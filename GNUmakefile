@@ -1,4 +1,4 @@
-# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest distclean pkgs ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR
+# spell-checker:ignore (misc) testsuite runtest findstring (targets) busytest toybox distclean pkgs ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MULTICALL DATAROOTDIR TESTDIR
 
 # Config options
 PROFILE         ?= debug
@@ -38,8 +38,12 @@ PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
 
 BUSYBOX_ROOT := $(BASEDIR)/tmp
-BUSYBOX_VER  := 1.32.1
+BUSYBOX_VER  := 1.35.0
 BUSYBOX_SRC  := $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)
+
+TOYBOX_ROOT := $(BASEDIR)/tmp
+TOYBOX_VER  := 0.8.8
+TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 
 ifeq ($(SELINUX_ENABLED),)
 	SELINUX_ENABLED := 0
@@ -284,6 +288,18 @@ $(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$
 
 test:
 	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
+
+test_toybox:
+	-(cd $(TOYBOX_SRC)/ && make tests)
+
+toybox-src:
+	if [ ! -e "$(TOYBOX_SRC)" ] ; then \
+		mkdir -p "$(TOYBOX_ROOT)" ; \
+		wget "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -P "$(TOYBOX_ROOT)" ; \
+		tar -C "$(TOYBOX_ROOT)" -xf "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
+		sed -i -e "s|TESTDIR=\".*\"|TESTDIR=\"$(BUILDDIR)\"|g" $(TOYBOX_SRC)/scripts/test.sh; \
+		sed -i -e "s/ || exit 1//g" $(TOYBOX_SRC)/scripts/test.sh; \
+	fi ;
 
 busybox-src:
 	if [ ! -e "$(BUSYBOX_SRC)" ] ; then \

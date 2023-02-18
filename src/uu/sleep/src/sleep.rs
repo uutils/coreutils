@@ -9,11 +9,11 @@ use std::thread;
 use std::time::Duration;
 
 use uucore::{
-    error::{UResult, UUsageError},
-    format_usage,
+    error::{UResult, USimpleError, UUsageError},
+    format_usage, show,
 };
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 
 static ABOUT: &str = "Pause for NUMBER seconds.";
 const USAGE: &str = "\
@@ -33,15 +33,24 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    if let Some(values) = matches.get_many::<String>(options::NUMBER) {
-        let numbers = values.map(|s| s.as_str()).collect::<Vec<_>>();
-        return sleep(&numbers);
-    }
+    let numbers = matches
+        .get_many::<String>(options::NUMBER)
+        .ok_or_else(|| {
+            USimpleError::new(
+                1,
+                format!(
+                    "missing operand\nTry '{} --help' for more information.",
+                    uucore::execution_phrase()
+                ),
+            )
+        })?
+        .map(|s| s.as_str())
+        .collect::<Vec<_>>();
 
-    Ok(())
+    sleep(&numbers)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -52,21 +61,24 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::NUMBER)
                 .help("pause for NUMBER seconds")
                 .value_name(options::NUMBER)
-                .index(1)
-                .multiple_occurrences(true)
-                .required(true),
+                .action(ArgAction::Append),
         )
 }
 
 fn sleep(args: &[&str]) -> UResult<()> {
-    let sleep_dur =
-        args.iter().try_fold(
-            Duration::new(0, 0),
-            |result, arg| match uucore::parse_time::from_str(&arg[..]) {
-                Ok(m) => Ok(m.saturating_add(result)),
-                Err(f) => Err(UUsageError::new(1, f)),
-            },
-        )?;
+    let mut arg_error = false;
+    let intervals = args.iter().map(|s| match uucore::parse_time::from_str(s) {
+        Ok(result) => result,
+        Err(err) => {
+            arg_error = true;
+            show!(USimpleError::new(1, err));
+            Duration::new(0, 0)
+        }
+    });
+    let sleep_dur = intervals.fold(Duration::new(0, 0), |acc, n| acc + n);
+    if arg_error {
+        return Err(UUsageError::new(1, ""));
+    };
     thread::sleep(sleep_dur);
     Ok(())
 }

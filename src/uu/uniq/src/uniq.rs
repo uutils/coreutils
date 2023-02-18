@@ -5,10 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// TODO remove this when https://github.com/rust-lang/rust-clippy/issues/6902 is fixed
-#![allow(clippy::use_self)]
-
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -18,8 +15,14 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 
-static ABOUT: &str = "Report or omit repeated lines.";
+const ABOUT: &str = "Report or omit repeated lines.";
 const USAGE: &str = "{} [OPTION]... [INPUT [OUTPUT]]...";
+const LONG_USAGE: &str = "\
+    Filter adjacent matching lines from INPUT (or standard input),\n\
+    writing to OUTPUT (or standard output).\n\n\
+    Note: 'uniq' does not detect repeated lines unless they are adjacent.\n\
+    You may want to sort the input first, or use 'sort -u' without 'uniq'.";
+
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
     pub static CHECK_CHARS: &str = "check-chars";
@@ -212,7 +215,7 @@ impl Uniq {
         }
 
         if self.show_counts {
-            writer.write_all(format!("{:7} {}", count, line).as_bytes())
+            writer.write_all(format!("{count:7} {line}").as_bytes())
         } else {
             writer.write_all(line.as_bytes())
         }
@@ -225,7 +228,7 @@ impl Uniq {
 fn get_line_string(io_line: io::Result<Vec<u8>>) -> UResult<String> {
     let line_bytes = io_line.map_err_context(|| "failed to split lines".to_string())?;
     String::from_utf8(line_bytes)
-        .map_err(|e| USimpleError::new(1, format!("failed to convert line to utf8: {}", e)))
+        .map_err(|e| USimpleError::new(1, format!("failed to convert line to utf8: {e}")))
 }
 
 fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Option<T>> {
@@ -244,22 +247,9 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Optio
     })
 }
 
-fn get_long_usage() -> String {
-    String::from(
-        "Filter adjacent matching lines from INPUT (or standard input),\n\
-        writing to OUTPUT (or standard output).
-        Note: 'uniq' does not detect repeated lines unless they are adjacent.\n\
-        You may want to sort the input first, or use 'sort -u' without 'uniq'.\n",
-    )
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let long_usage = get_long_usage();
-
-    let matches = uu_app()
-        .after_help(&long_usage[..])
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)
@@ -276,18 +266,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let uniq = Uniq {
-        repeats_only: matches.contains_id(options::REPEATED)
+        repeats_only: matches.get_flag(options::REPEATED)
             || matches.contains_id(options::ALL_REPEATED),
-        uniques_only: matches.contains_id(options::UNIQUE),
+        uniques_only: matches.get_flag(options::UNIQUE),
         all_repeated: matches.contains_id(options::ALL_REPEATED)
             || matches.contains_id(options::GROUP),
         delimiters: get_delimiter(&matches),
-        show_counts: matches.contains_id(options::COUNT),
+        show_counts: matches.get_flag(options::COUNT),
         skip_fields: opt_parsed(options::SKIP_FIELDS, &matches)?,
         slice_start: opt_parsed(options::SKIP_CHARS, &matches)?,
         slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
-        ignore_case: matches.contains_id(options::IGNORE_CASE),
-        zero_terminated: matches.contains_id(options::ZERO_TERMINATED),
+        ignore_case: matches.get_flag(options::IGNORE_CASE),
+        zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
     };
 
     if uniq.show_counts && uniq.all_repeated {
@@ -303,7 +293,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -320,8 +310,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 ])
                 .help("print all duplicate lines. Delimiting is done with blank lines. [default: none]")
                 .value_name("delimit-method")
-                .min_values(0)
-                .max_values(1)
+                .num_args(0..=1)
                 .default_missing_value("none")
                 .require_equals(true),
         )
@@ -336,11 +325,10 @@ pub fn uu_app<'a>() -> Command<'a> {
                 ])
                 .help("show all items, separating groups with an empty line. [default: separate]")
                 .value_name("group-method")
-                .min_values(0)
-                .max_values(1)
+                .num_args(0..=1)
                 .default_missing_value("separate")
                 .require_equals(true)
-                .conflicts_with_all(&[
+                .conflicts_with_all([
                     options::REPEATED,
                     options::ALL_REPEATED,
                     options::UNIQUE,
@@ -357,19 +345,22 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::COUNT)
                 .short('c')
                 .long(options::COUNT)
-                .help("prefix lines by the number of occurrences"),
+                .help("prefix lines by the number of occurrences")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::IGNORE_CASE)
                 .short('i')
                 .long(options::IGNORE_CASE)
-                .help("ignore differences in case when comparing"),
+                .help("ignore differences in case when comparing")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REPEATED)
                 .short('d')
                 .long(options::REPEATED)
-                .help("only print duplicate lines"),
+                .help("only print duplicate lines")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SKIP_CHARS)
@@ -389,19 +380,20 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::UNIQUE)
                 .short('u')
                 .long(options::UNIQUE)
-                .help("only print unique lines"),
+                .help("only print unique lines")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
-                .help("end lines with 0 byte, not newline"),
+                .help("end lines with 0 byte, not newline")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .max_values(2)
+                .action(ArgAction::Append)
+                .num_args(0..=2)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -424,7 +416,7 @@ fn open_input_file(in_file_name: &str) -> UResult<BufReader<Box<dyn Read + 'stat
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let path = Path::new(in_file_name);
-        let in_file = File::open(&path)
+        let in_file = File::open(path)
             .map_err_context(|| format!("Could not open {}", in_file_name.maybe_quote()))?;
         Box::new(in_file) as Box<dyn Read>
     };
@@ -436,7 +428,7 @@ fn open_output_file(out_file_name: &str) -> UResult<BufWriter<Box<dyn Write + 's
         Box::new(stdout()) as Box<dyn Write>
     } else {
         let path = Path::new(out_file_name);
-        let out_file = File::create(&path)
+        let out_file = File::create(path)
             .map_err_context(|| format!("Could not create {}", out_file_name.maybe_quote()))?;
         Box::new(out_file) as Box<dyn Write>
     };

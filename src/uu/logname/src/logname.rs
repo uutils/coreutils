@@ -9,12 +9,9 @@
 
 // spell-checker:ignore (ToDO) getlogin userlogin
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, Command};
 use std::ffi::CStr;
-use uucore::error::UResult;
+use uucore::{error::UResult, show_error};
 
 extern "C" {
     // POSIX requires using getlogin (or equivalent code)
@@ -41,14 +38,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let _ = uu_app().try_get_matches_from(args)?;
 
     match get_userlogin() {
-        Some(userlogin) => println!("{}", userlogin),
+        Some(userlogin) => println!("{userlogin}"),
         None => show_error!("no login name"),
     }
 
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .override_usage(uucore::execution_phrase())

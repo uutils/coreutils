@@ -1,6 +1,6 @@
 [package]
 name = "uu_touch"
-version = "0.0.15"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "touch ~ (uutils) change FILE timestamps"
@@ -15,13 +15,13 @@ edition = "2021"
 path = "src/touch.rs"
 
 [dependencies]
-filetime = "0.2.17"
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-time = { version = "0.3", features = ["parsing", "formatting", "local-offset", "macros"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["libc"] }
+filetime = { workspace=true }
+clap = { workspace=true }
+time = { workspace=true, features = ["parsing", "formatting", "local-offset", "macros"] }
+uucore = { workspace=true, features=["libc"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3" }
+windows-sys = { workspace=true, features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
 
 [[bin]]
 name = "touch"

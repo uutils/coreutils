@@ -7,14 +7,11 @@
 
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::format_usage;
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
+use uucore::{format_usage, prompt_yes, show_error};
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -22,7 +19,6 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs;
 
-use std::io::stdin;
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
 #[cfg(windows)]
@@ -89,26 +85,21 @@ impl UError for LnError {
     }
 }
 
-fn long_usage() -> String {
-    String::from(
-        " In the 1st form, create a link to TARGET with the name LINK_NAME.
-        In the 2nd form, create a link to TARGET in the current directory.
-        In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
-        Create hard links by default, symbolic links with --symbolic.
-        By default, each destination (name of new link) should not already exist.
-        When creating hard links, each TARGET must exist.  Symbolic links
-        can hold arbitrary text; if later resolved, a relative link is
-        interpreted in relation to its parent directory.
-        ",
-    )
-}
-
-static ABOUT: &str = "change file owner and group";
+const ABOUT: &str = "Change file owner and group";
 const USAGE: &str = "\
-    {} [OPTION]... [-T] TARGET LINK_NAME
-    {} [OPTION]... TARGET
-    {} [OPTION]... TARGET... DIRECTORY
-    {} [OPTION]... -t DIRECTORY TARGET...";
+       {} [OPTION]... [-T] TARGET LINK_NAME
+       {} [OPTION]... TARGET
+       {} [OPTION]... TARGET... DIRECTORY
+       {} [OPTION]... -t DIRECTORY TARGET...";
+const LONG_USAGE: &str = "\
+    In the 1st form, create a link to TARGET with the name LINK_NAME.\n\
+    In the 2nd form, create a link to TARGET in the current directory.\n\
+    In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.\n\
+    Create hard links by default, symbolic links with --symbolic.\n\
+    By default, each destination (name of new link) should not already exist.\n\
+    When creating hard links, each TARGET must exist.  Symbolic links\n\
+    can hold arbitrary text; if later resolved, a relative link is\n\
+    interpreted in relation to its parent directory.";
 
 mod options {
     pub const FORCE: &str = "force";
@@ -128,15 +119,13 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let long_usage = long_usage();
+    let long_usage = format!(
+        "{}\n\n{}",
+        LONG_USAGE,
+        backup_control::BACKUP_CONTROL_LONG_HELP
+    );
 
-    let matches = uu_app()
-        .after_help(&*format!(
-            "{}\n{}",
-            long_usage,
-            backup_control::BACKUP_CONTROL_LONG_HELP
-        ))
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(long_usage).try_get_matches_from(args)?;
 
     /* the list of files */
 
@@ -146,11 +135,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(PathBuf::from)
         .collect();
 
-    let symbolic = matches.contains_id(options::SYMBOLIC);
+    let symbolic = matches.get_flag(options::SYMBOLIC);
 
-    let overwrite_mode = if matches.contains_id(options::FORCE) {
+    let overwrite_mode = if matches.get_flag(options::FORCE) {
         OverwriteMode::Force
-    } else if matches.contains_id(options::INTERACTIVE) {
+    } else if matches.get_flag(options::INTERACTIVE) {
         OverwriteMode::Interactive
     } else {
         OverwriteMode::NoClobber
@@ -160,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
     // When we have "-L" or "-L -P", false otherwise
-    let logical = matches.contains_id(options::LOGICAL);
+    let logical = matches.get_flag(options::LOGICAL);
 
     let settings = Settings {
         overwrite: overwrite_mode,
@@ -168,19 +157,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         suffix: backup_suffix,
         symbolic,
         logical,
-        relative: matches.contains_id(options::RELATIVE),
+        relative: matches.get_flag(options::RELATIVE),
         target_dir: matches
             .get_one::<String>(options::TARGET_DIRECTORY)
             .map(String::from),
-        no_target_dir: matches.contains_id(options::NO_TARGET_DIRECTORY),
-        no_dereference: matches.contains_id(options::NO_DEREFERENCE),
-        verbose: matches.contains_id(options::VERBOSE),
+        no_target_dir: matches.get_flag(options::NO_TARGET_DIRECTORY),
+        no_dereference: matches.get_flag(options::NO_DEREFERENCE),
+        verbose: matches.get_flag(options::VERBOSE),
     };
 
     exec(&paths[..], &settings)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -198,13 +187,15 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FORCE)
                 .short('f')
                 .long(options::FORCE)
-                .help("remove existing destination files"),
+                .help("remove existing destination files")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::INTERACTIVE)
                 .short('i')
                 .long(options::INTERACTIVE)
-                .help("prompt whether to remove existing destination files"),
+                .help("prompt whether to remove existing destination files")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE)
@@ -213,21 +204,24 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "treat LINK_NAME as a normal file if it is a \
                      symbolic link to a directory",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::LOGICAL)
                 .short('L')
                 .long(options::LOGICAL)
                 .help("dereference TARGETs that are symbolic links")
-                .overrides_with(options::PHYSICAL),
+                .overrides_with(options::PHYSICAL)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             // Not implemented yet
             Arg::new(options::PHYSICAL)
                 .short('P')
                 .long(options::PHYSICAL)
-                .help("make hard links directly to symbolic links"),
+                .help("make hard links directly to symbolic links")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SYMBOLIC)
@@ -235,7 +229,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::SYMBOLIC)
                 .help("make symbolic links instead of hard links")
                 // override added for https://github.com/uutils/coreutils/issues/2359
-                .overrides_with(options::SYMBOLIC),
+                .overrides_with(options::SYMBOLIC)
+                .action(ArgAction::SetTrue),
         )
         .arg(backup_control::arguments::suffix())
         .arg(
@@ -251,28 +246,30 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::NO_TARGET_DIRECTORY)
                 .short('T')
                 .long(options::NO_TARGET_DIRECTORY)
-                .help("treat LINK_NAME as a normal file always"),
+                .help("treat LINK_NAME as a normal file always")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RELATIVE)
                 .short('r')
                 .long(options::RELATIVE)
                 .help("create symbolic links relative to link location")
-                .requires(options::SYMBOLIC),
+                .requires(options::SYMBOLIC)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help("print name of each linked file"),
+                .help("print name of each linked file")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath)
                 .required(true)
-                .min_values(1),
+                .num_args(1..),
         )
 }
 
@@ -406,8 +403,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
-                print!("{}: overwrite {}? ", uucore::util_name(), dst.quote());
-                if !read_yes() {
+                if !prompt_yes!("overwrite {}?", dst.quote()) {
                     return Ok(());
                 }
 
@@ -436,7 +432,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         } else {
             source.to_path_buf()
         };
-        fs::hard_link(&p, dst).map_err_context(|| {
+        fs::hard_link(p, dst).map_err_context(|| {
             format!(
                 "failed to create hard link {} => {}",
                 source.quote(),
@@ -455,17 +451,6 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     Ok(())
 }
 
-fn read_yes() -> bool {
-    let mut s = String::new();
-    match stdin().read_line(&mut s) {
-        Ok(_) => match s.char_indices().next() {
-            Some((_, x)) => x == 'y' || x == 'Y',
-            _ => false,
-        },
-        _ => false,
-    }
-}
-
 fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
     let mut p = path.as_os_str().to_str().unwrap().to_owned();
     p.push_str(suffix);
@@ -475,7 +460,7 @@ fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
 fn numbered_backup_path(path: &Path) -> PathBuf {
     let mut i: u64 = 1;
     loop {
-        let new_path = simple_backup_path(path, &format!(".~{}~", i));
+        let new_path = simple_backup_path(path, &format!(".~{i}~"));
         if !new_path.exists() {
             return new_path;
         }

@@ -7,36 +7,31 @@
 
 // spell-checker:ignore (ToDO) ugoa cmode
 
-#[macro_use]
-extern crate uucore;
-
 use clap::builder::ValueParser;
 use clap::parser::ValuesRef;
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
+use uucore::{format_usage, show, show_if_err};
 
 static DEFAULT_PERM: u32 = 0o755;
 
-static ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
+const ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
 const USAGE: &str = "{} [OPTION]... [USER]";
+const LONG_USAGE: &str =
+    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.";
 
 mod options {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
     pub const VERBOSE: &str = "verbose";
     pub const DIRS: &str = "dirs";
-}
-
-fn get_long_usage() -> String {
-    String::from("Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.")
 }
 
 #[cfg(windows)]
@@ -58,7 +53,7 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
                 } else {
                     let cmode = if mode_had_minus_prefix {
                         // clap parsing is finished, now put prefix back
-                        format!("-{}", mode)
+                        format!("-{mode}")
                     } else {
                         mode.to_string()
                     };
@@ -91,20 +86,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Before we can parse 'args' with clap (and previously getopts),
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
     let mode_had_minus_prefix = strip_minus_from_mode(&mut args);
-    let after_help = get_long_usage();
 
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app()
-        .after_help(&after_help[..])
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
         .unwrap_or_default();
-    let verbose = matches.contains_id(options::VERBOSE);
-    let recursive = matches.contains_id(options::PARENTS);
+    let verbose = matches.get_flag(options::VERBOSE);
+    let recursive = matches.get_flag(options::PARENTS);
 
     match get_mode(&matches, mode_had_minus_prefix) {
         Ok(mode) => exec(dirs, recursive, mode, verbose),
@@ -112,7 +104,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -122,26 +114,26 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::MODE)
                 .short('m')
                 .long(options::MODE)
-                .help("set file mode (not implemented on windows)")
-                .takes_value(true),
+                .help("set file mode (not implemented on windows)"),
         )
         .arg(
             Arg::new(options::PARENTS)
                 .short('p')
                 .long(options::PARENTS)
-                .help("make parent directories as needed"),
+                .help("make parent directories as needed")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long(options::VERBOSE)
-                .help("print a message for each printed directory"),
+                .help("print a message for each printed directory")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DIRS)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .min_values(1)
+                .action(ArgAction::Append)
+                .num_args(1..)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::DirPath),
         )

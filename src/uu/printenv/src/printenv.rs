@@ -7,7 +7,7 @@
 
 /* last synced with: printenv (GNU coreutils) 8.13 */
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::env;
 use uucore::{error::UResult, format_usage};
 
@@ -27,7 +27,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let separator = if matches.contains_id(OPT_NULL) {
+    let separator = if matches.get_flag(OPT_NULL) {
         "\x00"
     } else {
         "\n"
@@ -35,28 +35,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if variables.is_empty() {
         for (env_var, value) in env::vars() {
-            print!("{}={}{}", env_var, value, separator);
+            print!("{env_var}={value}{separator}");
         }
         return Ok(());
     }
 
-    let mut not_found = false;
+    let mut error_found = false;
     for env_var in variables {
+        // we silently ignore a=b as variable but we trigger an error
+        if env_var.contains('=') {
+            error_found = true;
+            continue;
+        }
         if let Ok(var) = env::var(env_var) {
-            print!("{}{}", var, separator);
+            print!("{var}{separator}");
         } else {
-            not_found = true;
+            error_found = true;
         }
     }
 
-    if not_found {
+    if error_found {
         Err(1.into())
     } else {
         Ok(())
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -66,12 +71,12 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_NULL)
                 .short('0')
                 .long(OPT_NULL)
-                .help("end each output line with 0 byte rather than newline"),
+                .help("end each output line with 0 byte rather than newline")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_VARIABLES)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .min_values(1),
+                .action(ArgAction::Append)
+                .num_args(1..),
         )
 }

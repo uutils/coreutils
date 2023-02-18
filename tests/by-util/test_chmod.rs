@@ -216,7 +216,7 @@ fn test_chmod_ugoa() {
         .fails()
         .code_is(1)
         // spell-checker:disable-next-line
-        .stderr_is("chmod: file: new permissions are r-xrwxrwx, not r-xr-xr-x");
+        .stderr_is("chmod: file: new permissions are r-xrwxrwx, not r-xr-xr-x\n");
     assert_eq!(
         metadata(at.plus("file")).unwrap().permissions().mode(),
         0o100577
@@ -314,7 +314,7 @@ fn test_permission_denied() {
         .arg("o=r")
         .arg("d")
         .fails()
-        .stderr_is("chmod: 'd/no-x/y': Permission denied");
+        .stderr_is("chmod: 'd/no-x/y': Permission denied\n");
 }
 
 #[test]
@@ -341,7 +341,7 @@ fn test_chmod_recursive() {
         .arg("a")
         .arg("z")
         .fails()
-        .stderr_is("chmod: Permission denied");
+        .stderr_is("chmod: Permission denied\n");
 
     assert_eq!(at.metadata("z/y").permissions().mode(), 0o100444);
     assert_eq!(at.metadata("a/a").permissions().mode(), 0o100444);
@@ -380,7 +380,7 @@ fn test_chmod_non_existing_file() {
         .arg("-r,a+w")
         .arg("does-not-exist")
         .fails()
-        .stderr_contains(&"cannot access 'does-not-exist': No such file or directory");
+        .stderr_contains("cannot access 'does-not-exist': No such file or directory");
 }
 
 #[test]
@@ -403,7 +403,7 @@ fn test_chmod_preserve_root() {
         .arg("755")
         .arg("/")
         .fails()
-        .stderr_contains(&"chmod: it is dangerous to operate recursively on '/'");
+        .stderr_contains("chmod: it is dangerous to operate recursively on '/'");
 }
 
 #[test]
@@ -414,10 +414,9 @@ fn test_chmod_symlink_non_existing_file() {
     let non_existing = "test_chmod_symlink_non_existing_file";
     let test_symlink = "test_chmod_symlink_non_existing_file_symlink";
     let expected_stdout = &format!(
-        "failed to change mode of '{}' from 0000 (---------) to 0000 (---------)",
-        test_symlink
+        "failed to change mode of '{test_symlink}' from 0000 (---------) to 0000 (---------)"
     );
-    let expected_stderr = &format!("cannot operate on dangling symlink '{}'", test_symlink);
+    let expected_stderr = &format!("cannot operate on dangling symlink '{test_symlink}'");
 
     at.symlink_file(non_existing, test_symlink);
 
@@ -455,10 +454,7 @@ fn test_chmod_symlink_non_existing_file_recursive() {
     let test_directory = "test_chmod_symlink_non_existing_file_directory";
 
     at.mkdir(test_directory);
-    at.symlink_file(
-        non_existing,
-        &format!("{}/{}", test_directory, test_symlink),
-    );
+    at.symlink_file(non_existing, &format!("{test_directory}/{test_symlink}"));
 
     // this should succeed
     scene
@@ -472,8 +468,7 @@ fn test_chmod_symlink_non_existing_file_recursive() {
 
     let expected_stdout = &format!(
         // spell-checker:disable-next-line
-        "mode of '{}' retained as 0755 (rwxr-xr-x)",
-        test_directory
+        "mode of '{test_directory}' retained as 0755 (rwxr-xr-x)"
     );
 
     // '-v': this should succeed without stderr
@@ -577,5 +572,73 @@ fn test_mode_after_dash_dash() {
         },
         &at,
         ucmd,
+    );
+}
+
+#[test]
+fn test_chmod_file_after_non_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(TEST_FILE);
+    at.touch("file2");
+    set_permissions(at.plus(TEST_FILE), Permissions::from_mode(0o664)).unwrap();
+    set_permissions(at.plus("file2"), Permissions::from_mode(0o664)).unwrap();
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("does-not-exist")
+        .arg(TEST_FILE)
+        .fails()
+        .stderr_contains("chmod: cannot access 'does-not-exist': No such file or directory")
+        .code_is(1);
+
+    assert_eq!(at.metadata(TEST_FILE).permissions().mode(), 0o100764);
+
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("--q")
+        .arg("does-not-exist")
+        .arg("file2")
+        .fails()
+        .no_stderr()
+        .code_is(1);
+    assert_eq!(at.metadata("file2").permissions().mode(), 0o100764);
+}
+
+#[test]
+fn test_chmod_file_symlink_after_non_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let existing = "file";
+    let test_existing_symlink = "file_symlink";
+
+    let non_existing = "test_chmod_symlink_non_existing_file";
+    let test_dangling_symlink = "test_chmod_symlink_non_existing_file_symlink";
+    let expected_stdout = &format!(
+        "failed to change mode of '{test_dangling_symlink}' from 0000 (---------) to 0000 (---------)"
+    );
+    let expected_stderr = &format!("cannot operate on dangling symlink '{test_dangling_symlink}'");
+
+    at.touch(existing);
+    set_permissions(at.plus(existing), Permissions::from_mode(0o664)).unwrap();
+    at.symlink_file(non_existing, test_dangling_symlink);
+    at.symlink_file(existing, test_existing_symlink);
+
+    // this cannot succeed since the symbolic link dangles
+    // but the metadata for the existing target should change
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("-v")
+        .arg(test_dangling_symlink)
+        .arg(test_existing_symlink)
+        .fails()
+        .code_is(1)
+        .stdout_contains(expected_stdout)
+        .stderr_contains(expected_stderr);
+    assert_eq!(
+        at.metadata(test_existing_symlink).permissions().mode(),
+        0o100764
     );
 }

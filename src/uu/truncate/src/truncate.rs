@@ -6,7 +6,7 @@
 //  * file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 #[cfg(unix)]
@@ -73,8 +73,25 @@ impl TruncateMode {
     }
 }
 
-static ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
+const ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
 const USAGE: &str = "{} [OPTION]... [FILE]...";
+const LONG_USAGE: &str = "\
+SIZE is an integer with an optional prefix and optional unit.
+The available units (K, M, G, T, P, E, Z, and Y) use the following format:
+    'KB' =>           1000 (kilobytes)
+    'K'  =>           1024 (kibibytes)
+    'MB' =>      1000*1000 (megabytes)
+    'M'  =>      1024*1024 (mebibytes)
+    'GB' => 1000*1000*1000 (gigabytes)
+    'G'  => 1024*1024*1024 (gibibytes)
+SIZE may also be prefixed by one of the following to adjust the size of each
+file based on its current size:
+    '+'  => extend by
+    '-'  => reduce by
+    '<'  => at most
+    '>'  => at least
+    '/'  => round down to multiple of
+    '%'  => round up to multiple of";
 
 pub mod options {
     pub static IO_BLOCKS: &str = "io-blocks";
@@ -84,39 +101,15 @@ pub mod options {
     pub static ARG_FILES: &str = "files";
 }
 
-fn get_long_usage() -> String {
-    String::from(
-        "
-    SIZE is an integer with an optional prefix and optional unit.
-    The available units (K, M, G, T, P, E, Z, and Y) use the following format:
-        'KB' =>           1000 (kilobytes)
-        'K'  =>           1024 (kibibytes)
-        'MB' =>      1000*1000 (megabytes)
-        'M'  =>      1024*1024 (mebibytes)
-        'GB' => 1000*1000*1000 (gigabytes)
-        'G'  => 1024*1024*1024 (gibibytes)
-    SIZE may also be prefixed by one of the following to adjust the size of each
-    file based on its current size:
-        '+'  => extend by
-        '-'  => reduce by
-        '<'  => at most
-        '>'  => at least
-        '/'  => round down to multiple of
-        '%'  => round up to multiple of",
-    )
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let long_usage = get_long_usage();
-
     let matches = uu_app()
-        .after_help(&long_usage[..])
+        .after_help(LONG_USAGE)
         .try_get_matches_from(args)
         .map_err(|e| {
             e.print().expect("Error writing clap::Error");
             match e.kind() {
-                clap::ErrorKind::DisplayHelp | clap::ErrorKind::DisplayVersion => 0,
+                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => 0,
                 _ => 1,
             }
         })?;
@@ -129,8 +122,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if files.is_empty() {
         return Err(UUsageError::new(1, "missing file operand"));
     } else {
-        let io_blocks = matches.contains_id(options::IO_BLOCKS);
-        let no_create = matches.contains_id(options::NO_CREATE);
+        let io_blocks = matches.get_flag(options::IO_BLOCKS);
+        let no_create = matches.get_flag(options::NO_CREATE);
         let reference = matches
             .get_one::<String>(options::REFERENCE)
             .map(String::from);
@@ -139,7 +132,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -147,40 +140,48 @@ pub fn uu_app<'a>() -> Command<'a> {
         .infer_long_args(true)
         .arg(
             Arg::new(options::IO_BLOCKS)
-            .short('o')
-            .long(options::IO_BLOCKS)
-            .help("treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)")
+                .short('o')
+                .long(options::IO_BLOCKS)
+                .help(
+                    "treat SIZE as the number of I/O blocks of the file rather than bytes \
+            (NOT IMPLEMENTED)",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_CREATE)
-            .short('c')
-            .long(options::NO_CREATE)
-            .help("do not create files that do not exist")
+                .short('c')
+                .long(options::NO_CREATE)
+                .help("do not create files that do not exist")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REFERENCE)
-            .short('r')
-            .long(options::REFERENCE)
-            .required_unless_present(options::SIZE)
-            .help("base the size of each file on the size of RFILE")
-            .value_name("RFILE")
-            .value_hint(clap::ValueHint::FilePath)
+                .short('r')
+                .long(options::REFERENCE)
+                .required_unless_present(options::SIZE)
+                .help("base the size of each file on the size of RFILE")
+                .value_name("RFILE")
+                .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::SIZE)
-            .short('s')
-            .long(options::SIZE)
-            .required_unless_present(options::REFERENCE)
-            .help("set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified")
-            .value_name("SIZE")
+                .short('s')
+                .long(options::SIZE)
+                .required_unless_present(options::REFERENCE)
+                .help(
+                    "set or adjust the size of each file according to SIZE, which is in \
+            bytes unless --io-blocks is specified",
+                )
+                .value_name("SIZE"),
         )
-        .arg(Arg::new(options::ARG_FILES)
-             .value_name("FILE")
-             .multiple_occurrences(true)
-             .takes_value(true)
-             .required(true)
-             .min_values(1)
-             .value_hint(clap::ValueHint::FilePath))
+        .arg(
+            Arg::new(options::ARG_FILES)
+                .value_name("FILE")
+                .action(ArgAction::Append)
+                .required(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
 }
 
 /// Truncate the named file to the specified size.
@@ -225,7 +226,7 @@ fn truncate_reference_and_size(
     create: bool,
 ) -> UResult<()> {
     let mode = match parse_mode_and_size(size_string) {
-        Err(e) => return Err(USimpleError::new(1, format!("Invalid number: {}", e))),
+        Err(e) => return Err(USimpleError::new(1, format!("Invalid number: {e}"))),
         Ok(TruncateMode::Absolute(_)) => {
             return Err(USimpleError::new(
                 1,
@@ -332,7 +333,7 @@ fn truncate_reference_file_only(
 /// If at least one file is a named pipe (also known as a fifo).
 fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> UResult<()> {
     let mode = parse_mode_and_size(size_string)
-        .map_err(|e| USimpleError::new(1, format!("Invalid number: {}", e)))?;
+        .map_err(|e| USimpleError::new(1, format!("Invalid number: {e}")))?;
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
         return Err(USimpleError::new(1, "division by zero"));
     }

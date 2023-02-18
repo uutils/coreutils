@@ -44,8 +44,8 @@ fn test_heading() {
         //   specifically number of TABs between "TIME" and "COMMENT" may be variant
         let actual = ts.ucmd().arg(opt).succeeds().stdout_move_str();
         let expect = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
-        println!("actual: {:?}", actual);
-        println!("expect: {:?}", expect);
+        println!("actual: {actual:?}");
+        println!("expect: {expect:?}");
         let v_actual: Vec<&str> = actual.split_whitespace().collect();
         let v_expect: Vec<&str> = expect.split_whitespace().collect();
         assert_eq!(v_actual, v_expect);
@@ -151,7 +151,7 @@ fn test_arg1_arg2() {
 #[test]
 fn test_too_many_args() {
     const EXPECTED: &str =
-        "error: The value 'u' was provided to '<FILE>...' but it wasn't expecting any more values";
+        "error: The value 'u' was provided to '[FILE]...' but it wasn't expecting any more values";
 
     let args = ["am", "i", "u"];
     new_ucmd!().args(&args).fails().stderr_contains(EXPECTED);
@@ -165,8 +165,8 @@ fn test_users() {
     for opt in ["-u", "--users", "--us"] {
         let actual = ts.ucmd().arg(opt).succeeds().stdout_move_str();
         let expect = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
-        println!("actual: {:?}", actual);
-        println!("expect: {:?}", expect);
+        println!("actual: {actual:?}");
+        println!("expect: {expect:?}");
 
         let mut v_actual: Vec<&str> = actual.split_whitespace().collect();
         let mut v_expect: Vec<&str> = expect.split_whitespace().collect();

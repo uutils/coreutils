@@ -67,7 +67,7 @@ impl FloatAnalysis {
         let mut pos_before_first_nonzero_after_decimal: Option<usize> = None;
         for c in str_it {
             match c {
-                e @ '0'..='9' | e @ 'A'..='F' | e @ 'a'..='f' => {
+                e @ ('0'..='9' | 'A'..='F' | 'a'..='f') => {
                     if !hex_input {
                         match e {
                             '0'..='9' => {}
@@ -226,7 +226,7 @@ pub fn get_primitive_dec(
     last_dec_place: usize,
     sci_mode: Option<bool>,
 ) -> FormatPrimitive {
-    let mut f: FormatPrimitive = Default::default();
+    let mut f = FormatPrimitive::default();
 
     // add negative sign section
     if initial_prefix.sign == -1 {
@@ -304,11 +304,11 @@ pub fn get_primitive_dec(
             mantissa += 1;
         }
         f.suffix = Some(if mantissa >= 0 {
-            format!("{}+{:02}", si_ind, mantissa)
+            format!("{si_ind}+{mantissa:02}")
         } else {
             // negative sign is considered in format!s
             // leading zeroes
-            format!("{}{:03}", si_ind, mantissa)
+            format!("{si_ind}{mantissa:03}")
         });
         f.pre_decimal = Some(pre_dec_draft);
     } else if dec_place_chg {

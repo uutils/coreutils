@@ -34,7 +34,7 @@ fn get_symlink_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
 }
 
 fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
-    filetime::set_file_times(&at.plus_as_string(path), atime, mtime).unwrap();
+    filetime::set_file_times(at.plus_as_string(path), atime, mtime).unwrap();
 }
 
 // Adjusts for local timezone
@@ -52,7 +52,7 @@ fn str_to_filetime(format: &str, s: &str) -> FileTime {
     let d = match time::OffsetDateTime::now_local() {
         Ok(now) => now,
         Err(e) => {
-            panic!("Error {} retrieving the OffsetDateTime::now_local", e);
+            panic!("Error {e} retrieving the OffsetDateTime::now_local");
         }
     };
     let offset_dt = tm.assume_offset(d.offset());
@@ -512,6 +512,98 @@ fn test_touch_set_date7() {
     assert_eq!(mtime, expected);
 }
 
+/// Test for setting the date by a relative time unit.
+#[test]
+fn test_touch_set_date_relative_smoke() {
+    // From the GNU documentation:
+    //
+    // > The unit of time displacement may be selected by the string
+    // > ‘year’ or ‘month’ for moving by whole years or months.  These
+    // > are fuzzy units, as years and months are not all of equal
+    // > duration.  More precise units are ‘fortnight’ which is worth 14
+    // > days, ‘week’ worth 7 days, ‘day’ worth 24 hours, ‘hour’ worth
+    // > 60 minutes, ‘minute’ or ‘min’ worth 60 seconds, and ‘second’ or
+    // > ‘sec’ worth one second.  An ‘s’ suffix on these units is
+    // > accepted and ignored.
+    //
+    let times = [
+        // "-1 year", "+1 year", "-1 years", "+1 years",
+        // "-1 month", "+1 month", "-1 months", "+1 months",
+        "-1 fortnight",
+        "+1 fortnight",
+        "-1 fortnights",
+        "+1 fortnights",
+        "fortnight",
+        "fortnights",
+        "-1 week",
+        "+1 week",
+        "-1 weeks",
+        "+1 weeks",
+        "week",
+        "weeks",
+        "-1 day",
+        "+1 day",
+        "-1 days",
+        "+1 days",
+        "day",
+        "days",
+        "-1 hour",
+        "+1 hour",
+        "-1 hours",
+        "+1 hours",
+        "hour",
+        "hours",
+        "-1 minute",
+        "+1 minute",
+        "-1 minutes",
+        "+1 minutes",
+        "minute",
+        "minutes",
+        "-1 min",
+        "+1 min",
+        "-1 mins",
+        "+1 mins",
+        "min",
+        "mins",
+        "-1 second",
+        "+1 second",
+        "-1 seconds",
+        "+1 seconds",
+        "second",
+        "seconds",
+        "-1 sec",
+        "+1 sec",
+        "-1 secs",
+        "+1 secs",
+        "sec",
+        "secs",
+    ];
+    for time in times {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("f");
+        ucmd.args(&["-d", time, "f"])
+            .succeeds()
+            .no_stderr()
+            .no_stdout();
+    }
+
+    // From the GNU documentation:
+    //
+    // > The string ‘tomorrow’ is worth one day in the future
+    // > (equivalent to ‘day’), the string ‘yesterday’ is worth one day
+    // > in the past (equivalent to ‘day ago’).
+    //
+    let times = ["yesterday", "tomorrow", "now"];
+    for time in times {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("f");
+        ucmd.args(&["-d", time, "f"])
+            .succeeds()
+            .no_stderr()
+            .no_stdout();
+    }
+}
+
 #[test]
 fn test_touch_set_date_wrong_format() {
     let (_at, mut ucmd) = at_and_ucmd!();
@@ -562,7 +654,7 @@ fn get_dst_switch_hour() -> Option<String> {
     let now = match time::OffsetDateTime::now_local() {
         Ok(now) => now,
         Err(e) => {
-            panic!("Error {} retrieving the OffsetDateTime::now_local", e);
+            panic!("Error {e} retrieving the OffsetDateTime::now_local");
         }
     };
 
@@ -620,8 +712,7 @@ fn test_touch_no_such_file_error_msg() {
     let path_str = path.to_str().unwrap();
 
     new_ucmd!().arg(&path).fails().stderr_only(format!(
-        "touch: cannot touch '{}': No such file or directory",
-        path_str
+        "touch: cannot touch '{path_str}': No such file or directory\n"
     ));
 }
 
@@ -663,7 +754,7 @@ fn test_touch_permission_denied_error_msg() {
 
     let full_path = at.plus_as_string(path_str);
     ucmd.arg(&full_path).fails().stderr_only(format!(
-        "touch: cannot touch '{}': Permission denied",
+        "touch: cannot touch '{}': Permission denied\n",
         &full_path
     ));
 }
@@ -671,10 +762,7 @@ fn test_touch_permission_denied_error_msg() {
 #[test]
 fn test_touch_no_args() {
     let mut ucmd = new_ucmd!();
-    ucmd.fails().stderr_only(
-        r##"touch: missing file operand
-Try 'touch --help' for more information."##,
-    );
+    ucmd.fails().no_stdout().usage_error("missing file operand");
 }
 
 #[test]

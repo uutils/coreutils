@@ -298,3 +298,93 @@ fn test_tabs_and_tabs_shortcut_mixed() {
         //          01234567890
         .stdout_is("  a  b c");
 }
+
+#[test]
+fn test_ignore_initial_plus() {
+    new_ucmd!()
+        .args(&["--tabs=+3"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //          01234567890
+        .stdout_is("   a  b  c");
+}
+
+#[test]
+fn test_ignore_initial_pluses() {
+    new_ucmd!()
+        .args(&["--tabs=++3"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //          01234567890
+        .stdout_is("   a  b  c");
+}
+
+#[test]
+fn test_ignore_initial_slash() {
+    new_ucmd!()
+        .args(&["--tabs=/3"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //          01234567890
+        .stdout_is("   a  b  c");
+}
+
+#[test]
+fn test_ignore_initial_slashes() {
+    new_ucmd!()
+        .args(&["--tabs=//3"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //          01234567890
+        .stdout_is("   a  b  c");
+}
+
+#[test]
+fn test_ignore_initial_plus_slash_combination() {
+    new_ucmd!()
+        .args(&["--tabs=+/3"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //          01234567890
+        .stdout_is("   a  b  c");
+}
+
+#[test]
+fn test_comma_with_plus_1() {
+    new_ucmd!()
+        .args(&["--tabs=3,+6"])
+        .pipe_in("\t111\t222\t333")
+        .succeeds()
+        //          01234567890
+        .stdout_is("   111   222   333");
+}
+
+#[test]
+fn test_comma_with_plus_2() {
+    new_ucmd!()
+        .args(&["--tabs=1,+5"])
+        .pipe_in("\ta\tb\tc")
+        .succeeds()
+        //          01234567890
+        .stdout_is(" a    b    c");
+}
+
+#[test]
+fn test_comma_with_plus_3() {
+    new_ucmd!()
+        .args(&["--tabs=2,+5"])
+        .pipe_in("a\tb\tc")
+        .succeeds()
+        //          01234567890
+        .stdout_is("a b    c");
+}
+
+#[test]
+fn test_comma_with_plus_4() {
+    new_ucmd!()
+        .args(&["--tabs=1,3,+5"])
+        .pipe_in("a\tb\tc")
+        .succeeds()
+        //          01234567890
+        .stdout_is("a  b    c");
+}

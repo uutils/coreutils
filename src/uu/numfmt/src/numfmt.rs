@@ -9,7 +9,7 @@ use crate::errors::*;
 use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Unit};
-use clap::{crate_version, Arg, ArgMatches, Command, ValueSource};
+use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use std::io::{BufRead, Write};
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
@@ -24,7 +24,7 @@ pub mod options;
 mod units;
 
 const ABOUT: &str = help_section!("about", "numfmt.md");
-const LONG_HELP: &str = help_section!("long help", "numfmt.md");
+const AFTER_HELP: &str = help_section!("after help", "numfmt.md");
 const USAGE: &str = help_usage!("numfmt.md");
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
@@ -46,7 +46,7 @@ where
     for (idx, line) in lines.by_ref().enumerate() {
         match line {
             Ok(l) if idx < options.header => {
-                println!("{}", l);
+                println!("{l}");
                 Ok(())
             }
             Ok(l) => match format_and_print(&l, options) {
@@ -158,12 +158,15 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Ok(0)
     }?;
 
-    let fields = match args.get_one::<String>(options::FIELD).unwrap().as_str() {
-        "-" => vec![Range {
+    let fields = args.get_one::<String>(options::FIELD).unwrap().as_str();
+    // a lone "-" means "all fields", even as part of a list of fields
+    let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
+        vec![Range {
             low: 1,
             high: std::usize::MAX,
-        }],
-        v => Range::from_list(v)?,
+        }]
+    } else {
+        Range::from_list(fields)?
     };
 
     let format = match args.get_one::<String>(options::FORMAT) {
@@ -255,11 +258,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .allow_negative_numbers(true)
         .infer_long_args(true)
@@ -275,13 +278,13 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::FIELD)
                 .help("replace the numbers in these input fields; see FIELDS below")
                 .value_name("FIELDS")
+                .allow_hyphen_values(true)
                 .default_value(options::FIELD_DEFAULT),
         )
         .arg(
             Arg::new(options::FORMAT)
                 .long(options::FORMAT)
                 .help("use printf style floating-point FORMAT; see FORMAT below for details")
-                .takes_value(true)
                 .value_name("FORMAT"),
         )
         .arg(
@@ -330,6 +333,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "print (without converting) the first N header lines; \
                      N defaults to 1 if not specified",
                 )
+                .num_args(..=1)
                 .value_name("N")
                 .default_missing_value(options::HEADER_DEFAULT)
                 .hide_default_value(true),
@@ -357,7 +361,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::NUMBER)
                 .hide(true)
-                .multiple_occurrences(true),
+                .action(ArgAction::Append),
         )
 }
 
@@ -399,8 +403,8 @@ mod tests {
         let mock_buffer = MockBuffer {};
         let result = handle_buffer(BufReader::new(mock_buffer), &get_valid_options())
             .expect_err("returned Ok after receiving IO error");
-        let result_debug = format!("{:?}", result);
-        let result_display = format!("{}", result);
+        let result_debug = format!("{result:?}");
+        let result_display = format!("{result}");
         assert_eq!(result_debug, "IoError(\"broken pipe\")");
         assert_eq!(result_display, "broken pipe");
         assert_eq!(result.code(), 1);
@@ -411,8 +415,8 @@ mod tests {
         let input_value = b"135\nhello";
         let result = handle_buffer(BufReader::new(&input_value[..]), &get_valid_options())
             .expect_err("returned Ok after receiving improperly formatted input");
-        let result_debug = format!("{:?}", result);
-        let result_display = format!("{}", result);
+        let result_debug = format!("{result:?}");
+        let result_display = format!("{result}");
         assert_eq!(
             result_debug,
             "FormattingError(\"invalid suffix in input: 'hello'\")"

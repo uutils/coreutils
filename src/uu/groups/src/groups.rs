@@ -15,18 +15,16 @@
 
 // spell-checker:ignore (ToDO) passwd
 
-#[macro_use]
-extern crate uucore;
 use std::error::Error;
 use std::fmt::Display;
 use uucore::{
     display::Quotable,
     entries::{get_groups_gnu, gid2grp, Locate, Passwd},
     error::{UError, UResult},
-    format_usage,
+    format_usage, show,
 };
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 
 mod options {
     pub const USERS: &str = "USERNAME";
@@ -51,7 +49,7 @@ impl Display for GroupsError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::GetGroupsFailed => write!(f, "failed to fetch groups"),
-            Self::GroupNotFound(gid) => write!(f, "cannot find name for group ID {}", gid),
+            Self::GroupNotFound(gid) => write!(f, "cannot find name for group ID {gid}"),
             Self::UserNotFound(user) => write!(f, "{}: no such user", user.quote()),
         }
     }
@@ -102,7 +100,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -110,8 +108,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .infer_long_args(true)
         .arg(
             Arg::new(options::USERS)
-                .multiple_occurrences(true)
-                .takes_value(true)
+                .action(ArgAction::Append)
                 .value_name(options::USERS)
                 .value_hint(clap::ValueHint::Username),
         )

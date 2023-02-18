@@ -13,7 +13,8 @@ mod platform;
 
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
-use clap::{crate_version, Arg, ArgMatches, Command, ValueSource};
+use clap::ArgAction;
+use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
 use std::env;
 use std::fmt;
 use std::fs::{metadata, File};
@@ -37,8 +38,9 @@ static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
 static OPT_VERBOSE: &str = "verbose";
-//The ---io-blksize parameter is consumed and ignored.
+//The ---io and ---io-blksize parameters are consumed and ignored.
 //The parameter is included to make GNU coreutils tests pass.
+static OPT_IO: &str = "-io";
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
 static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 
@@ -56,12 +58,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
     match Settings::from(&matches) {
         Ok(settings) => split(&settings),
-        Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{}", e))),
-        Err(e) => Err(USimpleError::new(1, format!("{}", e))),
+        Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
+        Err(e) => Err(USimpleError::new(1, format!("{e}"))),
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
@@ -73,7 +75,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_BYTES)
                 .short('b')
                 .long(OPT_BYTES)
-                .takes_value(true)
                 .value_name("SIZE")
                 .help("put SIZE bytes per output file"),
         )
@@ -81,7 +82,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_LINE_BYTES)
                 .short('C')
                 .long(OPT_LINE_BYTES)
-                .takes_value(true)
                 .value_name("SIZE")
                 .default_value("2")
                 .help("put at most SIZE bytes of lines per output file"),
@@ -90,7 +90,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_LINES)
                 .short('l')
                 .long(OPT_LINES)
-                .takes_value(true)
                 .value_name("NUMBER")
                 .default_value("1000")
                 .help("put NUMBER lines/records per output file"),
@@ -99,7 +98,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_NUMBER)
                 .short('n')
                 .long(OPT_NUMBER)
-                .takes_value(true)
                 .value_name("CHUNKS")
                 .help("generate CHUNKS output files; see explanation below"),
         )
@@ -107,7 +105,6 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(OPT_ADDITIONAL_SUFFIX)
                 .long(OPT_ADDITIONAL_SUFFIX)
-                .takes_value(true)
                 .value_name("SUFFIX")
                 .default_value("")
                 .help("additional SUFFIX to append to output file names"),
@@ -115,7 +112,6 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(OPT_FILTER)
                 .long(OPT_FILTER)
-                .takes_value(true)
                 .value_name("COMMAND")
                 .value_hint(clap::ValueHint::CommandName)
                 .help(
@@ -126,58 +122,59 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(OPT_ELIDE_EMPTY_FILES)
                 .long(OPT_ELIDE_EMPTY_FILES)
                 .short('e')
-                .takes_value(false)
-                .help("do not generate empty output files with '-n'"),
+                .help("do not generate empty output files with '-n'")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
                 .short('d')
                 .long(OPT_NUMERIC_SUFFIXES)
-                .takes_value(true)
                 .default_missing_value("0")
+                .num_args(0..=1)
                 .help("use numeric suffixes instead of alphabetic"),
         )
         .arg(
             Arg::new(OPT_SUFFIX_LENGTH)
                 .short('a')
                 .long(OPT_SUFFIX_LENGTH)
-                .takes_value(true)
                 .value_name("N")
                 .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
-                .help("use suffixes of length N (default 2)"),
+                .help("use suffixes of fixed length N. 0 implies dynamic length."),
         )
         .arg(
             Arg::new(OPT_HEX_SUFFIXES)
                 .short('x')
                 .long(OPT_HEX_SUFFIXES)
-                .takes_value(true)
                 .default_missing_value("0")
+                .num_args(0..=1)
                 .help("use hex suffixes instead of alphabetic"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
                 .long(OPT_VERBOSE)
-                .help("print a diagnostic just before each output file is opened"),
+                .help("print a diagnostic just before each output file is opened")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(OPT_IO)
+                .long("io")
+                .alias(OPT_IO)
+                .hide(true),
         )
         .arg(
             Arg::new(OPT_IO_BLKSIZE)
-                .long(OPT_IO_BLKSIZE)
+                .long("io-blksize")
                 .alias(OPT_IO_BLKSIZE)
-                .takes_value(true)
                 .hide(true),
         )
         .arg(
             Arg::new(ARG_INPUT)
-                .takes_value(true)
                 .default_value("-")
-                .index(1)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(ARG_PREFIX)
-                .takes_value(true)
                 .default_value("x")
-                .index(2),
         )
 }
 
@@ -346,13 +343,13 @@ enum StrategyError {
 impl fmt::Display for StrategyError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Lines(e) => write!(f, "invalid number of lines: {}", e),
-            Self::Bytes(e) => write!(f, "invalid number of bytes: {}", e),
+            Self::Lines(e) => write!(f, "invalid number of lines: {e}"),
+            Self::Bytes(e) => write!(f, "invalid number of bytes: {e}"),
             Self::NumberType(NumberTypeError::NumberOfChunks(s)) => {
-                write!(f, "invalid number of chunks: {}", s)
+                write!(f, "invalid number of chunks: {s}")
             }
             Self::NumberType(NumberTypeError::ChunkNumber(s)) => {
-                write!(f, "invalid chunk number: {}", s)
+                write!(f, "invalid chunk number: {s}")
             }
             Self::MultipleWays => write!(f, "cannot split in more than one way"),
         }
@@ -400,13 +397,23 @@ impl Strategy {
 }
 
 /// Parse the suffix type from the command-line arguments.
-fn suffix_type_from(matches: &ArgMatches) -> SuffixType {
+fn suffix_type_from(matches: &ArgMatches) -> Result<(SuffixType, usize), SettingsError> {
     if matches.value_source(OPT_NUMERIC_SUFFIXES) == Some(ValueSource::CommandLine) {
-        SuffixType::Decimal
+        let suffix_start = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES);
+        let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
+        let suffix_start = suffix_start
+            .parse()
+            .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
+        Ok((SuffixType::Decimal, suffix_start))
     } else if matches.value_source(OPT_HEX_SUFFIXES) == Some(ValueSource::CommandLine) {
-        SuffixType::Hexadecimal
+        let suffix_start = matches.get_one::<String>(OPT_HEX_SUFFIXES);
+        let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
+        let suffix_start = usize::from_str_radix(suffix_start, 16)
+            .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
+        Ok((SuffixType::Hexadecimal, suffix_start))
     } else {
-        SuffixType::Alphabetic
+        // no numeric/hex suffix
+        Ok((SuffixType::Alphabetic, 0))
     }
 }
 
@@ -418,6 +425,7 @@ struct Settings {
     prefix: String,
     suffix_type: SuffixType,
     suffix_length: usize,
+    suffix_start: usize,
     additional_suffix: String,
     input: String,
     /// When supplied, a shell command to output to instead of xaa, xab …
@@ -470,7 +478,7 @@ impl fmt::Display for SettingsError {
         match self {
             Self::Strategy(e) => e.fmt(f),
             Self::SuffixNotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
-            Self::SuffixTooSmall(i) => write!(f, "the suffix length needs to be at least {}", i),
+            Self::SuffixTooSmall(i) => write!(f, "the suffix length needs to be at least {i}"),
             Self::SuffixContainsSeparator(s) => write!(
                 f,
                 "invalid suffix {}, contains directory separator",
@@ -479,8 +487,7 @@ impl fmt::Display for SettingsError {
             #[cfg(windows)]
             Self::NotSupported => write!(
                 f,
-                "{} is currently not supported in this platform",
-                OPT_FILTER
+                "{OPT_FILTER} is currently not supported in this platform"
             ),
         }
     }
@@ -497,7 +504,7 @@ impl Settings {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
         let strategy = Strategy::from(matches).map_err(SettingsError::Strategy)?;
-        let suffix_type = suffix_type_from(matches);
+        let (suffix_type, suffix_start) = suffix_type_from(matches)?;
         let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap();
         let suffix_length: usize = suffix_length_str
             .parse()
@@ -517,13 +524,14 @@ impl Settings {
                 .parse()
                 .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?,
             suffix_type,
+            suffix_start,
             additional_suffix,
             verbose: matches.value_source("verbose") == Some(ValueSource::CommandLine),
             strategy,
             input: matches.get_one::<String>(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.get_one::<String>(OPT_FILTER).map(|s| s.to_owned()),
-            elide_empty_files: matches.contains_id(OPT_ELIDE_EMPTY_FILES),
+            elide_empty_files: matches.get_flag(OPT_ELIDE_EMPTY_FILES),
         };
         #[cfg(windows)]
         if result.filter.is_some() {
@@ -538,7 +546,7 @@ impl Settings {
         if platform::paths_refer_to_same_file(&self.input, filename) {
             return Err(io::Error::new(
                 ErrorKind::Other,
-                format!("'{}' would overwrite input; aborting", filename),
+                format!("'{filename}' would overwrite input; aborting"),
             ));
         }
 
@@ -589,7 +597,8 @@ impl<'a> ByteChunkWriter<'a> {
             &settings.additional_suffix,
             settings.suffix_length,
             settings.suffix_type,
-        );
+            settings.suffix_start,
+        )?;
         let filename = filename_iterator
             .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
@@ -717,7 +726,8 @@ impl<'a> LineChunkWriter<'a> {
             &settings.additional_suffix,
             settings.suffix_length,
             settings.suffix_type,
-        );
+            settings.suffix_start,
+        )?;
         let filename = filename_iterator
             .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
@@ -825,7 +835,8 @@ impl<'a> LineBytesChunkWriter<'a> {
             &settings.additional_suffix,
             settings.suffix_length,
             settings.suffix_type,
-        );
+            settings.suffix_start,
+        )?;
         let filename = filename_iterator
             .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
@@ -907,10 +918,22 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                 // then move on to the next chunk if necessary.
                 None => {
                     let end = self.num_bytes_remaining_in_current_chunk;
-                    let num_bytes_written = self.inner.write(&buf[..end.min(buf.len())])?;
-                    self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
-                    total_bytes_written += num_bytes_written;
-                    buf = &buf[num_bytes_written..];
+
+                    // This is ugly but here to match GNU behavior. If the input
+                    // doesn't end with a \n, pretend that it does for handling
+                    // the second to last segment chunk. See `line-bytes.sh`.
+                    if end == buf.len()
+                        && self.num_bytes_remaining_in_current_chunk
+                            < self.chunk_size.try_into().unwrap()
+                        && buf[buf.len() - 1] != b'\n'
+                    {
+                        self.num_bytes_remaining_in_current_chunk = 0;
+                    } else {
+                        let num_bytes_written = self.inner.write(&buf[..end.min(buf.len())])?;
+                        self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
+                        total_bytes_written += num_bytes_written;
+                        buf = &buf[num_bytes_written..];
+                    }
                 }
 
                 // If there is a newline character and the line
@@ -1022,7 +1045,8 @@ where
         &settings.additional_suffix,
         settings.suffix_length,
         settings.suffix_type,
-    );
+        settings.suffix_start,
+    )?;
 
     // Create one writer for each chunk. This will create each
     // of the underlying files (if not in `--filter` mode).
@@ -1090,7 +1114,7 @@ where
     // of bytes per chunk.
     let metadata = metadata(&settings.input).unwrap();
     let num_bytes = metadata.len();
-    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+    let chunk_size = (num_bytes / num_chunks) as usize;
 
     // This object is responsible for creating the filename for each chunk.
     let mut filename_iterator = FilenameIterator::new(
@@ -1098,7 +1122,8 @@ where
         &settings.additional_suffix,
         settings.suffix_length,
         settings.suffix_type,
-    );
+        settings.suffix_start,
+    )?;
 
     // Create one writer for each chunk. This will create each
     // of the underlying files (if not in `--filter` mode).
@@ -1162,7 +1187,7 @@ where
     // of bytes per chunk.
     let metadata = metadata(&settings.input).unwrap();
     let num_bytes = metadata.len();
-    let chunk_size = (num_bytes / (num_chunks as u64)) as usize;
+    let chunk_size = (num_bytes / num_chunks) as usize;
 
     // Write to stdout instead of to a file.
     let stdout = std::io::stdout();
@@ -1195,6 +1220,47 @@ where
     Ok(())
 }
 
+fn split_into_n_chunks_by_line_round_robin<R>(
+    settings: &Settings,
+    reader: &mut R,
+    num_chunks: u64,
+) -> UResult<()>
+where
+    R: BufRead,
+{
+    // This object is responsible for creating the filename for each chunk.
+    let mut filename_iterator = FilenameIterator::new(
+        &settings.prefix,
+        &settings.additional_suffix,
+        settings.suffix_length,
+        settings.suffix_type,
+        settings.suffix_start,
+    )?;
+
+    // Create one writer for each chunk. This will create each
+    // of the underlying files (if not in `--filter` mode).
+    let mut writers = vec![];
+    for _ in 0..num_chunks {
+        let filename = filename_iterator
+            .next()
+            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+        let writer = settings.instantiate_current_writer(filename.as_str())?;
+        writers.push(writer);
+    }
+
+    let num_chunks: usize = num_chunks.try_into().unwrap();
+    for (i, line_result) in reader.lines().enumerate() {
+        let line = line_result.unwrap();
+        let maybe_writer = writers.get_mut(i % num_chunks);
+        let writer = maybe_writer.unwrap();
+        let bytes = line.as_bytes();
+        writer.write_all(bytes)?;
+        writer.write_all(b"\n")?;
+    }
+
+    Ok(())
+}
+
 fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
@@ -1221,6 +1287,9 @@ fn split(settings: &Settings) -> UResult<()> {
             let chunk_number = chunk_number - 1;
             kth_chunk_by_line(settings, &mut reader, chunk_number, num_chunks)
         }
+        Strategy::Number(NumberType::RoundRobin(num_chunks)) => {
+            split_into_n_chunks_by_line_round_robin(settings, &mut reader, num_chunks)
+        }
         Strategy::Number(_) => Err(USimpleError::new(1, "-n mode not yet fully implemented")),
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
@@ -1235,7 +1304,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // allowable filenames, we use `ErrorKind::Other` to
                     // indicate that. A special error message needs to be
                     // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{}", e))),
+                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
                     ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
@@ -1254,7 +1323,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // allowable filenames, we use `ErrorKind::Other` to
                     // indicate that. A special error message needs to be
                     // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{}", e))),
+                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
                     ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },
@@ -1273,7 +1342,7 @@ fn split(settings: &Settings) -> UResult<()> {
                     // allowable filenames, we use `ErrorKind::Other` to
                     // indicate that. A special error message needs to be
                     // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{}", e))),
+                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
                     ErrorKind::BrokenPipe => Ok(()),
                     _ => Err(uio_error!(e, "input/output error")),
                 },

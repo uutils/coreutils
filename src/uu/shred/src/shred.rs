@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (words) writeback wipesync
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::cell::{Cell, RefCell};
@@ -16,14 +16,10 @@ use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::prelude::*;
-use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, util_name};
-
-#[macro_use]
-extern crate uucore;
+use uucore::{format_usage, show, show_if_err, util_name};
 
 const BLOCK_SIZE: usize = 512;
 const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
@@ -129,7 +125,7 @@ impl<'a> BytesGenerator<'a> {
     fn new(total_bytes: u64, gen_type: PassType<'a>, exact: bool) -> BytesGenerator {
         let rng = match gen_type {
             PassType::Random => Some(RefCell::new(rand::thread_rng())),
-            _ => None,
+            PassType::Pattern(_) => None,
         };
 
         let bytes = [0; BLOCK_SIZE];
@@ -296,15 +292,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // TODO: implement --random-source
 
-    let force = matches.contains_id(options::FORCE);
-    let remove = matches.contains_id(options::REMOVE);
+    let force = matches.get_flag(options::FORCE);
+    let remove = matches.get_flag(options::REMOVE);
     let size_arg = matches
         .get_one::<String>(options::SIZE)
         .map(|s| s.to_string());
     let size = get_size(size_arg);
-    let exact = matches.contains_id(options::EXACT) && size.is_none(); // if -s is given, ignore -x
-    let zero = matches.contains_id(options::ZERO);
-    let verbose = matches.contains_id(options::VERBOSE);
+    let exact = matches.get_flag(options::EXACT) && size.is_none(); // if -s is given, ignore -x
+    let zero = matches.get_flag(options::ZERO);
+    let verbose = matches.get_flag(options::VERBOSE);
 
     for path_str in matches.get_many::<String>(options::FILE).unwrap() {
         show_if_err!(wipe_file(
@@ -314,7 +310,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -325,7 +321,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FORCE)
                 .long(options::FORCE)
                 .short('f')
-                .help("change permissions to allow writing if necessary"),
+                .help("change permissions to allow writing if necessary")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ITERATIONS)
@@ -339,7 +336,6 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::SIZE)
                 .long(options::SIZE)
                 .short('s')
-                .takes_value(true)
                 .value_name("N")
                 .help("shred this many bytes (suffixes like K, M, G accepted)"),
         )
@@ -347,13 +343,15 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::REMOVE)
                 .short('u')
                 .long(options::REMOVE)
-                .help("truncate and remove file after overwriting;  See below"),
+                .help("truncate and remove file after overwriting;  See below")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .long(options::VERBOSE)
                 .short('v')
-                .help("show progress"),
+                .help("show progress")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::EXACT)
@@ -362,19 +360,20 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "do not round file sizes up to the next full block;\n\
                      this is the default for non-regular files",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO)
                 .long(options::ZERO)
                 .short('z')
-                .help("add a final overwrite with zeros to hide shredding"),
+                .help("add a final overwrite with zeros to hide shredding")
+                .action(ArgAction::SetTrue),
         )
         // Positional arguments
         .arg(
             Arg::new(options::FILE)
-                .hide(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -424,7 +423,7 @@ fn pass_name(pass_type: PassType) -> String {
             let mut s: String = String::new();
             while s.len() < 6 {
                 for b in bytes {
-                    let readable: String = format!("{:x}", b);
+                    let readable: String = format!("{b:x}");
                     s.push_str(&readable);
                 }
             }
@@ -560,7 +559,7 @@ fn do_pass<'a>(
     generator_type: PassType<'a>,
     given_file_size: Option<u64>,
 ) -> Result<(), io::Error> {
-    file.seek(SeekFrom::Start(0))?;
+    file.rewind()?;
 
     // Use the given size or the whole file if not specified
     let size: u64 = given_file_size.unwrap_or(get_file_size(path)?);

@@ -75,7 +75,7 @@ impl Range {
     pub fn from_list(list: &str) -> Result<Vec<Self>, String> {
         let mut ranges = Vec::new();
 
-        for item in list.split(',') {
+        for item in list.split(&[',', ' ']) {
             let range_item = FromStr::from_str(item)
                 .map_err(|e| format!("range {} was invalid: {}", item.quote(), e))?;
             ranges.push(range_item);

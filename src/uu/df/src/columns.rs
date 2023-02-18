@@ -4,7 +4,7 @@
 //  * file that was distributed with this source code.
 // spell-checker:ignore itotal iused iavail ipcent pcent squashfs
 use crate::{OPT_INODES, OPT_OUTPUT, OPT_PRINT_TYPE};
-use clap::{ArgMatches, ValueSource};
+use clap::{parser::ValueSource, ArgMatches};
 
 /// The columns in the output table produced by `df`.
 ///
@@ -75,8 +75,8 @@ impl Column {
     /// than once in the command-line argument.
     pub(crate) fn from_matches(matches: &ArgMatches) -> Result<Vec<Self>, ColumnError> {
         match (
-            matches.contains_id(OPT_PRINT_TYPE),
-            matches.contains_id(OPT_INODES),
+            matches.get_flag(OPT_PRINT_TYPE),
+            matches.get_flag(OPT_INODES),
             matches.value_source(OPT_OUTPUT) == Some(ValueSource::CommandLine),
         ) {
             (false, false, false) => Ok(vec![

@@ -435,44 +435,43 @@ fn test_ls_io_errors() {
 
         // on the mac and in certain Linux containers bad fds are typed as dirs,
         // however sometimes bad fds are typed as links and directory entry on links won't fail
-        if PathBuf::from(format!("/dev/fd/{fd}", fd = fd2)).is_dir() {
+        if PathBuf::from(format!("/dev/fd/{fd2}")).is_dir() {
             scene
                 .ucmd()
                 .arg("-alR")
-                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .arg(format!("/dev/fd/{fd2}"))
                 .fails()
                 .stderr_contains(format!(
-                    "cannot open directory '/dev/fd/{fd}': Bad file descriptor",
-                    fd = fd2
+                    "cannot open directory '/dev/fd/{fd2}': Bad file descriptor"
                 ))
-                .stdout_does_not_contain(format!("{fd}:\n", fd = fd2));
+                .stdout_does_not_contain(format!("{fd2}:\n"));
 
             scene
                 .ucmd()
                 .arg("-RiL")
-                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .arg(format!("/dev/fd/{fd2}"))
                 .fails()
-                .stderr_contains(format!("cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2))
+                .stderr_contains(format!("cannot open directory '/dev/fd/{fd2}': Bad file descriptor"))
                 // don't double print bad fd errors
-                .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd}': Bad file descriptor", fd = fd2));
+                .stderr_does_not_contain(format!("ls: cannot open directory '/dev/fd/{fd2}': Bad file descriptor\nls: cannot open directory '/dev/fd/{fd2}': Bad file descriptor"));
         } else {
             scene
                 .ucmd()
                 .arg("-alR")
-                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .arg(format!("/dev/fd/{fd2}"))
                 .succeeds();
 
             scene
                 .ucmd()
                 .arg("-RiL")
-                .arg(format!("/dev/fd/{fd}", fd = fd2))
+                .arg(format!("/dev/fd/{fd2}"))
                 .succeeds();
         }
 
         scene
             .ucmd()
             .arg("-alL")
-            .arg(format!("/dev/fd/{fd}", fd = fd2))
+            .arg(format!("/dev/fd/{fd2}"))
             .succeeds();
 
         let _ = close(fd2);
@@ -561,8 +560,8 @@ fn test_ls_a() {
         .arg("-a")
         .arg("-1")
         .succeeds()
-        .stdout_contains(&".test-1")
-        .stdout_contains(&"..")
+        .stdout_contains(".test-1")
+        .stdout_contains("..")
         .stdout_matches(&re_pwd);
 
     scene
@@ -590,8 +589,8 @@ fn test_ls_a() {
         .arg("-1")
         .arg("some-dir")
         .succeeds()
-        .stdout_contains(&".test-2")
-        .stdout_contains(&"..")
+        .stdout_contains(".test-2")
+        .stdout_contains("..")
         .no_stderr()
         .stdout_matches(&re_pwd);
 
@@ -685,7 +684,7 @@ fn test_ls_width() {
             .args(&option.split(' ').collect::<Vec<_>>())
             .arg("-C")
             .fails()
-            .stderr_only("ls: invalid line width: '1a'");
+            .stderr_only("ls: invalid line width: '1a'\n");
     }
 }
 
@@ -736,7 +735,7 @@ fn test_ls_columns() {
             .arg("-C")
             .succeeds()
             .stdout_is("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n")
-            .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'");
+            .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'\n");
     }
     scene
         .ucmd()
@@ -951,7 +950,7 @@ fn test_ls_commas_trailing() {
         .arg("./test-commas-trailing-1")
         .arg("./test-commas-trailing-2")
         .succeeds()
-        .stdout_matches(&Regex::new(r"\S$").unwrap()); // matches if there is no whitespace at the end of stdout.
+        .stdout_matches(&Regex::new(r"\S\n$").unwrap());
 }
 
 #[test]
@@ -966,7 +965,7 @@ fn test_ls_long() {
         result.stdout_matches(&Regex::new(r"[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}.*").unwrap());
 
         #[cfg(windows)]
-        result.stdout_contains("---------- 1 somebody somegroup");
+        result.stdout_matches(&Regex::new(r"[-dl](r[w-]x){3}.*").unwrap());
     }
 }
 
@@ -1174,7 +1173,7 @@ fn test_ls_long_symlink_color() {
                 captures.get(1).unwrap().as_str().to_string(),
                 captures.get(2).unwrap().as_str().to_string(),
             ),
-            None => ("".to_string(), input.to_string()),
+            None => (String::new(), input.to_string()),
         }
     }
 
@@ -1821,7 +1820,7 @@ fn test_ls_files_dirs() {
         .ucmd()
         .arg("doesntexist")
         .fails()
-        .stderr_contains(&"'doesntexist': No such file or directory");
+        .stderr_contains("'doesntexist': No such file or directory");
 
     // One exists, the other doesn't
     scene
@@ -1829,8 +1828,8 @@ fn test_ls_files_dirs() {
         .arg("a")
         .arg("doesntexist")
         .fails()
-        .stderr_contains(&"'doesntexist': No such file or directory")
-        .stdout_contains(&"a:");
+        .stderr_contains("'doesntexist': No such file or directory")
+        .stdout_contains("a:");
 }
 
 #[test]
@@ -1851,7 +1850,7 @@ fn test_ls_recursive() {
         .arg("z")
         .arg("-R")
         .succeeds()
-        .stdout_contains(&"z:");
+        .stdout_contains("z:");
     let result = scene
         .ucmd()
         .arg("--color=never")
@@ -1861,9 +1860,9 @@ fn test_ls_recursive() {
         .succeeds();
 
     #[cfg(not(windows))]
-    result.stdout_contains(&"a/b:\nb");
+    result.stdout_contains("a/b:\nb");
     #[cfg(windows)]
-    result.stdout_contains(&"a\\b:\nb");
+    result.stdout_contains("a\\b:\nb");
 }
 
 #[test]
@@ -1932,10 +1931,7 @@ fn test_ls_color() {
         .arg("-w=15")
         .arg("-C")
         .succeeds()
-        .stdout_only(format!(
-            "{}  test-color\nb  {}\n",
-            a_with_colors, z_with_colors
-        ));
+        .stdout_only(format!("{a_with_colors}  test-color\nb  {z_with_colors}\n"));
 }
 
 #[cfg(unix)]
@@ -2014,7 +2010,7 @@ fn test_ls_indicator_style() {
         "-p",
     ] {
         // Verify that classify and file-type both contain indicators for symlinks.
-        scene.ucmd().arg(opt).succeeds().stdout_contains(&"/");
+        scene.ucmd().arg(opt).succeeds().stdout_contains("/");
     }
 
     // Classify, Indicator options should not contain any indicators when value is none.
@@ -2030,9 +2026,9 @@ fn test_ls_indicator_style() {
             .ucmd()
             .arg(opt)
             .succeeds()
-            .stdout_does_not_contain(&"/")
-            .stdout_does_not_contain(&"@")
-            .stdout_does_not_contain(&"|");
+            .stdout_does_not_contain("/")
+            .stdout_does_not_contain("@")
+            .stdout_does_not_contain("|");
     }
 
     // Classify and File-Type all contain indicators for pipes and links.
@@ -2041,10 +2037,10 @@ fn test_ls_indicator_style() {
         // Verify that classify and file-type both contain indicators for symlinks.
         scene
             .ucmd()
-            .arg(format!("--indicator-style={}", opt))
+            .arg(format!("--indicator-style={opt}"))
             .succeeds()
-            .stdout_contains(&"@")
-            .stdout_contains(&"|");
+            .stdout_contains("@")
+            .stdout_contains("|");
     }
 
     // Test sockets. Because the canonical way of making sockets to test is with
@@ -2057,7 +2053,7 @@ fn test_ls_indicator_style() {
             .tempdir()
             .expect("failed to create dir");
         let socket_path = dir.path().join("sock");
-        let _listener = UnixListener::bind(&socket_path).expect("failed to create socket");
+        let _listener = UnixListener::bind(socket_path).expect("failed to create socket");
 
         new_ucmd!()
             .args(&[
@@ -2091,15 +2087,15 @@ fn test_ls_indicator_style() {
         // Verify that classify and file-type both contain indicators for symlinks.
         scene
             .ucmd()
-            .arg(format!("--indicator-style={}", opt))
+            .arg(format!("--indicator-style={opt}"))
             .succeeds()
-            .stdout_contains(&"/");
+            .stdout_contains("/");
     }
 
     // Same test as above, but with the alternate flags.
     let options = vec!["--classify", "--file-type", "-p"];
     for opt in options {
-        scene.ucmd().arg(opt).succeeds().stdout_contains(&"/");
+        scene.ucmd().arg(opt).succeeds().stdout_contains("/");
     }
 
     // Classify and File-Type all contain indicators for pipes and links.
@@ -2108,9 +2104,9 @@ fn test_ls_indicator_style() {
         // Verify that classify and file-type both contain indicators for symlinks.
         scene
             .ucmd()
-            .arg(format!("--indicator-style={}", opt))
+            .arg(format!("--indicator-style={opt}"))
             .succeeds()
-            .stdout_contains(&"@");
+            .stdout_contains("@");
     }
 }
 
@@ -2389,7 +2385,7 @@ fn test_ls_quoting_style() {
                 .arg(arg)
                 .arg("one\ntwo")
                 .succeeds()
-                .stdout_only(format!("{}\n", correct));
+                .stdout_only(format!("{correct}\n"));
         }
 
         for (arg, correct) in [
@@ -2405,7 +2401,7 @@ fn test_ls_quoting_style() {
                 .arg("--show-control-chars")
                 .arg("one\ntwo")
                 .succeeds()
-                .stdout_only(format!("{}\n", correct));
+                .stdout_only(format!("{correct}\n"));
         }
 
         for (arg, correct) in [
@@ -2427,7 +2423,7 @@ fn test_ls_quoting_style() {
                 .arg(arg)
                 .arg("one\\two")
                 .succeeds()
-                .stdout_only(format!("{}\n", correct));
+                .stdout_only(format!("{correct}\n"));
         }
 
         // Tests for a character that forces quotation in shell-style escaping
@@ -2443,7 +2439,7 @@ fn test_ls_quoting_style() {
                 .arg(arg)
                 .arg("one\n&two")
                 .succeeds()
-                .stdout_only(format!("{}\n", correct));
+                .stdout_only(format!("{correct}\n"));
         }
     }
 
@@ -2474,7 +2470,7 @@ fn test_ls_quoting_style() {
             .arg(arg)
             .arg("one two")
             .succeeds()
-            .stdout_only(format!("{}\n", correct));
+            .stdout_only(format!("{correct}\n"));
     }
 
     scene.ucmd().arg("one").succeeds().stdout_only("one\n");
@@ -2498,7 +2494,7 @@ fn test_ls_quoting_style() {
             .arg(arg)
             .arg("one")
             .succeeds()
-            .stdout_only(format!("{}\n", correct));
+            .stdout_only(format!("{correct}\n"));
     }
 }
 
@@ -2631,7 +2627,7 @@ fn test_ls_ignore_hide() {
         .arg("--ignore=READ[ME")
         .arg("-1")
         .succeeds()
-        .stderr_contains(&"Invalid pattern")
+        .stderr_contains("Invalid pattern")
         .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
 
     scene
@@ -2639,7 +2635,7 @@ fn test_ls_ignore_hide() {
         .arg("--hide=READ[ME")
         .arg("-1")
         .succeeds()
-        .stderr_contains(&"Invalid pattern")
+        .stderr_contains("Invalid pattern")
         .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
 }
 
@@ -2679,6 +2675,73 @@ fn test_ls_ignore_backups() {
         .stdout_contains("somefile")
         .stdout_does_not_contain("somebackup")
         .stdout_does_not_contain(".somehiddenbackup~");
+}
+
+// This test fails on windows, see details at #3985
+#[cfg(not(windows))]
+#[test]
+fn test_ls_ignore_explicit_period() {
+    // In ls ignore patterns, leading periods must be explicitly specified
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    at.touch(".hidden.yml");
+    at.touch("regular.yml");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore")
+        .arg("?hidden.yml")
+        .succeeds()
+        .stdout_contains(".hidden.yml")
+        .stdout_contains("regular.yml");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore")
+        .arg("*.yml")
+        .succeeds()
+        .stdout_contains(".hidden.yml")
+        .stdout_does_not_contain("regular.yml");
+
+    // Leading period is explicitly specified
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore")
+        .arg(".*.yml")
+        .succeeds()
+        .stdout_does_not_contain(".hidden.yml")
+        .stdout_contains("regular.yml");
+}
+
+// This test fails on windows, see details at #3985
+#[cfg(not(windows))]
+#[test]
+fn test_ls_ignore_negation() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    at.touch("apple");
+    at.touch("boy");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("[!a]*")
+        .succeeds()
+        .stdout_contains("apple")
+        .stdout_does_not_contain("boy");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("[^a]*")
+        .succeeds()
+        .stdout_contains("apple")
+        .stdout_does_not_contain("boy");
 }
 
 #[test]
@@ -2961,31 +3024,31 @@ fn test_ls_path() {
     let file1 = "file1";
     let file2 = "file2";
     let dir = "dir";
-    let path = &format!("{}/{}", dir, file2);
+    let path = &format!("{dir}/{file2}");
 
     at.mkdir(dir);
     at.touch(file1);
     at.touch(path);
 
-    let expected_stdout = &format!("{}\n", path);
+    let expected_stdout = &format!("{path}\n");
     scene.ucmd().arg(path).run().stdout_is(expected_stdout);
 
-    let expected_stdout = &format!("./{}\n", path);
+    let expected_stdout = &format!("./{path}\n");
     scene
         .ucmd()
-        .arg(format!("./{}", path))
+        .arg(format!("./{path}"))
         .run()
         .stdout_is(expected_stdout);
 
     let abs_path = format!("{}/{}", at.as_string(), path);
     let expected_stdout = if cfg!(windows) {
-        format!("\'{}\'\n", abs_path)
+        format!("\'{abs_path}\'\n")
     } else {
-        format!("{}\n", abs_path)
+        format!("{abs_path}\n")
     };
     scene.ucmd().arg(&abs_path).run().stdout_is(expected_stdout);
 
-    let expected_stdout = format!("{}\n{}\n", path, file1);
+    let expected_stdout = format!("{path}\n{file1}\n");
     scene
         .ucmd()
         .arg(file1)
@@ -3128,7 +3191,7 @@ fn test_ls_context_format() {
     ] {
         let format = format!("--format={}", word);
         ts.ucmd()
-            .args(&[&"-Z", &format.as_str(), &"/"])
+            .args(&["-Z", format.as_str(), "/"])
             .succeeds()
             .stdout_only(
                 unwrap_or_return!(expected_result(&ts, &["-Z", format.as_str(), "/"])).stdout_str(),
@@ -3181,6 +3244,7 @@ fn test_ls_multiple_a_A() {
 }
 
 #[test]
+#[cfg(feature = "ln")]
 fn test_ls_quoting() {
     let scene = TestScenario::new(util_name!());
 
@@ -3200,6 +3264,7 @@ fn test_ls_quoting() {
 }
 
 #[test]
+#[cfg(feature = "ln")]
 fn test_ls_quoting_color() {
     let scene = TestScenario::new(util_name!());
 

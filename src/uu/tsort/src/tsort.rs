@@ -76,18 +76,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if !g.is_acyclic() {
         return Err(USimpleError::new(
             1,
-            format!("{}, input contains a loop:", input),
+            format!("{input}, input contains a loop:"),
         ));
     }
 
     for x in &g.result {
-        println!("{}", x);
+        println!("{x}");
     }
 
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .override_usage(format_usage(USAGE))

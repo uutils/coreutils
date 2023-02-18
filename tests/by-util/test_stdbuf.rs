@@ -27,17 +27,10 @@ fn test_stdbuf_line_buffered_stdout() {
 fn test_stdbuf_no_buffer_option_fails() {
     let ts = TestScenario::new(util_name!());
 
-    ts.ucmd().args(&["head"]).fails().stderr_is(&format!(
-        "error: The following required arguments were not provided:\n    \
-         --input <MODE>\n    \
-         --output <MODE>\n    \
-         --error <MODE>\n\n\
-         USAGE:\n    \
-         {1} {0} OPTION... COMMAND\n\n\
-         For more information try --help",
-        ts.util_name,
-        ts.bin_path.to_string_lossy()
-    ));
+    ts.ucmd()
+        .args(&["head"])
+        .fails()
+        .stderr_contains("The following required arguments were not provided:");
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -68,7 +61,7 @@ fn test_stdbuf_invalid_mode_fails() {
             .args(&[*option, "1024R", "head"])
             .fails()
             .code_is(125)
-            .stderr_only("stdbuf: invalid mode '1024R'");
+            .stderr_only("stdbuf: invalid mode '1024R'\n");
         #[cfg(not(target_pointer_width = "128"))]
         new_ucmd!()
             .args(&[*option, "1Y", "head"])

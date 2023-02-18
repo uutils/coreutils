@@ -7,20 +7,26 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{ExitCode, UResult, USimpleError, UUsageError};
+use uucore::error::{set_exit_code, ExitCode, UResult, USimpleError, UUsageError};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, show, show_error};
 
-static ABOUT: &str = "Change the mode of each FILE to MODE.
- With --reference, change the mode of each FILE to that of RFILE.";
+const ABOUT: &str = "Change the mode of each FILE to MODE.\n\
+    With --reference, change the mode of each FILE to that of RFILE.";
+const USAGE: &str = "\
+       {} [OPTION]... MODE[,MODE]... FILE...
+       {} [OPTION]... OCTAL-MODE FILE...
+       {} [OPTION]... --reference=RFILE FILE...";
+const LONG_USAGE: &str =
+    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.";
 
 mod options {
     pub const CHANGES: &str = "changes";
@@ -34,15 +40,6 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const USAGE: &str = "\
-    {} [OPTION]... MODE[,MODE]... FILE...
-    {} [OPTION]... OCTAL-MODE FILE...
-    {} [OPTION]... --reference=RFILE FILE...";
-
-fn get_long_usage() -> String {
-    String::from("Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.")
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args.collect_lossy();
@@ -51,17 +48,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
     let mode_had_minus_prefix = mode::strip_minus_from_mode(&mut args);
 
-    let after_help = get_long_usage();
+    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
 
-    let matches = uu_app()
-        .after_help(&after_help[..])
-        .try_get_matches_from(args)?;
-
-    let changes = matches.contains_id(options::CHANGES);
-    let quiet = matches.contains_id(options::QUIET);
-    let verbose = matches.contains_id(options::VERBOSE);
-    let preserve_root = matches.contains_id(options::PRESERVE_ROOT);
-    let recursive = matches.contains_id(options::RECURSIVE);
+    let changes = matches.get_flag(options::CHANGES);
+    let quiet = matches.get_flag(options::QUIET);
+    let verbose = matches.get_flag(options::VERBOSE);
+    let preserve_root = matches.get_flag(options::PRESERVE_ROOT);
+    let recursive = matches.get_flag(options::RECURSIVE);
     let fmode = match matches.get_one::<String>(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode()),
@@ -77,7 +70,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let modes = matches.get_one::<String>(options::MODE).unwrap(); // should always be Some because required
     let cmode = if mode_had_minus_prefix {
         // clap parsing is finished, now put prefix back
-        format!("-{}", modes)
+        format!("-{modes}")
     } else {
         modes.to_string()
     };
@@ -112,7 +105,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     chmoder.chmod(&files)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -122,56 +115,58 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::CHANGES)
                 .long(options::CHANGES)
                 .short('c')
-                .help("like verbose but report only when a change is made"),
+                .help("like verbose but report only when a change is made")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::QUIET)
                 .long(options::QUIET)
                 .visible_alias("silent")
                 .short('f')
-                .help("suppress most error messages"),
+                .help("suppress most error messages")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .long(options::VERBOSE)
                 .short('v')
-                .help("output a diagnostic for every file processed"),
+                .help("output a diagnostic for every file processed")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_PRESERVE_ROOT)
                 .long(options::NO_PRESERVE_ROOT)
-                .help("do not treat '/' specially (the default)"),
+                .help("do not treat '/' specially (the default)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRESERVE_ROOT)
                 .long(options::PRESERVE_ROOT)
-                .help("fail to operate recursively on '/'"),
+                .help("fail to operate recursively on '/'")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RECURSIVE)
                 .long(options::RECURSIVE)
                 .short('R')
-                .help("change files and directories recursively"),
+                .help("change files and directories recursively")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REFERENCE)
                 .long("reference")
-                .takes_value(true)
                 .value_hint(clap::ValueHint::FilePath)
                 .help("use RFILE's mode instead of MODE values"),
         )
         .arg(
-            Arg::new(options::MODE)
-                .required_unless_present(options::REFERENCE)
-                .takes_value(true),
-            // It would be nice if clap could parse with delimiter, e.g. "g-x,u+x",
-            // however .multiple_occurrences(true) cannot be used here because FILE already needs that.
-            // Only one positional argument with .multiple_occurrences(true) set is allowed per command
+            Arg::new(options::MODE).required_unless_present(options::REFERENCE), // It would be nice if clap could parse with delimiter, e.g. "g-x,u+x",
+                                                                                 // however .multiple_occurrences(true) cannot be used here because FILE already needs that.
+                                                                                 // Only one positional argument with .multiple_occurrences(true) set is allowed per command
         )
         .arg(
             Arg::new(options::FILE)
                 .required_unless_present(options::MODE)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
@@ -200,21 +195,24 @@ impl Chmoder {
                         filename.quote()
                     );
                     if !self.quiet {
-                        return Err(USimpleError::new(
+                        show!(USimpleError::new(
                             1,
                             format!("cannot operate on dangling symlink {}", filename.quote()),
                         ));
                     }
                 } else if !self.quiet {
-                    return Err(USimpleError::new(
+                    show!(USimpleError::new(
                         1,
                         format!(
                             "cannot access {}: No such file or directory",
                             filename.quote()
-                        ),
+                        )
                     ));
                 }
-                return Err(ExitCode::new(1));
+                // GNU exits with exit code 1 even if -q or --quiet are passed
+                // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
+                set_exit_code(1);
+                continue;
             }
             if self.recursive && self.preserve_root && filename == "/" {
                 return Err(USimpleError::new(

@@ -56,6 +56,30 @@ fn empty_empty() {
 }
 
 #[test]
+fn total() {
+    new_ucmd!()
+        .args(&["--total", "a", "b"])
+        .succeeds()
+        .stdout_is_fixture("ab_total.expected");
+}
+
+#[test]
+fn total_with_suppressed_regular_output() {
+    new_ucmd!()
+        .args(&["--total", "-123", "a", "b"])
+        .succeeds()
+        .stdout_is_fixture("ab_total_suppressed_regular_output.expected");
+}
+
+#[test]
+fn total_with_output_delimiter() {
+    new_ucmd!()
+        .args(&["--total", "--output-delimiter=word", "a", "b"])
+        .succeeds()
+        .stdout_is_fixture("ab_total_delimiter_word.expected");
+}
+
+#[test]
 fn output_delimiter() {
     new_ucmd!()
         .args(&["--output-delimiter=word", "a", "b"])
@@ -162,16 +186,14 @@ fn unintuitive_default_behavior_1() {
         .stdout_only_fixture("defaultcheck_unintuitive.expected");
 }
 
-#[ignore] //bug? should help be stdout if not called via -h|--help?
 #[test]
 fn no_arguments() {
-    new_ucmd!().fails().no_stdout().no_stderr();
+    new_ucmd!().fails().no_stdout();
 }
 
-#[ignore] //bug? should help be stdout if not called via -h|--help?
 #[test]
 fn one_argument() {
-    new_ucmd!().arg("a").fails().no_stdout().no_stderr();
+    new_ucmd!().arg("a").fails().no_stdout();
 }
 
 #[test]
@@ -179,5 +201,5 @@ fn test_no_such_file() {
     new_ucmd!()
         .args(&["bogus_file_1", "bogus_file_2"])
         .fails()
-        .stderr_only("comm: bogus_file_1: No such file or directory");
+        .stderr_only("comm: bogus_file_1: No such file or directory\n");
 }

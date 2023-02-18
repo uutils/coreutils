@@ -2,9 +2,6 @@
 // spell-checker:ignore rustdoc
 #![allow(rustdoc::private_intra_doc_links)]
 
-#[macro_use]
-extern crate uucore;
-
 use std::cmp::Ordering;
 use std::io::{self, BufReader};
 use std::{
@@ -12,11 +9,11 @@ use std::{
     io::{BufRead, BufWriter, Write},
 };
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::format_usage;
+use uucore::{crash_if_err, format_usage};
 
 mod csplit_error;
 mod patterns;
@@ -25,7 +22,7 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-static ABOUT: &str = "split a file into sections determined by context lines";
+static ABOUT: &str = "Split a file into sections determined by context lines";
 static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
 const USAGE: &str = "{} [OPTION]... FILE PATTERN...";
 
@@ -52,10 +49,10 @@ pub struct CsplitOptions {
 
 impl CsplitOptions {
     fn new(matches: &ArgMatches) -> Self {
-        let keep_files = matches.contains_id(options::KEEP_FILES);
-        let quiet = matches.contains_id(options::QUIET);
-        let elide_empty_files = matches.contains_id(options::ELIDE_EMPTY_FILES);
-        let suppress_matched = matches.contains_id(options::SUPPRESS_MATCHED);
+        let keep_files = matches.get_flag(options::KEEP_FILES);
+        let quiet = matches.get_flag(options::QUIET);
+        let elide_empty_files = matches.get_flag(options::ELIDE_EMPTY_FILES);
+        let suppress_matched = matches.get_flag(options::SUPPRESS_MATCHED);
 
         Self {
             split_name: crash_if_err!(
@@ -231,7 +228,7 @@ impl<'a> SplitWriter<'a> {
     /// The creation of the split file may fail with some [`io::Error`].
     fn new_writer(&mut self) -> io::Result<()> {
         let file_name = self.options.split_name.get(self.counter);
-        let file = File::create(&file_name)?;
+        let file = File::create(file_name)?;
         self.current_writer = Some(BufWriter::new(file));
         self.counter += 1;
         self.size = 0;
@@ -577,7 +574,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -586,7 +583,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -598,7 +595,7 @@ mod tests {
                 );
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         input_splitter.rewind_buffer();
@@ -608,7 +605,7 @@ mod tests {
                 assert_eq!(line, String::from("bbb"));
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -616,7 +613,7 @@ mod tests {
                 assert_eq!(line, String::from("ccc"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -624,7 +621,7 @@ mod tests {
                 assert_eq!(line, String::from("ddd"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         assert!(input_splitter.next().is_none());
@@ -649,7 +646,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -658,7 +655,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -667,7 +664,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(2, line), None);
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         input_splitter.rewind_buffer();
@@ -678,7 +675,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -686,7 +683,7 @@ mod tests {
                 assert_eq!(line, String::from("aaa"));
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -694,7 +691,7 @@ mod tests {
                 assert_eq!(line, String::from("bbb"));
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -702,7 +699,7 @@ mod tests {
                 assert_eq!(line, String::from("ccc"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -710,7 +707,7 @@ mod tests {
                 assert_eq!(line, String::from("ddd"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         assert!(input_splitter.next().is_none());
@@ -750,7 +747,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -774,12 +771,14 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::KEEP_FILES)
                 .short('k')
                 .long(options::KEEP_FILES)
-                .help("do not remove output files on errors"),
+                .help("do not remove output files on errors")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SUPPRESS_MATCHED)
                 .long(options::SUPPRESS_MATCHED)
-                .help("suppress the lines matching PATTERN"),
+                .help("suppress the lines matching PATTERN")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DIGITS)
@@ -793,13 +792,15 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('s')
                 .long(options::QUIET)
                 .visible_alias("silent")
-                .help("do not print counts of output file sizes"),
+                .help("do not print counts of output file sizes")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ELIDE_EMPTY_FILES)
                 .short('z')
                 .long(options::ELIDE_EMPTY_FILES)
-                .help("remove empty output files"),
+                .help("remove empty output files")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE)
@@ -810,7 +811,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::PATTERN)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(clap::ArgAction::Append)
                 .required(true),
         )
         .after_help(LONG_HELP)

@@ -7,21 +7,17 @@
 
 // spell-checker:ignore (ToDO) sysv
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, show};
 
-static NAME: &str = "sum";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
-static ABOUT: &str = r#"Checksum and count the blocks in a file.
-                        With no FILE, or when  FILE is -, read standard input."#;
+static ABOUT: &str = "Checksum and count the blocks in a file.\n\n\
+                      With no FILE, or when FILE is -, read standard input.";
 
 // This can be replaced with usize::div_ceil once it is stabilized.
 // This implementation approach is optimized for when `b` is a constant,
@@ -118,13 +114,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec!["-".to_owned()],
     };
 
-    let sysv = matches.contains_id(options::SYSTEM_V_COMPATIBLE);
+    let sysv = matches.get_flag(options::SYSTEM_V_COMPATIBLE);
 
-    let print_names = if sysv {
-        files.len() > 1 || files[0] != "-"
-    } else {
-        files.len() > 1
-    };
+    let print_names = files.len() > 1 || files[0] != "-";
+    let width = if sysv { 1 } else { 5 };
 
     for file in &files {
         let reader = match open(file) {
@@ -141,36 +134,37 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
 
         if print_names {
-            println!("{} {} {}", sum, blocks, file);
+            println!("{sum:0width$} {blocks:width$} {file}");
         } else {
-            println!("{} {}", sum, blocks);
+            println!("{sum:0width$} {blocks:width$}");
         }
     }
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)
         .arg(
             Arg::new(options::FILE)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .hide(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
             Arg::new(options::BSD_COMPATIBLE)
                 .short('r')
-                .help("use the BSD sum algorithm, use 1K blocks (default)"),
+                .help("use the BSD sum algorithm, use 1K blocks (default)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SYSTEM_V_COMPATIBLE)
                 .short('s')
                 .long(options::SYSTEM_V_COMPATIBLE)
-                .help("use System V sum algorithm, use 512 bytes blocks"),
+                .help("use System V sum algorithm, use 512 bytes blocks")
+                .action(ArgAction::SetTrue),
         )
 }

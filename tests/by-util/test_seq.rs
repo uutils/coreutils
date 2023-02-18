@@ -1,6 +1,6 @@
 // spell-checker:ignore lmnop xlmnop
 use crate::common::util::*;
-use std::io::Read;
+use std::process::Stdio;
 
 #[test]
 fn test_invalid_arg() {
@@ -13,26 +13,41 @@ fn test_hex_rejects_sign_after_identifier() {
         .args(&["0x-123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '0x-123ABC'")
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '0x-123ABC'");
     new_ucmd!()
         .args(&["0x+123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '0x+123ABC'")
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '0x+123ABC'");
+
+    new_ucmd!()
+        .args(&["--", "-0x-123ABC"])
+        .fails()
+        .no_stdout()
+        .usage_error("invalid floating point argument: '-0x-123ABC'");
+    new_ucmd!()
+        .args(&["--", "-0x+123ABC"])
+        .fails()
+        .no_stdout()
+        .usage_error("invalid floating point argument: '-0x+123ABC'");
+
+    // test without "--" => argument parsed as (invalid) flag
     new_ucmd!()
         .args(&["-0x-123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("which wasn't expected, or isn't valid in this context")
-        .stderr_contains("For more information try --help");
+        .stderr_contains(
+            "Found argument '-0' which wasn't expected, or isn't valid in this context",
+        )
+        .stderr_contains("For more information try '--help'");
     new_ucmd!()
         .args(&["-0x+123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("which wasn't expected, or isn't valid in this context")
-        .stderr_contains("For more information try --help");
+        .stderr_contains(
+            "Found argument '-0' which wasn't expected, or isn't valid in this context",
+        )
+        .stderr_contains("For more information try '--help'");
 }
 
 #[test]
@@ -66,8 +81,7 @@ fn test_hex_identifier_in_wrong_place() {
         .args(&["1234ABCD0x"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '1234ABCD0x'")
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '1234ABCD0x'");
 }
 
 #[test]
@@ -119,38 +133,32 @@ fn test_invalid_float() {
         .args(&["1e2.3"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '1e2.3'")
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '1e2.3'");
     new_ucmd!()
         .args(&["1e2.3", "2"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '1e2.3'")
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '1e2.3'");
     new_ucmd!()
         .args(&["1", "1e2.3"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '1e2.3'")
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '1e2.3'");
     new_ucmd!()
         .args(&["1e2.3", "2", "3"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '1e2.3'")
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '1e2.3'");
     new_ucmd!()
         .args(&["1", "1e2.3", "3"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '1e2.3'")
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '1e2.3'");
     new_ucmd!()
         .args(&["1", "2", "1e2.3"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '1e2.3'")
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '1e2.3'");
 }
 
 #[test]
@@ -159,8 +167,7 @@ fn test_width_invalid_float() {
         .args(&["-w", "1e2.3"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid floating point argument: '1e2.3'")
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '1e2.3'");
 }
 
 // ---- Tests for the big integer based path ----
@@ -595,12 +602,10 @@ fn test_width_floats() {
 /// Run `seq`, capture some of the output, close the pipe, and verify it.
 fn run(args: &[&str], expected: &[u8]) {
     let mut cmd = new_ucmd!();
-    let mut child = cmd.args(args).run_no_wait();
-    let mut stdout = child.stdout.take().unwrap();
-    let mut buf = vec![0; expected.len()];
-    stdout.read_exact(&mut buf).unwrap();
-    drop(stdout);
-    assert!(child.wait().unwrap().success());
+    let mut child = cmd.args(args).set_stdout(Stdio::piped()).run_no_wait();
+    let buf = child.stdout_exact_bytes(expected.len());
+    child.close_stdout();
+    child.wait().unwrap().success();
     assert_eq!(buf.as_slice(), expected);
 }
 
@@ -740,6 +745,5 @@ fn test_invalid_zero_increment_value() {
         .args(&["0", "0", "1"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid Zero increment value: '0'")
-        .stderr_contains("for more information.");
+        .usage_error("invalid Zero increment value: '0'");
 }

@@ -9,7 +9,7 @@
 // spell-checker:ignore (ToDO) getloadavg upsecs updays nusers loadavg boottime uphours upmins
 
 use chrono::{Local, TimeZone, Utc};
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 
 use uucore::format_usage;
 // import crate time from utmpx
@@ -43,8 +43,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if uptime < 0 {
         Err(USimpleError::new(1, "could not retrieve system uptime"))
     } else {
-        if matches.contains_id(options::SINCE) {
-            let initial_date = Local.timestamp(Utc::now().timestamp() - uptime, 0);
+        if matches.get_flag(options::SINCE) {
+            let initial_date = Local
+                .timestamp_opt(Utc::now().timestamp() - uptime, 0)
+                .unwrap();
             println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
             return Ok(());
         }
@@ -59,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -69,7 +71,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::SINCE)
                 .short('s')
                 .long(options::SINCE)
-                .help("system up since"),
+                .help("system up since")
+                .action(ArgAction::SetTrue),
         )
 }
 
@@ -130,7 +133,7 @@ fn process_utmpx() -> (Option<time_t>, usize) {
 fn print_nusers(nusers: usize) {
     match nusers.cmp(&1) {
         std::cmp::Ordering::Equal => print!("1 user,  "),
-        std::cmp::Ordering::Greater => print!("{} users,  ", nusers),
+        std::cmp::Ordering::Greater => print!("{nusers} users,  "),
         _ => {}
     };
 }
@@ -157,7 +160,10 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
     proc_uptime.unwrap_or_else(|| match boot_time {
         Some(t) => {
             let now = Local::now().timestamp();
-            let boottime = t as i64;
+            #[cfg(target_pointer_width = "64")]
+            let boottime: i64 = t;
+            #[cfg(not(target_pointer_width = "64"))]
+            let boottime: i64 = t.into();
             now - boottime
         }
         None => -1,
@@ -174,10 +180,10 @@ fn print_uptime(upsecs: i64) {
     let uphours = (upsecs - (updays * 86400)) / 3600;
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
     match updays.cmp(&1) {
-        std::cmp::Ordering::Equal => print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins),
+        std::cmp::Ordering::Equal => print!("up {updays:1} day, {uphours:2}:{upmins:02},  "),
         std::cmp::Ordering::Greater => {
-            print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins);
+            print!("up {updays:1} days, {uphours:2}:{upmins:02},  ");
         }
-        _ => print!("up  {:2}:{:02}, ", uphours, upmins),
+        _ => print!("up  {uphours:2}:{upmins:02}, "),
     };
 }

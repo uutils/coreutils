@@ -8,9 +8,9 @@
 
 // last synced with: uname (GNU coreutils) 8.21
 
-// spell-checker:ignore (ToDO) nodename kernelname kernelrelease kernelversion sysname hwplatform mnrsv
+// spell-checker:ignore (API) nodename osname sysname (options) mnrsv mnrsvo
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use platform_info::*;
 use uucore::{
     error::{FromIo, UResult},
@@ -23,36 +23,15 @@ const USAGE: &str = "{} [OPTION]...";
 
 pub mod options {
     pub static ALL: &str = "all";
-    pub static KERNELNAME: &str = "kernel-name";
+    pub static KERNEL_NAME: &str = "kernel-name";
     pub static NODENAME: &str = "nodename";
-    pub static KERNELVERSION: &str = "kernel-version";
-    pub static KERNELRELEASE: &str = "kernel-release";
+    pub static KERNEL_VERSION: &str = "kernel-version";
+    pub static KERNEL_RELEASE: &str = "kernel-release";
     pub static MACHINE: &str = "machine";
     pub static PROCESSOR: &str = "processor";
-    pub static HWPLATFORM: &str = "hardware-platform";
+    pub static HARDWARE_PLATFORM: &str = "hardware-platform";
     pub static OS: &str = "operating-system";
 }
-
-#[cfg(all(target_os = "linux", any(target_env = "gnu", target_env = "")))]
-const HOST_OS: &str = "GNU/Linux";
-#[cfg(all(target_os = "linux", not(any(target_env = "gnu", target_env = ""))))]
-const HOST_OS: &str = "Linux";
-#[cfg(target_os = "android")]
-const HOST_OS: &str = "Android";
-#[cfg(target_os = "windows")]
-const HOST_OS: &str = "Windows NT";
-#[cfg(target_os = "freebsd")]
-const HOST_OS: &str = "FreeBSD";
-#[cfg(target_os = "netbsd")]
-const HOST_OS: &str = "NetBSD";
-#[cfg(target_os = "openbsd")]
-const HOST_OS: &str = "OpenBSD";
-#[cfg(target_vendor = "apple")]
-const HOST_OS: &str = "Darwin";
-#[cfg(target_os = "fuchsia")]
-const HOST_OS: &str = "Fuchsia";
-#[cfg(target_os = "redox")]
-const HOST_OS: &str = "Redox";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -62,42 +41,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         PlatformInfo::new().map_err_context(|| "failed to create PlatformInfo".to_string())?;
     let mut output = String::new();
 
-    let all = matches.contains_id(options::ALL);
-    let kernelname = matches.contains_id(options::KERNELNAME);
-    let nodename = matches.contains_id(options::NODENAME);
-    let kernelrelease = matches.contains_id(options::KERNELRELEASE);
-    let kernelversion = matches.contains_id(options::KERNELVERSION);
-    let machine = matches.contains_id(options::MACHINE);
-    let processor = matches.contains_id(options::PROCESSOR);
-    let hwplatform = matches.contains_id(options::HWPLATFORM);
-    let os = matches.contains_id(options::OS);
+    let all = matches.get_flag(options::ALL);
+    let kernel_name = matches.get_flag(options::KERNEL_NAME);
+    let nodename = matches.get_flag(options::NODENAME);
+    let kernel_release = matches.get_flag(options::KERNEL_RELEASE);
+    let kernel_version = matches.get_flag(options::KERNEL_VERSION);
+    let machine = matches.get_flag(options::MACHINE);
+    let processor = matches.get_flag(options::PROCESSOR);
+    let hardware_platform = matches.get_flag(options::HARDWARE_PLATFORM);
+    let os = matches.get_flag(options::OS);
 
     let none = !(all
-        || kernelname
+        || kernel_name
         || nodename
-        || kernelrelease
-        || kernelversion
+        || kernel_release
+        || kernel_version
         || machine
         || os
         || processor
-        || hwplatform);
+        || hardware_platform);
 
-    if kernelname || all || none {
+    if kernel_name || all || none {
         output.push_str(&uname.sysname());
         output.push(' ');
     }
 
     if nodename || all {
-        output.push_str(&uname.nodename());
+        // maint: [2023-01-14; rivy] remove `.trim_end_matches('\0')` when platform-info nodename-NUL bug is fixed (see GH:uutils/platform-info/issues/32)
+        output.push_str(uname.nodename().trim_end_matches('\0'));
         output.push(' ');
     }
 
-    if kernelrelease || all {
+    if kernel_release || all {
         output.push_str(&uname.release());
         output.push(' ');
     }
 
-    if kernelversion || all {
+    if kernel_version || all {
         output.push_str(&uname.version());
         output.push(' ');
     }
@@ -108,7 +88,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if os || all {
-        output.push_str(HOST_OS);
+        output.push_str(&uname.osname());
         output.push(' ');
     }
 
@@ -121,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // This option is unsupported on modern Linux systems
     // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-    if hwplatform {
+    if hardware_platform {
         output.push_str("unknown");
         output.push(' ');
     }
@@ -131,50 +111,80 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
-        .arg(Arg::new(options::ALL)
-            .short('a')
-            .long(options::ALL)
-            .help("Behave as though all of the options -mnrsv were specified."))
-        .arg(Arg::new(options::KERNELNAME)
-            .short('s')
-            .long(options::KERNELNAME)
-            .alias("sysname") // Obsolescent option in GNU uname
-            .help("print the kernel name."))
-        .arg(Arg::new(options::NODENAME)
-            .short('n')
-            .long(options::NODENAME)
-            .help("print the nodename (the nodename may be a name that the system is known by to a communications network)."))
-        .arg(Arg::new(options::KERNELRELEASE)
-            .short('r')
-            .long(options::KERNELRELEASE)
-            .alias("release") // Obsolescent option in GNU uname
-            .help("print the operating system release."))
-        .arg(Arg::new(options::KERNELVERSION)
-            .short('v')
-            .long(options::KERNELVERSION)
-            .help("print the operating system version."))
-        .arg(Arg::new(options::MACHINE)
-            .short('m')
-            .long(options::MACHINE)
-            .help("print the machine hardware name."))
-        .arg(Arg::new(options::OS)
-            .short('o')
-            .long(options::OS)
-            .help("print the operating system name."))
-        .arg(Arg::new(options::PROCESSOR)
-            .short('p')
-            .long(options::PROCESSOR)
-            .help("print the processor type (non-portable)")
-            .hide(true))
-        .arg(Arg::new(options::HWPLATFORM)
-            .short('i')
-            .long(options::HWPLATFORM)
-            .help("print the hardware platform (non-portable)")
-            .hide(true))
+        .arg(
+            Arg::new(options::ALL)
+                .short('a')
+                .long(options::ALL)
+                .help("Behave as though all of the options -mnrsvo were specified.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::KERNEL_NAME)
+                .short('s')
+                .long(options::KERNEL_NAME)
+                .alias("sysname") // Obsolescent option in GNU uname
+                .help("print the kernel name.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::NODENAME)
+                .short('n')
+                .long(options::NODENAME)
+                .help(
+                    "print the nodename (the nodename may be a name that the system \
+                is known by to a communications network).",
+                )
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::KERNEL_RELEASE)
+                .short('r')
+                .long(options::KERNEL_RELEASE)
+                .alias("release") // Obsolescent option in GNU uname
+                .help("print the operating system release.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::KERNEL_VERSION)
+                .short('v')
+                .long(options::KERNEL_VERSION)
+                .help("print the operating system version.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::MACHINE)
+                .short('m')
+                .long(options::MACHINE)
+                .help("print the machine hardware name.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::OS)
+                .short('o')
+                .long(options::OS)
+                .help("print the operating system name.")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::PROCESSOR)
+                .short('p')
+                .long(options::PROCESSOR)
+                .help("print the processor type (non-portable)")
+                .action(ArgAction::SetTrue)
+                .hide(true),
+        )
+        .arg(
+            Arg::new(options::HARDWARE_PLATFORM)
+                .short('i')
+                .long(options::HARDWARE_PLATFORM)
+                .help("print the hardware platform (non-portable)")
+                .action(ArgAction::SetTrue)
+                .hide(true),
+        )
 }

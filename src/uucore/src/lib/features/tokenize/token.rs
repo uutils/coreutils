@@ -1,16 +1,29 @@
 //! Traits and enums dealing with Tokenization of printf Format String
-use itertools::PutBackN;
+use std::io::Write;
 use std::iter::Peekable;
 use std::slice::Iter;
-use std::str::Chars;
 
-use crate::error::UResult;
+use crate::features::tokenize::sub::Sub;
+use crate::features::tokenize::unescaped_text::UnescapedText;
 
 // A token object is an object that can print the expected output
 // of a contiguous segment of the format string, and
 // requires at most 1 argument
-pub trait Token {
-    fn print(&self, args: &mut Peekable<Iter<String>>);
+pub enum Token {
+    Sub(Sub),
+    UnescapedText(UnescapedText),
+}
+
+impl Token {
+    pub(crate) fn write<W>(&self, writer: &mut W, args: &mut Peekable<Iter<String>>)
+    where
+        W: Write,
+    {
+        match self {
+            Self::Sub(sub) => sub.write(writer, args),
+            Self::UnescapedText(unescaped_text) => unescaped_text.write(writer),
+        }
+    }
 }
 
 // A tokenizer object is an object that takes an iterator
@@ -24,10 +37,3 @@ pub trait Token {
 // printing of that token's value. Essentially tokenizing
 // a whole format string will print the format string and consume
 // a number of arguments equal to the number of argument-using tokens
-
-pub trait Tokenizer {
-    fn from_it(
-        it: &mut PutBackN<Chars>,
-        args: &mut Peekable<Iter<String>>,
-    ) -> UResult<Option<Box<dyn Token>>>;
-}

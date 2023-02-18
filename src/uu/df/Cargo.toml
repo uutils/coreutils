@@ -1,6 +1,6 @@
 [package]
 name = "uu_df"
-version = "0.0.15"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "df ~ (uutils) display file system information"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/df.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["libc", "fsext"] }
-unicode-width = "0.1.9"
+clap = { workspace=true }
+uucore = { workspace=true, features=["libc", "fsext"] }
+unicode-width = { workspace=true }
 
 [[bin]]
 name = "df"

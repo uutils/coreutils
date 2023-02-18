@@ -1,6 +1,6 @@
 [package]
 name = "uu_dd"
-version = "0.0.15"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "dd ~ (uutils) copy and convert files"
@@ -15,14 +15,13 @@ edition = "2021"
 path = "src/dd.rs"
 
 [dependencies]
-byte-unit = "4.0"
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-gcd = "2.0"
-libc = "0.2"
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+clap = { workspace=true }
+gcd = { workspace=true }
+libc = { workspace=true }
+uucore = { workspace=true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-signal-hook = "0.3.14"
+signal-hook = { workspace=true }
 
 [[bin]]
 name = "dd"

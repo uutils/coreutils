@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset CHARCLASS
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -21,7 +21,6 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::format_usage;
 
-static NAME: &str = "ptx";
 const USAGE: &str = "\
     {} [OPTION]... [INPUT]...
     {} -G [OPTION]... [INPUT [OUTPUT]]";
@@ -171,12 +170,11 @@ impl WordFilter {
                             .unwrap()
                             .into_iter()
                             .map(|c| if REGEX_CHARCLASS.contains(c) {
-                                format!("\\{}", c)
+                                format!("\\{c}")
                             } else {
                                 c.to_string()
                             })
-                            .collect::<Vec<String>>()
-                            .join("")
+                            .collect::<String>()
                     )
                 } else if config.gnu_ext {
                     "\\w+".to_owned()
@@ -221,16 +219,16 @@ impl Display for PtxError {
             Self::DumbFormat => {
                 write!(f, "There is no dumb format with GNU extensions disabled")
             }
-            Self::NotImplemented(s) => write!(f, "{} not implemented yet", s),
+            Self::NotImplemented(s) => write!(f, "{s} not implemented yet"),
             Self::ParseError(e) => e.fmt(f),
         }
     }
 }
 
 fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
-    let mut config: Config = Default::default();
+    let mut config = Config::default();
     let err_msg = "parsing options failed";
-    if matches.contains_id(options::TRADITIONAL) {
+    if matches.get_flag(options::TRADITIONAL) {
         config.gnu_ext = false;
         config.format = OutFormat::Roff;
         config.context_regex = "[^ \t\n]+".to_owned();
@@ -240,10 +238,10 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     if matches.contains_id(options::SENTENCE_REGEXP) {
         return Err(PtxError::NotImplemented("-S").into());
     }
-    config.auto_ref = matches.contains_id(options::AUTO_REFERENCE);
-    config.input_ref = matches.contains_id(options::REFERENCES);
-    config.right_ref &= matches.contains_id(options::RIGHT_SIDE_REFS);
-    config.ignore_case = matches.contains_id(options::IGNORE_CASE);
+    config.auto_ref = matches.get_flag(options::AUTO_REFERENCE);
+    config.input_ref = matches.get_flag(options::REFERENCES);
+    config.right_ref &= matches.get_flag(options::RIGHT_SIDE_REFS);
+    config.ignore_case = matches.get_flag(options::IGNORE_CASE);
     if matches.contains_id(options::MACRO_NAME) {
         config.macro_name = matches
             .get_one::<String>(options::MACRO_NAME)
@@ -270,10 +268,10 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
             .parse()
             .map_err(PtxError::ParseError)?;
     }
-    if matches.contains_id(options::FORMAT_ROFF) {
+    if matches.get_flag(options::FORMAT_ROFF) {
         config.format = OutFormat::Roff;
     }
-    if matches.contains_id(options::FORMAT_TEX) {
+    if matches.get_flag(options::FORMAT_TEX) {
         config.format = OutFormat::Tex;
     }
     Ok(config)
@@ -439,7 +437,7 @@ fn get_output_chunks(
 ) -> (String, String, String, String) {
     // Chunk size logics are mostly copied from the GNU ptx source.
     // https://github.com/MaiZure/coreutils-8.3/blob/master/src/ptx.c#L1234
-    let half_line_size = (config.line_width / 2) as usize;
+    let half_line_size = config.line_width / 2;
     let max_before_size = cmp::max(half_line_size as isize - config.gap_size as isize, 0) as usize;
     let max_after_size = cmp::max(
         half_line_size as isize
@@ -500,7 +498,7 @@ fn get_output_chunks(
     let (tail_beg, _) = trim_idx(all_after, after_end, all_after.len());
 
     // end = begin + max length
-    let tail_end = cmp::min(all_after.len(), tail_beg + max_tail_size) as usize;
+    let tail_end = cmp::min(all_after.len(), tail_beg + max_tail_size);
     // in case that falls in the middle of a word, trim away the word.
     let tail_end = trim_broken_word_right(all_after, tail_beg, tail_end);
 
@@ -554,8 +552,8 @@ fn get_output_chunks(
 fn tex_mapper(x: char) -> String {
     match x {
         '\\' => "\\backslash{}".to_owned(),
-        '$' | '%' | '#' | '&' | '_' => format!("\\{}", x),
-        '}' | '{' => format!("$\\{}$", x),
+        '$' | '%' | '#' | '&' | '_' => format!("\\{x}"),
+        '}' | '{' => format!("$\\{x}$"),
         _ => x.to_string(),
     }
 }
@@ -697,7 +695,7 @@ fn write_traditional_output(
                 return Err(PtxError::DumbFormat.into());
             }
         };
-        writeln!(writer, "{}", output_line).map_err_context(String::new)?;
+        writeln!(writer, "{output_line}").map_err_context(String::new)?;
     }
     Ok(())
 }
@@ -745,9 +743,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     write_traditional_output(&config, &file_map, &word_set, &output_file)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
@@ -755,7 +752,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -763,64 +760,63 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('A')
                 .long(options::AUTO_REFERENCE)
                 .help("output automatically generated references")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TRADITIONAL)
                 .short('G')
                 .long(options::TRADITIONAL)
-                .help("behave more like System V 'ptx'"),
+                .help("behave more like System V 'ptx'")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FLAG_TRUNCATION)
                 .short('F')
                 .long(options::FLAG_TRUNCATION)
                 .help("use STRING for flagging line truncations")
-                .value_name("STRING")
-                .takes_value(true),
+                .value_name("STRING"),
         )
         .arg(
             Arg::new(options::MACRO_NAME)
                 .short('M')
                 .long(options::MACRO_NAME)
                 .help("macro name to use instead of 'xx'")
-                .value_name("STRING")
-                .takes_value(true),
+                .value_name("STRING"),
         )
         .arg(
             Arg::new(options::FORMAT_ROFF)
                 .short('O')
                 .long(options::FORMAT_ROFF)
-                .help("generate output as roff directives"),
+                .help("generate output as roff directives")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RIGHT_SIDE_REFS)
                 .short('R')
                 .long(options::RIGHT_SIDE_REFS)
                 .help("put references at right, not counted in -w")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SENTENCE_REGEXP)
                 .short('S')
                 .long(options::SENTENCE_REGEXP)
                 .help("for end of lines or end of sentences")
-                .value_name("REGEXP")
-                .takes_value(true),
+                .value_name("REGEXP"),
         )
         .arg(
             Arg::new(options::FORMAT_TEX)
                 .short('T')
                 .long(options::FORMAT_TEX)
-                .help("generate output as TeX directives"),
+                .help("generate output as TeX directives")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WORD_REGEXP)
                 .short('W')
                 .long(options::WORD_REGEXP)
                 .help("use REGEXP to match each keyword")
-                .value_name("REGEXP")
-                .takes_value(true),
+                .value_name("REGEXP"),
         )
         .arg(
             Arg::new(options::BREAK_FILE)
@@ -828,7 +824,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::BREAK_FILE)
                 .help("word break characters in this FILE")
                 .value_name("FILE")
-                .takes_value(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -836,15 +831,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('f')
                 .long(options::IGNORE_CASE)
                 .help("fold lower case to upper case for sorting")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::GAP_SIZE)
                 .short('g')
                 .long(options::GAP_SIZE)
                 .help("gap size in columns between output fields")
-                .value_name("NUMBER")
-                .takes_value(true),
+                .value_name("NUMBER"),
         )
         .arg(
             Arg::new(options::IGNORE_FILE)
@@ -852,7 +846,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::IGNORE_FILE)
                 .help("read ignore word list from FILE")
                 .value_name("FILE")
-                .takes_value(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -861,7 +854,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::ONLY_FILE)
                 .help("read only word list from this FILE")
                 .value_name("FILE")
-                .takes_value(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -870,14 +862,13 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::REFERENCES)
                 .help("first field of each line is a reference")
                 .value_name("FILE")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WIDTH)
                 .short('w')
                 .long(options::WIDTH)
                 .help("output width in columns, reference excluded")
-                .value_name("NUMBER")
-                .takes_value(true),
+                .value_name("NUMBER"),
         )
 }

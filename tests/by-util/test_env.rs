@@ -16,7 +16,7 @@ fn test_env_help() {
         .arg("--help")
         .succeeds()
         .no_stderr()
-        .stdout_contains("OPTIONS:");
+        .stdout_contains("Options:");
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn test_unset_invalid_variables() {
     // with this error: Error { kind: InvalidInput, message: "nul byte found in provided data" }
     for var in ["", "a=b"] {
         new_ucmd!().arg("-u").arg(var).run().stderr_only(format!(
-            "env: cannot unset {}: Invalid argument",
+            "env: cannot unset {}: Invalid argument\n",
             var.quote()
         ));
     }
@@ -120,8 +120,8 @@ fn test_multiple_name_value_pairs() {
 fn test_ignore_environment() {
     let scene = TestScenario::new(util_name!());
 
-    scene.ucmd().arg("-i").run().no_stdout();
-    scene.ucmd().arg("-").run().no_stdout();
+    scene.ucmd().arg("-i").succeeds().no_stdout();
+    scene.ucmd().arg("-").succeeds().no_stdout();
 }
 
 #[test]
@@ -130,7 +130,7 @@ fn test_empty_name() {
         .arg("-i")
         .arg("=xyz")
         .run()
-        .stderr_only("env: warning: no name specified for value 'xyz'");
+        .stderr_only("env: warning: no name specified for value 'xyz'\n");
 }
 
 #[test]
@@ -220,7 +220,7 @@ fn test_change_directory() {
     let out = scene
         .ucmd()
         .arg("--chdir")
-        .arg(&temporary_path)
+        .arg(temporary_path)
         .args(&pwd)
         .succeeds()
         .stdout_move_str();

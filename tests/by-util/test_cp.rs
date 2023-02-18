@@ -1,4 +1,4 @@
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile
 
 use crate::common::util::*;
 #[cfg(not(windows))]
@@ -13,6 +13,8 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
+#[cfg(not(windows))]
+use std::path::Path;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
@@ -20,11 +22,8 @@ use filetime::FileTime;
 use rlimit::Resource;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs as std_fs;
-#[cfg(not(target_os = "freebsd"))]
 use std::thread::sleep;
-#[cfg(not(target_os = "freebsd"))]
 use std::time::Duration;
-use uucore::display::Quotable;
 
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
@@ -47,6 +46,27 @@ static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 #[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
+
+/// Assert that mode, ownership, and permissions of two metadata objects match.
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
+macro_rules! assert_metadata_eq {
+    ($m1:expr, $m2:expr) => {{
+        assert_eq!($m1.mode(), $m2.mode(), "mode is different");
+        assert_eq!($m1.uid(), $m2.uid(), "uid is different");
+        assert_eq!($m1.atime(), $m2.atime(), "atime is different");
+        assert_eq!(
+            $m1.atime_nsec(),
+            $m2.atime_nsec(),
+            "atime_nsec is different"
+        );
+        assert_eq!($m1.mtime(), $m2.mtime(), "mtime is different");
+        assert_eq!(
+            $m1.mtime_nsec(),
+            $m2.mtime_nsec(),
+            "mtime_nsec is different"
+        );
+    }};
+}
 
 #[test]
 fn test_cp_cp() {
@@ -71,7 +91,7 @@ fn test_cp_existing_target() {
     assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
 
     // No backup should have been created
-    assert!(!at.file_exists(&format!("{}~", TEST_EXISTING_FILE)));
+    assert!(!at.file_exists(&format!("{TEST_EXISTING_FILE}~")));
 }
 
 #[test]
@@ -191,20 +211,31 @@ fn test_cp_target_directory_is_file() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .fails()
-        .stderr_contains(format!("'{}' is not a directory", TEST_HOW_ARE_YOU_SOURCE));
+        .stderr_contains(format!("'{TEST_HOW_ARE_YOU_SOURCE}' is not a directory"));
 }
 
 #[test]
-fn test_cp_arg_interactive() {
+fn test_cp_arg_update_interactive() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("-i")
+        .arg("--update")
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
+
+#[test]
+fn test_cp_arg_interactive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    ucmd.args(&["-i", "a", "b"])
         .pipe_in("N\n")
         .succeeds()
         .no_stdout()
-        .stderr_contains(format!("overwrite '{}'?", TEST_HOW_ARE_YOU_SOURCE))
-        .stderr_contains("Not overwriting");
+        .stderr_is("cp: overwrite 'b'? ");
 }
 
 #[test]
@@ -276,8 +307,7 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
-        .succeeds()
-        .stdout_does_not_contain("Not overwriting");
+        .succeeds();
 
     assert_eq!(at.read("source.txt"), "some-content");
     // Should be empty as the "no-clobber" should keep
@@ -344,7 +374,7 @@ fn test_cp_arg_backup() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -360,7 +390,7 @@ fn test_cp_arg_backup_with_other_args() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -376,7 +406,7 @@ fn test_cp_arg_backup_arg_first() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -394,7 +424,7 @@ fn test_cp_arg_suffix() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.bak")),
         "How are you?\n"
     );
 }
@@ -412,7 +442,7 @@ fn test_cp_arg_suffix_hyphen_value() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}-v", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}-v")),
         "How are you?\n"
     );
 }
@@ -431,7 +461,7 @@ fn test_cp_custom_backup_suffix_via_env() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}{}", TEST_HOW_ARE_YOU_SOURCE, suffix)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}{suffix}")),
         "How are you?\n"
     );
 }
@@ -448,7 +478,7 @@ fn test_cp_backup_numbered_with_t() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~")),
         "How are you?\n"
     );
 }
@@ -465,7 +495,7 @@ fn test_cp_backup_numbered() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~")),
         "How are you?\n"
     );
 }
@@ -482,7 +512,7 @@ fn test_cp_backup_existing() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -499,7 +529,7 @@ fn test_cp_backup_nil() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -507,7 +537,7 @@ fn test_cp_backup_nil() {
 #[test]
 fn test_cp_numbered_if_existing_backup_existing() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let existing_backup = &format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+    let existing_backup = &format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~");
     at.touch(existing_backup);
 
     ucmd.arg("--backup=existing")
@@ -519,7 +549,7 @@ fn test_cp_numbered_if_existing_backup_existing() {
     assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
     assert!(at.file_exists(existing_backup));
     assert_eq!(
-        at.read(&format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.~2~")),
         "How are you?\n"
     );
 }
@@ -527,7 +557,7 @@ fn test_cp_numbered_if_existing_backup_existing() {
 #[test]
 fn test_cp_numbered_if_existing_backup_nil() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let existing_backup = &format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+    let existing_backup = &format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~");
 
     at.touch(existing_backup);
     ucmd.arg("--backup=nil")
@@ -539,7 +569,7 @@ fn test_cp_numbered_if_existing_backup_nil() {
     assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
     assert!(at.file_exists(existing_backup));
     assert_eq!(
-        at.read(&format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.~2~")),
         "How are you?\n"
     );
 }
@@ -556,7 +586,7 @@ fn test_cp_backup_simple() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -564,15 +594,14 @@ fn test_cp_backup_simple() {
 #[test]
 fn test_cp_backup_simple_protect_source() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let source = format!("{}~", TEST_HELLO_WORLD_SOURCE);
+    let source = format!("{TEST_HELLO_WORLD_SOURCE}~");
     at.touch(&source);
     ucmd.arg("--backup=simple")
         .arg(&source)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .fails()
         .stderr_only(format!(
-            "cp: backing up '{}' might destroy source;  '{}' not copied",
-            TEST_HELLO_WORLD_SOURCE, source,
+            "cp: backing up '{TEST_HELLO_WORLD_SOURCE}' might destroy source;  '{source}' not copied\n",
         ));
 
     assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "Hello, World!\n");
@@ -591,7 +620,7 @@ fn test_cp_backup_never() {
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
-        at.read(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
 }
@@ -607,7 +636,7 @@ fn test_cp_backup_none() {
         .no_stderr();
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
-    assert!(!at.file_exists(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)));
+    assert!(!at.file_exists(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
 }
 
 #[test]
@@ -621,7 +650,7 @@ fn test_cp_backup_off() {
         .no_stderr();
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
-    assert!(!at.file_exists(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)));
+    assert!(!at.file_exists(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
 }
 
 #[test]
@@ -771,7 +800,7 @@ fn test_cp_strip_trailing_slashes() {
 
     //using --strip-trailing-slashes option
     ucmd.arg("--strip-trailing-slashes")
-        .arg(format!("{}/", TEST_HELLO_WORLD_SOURCE))
+        .arg(format!("{TEST_HELLO_WORLD_SOURCE}/"))
         .arg(TEST_HELLO_WORLD_DEST)
         .succeeds();
 
@@ -790,8 +819,7 @@ fn test_cp_parents() {
 
     assert_eq!(
         at.read(&format!(
-            "{}/{}",
-            TEST_COPY_TO_FOLDER, TEST_COPY_FROM_FOLDER_FILE
+            "{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER_FILE}"
         )),
         "Hello, World!\n"
     );
@@ -809,16 +837,12 @@ fn test_cp_parents_multiple_files() {
 
     assert_eq!(
         at.read(&format!(
-            "{}/{}",
-            TEST_COPY_TO_FOLDER, TEST_COPY_FROM_FOLDER_FILE
+            "{TEST_COPY_TO_FOLDER}/{TEST_COPY_FROM_FOLDER_FILE}"
         )),
         "Hello, World!\n"
     );
     assert_eq!(
-        at.read(&format!(
-            "{}/{}",
-            TEST_COPY_TO_FOLDER, TEST_HOW_ARE_YOU_SOURCE
-        )),
+        at.read(&format!("{TEST_COPY_TO_FOLDER}/{TEST_HOW_ARE_YOU_SOURCE}")),
         "How are you?\n"
     );
 }
@@ -850,11 +874,114 @@ fn test_cp_issue_1665() {
 
 #[test]
 fn test_cp_preserve_no_args() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src_file = "a";
+    let dst_file = "b";
+
+    // Prepare the source file
+    at.touch(src_file);
+    #[cfg(unix)]
+    at.set_mode(src_file, 0o0500);
+
+    // Copy
+    ucmd.arg(src_file)
+        .arg(dst_file)
+        .arg("--preserve")
+        .succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        // Assert that the mode, ownership, and timestamps are preserved
+        // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+        let metadata_src = at.metadata(src_file);
+        let metadata_dst = at.metadata(dst_file);
+        assert_metadata_eq!(metadata_src, metadata_dst);
+    }
+}
+
+#[test]
+fn test_cp_preserve_all() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src_file = "a";
+    let dst_file = "b";
+
+    // Prepare the source file
+    at.touch(src_file);
+    #[cfg(unix)]
+    at.set_mode(src_file, 0o0500);
+
+    // TODO: create a destination that does not allow copying of xattr and context
+    // Copy
+    ucmd.arg(src_file)
+        .arg(dst_file)
+        .arg("--preserve=all")
+        .succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        // Assert that the mode, ownership, and timestamps are preserved
+        // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+        let metadata_src = at.metadata(src_file);
+        let metadata_dst = at.metadata(dst_file);
+        assert_metadata_eq!(metadata_src, metadata_dst);
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_cp_preserve_xattr() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src_file = "a";
+    let dst_file = "b";
+
+    // Prepare the source file
+    at.touch(src_file);
+    #[cfg(unix)]
+    at.set_mode(src_file, 0o0500);
+
+    // Sleep so that the time stats are different
+    sleep(Duration::from_secs(1));
+
+    // TODO: create a destination that does not allow copying of xattr and context
+    // Copy
+    ucmd.arg(src_file)
+        .arg(dst_file)
+        .arg("--preserve=xattr")
+        .succeeds();
+
+    // FIXME: macos copy keeps the original mtime
+    #[cfg(not(any(target_os = "freebsd", target_os = "macos")))]
+    {
+        // Assert that the mode, ownership, and timestamps are *NOT* preserved
+        // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+        let metadata_src = at.metadata(src_file);
+        let metadata_dst = at.metadata(dst_file);
+        assert_ne!(metadata_src.mtime(), metadata_dst.mtime());
+        // TODO: verify access time as well. It shouldn't change, however, it does change in this test.
+    }
+}
+
+#[test]
+#[cfg(all(target_os = "linux", not(feature = "feat_selinux")))]
+fn test_cp_preserve_all_context_fails_on_non_selinux() {
     new_ucmd!()
         .arg(TEST_COPY_FROM_FOLDER_FILE)
         .arg(TEST_HELLO_WORLD_DEST)
-        .arg("--preserve")
-        .succeeds();
+        .arg("--preserve=all,context")
+        .fails();
+}
+
+#[test]
+#[cfg(any(target_os = "android"))]
+fn test_cp_preserve_xattr_fails_on_android() {
+    // Because of the SELinux extended attributes used on Android, trying to copy extended
+    // attributes has to fail in this case, since we specify `--preserve=xattr` and this puts it
+    // into the required attributes
+    new_ucmd!()
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .arg("--preserve=xattr")
+        .fails();
 }
 
 #[test]
@@ -1054,7 +1181,7 @@ fn test_cp_no_deref_folder_to_folder() {
 fn test_cp_archive() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::OffsetDateTime::now_local().unwrap();
-    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond() as u32);
+    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
     // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
@@ -1217,7 +1344,7 @@ fn test_cp_no_preserve_timestamps() {
     let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
 
     println!("ls dest {}", result.stdout_str());
-    println!("creation {:?} / {:?}", creation, creation2);
+    println!("creation {creation:?} / {creation2:?}");
 
     assert_ne!(creation, creation2);
     let res = creation.elapsed().unwrap() - creation2.elapsed().unwrap();
@@ -1374,7 +1501,7 @@ fn test_cp_reflink_bad() {
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_contains("error: \"bad\" isn't a valid value for '--reflink[=<WHEN>...]'");
+        .stderr_contains("error: 'bad' isn't a valid value for '--reflink[=<WHEN>]'");
 }
 
 #[test]
@@ -1391,7 +1518,7 @@ fn test_cp_reflink_insufficient_permission() {
         .arg("unreadable")
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)");
+        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)\n");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1530,6 +1657,7 @@ fn test_cp_sparse_never_reflink_always() {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(feature = "truncate")]
 #[test]
 fn test_cp_reflink_always_override() {
     let scene = TestScenario::new(util_name!());
@@ -1618,6 +1746,7 @@ fn test_copy_dir_symlink() {
 
 #[test]
 #[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
+#[cfg(feature = "ln")]
 fn test_copy_dir_with_symlinks() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
@@ -1728,9 +1857,9 @@ fn test_copy_through_just_created_symlink() {
             .arg("c")
             .fails()
             .stderr_only(if cfg!(not(target_os = "windows")) {
-                "cp: will not copy 'b/1' through just-created symlink 'c/1'"
+                "cp: will not copy 'b/1' through just-created symlink 'c/1'\n"
             } else {
-                "cp: will not copy 'b/1' through just-created symlink 'c\\1'"
+                "cp: will not copy 'b/1' through just-created symlink 'c\\1'\n"
             });
         if create_t {
             assert_eq!(at.read("a/1"), "world");
@@ -1746,7 +1875,7 @@ fn test_copy_through_dangling_symlink() {
     ucmd.arg("file")
         .arg("target")
         .fails()
-        .stderr_only("cp: not writing through dangling symlink 'target'");
+        .stderr_only("cp: not writing through dangling symlink 'target'\n");
 }
 
 #[test]
@@ -1783,24 +1912,11 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     assert!(at.symlink_exists("d2"), "symlink wasn't created");
 
     // `-p` means `--preserve=mode,ownership,timestamps`
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "freebsd")))]
     {
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
-        assert_eq!(metadata1.mode(), metadata2.mode(), "mode is different");
-        assert_eq!(metadata1.uid(), metadata2.uid(), "uid is different");
-        assert_eq!(metadata1.atime(), metadata2.atime(), "atime is different");
-        assert_eq!(
-            metadata1.atime_nsec(),
-            metadata2.atime_nsec(),
-            "atime_nsec is different"
-        );
-        assert_eq!(metadata1.mtime(), metadata2.mtime(), "mtime is different");
-        assert_eq!(
-            metadata1.mtime_nsec(),
-            metadata2.mtime_nsec(),
-            "mtime_nsec is different"
-        );
+        assert_metadata_eq!(metadata1, metadata2);
     }
 }
 
@@ -1811,7 +1927,20 @@ fn test_copy_through_dangling_symlink_no_dereference_2() {
     at.symlink_file("nonexistent", "target");
     ucmd.args(&["-P", "file", "target"])
         .fails()
-        .stderr_only("cp: not writing through dangling symlink 'target'");
+        .stderr_only("cp: not writing through dangling symlink 'target'\n");
+}
+
+/// Test that copy through a dangling symbolic link fails, even with --force.
+#[test]
+#[cfg(not(windows))]
+fn test_copy_through_dangling_symlink_force() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.symlink_file("no-such-file", "dest");
+    ucmd.args(&["--force", "src", "dest"])
+        .fails()
+        .stderr_only("cp: not writing through dangling symlink 'dest'\n");
+    assert!(!at.file_exists("dest"));
 }
 
 #[test]
@@ -1823,7 +1952,7 @@ fn test_cp_archive_on_nonexistent_file() {
         .arg(TEST_EXISTING_FILE)
         .fails()
         .stderr_only(
-            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)",
+            "cp: cannot stat 'nonexistent_file.txt': No such file or directory (os error 2)\n",
         );
 }
 
@@ -1908,7 +2037,7 @@ fn test_cp_dir_vs_file() {
         .arg(TEST_COPY_FROM_FOLDER)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_only("cp: cannot overwrite non-directory with directory");
+        .stderr_only("cp: cannot overwrite non-directory with directory\n");
 }
 
 #[test]
@@ -1986,48 +2115,83 @@ fn test_copy_same_symlink_no_dereference_dangling() {
     ucmd.args(&["-d", "a", "b"]).succeeds();
 }
 
+// TODO: enable for Android, when #3477 solved
+#[cfg(not(any(windows, target_os = "android")))]
 #[test]
-#[ignore = "issue #3332"]
+fn test_cp_parents_2_dirs() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("a/b/c");
+    at.mkdir("d");
+    ucmd.args(&["-a", "--parents", "a/b/c", "d"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.dir_exists("d/a/b/c"));
+}
+
+#[test]
 fn test_cp_parents_2() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("a/b");
     at.touch("a/b/c");
     at.mkdir("d");
-    ucmd.args(&["--verbose", "-a", "--parents", "a/b/c", "d"])
+    #[cfg(not(windows))]
+    let expected_stdout = "a -> d/a\na/b -> d/a/b\n'a/b/c' -> 'd/a/b/c'\n";
+    #[cfg(windows)]
+    let expected_stdout = "a -> d\\a\na/b -> d\\a/b\n'a/b/c' -> 'd\\a/b/c'\n";
+    ucmd.args(&["--verbose", "--parents", "a/b/c", "d"])
         .succeeds()
-        .stdout_is(format!(
-            "{} -> {}\n{} -> {}\n{} -> {}\n",
-            "a",
-            path_concat!("d", "a"),
-            path_concat!("a", "b"),
-            path_concat!("d", "a", "b"),
-            path_concat!("a", "b", "c").quote(),
-            path_concat!("d", "a", "b", "c").quote()
-        ));
+        .stdout_only(expected_stdout);
     assert!(at.file_exists("d/a/b/c"));
 }
 
 #[test]
-#[ignore = "issue #3332"]
 fn test_cp_parents_2_link() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("a/b");
     at.touch("a/b/c");
     at.mkdir("d");
     at.relative_symlink_file("b", "a/link");
-    ucmd.args(&["--verbose", "-a", "--parents", "a/link/c", "d"])
+    #[cfg(not(windows))]
+    let expected_stdout = "a -> d/a\na/link -> d/a/link\n'a/link/c' -> 'd/a/link/c'\n";
+    #[cfg(windows)]
+    let expected_stdout = "a -> d\\a\na/link -> d\\a/link\n'a/link/c' -> 'd\\a/link/c'\n";
+    ucmd.args(&["--verbose", "--parents", "a/link/c", "d"])
         .succeeds()
-        .stdout_is(format!(
-            "{} -> {}\n{} -> {}\n{} -> {}\n",
-            "a",
-            path_concat!("d", "a"),
-            path_concat!("a", "link"),
-            path_concat!("d", "a", "link"),
-            path_concat!("a", "link", "c").quote(),
-            path_concat!("d", "a", "link", "c").quote()
-        ));
-    assert!(at.dir_exists("d/a/link") && !at.symlink_exists("d/a/link"));
+        .stdout_only(expected_stdout);
+    assert!(at.dir_exists("d/a/link"));
+    assert!(!at.symlink_exists("d/a/link"));
     assert!(at.file_exists("d/a/link/c"));
+}
+
+#[test]
+fn test_cp_parents_2_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("a/b/c");
+    at.mkdir("d");
+    #[cfg(not(windows))]
+    let expected_stdout = "a -> d/a\na/b -> d/a/b\n'a/b/c' -> 'd/a/b/c'\n";
+    #[cfg(windows)]
+    let expected_stdout = "a -> d\\a\na/b -> d\\a/b\n'a/b/c' -> 'd\\a/b\\c'\n";
+    ucmd.args(&["--verbose", "-r", "--parents", "a/b/c", "d"])
+        .succeeds()
+        .stdout_only(expected_stdout);
+    assert!(at.dir_exists("d/a/b/c"));
+}
+
+#[test]
+fn test_cp_parents_2_deep_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("a/b/c");
+    at.mkdir_all("d/e");
+    #[cfg(not(windows))]
+    let expected_stdout = "a -> d/e/a\na/b -> d/e/a/b\n'a/b/c' -> 'd/e/a/b/c'\n";
+    #[cfg(windows)]
+    let expected_stdout = "a -> d/e\\a\na/b -> d/e\\a/b\n'a/b/c' -> 'd/e\\a/b\\c'\n";
+    ucmd.args(&["--verbose", "-r", "--parents", "a/b/c", "d/e"])
+        .succeeds()
+        .stdout_only(expected_stdout);
+    assert!(at.dir_exists("d/e/a/b/c"));
 }
 
 #[test]
@@ -2096,15 +2260,28 @@ fn test_cp_mode_hardlink_no_dereference() {
     assert_eq!(at.read_symlink("z"), "slink");
 }
 
+#[test]
+fn test_remove_destination_symbolic_link_loop() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("loop", "loop");
+    at.plus("loop");
+    at.touch("f");
+    ucmd.args(&["--remove-destination", "f", "loop"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists("loop"));
+}
+
 /// Test that copying a directory to itself is disallowed.
 #[test]
 fn test_copy_directory_to_itself_disallowed() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("d");
     #[cfg(not(windows))]
-    let expected = "cp: cannot copy a directory, 'd', into itself, 'd/d'";
+    let expected = "cp: cannot copy a directory, 'd', into itself, 'd/d'\n";
     #[cfg(windows)]
-    let expected = "cp: cannot copy a directory, 'd', into itself, 'd\\d'";
+    let expected = "cp: cannot copy a directory, 'd', into itself, 'd\\d'\n";
     ucmd.args(&["-R", "d", "d"]).fails().stderr_only(expected);
 }
 
@@ -2116,10 +2293,242 @@ fn test_copy_nested_directory_to_itself_disallowed() {
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     #[cfg(not(windows))]
-    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c/b'";
+    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c/b'\n";
     #[cfg(windows)]
-    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c\\b'";
+    let expected = "cp: cannot copy a directory, 'a/b', into itself, 'a/b/c\\b'\n";
     ucmd.args(&["-R", "a/b", "a/b/c"])
         .fails()
         .stderr_only(expected);
+}
+
+/// Test for preserving permissions when copying a directory.
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[test]
+fn test_copy_dir_preserve_permissions() {
+    // Create a directory that has some non-default permissions.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.set_mode("d1", 0o0500);
+
+    // Copy the directory, preserving those permissions.
+    //
+    //         preserve permissions (mode, ownership, timestamps)
+    //            |    copy directories recursively
+    //            |      |   from this source directory
+    //            |      |    |   to this destination
+    //            |      |    |     |
+    //            V      V    V     V
+    ucmd.args(&["-p", "-R", "d1", "d2"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.dir_exists("d2"));
+
+    // Assert that the permissions are preserved.
+    let metadata1 = at.metadata("d1");
+    let metadata2 = at.metadata("d2");
+    assert_metadata_eq!(metadata1, metadata2);
+}
+
+/// Test for preserving permissions when copying a directory, even in
+/// the face of an inaccessible file in that directory.
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[test]
+fn test_copy_dir_preserve_permissions_inaccessible_file() {
+    // Create a directory that has some non-default permissions and
+    // contains an inaccessible file.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d1");
+    at.touch("d1/f");
+    at.set_mode("d1/f", 0);
+    at.set_mode("d1", 0o0500);
+
+    // Copy the directory, preserving those permissions. There should
+    // be an error message that the file `d1/f` is inaccessible.
+    //
+    //         preserve permissions (mode, ownership, timestamps)
+    //            |    copy directories recursively
+    //            |      |   from this source directory
+    //            |      |    |   to this destination
+    //            |      |    |     |
+    //            V      V    V     V
+    ucmd.args(&["-p", "-R", "d1", "d2"])
+        .fails()
+        .code_is(1)
+        .stderr_only("cp: cannot open 'd1/f' for reading: Permission denied\n");
+    assert!(at.dir_exists("d2"));
+    assert!(!at.file_exists("d2/f"));
+
+    // Assert that the permissions are preserved.
+    let metadata1 = at.metadata("d1");
+    let metadata2 = at.metadata("d2");
+    assert_metadata_eq!(metadata1, metadata2);
+}
+
+/// Test that copying file to itself with backup fails.
+#[test]
+fn test_same_file_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["--backup", "f", "f"])
+        .fails()
+        .stderr_only("cp: 'f' and 'f' are the same file\n");
+    assert!(!at.file_exists("f~"));
+}
+
+/// Test that copying file to itself with forced backup succeeds.
+#[cfg(not(windows))]
+#[test]
+fn test_same_file_force() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["--force", "f", "f"])
+        .fails()
+        .stderr_only("cp: 'f' and 'f' are the same file\n");
+    assert!(!at.file_exists("f~"));
+}
+
+/// Test that copying file to itself with forced backup succeeds.
+#[cfg(all(not(windows)))]
+#[test]
+fn test_same_file_force_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["--force", "--backup", "f", "f"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists("f~"));
+}
+
+/// Test for copying the contents of a FIFO as opposed to the FIFO object itself.
+#[cfg(all(unix, not(target_os = "freebsd")))]
+#[test]
+fn test_copy_contents_fifo() {
+    // TODO this test should work on FreeBSD, but the command was
+    // causing an error:
+    //
+    // cp: 'fifo' -> 'outfile': the source path is neither a regular file nor a symlink to a regular file
+    //
+    // the underlying `std::fs:copy` doesn't support copying fifo on freeBSD
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+
+    // Start the `cp` process, reading the contents of `fifo` and
+    // writing to regular file `outfile`.
+    at.mkfifo("fifo");
+    let mut ucmd = scenario.ucmd();
+    let child = ucmd
+        .args(&["--copy-contents", "fifo", "outfile"])
+        .run_no_wait();
+
+    // Write some bytes to the `fifo`. We expect these bytes to get
+    // copied through to `outfile`.
+    std::fs::write(at.plus("fifo"), "foo").unwrap();
+
+    // At this point the child process should have terminated
+    // successfully with no output. The `outfile` should have the
+    // contents of `fifo` copied into it.
+    child.wait().unwrap().no_stdout().no_stderr().success();
+    assert_eq!(at.read("outfile"), "foo");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_reflink_never_sparse_always() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Create a file and make it a large sparse file.
+    //
+    // On common Linux filesystems, setting the length to one megabyte
+    // should cause the file to become a sparse file, but it depends
+    // on the system.
+    std::fs::File::create(at.plus("src"))
+        .unwrap()
+        .set_len(1024 * 1024)
+        .unwrap();
+
+    ucmd.args(&["--reflink=never", "--sparse=always", "src", "dest"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    at.file_exists("dest");
+
+    let src_metadata = std::fs::metadata(at.plus("src")).unwrap();
+    let dest_metadata = std::fs::metadata(at.plus("dest")).unwrap();
+    assert_eq!(src_metadata.blocks(), dest_metadata.blocks());
+    assert_eq!(dest_metadata.len(), 1024 * 1024);
+}
+
+/// Test for preserving attributes of a hard link in a directory.
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_preserve_hardlink_attributes_in_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // The source directory tree.
+    at.mkdir("src");
+    at.touch("src/f");
+    at.hard_link("src/f", "src/link");
+
+    // The destination directory tree.
+    //
+    // The file `f` already exists, but the `link` does not.
+    at.mkdir_all("dest/src");
+    at.touch("dest/src/f");
+
+    ucmd.args(&["-a", "src", "dest"]).succeeds().no_output();
+
+    // The hard link should now appear in the destination directory tree.
+    //
+    // A hard link should have the same inode as the target file.
+    at.file_exists("dest/src/link");
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    assert_eq!(
+        at.metadata("dest/src/f").ino(),
+        at.metadata("dest/src/link").ino()
+    );
+}
+
+#[test]
+#[cfg(not(any(windows, target_os = "android")))]
+fn test_hard_link_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.touch("dest");
+    ucmd.args(&["-f", "--link", "src", "dest"])
+        .succeeds()
+        .no_output();
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    assert_eq!(at.metadata("src").ino(), at.metadata("dest").ino());
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_symbolic_link_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.touch("dest");
+    ucmd.args(&["-f", "--symbolic-link", "src", "dest"])
+        .succeeds()
+        .no_output();
+    assert_eq!(
+        std::fs::read_link(at.plus("dest")).unwrap(),
+        Path::new("src")
+    );
+}
+
+#[test]
+fn test_src_base_dot() {
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures.clone();
+    at.mkdir("x");
+    at.mkdir("y");
+    let mut ucmd = UCommand::new(ts.bin_path, &Some(ts.util_name), at.plus("y"), true);
+
+    ucmd.args(&["--verbose", "-r", "../x/.", "."])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(!at.dir_exists("y/x"));
 }

@@ -9,20 +9,17 @@
 
 mod mode;
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
-use uucore::format_usage;
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
+use uucore::{format_usage, show, show_error, show_if_err, uio_error};
 
 use libc::{getegid, geteuid};
 use std::error::Error;
@@ -30,7 +27,9 @@ use std::fmt::{Debug, Display};
 use std::fs;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
-use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::os::unix::prelude::OsStrExt;
+use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process;
 
 const DEFAULT_MODE: u32 = 0o755;
@@ -88,7 +87,7 @@ impl Error for InstallError {}
 impl Display for InstallError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Unimplemented(opt) => write!(f, "Unimplemented feature: {}", opt),
+            Self::Unimplemented(opt) => write!(f, "Unimplemented feature: {opt}"),
             Self::DirNeedsArg() => {
                 write!(
                     f,
@@ -116,7 +115,7 @@ impl Display for InstallError {
                 &uio_error!(e, "cannot install {} to {}", from.quote(), to.quote()),
                 f,
             ),
-            Self::StripProgramFailed(msg) => write!(f, "strip program failed: {}", msg),
+            Self::StripProgramFailed(msg) => write!(f, "strip program failed: {msg}"),
             Self::MetadataFailed(e) => Display::fmt(&uio_error!(e, ""), f),
             Self::NoSuchUser(user) => write!(f, "no such user: {}", user.maybe_quote()),
             Self::NoSuchGroup(group) => write!(f, "no such group: {}", group.maybe_quote()),
@@ -188,57 +187,63 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
-        .arg(
-            backup_control::arguments::backup()
-        )
-        .arg(
-            backup_control::arguments::backup_no_args()
-        )
+        .arg(backup_control::arguments::backup())
+        .arg(backup_control::arguments::backup_no_args())
         .arg(
             Arg::new(OPT_IGNORED)
-            .short('c')
-            .help("ignored")
+                .short('c')
+                .help("ignored")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_COMPARE)
-            .short('C')
-            .long(OPT_COMPARE)
-            .help("compare each pair of source and destination files, and in some cases, do not modify the destination at all")
+                .short('C')
+                .long(OPT_COMPARE)
+                .help(
+                    "compare each pair of source and destination files, and in some cases, \
+                    do not modify the destination at all",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_DIRECTORY)
                 .short('d')
                 .long(OPT_DIRECTORY)
-                .help("treat all arguments as directory names. create all components of the specified directories")
+                .help(
+                    "treat all arguments as directory names. create all components of \
+                        the specified directories",
+                )
+                .action(ArgAction::SetTrue),
         )
-
         .arg(
             // TODO implement flag
             Arg::new(OPT_CREATE_LEADING)
                 .short('D')
-                .help("create all leading components of DEST except the last, then copy SOURCE to DEST")
+                .help(
+                    "create all leading components of DEST except the last, then copy \
+                        SOURCE to DEST",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_GROUP)
                 .short('g')
                 .long(OPT_GROUP)
                 .help("set group ownership, instead of process's current group")
-                .value_name("GROUP")
-                .takes_value(true)
+                .value_name("GROUP"),
         )
         .arg(
             Arg::new(OPT_MODE)
                 .short('m')
                 .long(OPT_MODE)
                 .help("set permission mode (as in chmod), instead of rwxr-xr-x")
-                .value_name("MODE")
-                .takes_value(true)
+                .value_name("MODE"),
         )
         .arg(
             Arg::new(OPT_OWNER)
@@ -246,31 +251,33 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(OPT_OWNER)
                 .help("set ownership (super-user only)")
                 .value_name("OWNER")
-                .takes_value(true)
-                .value_hint(clap::ValueHint::Username)
+                .value_hint(clap::ValueHint::Username),
         )
         .arg(
             Arg::new(OPT_PRESERVE_TIMESTAMPS)
                 .short('p')
                 .long(OPT_PRESERVE_TIMESTAMPS)
-                .help("apply access/modification times of SOURCE files to corresponding destination files")
+                .help(
+                    "apply access/modification times of SOURCE files to \
+                    corresponding destination files",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP)
                 .short('s')
                 .long(OPT_STRIP)
                 .help("strip symbol tables (no action Windows)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_STRIP_PROGRAM)
                 .long(OPT_STRIP_PROGRAM)
                 .help("program used to strip binaries (no action Windows)")
                 .value_name("PROGRAM")
-                .value_hint(clap::ValueHint::CommandName)
+                .value_hint(clap::ValueHint::CommandName),
         )
-        .arg(
-            backup_control::arguments::suffix()
-        )
+        .arg(backup_control::arguments::suffix())
         .arg(
             // TODO implement flag
             Arg::new(OPT_TARGET_DIRECTORY)
@@ -278,7 +285,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(OPT_TARGET_DIRECTORY)
                 .help("move all SOURCE arguments into DIRECTORY")
                 .value_name("DIRECTORY")
-                .value_hint(clap::ValueHint::DirPath)
+                .value_hint(clap::ValueHint::DirPath),
         )
         .arg(
             // TODO implement flag
@@ -286,13 +293,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('T')
                 .long(OPT_NO_TARGET_DIRECTORY)
                 .help("(unimplemented) treat DEST as a normal file")
-
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
-            .short('v')
-            .long(OPT_VERBOSE)
-            .help("explain what is being done")
+                .short('v')
+                .long(OPT_VERBOSE)
+                .help("explain what is being done")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             // TODO implement flag
@@ -300,6 +308,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('P')
                 .long(OPT_PRESERVE_CONTEXT)
                 .help("(unimplemented) preserve security context")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             // TODO implement flag
@@ -308,13 +317,13 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(OPT_CONTEXT)
                 .help("(unimplemented) set security context of files and directories")
                 .value_name("CONTEXT")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .min_values(1)
-                .value_hint(clap::ValueHint::AnyPath)
+                .action(ArgAction::Append)
+                .num_args(1..)
+                .value_hint(clap::ValueHint::AnyPath),
         )
 }
 
@@ -328,11 +337,11 @@ pub fn uu_app<'a>() -> Command<'a> {
 ///
 ///
 fn check_unimplemented(matches: &ArgMatches) -> UResult<()> {
-    if matches.contains_id(OPT_NO_TARGET_DIRECTORY) {
+    if matches.get_flag(OPT_NO_TARGET_DIRECTORY) {
         Err(InstallError::Unimplemented(String::from("--no-target-directory, -T")).into())
-    } else if matches.contains_id(OPT_PRESERVE_CONTEXT) {
+    } else if matches.get_flag(OPT_PRESERVE_CONTEXT) {
         Err(InstallError::Unimplemented(String::from("--preserve-context, -P")).into())
-    } else if matches.contains_id(OPT_CONTEXT) {
+    } else if matches.get_flag(OPT_CONTEXT) {
         Err(InstallError::Unimplemented(String::from("--context, -Z")).into())
     } else {
         Ok(())
@@ -348,7 +357,7 @@ fn check_unimplemented(matches: &ArgMatches) -> UResult<()> {
 /// In event of failure, returns an integer intended as a program return code.
 ///
 fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
-    let main_function = if matches.contains_id(OPT_DIRECTORY) {
+    let main_function = if matches.get_flag(OPT_DIRECTORY) {
         MainFunction::Directory
     } else {
         MainFunction::Standard
@@ -371,9 +380,9 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         .get_one::<String>(OPT_TARGET_DIRECTORY)
         .map(|d| d.to_owned());
 
-    let preserve_timestamps = matches.contains_id(OPT_PRESERVE_TIMESTAMPS);
-    let compare = matches.contains_id(OPT_COMPARE);
-    let strip = matches.contains_id(OPT_STRIP);
+    let preserve_timestamps = matches.get_flag(OPT_PRESERVE_TIMESTAMPS);
+    let compare = matches.get_flag(OPT_COMPARE);
+    let strip = matches.get_flag(OPT_STRIP);
     if preserve_timestamps && compare {
         show_error!("Options --compare and --preserve-timestamps are mutually exclusive");
         return Err(1.into());
@@ -397,7 +406,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
             .map(|s| s.as_str())
             .unwrap_or("")
             .to_string(),
-        verbose: matches.contains_id(OPT_VERBOSE),
+        verbose: matches.get_flag(OPT_VERBOSE),
         preserve_timestamps,
         compare,
         strip,
@@ -407,7 +416,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
                 .map(|s| s.as_str())
                 .unwrap_or(DEFAULT_STRIP_PROGRAM),
         ),
-        create_leading: matches.contains_id(OPT_CREATE_LEADING),
+        create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
     })
 }
@@ -473,40 +482,73 @@ fn is_new_file_path(path: &Path) -> bool {
             || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
 }
 
+/// Test if the path is an existing directory or ends with a trailing separator.
+///
+/// Returns true, if one of the conditions above is met; else false.
+///
+#[cfg(unix)]
+fn is_potential_directory_path(path: &Path) -> bool {
+    let separator = MAIN_SEPARATOR as u8;
+    path.as_os_str().as_bytes().last() == Some(&separator) || path.is_dir()
+}
+
+#[cfg(not(unix))]
+fn is_potential_directory_path(path: &Path) -> bool {
+    let path_str = path.to_string_lossy();
+    path_str.ends_with(MAIN_SEPARATOR) || path_str.ends_with('/') || path.is_dir()
+}
+
 /// Perform an install, given a list of paths and behavior.
 ///
 /// Returns a Result type with the Err variant containing the error message.
 ///
 fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
+    // first check that paths contains at least one element
+    if paths.is_empty() {
+        return Err(UUsageError::new(1, "missing file operand"));
+    }
+
+    // get the target from either "-t foo" param or from the last given paths argument
     let target: PathBuf = if let Some(path) = &b.target_dir {
         path.into()
     } else {
-        paths
-            .pop()
-            .ok_or_else(|| UUsageError::new(1, "missing file operand"))?
-            .into()
+        let last_path: PathBuf = paths.pop().unwrap().into();
+
+        // paths has to contain more elements
+        if paths.is_empty() {
+            return Err(UUsageError::new(
+                1,
+                format!(
+                    "missing destination file operand after '{}'",
+                    last_path.to_str().unwrap()
+                ),
+            ));
+        }
+
+        last_path
     };
 
     let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
-    if sources.len() > 1 || (target.exists() && target.is_dir()) {
-        copy_files_into_dir(sources, &target, b)
-    } else {
+    if b.create_leading {
         // if -t is used in combination with -D, create whole target because it does not include filename
-        let to_create: Option<&Path> = if b.target_dir.is_some() && b.create_leading {
+        let to_create: Option<&Path> = if b.target_dir.is_some() {
             Some(target.as_path())
-        } else {
+        // if source and target are filenames used in combination with -D, create target's parent
+        } else if !(sources.len() > 1 || is_potential_directory_path(&target)) {
             target.parent()
+        } else {
+            None
         };
 
         if let Some(to_create) = to_create {
-            if !to_create.exists() && b.create_leading {
+            if !to_create.exists() {
                 if b.verbose {
                     let mut result = PathBuf::new();
                     // When creating directories with -Dv, show directory creations step by step
                     for part in to_create.components() {
                         result.push(part.as_os_str());
-                        if !Path::new(part.as_os_str()).is_dir() {
+                        if !result.is_dir() {
                             // Don't display when the directory already exists
                             println!("install: creating directory {}", result.quote());
                         }
@@ -524,25 +566,16 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                 }
             }
         }
+    }
 
-        let source = sources.first().ok_or_else(|| {
-            UUsageError::new(
-                1,
-                format!(
-                    "missing destination file operand after '{}'",
-                    target.to_str().unwrap()
-                ),
-            )
-        })?;
+    if sources.len() > 1 || is_potential_directory_path(&target) {
+        copy_files_into_dir(sources, &target, b)
+    } else {
+        let source = sources.first().unwrap();
 
-        // If the -D flag was passed (target does not include filename),
-        // we need to add the source name to the target_dir
-        // because `copy` expects `to` to be a file, not a directory
-        let target = if target.is_dir() && b.create_leading {
-            target.join(source)
-        } else {
-            target // already includes dest filename
-        };
+        if source.is_dir() {
+            return Err(InstallError::OmittingDirectory(source.to_path_buf()).into());
+        }
 
         if target.is_file() || is_new_file_path(&target) {
             copy(source, &target, b)

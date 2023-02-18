@@ -3,11 +3,11 @@ Documentation
 
 The source of the documentation is available on:
 
-https://uutils.github.io/coreutils-docs/coreutils/
+https://uutils.github.io/dev/coreutils/
 
 The documentation is updated everyday on this repository:
 
-https://github.com/uutils/coreutils-docs
+https://github.com/uutils/uutils.github.io/
 
 Running GNU tests
 -----------------

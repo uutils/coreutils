@@ -10,6 +10,144 @@ use std::fmt;
 
 use crate::display::Quotable;
 
+/// Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
+///
+/// The [`Parser::parse`] function performs the parse.
+#[derive(Default)]
+pub struct Parser<'parser> {
+    /// Whether to treat the suffix "B" as meaning "bytes".
+    pub capital_b_bytes: bool,
+    /// Whether to treat "b" as a "byte count" instead of "block"
+    pub b_byte_count: bool,
+    /// Whitelist for the suffix
+    pub allow_list: Option<&'parser [&'parser str]>,
+    /// Default unit when no suffix is provided
+    pub default_unit: Option<&'parser str>,
+}
+
+impl<'parser> Parser<'parser> {
+    pub fn with_allow_list(&mut self, allow_list: &'parser [&str]) -> &mut Self {
+        self.allow_list = Some(allow_list);
+        self
+    }
+
+    pub fn with_default_unit(&mut self, default_unit: &'parser str) -> &mut Self {
+        self.default_unit = Some(default_unit);
+        self
+    }
+
+    pub fn with_b_byte_count(&mut self, value: bool) -> &mut Self {
+        self.b_byte_count = value;
+        self
+    }
+
+    /// Parse a size string into a number of bytes.
+    ///
+    /// A size string comprises an integer and an optional unit. The unit
+    /// may be K, M, G, T, P, E, Z or Y (powers of 1024), or KB, MB,
+    /// etc. (powers of 1000), or b which is 512.
+    /// Binary prefixes can be used, too: KiB=K, MiB=M, and so on.
+    ///
+    /// # Errors
+    ///
+    /// Will return `ParseSizeError` if it's not possible to parse this
+    /// string into a number, e.g. if the string does not begin with a
+    /// numeral, or if the unit is not one of the supported units described
+    /// in the preceding section.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use uucore::parse_size::parse_size;
+    /// assert_eq!(Ok(123), parse_size("123"));
+    /// assert_eq!(Ok(9 * 1000), parse_size("9kB")); // kB is 1000
+    /// assert_eq!(Ok(2 * 1024), parse_size("2K")); // K is 1024
+    /// ```
+    pub fn parse(&self, size: &str) -> Result<u64, ParseSizeError> {
+        if size.is_empty() {
+            return Err(ParseSizeError::parse_failure(size));
+        }
+        // Get the numeric part of the size argument. For example, if the
+        // argument is "123K", then the numeric part is "123".
+        let numeric_string: String = size.chars().take_while(|c| c.is_ascii_digit()).collect();
+        let number: u64 = if !numeric_string.is_empty() {
+            match numeric_string.parse() {
+                Ok(n) => n,
+                Err(_) => return Err(ParseSizeError::parse_failure(size)),
+            }
+        } else {
+            1
+        };
+
+        // Get the alphabetic units part of the size argument and compute
+        // the factor it represents. For example, if the argument is "123K",
+        // then the unit part is "K" and the factor is 1024. This may be the
+        // empty string, in which case, the factor is 1.
+        //
+        // The lowercase "b" (used by `od`, `head`, `tail`, etc.) means
+        // "block" and the Posix block size is 512. The uppercase "B"
+        // means "byte".
+        let mut unit: &str = &size[numeric_string.len()..];
+
+        if let Some(default_unit) = self.default_unit {
+            // Check if `unit` is empty then assigns `default_unit` to `unit`
+            if unit.is_empty() {
+                unit = default_unit;
+            }
+        }
+
+        // Check if `b` is a byte count and remove `b`
+        if self.b_byte_count && unit.ends_with('b') {
+            // If `unit` = 'b' then return error
+            if numeric_string.is_empty() {
+                return Err(ParseSizeError::parse_failure(size));
+            }
+            unit = &unit[0..unit.len() - 1];
+        }
+
+        if let Some(allow_list) = self.allow_list {
+            // Check if `unit` appears in `allow_list`, if not return error
+            if !allow_list.contains(&unit) && !unit.is_empty() {
+                if numeric_string.is_empty() {
+                    return Err(ParseSizeError::parse_failure(size));
+                }
+                return Err(ParseSizeError::invalid_suffix(size));
+            }
+        }
+
+        let (base, exponent): (u128, u32) = match unit {
+            "" => (1, 0),
+            "B" if self.capital_b_bytes => (1, 0),
+            "b" => (512, 1),
+            "KiB" | "kiB" | "K" | "k" => (1024, 1),
+            "MiB" | "miB" | "M" | "m" => (1024, 2),
+            "GiB" | "giB" | "G" | "g" => (1024, 3),
+            "TiB" | "tiB" | "T" | "t" => (1024, 4),
+            "PiB" | "piB" | "P" | "p" => (1024, 5),
+            "EiB" | "eiB" | "E" | "e" => (1024, 6),
+            "ZiB" | "ziB" | "Z" | "z" => (1024, 7),
+            "YiB" | "yiB" | "Y" | "y" => (1024, 8),
+            "KB" | "kB" => (1000, 1),
+            "MB" | "mB" => (1000, 2),
+            "GB" | "gB" => (1000, 3),
+            "TB" | "tB" => (1000, 4),
+            "PB" | "pB" => (1000, 5),
+            "EB" | "eB" => (1000, 6),
+            "ZB" | "zB" => (1000, 7),
+            "YB" | "yB" => (1000, 8),
+            _ if numeric_string.is_empty() => return Err(ParseSizeError::parse_failure(size)),
+            _ => return Err(ParseSizeError::invalid_suffix(size)),
+        };
+        let factor = match u64::try_from(base.pow(exponent)) {
+            Ok(n) => n,
+            Err(_) => return Err(ParseSizeError::size_too_big(size)),
+        };
+        number
+            .checked_mul(factor)
+            .ok_or_else(|| ParseSizeError::size_too_big(size))
+    }
+}
+
 /// Parse a size string into a number of bytes.
 ///
 /// A size string comprises an integer and an optional unit. The unit
@@ -33,55 +171,7 @@ use crate::display::Quotable;
 /// assert_eq!(Ok(2 * 1024), parse_size("2K")); // K is 1024
 /// ```
 pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
-    if size.is_empty() {
-        return Err(ParseSizeError::parse_failure(size));
-    }
-    // Get the numeric part of the size argument. For example, if the
-    // argument is "123K", then the numeric part is "123".
-    let numeric_string: String = size.chars().take_while(|c| c.is_ascii_digit()).collect();
-    let number: u64 = if !numeric_string.is_empty() {
-        match numeric_string.parse() {
-            Ok(n) => n,
-            Err(_) => return Err(ParseSizeError::parse_failure(size)),
-        }
-    } else {
-        1
-    };
-
-    // Get the alphabetic units part of the size argument and compute
-    // the factor it represents. For example, if the argument is "123K",
-    // then the unit part is "K" and the factor is 1024. This may be the
-    // empty string, in which case, the factor is 1.
-    let unit = &size[numeric_string.len()..];
-    let (base, exponent): (u128, u32) = match unit {
-        "" => (1, 0),
-        "b" => (512, 1), // (`od`, `head` and `tail` use "b")
-        "KiB" | "kiB" | "K" | "k" => (1024, 1),
-        "MiB" | "miB" | "M" | "m" => (1024, 2),
-        "GiB" | "giB" | "G" | "g" => (1024, 3),
-        "TiB" | "tiB" | "T" | "t" => (1024, 4),
-        "PiB" | "piB" | "P" | "p" => (1024, 5),
-        "EiB" | "eiB" | "E" | "e" => (1024, 6),
-        "ZiB" | "ziB" | "Z" | "z" => (1024, 7),
-        "YiB" | "yiB" | "Y" | "y" => (1024, 8),
-        "KB" | "kB" => (1000, 1),
-        "MB" | "mB" => (1000, 2),
-        "GB" | "gB" => (1000, 3),
-        "TB" | "tB" => (1000, 4),
-        "PB" | "pB" => (1000, 5),
-        "EB" | "eB" => (1000, 6),
-        "ZB" | "zB" => (1000, 7),
-        "YB" | "yB" => (1000, 8),
-        _ if numeric_string.is_empty() => return Err(ParseSizeError::parse_failure(size)),
-        _ => return Err(ParseSizeError::invalid_suffix(size)),
-    };
-    let factor = match u64::try_from(base.pow(exponent)) {
-        Ok(n) => n,
-        Err(_) => return Err(ParseSizeError::size_too_big(size)),
-    };
-    number
-        .checked_mul(factor)
-        .ok_or_else(|| ParseSizeError::size_too_big(size))
+    Parser::default().parse(size)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -106,7 +196,7 @@ impl fmt::Display for ParseSizeError {
         let s = match self {
             Self::InvalidSuffix(s) | Self::ParseFailure(s) | Self::SizeTooBig(s) => s,
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 
@@ -202,21 +292,21 @@ mod tests {
         ];
 
         for &(c, exp) in &suffixes {
-            let s = format!("2{}B", c); // KB
+            let s = format!("2{c}B"); // KB
             assert_eq!(Ok((2 * (1000_u128).pow(exp)) as u64), parse_size(&s));
-            let s = format!("2{}", c); // K
+            let s = format!("2{c}"); // K
             assert_eq!(Ok((2 * (1024_u128).pow(exp)) as u64), parse_size(&s));
-            let s = format!("2{}iB", c); // KiB
+            let s = format!("2{c}iB"); // KiB
             assert_eq!(Ok((2 * (1024_u128).pow(exp)) as u64), parse_size(&s));
             let s = format!("2{}iB", c.to_lowercase()); // kiB
             assert_eq!(Ok((2 * (1024_u128).pow(exp)) as u64), parse_size(&s));
 
             // suffix only
-            let s = format!("{}B", c); // KB
+            let s = format!("{c}B"); // KB
             assert_eq!(Ok(((1000_u128).pow(exp)) as u64), parse_size(&s));
-            let s = format!("{}", c); // K
+            let s = format!("{c}"); // K
             assert_eq!(Ok(((1024_u128).pow(exp)) as u64), parse_size(&s));
-            let s = format!("{}iB", c); // KiB
+            let s = format!("{c}iB"); // KiB
             assert_eq!(Ok(((1024_u128).pow(exp)) as u64), parse_size(&s));
             let s = format!("{}iB", c.to_lowercase()); // kiB
             assert_eq!(Ok(((1024_u128).pow(exp)) as u64), parse_size(&s));
@@ -319,5 +409,45 @@ mod tests {
         assert_eq!(Ok(2_000_000_000_000), parse_size("2TB"));
         assert_eq!(Ok(2_000_000_000_000_000), parse_size("2PB"));
         assert_eq!(Ok(2_000_000_000_000_000_000), parse_size("2EB"));
+    }
+
+    #[test]
+    fn parse_size_options() {
+        let mut parser = Parser::default();
+
+        parser
+            .with_allow_list(&["k", "K", "G", "MB", "M"])
+            .with_default_unit("K");
+
+        assert_eq!(Ok(1024), parser.parse("1"));
+        assert_eq!(Ok(2 * 1024), parser.parse("2"));
+        assert_eq!(Ok(1000 * 1000), parser.parse("1MB"));
+        assert_eq!(Ok(1024 * 1024), parser.parse("1M"));
+        assert_eq!(Ok(1024 * 1024 * 1024), parser.parse("1G"));
+
+        assert!(parser.parse("1T").is_err());
+        assert!(parser.parse("1P").is_err());
+        assert!(parser.parse("1E").is_err());
+
+        parser
+            .with_allow_list(&[
+                "b", "k", "K", "m", "M", "MB", "g", "G", "t", "T", "P", "E", "Z", "Y",
+            ])
+            .with_default_unit("K")
+            .with_b_byte_count(true);
+
+        assert_eq!(Ok(1024), parser.parse("1"));
+        assert_eq!(Ok(2 * 1024), parser.parse("2"));
+        assert_eq!(Ok(1000 * 1000), parser.parse("1MB"));
+        assert_eq!(Ok(1024 * 1024), parser.parse("1M"));
+        assert_eq!(Ok(1024 * 1024 * 1024), parser.parse("1G"));
+
+        assert_eq!(Ok(1), parser.parse("1b"));
+        assert_eq!(Ok(1024), parser.parse("1024b"));
+        assert_eq!(Ok(1024 * 1024 * 1024), parser.parse("1024Mb"));
+
+        assert!(parser.parse("b").is_err());
+        assert!(parser.parse("1B").is_err());
+        assert!(parser.parse("B").is_err());
     }
 }

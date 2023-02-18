@@ -13,7 +13,7 @@ fn test_invalid_arg() {
 fn test_subcommand_return_code() {
     new_ucmd!().arg("1").arg("true").succeeds();
 
-    new_ucmd!().arg("1").arg("false").run().status_code(1);
+    new_ucmd!().arg("1").arg("false").run().code_is(1);
 }
 
 #[test]
@@ -48,11 +48,11 @@ fn test_verbose() {
         new_ucmd!()
             .args(&[verbose_flag, ".1", "sleep", "10"])
             .fails()
-            .stderr_only("timeout: sending signal TERM to command 'sleep'");
+            .stderr_only("timeout: sending signal TERM to command 'sleep'\n");
         new_ucmd!()
             .args(&[verbose_flag, "-s0", "-k.1", ".1", "sleep", "10"])
             .fails()
-            .stderr_only("timeout: sending signal EXIT to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'");
+            .stderr_only("timeout: sending signal EXIT to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'\n");
     }
 }
 

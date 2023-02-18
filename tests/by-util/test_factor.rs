@@ -8,11 +8,9 @@
 
 // spell-checker:ignore (methods) hexdigest
 
-use tempfile::TempDir;
-
 use crate::common::util::*;
-use std::fs::OpenOptions;
-use std::time::SystemTime;
+
+use std::time::{Duration, SystemTime};
 
 #[path = "../../src/uu/factor/sieve.rs"]
 mod sieve;
@@ -33,14 +31,17 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(feature = "sort")]
 fn test_parallel() {
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
+    use std::{fs::OpenOptions, time::Duration};
+    use tempfile::TempDir;
     // factor should only flush the buffer at line breaks
     let n_integers = 100_000;
     let mut input_string = String::new();
     for i in 0..=n_integers {
-        input_string.push_str(&(format!("{} ", i))[..]);
+        input_string.push_str(&(format!("{i} "))[..]);
     }
 
     let tmp_dir = TempDir::new().unwrap();
@@ -51,16 +52,17 @@ fn test_parallel() {
         .open(tmp_dir.plus("output"))
         .unwrap();
 
-    for mut child in (0..10)
+    for child in (0..10)
         .map(|_| {
             new_ucmd!()
+                .timeout(Duration::from_secs(240))
                 .set_stdout(output.try_clone().unwrap())
                 .pipe_in(input_string.clone())
                 .run_no_wait()
         })
         .collect::<Vec<_>>()
     {
-        assert_eq!(child.wait().unwrap().code().unwrap(), 0);
+        child.wait().unwrap().success();
     }
 
     let result = TestScenario::new(util_name!())
@@ -77,27 +79,27 @@ fn test_parallel() {
 }
 
 #[test]
-fn test_first_100000_integers() {
+fn test_first_1000_integers() {
     extern crate sha1;
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
 
-    let n_integers = 100_000;
+    let n_integers = 1000;
     let mut input_string = String::new();
     for i in 0..=n_integers {
-        input_string.push_str(&(format!("{} ", i))[..]);
+        input_string.push_str(&(format!("{i} "))[..]);
     }
 
-    println!("STDIN='{}'", input_string);
+    println!("STDIN='{input_string}'");
     let result = new_ucmd!().pipe_in(input_string.as_bytes()).succeeds();
 
-    // `seq 0 100000 | factor | sha1sum` => "4ed2d8403934fa1c76fe4b84c5d4b8850299c359"
+    // `seq 0 1000 | factor | sha1sum` => "c734327bd18b90fca5762f671672b5eda19f7dca"
     let mut hasher = Sha1::new();
     hasher.update(result.stdout());
     let hash_check = hasher.finalize();
     assert_eq!(
         hash_check[..],
-        hex!("4ed2d8403934fa1c76fe4b84c5d4b8850299c359")
+        hex!("c734327bd18b90fca5762f671672b5eda19f7dca")
     );
 }
 
@@ -107,10 +109,10 @@ fn test_cli_args() {
     new_ucmd!().args(&["3"]).succeeds().stdout_contains("3: 3");
 
     new_ucmd!()
-        .args(&["3", "6"])
+        .args(&["3", "6", " +9"])
         .succeeds()
         .stdout_contains("3: 3")
-        .stdout_contains("6: 2 3");
+        .stdout_contains("9: 3 3");
 }
 
 #[test]
@@ -124,7 +126,7 @@ fn test_random() {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    println!("rng_seed={:?}", rng_seed);
+    println!("rng_seed={rng_seed:?}");
     let mut rng = SmallRng::seed_from_u64(rng_seed);
 
     let mut rand_gt = move |min: u64| {
@@ -160,11 +162,11 @@ fn test_random() {
     let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_gt(1 << 63);
-        input_string.push_str(&(format!("{} ", product))[..]);
+        input_string.push_str(&(format!("{product} "))[..]);
 
-        output_string.push_str(&(format!("{}:", product))[..]);
+        output_string.push_str(&(format!("{product}:"))[..]);
         for factor in factors {
-            output_string.push_str(&(format!(" {}", factor))[..]);
+            output_string.push_str(&(format!(" {factor}"))[..]);
         }
         output_string.push('\n');
     }
@@ -178,7 +180,7 @@ fn test_random_big() {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    println!("rng_seed={:?}", rng_seed);
+    println!("rng_seed={rng_seed:?}");
     let mut rng = SmallRng::seed_from_u64(rng_seed);
 
     let bit_range_1 = Uniform::new(14_usize, 51);
@@ -242,11 +244,11 @@ fn test_random_big() {
     let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_64();
-        input_string.push_str(&(format!("{} ", product))[..]);
+        input_string.push_str(&(format!("{product} "))[..]);
 
-        output_string.push_str(&(format!("{}:", product))[..]);
+        output_string.push_str(&(format!("{product}:"))[..]);
         for factor in factors {
-            output_string.push_str(&(format!(" {}", factor))[..]);
+            output_string.push_str(&(format!(" {factor}"))[..]);
         }
         output_string.push('\n');
     }
@@ -259,8 +261,8 @@ fn test_big_primes() {
     let mut input_string = String::new();
     let mut output_string = String::new();
     for prime in PRIMES64 {
-        input_string.push_str(&(format!("{} ", prime))[..]);
-        output_string.push_str(&(format!("{0}: {0}\n", prime))[..]);
+        input_string.push_str(&(format!("{prime} "))[..]);
+        output_string.push_str(&(format!("{prime}: {prime}\n"))[..]);
     }
 
     run(input_string.as_bytes(), output_string.as_bytes());
@@ -274,6 +276,7 @@ fn run(input_string: &[u8], output_string: &[u8]) {
     );
     // now run factor
     new_ucmd!()
+        .timeout(Duration::from_secs(240))
         .pipe_in(input_string)
         .run()
         .stdout_is(String::from_utf8(output_string.to_owned()).unwrap());

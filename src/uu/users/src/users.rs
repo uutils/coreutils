@@ -11,6 +11,7 @@
 use std::ffi::OsString;
 use std::path::Path;
 
+use clap::builder::ValueParser;
 use clap::{crate_version, Arg, Command};
 use uucore::error::UResult;
 use uucore::format_usage;
@@ -31,10 +32,8 @@ If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.",
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let after_help = get_long_usage();
-
     let matches = uu_app()
-        .after_help(&after_help[..])
+        .after_help(get_long_usage())
         .try_get_matches_from(args)?;
 
     let files: Vec<&Path> = matches
@@ -61,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -69,8 +68,8 @@ pub fn uu_app<'a>() -> Command<'a> {
         .infer_long_args(true)
         .arg(
             Arg::new(ARG_FILES)
-                .takes_value(true)
-                .max_values(1)
-                .value_hint(clap::ValueHint::FilePath),
+                .num_args(1)
+                .value_hint(clap::ValueHint::FilePath)
+                .value_parser(ValueParser::os_string()),
         )
 }

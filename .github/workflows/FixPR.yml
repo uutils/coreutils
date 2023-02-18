@@ -27,22 +27,21 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v1
     - name: Initialize job variables
       id: vars
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # surface MSRV from CICD workflow
         RUST_MIN_SRV=$(grep -P "^\s+RUST_MIN_SRV:" .github/workflows/CICD.yml | grep -Po "(?<=\x22)\d+[.]\d+(?:[.]\d+)?(?=\x22)" )
         outputs RUST_MIN_SRV
     - name: Install `rust` toolchain (v${{ steps.vars.outputs.RUST_MIN_SRV }})
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ steps.vars.outputs.RUST_MIN_SRV }}
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      run: |
+        ## Install `rust` toolchain (v${{ steps.vars.outputs.RUST_MIN_SRV }})
+        rustup toolchain install ${{ steps.vars.outputs.RUST_MIN_SRV }} --profile minimal
+        rustup default ${{ steps.vars.outputs.RUST_MIN_SRV }}
+    - uses: Swatinem/rust-cache@v2
     - name: Ensure updated 'Cargo.lock'
       shell: bash
       run: |
@@ -91,25 +90,24 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v1
     - name: Initialize job variables
       id: vars
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt
+      run: |
+        ## Install `rust` toolchain
+        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
+        rustup toolchain install stable -c rustfmt --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: "`cargo fmt`"
       shell: bash
       run: |

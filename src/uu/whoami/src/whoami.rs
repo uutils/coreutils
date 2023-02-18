@@ -7,10 +7,7 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
-#[macro_use]
-extern crate clap;
-
-use clap::Command;
+use clap::{crate_version, Command};
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
@@ -23,11 +20,11 @@ static ABOUT: &str = "Print the current username.";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().try_get_matches_from(args)?;
     let username = platform::get_username().map_err_context(|| "failed to get username".into())?;
-    println_verbatim(&username).map_err_context(|| "failed to print username".into())?;
+    println_verbatim(username).map_err_context(|| "failed to print username".into())?;
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)

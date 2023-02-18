@@ -8,7 +8,7 @@
 // spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
 mod error;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
 use std::io::{stdin, stdout, BufWriter, Read, Write};
@@ -23,7 +23,6 @@ use uucore::{format_usage, show};
 
 use crate::error::TacError;
 
-static NAME: &str = "tac";
 static USAGE: &str = "{} [OPTION]... [FILE]...";
 static ABOUT: &str = "Write each file to standard output, last line first.";
 
@@ -40,8 +39,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let before = matches.contains_id(options::BEFORE);
-    let regex = matches.contains_id(options::REGEX);
+    let before = matches.get_flag(options::BEFORE);
+    let regex = matches.get_flag(options::REGEX);
     let raw_separator = matches
         .get_one::<String>(options::SEPARATOR)
         .map(|s| s.as_str())
@@ -60,9 +59,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     tac(&files, before, regex, separator)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
@@ -72,26 +70,26 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('b')
                 .long(options::BEFORE)
                 .help("attach the separator before instead of after")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::REGEX)
                 .short('r')
                 .long(options::REGEX)
                 .help("interpret the sequence as a regular expression")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SEPARATOR)
                 .short('s')
                 .long(options::SEPARATOR)
                 .help("use STRING as the separator instead of newline")
-                .takes_value(true),
+                .value_name("STRING"),
         )
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

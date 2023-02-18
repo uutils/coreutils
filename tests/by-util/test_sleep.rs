@@ -9,6 +9,10 @@ fn test_invalid_time_interval() {
         .arg("xyz")
         .fails()
         .usage_error("invalid time interval 'xyz'");
+    new_ucmd!()
+        .args(&["--", "-1"])
+        .fails()
+        .usage_error("invalid time interval '-1'");
 }
 
 #[test]
@@ -75,7 +79,7 @@ fn test_sleep_zero_duration() {
 
 #[test]
 fn test_sleep_no_argument() {
-    new_ucmd!().fails();
+    new_ucmd!().fails().usage_error("missing operand");
 }
 
 #[test]

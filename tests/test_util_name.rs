@@ -21,7 +21,7 @@ fn execution_phrase_double() {
         .unwrap();
     assert!(String::from_utf8(output.stderr)
         .unwrap()
-        .contains(&format!("USAGE:\n    {} ls", scenario.bin_path.display(),)));
+        .contains(&format!("Usage: {} ls", scenario.bin_path.display(),)));
 }
 
 #[test]
@@ -36,8 +36,9 @@ fn execution_phrase_single() {
         .arg("--some-invalid-arg")
         .output()
         .unwrap();
+    dbg!(String::from_utf8(output.stderr.clone()).unwrap());
     assert!(String::from_utf8(output.stderr).unwrap().contains(&format!(
-        "USAGE:\n    {}",
+        "Usage: {}",
         scenario.fixtures.plus("uu-ls").display()
     )));
 }
@@ -51,7 +52,7 @@ fn util_name_double() {
     };
 
     let scenario = TestScenario::new("sort");
-    let mut child = Command::new(&scenario.bin_path)
+    let mut child = Command::new(scenario.bin_path)
         .arg("sort")
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())

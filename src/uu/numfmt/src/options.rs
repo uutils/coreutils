@@ -74,7 +74,7 @@ impl RoundMethod {
 }
 
 // Represents the options extracted from the --format argument provided by the user.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct FormatOptions {
     pub grouping: bool,
     pub padding: Option<isize>,
@@ -82,19 +82,6 @@ pub struct FormatOptions {
     pub prefix: String,
     pub suffix: String,
     pub zero_padding: bool,
-}
-
-impl Default for FormatOptions {
-    fn default() -> Self {
-        Self {
-            grouping: false,
-            padding: None,
-            precision: None,
-            prefix: String::from(""),
-            suffix: String::from(""),
-            zero_padding: false,
-        }
-    }
 }
 
 impl FromStr for FormatOptions {
@@ -112,8 +99,8 @@ impl FromStr for FormatOptions {
         let mut iter = s.chars().peekable();
         let mut options = Self::default();
 
-        let mut padding = String::from("");
-        let mut precision = String::from("");
+        let mut padding = String::new();
+        let mut precision = String::new();
         let mut double_percentage_counter = 0;
 
         // '%' chars in the prefix, if any, must appear in blocks of even length, for example: "%%%%" and
@@ -141,14 +128,14 @@ impl FromStr for FormatOptions {
 
         if iter.peek().is_none() {
             return if options.prefix == s {
-                Err(format!("format '{}' has no % directive", s))
+                Err(format!("format '{s}' has no % directive"))
             } else {
-                Err(format!("format '{}' ends in %", s))
+                Err(format!("format '{s}' ends in %"))
             };
         }
 
         // GNU numfmt allows to mix the characters " ", "'", and "0" in any way, so we do the same
-        while matches!(iter.peek(), Some(' ') | Some('\'') | Some('0')) {
+        while matches!(iter.peek(), Some(' ' | '\'' | '0')) {
             match iter.next().unwrap() {
                 ' ' => (),
                 '\'' => options.grouping = true,
@@ -164,8 +151,7 @@ impl FromStr for FormatOptions {
                 Some(c) if c.is_ascii_digit() => padding.push('-'),
                 _ => {
                     return Err(format!(
-                        "invalid format '{}', directive must be %[0]['][-][N][.][N]f",
-                        s
+                        "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
                     ))
                 }
             }
@@ -184,15 +170,15 @@ impl FromStr for FormatOptions {
             if let Ok(p) = padding.parse() {
                 options.padding = Some(p);
             } else {
-                return Err(format!("invalid format '{}' (width overflow)", s));
+                return Err(format!("invalid format '{s}' (width overflow)"));
             }
         }
 
         if let Some('.') = iter.peek() {
             iter.next();
 
-            if matches!(iter.peek(), Some(' ') | Some('+') | Some('-')) {
-                return Err(format!("invalid precision in format '{}'", s));
+            if matches!(iter.peek(), Some(' ' | '+' | '-')) {
+                return Err(format!("invalid precision in format '{s}'"));
             }
 
             while let Some(c) = iter.peek() {
@@ -208,7 +194,7 @@ impl FromStr for FormatOptions {
                 if let Ok(p) = precision.parse() {
                     options.precision = Some(p);
                 } else {
-                    return Err(format!("invalid precision in format '{}'", s));
+                    return Err(format!("invalid precision in format '{s}'"));
                 }
             } else {
                 options.precision = Some(0);
@@ -219,8 +205,7 @@ impl FromStr for FormatOptions {
             iter.next();
         } else {
             return Err(format!(
-                "invalid format '{}', directive must be %[0]['][-][N][.][N]f",
-                s
+                "invalid format '{s}', directive must be %[0]['][-][N][.][N]f"
             ));
         }
 
@@ -235,7 +220,7 @@ impl FromStr for FormatOptions {
                 }
                 iter.next();
             } else {
-                return Err(format!("format '{}' has too many % directives", s));
+                return Err(format!("format '{s}' has too many % directives"));
             }
         }
 

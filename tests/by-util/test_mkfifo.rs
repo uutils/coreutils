@@ -7,7 +7,7 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_create_fifo_missing_operand() {
-    new_ucmd!().fails().stderr_is("mkfifo: missing operand");
+    new_ucmd!().fails().stderr_is("mkfifo: missing operand\n");
 }
 
 #[test]
@@ -46,5 +46,5 @@ fn test_create_one_fifo_already_exists() {
         .arg("abcdef")
         .arg("abcdef")
         .fails()
-        .stderr_is("mkfifo: cannot create fifo 'abcdef': File exists");
+        .stderr_is("mkfifo: cannot create fifo 'abcdef': File exists\n");
 }

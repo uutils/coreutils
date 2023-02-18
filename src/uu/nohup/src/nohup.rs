@@ -7,10 +7,7 @@
 
 // spell-checker:ignore (ToDO) execvp SIGHUP cproc vprocmgr cstrs homeout
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use libc::{c_char, dup2, execvp, signal};
 use libc::{SIGHUP, SIG_IGN};
 use std::env;
@@ -22,7 +19,7 @@ use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult};
-use uucore::format_usage;
+use uucore::{format_usage, show_error};
 
 static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
 static LONG_HELP: &str = "
@@ -68,7 +65,7 @@ impl Display for NohupError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::CannotDetach => write!(f, "Cannot detach from console"),
-            Self::CannotReplace(s, e) => write!(f, "Cannot replace {}: {}", s, e),
+            Self::CannotReplace(s, e) => write!(f, "Cannot replace {s}: {e}"),
             Self::OpenFailed(_, e) => {
                 write!(f, "failed to open {}: {}", NOHUP_OUT.quote(), e)
             }
@@ -114,7 +111,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -124,7 +121,7 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::CMD)
                 .hide(true)
                 .required(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::CommandName),
         )
         .trailing_var_arg(true)

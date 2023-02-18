@@ -93,7 +93,7 @@ for details about the options it supports.";
 
 const ABOUT: &str = "Check file types and compare values.";
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -186,7 +186,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                     return Ok(true);
                 }
                 _ => {
-                    return Err(format!("missing argument after '{:?}'", op));
+                    return Err(format!("missing argument after '{op:?}'"));
                 }
             };
 
@@ -452,18 +452,18 @@ mod tests {
     fn test_integer_op() {
         let a = OsStr::new("18446744073709551616");
         let b = OsStr::new("0");
-        assert_eq!(integers(a, b, OsStr::new("-lt")).unwrap(), false);
+        assert!(!integers(a, b, OsStr::new("-lt")).unwrap());
         let a = OsStr::new("18446744073709551616");
         let b = OsStr::new("0");
-        assert_eq!(integers(a, b, OsStr::new("-gt")).unwrap(), true);
+        assert!(integers(a, b, OsStr::new("-gt")).unwrap());
         let a = OsStr::new("-1");
         let b = OsStr::new("0");
-        assert_eq!(integers(a, b, OsStr::new("-lt")).unwrap(), true);
+        assert!(integers(a, b, OsStr::new("-lt")).unwrap());
         let a = OsStr::new("42");
         let b = OsStr::new("42");
-        assert_eq!(integers(a, b, OsStr::new("-eq")).unwrap(), true);
+        assert!(integers(a, b, OsStr::new("-eq")).unwrap());
         let a = OsStr::new("42");
         let b = OsStr::new("42");
-        assert_eq!(integers(a, b, OsStr::new("-ne")).unwrap(), false);
+        assert!(!integers(a, b, OsStr::new("-ne")).unwrap());
     }
 }

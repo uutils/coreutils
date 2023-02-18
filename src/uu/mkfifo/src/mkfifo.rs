@@ -5,17 +5,13 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use libc::mkfifo;
 use std::ffi::CString;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, show};
 
-static NAME: &str = "mkfifo";
 static USAGE: &str = "{} [OPTION]... NAME...";
 static ABOUT: &str = "Create a FIFO with the given name.";
 
@@ -35,14 +31,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if matches.contains_id(options::CONTEXT) {
         return Err(USimpleError::new(1, "--context is not implemented"));
     }
-    if matches.contains_id(options::SE_LINUX_SECURITY_CONTEXT) {
+    if matches.get_flag(options::SE_LINUX_SECURITY_CONTEXT) {
         return Err(USimpleError::new(1, "-Z is not implemented"));
     }
 
     let mode = match matches.get_one::<String>(options::MODE) {
         Some(m) => match usize::from_str_radix(m, 8) {
             Ok(m) => m,
-            Err(e) => return Err(USimpleError::new(1, format!("invalid mode: {}", e))),
+            Err(e) => return Err(USimpleError::new(1, format!("invalid mode: {e}"))),
         },
         None => 0o666,
     };
@@ -68,9 +64,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
@@ -81,12 +76,13 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long(options::MODE)
                 .help("file permissions for the fifo")
                 .default_value("0666")
-                .value_name("0666"),
+                .value_name("MODE"),
         )
         .arg(
             Arg::new(options::SE_LINUX_SECURITY_CONTEXT)
                 .short('Z')
-                .help("set the SELinux security context to default type"),
+                .help("set the SELinux security context to default type")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CONTEXT)
@@ -100,7 +96,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::FIFO)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

@@ -9,9 +9,17 @@
 
 extern crate libc;
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::errno::Errno;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::fcntl::{open, OFlag};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 
@@ -44,7 +52,7 @@ mod platform {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
         for path in files {
-            let f = File::open(&path).unwrap();
+            let f = File::open(path).unwrap();
             let fd = f.as_raw_fd();
             libc::syscall(libc::SYS_syncfs, fd);
         }
@@ -54,7 +62,7 @@ mod platform {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub unsafe fn do_fdatasync(files: Vec<String>) -> isize {
         for path in files {
-            let f = File::open(&path).unwrap();
+            let f = File::open(path).unwrap();
             let fd = f.as_raw_fd();
             libc::syscall(libc::SYS_fdatasync, fd);
         }
@@ -64,29 +72,27 @@ mod platform {
 
 #[cfg(windows)]
 mod platform {
-    extern crate winapi;
-    use self::winapi::shared::minwindef;
-    use self::winapi::shared::winerror;
-    use self::winapi::um::handleapi;
-    use self::winapi::um::winbase;
-    use self::winapi::um::winnt;
     use std::fs::OpenOptions;
     use std::os::windows::prelude::*;
     use std::path::Path;
     use uucore::crash;
     use uucore::wide::{FromWide, ToWide};
+    use windows_sys::Win32::Foundation::{
+        GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
+    };
+    use windows_sys::Win32::Storage::FileSystem::{
+        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, FlushFileBuffers, GetDriveTypeW,
+    };
+    use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
     unsafe fn flush_volume(name: &str) {
         let name_wide = name.to_wide_null();
-        if winapi::um::fileapi::GetDriveTypeW(name_wide.as_ptr()) == winbase::DRIVE_FIXED {
+        if GetDriveTypeW(name_wide.as_ptr()) == DRIVE_FIXED {
             let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
-                    if winapi::um::fileapi::FlushFileBuffers(file.as_raw_handle()) == 0 {
-                        crash!(
-                            winapi::um::errhandlingapi::GetLastError() as i32,
-                            "failed to flush file buffer"
-                        );
+                    if FlushFileBuffers(file.as_raw_handle() as HANDLE) == 0 {
+                        crash!(GetLastError() as i32, "failed to flush file buffer");
                     }
                 }
                 Err(e) => crash!(
@@ -97,17 +103,11 @@ mod platform {
         }
     }
 
-    unsafe fn find_first_volume() -> (String, winnt::HANDLE) {
-        let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = [0; minwindef::MAX_PATH];
-        let handle = winapi::um::fileapi::FindFirstVolumeW(
-            name.as_mut_ptr(),
-            name.len() as minwindef::DWORD,
-        );
-        if handle == handleapi::INVALID_HANDLE_VALUE {
-            crash!(
-                winapi::um::errhandlingapi::GetLastError() as i32,
-                "failed to find first volume"
-            );
+    unsafe fn find_first_volume() -> (String, HANDLE) {
+        let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
+        let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
+        if handle == INVALID_HANDLE_VALUE {
+            crash!(GetLastError() as i32, "failed to find first volume");
         }
         (String::from_wide_null(&name), handle)
     }
@@ -116,16 +116,11 @@ mod platform {
         let (first_volume, next_volume_handle) = find_first_volume();
         let mut volumes = vec![first_volume];
         loop {
-            let mut name: [winnt::WCHAR; minwindef::MAX_PATH] = [0; minwindef::MAX_PATH];
-            if winapi::um::fileapi::FindNextVolumeW(
-                next_volume_handle,
-                name.as_mut_ptr(),
-                name.len() as minwindef::DWORD,
-            ) == 0
-            {
-                match winapi::um::errhandlingapi::GetLastError() {
-                    winerror::ERROR_NO_MORE_FILES => {
-                        winapi::um::fileapi::FindVolumeClose(next_volume_handle);
+            let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
+            if FindNextVolumeW(next_volume_handle, name.as_mut_ptr(), name.len() as u32) == 0 {
+                match GetLastError() {
+                    ERROR_NO_MORE_FILES => {
+                        FindVolumeClose(next_volume_handle);
                         return volumes;
                     }
                     err => crash!(err as i32, "failed to find next volume"),
@@ -169,20 +164,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
+    if matches.get_flag(options::DATA) && files.is_empty() {
+        return Err(USimpleError::new(1, "--data needs at least one argument"));
+    }
+
     for f in &files {
-        if !Path::new(&f).exists() {
-            return Err(USimpleError::new(
-                1,
-                format!("cannot stat {}: No such file or directory", f.quote()),
-            ));
+        // Use the Nix open to be able to set the NONBLOCK flags for fifo files
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            let path = Path::new(&f);
+            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
+                if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
+                    return e.map_err_context(|| format!("cannot stat {}", f.quote()))?;
+                }
+            }
+        }
+
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        {
+            if !Path::new(&f).exists() {
+                return Err(USimpleError::new(
+                    1,
+                    format!("cannot stat {}: No such file or directory", f.quote()),
+                ));
+            }
         }
     }
 
     #[allow(clippy::if_same_then_else)]
-    if matches.contains_id(options::FILE_SYSTEM) {
+    if matches.get_flag(options::FILE_SYSTEM) {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
         syncfs(files);
-    } else if matches.contains_id(options::DATA) {
+    } else if matches.get_flag(options::DATA) {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fdatasync(files);
     } else {
@@ -191,7 +204,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -202,19 +215,20 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('f')
                 .long(options::FILE_SYSTEM)
                 .conflicts_with(options::DATA)
-                .help("sync the file systems that contain the files (Linux and Windows only)"),
+                .help("sync the file systems that contain the files (Linux and Windows only)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DATA)
                 .short('d')
                 .long(options::DATA)
                 .conflicts_with(options::FILE_SYSTEM)
-                .help("sync only file data, no unneeded metadata (Linux only)"),
+                .help("sync only file data, no unneeded metadata (Linux only)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }

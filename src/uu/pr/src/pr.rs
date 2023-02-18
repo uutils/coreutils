@@ -6,10 +6,7 @@
 
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
-#[macro_use]
-extern crate quick_error;
-
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use quick_error::ResultExt;
 use regex::Regex;
@@ -21,6 +18,7 @@ use std::os::unix::fs::FileTypeExt;
 use time::macros::format_description;
 use time::OffsetDateTime;
 
+use quick_error::quick_error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
 
@@ -192,18 +190,18 @@ quick_error! {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .infer_long_args(true)
         .args_override_self(true)
+        .disable_help_flag(true)
         .arg(
             Arg::new(options::PAGES)
                 .long(options::PAGES)
                 .help("Begin and stop printing with page FIRST_PAGE[:LAST_PAGE]")
-                .takes_value(true)
                 .value_name("FIRST_PAGE[:LAST_PAGE]"),
         )
         .arg(
@@ -214,157 +212,194 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "Use the string header to replace the file name \
                     in the header line.",
                 )
-                .takes_value(true)
                 .value_name("STRING"),
         )
         .arg(
             Arg::new(options::DOUBLE_SPACE)
                 .short('d')
                 .long(options::DOUBLE_SPACE)
-                .help("Produce output that is double spaced. An extra <newline> character is output following every <newline>
-                found in the input.")
+                .help(
+                    "Produce output that is double spaced. An extra <newline> \
+                character is output following every <newline> found in the input.",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NUMBER_LINES)
                 .short('n')
                 .long(options::NUMBER_LINES)
-                .help("Provide width digit line numbering.  The default for width, if not specified, is 5.  The number occupies
-                the first width column positions of each text column or each line of -m output.  If char (any non-digit
-                character) is given, it is appended to the line number to separate it from whatever follows.  The default
-                for char is a <tab>.  Line numbers longer than width columns are truncated.")
-                .takes_value(true)
+                .help(
+                    "Provide width digit line numbering.  The default for width, \
+                if not specified, is 5.  The number occupies the first width column \
+                positions of each text column or each line of -m output.  If char \
+                (any non-digit character) is given, it is appended to the line number \
+                to separate it from whatever follows.  The default for char is a <tab>. \
+                Line numbers longer than width columns are truncated.",
+                )
                 .allow_hyphen_values(true)
-                .value_name("[char][width]")
+                .value_name("[char][width]"),
         )
         .arg(
             Arg::new(options::FIRST_LINE_NUMBER)
                 .short('N')
                 .long(options::FIRST_LINE_NUMBER)
                 .help("start counting with NUMBER at 1st line of first page printed")
-                .takes_value(true)
-                .value_name("NUMBER")
+                .value_name("NUMBER"),
         )
         .arg(
             Arg::new(options::OMIT_HEADER)
                 .short('t')
                 .long(options::OMIT_HEADER)
-                .help("Write neither the five-line identifying header nor the five-line trailer usually supplied for  each  page.  Quit
-                writing after the last line of each file without spacing to the end of the page.")
+                .help(
+                    "Write neither the five-line identifying header nor the five-line \
+                trailer usually supplied for each page. Quit writing after the last line \
+                 of each file without spacing to the end of the page.",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PAGE_LENGTH)
                 .short('l')
                 .long(options::PAGE_LENGTH)
-                .help("Override the 66-line default (default number of lines of text 56, and with -F 63) and reset the page length to lines.  If lines is not greater than the sum  of  both
-                the  header  and trailer depths (in lines), the pr utility shall suppress both the header and trailer, as if the
-                -t option were in effect. ")
-                .takes_value(true)
-                .value_name("PAGE_LENGTH")
+                .help(
+                    "Override the 66-line default (default number of lines of text 56, \
+                    and with -F 63) and reset the page length to lines.  If lines is not \
+                    greater than the sum  of  both the  header  and trailer depths (in lines), \
+                    the pr utility shall suppress both the header and trailer, as if the -t \
+                    option were in effect. ",
+                )
+                .value_name("PAGE_LENGTH"),
         )
         .arg(
             Arg::new(options::NO_FILE_WARNINGS)
                 .short('r')
                 .long(options::NO_FILE_WARNINGS)
                 .help("omit warning when a file cannot be opened")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FORM_FEED)
                 .short('F')
                 .short_alias('f')
                 .long(options::FORM_FEED)
-                .help("Use a <form-feed> for new pages, instead of the default behavior that uses a sequence of <newline>s.")
+                .help(
+                    "Use a <form-feed> for new pages, instead of the default behavior that \
+                uses a sequence of <newline>s.",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_WIDTH)
                 .short('w')
                 .long(options::COLUMN_WIDTH)
-                .help("Set the width of the line to width column positions for multiple text-column output only. If the -w option is
-                not specified and the -s option is not specified, the default width shall be 72. If the -w option is not specified
-                and the -s option is specified, the default width shall be 512.")
-                .takes_value(true)
-                .value_name("width")
+                .help(
+                    "Set the width of the line to width column positions for multiple \
+                text-column output only. If the -w option is not specified and the -s option \
+                is not specified, the default width shall be 72. If the -w option is not specified \
+                and the -s option is specified, the default width shall be 512.",
+                )
+                .value_name("width"),
         )
         .arg(
             Arg::new(options::PAGE_WIDTH)
                 .short('W')
                 .long(options::PAGE_WIDTH)
-                .help("set page width to PAGE_WIDTH (72) characters always,
-                truncate lines, except -J option is set, no interference
-                with -S or -s")
-                .takes_value(true)
-                .value_name("width")
+                .help(
+                    "set page width to PAGE_WIDTH (72) characters always, \
+                truncate lines, except -J option is set, no interference \
+                with -S or -s",
+                )
+                .value_name("width"),
         )
         .arg(
             Arg::new(options::ACROSS)
                 .short('a')
                 .long(options::ACROSS)
-                .help("Modify the effect of the - column option so that the columns are filled across the page in a  round-robin  order
-                (for example, when column is 2, the first input line heads column 1, the second heads column 2, the third is the
-                second line in column 1, and so on).")
+                .help(
+                    "Modify the effect of the - column option so that the columns are filled \
+                across the page in a  round-robin  order (for example, when column is 2, the \
+                first input line heads column 1, the second heads column 2, the third is the \
+                second line in column 1, and so on).",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN)
                 .long(options::COLUMN)
-                .help("Produce multi-column output that is arranged in column columns (the default shall be 1) and is written down each
-                column  in  the order in which the text is received from the input file. This option should not be used with -m.
-                The options -e and -i shall be assumed for multiple text-column output.  Whether or not text columns are produced
-                with identical vertical lengths is unspecified, but a text column shall never exceed the length of the
-                page (see the -l option). When used with -t, use the minimum number of lines to write the output.")
-                .takes_value(true)
-                .value_name("column")
+                .help(
+                    "Produce multi-column output that is arranged in column columns \
+                (the default shall be 1) and is written down each column  in  the order in which \
+                the text is received from the input file. This option should not be used with -m. \
+                The options -e and -i shall be assumed for multiple text-column output.  Whether \
+                or not text columns are produced with identical vertical lengths is unspecified, \
+                but a text column shall never exceed the length of the page (see the -l option). \
+                When used with -t, use the minimum number of lines to write the output.",
+                )
+                .value_name("column"),
         )
         .arg(
             Arg::new(options::COLUMN_CHAR_SEPARATOR)
                 .short('s')
                 .long(options::COLUMN_CHAR_SEPARATOR)
-                .help("Separate text columns by the single character char instead of by the appropriate number of <space>s
-                (default for char is the <tab> character).")
-                .takes_value(true)
-                .value_name("char")
+                .help(
+                    "Separate text columns by the single character char instead of by the \
+                appropriate number of <space>s (default for char is the <tab> character).",
+                )
+                .value_name("char"),
         )
         .arg(
             Arg::new(options::COLUMN_STRING_SEPARATOR)
                 .short('S')
                 .long(options::COLUMN_STRING_SEPARATOR)
-                .help("separate columns by STRING,
-                without -S: Default separator <TAB> with -J and <space>
-                otherwise (same as -S\" \"), no effect on column options")
-                .takes_value(true)
-                .value_name("string")
+                .help(
+                    "separate columns by STRING, \
+                without -S: Default separator <TAB> with -J and <space> \
+                otherwise (same as -S\" \"), no effect on column options",
+                )
+                .value_name("string"),
         )
         .arg(
             Arg::new(options::MERGE)
                 .short('m')
                 .long(options::MERGE)
-                .help("Merge files. Standard output shall be formatted so the pr utility writes one line from each file specified by  a
-                file  operand, side by side into text columns of equal fixed widths, in terms of the number of column positions.
-                Implementations shall support merging of at least nine file operands.")
+                .help(
+                    "Merge files. Standard output shall be formatted so the pr utility \
+                writes one line from each file specified by a file operand, side by side \
+                into text columns of equal fixed widths, in terms of the number of column \
+                positions. Implementations shall support merging of at least nine file operands.",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::INDENT)
                 .short('o')
                 .long(options::INDENT)
-                .help("Each line of output shall be preceded by offset <space>s. If the -o option is not specified, the default offset
-                shall be zero. The space taken is in addition to the output line width (see the -w option below).")
-                .takes_value(true)
-                .value_name("margin")
+                .help(
+                    "Each line of output shall be preceded by offset <space>s. If the -o \
+                option is not specified, the default offset shall be zero. The space taken is \
+                in addition to the output line width (see the -w option below).",
+                )
+                .value_name("margin"),
         )
         .arg(
             Arg::new(options::JOIN_LINES)
                 .short('J')
-                .help("merge full lines, turns off -W line truncation, no column
-                alignment, --sep-string[=STRING] sets separators")
+                .help(
+                    "merge full lines, turns off -W line truncation, no column \
+                alignment, --sep-string[=STRING] sets separators",
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
                 .help("Print help information")
+                .action(ArgAction::Help),
         )
         .arg(
             Arg::new(options::FILES)
-                .multiple_occurrences(true)
-                .multiple_values(true)
-                .value_hint(clap::ValueHint::FilePath)
+                .action(ArgAction::Append)
+                .value_hint(clap::ValueHint::FilePath),
         )
 }
 
@@ -392,7 +427,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         files.insert(0, FILE_STDIN);
     }
 
-    let file_groups: Vec<_> = if matches.contains_id(options::MERGE) {
+    let file_groups: Vec<_> = if matches.get_flag(options::MERGE) {
         vec![files]
     } else {
         files.into_iter().map(|i| vec![i]).collect()
@@ -435,7 +470,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 fn recreate_arguments(args: &[String]) -> Vec<String> {
     let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
-    //let a_file: Regex = Regex::new(r"^[^-+].*").unwrap();
     let n_regex = Regex::new(r"^-n\s*$").unwrap();
     let mut arguments = args.to_owned();
     let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
@@ -456,8 +490,8 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
 }
 
 fn print_error(matches: &ArgMatches, err: &PrError) {
-    if !matches.contains_id(options::NO_FILE_WARNINGS) {
-        eprintln!("{}", err);
+    if !matches.get_flag(options::NO_FILE_WARNINGS) {
+        eprintln!("{err}");
     }
 }
 
@@ -471,7 +505,7 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
     };
     matches
         .get_one::<String>(opt)
-        .map(|i| (i.to_string(), format!("-{}", opt)))
+        .map(|i| (i.to_string(), format!("-{opt}")))
         .map(from_parse_error_to_pr_error)
 }
 
@@ -480,21 +514,21 @@ fn build_options(
     paths: &[&str],
     free_args: &str,
 ) -> Result<OutputOptions, PrError> {
-    let form_feed_used = matches.contains_id(options::FORM_FEED);
+    let form_feed_used = matches.get_flag(options::FORM_FEED);
 
-    let is_merge_mode = matches.contains_id(options::MERGE);
+    let is_merge_mode = matches.get_flag(options::MERGE);
 
     if is_merge_mode && matches.contains_id(options::COLUMN) {
         let err_msg = String::from("cannot specify number of columns when printing in parallel");
         return Err(PrError::EncounteredErrors(err_msg));
     }
 
-    if is_merge_mode && matches.contains_id(options::ACROSS) {
+    if is_merge_mode && matches.get_flag(options::ACROSS) {
         let err_msg = String::from("cannot specify both printing across and printing in parallel");
         return Err(PrError::EncounteredErrors(err_msg));
     }
 
-    let merge_files_print = if matches.contains_id(options::MERGE) {
+    let merge_files_print = if matches.get_flag(options::MERGE) {
         Some(paths.len())
     } else {
         None
@@ -546,7 +580,7 @@ fn build_options(
             }
         });
 
-    let double_space = matches.contains_id(options::DOUBLE_SPACE);
+    let double_space = matches.get_flag(options::DOUBLE_SPACE);
 
     let content_line_separator = if double_space {
         "\n".repeat(2)
@@ -634,8 +668,7 @@ fn build_options(
     if let Some(end_page) = end_page {
         if start_page > end_page {
             return Err(PrError::EncounteredErrors(format!(
-                "invalid --pages argument '{}:{}'",
-                start_page, end_page
+                "invalid --pages argument '{start_page}:{end_page}'"
             )));
         }
     }
@@ -652,7 +685,7 @@ fn build_options(
     let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
     let display_header_and_trailer =
-        !(page_length_le_ht) && !matches.contains_id(options::OMIT_HEADER);
+        !(page_length_le_ht) && !matches.get_flag(options::OMIT_HEADER);
 
     let content_lines_per_page = if page_length_le_ht {
         page_length
@@ -660,14 +693,14 @@ fn build_options(
         page_length - (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE)
     };
 
-    let page_separator_char = if matches.contains_id(options::FORM_FEED) {
+    let page_separator_char = if matches.get_flag(options::FORM_FEED) {
         let bytes = vec![FF];
         String::from_utf8(bytes).unwrap()
     } else {
         "\n".to_string()
     };
 
-    let across_mode = matches.contains_id(options::ACROSS);
+    let across_mode = matches.get_flag(options::ACROSS);
 
     let column_separator = match matches.get_one::<String>(options::COLUMN_STRING_SEPARATOR) {
         Some(x) => Some(x),
@@ -687,7 +720,7 @@ fn build_options(
     let column_width =
         parse_usize(matches, options::COLUMN_WIDTH).unwrap_or(Ok(default_column_width))?;
 
-    let page_width = if matches.contains_id(options::JOIN_LINES) {
+    let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
         match parse_usize(matches, options::PAGE_WIDTH) {
@@ -723,7 +756,7 @@ fn build_options(
     });
 
     let offset_spaces = " ".repeat(parse_usize(matches, options::INDENT).unwrap_or(Ok(0))?);
-    let join_lines = matches.contains_id(options::JOIN_LINES);
+    let join_lines = matches.get_flag(options::JOIN_LINES);
 
     let col_sep_for_printing = column_mode_options
         .as_ref()
@@ -1166,11 +1199,10 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
             format!(
                 "{:>width$}{}",
                 &line_str[line_str.len() - width..],
-                separator,
-                width = width
+                separator
             )
         } else {
-            format!("{:>width$}{}", line_str, separator, width = width)
+            format!("{line_str:>width$}{separator}")
         }
     } else {
         String::new()

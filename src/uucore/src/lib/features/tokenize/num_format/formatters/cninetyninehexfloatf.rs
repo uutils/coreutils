@@ -81,9 +81,9 @@ fn get_primitive_hex(
     let suffix = Some({
         let ind = if capitalized { "P" } else { "p" };
         if mantissa >= 0 {
-            format!("{}+{}", ind, mantissa)
+            format!("{ind}+{mantissa}")
         } else {
-            format!("{}{}", ind, mantissa)
+            format!("{ind}{mantissa}")
         }
     });
     FormatPrimitive {

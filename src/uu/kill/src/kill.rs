@@ -7,17 +7,14 @@
 
 // spell-checker:ignore (ToDO) signalname pids killpg
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::format_usage;
 use uucore::signals::{signal_by_name_or_value, ALL_SIGNALS};
+use uucore::{format_usage, show};
 
 static ABOUT: &str = "Send signal to processes or list information about signals.";
 const USAGE: &str = "{} [OPTIONS]... PID...";
@@ -43,9 +40,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let mode = if matches.contains_id(options::TABLE) {
+    let mode = if matches.get_flag(options::TABLE) {
         Mode::Table
-    } else if matches.contains_id(options::LIST) {
+    } else if matches.get_flag(options::LIST) {
         Mode::List
     } else {
         Mode::Kill
@@ -80,7 +77,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -92,26 +89,28 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('l')
                 .long(options::LIST)
                 .help("Lists signals")
-                .conflicts_with(options::TABLE),
+                .conflicts_with(options::TABLE)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TABLE)
                 .short('t')
                 .short_alias('L')
                 .long(options::TABLE)
-                .help("Lists table of signals"),
+                .help("Lists table of signals")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SIGNAL)
                 .short('s')
                 .long(options::SIGNAL)
-                .help("Sends given signal")
-                .takes_value(true),
+                .value_name("signal")
+                .help("Sends given signal instead of SIGTERM"),
         )
         .arg(
             Arg::new(options::PIDS_OR_SIGNALS)
                 .hide(true)
-                .multiple_occurrences(true),
+                .action(ArgAction::Append),
         )
 }
 
@@ -147,11 +146,11 @@ fn table() {
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
-        if signal == signal_name_or_value || (format!("SIG{}", signal)) == signal_name_or_value {
-            println!("{}", value);
+        if signal == signal_name_or_value || (format!("SIG{signal}")) == signal_name_or_value {
+            println!("{value}");
             return Ok(());
         } else if signal_name_or_value == value.to_string() {
-            println!("{}", signal);
+            println!("{signal}");
             return Ok(());
         }
     }
@@ -166,7 +165,7 @@ fn print_signals() {
         if idx > 0 {
             print!(" ");
         }
-        print!("{}", signal);
+        print!("{signal}");
     }
     println!();
 }
@@ -206,7 +205,7 @@ fn kill(sig: Signal, pids: &[i32]) {
     for &pid in pids {
         if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
             show!(Error::from_raw_os_error(e as i32)
-                .map_err_context(|| format!("sending signal to {} failed", pid)));
+                .map_err_context(|| format!("sending signal to {pid} failed")));
         }
     }
 }

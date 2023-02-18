@@ -5,6 +5,10 @@ use crate::common::util::*;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
+#[cfg(not(windows))]
+use std::thread::sleep;
+#[cfg(not(windows))]
+use std::time::Duration;
 use tempfile::tempfile;
 
 macro_rules! inf {
@@ -207,35 +211,35 @@ fn test_x_multiplier() {
 fn test_zero_multiplier_warning() {
     for arg in ["count", "seek", "skip"] {
         new_ucmd!()
-            .args(&[format!("{}=0", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=0").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .no_stderr();
 
         new_ucmd!()
-            .args(&[format!("{}=00x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=00x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .no_stderr();
 
         new_ucmd!()
-            .args(&[format!("{}=0x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=0x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
 
         new_ucmd!()
-            .args(&[format!("{}=0x0x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=0x0x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\ndd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
 
         new_ucmd!()
-            .args(&[format!("{}=1x0x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=1x0x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
@@ -255,7 +259,7 @@ fn test_final_stats_noxfer() {
 fn test_final_stats_unspec() {
     new_ucmd!()
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0 B/s\n")
+        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0.0 B/s\n")
         .success();
 }
 
@@ -321,7 +325,7 @@ fn test_nocreat_causes_failure_when_outfile_not_present() {
         .pipe_in("")
         .fails()
         .stderr_only(
-            "dd: failed to open 'this-file-does-not-exist.txt': No such file or directory",
+            "dd: failed to open 'this-file-does-not-exist.txt': No such file or directory\n",
         );
     assert!(!fix.file_exists(fname));
 }
@@ -371,7 +375,7 @@ fn test_null_stats() {
     new_ucmd!()
         .args(&["if=null.txt"])
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0 B/s\n")
+        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0.0 B/s\n")
         .success();
 }
 
@@ -457,7 +461,7 @@ fn test_oversized_bs_32_bit() {
             .run()
             .no_stdout()
             .failure()
-            .status_code(1)
+            .code_is(1)
             .stderr_is(format!("dd: {}=N cannot fit into memory\n", bs_param));
     }
 }
@@ -492,7 +496,7 @@ fn test_ascii_10k_to_stdout() {
 #[test]
 fn test_zeros_to_file() {
     let tname = "zero-256k";
-    let test_fn = format!("{}.txt", tname);
+    let test_fn = format!("{tname}.txt");
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
     assert_fixture_exists!(test_fn);
 
@@ -512,7 +516,7 @@ fn test_zeros_to_file() {
 #[test]
 fn test_to_file_with_ibs_obs() {
     let tname = "zero-256k";
-    let test_fn = format!("{}.txt", tname);
+    let test_fn = format!("{tname}.txt");
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
     assert_fixture_exists!(test_fn);
 
@@ -604,7 +608,7 @@ fn test_self_transfer() {
 #[test]
 fn test_unicode_filenames() {
     let tname = "😎💚🦊";
-    let test_fn = format!("{}.txt", tname);
+    let test_fn = format!("{tname}.txt");
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
     assert_fixture_exists!(test_fn);
 
@@ -1007,6 +1011,39 @@ fn test_random_73k_test_obs_lt_not_a_multiple_ibs() {
         .stdout_is_fixture_bytes("random-5828891cb1230748e146f34223bbd3b5.test");
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_random_73k_test_lazy_fullblock() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    let child = ucmd
+        .args(&[
+            "ibs=521",
+            "obs=1031",
+            "iflag=fullblock",
+            "if=fifo",
+            "status=noxfer",
+        ])
+        .run_no_wait();
+    let data = at.read_bytes("random-5828891cb1230748e146f34223bbd3b5.test");
+    {
+        let mut fifo = OpenOptions::new()
+            .write(true)
+            .open(at.plus("fifo"))
+            .unwrap();
+        for chunk in data.chunks(521 / 2) {
+            fifo.write_all(chunk).unwrap();
+            sleep(Duration::from_millis(10));
+        }
+    }
+    child
+        .wait()
+        .unwrap()
+        .success()
+        .stdout_is_bytes(&data)
+        .stderr_is("142+1 records in\n72+1 records out\n");
+}
+
 #[test]
 fn test_deadbeef_all_32k_test_count_reads() {
     new_ucmd!()
@@ -1202,22 +1239,43 @@ fn test_bytes_oseek_seek_not_additive() {
 }
 
 #[test]
-fn test_final_stats_si_iec() {
+fn test_final_stats_less_than_one_kb_si() {
     let result = new_ucmd!().pipe_in("0".repeat(999)).succeeds();
     let s = result.stderr_str();
     assert!(s.starts_with("1+1 records in\n1+1 records out\n999 bytes copied,"));
+}
 
+#[test]
+fn test_final_stats_less_than_one_kb_iec() {
     let result = new_ucmd!().pipe_in("0".repeat(1000)).succeeds();
     let s = result.stderr_str();
-    assert!(s.starts_with("1+1 records in\n1+1 records out\n1000 bytes (1000 B) copied,"));
+    assert!(s.starts_with("1+1 records in\n1+1 records out\n1000 bytes (1.0 kB) copied,"));
 
     let result = new_ucmd!().pipe_in("0".repeat(1023)).succeeds();
     let s = result.stderr_str();
-    assert!(s.starts_with("1+1 records in\n1+1 records out\n1023 bytes (1 KB) copied,"));
+    assert!(s.starts_with("1+1 records in\n1+1 records out\n1023 bytes (1.0 kB) copied,"));
+}
 
+#[test]
+fn test_final_stats_more_than_one_kb() {
     let result = new_ucmd!().pipe_in("0".repeat(1024)).succeeds();
     let s = result.stderr_str();
-    assert!(s.starts_with("2+0 records in\n2+0 records out\n1024 bytes (1 KB, 1024 B) copied,"));
+    assert!(s.starts_with("2+0 records in\n2+0 records out\n1024 bytes (1.0 kB, 1.0 KiB) copied,"));
+}
+
+#[test]
+fn test_final_stats_three_char_limit() {
+    let result = new_ucmd!().pipe_in("0".repeat(10_000)).succeeds();
+    let s = result.stderr_str();
+    assert!(
+        s.starts_with("19+1 records in\n19+1 records out\n10000 bytes (10 kB, 9.8 KiB) copied,")
+    );
+
+    let result = new_ucmd!().pipe_in("0".repeat(100_000)).succeeds();
+    let s = result.stderr_str();
+    assert!(
+        s.starts_with("195+1 records in\n195+1 records out\n100000 bytes (100 kB, 98 KiB) copied,")
+    );
 }
 
 #[test]
@@ -1226,14 +1284,14 @@ fn test_invalid_number_arg_gnu_compatibility() {
 
     for command in commands {
         new_ucmd!()
-            .args(&[format!("{}=", command)])
+            .args(&[format!("{command}=")])
             .fails()
-            .stderr_is("dd: invalid number: ‘’");
+            .stderr_is("dd: invalid number: ‘’\n");
 
         new_ucmd!()
-            .args(&[format!("{}=29d", command)])
+            .args(&[format!("{command}=29d")])
             .fails()
-            .stderr_is("dd: invalid number: ‘29d’");
+            .stderr_is("dd: invalid number: ‘29d’\n");
     }
 }
 
@@ -1243,14 +1301,14 @@ fn test_invalid_flag_arg_gnu_compatibility() {
 
     for command in commands {
         new_ucmd!()
-            .args(&[format!("{}=", command)])
+            .args(&[format!("{command}=")])
             .fails()
-            .stderr_is("dd: invalid input flag: ‘’\nTry 'dd --help' for more information.");
+            .usage_error("invalid input flag: ‘’");
 
         new_ucmd!()
-            .args(&[format!("{}=29d", command)])
+            .args(&[format!("{command}=29d")])
             .fails()
-            .stderr_is("dd: invalid input flag: ‘29d’\nTry 'dd --help' for more information.");
+            .usage_error("invalid input flag: ‘29d’");
     }
 }
 
@@ -1259,19 +1317,19 @@ fn test_invalid_file_arg_gnu_compatibility() {
     new_ucmd!()
         .args(&["if="])
         .fails()
-        .stderr_is("dd: failed to open '': No such file or directory");
+        .stderr_is("dd: failed to open '': No such file or directory\n");
 
     new_ucmd!()
         .args(&["if=81as9bn8as9g302az8ns9.pdf.zip.pl.com"])
         .fails()
         .stderr_is(
-            "dd: failed to open '81as9bn8as9g302az8ns9.pdf.zip.pl.com': No such file or directory",
+            "dd: failed to open '81as9bn8as9g302az8ns9.pdf.zip.pl.com': No such file or directory\n",
         );
 
     new_ucmd!()
         .args(&["of="])
         .fails()
-        .stderr_is("dd: failed to open '': No such file or directory");
+        .stderr_is("dd: failed to open '': No such file or directory\n");
 
     new_ucmd!()
         .args(&["of=81as9bn8as9g302az8ns9.pdf.zip.pl.com"])
@@ -1294,4 +1352,93 @@ fn test_big_multiplication() {
         .arg("ibs=10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10x10")
         .fails()
         .stderr_contains("invalid number");
+}
+
+/// Test for count, seek, and skip given in units of bytes.
+#[test]
+fn test_bytes_suffix() {
+    new_ucmd!()
+        .args(&["count=3B", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("abc");
+    new_ucmd!()
+        .args(&["skip=3B", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("def");
+    new_ucmd!()
+        .args(&["iseek=3B", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("def");
+    new_ucmd!()
+        .args(&["seek=3B", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("\0\0\0abcdef");
+    new_ucmd!()
+        .args(&["oseek=3B", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("\0\0\0abcdef");
+}
+
+/// Test for "conv=sync" with a slow reader.
+#[cfg(not(windows))]
+#[test]
+fn test_sync_delayed_reader() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    let child = ucmd
+        .args(&["ibs=16", "obs=32", "conv=sync", "if=fifo", "status=noxfer"])
+        .run_no_wait();
+    {
+        let mut fifo = OpenOptions::new()
+            .write(true)
+            .open(at.plus("fifo"))
+            .unwrap();
+        for _ in 0..8 {
+            fifo.write_all(&[0xF; 8]).unwrap();
+            sleep(Duration::from_millis(10));
+        }
+    }
+    // Expected output is 0xFFFFFFFF00000000FFFFFFFF00000000...
+    let mut expected: [u8; 8 * 16] = [0; 8 * 16];
+    for i in 0..8 {
+        for j in 0..8 {
+            expected[16 * i + j] = 0xF;
+        }
+    }
+
+    child
+        .wait()
+        .unwrap()
+        .success()
+        .stdout_is_bytes(expected)
+        .stderr_is("0+8 records in\n4+0 records out\n");
+}
+
+/// Test for making a sparse copy of the input file.
+#[test]
+fn test_sparse() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Create a file and make it a large sparse file.
+    //
+    // On common Linux filesystems, setting the length to one megabyte
+    // should cause the file to become a sparse file, but it depends
+    // on the system.
+    std::fs::File::create(at.plus("infile"))
+        .unwrap()
+        .set_len(1024 * 1024)
+        .unwrap();
+
+    // Perform a sparse copy.
+    ucmd.args(&["bs=32K", "if=infile", "of=outfile", "conv=sparse"])
+        .succeeds();
+
+    // The number of bytes in the file should be accurate though the
+    // number of blocks stored on disk may be zero.
+    assert_eq!(at.metadata("infile").len(), at.metadata("outfile").len());
 }

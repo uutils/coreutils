@@ -7,7 +7,7 @@
 
 mod flags;
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{c_ushort, TIOCGWINSZ, TIOCSWINSZ};
 use nix::sys::termios::{
     cfgetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags, OutputFlags, Termios,
@@ -30,7 +30,6 @@ use uucore::format_usage;
 use flags::BAUD_RATES;
 use flags::{CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
-const NAME: &str = "stty";
 const USAGE: &str = "\
     {} [-F DEVICE | --file=DEVICE] [SETTING]...
     {} [-F DEVICE | --file=DEVICE] [-a|--all]
@@ -100,13 +99,15 @@ struct Options<'a> {
 impl<'a> Options<'a> {
     fn from(matches: &'a ArgMatches) -> io::Result<Self> {
         Ok(Self {
-            all: matches.contains_id(options::ALL),
-            save: matches.contains_id(options::SAVE),
+            all: matches.get_flag(options::ALL),
+            save: matches.get_flag(options::SAVE),
             file: match matches.get_one::<String>(options::FILE) {
                 Some(_f) => todo!(),
                 None => stdout().as_raw_fd(),
             },
-            settings: matches.values_of(options::SETTINGS).map(|v| v.collect()),
+            settings: matches
+                .get_many::<String>(options::SETTINGS)
+                .map(|v| v.map(|s| s.as_ref()).collect()),
         })
     }
 }
@@ -169,7 +170,7 @@ fn stty(opts: &Options) -> UResult<()> {
             if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
                 return Err(USimpleError::new(
                     1,
-                    format!("invalid argument '{}'", setting),
+                    format!("invalid argument '{setting}'"),
                 ));
             }
         }
@@ -194,7 +195,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    print!("speed {} baud; ", speed);
+    print!("speed {speed} baud; ");
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
@@ -208,7 +209,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
-            print!("speed {} baud; ", text);
+            print!("speed {text} baud; ");
             break;
         }
     }
@@ -225,7 +226,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         // so we get the underlying libc::termios struct to get that information.
         let libc_termios: nix::libc::termios = termios.clone().into();
         let line = libc_termios.c_line;
-        print!("line = {};", line);
+        print!("line = {line};");
     }
 
     println!();
@@ -257,14 +258,14 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
         let val = flag.is_in(termios, group);
         if group.is_some() {
             if val && (!sane || opts.all) {
-                print!("{} ", name);
+                print!("{name} ");
                 printed = true;
             }
         } else if opts.all || val != sane {
             if !val {
                 print!("-");
             }
-            print!("{} ", name);
+            print!("{name} ");
             printed = true;
         }
     }
@@ -320,9 +321,8 @@ fn apply_flag<T: TermiosFlag>(
     ControlFlow::Continue(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(SUMMARY)
@@ -331,27 +331,27 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::ALL)
                 .short('a')
                 .long(options::ALL)
-                .help("print all current settings in human-readable form"),
+                .help("print all current settings in human-readable form")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SAVE)
                 .short('g')
                 .long(options::SAVE)
-                .help("print all current settings in a stty-readable form"),
+                .help("print all current settings in a stty-readable form")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE)
                 .short('F')
                 .long(options::FILE)
-                .takes_value(true)
                 .value_hint(clap::ValueHint::FilePath)
                 .value_name("DEVICE")
                 .help("open and use the specified DEVICE instead of stdin"),
         )
         .arg(
             Arg::new(options::SETTINGS)
-                .takes_value(true)
-                .multiple_values(true)
+                .action(ArgAction::Append)
                 .help("settings to change"),
         )
 }

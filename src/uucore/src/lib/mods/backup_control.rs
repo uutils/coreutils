@@ -47,8 +47,8 @@
 //!         .arg(backup_control::arguments::backup())
 //!         .arg(backup_control::arguments::backup_no_args())
 //!         .arg(backup_control::arguments::suffix())
-//!         .override_usage(&usage[..])
-//!         .after_help(&*format!(
+//!         .override_usage(usage)
+//!         .after_help(format!(
 //!             "{}\n{}",
 //!             long_usage,
 //!             backup_control::BACKUP_CONTROL_LONG_HELP
@@ -94,7 +94,7 @@ pub static BACKUP_CONTROL_VALUES: &[&str] = &[
     "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
 ];
 
-pub static BACKUP_CONTROL_LONG_HELP: &str =
+pub const BACKUP_CONTROL_LONG_HELP: &str =
     "The backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX.
 The version control method may be selected via the --backup option or through
 the VERSION_CONTROL environment variable.  Here are the values:
@@ -198,6 +198,8 @@ impl Display for BackupError {
 /// This way the backup-specific arguments are handled uniformly across
 /// utilities and can be maintained in one central place.
 pub mod arguments {
+    use clap::ArgAction;
+
     extern crate clap;
 
     pub static OPT_BACKUP: &str = "backupopt_backup";
@@ -205,30 +207,31 @@ pub mod arguments {
     pub static OPT_SUFFIX: &str = "backupopt_suffix";
 
     /// '--backup' argument
-    pub fn backup<'a>() -> clap::Arg<'a> {
+    pub fn backup() -> clap::Arg {
         clap::Arg::new(OPT_BACKUP)
             .long("backup")
             .help("make a backup of each existing destination file")
-            .takes_value(true)
+            .action(clap::ArgAction::Set)
             .require_equals(true)
-            .min_values(0)
+            .num_args(0..=1)
             .value_name("CONTROL")
     }
 
     /// '-b' argument
-    pub fn backup_no_args<'a>() -> clap::Arg<'a> {
+    pub fn backup_no_args() -> clap::Arg {
         clap::Arg::new(OPT_BACKUP_NO_ARG)
             .short('b')
             .help("like --backup but does not accept an argument")
+            .action(ArgAction::SetTrue)
     }
 
     /// '-S, --suffix' argument
-    pub fn suffix<'a>() -> clap::Arg<'a> {
+    pub fn suffix() -> clap::Arg {
         clap::Arg::new(OPT_SUFFIX)
             .short('S')
             .long("suffix")
             .help("override the usual backup suffix")
-            .takes_value(true)
+            .action(clap::ArgAction::Set)
             .value_name("SUFFIX")
             .allow_hyphen_values(true)
     }
@@ -347,7 +350,7 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
             // Default if no argument is provided to '--backup'
             Ok(BackupMode::ExistingBackup)
         }
-    } else if matches.contains_id(arguments::OPT_BACKUP_NO_ARG) {
+    } else if matches.get_flag(arguments::OPT_BACKUP_NO_ARG) {
         // the short form of this option, -b does not accept any argument.
         // Using -b is equivalent to using --backup=existing.
         Ok(BackupMode::ExistingBackup)
@@ -460,7 +463,7 @@ mod tests {
     // Environment variable for "VERSION_CONTROL"
     static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";
 
-    fn make_app() -> clap::Command<'static> {
+    fn make_app() -> clap::Command {
         Command::new("command")
             .arg(arguments::backup())
             .arg(arguments::backup_no_args())

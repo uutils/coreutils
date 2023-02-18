@@ -1,6 +1,11 @@
 name: GnuTests
 
-# spell-checker:ignore (names) gnulib ; (jargon) submodules ; (people) Dawid Dziurla * dawidd ; (utils) autopoint chksum gperf pyinotify shopt texinfo ; (vars) FILESET SUBDIRS XPASS
+# spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests
+# spell-checker:ignore (jargon) submodules
+# spell-checker:ignore (libs/utils) autopoint chksum gperf lcov libexpect pyinotify shopt texinfo valgrind
+# spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
+# spell-checker:ignore (people) Dawid Dziurla * dawidd
+# spell-checker:ignore (vars) FILESET SUBDIRS XPASS
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
@@ -9,6 +14,11 @@ on: [push, pull_request]
 permissions:
   contents: read
 
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   gnu:
     permissions:
@@ -16,14 +26,14 @@ jobs:
       contents: read  # for actions/checkout to fetch code
       pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
     name: Run GNU tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Initialize workflow variables
       id: vars
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # * config
         path_GNU="gnu"
         path_GNU_tests="${path_GNU}/tests"
@@ -66,21 +76,21 @@ jobs:
         workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
         path: "${{ steps.vars.outputs.path_reference }}"
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt
+      run: |
+        ## Install `rust` toolchain
+        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
+        rustup toolchain install stable -c rustfmt --profile minimal
+        rustup default stable
     - name: Install dependencies
       shell: bash
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify jq valgrind libexpect-perl
+        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl
     - name: Add various locales
       shell: bash
       run: |
+        ## Add various locales
         echo "Before:"
         locale -a
         ## Some tests fail with 'cannot change locale (en_US.ISO-8859-1): No such file or directory'
@@ -105,27 +115,31 @@ jobs:
     - name: Run GNU tests
       shell: bash
       run: |
+        ## Run GNU tests
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh"
     - name: Run GNU root tests
       shell: bash
       run: |
+        ## Run GNU root tests
         path_GNU='${{ steps.vars.outputs.path_GNU }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         bash "${path_UUTILS}/util/run-gnu-test.sh" run-root
     - name: Extract testing info into JSON
       shell: bash
       run : |
+        ## Extract testing info into JSON
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         python ${path_UUTILS}/util/gnu-json-result.py ${{ steps.vars.outputs.path_GNU_tests }} > ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
     - name: Extract/summarize testing info
       id: summary
       shell: bash
       run: |
-        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         ## Extract/summarize testing info
-        outputs() { step_id="summary"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        #
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         #
         SUITE_LOG_FILE='${{ steps.vars.outputs.SUITE_LOG_FILE }}'
         ROOT_SUITE_LOG_FILE='${{ steps.vars.outputs.ROOT_SUITE_LOG_FILE }}'
@@ -182,10 +196,27 @@ jobs:
     - name: Compare test failures VS reference
       shell: bash
       run: |
+        ## Compare test failures VS reference
         have_new_failures=""
         REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
+        # https://github.com/uutils/coreutils/issues/4294
+        # https://github.com/uutils/coreutils/issues/4295
+        IGNORE_INTERMITTENT='tests/tail-2/inotify-dir-recreate tests/misc/timeout tests/rm/rm1'
+
+        mkdir -p ${{ steps.vars.outputs.path_reference }}
+
+        COMMENT_DIR="${{ steps.vars.outputs.path_reference }}/comment"
+        mkdir -p ${COMMENT_DIR}
+        echo ${{ github.event.number }} > ${COMMENT_DIR}/NR
+        COMMENT_LOG="${COMMENT_DIR}/result.txt"
+
+        # The comment log might be downloaded from a previous run
+        # We only want the new changes, so remove it if it exists.
+        rm -f ${COMMENT_LOG}
+        touch ${COMMENT_LOG}
+
         if test -f "${REF_LOG_FILE}"; then
           echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
           REF_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
@@ -195,28 +226,44 @@ jobs:
           for LINE in ${REF_FAILING}
           do
             if ! grep -Fxq ${LINE}<<<"${NEW_FAILING}"; then
-              echo "::warning ::Congrats! The gnu test ${LINE} is no longer failing!"
+              MSG="Congrats! The gnu test ${LINE} is no longer failing!"
+              echo "::warning ::$MSG"
+              echo $MSG >> ${COMMENT_LOG}
             fi
           done
           for LINE in ${NEW_FAILING}
           do
             if ! grep -Fxq ${LINE}<<<"${REF_FAILING}"
             then
-              echo "::error ::GNU test failed: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
-              have_new_failures="true"
+              if ! grep ${LINE} ${IGNORE_INTERMITTENT}
+              then
+                MSG="GNU test failed: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+                echo "::error ::$MSG"
+                echo $MSG >> ${COMMENT_LOG}
+                have_new_failures="true"
+              else
+                MSG="Skip an intermittent issue ${LINE}"
+                echo "::warning ::$MSG"
+                echo $MSG >> ${COMMENT_LOG}
+                echo ""
+              fi
             fi
           done
           for LINE in ${REF_ERROR}
           do
             if ! grep -Fxq ${LINE}<<<"${NEW_ERROR}"; then
-              echo "::warning ::Congrats! The gnu test ${LINE} is no longer ERROR!"
+              MSG="Congrats! The gnu test ${LINE} is no longer ERROR!"
+              echo "::warning ::$MSG"
+              echo $MSG >> ${COMMENT_LOG}
             fi
           done
           for LINE in ${NEW_ERROR}
           do
             if ! grep -Fxq ${LINE}<<<"${REF_ERROR}"
             then
-              echo "::error ::GNU test error: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              MSG="GNU test error: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+              echo "::error ::$MSG"
+              echo $MSG >> ${COMMENT_LOG}
               have_new_failures="true"
             fi
           done
@@ -225,10 +272,17 @@ jobs:
           echo "::warning ::Skipping test failure comparison; no prior reference test logs are available."
         fi
         if test -n "${have_new_failures}" ; then exit -1 ; fi
+    - name: Upload comparison log (for GnuComment workflow)
+      if: success() || failure() # run regardless of prior step success/failure
+      uses: actions/upload-artifact@v3
+      with:
+        name: comment
+        path: ${{ steps.vars.outputs.path_reference }}/comment/
     - name: Compare test summary VS reference
       if: success() || failure() # run regardless of prior step success/failure
       shell: bash
       run: |
+        ## Compare test summary VS reference
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
         if test -f "${REF_SUMMARY_FILE}"; then
           echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
@@ -240,7 +294,7 @@ jobs:
 
   gnu_coverage:
     name: Run GNU tests with coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout code uutil
       uses: actions/checkout@v3
@@ -254,18 +308,19 @@ jobs:
         ref: 'v9.1'
         submodules: recursive
     - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt
+      run: |
+        ## Install `rust` toolchain
+        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
+        rustup toolchain install nightly -c rustfmt --profile minimal
+        rustup default nightly
     - name: Install dependencies
       run: |
+        ## Install dependencies
         sudo apt update
-        sudo apt install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify jq valgrind libexpect-perl -y
+        sudo apt install autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl -y
     - name: Add various locales
       run: |
+        ## Add various locales
         echo "Before:"
         locale -a
         ## Some tests fail with 'cannot change locale (en_US.ISO-8859-1): No such file or directory'
@@ -282,16 +337,13 @@ jobs:
         RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
       run: |
+        ## Build binaries
         cd uutils
         UU_MAKE_PROFILE=debug bash util/build-gnu.sh
     - name: Run GNU tests
       run: bash uutils/util/run-gnu-test.sh
     - name: "`grcov` ~ install"
-      uses: actions-rs/install@v0.1
-      with:
-        crate: grcov
-        version: latest
-        use-tool-cache: false
+      run: cargo install grcov
     - name: Generate coverage data (via `grcov`)
       id: coverage
       run: |
@@ -305,7 +357,7 @@ jobs:
         grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
         # generate coverage report
         grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
-        echo ::set-output name=report::${COVERAGE_REPORT_FILE}
+        echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v3
       with:

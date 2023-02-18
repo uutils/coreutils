@@ -19,13 +19,8 @@ fn test_increase_file_size() {
     ucmd.args(&["-s", "+5K", FILE1]).succeeds();
 
     file.seek(SeekFrom::End(0)).unwrap();
-    let actual = file.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -36,13 +31,8 @@ fn test_increase_file_size_kb() {
     ucmd.args(&["-s", "+5KB", FILE1]).succeeds();
 
     file.seek(SeekFrom::End(0)).unwrap();
-    let actual = file.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -66,13 +56,8 @@ fn test_reference() {
         .succeeds();
 
     file.seek(SeekFrom::End(0)).unwrap();
-    let actual = file.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -83,13 +68,8 @@ fn test_decrease_file_size() {
     file.write_all(b"1234567890").unwrap();
     ucmd.args(&["--size=-4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
-    let actual = file.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -100,13 +80,8 @@ fn test_space_in_size() {
     file.write_all(b"1234567890").unwrap();
     ucmd.args(&["--size", " 4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
-    let actual = file.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -134,13 +109,8 @@ fn test_at_most_shrinks() {
     file.write_all(b"1234567890").unwrap();
     ucmd.args(&["--size", "<4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
-    let actual = file.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -151,13 +121,8 @@ fn test_at_most_no_change() {
     file.write_all(b"1234567890").unwrap();
     ucmd.args(&["--size", "<40", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
-    let actual = file.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -168,13 +133,8 @@ fn test_at_least_grows() {
     file.write_all(b"1234567890").unwrap();
     ucmd.args(&["--size", ">15", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
-    let actual = file.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -185,13 +145,8 @@ fn test_at_least_no_change() {
     file.write_all(b"1234567890").unwrap();
     ucmd.args(&["--size", ">4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
-    let actual = file.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -202,13 +157,8 @@ fn test_round_down() {
     file.write_all(b"1234567890").unwrap();
     ucmd.args(&["--size", "/4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
-    let actual = file.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -219,13 +169,8 @@ fn test_round_up() {
     file.write_all(b"1234567890").unwrap();
     ucmd.args(&["--size", "%4", FILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
-    let actual = file.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -238,13 +183,8 @@ fn test_size_and_reference() {
     ucmd.args(&["--reference", FILE1, "--size", "+5", FILE2])
         .succeeds();
     file2.seek(SeekFrom::End(0)).unwrap();
-    let actual = file2.seek(SeekFrom::Current(0)).unwrap();
-    assert!(
-        expected == actual,
-        "expected '{}' got '{}'",
-        expected,
-        actual
-    );
+    let actual = file2.stream_position().unwrap();
+    assert!(expected == actual, "expected '{expected}' got '{actual}'");
 }
 
 #[test]
@@ -254,11 +194,7 @@ fn test_error_filename_only() {
         .args(&["file"])
         .fails()
         .code_is(1)
-        .stderr_contains(
-            "error: The following required arguments were not provided:
-    --reference <RFILE>
-    --size <SIZE>",
-        );
+        .stderr_contains("error: The following required arguments were not provided:");
 }
 
 #[test]
@@ -312,13 +248,13 @@ fn test_truncate_bytes_size() {
         .args(&["--size", "1024R", "file"])
         .fails()
         .code_is(1)
-        .stderr_only("truncate: Invalid number: '1024R'");
+        .stderr_only("truncate: Invalid number: '1024R'\n");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["--size", "1Y", "file"])
         .fails()
         .code_is(1)
-        .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type");
+        .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type\n");
 }
 
 /// Test that truncating a non-existent file creates that file.

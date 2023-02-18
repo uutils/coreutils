@@ -36,9 +36,9 @@ fn truncate(mut format: FormatPrimitive) -> FormatPrimitive {
         if trimmed.is_empty() {
             // If there are no nonzero digits after the decimal point,
             // use integer formatting by clearing post_decimal and suffix.
-            format.post_decimal = Some("".into());
+            format.post_decimal = Some(String::new());
             if format.suffix == Some("e+00".into()) {
-                format.suffix = Some("".into());
+                format.suffix = Some(String::new());
             }
         } else if trimmed.len() != post_dec.len() {
             // Otherwise, update the format to remove only the trailing
@@ -108,7 +108,7 @@ fn round(mut format: FormatPrimitive) -> FormatPrimitive {
         } else {
             // If the rounded post_decimal is entirely zeroes, discard
             // it and use integer formatting instead.
-            post_decimal_str = "".into();
+            post_decimal_str = String::new();
         }
 
         format.post_decimal = Some(post_decimal_str);

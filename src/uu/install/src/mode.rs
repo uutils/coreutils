@@ -22,7 +22,7 @@ pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32
 #[cfg(any(unix, target_os = "redox"))]
 pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
     use std::os::unix::fs::PermissionsExt;
-    use uucore::display::Quotable;
+    use uucore::{display::Quotable, show_error};
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).map_err(|err| {
         show_error!("{}: chmod failed with error {}", path.maybe_quote(), err);
     })

@@ -26,7 +26,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -50,5 +50,5 @@ fn hostid() {
     let mask = 0xffff_ffff;
 
     result &= mask;
-    println!("{:0>8x}", result);
+    println!("{result:0>8x}");
 }

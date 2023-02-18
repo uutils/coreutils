@@ -473,8 +473,7 @@ fn test_tmpdir_absolute_path() {
         .args(&["--tmpdir=a", path])
         .fails()
         .stderr_only(format!(
-            "mktemp: invalid template, '{}'; with --tmpdir, it may not be absolute\n",
-            path
+            "mktemp: invalid template, '{path}'; with --tmpdir, it may not be absolute\n"
         ));
 }
 
@@ -673,11 +672,7 @@ fn test_mktemp_with_posixly_correct() {
         .env("POSIXLY_CORRECT", "1")
         .args(&["aXXXX", "--suffix=b"])
         .fails()
-        .stderr_is(&format!(
-            "mktemp: too many templates\nTry '{} {} --help' for more information.\n",
-            scene.bin_path.to_string_lossy(),
-            scene.util_name
-        ));
+        .usage_error("too many templates");
 
     scene
         .ucmd()
@@ -695,7 +690,7 @@ fn test_tmpdir_env_var() {
     let filename = result.no_stderr().stdout_str().trim_end();
     #[cfg(not(windows))]
     {
-        let template = format!(".{}tmp.XXXXXXXXXX", MAIN_SEPARATOR);
+        let template = format!(".{MAIN_SEPARATOR}tmp.XXXXXXXXXX");
         assert_matches_template!(&template, filename);
     }
     // On Windows, `env::temp_dir()` seems to give an absolute path
@@ -724,7 +719,7 @@ fn test_tmpdir_env_var() {
     let filename = result.no_stderr().stdout_str().trim_end();
     #[cfg(not(windows))]
     {
-        let template = format!(".{}XXX", MAIN_SEPARATOR);
+        let template = format!(".{MAIN_SEPARATOR}XXX");
         assert_matches_template!(&template, filename);
     }
     #[cfg(windows)]
@@ -824,4 +819,10 @@ fn test_nonexistent_dir_prefix() {
             stderr
         );
     }
+}
+
+#[test]
+fn test_default_missing_value() {
+    let scene = TestScenario::new(util_name!());
+    scene.ucmd().arg("-d").arg("--tmpdir").succeeds();
 }

@@ -8,9 +8,6 @@
 // spell-checker:ignore (clap) dont
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
 
-#[macro_use]
-extern crate uucore;
-
 mod byteorder_io;
 mod formatteriteminfo;
 mod inputdecoder;
@@ -43,14 +40,17 @@ use crate::parse_nrofbytes::parse_number_of_bytes;
 use crate::partialreader::*;
 use crate::peekreader::*;
 use crate::prn_char::format_ascii_dump;
-use clap::{crate_version, AppSettings, Arg, ArgMatches, Command, ValueSource};
+use clap::ArgAction;
+use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::parse_size::ParseSizeError;
+use uucore::show_error;
+use uucore::show_warning;
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
-static ABOUT: &str = "dump files in octal and other formats";
+static ABOUT: &str = "Dump files in octal and other formats";
 
 static USAGE: &str = "\
     {} [OPTION]... [--] [FILENAME]...
@@ -131,7 +131,7 @@ impl OdOptions {
                 _ => {
                     return Err(USimpleError::new(
                         1,
-                        format!("Invalid argument --endian={}", s),
+                        format!("Invalid argument --endian={s}"),
                     ))
                 }
             }
@@ -155,7 +155,7 @@ impl OdOptions {
         let mut label: Option<u64> = None;
 
         let parsed_input = parse_inputs(matches)
-            .map_err(|e| USimpleError::new(1, format!("Invalid inputs: {}", e)))?;
+            .map_err(|e| USimpleError::new(1, format!("Invalid inputs: {e}")))?;
         let input_strings = match parsed_input {
             CommandLineInputs::FileNames(v) => v,
             CommandLineInputs::FileAndOffset((f, s, l)) => {
@@ -173,7 +173,7 @@ impl OdOptions {
                 if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
                     match parse_number_of_bytes(s) {
                         Ok(n) => usize::try_from(n)
-                            .map_err(|_| USimpleError::new(1, format!("‘{}‘ is too large", s)))?,
+                            .map_err(|_| USimpleError::new(1, format!("‘{s}‘ is too large")))?,
                         Err(e) => {
                             return Err(USimpleError::new(
                                 1,
@@ -195,7 +195,7 @@ impl OdOptions {
             line_bytes = min_bytes;
         }
 
-        let output_duplicates = matches.contains_id(options::OUTPUT_DUPLICATES);
+        let output_duplicates = matches.get_flag(options::OUTPUT_DUPLICATES);
 
         let read_bytes = match matches.get_one::<String>(options::READ_BYTES) {
             None => None,
@@ -290,7 +290,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     odfunc(&mut input_offset, &mut input_decoder, &output_info)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -299,11 +299,13 @@ pub fn uu_app<'a>() -> Command<'a> {
         .trailing_var_arg(true)
         .dont_delimit_trailing_values(true)
         .infer_long_args(true)
-        .setting(AppSettings::DeriveDisplayOrder)
+        .args_override_self(true)
+        .disable_help_flag(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
                 .help("Print help information.")
+                .action(ArgAction::Help)
         )
         .arg(
             Arg::new(options::ADDRESS_RADIX)
@@ -348,142 +350,123 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new("a")
                 .short('a')
                 .help("named characters, ignoring high-order bit")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("b")
                 .short('b')
                 .help("octal bytes")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("c")
                 .short('c')
                 .help("ASCII characters or backslash escapes")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("d")
                 .short('d')
                 .help("unsigned decimal 2-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("D")
                 .short('D')
                 .help("unsigned decimal 4-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("o")
                 .short('o')
                 .help("octal 2-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("I")
                 .short('I')
                 .help("decimal 8-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("L")
                 .short('L')
                 .help("decimal 8-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("i")
                 .short('i')
                 .help("decimal 4-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("l")
                 .short('l')
                 .help("decimal 8-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("x")
                 .short('x')
                 .help("hexadecimal 2-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("h")
                 .short('h')
                 .help("hexadecimal 2-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("O")
                 .short('O')
                 .help("octal 4-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new("s")
                 .short('s')
                 .help("decimal 2-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("X")
                 .short('X')
                 .help("hexadecimal 4-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("H")
                 .short('H')
                 .help("hexadecimal 4-byte units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("e")
                 .short('e')
                 .help("floating point double precision (64-bit) units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("f")
                 .short('f')
                 .help("floating point double precision (32-bit) units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("F")
                 .short('F')
                 .help("floating point double precision (64-bit) units")
-                .multiple_occurrences(true)
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FORMAT)
                 .short('t')
                 .long("format")
                 .help("select output format or formats")
-                .multiple_occurrences(true)
-                .number_of_values(1)
+                .action(ArgAction::Append)
+                .num_args(1)
                 .value_name("TYPE"),
         )
         .arg(
@@ -491,7 +474,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('v')
                 .long(options::OUTPUT_DUPLICATES)
                 .help("do not use * to mark line suppression")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WIDTH)
@@ -502,18 +485,19 @@ pub fn uu_app<'a>() -> Command<'a> {
                      specified.",
                 )
                 .default_missing_value("32")
-                .value_name("BYTES"),
+                .value_name("BYTES")
+                .num_args(..=1),
         )
         .arg(
             Arg::new(options::TRADITIONAL)
                 .long(options::TRADITIONAL)
                 .help("compatibility mode with one input, offset and label.")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILENAME)
                 .hide(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -641,15 +625,15 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
         }
 
         if first {
-            print!("{}", prefix); // print offset
-                                  // if printing in multiple formats offset is printed only once
+            print!("{prefix}"); // print offset
+                                // if printing in multiple formats offset is printed only once
             first = false;
         } else {
             // this takes the space of the file offset on subsequent
             // lines of multi-format rasters.
             print!("{:>width$}", "", width = prefix.chars().count());
         }
-        println!("{}", output_text);
+        println!("{output_text}");
     }
 }
 

@@ -135,13 +135,11 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
             RawSuffix::Z => Ok(i * IEC_BASES[7]),
             RawSuffix::Y => Ok(i * IEC_BASES[8]),
         },
-        (None, &Unit::Iec(true)) => Err(format!(
-            "missing 'i' suffix in input: '{}' (e.g Ki/Mi/Gi)",
-            i
-        )),
+        (None, &Unit::Iec(true)) => {
+            Err(format!("missing 'i' suffix in input: '{i}' (e.g Ki/Mi/Gi)"))
+        }
         (Some((raw_suffix, false)), &Unit::Iec(true)) => Err(format!(
-            "missing 'i' suffix in input: '{}{:?}' (e.g Ki/Mi/Gi)",
-            i, raw_suffix
+            "missing 'i' suffix in input: '{i}{raw_suffix:?}' (e.g Ki/Mi/Gi)"
         )),
         (Some((raw_suffix, with_i)), &Unit::None) => Err(format!(
             "rejecting suffix in input: '{}{:?}{}' (consider using --from)",
@@ -161,7 +159,11 @@ fn transform_from(s: &str, opts: &TransformOptions) -> Result<f64> {
     remove_suffix(i, suffix, &opts.from).map(|n| {
         // GNU numfmt doesn't round values if no --from argument is provided by the user
         if opts.from == Unit::None {
-            n
+            if n == -0.0 {
+                0.0
+            } else {
+                n
+            }
         } else if n < 0.0 {
             -n.abs().ceil()
         } else {
@@ -268,14 +270,13 @@ fn transform_to(
     let (i2, s) = consider_suffix(s, &opts.to, round_method, precision)?;
     let i2 = i2 / (opts.to_unit as f64);
     Ok(match s {
-        None if precision > 0 => {
+        None => {
             format!(
                 "{:.precision$}",
                 round_with_precision(i2, round_method, precision),
                 precision = precision
             )
         }
-        None => format!("{}", i2),
         Some(s) if precision > 0 => {
             format!(
                 "{:.precision$}{}",
@@ -317,7 +318,7 @@ fn format_string(
 
     // bring back the suffix before applying padding
     let number_with_suffix = match &options.suffix {
-        Some(suffix) => format!("{}{}", number, suffix),
+        Some(suffix) => format!("{number}{suffix}"),
         None => number,
     };
 
@@ -359,14 +360,14 @@ fn format_and_print_delimited(s: &str, options: &NumfmtOptions) -> Result<()> {
 
         // print delimiter before second and subsequent fields
         if n > 1 {
-            print!("{}", delimiter);
+            print!("{delimiter}");
         }
 
         if field_selected {
             print!("{}", format_string(field.trim_start(), options, None)?);
         } else {
             // print unselected field without conversion
-            print!("{}", field);
+            print!("{field}");
         }
     }
 
@@ -399,7 +400,7 @@ fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
             print!("{}", format_string(field, options, implicit_padding)?);
         } else {
             // print unselected field without conversion
-            print!("{}{}", prefix, field);
+            print!("{prefix}{field}");
         }
     }
 

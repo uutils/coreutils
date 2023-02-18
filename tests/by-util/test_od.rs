@@ -76,12 +76,12 @@ fn test_2files() {
     let file2 = tmpdir.join("test2");
 
     for (n, a) in [(1, "a"), (2, "b")] {
-        println!("number: {} letter:{}", n, a);
+        println!("number: {n} letter:{a}");
     }
 
     // spell-checker:disable-next-line
     for (path, data) in [(&file1, "abcdefghijklmnop"), (&file2, "qrstuvwxyz\n")] {
-        let mut f = File::create(&path).unwrap();
+        let mut f = File::create(path).unwrap();
         assert!(
             f.write_all(data.as_bytes()).is_ok(),
             "Test setup failed - could not write file"
@@ -133,7 +133,7 @@ fn test_from_mixed() {
     // spell-checker:disable-next-line
     let (data1, data2, data3) = ("abcdefg", "hijklmnop", "qrstuvwxyz\n");
     for (path, data) in [(&file1, data1), (&file3, data3)] {
-        let mut f = File::create(&path).unwrap();
+        let mut f = File::create(path).unwrap();
         assert!(
             f.write_all(data.as_bytes()).is_ok(),
             "Test setup failed - could not write file"
@@ -849,31 +849,27 @@ fn test_od_invalid_bytes() {
     ];
     for option in &options {
         new_ucmd!()
-            .arg(format!("{}={}", option, INVALID_SIZE))
+            .arg(format!("{option}={INVALID_SIZE}"))
             .arg("file")
             .fails()
             .code_is(1)
-            .stderr_only(format!(
-                "od: invalid {} argument '{}'",
-                option, INVALID_SIZE
-            ));
+            .stderr_only(format!("od: invalid {option} argument '{INVALID_SIZE}'\n"));
 
         new_ucmd!()
-            .arg(format!("{}={}", option, INVALID_SUFFIX))
+            .arg(format!("{option}={INVALID_SUFFIX}"))
             .arg("file")
             .fails()
             .code_is(1)
             .stderr_only(format!(
-                "od: invalid suffix in {} argument '{}'",
-                option, INVALID_SUFFIX
+                "od: invalid suffix in {option} argument '{INVALID_SUFFIX}'\n"
             ));
 
         #[cfg(not(target_pointer_width = "128"))]
         new_ucmd!()
-            .arg(format!("{}={}", option, BIG_SIZE))
+            .arg(format!("{option}={BIG_SIZE}"))
             .arg("file")
             .fails()
             .code_is(1)
-            .stderr_only(format!("od: {} argument '{}' too large", option, BIG_SIZE));
+            .stderr_only(format!("od: {option} argument '{BIG_SIZE}' too large\n"));
     }
 }

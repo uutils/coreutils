@@ -32,18 +32,14 @@ use std::ffi::OsStr;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
-use winapi::shared::minwindef::DWORD;
+use windows_sys::Win32::Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE};
 #[cfg(windows)]
-use winapi::um::fileapi::GetDiskFreeSpaceW;
-#[cfg(windows)]
-use winapi::um::fileapi::{
-    FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDriveTypeW, GetVolumeInformationW,
-    GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+use windows_sys::Win32::Storage::FileSystem::{
+    FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
+    GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
 };
 #[cfg(windows)]
-use winapi::um::handleapi::INVALID_HANDLE_VALUE;
-#[cfg(windows)]
-use winapi::um::winbase::DRIVE_REMOTE;
+use windows_sys::Win32::System::WindowsProgramming::DRIVE_REMOTE;
 
 // Warning: the pointer has to be used *immediately* or the Vec
 // it points to will be dropped!
@@ -127,7 +123,7 @@ pub use libc::statvfs as statfs_fn;
 
 pub trait BirthTime {
     fn pretty_birth(&self) -> String;
-    fn birth(&self) -> String;
+    fn birth(&self) -> u64;
 }
 
 use std::fs::Metadata;
@@ -140,12 +136,12 @@ impl BirthTime for Metadata {
             .unwrap_or_else(|| "-".to_owned())
     }
 
-    fn birth(&self) -> String {
+    fn birth(&self) -> u64 {
         self.created()
             .ok()
             .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|e| format!("{}", e.as_secs()))
-            .unwrap_or_else(|| "0".to_owned())
+            .map(|e| e.as_secs())
+            .unwrap_or_default()
     }
 }
 
@@ -173,7 +169,7 @@ impl MountInfo {
                 // Why do we cast this to i32?
                 self.dev_id = (stat.dev() as i32).to_string();
             } else {
-                self.dev_id = "".to_string();
+                self.dev_id = String::new();
             }
         }
         // set MountInfo::dummy
@@ -223,7 +219,7 @@ impl MountInfo {
                     + FIELDS_OFFSET
                     + 1;
                 let mut m = Self {
-                    dev_id: "".to_string(),
+                    dev_id: String::new(),
                     dev_name: raw[after_fields + 1].to_string(),
                     fs_type: raw[after_fields].to_string(),
                     mount_root: raw[3].to_string(),
@@ -237,10 +233,10 @@ impl MountInfo {
             }
             LINUX_MTAB => {
                 let mut m = Self {
-                    dev_id: "".to_string(),
+                    dev_id: String::new(),
                     dev_name: raw[0].to_string(),
                     fs_type: raw[2].to_string(),
-                    mount_root: "".to_string(),
+                    mount_root: String::new(),
                     mount_dir: raw[1].to_string(),
                     mount_option: raw[3].to_string(),
                     remote: false,
@@ -265,7 +261,7 @@ impl MountInfo {
                     .collect::<Vec<u16>>()
                     .as_ptr(),
                 dev_name_buf.as_mut_ptr(),
-                dev_name_buf.len() as DWORD,
+                dev_name_buf.len() as u32,
             )
         };
         volume_name.push('\\');
@@ -276,7 +272,7 @@ impl MountInfo {
             GetVolumePathNamesForVolumeNameW(
                 String2LPWSTR!(volume_name),
                 mount_root_buf.as_mut_ptr(),
-                mount_root_buf.len() as DWORD,
+                mount_root_buf.len() as u32,
                 ptr::null_mut(),
             )
         };
@@ -296,7 +292,7 @@ impl MountInfo {
                 ptr::null_mut(),
                 ptr::null_mut(),
                 fs_type_buf.as_mut_ptr(),
-                fs_type_buf.len() as DWORD,
+                fs_type_buf.len() as u32,
             )
         };
         let fs_type = if 0 != success {
@@ -307,10 +303,10 @@ impl MountInfo {
         let mut mn_info = Self {
             dev_id: volume_name,
             dev_name,
-            fs_type: fs_type.unwrap_or_else(|| "".to_string()),
+            fs_type: fs_type.unwrap_or_default(),
             mount_root,
-            mount_dir: "".to_string(),
-            mount_option: "".to_string(),
+            mount_dir: String::new(),
+            mount_option: String::new(),
             remote: false,
             dummy: false,
         };
@@ -328,7 +324,7 @@ impl MountInfo {
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
         let mut info = Self {
-            dev_id: "".to_string(),
+            dev_id: String::new(),
             dev_name: unsafe {
                 // spell-checker:disable-next-line
                 CStr::from_ptr(&statfs.f_mntfromname[0])
@@ -347,8 +343,8 @@ impl From<StatFs> for MountInfo {
                     .to_string_lossy()
                     .into_owned()
             },
-            mount_root: "".to_string(),
-            mount_option: "".to_string(),
+            mount_root: String::new(),
+            mount_option: String::new(),
             remote: false,
             dummy: false,
         };
@@ -443,9 +439,8 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
     {
         let mut volume_name_buf = [0u16; MAX_PATH];
         // As recommended in the MS documentation, retrieve the first volume before the others
-        let find_handle = unsafe {
-            FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as DWORD)
-        };
+        let find_handle =
+            unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
         if INVALID_HANDLE_VALUE == find_handle {
             crash!(
                 EXIT_ERR,
@@ -467,12 +462,11 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
                 FindNextVolumeW(
                     find_handle,
                     volume_name_buf.as_mut_ptr(),
-                    volume_name_buf.len() as DWORD,
+                    volume_name_buf.len() as u32,
                 )
             } {
                 let err = IOError::last_os_error();
-                if err.raw_os_error() != Some(winapi::shared::winerror::ERROR_NO_MORE_FILES as i32)
-                {
+                if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
                     crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
                 }
                 break;
@@ -505,15 +499,39 @@ impl FsUsage {
     #[cfg(unix)]
     pub fn new(statvfs: StatFs) -> Self {
         {
-            Self {
+            #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+            return Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
-                blocks: statvfs.f_blocks as u64,
-                bfree: statvfs.f_bfree as u64,
-                bavail: statvfs.f_bavail as u64,
+                blocks: statvfs.f_blocks,
+                bfree: statvfs.f_bfree,
+                bavail: statvfs.f_bavail,
+                bavail_top_bit_set: ((statvfs.f_bavail) & (1u64.rotate_right(1))) != 0,
+                files: statvfs.f_files,
+                ffree: statvfs.f_ffree,
+            };
+            #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+            return Self {
+                blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
+                blocks: statvfs.f_blocks.into(),
+                bfree: statvfs.f_bfree.into(),
+                bavail: statvfs.f_bavail.into(),
                 bavail_top_bit_set: ((statvfs.f_bavail as u64) & (1u64.rotate_right(1))) != 0,
-                files: statvfs.f_files as u64,
-                ffree: statvfs.f_ffree as u64,
-            }
+                files: statvfs.f_files.into(),
+                ffree: statvfs.f_ffree.into(),
+            };
+            #[cfg(target_os = "freebsd")]
+            return Self {
+                blocksize: statvfs.f_bsize, // or `statvfs.f_frsize` ?
+                blocks: statvfs.f_blocks,
+                bfree: statvfs.f_bfree,
+                bavail: statvfs.f_bavail.try_into().unwrap(),
+                bavail_top_bit_set: ((std::convert::TryInto::<u64>::try_into(statvfs.f_bavail)
+                    .unwrap())
+                    & (1u64.rotate_right(1)))
+                    != 0,
+                files: statvfs.f_files,
+                ffree: statvfs.f_ffree.try_into().unwrap(),
+            };
         }
     }
     #[cfg(not(unix))]
@@ -524,7 +542,7 @@ impl FsUsage {
                 //path_utf8.as_ptr(),
                 String2LPWSTR!(path.as_os_str()),
                 root_path.as_mut_ptr(),
-                root_path.len() as DWORD,
+                root_path.len() as u32,
                 ptr::null_mut(),
             )
         };
@@ -562,7 +580,7 @@ impl FsUsage {
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
         Self {
             // f_bsize      File system block size.
-            blocksize: bytes_per_cluster as u64,
+            blocksize: bytes_per_cluster,
             // f_blocks - Total number of blocks on the file system, in units of f_frsize.
             // frsize =     Fundamental file system block size (fragment size).
             blocks: total_number_of_clusters as u64,
@@ -596,22 +614,62 @@ pub trait FsMeta {
 #[cfg(unix)]
 impl FsMeta for StatFs {
     fn block_size(&self) -> i64 {
-        self.f_bsize as i64
+        #[cfg(all(
+            not(target_env = "musl"),
+            not(target_vendor = "apple"),
+            not(target_os = "android"),
+            not(target_os = "freebsd"),
+            not(target_arch = "s390x"),
+            target_pointer_width = "64"
+        ))]
+        return self.f_bsize;
+        #[cfg(all(
+            not(target_env = "musl"),
+            not(target_os = "freebsd"),
+            any(
+                target_arch = "s390x",
+                target_vendor = "apple",
+                target_os = "android",
+                not(target_pointer_width = "64")
+            )
+        ))]
+        return self.f_bsize.into();
+        #[cfg(any(target_env = "musl", target_os = "freebsd"))]
+        return self.f_bsize.try_into().unwrap();
     }
     fn total_blocks(&self) -> u64 {
-        self.f_blocks as u64
+        #[cfg(target_pointer_width = "64")]
+        return self.f_blocks;
+        #[cfg(not(target_pointer_width = "64"))]
+        return self.f_blocks.into();
     }
     fn free_blocks(&self) -> u64 {
-        self.f_bfree as u64
+        #[cfg(target_pointer_width = "64")]
+        return self.f_bfree;
+        #[cfg(not(target_pointer_width = "64"))]
+        return self.f_bfree.into();
     }
     fn avail_blocks(&self) -> u64 {
-        self.f_bavail as u64
+        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+        return self.f_bavail;
+        #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+        return self.f_bavail.into();
+        #[cfg(target_os = "freebsd")]
+        return self.f_bavail.try_into().unwrap();
     }
     fn total_file_nodes(&self) -> u64 {
-        self.f_files as u64
+        #[cfg(target_pointer_width = "64")]
+        return self.f_files;
+        #[cfg(not(target_pointer_width = "64"))]
+        return self.f_files.into();
     }
     fn free_file_nodes(&self) -> u64 {
-        self.f_ffree as u64
+        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+        return self.f_ffree;
+        #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+        return self.f_ffree.into();
+        #[cfg(target_os = "freebsd")]
+        return self.f_ffree.try_into().unwrap();
     }
     #[cfg(any(
         target_os = "linux",
@@ -620,7 +678,28 @@ impl FsMeta for StatFs {
         target_os = "freebsd"
     ))]
     fn fs_type(&self) -> i64 {
-        self.f_type as i64
+        #[cfg(all(
+            not(target_env = "musl"),
+            not(target_vendor = "apple"),
+            not(target_os = "android"),
+            not(target_os = "freebsd"),
+            not(target_arch = "s390x"),
+            target_pointer_width = "64"
+        ))]
+        return self.f_type;
+        #[cfg(all(
+            not(target_env = "musl"),
+            any(
+                target_vendor = "apple",
+                target_os = "android",
+                target_os = "freebsd",
+                target_arch = "s390x",
+                not(target_pointer_width = "64")
+            )
+        ))]
+        return self.f_type.into();
+        #[cfg(target_env = "musl")]
+        return self.f_type.try_into().unwrap();
     }
     #[cfg(not(any(
         target_os = "linux",
@@ -639,7 +718,10 @@ impl FsMeta for StatFs {
     }
     #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
     fn io_size(&self) -> u64 {
-        self.f_iosize as u64
+        #[cfg(target_os = "freebsd")]
+        return self.f_iosize;
+        #[cfg(not(target_os = "freebsd"))]
+        return self.f_iosize as u64;
     }
     // XXX: dunno if this is right
     #[cfg(not(any(
@@ -750,7 +832,7 @@ pub fn pretty_time(sec: i64, nsec: i64) -> String {
     let tm = match time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos) {
         Ok(tm) => tm,
         Err(e) => {
-            panic!("error: {}", e);
+            panic!("error: {e}");
         }
     };
 
@@ -760,7 +842,7 @@ pub fn pretty_time(sec: i64, nsec: i64) -> String {
     let local_offset = match UtcOffset::local_offset_at(tm) {
         Ok(lo) => lo,
         Err(e) => {
-            panic!("error: {}", e);
+            panic!("error: {e}");
         }
     };
 
@@ -915,7 +997,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x5846_5342 => "xfs".into(),
         0x012F_D16D => "xia".into(),
         0x2FC1_2FC1 => "zfs".into(),
-        other => format!("UNKNOWN ({:#x})", other).into(),
+        other => format!("UNKNOWN ({other:#x})").into(),
     }
     // spell-checker:enable
 }

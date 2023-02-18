@@ -7,3 +7,7 @@ title = "uutils Documentation"
 
 [output.html]
 git-repository-url = "https://github.com/rust-lang/cargo/tree/master/src/doc/src"
+
+[preprocessor.toc]
+command = "mdbook-toc"
+renderer = ["html"]

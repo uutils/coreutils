@@ -70,7 +70,7 @@ fn test_tee_append() {
 fn test_tee_no_more_writeable_1() {
     // equals to 'tee /dev/full out2 <multi_read' call
     let (at, mut ucmd) = at_and_ucmd!();
-    let content = (1..=10).map(|x| format!("{}\n", x)).collect::<String>();
+    let content = (1..=10).map(|x| format!("{x}\n")).collect::<String>();
     let file_out = "tee_file_out";
 
     ucmd.arg("/dev/full")
@@ -78,7 +78,7 @@ fn test_tee_no_more_writeable_1() {
         .pipe_in(&content[..])
         .fails()
         .stdout_contains(&content)
-        .stderr_contains(&"No space left on device");
+        .stderr_contains("No space left on device");
 
     assert_eq!(at.read(file_out), content);
 }
@@ -90,7 +90,7 @@ fn test_tee_no_more_writeable_2() {
     // but currently there is no way to redirect stdout to /dev/full
     // so this test is disabled
     let (_at, mut ucmd) = at_and_ucmd!();
-    let _content = (1..=10).map(|x| format!("{}\n", x)).collect::<String>();
+    let _content = (1..=10).map(|x| format!("{x}\n")).collect::<String>();
     let file_out_a = "tee_file_out_a";
     let file_out_b = "tee_file_out_b";
 
@@ -111,9 +111,7 @@ mod linux_only {
     use crate::common::util::*;
 
     use std::fs::File;
-    use std::io::Write;
-    use std::process::Output;
-    use std::thread;
+    use std::process::{Output, Stdio};
 
     fn make_broken_pipe() -> File {
         use libc::c_int;
@@ -132,23 +130,14 @@ mod linux_only {
     }
 
     fn run_tee(proc: &mut UCommand) -> (String, Output) {
-        let content = (1..=100000).map(|x| format!("{}\n", x)).collect::<String>();
+        let content = (1..=100000).map(|x| format!("{x}\n")).collect::<String>();
 
-        let mut prog = proc.run_no_wait();
-
-        let mut stdin = prog
-            .stdin
-            .take()
-            .unwrap_or_else(|| panic!("Could not take child process stdin"));
-
-        let c = content.clone();
-        let thread = thread::spawn(move || {
-            let _ = stdin.write_all(c.as_bytes());
-        });
-
-        let output = prog.wait_with_output().unwrap();
-
-        thread.join().unwrap();
+        #[allow(deprecated)]
+        let output = proc
+            .ignore_stdin_write_error()
+            .set_stdin(Stdio::piped())
+            .run_no_wait()
+            .pipe_in_and_wait_with_output(content.as_bytes());
 
         (content, output)
     }
@@ -215,9 +204,7 @@ mod linux_only {
             contents.len()
         );
         assert!(contents.starts_with(&compare),
-                "Expected truncated output to be a prefix of the correct output, but it isn't.\n Correct: {}\n Compare: {}",
-                contents,
-                compare);
+                "Expected truncated output to be a prefix of the correct output, but it isn't.\n Correct: {contents}\n Compare: {compare}");
     }
 
     #[test]

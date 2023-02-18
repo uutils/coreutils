@@ -168,8 +168,8 @@ fn test_invalid_utf8() {
         .run()
         .failure()
         .stderr_only(
-            "uniq: failed to convert line to utf8: invalid utf-8 sequence of 1 bytes from index 0",
-        );
+        "uniq: failed to convert line to utf8: invalid utf-8 sequence of 1 bytes from index 0\n",
+    );
 }
 
 #[test]

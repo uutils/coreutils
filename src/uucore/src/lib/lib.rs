@@ -6,8 +6,8 @@
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
 pub extern crate libc;
-#[cfg(feature = "winapi")]
-pub extern crate winapi;
+#[cfg(all(feature = "windows-sys", target_os = "windows"))]
+pub extern crate windows_sys;
 
 //## internal modules
 
@@ -98,10 +98,10 @@ macro_rules! bin {
 /// Generate the usage string for clap.
 ///
 /// This function replaces all occurrences of `{}` with the execution phrase
-/// and leaks the result to return a `&'static str`. It does **not** support
+/// and returns the resulting `String`. It does **not** support
 /// more advanced formatting features such as `{0}`.
-pub fn format_usage(s: &str) -> &'static str {
-    &*Box::leak(s.replace("{}", crate::execution_phrase()).into_boxed_str())
+pub fn format_usage(s: &str) -> String {
+    s.replace("{}", crate::execution_phrase())
 }
 
 pub fn get_utility_is_second_arg() -> bool {
@@ -165,6 +165,44 @@ impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 pub fn args_os() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
 }
+
+/// Read a line from stdin and check whether the first character is `'y'` or `'Y'`
+pub fn read_yes() -> bool {
+    let mut s = String::new();
+    match std::io::stdin().read_line(&mut s) {
+        Ok(_) => matches!(s.chars().next(), Some('y' | 'Y')),
+        _ => false,
+    }
+}
+
+/// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`
+///
+/// This macro functions accepts the same syntax as `format!`. The prompt is written to
+/// `stderr`. A space is also printed at the end for nice spacing between the prompt and
+/// the user input. Any input starting with `'y'` or `'Y'` is interpreted as `yes`.
+///
+/// # Examples
+/// ```
+/// use uucore::prompt_yes;
+/// let file = "foo.rs";
+/// prompt_yes!("Do you want to delete '{}'?", file);
+/// ```
+/// will print something like below to `stderr` (with `util_name` substituted by the actual
+/// util name) and will wait for user input.
+/// ```txt
+/// util_name: Do you want to delete 'foo.rs'?
+/// ```
+#[macro_export]
+macro_rules! prompt_yes(
+    ($($args:tt)+) => ({
+        use std::io::Write;
+        eprint!("{}: ", uucore::util_name());
+        eprint!($($args)+);
+        eprint!(" ");
+        uucore::crash_if_err!(1, std::io::stderr().flush());
+        uucore::read_yes()
+    })
+);
 
 #[cfg(test)]
 mod tests {

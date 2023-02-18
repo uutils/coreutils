@@ -99,7 +99,7 @@ impl fmt::Display for Factors {
 
         for (p, exp) in v.iter() {
             for _ in 0..*exp {
-                write!(f, " {}", p)?;
+                write!(f, " {p}")?;
             }
         }
 

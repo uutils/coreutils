@@ -1,7 +1,7 @@
-# spell-checker:ignore (libs) kqueue
+# spell-checker:ignore (libs) kqueue fundu
 [package]
 name = "uu_tail"
-version = "0.0.15"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tail ~ (uutils) display the last lines of input"
@@ -16,19 +16,18 @@ edition = "2021"
 path = "src/tail.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-libc = "0.2.132"
-memchr = "2.5.0"
-notify = { version = "=5.0.0", features=["macos_kqueue"]}
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore", features=["ringbuffer", "lines"] }
-same-file = "1.0.6"
+clap = { workspace=true }
+libc = { workspace=true }
+memchr = { workspace=true }
+notify = { workspace=true }
+uucore = { workspace=true }
+same-file = { workspace=true }
+atty = { workspace=true }
+fundu = { workspace=true }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
-winapi-util = { version="0.1.5" }
-
-[target.'cfg(unix)'.dependencies]
-nix = { version = "0.25", features = ["fs"] }
+windows-sys = { workspace=true, features = ["Win32_System_Threading", "Win32_Foundation"] }
+winapi-util = { workspace=true }
 
 [[bin]]
 name = "tail"

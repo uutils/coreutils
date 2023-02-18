@@ -58,11 +58,11 @@ impl Distribution<u8> for AlphanumericNewline {
 /// use rand::distributions::Alphanumeric;
 ///
 /// // generates a 100 byte string with characters from AlphanumericNewline
-/// let random_string = RandomString::generate(&AlphanumericNewline, 100);
+/// let random_string = RandomString::generate(AlphanumericNewline, 100);
 /// assert_eq!(100, random_string.len());
 ///
 /// // generates a 100 byte string with 10 newline characters not ending with a newline
-/// let string = RandomString::generate_with_delimiter(&Alphanumeric, b'\n', 10, false, 100);
+/// let string = RandomString::generate_with_delimiter(Alphanumeric, b'\n', 10, false, 100);
 /// assert_eq!(100, random_string.len());
 /// ```
 pub struct RandomString;
@@ -108,7 +108,7 @@ impl RandomString {
     /// use crate::common::random::{AlphanumericNewline, RandomString};
     ///
     /// // generates a 100 byte string with 10 '\0' byte characters not ending with a '\0' byte
-    /// let string = RandomString::generate_with_delimiter(&AlphanumericNewline, 0, 10, false, 100);
+    /// let string = RandomString::generate_with_delimiter(AlphanumericNewline, 0, 10, false, 100);
     /// assert_eq!(100, random_string.len());
     /// assert_eq!(
     ///     10,
@@ -127,7 +127,7 @@ impl RandomString {
         D: Distribution<u8>,
     {
         if length == 0 {
-            return String::from("");
+            return String::new();
         } else if length == 1 {
             return if num_delimiter > 0 {
                 String::from(delimiter as char)
@@ -183,25 +183,25 @@ mod tests {
 
     #[test]
     fn test_random_string_generate() {
-        let random_string = RandomString::generate(&AlphanumericNewline, 0);
+        let random_string = RandomString::generate(AlphanumericNewline, 0);
         assert_eq!(0, random_string.len());
 
-        let random_string = RandomString::generate(&AlphanumericNewline, 1);
+        let random_string = RandomString::generate(AlphanumericNewline, 1);
         assert_eq!(1, random_string.len());
 
-        let random_string = RandomString::generate(&AlphanumericNewline, 100);
+        let random_string = RandomString::generate(AlphanumericNewline, 100);
         assert_eq!(100, random_string.len());
     }
 
     #[test]
     fn test_random_string_generate_with_delimiter_when_length_is_zero() {
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 0, false, 0);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 0, false, 0);
         assert_eq!(0, random_string.len());
     }
 
     #[test]
     fn test_random_string_generate_with_delimiter_when_num_delimiter_is_greater_than_length() {
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 2, false, 1);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 2, false, 1);
         assert_eq!(1, random_string.len());
         assert!(random_string.as_bytes().contains(&0));
         assert!(random_string.as_bytes().ends_with(&[0]));
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_random_string_generate_with_delimiter_should_end_with_delimiter() {
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 1, true, 1);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 1, true, 1);
         assert_eq!(1, random_string.len());
         assert_eq!(
             1,
@@ -217,7 +217,7 @@ mod tests {
         );
         assert!(random_string.as_bytes().ends_with(&[0]));
 
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 1, false, 1);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 1, false, 1);
         assert_eq!(1, random_string.len());
         assert_eq!(
             1,
@@ -225,7 +225,7 @@ mod tests {
         );
         assert!(random_string.as_bytes().ends_with(&[0]));
 
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 1, true, 2);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 1, true, 2);
         assert_eq!(2, random_string.len());
         assert_eq!(
             1,
@@ -233,7 +233,7 @@ mod tests {
         );
         assert!(random_string.as_bytes().ends_with(&[0]));
 
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 2, true, 2);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 2, true, 2);
         assert_eq!(2, random_string.len());
         assert_eq!(
             2,
@@ -241,7 +241,7 @@ mod tests {
         );
         assert!(random_string.as_bytes().ends_with(&[0]));
 
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 1, true, 3);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 1, true, 3);
         assert_eq!(3, random_string.len());
         assert_eq!(
             1,
@@ -252,21 +252,21 @@ mod tests {
 
     #[test]
     fn test_random_string_generate_with_delimiter_should_not_end_with_delimiter() {
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 0, false, 1);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 0, false, 1);
         assert_eq!(1, random_string.len());
         assert_eq!(
             0,
             random_string.as_bytes().iter().filter(|p| **p == 0).count()
         );
 
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 0, true, 1);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 0, true, 1);
         assert_eq!(1, random_string.len());
         assert_eq!(
             0,
             random_string.as_bytes().iter().filter(|p| **p == 0).count()
         );
 
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 1, false, 2);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 1, false, 2);
         assert_eq!(2, random_string.len());
         assert_eq!(
             1,
@@ -274,7 +274,7 @@ mod tests {
         );
         assert!(!random_string.as_bytes().ends_with(&[0]));
 
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 1, false, 3);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 1, false, 3);
         assert_eq!(3, random_string.len());
         assert_eq!(
             1,
@@ -282,7 +282,7 @@ mod tests {
         );
         assert!(!random_string.as_bytes().ends_with(&[0]));
 
-        let random_string = RandomString::generate_with_delimiter(&Alphanumeric, 0, 2, false, 3);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 2, false, 3);
         assert_eq!(3, random_string.len());
         assert_eq!(
             2,
@@ -294,7 +294,7 @@ mod tests {
     #[test]
     fn test_generate_with_delimiter_with_greater_length() {
         let random_string =
-            RandomString::generate_with_delimiter(&Alphanumeric, 0, 100, false, 1000);
+            RandomString::generate_with_delimiter(Alphanumeric, 0, 100, false, 1000);
         assert_eq!(1000, random_string.len());
         assert_eq!(
             100,
@@ -302,8 +302,7 @@ mod tests {
         );
         assert!(!random_string.as_bytes().ends_with(&[0]));
 
-        let random_string =
-            RandomString::generate_with_delimiter(&Alphanumeric, 0, 100, true, 1000);
+        let random_string = RandomString::generate_with_delimiter(Alphanumeric, 0, 100, true, 1000);
         assert_eq!(1000, random_string.len());
         assert_eq!(
             100,
@@ -325,7 +324,7 @@ mod tests {
 
         let length = 8192 * 3 + 1;
         let random_string =
-            RandomString::generate_with_delimiter(&Alphanumeric, b'\n', 100, true, length);
+            RandomString::generate_with_delimiter(Alphanumeric, b'\n', 100, true, length);
         assert_eq!(length, random_string.len());
         assert_eq!(
             100,

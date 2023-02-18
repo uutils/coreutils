@@ -12,7 +12,7 @@ use uucore::error::{FromIo, UResult};
 use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
 use uucore::utmpx::{self, time, Utmpx};
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::fmt::Write;
@@ -58,10 +58,8 @@ fn get_long_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let after_help = get_long_usage();
-
     let matches = uu_app()
-        .after_help(&after_help[..])
+        .after_help(get_long_usage())
         .try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
@@ -70,39 +68,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     // If true, attempt to canonicalize hostnames via a DNS lookup.
-    let do_lookup = matches.contains_id(options::LOOKUP);
+    let do_lookup = matches.get_flag(options::LOOKUP);
 
     // If true, display only a list of usernames and count of
     // the users logged on.
     // Ignored for 'who am i'.
-    let short_list = matches.contains_id(options::COUNT);
+    let short_list = matches.get_flag(options::COUNT);
 
-    let all = matches.contains_id(options::ALL);
+    let all = matches.get_flag(options::ALL);
 
     // If true, display a line at the top describing each field.
-    let include_heading = matches.contains_id(options::HEADING);
+    let include_heading = matches.get_flag(options::HEADING);
 
     // If true, display a '+' for each user if mesg y, a '-' if mesg n,
     // or a '?' if their tty cannot be statted.
-    let include_mesg = all || matches.contains_id(options::MESG) || matches.contains_id("w");
+    let include_mesg = all || matches.get_flag(options::MESG);
 
     // If true, display the last boot time.
-    let need_boottime = all || matches.contains_id(options::BOOT);
+    let need_boottime = all || matches.get_flag(options::BOOT);
 
     // If true, display dead processes.
-    let need_deadprocs = all || matches.contains_id(options::DEAD);
+    let need_deadprocs = all || matches.get_flag(options::DEAD);
 
     // If true, display processes waiting for user login.
-    let need_login = all || matches.contains_id(options::LOGIN);
+    let need_login = all || matches.get_flag(options::LOGIN);
 
     // If true, display processes started by init.
-    let need_initspawn = all || matches.contains_id(options::PROCESS);
+    let need_initspawn = all || matches.get_flag(options::PROCESS);
 
     // If true, display the last clock change.
-    let need_clockchange = all || matches.contains_id(options::TIME);
+    let need_clockchange = all || matches.get_flag(options::TIME);
 
     // If true, display the current runlevel.
-    let need_runlevel = all || matches.contains_id(options::RUNLEVEL);
+    let need_runlevel = all || matches.get_flag(options::RUNLEVEL);
 
     let use_defaults = !(all
         || need_boottime
@@ -111,10 +109,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         || need_initspawn
         || need_runlevel
         || need_clockchange
-        || matches.contains_id(options::USERS));
+        || matches.get_flag(options::USERS));
 
     // If true, display user processes.
-    let need_users = all || matches.contains_id(options::USERS) || use_defaults;
+    let need_users = all || matches.get_flag(options::USERS) || use_defaults;
 
     // If true, display the hours:minutes since each user has touched
     // the keyboard, or "." if within the last minute, or "old" if
@@ -128,7 +126,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let short_output = !include_exit && use_defaults;
 
     // If true, display info only for the controlling tty.
-    let my_line_only = matches.contains_id(options::ONLY_HOSTNAME_USER) || files.len() == 2;
+    let my_line_only = matches.get_flag(options::ONLY_HOSTNAME_USER) || files.len() == 2;
 
     let mut who = Who {
         do_lookup,
@@ -152,7 +150,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     who.exec()
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -162,96 +160,103 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::ALL)
                 .long(options::ALL)
                 .short('a')
-                .help("same as -b -d --login -p -r -t -T -u"),
+                .help("same as -b -d --login -p -r -t -T -u")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BOOT)
                 .long(options::BOOT)
                 .short('b')
-                .help("time of last system boot"),
+                .help("time of last system boot")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DEAD)
                 .long(options::DEAD)
                 .short('d')
-                .help("print dead processes"),
+                .help("print dead processes")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::HEADING)
                 .long(options::HEADING)
                 .short('H')
-                .help("print line of column headings"),
+                .help("print line of column headings")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::LOGIN)
                 .long(options::LOGIN)
                 .short('l')
-                .help("print system login processes"),
+                .help("print system login processes")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::LOOKUP)
                 .long(options::LOOKUP)
-                .help("attempt to canonicalize hostnames via DNS"),
+                .help("attempt to canonicalize hostnames via DNS")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ONLY_HOSTNAME_USER)
                 .short('m')
-                .help("only hostname and user associated with stdin"),
+                .help("only hostname and user associated with stdin")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PROCESS)
                 .long(options::PROCESS)
                 .short('p')
-                .help("print active processes spawned by init"),
+                .help("print active processes spawned by init")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COUNT)
                 .long(options::COUNT)
                 .short('q')
-                .help("all login names and number of users logged on"),
+                .help("all login names and number of users logged on")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RUNLEVEL)
                 .long(options::RUNLEVEL)
                 .short('r')
-                .help(RUNLEVEL_HELP),
+                .help(RUNLEVEL_HELP)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SHORT)
                 .long(options::SHORT)
                 .short('s')
-                .help("print only name, line, and time (default)"),
+                .help("print only name, line, and time (default)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TIME)
                 .long(options::TIME)
                 .short('t')
-                .help("print last system clock change"),
+                .help("print last system clock change")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::USERS)
                 .long(options::USERS)
                 .short('u')
-                .help("list users logged in"),
+                .help("list users logged in")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::MESG)
                 .long(options::MESG)
                 .short('T')
-                // .visible_short_alias('w')  // TODO: requires clap "3.0.0-beta.2"
-                .visible_aliases(&["message", "writable"])
-                .help("add user's message status as +, - or ?"),
-        )
-        .arg(
-            Arg::new("w") // work around for `Arg::visible_short_alias`
-                .short('w')
-                .help("same as -T"),
+                .visible_short_alias('w')
+                .visible_aliases(["message", "writable"])
+                .help("add user's message status as +, - or ?")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILE)
-                .takes_value(true)
-                .min_values(1)
-                .max_values(2)
+                .num_args(1..=2)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -317,7 +322,7 @@ fn current_tty() -> String {
                 .trim_start_matches("/dev/")
                 .to_owned()
         } else {
-            "".to_owned()
+            String::new()
         }
     }
 }
@@ -345,7 +350,7 @@ impl Who {
             println!("{}", users.join(" "));
             println!("# users={}", users.len());
         } else {
-            let records = Utmpx::iter_all_records_from(f).peekable();
+            let records = Utmpx::iter_all_records_from(f);
 
             if self.include_heading {
                 self.print_heading();
@@ -353,7 +358,7 @@ impl Who {
             let cur_tty = if self.my_line_only {
                 current_tty()
             } else {
-                "".to_owned()
+                String::new()
             };
 
             for ut in records {
@@ -387,7 +392,7 @@ impl Who {
     fn print_runlevel(&self, ut: &Utmpx) {
         let last = (ut.pid() / 256) as u8 as char;
         let curr = (ut.pid() % 256) as u8 as char;
-        let runlvline = format!("run-level {}", curr);
+        let runlvline = format!("run-level {curr}");
         let comment = format!("last={}", if last == 'N' { 'S' } else { 'N' });
 
         self.print_line(
@@ -469,11 +474,15 @@ impl Who {
         let last_change;
         match p.metadata() {
             Ok(meta) => {
-                mesg = if meta.mode() & (S_IWGRP as u32) != 0 {
-                    '+'
-                } else {
-                    '-'
-                };
+                #[cfg(all(
+                    not(target_os = "android"),
+                    not(target_os = "freebsd"),
+                    not(target_vendor = "apple")
+                ))]
+                let iwgrp = S_IWGRP;
+                #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
+                let iwgrp = S_IWGRP as u32;
+                mesg = if meta.mode() & iwgrp != 0 { '+' } else { '-' };
                 last_change = meta.atime();
             }
             _ => {
@@ -499,7 +508,7 @@ impl Who {
         } else {
             ut.host()
         };
-        let hoststr = if s.is_empty() { s } else { format!("({})", s) };
+        let hoststr = if s.is_empty() { s } else { format!("({s})") };
 
         self.print_line(
             ut.user().as_ref(),
@@ -530,24 +539,24 @@ impl Who {
         let mut buf = String::with_capacity(64);
         let msg = vec![' ', state].into_iter().collect::<String>();
 
-        write!(buf, "{:<8}", user).unwrap();
+        write!(buf, "{user:<8}").unwrap();
         if self.include_mesg {
             buf.push_str(&msg);
         }
-        write!(buf, " {:<12}", line).unwrap();
+        write!(buf, " {line:<12}").unwrap();
         // "%b %e %H:%M" (LC_ALL=C)
         let time_size = 3 + 2 + 2 + 1 + 2;
-        write!(buf, " {:<1$}", time, time_size).unwrap();
+        write!(buf, " {time:<time_size$}").unwrap();
 
         if !self.short_output {
             if self.include_idle {
-                write!(buf, " {:<6}", idle).unwrap();
+                write!(buf, " {idle:<6}").unwrap();
             }
-            write!(buf, " {:>10}", pid).unwrap();
+            write!(buf, " {pid:>10}").unwrap();
         }
-        write!(buf, " {:<8}", comment).unwrap();
+        write!(buf, " {comment:<8}").unwrap();
         if self.include_exit {
-            write!(buf, " {:<12}", exit).unwrap();
+            write!(buf, " {exit:<12}").unwrap();
         }
         println!("{}", buf.trim_end());
     }

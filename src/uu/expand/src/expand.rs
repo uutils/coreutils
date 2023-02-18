@@ -9,10 +9,7 @@
 
 // spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag Preprocess
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
@@ -22,7 +19,7 @@ use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::format_usage;
+use uucore::{crash, format_usage};
 
 static ABOUT: &str = "Convert tabs in each FILE to spaces, writing to standard output.
  With no FILE, or when FILE is -, read standard input.";
@@ -129,12 +126,8 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
         let bytes = word.as_bytes();
         for i in 0..bytes.len() {
             match bytes[i] {
-                b'+' => {
-                    remaining_mode = RemainingMode::Plus;
-                }
-                b'/' => {
-                    remaining_mode = RemainingMode::Slash;
-                }
+                b'+' => remaining_mode = RemainingMode::Plus,
+                b'/' => remaining_mode = RemainingMode::Slash,
                 _ => {
                     // Parse a number from the byte sequence.
                     let s = from_utf8(&bytes[i..]).unwrap();
@@ -194,6 +187,10 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     if nums.is_empty() {
         nums = vec![DEFAULT_TABSTOP];
     }
+
+    if nums.len() < 2 {
+        remaining_mode = RemainingMode::None;
+    }
     Ok((remaining_mode, nums))
 }
 
@@ -216,8 +213,8 @@ impl Options {
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
-        let iflag = matches.contains_id(options::INITIAL);
-        let uflag = !matches.contains_id(options::NO_UTF8);
+        let iflag = matches.get_flag(options::INITIAL);
+        let uflag = !matches.get_flag(options::NO_UTF8);
 
         // avoid allocations when dumping out long sequences of spaces
         // by precomputing the longest string of spaces we will ever need
@@ -258,7 +255,7 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
             arg[1..]
                 .split(',')
                 .filter(|s| !s.is_empty())
-                .for_each(|s| processed_args.push(format!("--tabs={}", s)));
+                .for_each(|s| processed_args.push(format!("--tabs={s}")));
         } else {
             processed_args.push(arg.to_string());
         }
@@ -276,7 +273,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     expand(&Options::new(&matches)?).map_err_context(|| "failed to write output".to_string())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -287,15 +284,15 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::INITIAL)
                 .long(options::INITIAL)
                 .short('i')
-                .help("do not convert tabs after non blanks"),
+                .help("do not convert tabs after non blanks")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TABS)
                 .long(options::TABS)
                 .short('t')
                 .value_name("N, LIST")
-                .takes_value(true)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .help(
                     "have tabs N characters apart, not 8 or use comma separated list \
                     of explicit tab positions",
@@ -305,13 +302,13 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::NO_UTF8)
                 .long(options::NO_UTF8)
                 .short('U')
-                .help("interpret input file as 8-bit ASCII rather than UTF-8"),
+                .help("interpret input file as 8-bit ASCII rather than UTF-8")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILES)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .hide(true)
-                .takes_value(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -339,17 +336,19 @@ fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
 /// in the `tabstops` slice is interpreted as a relative number of
 /// spaces, which this function will return for every input value of
 /// `col` beyond the end of the second-to-last element of `tabstops`.
-///
-/// If `remaining_mode` is [`RemainingMode::Plus`], then the last entry
-/// in the `tabstops` slice is interpreted as a relative number of
-/// spaces, which this function will return for every input value of
-/// `col` beyond the end of the second-to-last element of `tabstops`.
 fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) -> usize {
     let num_tabstops = tabstops.len();
     match remaining_mode {
         RemainingMode::Plus => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
             Some(t) => t - col,
-            None => tabstops[num_tabstops - 1] - 1,
+            None => {
+                let step_size = tabstops[num_tabstops - 1];
+                let last_fixed_tabstop = tabstops[num_tabstops - 2];
+                let characters_since_last_tabstop = col - last_fixed_tabstop;
+
+                let steps_required = 1 + characters_since_last_tabstop / step_size;
+                steps_required * step_size - characters_since_last_tabstop
+            }
         },
         RemainingMode::Slash => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
             Some(t) => t - col,
@@ -490,8 +489,8 @@ mod tests {
     #[test]
     fn test_next_tabstop_remaining_mode_plus() {
         assert_eq!(next_tabstop(&[1, 5], 0, &RemainingMode::Plus), 1);
-        assert_eq!(next_tabstop(&[1, 5], 3, &RemainingMode::Plus), 4);
-        assert_eq!(next_tabstop(&[1, 5], 6, &RemainingMode::Plus), 4);
+        assert_eq!(next_tabstop(&[1, 5], 3, &RemainingMode::Plus), 3);
+        assert_eq!(next_tabstop(&[1, 5], 6, &RemainingMode::Plus), 5);
     }
 
     #[test]

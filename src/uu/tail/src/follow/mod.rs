@@ -6,4 +6,4 @@
 mod files;
 mod watch;
 
-pub use watch::{follow, WatcherService};
+pub use watch::{follow, Observer};

@@ -7,10 +7,7 @@
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib dragonflybsd optgrps libstdbuf
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
@@ -19,8 +16,8 @@ use std::process;
 use tempfile::tempdir;
 use tempfile::TempDir;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::parse_size::parse_size;
+use uucore::{crash, format_usage};
 
 static ABOUT: &str =
     "Run COMMAND, with modified buffering operations for its standard streams.\n\n\
@@ -101,6 +98,8 @@ fn preload_strings() -> (&'static str, &'static str) {
     target_vendor = "apple"
 )))]
 fn preload_strings() -> (&'static str, &'static str) {
+    use uucore::crash;
+
     crash!(1, "Command not supported for this operating system!")
 }
 
@@ -121,8 +120,7 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
                 |m| {
                     Ok(BufferType::Size(m.try_into().map_err(|_| {
                         ProgramOptionsError(format!(
-                            "invalid mode '{}': Value too large for defined data type",
-                            x
+                            "invalid mode '{x}': Value too large for defined data type"
                         ))
                     })?))
                 },
@@ -162,9 +160,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.0))?;
 
-    let mut command_values = matches.values_of::<&str>(options::COMMAND).unwrap();
+    let mut command_values = matches.get_many::<String>(options::COMMAND).unwrap();
     let mut command = process::Command::new(command_values.next().unwrap());
-    let command_params: Vec<&str> = command_values.collect();
+    let command_params: Vec<&str> = command_values.map(|s| s.as_ref()).collect();
 
     let mut tmp_dir = tempdir().unwrap();
     let (preload_env, libstdbuf) = get_preload_env(&mut tmp_dir).map_err_context(String::new)?;
@@ -193,7 +191,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -207,7 +205,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short(options::INPUT_SHORT)
                 .help("adjust standard input stream buffering")
                 .value_name("MODE")
-                .required_unless_present_any(&[options::OUTPUT, options::ERROR]),
+                .required_unless_present_any([options::OUTPUT, options::ERROR]),
         )
         .arg(
             Arg::new(options::OUTPUT)
@@ -215,7 +213,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short(options::OUTPUT_SHORT)
                 .help("adjust standard output stream buffering")
                 .value_name("MODE")
-                .required_unless_present_any(&[options::INPUT, options::ERROR]),
+                .required_unless_present_any([options::INPUT, options::ERROR]),
         )
         .arg(
             Arg::new(options::ERROR)
@@ -223,12 +221,11 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short(options::ERROR_SHORT)
                 .help("adjust standard error stream buffering")
                 .value_name("MODE")
-                .required_unless_present_any(&[options::INPUT, options::OUTPUT]),
+                .required_unless_present_any([options::INPUT, options::OUTPUT]),
         )
         .arg(
             Arg::new(options::COMMAND)
-                .multiple_occurrences(true)
-                .takes_value(true)
+                .action(ArgAction::Append)
                 .hide(true)
                 .required(true)
                 .value_hint(clap::ValueHint::CommandName),

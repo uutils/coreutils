@@ -151,7 +151,7 @@ impl AstNode {
                     "index" => Ok(prefix_operator_index(&operand_values)),
                     "substr" => Ok(prefix_operator_substr(&operand_values)),
 
-                    _ => Err(format!("operation not implemented: {}", op_type)),
+                    _ => Err(format!("operation not implemented: {op_type}")),
                 },
             },
         }
@@ -204,7 +204,7 @@ fn maybe_dump_ast(result: &Result<Box<AstNode>, String>) {
             println!("EXPR_DEBUG_AST");
             match result {
                 Ok(ast) => ast.debug_dump(),
-                Err(reason) => println!("\terr: {:?}", reason),
+                Err(reason) => println!("\terr: {reason:?}"),
             }
         }
     }
@@ -217,7 +217,7 @@ fn maybe_dump_rpn(rpn: &TokenStack) {
         if debug_var == "1" {
             println!("EXPR_DEBUG_RPN");
             for token in rpn {
-                println!("\t{:?}", token);
+                println!("\t{token:?}");
             }
         }
     }
@@ -238,7 +238,7 @@ fn ast_from_rpn(rpn: &mut TokenStack) -> Result<Box<AstNode>, String> {
         }
 
         Some((token_idx, unexpected_token)) => {
-            panic!("unexpected token at #{} {:?}", token_idx, unexpected_token)
+            panic!("unexpected token at #{token_idx} {unexpected_token:?}")
         }
     }
 }
@@ -266,14 +266,12 @@ fn move_rest_of_ops_to_out(
             None => return Ok(()),
             Some((token_idx, Token::ParOpen)) => {
                 return Err(format!(
-                    "syntax error (Mismatched open-parenthesis at #{})",
-                    token_idx
+                    "syntax error (Mismatched open-parenthesis at #{token_idx})"
                 ))
             }
             Some((token_idx, Token::ParClose)) => {
                 return Err(format!(
-                    "syntax error (Mismatched close-parenthesis at #{})",
-                    token_idx
+                    "syntax error (Mismatched close-parenthesis at #{token_idx})"
                 ))
             }
             Some(other) => out_stack.push(other),
@@ -325,10 +323,10 @@ fn maybe_dump_shunting_yard_step(
     if let Ok(debug_var) = env::var("EXPR_DEBUG_SYA_STEP") {
         if debug_var == "1" {
             println!("EXPR_DEBUG_SYA_STEP");
-            println!("\t{} => {:?}", token_idx, token);
-            println!("\t\tout: {:?}", out_stack);
-            println!("\t\top : {:?}", op_stack);
-            println!("\t\tresult: {:?}", result);
+            println!("\t{token_idx} => {token:?}");
+            println!("\t\tout: {out_stack:?}");
+            println!("\t\top : {op_stack:?}");
+            println!("\t\tresult: {result:?}");
         }
     }
 }
@@ -478,7 +476,7 @@ fn prefix_operator_index(values: &[String]) -> String {
     for (current_idx, ch_h) in haystack.chars().enumerate() {
         for ch_n in needles.chars() {
             if ch_n == ch_h {
-                return current_idx.to_string();
+                return (current_idx + 1).to_string();
             }
         }
     }
@@ -505,11 +503,7 @@ fn prefix_operator_substr(values: &[String]) -> String {
 }
 
 fn bool_as_int(b: bool) -> u8 {
-    if b {
-        1
-    } else {
-        0
-    }
+    u8::from(b)
 }
 fn bool_as_string(b: bool) -> String {
     if b {

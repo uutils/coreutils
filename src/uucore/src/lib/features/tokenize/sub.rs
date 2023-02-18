@@ -9,6 +9,7 @@ use crate::error::{UError, UResult};
 use itertools::{put_back_n, PutBackN};
 use std::error::Error;
 use std::fmt::Display;
+use std::io::Write;
 use std::iter::Peekable;
 use std::process::exit;
 use std::slice::Iter;
@@ -30,7 +31,7 @@ pub enum SubError {
 impl Display for SubError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            Self::InvalidSpec(s) => write!(f, "%{}: invalid conversion specification", s),
+            Self::InvalidSpec(s) => write!(f, "%{s}: invalid conversion specification"),
         }
     }
 }
@@ -112,7 +113,7 @@ impl Sub {
 }
 
 #[derive(Default)]
-struct SubParser {
+pub(crate) struct SubParser {
     min_width_tmp: Option<String>,
     min_width_is_asterisk: bool,
     past_decimal: bool,
@@ -127,20 +128,24 @@ impl SubParser {
     fn new() -> Self {
         Self::default()
     }
-    fn from_it(
+    pub(crate) fn from_it<W>(
+        writer: &mut W,
         it: &mut PutBackN<Chars>,
         args: &mut Peekable<Iter<String>>,
-    ) -> UResult<Option<Box<dyn token::Token>>> {
+    ) -> UResult<Option<token::Token>>
+    where
+        W: Write,
+    {
         let mut parser = Self::new();
         if parser.sub_vals_retrieved(it)? {
-            let t: Box<dyn token::Token> = Self::build_token(parser);
-            t.print(args);
+            let t = Self::build_token(parser);
+            t.write(writer, args);
             Ok(Some(t))
         } else {
             Ok(None)
         }
     }
-    fn build_token(parser: Self) -> Box<dyn token::Token> {
+    fn build_token(parser: Self) -> token::Token {
         // not a self method so as to allow move of sub-parser vals.
         // return new Sub struct as token
         let prefix_char = match &parser.min_width_tmp {
@@ -148,7 +153,7 @@ impl SubParser {
             _ => ' ',
         };
 
-        let t: Box<dyn token::Token> = Box::new(Sub::new(
+        token::Token::Sub(Sub::new(
             if parser.min_width_is_asterisk {
                 CanAsterisk::Asterisk
             } else {
@@ -166,8 +171,7 @@ impl SubParser {
             parser.field_char.unwrap(),
             parser.text_so_far,
             prefix_char,
-        ));
-        t
+        ))
     }
     fn sub_vals_retrieved(&mut self, it: &mut PutBackN<Chars>) -> UResult<bool> {
         if !Self::successfully_eat_prefix(it, &mut self.text_so_far)? {
@@ -191,7 +195,7 @@ impl SubParser {
         // into min_width, second_field, field_char
         for ch in it {
             self.text_so_far.push(ch);
-            match ch as char {
+            match ch {
                 '-' | '*' | '0'..='9' => {
                     if !self.past_decimal {
                         if self.min_width_is_asterisk || self.specifiers_found {
@@ -337,16 +341,11 @@ impl SubParser {
     }
 }
 
-impl token::Tokenizer for Sub {
-    fn from_it(
-        it: &mut PutBackN<Chars>,
-        args: &mut Peekable<Iter<String>>,
-    ) -> UResult<Option<Box<dyn token::Token>>> {
-        SubParser::from_it(it, args)
-    }
-}
-impl token::Token for Sub {
-    fn print(&self, pf_args_it: &mut Peekable<Iter<String>>) {
+impl Sub {
+    pub(crate) fn write<W>(&self, writer: &mut W, pf_args_it: &mut Peekable<Iter<String>>)
+    where
+        W: Write,
+    {
         let field = FormatField {
             min_width: match self.min_width {
                 CanAsterisk::Fixed(x) => x,
@@ -397,7 +396,7 @@ impl token::Token for Sub {
                             }),
                             'b' => {
                                 let mut a_it = put_back_n(arg_string.chars());
-                                UnescapedText::from_it_core(&mut a_it, true);
+                                UnescapedText::from_it_core(writer, &mut a_it, true);
                                 None
                             }
                             // for 'c': get iter of string vals,
@@ -417,11 +416,12 @@ impl token::Token for Sub {
         };
         if let Some(pre_min_width) = pre_min_width_opt {
             // if have a string, print it, ensuring minimum width is met.
-            print!(
+            write!(
+                writer,
                 "{}",
                 match field.min_width {
                     Some(min_width) => {
-                        let diff: isize = min_width.abs() as isize - pre_min_width.len() as isize;
+                        let diff: isize = min_width.abs() - pre_min_width.len() as isize;
                         if diff > 0 {
                             let mut final_str = String::new();
                             // definitely more efficient ways
@@ -443,7 +443,8 @@ impl token::Token for Sub {
                     }
                     None => pre_min_width,
                 }
-            );
+            )
+            .ok();
         }
     }
 }

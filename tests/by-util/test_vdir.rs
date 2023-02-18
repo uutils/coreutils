@@ -29,7 +29,7 @@ fn test_default_output() {
     scene
         .ucmd()
         .succeeds()
-        .stdout_matches(&Regex::new("[rwx-]{10}.*some-file1$").unwrap());
+        .stdout_matches(&Regex::new("[rwx-]{10}.*some-file1\n$").unwrap());
 }
 
 #[test]

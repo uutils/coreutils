@@ -12,10 +12,9 @@
 //! Set of functions to manage IDs
 
 use libc::{gid_t, pid_t, uid_t};
-use std::fmt;
 use std::io;
 use std::process::Child;
-use std::process::ExitStatus as StdExitStatus;
+use std::process::ExitStatus;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -39,60 +38,6 @@ pub fn getgid() -> gid_t {
 /// `getuid()` returns the real user ID of the calling process.
 pub fn getuid() -> uid_t {
     unsafe { libc::getuid() }
-}
-
-// This is basically sys::unix::process::ExitStatus
-#[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum ExitStatus {
-    Code(i32),
-    Signal(i32),
-}
-
-#[allow(clippy::trivially_copy_pass_by_ref)]
-impl ExitStatus {
-    fn from_std_status(status: StdExitStatus) -> Self {
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::ExitStatusExt;
-
-            if let Some(signal) = status.signal() {
-                return Self::Signal(signal);
-            }
-        }
-
-        // NOTE: this should never fail as we check if the program exited through a signal above
-        Self::Code(status.code().unwrap())
-    }
-
-    pub fn success(&self) -> bool {
-        match *self {
-            Self::Code(code) => code == 0,
-            _ => false,
-        }
-    }
-
-    pub fn code(&self) -> Option<i32> {
-        match *self {
-            Self::Code(code) => Some(code),
-            _ => None,
-        }
-    }
-
-    pub fn signal(&self) -> Option<i32> {
-        match *self {
-            Self::Signal(code) => Some(code),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for ExitStatus {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Self::Code(code) => write!(f, "exit code: {}", code),
-            Self::Signal(code) => write!(f, "exit code: {}", code),
-        }
-    }
 }
 
 /// Missing methods for Child objects
@@ -119,9 +64,7 @@ impl ChildExt for Child {
 
     fn wait_or_timeout(&mut self, timeout: Duration) -> io::Result<Option<ExitStatus>> {
         if timeout == Duration::from_micros(0) {
-            return self
-                .wait()
-                .map(|status| Some(ExitStatus::from_std_status(status)));
+            return self.wait().map(Some);
         }
         // .try_wait() doesn't drop stdin, so we do it manually
         drop(self.stdin.take());
@@ -129,7 +72,7 @@ impl ChildExt for Child {
         let start = Instant::now();
         loop {
             if let Some(status) = self.try_wait()? {
-                return Ok(Some(ExitStatus::from_std_status(status)));
+                return Ok(Some(status));
             }
 
             if start.elapsed() >= timeout {

@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (vars) zlines BUFWRITER seekable
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
@@ -41,7 +41,7 @@ mod take;
 use take::take_all_but;
 use take::take_lines;
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -52,7 +52,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('c')
                 .long("bytes")
                 .value_name("[-]NUM")
-                .takes_value(true)
                 .help(
                     "\
                      print the first NUM bytes of each file;\n\
@@ -60,7 +59,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                      NUM bytes of each file\
                      ",
                 )
-                .overrides_with_all(&[options::BYTES_NAME, options::LINES_NAME])
+                .overrides_with_all([options::BYTES_NAME, options::LINES_NAME])
                 .allow_hyphen_values(true),
         )
         .arg(
@@ -68,7 +67,6 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('n')
                 .long("lines")
                 .value_name("[-]NUM")
-                .takes_value(true)
                 .help(
                     "\
                      print the first NUM lines instead of the first 10;\n\
@@ -76,7 +74,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                      NUM lines of each file\
                      ",
                 )
-                .overrides_with_all(&[options::LINES_NAME, options::BYTES_NAME])
+                .overrides_with_all([options::LINES_NAME, options::BYTES_NAME])
                 .allow_hyphen_values(true),
         )
         .arg(
@@ -85,31 +83,35 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .long("quiet")
                 .visible_alias("silent")
                 .help("never print headers giving file names")
-                .overrides_with_all(&[options::VERBOSE_NAME, options::QUIET_NAME]),
+                .overrides_with_all([options::VERBOSE_NAME, options::QUIET_NAME])
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::VERBOSE_NAME)
                 .short('v')
                 .long("verbose")
                 .help("always print headers giving file names")
-                .overrides_with_all(&[options::QUIET_NAME, options::VERBOSE_NAME]),
+                .overrides_with_all([options::QUIET_NAME, options::VERBOSE_NAME])
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRESUME_INPUT_PIPE)
-                .long("-presume-input-pipe")
+                .long("presume-input-pipe")
                 .alias("-presume-input-pipe")
-                .hide(true),
+                .hide(true)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_NAME)
                 .short('z')
                 .long("zero-terminated")
                 .help("line delimiter is NUL, not newline")
-                .overrides_with(options::ZERO_NAME),
+                .overrides_with(options::ZERO_NAME)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FILES_NAME)
-                .multiple_occurrences(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
@@ -132,7 +134,7 @@ impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
         if let Some(v) = matches.get_one::<String>(options::BYTES_NAME) {
             let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {}", err))?;
+                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {err}"))?;
             if all_but_last {
                 Ok(Self::AllButLastBytes(n))
             } else {
@@ -140,14 +142,14 @@ impl Mode {
             }
         } else if let Some(v) = matches.get_one::<String>(options::LINES_NAME) {
             let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {}", err))?;
+                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {err}"))?;
             if all_but_last {
                 Ok(Self::AllButLastLines(n))
             } else {
                 Ok(Self::FirstLines(n))
             }
         } else {
-            Ok(Default::default())
+            Ok(Self::default())
         }
     }
 }
@@ -199,10 +201,10 @@ impl HeadOptions {
     pub fn get_from(matches: &clap::ArgMatches) -> Result<Self, String> {
         let mut options = Self::default();
 
-        options.quiet = matches.contains_id(options::QUIET_NAME);
-        options.verbose = matches.contains_id(options::VERBOSE_NAME);
-        options.zeroed = matches.contains_id(options::ZERO_NAME);
-        options.presume_input_pipe = matches.contains_id(options::PRESUME_INPUT_PIPE);
+        options.quiet = matches.get_flag(options::QUIET_NAME);
+        options.verbose = matches.get_flag(options::VERBOSE_NAME);
+        options.zeroed = matches.get_flag(options::ZERO_NAME);
+        options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(matches)?;
 
@@ -385,13 +387,13 @@ where
             }
             // if it were just `n`,
             if lines == n + 1 {
-                input.seek(SeekFrom::Start(0))?;
+                input.rewind()?;
                 return Ok(size - i);
             }
             i += 1;
         }
         if size - i == 0 {
-            input.seek(SeekFrom::Start(0))?;
+            input.rewind()?;
             return Ok(0);
         }
     }
@@ -457,7 +459,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if let Err(e) = usize::try_from(n) {
                         show!(USimpleError::new(
                             1,
-                            format!("{}: number of bytes is too large", e)
+                            format!("{e}: number of bytes is too large")
                         ));
                         continue;
                     };
@@ -491,7 +493,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         println!();
                     }
-                    println!("==> {} <==", name);
+                    println!("==> {name} <==");
                 }
                 head_file(&mut file, options)
             }
@@ -504,7 +506,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             };
             show!(USimpleError::new(
                 1,
-                format!("error reading {}: Input/output error", name)
+                format!("error reading {name}: Input/output error")
             ));
         }
         first = false;

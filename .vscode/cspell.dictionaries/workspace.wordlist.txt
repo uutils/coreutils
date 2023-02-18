@@ -23,6 +23,7 @@ fsext
 getopts
 getrandom
 globset
+indicatif
 itertools
 lscolors
 mdbook
@@ -35,6 +36,7 @@ quickcheck
 rand_chacha
 ringbuffer
 rlimit
+rstest
 smallvec
 tempdir
 tempfile

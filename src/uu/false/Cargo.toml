@@ -1,6 +1,6 @@
 [package]
 name = "uu_false"
-version = "0.0.15"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "false ~ (uutils) do nothing and fail"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/false.rs"
 
 [dependencies]
-clap = { version = "3.2", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.15", package="uucore", path="../../uucore" }
+clap = { workspace=true }
+uucore = { workspace=true }
 
 [[bin]]
 name = "false"

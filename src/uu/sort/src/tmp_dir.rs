@@ -5,7 +5,10 @@ use std::{
 };
 
 use tempfile::TempDir;
-use uucore::error::{UResult, USimpleError};
+use uucore::{
+    error::{UResult, USimpleError},
+    show_error,
+};
 
 use crate::SortError;
 
@@ -28,7 +31,7 @@ impl TmpDirWrapper {
             parent_path: path,
             size: 0,
             temp_dir: None,
-            lock: Default::default(),
+            lock: Arc::default(),
         }
     }
 
@@ -53,7 +56,7 @@ impl TmpDirWrapper {
             }
             std::process::exit(2)
         })
-        .map_err(|e| USimpleError::new(2, format!("failed to set up signal handler: {}", e)))
+        .map_err(|e| USimpleError::new(2, format!("failed to set up signal handler: {e}")))
     }
 
     pub fn next_file(&mut self) -> UResult<(File, PathBuf)> {
@@ -80,7 +83,7 @@ impl TmpDirWrapper {
 /// Remove the directory at `path` by deleting its child files and then itself.
 /// Errors while deleting child files are ignored.
 fn remove_tmp_dir(path: &Path) -> std::io::Result<()> {
-    if let Ok(read_dir) = std::fs::read_dir(&path) {
+    if let Ok(read_dir) = std::fs::read_dir(path) {
         for file in read_dir.flatten() {
             // if we fail to delete the file here it was probably deleted by another thread
             // in the meantime, but that's ok.

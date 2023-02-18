@@ -7,7 +7,9 @@
 //! or at the end of piped stdin with [`LinesChunk`] or [`BytesChunk`].
 //!
 //! Use [`ReverseChunks::new`] to create a new iterator over chunks of bytes from the file.
+
 // spell-checker:ignore (ToDO) filehandle BUFSIZ
+
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, Read, Seek, SeekFrom, Write};
@@ -46,7 +48,7 @@ pub struct ReverseChunks<'a> {
 impl<'a> ReverseChunks<'a> {
     pub fn new(file: &'a mut File) -> ReverseChunks<'a> {
         let current = if cfg!(unix) {
-            file.seek(SeekFrom::Current(0)).unwrap()
+            file.stream_position().unwrap()
         } else {
             0
         };

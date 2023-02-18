@@ -6,15 +6,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
 use uucore::error::{FromIo, UResult};
 use uucore::format_usage;
 
-const NAME: &str = "echo";
-const ABOUT: &str = "display a line of text";
+const ABOUT: &str = "Display a line of text";
 const USAGE: &str = "{} [OPTIONS]... [STRING]...";
 const AFTER_HELP: &str = r#"
  Echo the STRING(s) to standard output.
@@ -64,6 +63,9 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 
     let mut buffer = ['\\'; 2];
 
+    // TODO `cargo +nightly clippy` complains that `.peek()` is never
+    // called on `iter`. However, `peek()` is called inside the
+    // `parse_code()` function that borrows `iter`.
     let mut iter = input.chars().peekable();
     while let Some(mut c) = iter.next() {
         let mut start = 1;
@@ -101,7 +103,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 
         // because printing char slices is apparently not available in the standard library
         for ch in &buffer[start..] {
-            write!(output, "{}", ch)?;
+            write!(output, "{ch}")?;
         }
     }
 
@@ -113,20 +115,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
     let matches = uu_app().get_matches_from(args);
 
-    let no_newline = matches.contains_id(options::NO_NEWLINE);
-    let escaped = matches.contains_id(options::ENABLE_BACKSLASH_ESCAPE);
+    let no_newline = matches.get_flag(options::NO_NEWLINE);
+    let escaped = matches.get_flag(options::ENABLE_BACKSLASH_ESCAPE);
     let values: Vec<String> = match matches.get_many::<String>(options::STRING) {
         Some(s) => s.map(|s| s.to_string()).collect(),
-        None => vec!["".to_string()],
+        None => vec![String::new()],
     };
 
     execute(no_newline, escaped, &values)
         .map_err_context(|| "could not write to stdout".to_string())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
         // Final argument must have multiple(true) or the usage string equivalent.
@@ -141,21 +142,21 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::NO_NEWLINE)
                 .short('n')
                 .help("do not output the trailing newline")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ENABLE_BACKSLASH_ESCAPE)
                 .short('e')
                 .help("enable interpretation of backslash escapes")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DISABLE_BACKSLASH_ESCAPE)
                 .short('E')
                 .help("disable interpretation of backslash escapes (default)")
-                .takes_value(false),
+                .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(options::STRING).multiple_occurrences(true))
+        .arg(Arg::new(options::STRING).action(ArgAction::Append))
 }
 
 fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
@@ -172,7 +173,7 @@ fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
                 break;
             }
         } else {
-            write!(output, "{}", input)?;
+            write!(output, "{input}")?;
         }
     }
 

@@ -239,7 +239,7 @@ fn test_realpath_when_symlink_is_absolute_and_enoent() {
         .run()
         .stdout_contains("\\dir2\\bar\n")
         .stdout_contains("\\dir2\\baz\n")
-        .stderr_is("realpath: dir1/foo2: No such file or directory");
+        .stderr_is("realpath: dir1/foo2: No such file or directory\n");
 }
 
 #[test]
@@ -255,8 +255,8 @@ fn test_realpath_when_symlink_part_is_missing() {
     at.relative_symlink_file("../dir2/baz", "dir1/foo3");
     at.symlink_file("dir3/bar", "dir1/foo4");
 
-    let expect1 = format!("dir2{}bar", MAIN_SEPARATOR);
-    let expect2 = format!("dir2{}baz", MAIN_SEPARATOR);
+    let expect1 = format!("dir2{MAIN_SEPARATOR}bar");
+    let expect2 = format!("dir2{MAIN_SEPARATOR}baz");
 
     ucmd.args(&["dir1/foo1", "dir1/foo2", "dir1/foo3", "dir1/foo4"])
         .run()
@@ -300,7 +300,7 @@ fn test_relative_base_not_prefix_of_relative_to() {
         .succeeds();
 
     #[cfg(windows)]
-    result.stdout_matches(&Regex::new(r"^.*:\\usr\n.*:\\usr\\local$").unwrap());
+    result.stdout_matches(&Regex::new(r"^.*:\\usr\n.*:\\usr\\local\n$").unwrap());
 
     #[cfg(not(windows))]
     result.stdout_is("/usr\n/usr/local\n");
@@ -344,7 +344,7 @@ fn test_relative() {
     #[cfg(not(windows))]
     result.stdout_is("/tmp\n.\n");
     #[cfg(windows)]
-    result.stdout_matches(&Regex::new(r"^.*:\\tmp\n\.$").unwrap());
+    result.stdout_matches(&Regex::new(r"^.*:\\tmp\n\.\n$").unwrap());
 
     new_ucmd!()
         .args(&["-sm", "--relative-base=/", "--relative-to=/", "/", "/usr"])
@@ -357,7 +357,7 @@ fn test_relative() {
     #[cfg(not(windows))]
     result.stdout_is("/tmp\n.\n");
     #[cfg(windows)]
-    result.stdout_matches(&Regex::new(r"^.*:\\tmp\n\.$").unwrap());
+    result.stdout_matches(&Regex::new(r"^.*:\\tmp\n\.\n$").unwrap());
 
     new_ucmd!()
         .args(&["-sm", "--relative-base=/", "/", "/usr"])
@@ -452,4 +452,9 @@ fn test_realpath_trailing_slash() {
         .args(&["-m", "link_no_dir/"])
         .succeeds()
         .stdout_contains(format!("{}no_dir\n", std::path::MAIN_SEPARATOR));
+}
+
+#[test]
+fn test_realpath_empty() {
+    new_ucmd!().fails().code_is(1);
 }

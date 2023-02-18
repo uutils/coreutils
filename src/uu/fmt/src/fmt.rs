@@ -7,17 +7,14 @@
 
 // spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
 
-#[macro_use]
-extern crate uucore;
-
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::cmp;
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
 use std::io::{BufReader, BufWriter, Read};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, show_warning};
 
 use self::linebreak::break_lines;
 use self::parasplit::ParagraphStream;
@@ -92,15 +89,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         tabwidth: 8,
     };
 
-    fmt_opts.tagged = matches.contains_id(OPT_TAGGED_PARAGRAPH);
-    if matches.contains_id(OPT_CROWN_MARGIN) {
+    fmt_opts.tagged = matches.get_flag(OPT_TAGGED_PARAGRAPH);
+    if matches.get_flag(OPT_CROWN_MARGIN) {
         fmt_opts.crown = true;
         fmt_opts.tagged = false;
     }
-    fmt_opts.mail = matches.contains_id(OPT_PRESERVE_HEADERS);
-    fmt_opts.uniform = matches.contains_id(OPT_UNIFORM_SPACING);
-    fmt_opts.quick = matches.contains_id(OPT_QUICK);
-    if matches.contains_id(OPT_SPLIT_ONLY) {
+    fmt_opts.mail = matches.get_flag(OPT_PRESERVE_HEADERS);
+    fmt_opts.uniform = matches.get_flag(OPT_UNIFORM_SPACING);
+    fmt_opts.quick = matches.get_flag(OPT_QUICK);
+    if matches.get_flag(OPT_SPLIT_ONLY) {
         fmt_opts.split_only = true;
         fmt_opts.crown = false;
         fmt_opts.tagged = false;
@@ -150,7 +147,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ));
             }
         };
-        if !matches.contains_id(OPT_WIDTH) {
+        if !matches.get_flag(OPT_WIDTH) {
             fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
         } else if fmt_opts.goal > fmt_opts.width {
             return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
@@ -218,7 +215,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -233,7 +230,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                     may have different indentations, in which \
                     case the first line's indentation is preserved, \
                     and each subsequent line's indentation matches the second line.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_TAGGED_PARAGRAPH)
@@ -242,7 +240,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "Like -c, except that the first and second line of a paragraph *must* \
                     have different indentation or they are treated as separate paragraphs.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PRESERVE_HEADERS)
@@ -251,13 +250,15 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "Attempt to detect and preserve mail headers in the input. \
                     Be careful when combining this flag with -p.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_SPLIT_ONLY)
                 .short('s')
                 .long("split-only")
-                .help("Split lines only, do not reflow."),
+                .help("Split lines only, do not reflow.")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_UNIFORM_SPACING)
@@ -269,7 +270,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                     Sentence breaks in the input are detected as [?!.] \
                     followed by two spaces or a newline; other punctuation \
                     is not interpreted as a sentence break.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_PREFIX)
@@ -301,7 +303,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "PREFIX must match at the \
                     beginning of the line with no preceding whitespace.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_EXACT_SKIP_PREFIX)
@@ -310,7 +313,8 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help(
                     "PSKIP must match at the \
                     beginning of the line with no preceding whitespace.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_WIDTH)
@@ -326,10 +330,16 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .help("Goal width, default ~0.94*WIDTH. Must be less than WIDTH.")
                 .value_name("GOAL"),
         )
-        .arg(Arg::new(OPT_QUICK).short('q').long("quick").help(
-            "Break lines more quickly at the \
+        .arg(
+            Arg::new(OPT_QUICK)
+                .short('q')
+                .long("quick")
+                .help(
+                    "Break lines more quickly at the \
             expense of a potentially more ragged appearance.",
-        ))
+                )
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(OPT_TAB_WIDTH)
                 .short('T')
@@ -343,8 +353,7 @@ pub fn uu_app<'a>() -> Command<'a> {
         )
         .arg(
             Arg::new(ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

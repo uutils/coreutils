@@ -3,17 +3,21 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) kqueue Signum
+// spell-checker:ignore (ToDO) kqueue Signum fundu
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
-use clap::{Arg, ArgMatches, Command, ValueSource};
+use atty::Stream;
+use clap::crate_version;
+use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use fundu::DurationParser;
+use same_file::Handle;
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::{format_usage, show_warning};
 
 const ABOUT: &str = "\
     Print the last 10 lines of each FILE to standard output.\n\
@@ -62,16 +66,11 @@ pub enum FilterMode {
 
 impl FilterMode {
     fn from(matches: &ArgMatches) -> UResult<Self> {
-        let zero_term = matches.contains_id(options::ZERO_TERM);
+        let zero_term = matches.get_flag(options::ZERO_TERM);
         let mode = if let Some(arg) = matches.get_one::<String>(options::BYTES) {
             match parse_num(arg) {
                 Ok(signum) => Self::Bytes(signum),
-                Err(e) => {
-                    return Err(UUsageError::new(
-                        1,
-                        format!("invalid number of bytes: {}", e),
-                    ))
-                }
+                Err(e) => return Err(UUsageError::new(1, format!("invalid number of bytes: {e}"))),
             }
         } else if let Some(arg) = matches.get_one::<String>(options::LINES) {
             match parse_num(arg) {
@@ -79,12 +78,7 @@ impl FilterMode {
                     let delimiter = if zero_term { 0 } else { b'\n' };
                     Self::Lines(signum, delimiter)
                 }
-                Err(e) => {
-                    return Err(UUsageError::new(
-                        1,
-                        format!("invalid number of lines: {}", e),
-                    ))
-                }
+                Err(e) => return Err(UUsageError::new(1, format!("invalid number of lines: {e}"))),
             }
         } else if zero_term {
             Self::default_zero()
@@ -112,6 +106,13 @@ pub enum FollowMode {
     Name,
 }
 
+#[derive(Debug)]
+pub enum VerificationResult {
+    Ok,
+    CannotFollowStdinByName,
+    NoOutput,
+}
+
 #[derive(Debug, Default)]
 pub struct Settings {
     pub follow: Option<FollowMode>,
@@ -134,7 +135,7 @@ impl Settings {
             ..Default::default()
         };
 
-        settings.follow = if matches.contains_id(options::FOLLOW_RETRY) {
+        settings.follow = if matches.get_flag(options::FOLLOW_RETRY) {
             Some(FollowMode::Name)
         } else if matches.value_source(options::FOLLOW) != Some(ValueSource::CommandLine) {
             None
@@ -146,25 +147,25 @@ impl Settings {
         };
 
         settings.retry =
-            matches.contains_id(options::RETRY) || matches.contains_id(options::FOLLOW_RETRY);
+            matches.get_flag(options::RETRY) || matches.get_flag(options::FOLLOW_RETRY);
 
-        if settings.retry && settings.follow.is_none() {
-            show_warning!("--retry ignored; --retry is useful only when following");
+        if let Some(source) = matches.get_one::<String>(options::SLEEP_INT) {
+            // Advantage of `fundu` over `Duration::(try_)from_secs_f64(source.parse().unwrap())`:
+            // * doesn't panic on errors like `Duration::from_secs_f64` would.
+            // * no precision loss, rounding errors or other floating point problems.
+            // * evaluates to `Duration::MAX` if the parsed number would have exceeded
+            //   `DURATION::MAX` or `infinity` was given
+            // * not applied here but it supports customizable time units and provides better error
+            //   messages
+            settings.sleep_sec =
+                DurationParser::without_time_units()
+                    .parse(source)
+                    .map_err(|_| {
+                        UUsageError::new(1, format!("invalid number of seconds: '{source}'"))
+                    })?;
         }
 
-        if let Some(s) = matches.get_one::<String>(options::SLEEP_INT) {
-            settings.sleep_sec = match s.parse::<f32>() {
-                Ok(s) => Duration::from_secs_f32(s),
-                Err(_) => {
-                    return Err(UUsageError::new(
-                        1,
-                        format!("invalid number of seconds: {}", s.quote()),
-                    ))
-                }
-            }
-        }
-
-        settings.use_polling = matches.contains_id(options::USE_POLLING);
+        settings.use_polling = matches.get_flag(options::USE_POLLING);
 
         if let Some(s) = matches.get_one::<String>(options::MAX_UNCHANGED_STATS) {
             settings.max_unchanged_stats = match s.parse::<u32>() {
@@ -193,14 +194,8 @@ impl Settings {
                             format!("invalid PID: {}", pid_str.quote()),
                         ));
                     }
+
                     settings.pid = pid;
-                    if settings.follow.is_none() {
-                        show_warning!("PID ignored; --pid=PID is useful only when following");
-                    }
-                    if !platform::supports_pid_checks(settings.pid) {
-                        show_warning!("--pid=PID is not supported on this system");
-                        settings.pid = 0;
-                    }
                 }
                 Err(e) => {
                     return Err(USimpleError::new(
@@ -213,16 +208,6 @@ impl Settings {
 
         settings.mode = FilterMode::from(matches)?;
 
-        // Mimic GNU's tail for -[nc]0 without -f and exit immediately
-        if settings.follow.is_none()
-            && matches!(
-                settings.mode,
-                FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero)
-            )
-        {
-            std::process::exit(0)
-        }
-
         let mut inputs: VecDeque<Input> = matches
             .get_many::<String>(options::ARG_FILES)
             .map(|v| v.map(|string| Input::from(string.clone())).collect())
@@ -233,14 +218,89 @@ impl Settings {
             inputs.push_front(Input::default());
         }
 
-        settings.verbose = (matches.contains_id(options::verbosity::VERBOSE) || inputs.len() > 1)
-            && !matches.contains_id(options::verbosity::QUIET);
+        settings.verbose = (matches.get_flag(options::verbosity::VERBOSE) || inputs.len() > 1)
+            && !matches.get_flag(options::verbosity::QUIET);
 
         settings.inputs = inputs;
 
-        settings.presume_input_pipe = matches.contains_id(options::PRESUME_INPUT_PIPE);
+        settings.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         Ok(settings)
+    }
+
+    pub fn has_only_stdin(&self) -> bool {
+        self.inputs.iter().all(|input| input.is_stdin())
+    }
+
+    pub fn has_stdin(&self) -> bool {
+        self.inputs.iter().any(|input| input.is_stdin())
+    }
+
+    pub fn num_inputs(&self) -> usize {
+        self.inputs.len()
+    }
+
+    /// Check [`Settings`] for problematic configurations of tail originating from user provided
+    /// command line arguments and print appropriate warnings.
+    pub fn check_warnings(&self) {
+        if self.retry {
+            if self.follow.is_none() {
+                show_warning!("--retry ignored; --retry is useful only when following");
+            } else if self.follow == Some(FollowMode::Descriptor) {
+                show_warning!("--retry only effective for the initial open");
+            }
+        }
+
+        if self.pid != 0 {
+            if self.follow.is_none() {
+                show_warning!("PID ignored; --pid=PID is useful only when following");
+            } else if !platform::supports_pid_checks(self.pid) {
+                show_warning!("--pid=PID is not supported on this system");
+            }
+        }
+
+        // This warning originates from gnu's tail implementation of the equivalent warning. If the
+        // user wants to follow stdin, but tail is blocking indefinitely anyways, because of stdin
+        // as `tty` (but no otherwise blocking stdin), then we print a warning that `--follow`
+        // cannot be applied under these circumstances and is therefore ineffective.
+        if self.follow.is_some() && self.has_stdin() {
+            let blocking_stdin = self.pid == 0
+                && self.follow == Some(FollowMode::Descriptor)
+                && self.num_inputs() == 1
+                && Handle::stdin().map_or(false, |handle| {
+                    handle
+                        .as_file()
+                        .metadata()
+                        .map_or(false, |meta| !meta.is_file())
+                });
+
+            if !blocking_stdin && atty::is(Stream::Stdin) {
+                show_warning!("following standard input indefinitely is ineffective");
+            }
+        }
+    }
+
+    /// Verify [`Settings`] and try to find unsolvable misconfigurations of tail originating from
+    /// user provided command line arguments. In contrast to [`Settings::check_warnings`] these
+    /// misconfigurations usually lead to the immediate exit or abortion of the running `tail`
+    /// process.
+    pub fn verify(&self) -> VerificationResult {
+        // Mimic GNU's tail for `tail -F`
+        if self.inputs.iter().any(|i| i.is_stdin()) && self.follow == Some(FollowMode::Name) {
+            return VerificationResult::CannotFollowStdinByName;
+        }
+
+        // Mimic GNU's tail for -[nc]0 without -f and exit immediately
+        if self.follow.is_none()
+            && matches!(
+                self.mode,
+                FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero)
+            )
+        {
+            return VerificationResult::NoOutput;
+        }
+
+        VerificationResult::Ok
     }
 }
 
@@ -297,25 +357,12 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
     })
 }
 
-pub fn stdin_is_pipe_or_fifo() -> bool {
-    #[cfg(unix)]
-    {
-        platform::stdin_is_pipe_or_fifo()
-    }
-    #[cfg(windows)]
-    {
-        winapi_util::file::typ(winapi_util::HandleRef::stdin())
-            .map(|t| t.is_disk() || t.is_pipe())
-            .unwrap_or(false)
-    }
-}
-
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let matches = uu_app().try_get_matches_from(arg_iterate(args)?)?;
     Settings::from(&matches)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     #[cfg(target_os = "linux")]
     pub static POLLING_HELP: &str = "Disable 'inotify' support and use polling instead";
     #[cfg(all(unix, not(target_os = "linux")))]
@@ -333,9 +380,8 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::BYTES)
                 .short('c')
                 .long(options::BYTES)
-                .takes_value(true)
                 .allow_hyphen_values(true)
-                .overrides_with_all(&[options::BYTES, options::LINES])
+                .overrides_with_all([options::BYTES, options::LINES])
                 .help("Number of bytes to print"),
         )
         .arg(
@@ -343,9 +389,7 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('f')
                 .long(options::FOLLOW)
                 .default_value("descriptor")
-                .takes_value(true)
-                .min_values(0)
-                .max_values(1)
+                .num_args(0..=1)
                 .require_equals(true)
                 .value_parser(["descriptor", "name"])
                 .help("Print the file as it grows"),
@@ -354,15 +398,14 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::LINES)
                 .short('n')
                 .long(options::LINES)
-                .takes_value(true)
                 .allow_hyphen_values(true)
-                .overrides_with_all(&[options::BYTES, options::LINES])
+                .overrides_with_all([options::BYTES, options::LINES])
                 .help("Number of lines to print"),
         )
         .arg(
             Arg::new(options::PID)
                 .long(options::PID)
-                .takes_value(true)
+                .value_name("PID")
                 .help("With -f, terminate after process ID, PID dies"),
         )
         .arg(
@@ -370,19 +413,20 @@ pub fn uu_app<'a>() -> Command<'a> {
                 .short('q')
                 .long(options::verbosity::QUIET)
                 .visible_alias("silent")
-                .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help("Never output headers giving file names"),
+                .overrides_with_all([options::verbosity::QUIET, options::verbosity::VERBOSE])
+                .help("Never output headers giving file names")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::SLEEP_INT)
                 .short('s')
-                .takes_value(true)
+                .value_name("N")
                 .long(options::SLEEP_INT)
                 .help("Number of seconds to sleep between polling the file when running with -f"),
         )
         .arg(
             Arg::new(options::MAX_UNCHANGED_STATS)
-                .takes_value(true)
+                .value_name("N")
                 .long(options::MAX_UNCHANGED_STATS)
                 .help(
                     "Reopen a FILE which has not changed size after N (default 5) iterations \
@@ -395,45 +439,49 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::verbosity::VERBOSE)
                 .short('v')
                 .long(options::verbosity::VERBOSE)
-                .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help("Always output headers giving file names"),
+                .overrides_with_all([options::verbosity::QUIET, options::verbosity::VERBOSE])
+                .help("Always output headers giving file names")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::ZERO_TERM)
                 .short('z')
                 .long(options::ZERO_TERM)
-                .help("Line delimiter is NUL, not newline"),
+                .help("Line delimiter is NUL, not newline")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::USE_POLLING)
                 .alias(options::DISABLE_INOTIFY_TERM) // NOTE: Used by GNU's test suite
                 .alias("dis") // NOTE: Used by GNU's test suite
                 .long(options::USE_POLLING)
-                .help(POLLING_HELP),
+                .help(POLLING_HELP)
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::RETRY)
                 .long(options::RETRY)
-                .help("Keep trying to open a file if it is inaccessible"),
+                .help("Keep trying to open a file if it is inaccessible")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FOLLOW_RETRY)
                 .short('F')
                 .help("Same as --follow=name --retry")
-                .overrides_with_all(&[options::RETRY, options::FOLLOW]),
+                .overrides_with_all([options::RETRY, options::FOLLOW])
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::PRESUME_INPUT_PIPE)
-                .long(options::PRESUME_INPUT_PIPE)
+                .long("presume-input-pipe")
                 .alias(options::PRESUME_INPUT_PIPE)
-                .hide(true),
+                .hide(true)
+                .action(ArgAction::SetTrue),
         )
-
         .arg(
             Arg::new(options::ARG_FILES)
-                .multiple_occurrences(true)
-                .takes_value(true)
-                .min_values(1)
+                .action(ArgAction::Append)
+                .num_args(1..)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

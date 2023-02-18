@@ -6,19 +6,17 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use std::error::Error;
 use std::fmt::Write as FmtWrite;
 use std::io::BufRead;
 use std::io::{self, stdin, stdout, Write};
 
 mod factor;
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 pub use factor::*;
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::{show_error, show_warning};
 
 mod miller_rabin;
 pub mod numeric;
@@ -37,12 +35,16 @@ fn print_factors_str(
     w: &mut io::BufWriter<impl io::Write>,
     factors_buffer: &mut String,
 ) -> Result<(), Box<dyn Error>> {
-    num_str.parse::<u64>().map_err(|e| e.into()).and_then(|x| {
-        factors_buffer.clear();
-        writeln!(factors_buffer, "{}:{}", x, factor(x))?;
-        w.write_all(factors_buffer.as_bytes())?;
-        Ok(())
-    })
+    num_str
+        .trim()
+        .parse::<u64>()
+        .map_err(|e| e.into())
+        .and_then(|x| {
+            factors_buffer.clear();
+            writeln!(factors_buffer, "{}:{}", x, factor(x))?;
+            w.write_all(factors_buffer.as_bytes())?;
+            Ok(())
+        })
 }
 
 #[uucore::main]
@@ -78,10 +80,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .infer_long_args(true)
-        .arg(Arg::new(options::NUMBER).multiple_occurrences(true))
+        .arg(Arg::new(options::NUMBER).action(ArgAction::Append))
 }

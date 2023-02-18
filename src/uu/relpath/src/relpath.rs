@@ -76,24 +76,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     println_verbatim(result).map_err_context(String::new)
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
-        .arg(Arg::new(options::DIR).short('d').takes_value(true).help(
+        .arg(Arg::new(options::DIR).short('d').help(
             "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative",
         ))
-        .arg(
-            Arg::new(options::TO)
-                .required(true)
-                .takes_value(true)
-                .value_hint(clap::ValueHint::AnyPath),
-        )
-        .arg(
-            Arg::new(options::FROM)
-                .takes_value(true)
-                .value_hint(clap::ValueHint::AnyPath),
-        )
+        .arg(Arg::new(options::TO).value_hint(clap::ValueHint::AnyPath))
+        .arg(Arg::new(options::FROM).value_hint(clap::ValueHint::AnyPath))
 }

@@ -10,13 +10,14 @@
 mod error;
 
 use crate::error::ChrootError;
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use std::ffi::CString;
 use std::io::Error;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::process;
-use uucore::error::{set_exit_code, UClapError, UResult};
+use uucore::error::{set_exit_code, UClapError, UResult, UUsageError};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{entries, format_usage};
 
@@ -47,6 +48,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(v) => Path::new(v),
         None => return Err(ChrootError::MissingNewRoot.into()),
     };
+
+    let skip_chdir = matches.get_flag(options::SKIP_CHDIR);
+    // We are resolving the path in case it is a symlink or /. or /../
+    if skip_chdir
+        && canonicalize(newroot, MissingHandling::Normal, ResolveMode::Logical)
+            .unwrap()
+            .to_str()
+            != Some("/")
+    {
+        return Err(UUsageError::new(
+            125,
+            "option --skip-chdir only permitted if NEWROOT is old '/'",
+        ));
+    }
 
     if !newroot.is_dir() {
         return Err(ChrootError::NoSuchDirectory(format!("{}", newroot.display())).into());
@@ -101,7 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -153,13 +168,14 @@ pub fn uu_app<'a>() -> Command<'a> {
                     "Use this option to not change the working directory \
                     to / after changing the root directory to newroot, \
                     i.e., inside the chroot.",
-                ),
+                )
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COMMAND)
+                .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::CommandName)
                 .hide(true)
-                .multiple_occurrences(true)
                 .index(2),
         )
 }

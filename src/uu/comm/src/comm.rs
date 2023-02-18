@@ -15,9 +15,9 @@ use uucore::error::FromIo;
 use uucore::error::UResult;
 use uucore::format_usage;
 
-use clap::{crate_version, Arg, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 
-static ABOUT: &str = "compare two sorted files line by line";
+static ABOUT: &str = "Compare two sorted files line by line";
 static LONG_HELP: &str = "";
 const USAGE: &str = "{} [OPTION]... FILE1 FILE2";
 
@@ -29,23 +29,15 @@ mod options {
     pub const DELIMITER_DEFAULT: &str = "\t";
     pub const FILE_1: &str = "FILE1";
     pub const FILE_2: &str = "FILE2";
+    pub const TOTAL: &str = "total";
 }
 
-fn mkdelim(col: usize, opts: &ArgMatches) -> String {
-    let mut s = String::new();
-    let delim = match opts.get_one::<String>(options::DELIMITER).unwrap().as_str() {
-        "" => "\0",
-        delim => delim,
-    };
-
-    if col > 1 && !opts.contains_id(options::COLUMN_1) {
-        s.push_str(delim.as_ref());
+fn column_width(col: &str, opts: &ArgMatches) -> usize {
+    if opts.get_flag(col) {
+        0
+    } else {
+        1
     }
-    if col > 2 && !opts.contains_id(options::COLUMN_2) {
-        s.push_str(delim.as_ref());
-    }
-
-    s
 }
 
 fn ensure_nl(line: &mut String) {
@@ -69,12 +61,25 @@ impl LineReader {
 }
 
 fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
-    let delim: Vec<String> = (0..4).map(|col| mkdelim(col, opts)).collect();
+    let delim = match opts.get_one::<String>(options::DELIMITER).unwrap().as_str() {
+        "" => "\0",
+        delim => delim,
+    };
+
+    let width_col_1 = column_width(options::COLUMN_1, opts);
+    let width_col_2 = column_width(options::COLUMN_2, opts);
+
+    let delim_col_2 = delim.repeat(width_col_1);
+    let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
 
     let ra = &mut String::new();
     let mut na = a.read_line(ra);
     let rb = &mut String::new();
     let mut nb = b.read_line(rb);
+
+    let mut total_col_1 = 0;
+    let mut total_col_2 = 0;
+    let mut total_col_3 = 0;
 
     while na.is_ok() || nb.is_ok() {
         let ord = match (na.is_ok(), nb.is_ok()) {
@@ -91,32 +96,39 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
 
         match ord {
             Ordering::Less => {
-                if !opts.contains_id(options::COLUMN_1) {
+                if !opts.get_flag(options::COLUMN_1) {
                     ensure_nl(ra);
-                    print!("{}{}", delim[1], ra);
+                    print!("{ra}");
                 }
                 ra.clear();
                 na = a.read_line(ra);
+                total_col_1 += 1;
             }
             Ordering::Greater => {
-                if !opts.contains_id(options::COLUMN_2) {
+                if !opts.get_flag(options::COLUMN_2) {
                     ensure_nl(rb);
-                    print!("{}{}", delim[2], rb);
+                    print!("{delim_col_2}{rb}");
                 }
                 rb.clear();
                 nb = b.read_line(rb);
+                total_col_2 += 1;
             }
             Ordering::Equal => {
-                if !opts.contains_id(options::COLUMN_3) {
+                if !opts.get_flag(options::COLUMN_3) {
                     ensure_nl(ra);
-                    print!("{}{}", delim[3], ra);
+                    print!("{delim_col_3}{ra}");
                 }
                 ra.clear();
                 rb.clear();
                 na = a.read_line(ra);
                 nb = b.read_line(rb);
+                total_col_3 += 1;
             }
         }
+    }
+
+    if opts.get_flag(options::TOTAL) {
+        println!("{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}total");
     }
 }
 
@@ -124,7 +136,7 @@ fn open_file(name: &str) -> io::Result<LineReader> {
     match name {
         "-" => Ok(LineReader::Stdin(stdin())),
         _ => {
-            let f = File::open(&Path::new(name))?;
+            let f = File::open(Path::new(name))?;
             Ok(LineReader::FileIn(BufReader::new(f)))
         }
     }
@@ -144,7 +156,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app<'a>() -> Command<'a> {
+pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -154,17 +166,20 @@ pub fn uu_app<'a>() -> Command<'a> {
         .arg(
             Arg::new(options::COLUMN_1)
                 .short('1')
-                .help("suppress column 1 (lines unique to FILE1)"),
+                .help("suppress column 1 (lines unique to FILE1)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_2)
                 .short('2')
-                .help("suppress column 2 (lines unique to FILE2)"),
+                .help("suppress column 2 (lines unique to FILE2)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::COLUMN_3)
                 .short('3')
-                .help("suppress column 3 (lines that appear in both files)"),
+                .help("suppress column 3 (lines that appear in both files)")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::DELIMITER)
@@ -183,5 +198,11 @@ pub fn uu_app<'a>() -> Command<'a> {
             Arg::new(options::FILE_2)
                 .required(true)
                 .value_hint(clap::ValueHint::FilePath),
+        )
+        .arg(
+            Arg::new(options::TOTAL)
+                .long(options::TOTAL)
+                .help("output a summary")
+                .action(ArgAction::SetTrue),
         )
 }

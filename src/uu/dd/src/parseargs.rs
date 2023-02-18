@@ -14,7 +14,7 @@ use crate::conversion_tables::ConversionTable;
 use std::error::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
-use uucore::parse_size::ParseSizeError;
+use uucore::parse_size::{ParseSizeError, Parser as SizeParser};
 use uucore::show_warning;
 
 /// Parser Errors describe errors with parser input
@@ -394,7 +394,7 @@ impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnrecognizedOperand(arg) => {
-                write!(f, "Unrecognized operand '{}'", arg)
+                write!(f, "Unrecognized operand '{arg}'")
             }
             Self::MultipleFmtTable => {
                 write!(
@@ -415,37 +415,37 @@ impl std::fmt::Display for ParseError {
                 // Additional message about 'dd --help' is displayed only in this situation.
                 write!(
                     f,
-                    "invalid input flag: ‘{}’\nTry 'dd --help' for more information.",
-                    arg
+                    "invalid input flag: ‘{}’\nTry '{} --help' for more information.",
+                    arg,
+                    uucore::execution_phrase()
                 )
             }
             Self::ConvFlagNoMatch(arg) => {
-                write!(f, "Unrecognized conv=CONV -> {}", arg)
+                write!(f, "Unrecognized conv=CONV -> {arg}")
             }
             Self::MultiplierStringParseFailure(arg) => {
-                write!(f, "Unrecognized byte multiplier -> {}", arg)
+                write!(f, "Unrecognized byte multiplier -> {arg}")
             }
             Self::MultiplierStringOverflow(arg) => {
                 write!(
                     f,
-                    "Multiplier string would overflow on current system -> {}",
-                    arg
+                    "Multiplier string would overflow on current system -> {arg}"
                 )
             }
             Self::BlockUnblockWithoutCBS => {
                 write!(f, "conv=block or conv=unblock specified without cbs=N")
             }
             Self::StatusLevelNotRecognized(arg) => {
-                write!(f, "status=LEVEL not recognized -> {}", arg)
+                write!(f, "status=LEVEL not recognized -> {arg}")
             }
             Self::BsOutOfRange(arg) => {
-                write!(f, "{}=N cannot fit into memory", arg)
+                write!(f, "{arg}=N cannot fit into memory")
             }
             Self::Unimplemented(arg) => {
-                write!(f, "feature not implemented on this system -> {}", arg)
+                write!(f, "feature not implemented on this system -> {arg}")
             }
             Self::InvalidNumber(arg) => {
-                write!(f, "invalid number: ‘{}’", arg)
+                write!(f, "invalid number: ‘{arg}’")
             }
         }
     }
@@ -499,10 +499,14 @@ fn parse_bytes_only(s: &str) -> Result<u64, ParseError> {
 /// assert_eq!(parse_bytes_no_x("2k", "2k").unwrap(), 2 * 1024);
 /// ```
 fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
+    let parser = SizeParser {
+        capital_b_bytes: true,
+        ..Default::default()
+    };
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
-        (None, None, None) => match uucore::parse_size::parse_size(s) {
+        (None, None, None) => match parser.parse(s) {
             Ok(n) => (n, 1),
-            Err(ParseSizeError::InvalidSuffix(_)) | Err(ParseSizeError::ParseFailure(_)) => {
+            Err(ParseSizeError::InvalidSuffix(_) | ParseSizeError::ParseFailure(_)) => {
                 return Err(ParseError::InvalidNumber(full.to_string()))
             }
             Err(ParseSizeError::SizeTooBig(_)) => {
