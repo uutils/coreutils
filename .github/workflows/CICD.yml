@@ -136,6 +136,25 @@ jobs:
         S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::${fault_type} file=\1,line=\2::${fault_prefix}: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt -- \"\1\"\`)/p" ; fault=true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
+  fuzz:
+    name: Run the Fuzzer
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: Swatinem/rust-cache@v2
+    - name: Install `rust` toolchain
+      run: |
+        rustup toolchain install nightly --no-self-update --profile minimal
+        rustup default nightly
+    - name: Install `cargo-fuzz`
+      run: cargo install cargo-fuzz
+    - name: Run the fuzzer on date for 60 seconds
+      shell: bash
+      run: |
+        ## Run it
+        cd src/uu/date
+        cargo +nightly fuzz run fuzz_target_1 -- -max_total_time=60 -detect_leaks=0
+
   style_lint:
     name: Style/lint
     runs-on: ${{ matrix.job.os }}
