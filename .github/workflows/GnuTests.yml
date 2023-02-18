@@ -201,6 +201,9 @@ jobs:
         REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
+        # https://github.com/uutils/coreutils/issues/4294
+        # https://github.com/uutils/coreutils/issues/4295
+        IGNORE_INTERMITTENT='tests/tail-2/inotify-dir-recreate tests/misc/timeout tests/rm/rm1'
 
         mkdir -p ${{ steps.vars.outputs.path_reference }}
 
@@ -232,10 +235,18 @@ jobs:
           do
             if ! grep -Fxq ${LINE}<<<"${REF_FAILING}"
             then
-              MSG="GNU test failed: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
-              echo "::error ::$MSG"
-              echo $MSG >> ${COMMENT_LOG}
-              have_new_failures="true"
+              if ! grep ${LINE} ${IGNORE_INTERMITTENT}
+              then
+                MSG="GNU test failed: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+                echo "::error ::$MSG"
+                echo $MSG >> ${COMMENT_LOG}
+                have_new_failures="true"
+              else
+                MSG="Skip an intermittent issue ${LINE}"
+                echo "::warning ::$MSG"
+                echo $MSG >> ${COMMENT_LOG}
+                echo ""
+              fi
             fi
           done
           for LINE in ${REF_ERROR}
