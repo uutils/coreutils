@@ -12,15 +12,21 @@ use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{ExitCode, UResult, USimpleError, UUsageError};
+use uucore::error::{set_exit_code, ExitCode, UResult, USimpleError, UUsageError};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, show, show_error};
 
-static ABOUT: &str = "Change the mode of each FILE to MODE.
- With --reference, change the mode of each FILE to that of RFILE.";
+const ABOUT: &str = "Change the mode of each FILE to MODE.\n\
+    With --reference, change the mode of each FILE to that of RFILE.";
+const USAGE: &str = "\
+       {} [OPTION]... MODE[,MODE]... FILE...
+       {} [OPTION]... OCTAL-MODE FILE...
+       {} [OPTION]... --reference=RFILE FILE...";
+const LONG_USAGE: &str =
+    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.";
 
 mod options {
     pub const CHANGES: &str = "changes";
@@ -34,15 +40,6 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const USAGE: &str = "\
-    {} [OPTION]... MODE[,MODE]... FILE...
-    {} [OPTION]... OCTAL-MODE FILE...
-    {} [OPTION]... --reference=RFILE FILE...";
-
-fn get_long_usage() -> &'static str {
-    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'."
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args.collect_lossy();
@@ -51,9 +48,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
     let mode_had_minus_prefix = mode::strip_minus_from_mode(&mut args);
 
-    let after_help = get_long_usage();
-
-    let matches = uu_app().after_help(after_help).try_get_matches_from(args)?;
+    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
 
     let changes = matches.get_flag(options::CHANGES);
     let quiet = matches.get_flag(options::QUIET);
@@ -200,21 +195,24 @@ impl Chmoder {
                         filename.quote()
                     );
                     if !self.quiet {
-                        return Err(USimpleError::new(
+                        show!(USimpleError::new(
                             1,
                             format!("cannot operate on dangling symlink {}", filename.quote()),
                         ));
                     }
                 } else if !self.quiet {
-                    return Err(USimpleError::new(
+                    show!(USimpleError::new(
                         1,
                         format!(
                             "cannot access {}: No such file or directory",
                             filename.quote()
-                        ),
+                        )
                     ));
                 }
-                return Err(ExitCode::new(1));
+                // GNU exits with exit code 1 even if -q or --quiet are passed
+                // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
+                set_exit_code(1);
+                continue;
             }
             if self.recursive && self.preserve_root && filename == "/" {
                 return Err(USimpleError::new(

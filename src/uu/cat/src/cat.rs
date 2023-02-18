@@ -33,11 +33,10 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
-use uucore::format_usage;
+use uucore::{format_usage, help_section, help_usage};
 
-static USAGE: &str = "{} [OPTION]... [FILE]...";
-static ABOUT: &str = "Concatenate FILE(s), or standard input, to standard output
-With no FILE, or when FILE is -, read standard input.";
+const USAGE: &str = help_usage!("cat.md");
+const ABOUT: &str = help_section!("about", "cat.md");
 
 #[derive(Error, Debug)]
 enum CatError {

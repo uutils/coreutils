@@ -879,6 +879,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fundu"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "925250bc259498d4008ee072bf16586083ab2c491aa4b06b3c4d0a6556cebd74"
+
+[[package]]
 name = "futures"
 version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2807,7 +2813,6 @@ version = "0.0.17"
 dependencies = [
  "clap",
  "libc",
- "num_cpus",
  "uucore",
 ]
 
@@ -3094,9 +3099,9 @@ version = "0.0.17"
 dependencies = [
  "atty",
  "clap",
+ "fundu",
  "libc",
  "memchr",
- "nix",
  "notify",
  "same-file",
  "uucore",

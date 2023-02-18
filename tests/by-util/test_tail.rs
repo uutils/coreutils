@@ -13,6 +13,7 @@ use crate::common::random::*;
 use crate::common::util::*;
 use pretty_assertions::assert_eq;
 use rand::distributions::Alphanumeric;
+use rstest::rstest;
 use std::char::from_digit;
 use std::fs::File;
 use std::io::Write;
@@ -4453,29 +4454,24 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same
         .stdout_only(expected_stdout);
 }
 
-#[test]
-#[cfg(disable_until_fixed)]
-fn test_args_sleep_interval_when_illegal_argument_then_usage_error() {
-    let scene = TestScenario::new(util_name!());
-    for interval in [
-        &format!("{}0", f64::MAX),
-        &format!("{}0.0", f64::MAX),
-        "1_000",
-        ".",
-        "' '",
-        "",
-        " ",
-        "0,0",
-        "one.zero",
-        ".zero",
-        "one.",
-        "0..0",
-    ] {
-        scene
-            .ucmd()
-            .args(&["--sleep-interval", interval])
-            .run()
-            .usage_error(format!("invalid number of seconds: '{}'", interval))
-            .code_is(1);
-    }
+#[rstest]
+#[case::exponent_exceed_float_max("1.0e2048")]
+#[case::underscore_delimiter("1_000")]
+#[case::only_point(".")]
+#[case::space_in_primes("' '")]
+#[case::space(" ")]
+#[case::empty("")]
+#[case::comma_separator("0,0")]
+#[case::words_nominator_fract("one.zero")]
+#[case::words_fract(".zero")]
+#[case::words_nominator("one.")]
+#[case::two_points("0..0")]
+#[case::seconds_unit("1.0s")]
+#[case::circumflex_exponent("1.0e^1000")]
+fn test_args_sleep_interval_when_illegal_argument_then_usage_error(#[case] sleep_interval: &str) {
+    new_ucmd!()
+        .args(&["--sleep-interval", sleep_interval])
+        .run()
+        .usage_error(format!("invalid number of seconds: '{sleep_interval}'"))
+        .code_is(1);
 }

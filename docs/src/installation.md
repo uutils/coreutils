@@ -43,13 +43,23 @@ pacman -S uutils-coreutils
 
 ### Debian
 
-[![Debian Unstable package](https://repology.org/badge/version-for-repo/debian_unstable/uutils-coreutils.svg)](https://packages.debian.org/sid/source/rust-coreutils)
+[![Debian package](https://repology.org/badge/version-for-repo/debian_unstable/uutils-coreutils.svg)](https://packages.debian.org/sid/source/rust-coreutils)
 
 ```bash
 apt install rust-coreutils
+# To use it:
+export PATH=/usr/lib/cargo/bin/coreutils:$PATH
 ```
 
-> **Note**: Requires the `unstable` repository.
+> **Note**: Only available from Bookworm (Debian 12)
+
+### Gentoo
+
+[![Gentoo package](https://repology.org/badge/version-for-repo/gentoo/uutils-coreutils.svg)](https://packages.gentoo.org/packages/sys-apps/uutils)
+
+```bash
+emerge -pv sys-apps/uutils
+```
 
 ### Manjaro
 ![Manjaro Stable package](https://repology.org/badge/version-for-repo/manjaro_stable/uutils-coreutils.svg)
@@ -68,6 +78,18 @@ pamac install uutils-coreutils
 ```bash
 nix-env -iA nixos.uutils-coreutils
 ```
+
+### Ubuntu
+
+[![Ubuntu package](https://repology.org/badge/version-for-repo/ubuntu_23_04/uutils-coreutils.svg)](https://packages.ubuntu.com/source/lunar/rust-coreutils)
+
+```bash
+apt install rust-coreutils
+# To use it:
+export PATH=/usr/lib/cargo/bin/coreutils:$PATH
+```
+
+> **Note**: Only available from Kinetic (Ubuntu 22.10)
 
 ## MacOS
 

@@ -20,6 +20,11 @@ on: [push, pull_request]
 permissions:
   contents: read # to fetch code (actions/checkout)
 
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   cargo-deny:
     name: Style/cargo-deny
