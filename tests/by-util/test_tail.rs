@@ -4768,7 +4768,6 @@ fn test_obsolete_encoding_unix() {
 
     let scene = TestScenario::new(util_name!());
     let invalid_utf8_arg = OsStr::from_bytes(&[b'-', INVALID_UTF8, b'b']);
-    let valid_utf8_arg = OsStr::from_bytes(&[b'-', b'b']);
 
     scene
         .ucmd()
@@ -4776,13 +4775,6 @@ fn test_obsolete_encoding_unix() {
         .fails()
         .no_stdout()
         .stderr_is("tail: bad argument encoding: '-�b'\n")
-        .code_is(1);
-    scene
-        .ucmd()
-        .args(&[valid_utf8_arg, invalid_utf8_arg])
-        .fails()
-        .no_stdout()
-        .stderr_is("tail: bad argument encoding\n")
         .code_is(1);
 }
 
@@ -4794,7 +4786,6 @@ fn test_obsolete_encoding_windows() {
 
     let scene = TestScenario::new(util_name!());
     let invalid_utf16_arg = OsString::from_wide(&['-' as u16, INVALID_UTF16, 'b' as u16]);
-    let valid_utf16_arg = OsString::from("-b");
 
     scene
         .ucmd()
@@ -4802,12 +4793,5 @@ fn test_obsolete_encoding_windows() {
         .fails()
         .no_stdout()
         .stderr_is("tail: bad argument encoding: '-�b'\n")
-        .code_is(1);
-    scene
-        .ucmd()
-        .args(&[&valid_utf16_arg, &invalid_utf16_arg])
-        .fails()
-        .no_stdout()
-        .stderr_is("tail: bad argument encoding\n")
         .code_is(1);
 }

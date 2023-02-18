@@ -13,6 +13,7 @@ use fundu::DurationParser;
 use is_terminal::IsTerminal;
 use same_file::Handle;
 use std::collections::VecDeque;
+use std::ffi::OsString;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
@@ -144,7 +145,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn from_obsolete_args(args: &parse::ObsoleteArgs, name: Option<&str>) -> Self {
+    pub fn from_obsolete_args(args: &parse::ObsoleteArgs, name: Option<OsString>) -> Self {
         let mut settings: Self = Self {
             sleep_sec: Duration::from_secs_f32(1.0),
             max_unchanged_stats: 5,
@@ -159,7 +160,7 @@ impl Settings {
         }
         settings.mode = FilterMode::from_obsolete_args(args);
         let input = if let Some(name) = name {
-            Input::from(name.to_string())
+            Input::from(&name)
         } else {
             Input::default()
         };
@@ -249,7 +250,7 @@ impl Settings {
 
         let mut inputs: VecDeque<Input> = matches
             .get_many::<String>(options::ARG_FILES)
-            .map(|v| v.map(|string| Input::from(string.clone())).collect())
+            .map(|v| v.map(|string| Input::from(&string)).collect())
             .unwrap_or_default();
 
         // apply default and add '-' to inputs if none is present
@@ -575,7 +576,10 @@ mod tests {
 
     #[test]
     fn test_parse_obsolete_settings_f() {
-        let args = ObsoleteArgs { follow: true, ..Default::default() };
+        let args = ObsoleteArgs {
+            follow: true,
+            ..Default::default()
+        };
         let result = Settings::from_obsolete_args(&args, None);
         assert_eq!(result.follow, Some(FollowMode::Descriptor));
 
