@@ -6,7 +6,6 @@
 //  * file that was distributed with this source code.
 
 use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, Command};
-use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::PathBuf;
@@ -301,7 +300,7 @@ impl Write for MultiWriter {
         let mut aborted = None;
         let mode = self.output_error_mode.clone();
         let mut errors = 0;
-        RetainMut::retain_mut(&mut self.writers, |writer| {
+        self.writers.retain_mut(|writer| {
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
@@ -332,7 +331,7 @@ impl Write for MultiWriter {
         let mut aborted = None;
         let mode = self.output_error_mode.clone();
         let mut errors = 0;
-        RetainMut::retain_mut(&mut self.writers, |writer| {
+        self.writers.retain_mut(|writer| {
             let result = writer.flush();
             match result {
                 Err(f) => {

@@ -879,6 +879,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fundu"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "925250bc259498d4008ee072bf16586083ab2c491aa4b06b3c4d0a6556cebd74"
+
+[[package]]
 name = "futures"
 version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1332,8 +1338,6 @@ dependencies = [
  "bitflags",
  "cfg-if",
  "libc",
- "memoffset",
- "pin-utils",
  "static_assertions",
 ]
 
@@ -1835,12 +1839,6 @@ checksum = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
 dependencies = [
  "winapi",
 ]
-
-[[package]]
-name = "retain_mut"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c31b5c4033f8fdde8700e4657be2c497e7288f01515be52168c631e2e4d4086"
 
 [[package]]
 name = "rlimit"
@@ -2824,7 +2822,6 @@ version = "0.0.17"
 dependencies = [
  "clap",
  "libc",
- "num_cpus",
  "uucore",
 ]
 
@@ -3111,9 +3108,9 @@ version = "0.0.17"
 dependencies = [
  "atty",
  "clap",
+ "fundu",
  "libc",
  "memchr",
- "nix",
  "notify",
  "same-file",
  "uucore",
@@ -3127,7 +3124,6 @@ version = "0.0.17"
 dependencies = [
  "clap",
  "libc",
- "retain_mut",
  "uucore",
 ]
 

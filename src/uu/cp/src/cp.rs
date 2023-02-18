@@ -40,7 +40,7 @@ use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
     canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
-use uucore::{crash, format_usage, prompt_yes, show_error, show_warning};
+use uucore::{crash, format_usage, help_section, help_usage, prompt_yes, show_error, show_warning};
 
 use crate::copydir::copy_directory;
 
@@ -228,13 +228,10 @@ pub struct Options {
     progress_bar: bool,
 }
 
-static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
+const ABOUT: &str = help_section!("about", "cp.md");
 static EXIT_ERR: i32 = 1;
 
-const USAGE: &str = "\
-    {} [OPTION]... [-T] SOURCE DEST
-    {} [OPTION]... SOURCE... DIRECTORY
-    {} [OPTION]... -t DIRECTORY SOURCE...";
+const USAGE: &str = help_usage!("cp.md");
 
 // Argument constants
 mod options {
@@ -523,7 +520,7 @@ pub fn uu_app() -> Command {
                 .long(options::SPARSE)
                 .value_name("WHEN")
                 .value_parser(["never", "auto", "always"])
-                .help("NotImplemented: control creation of sparse files. See below"),
+                .help("control creation of sparse files. See below"),
         )
         // TODO: implement the following args
         .arg(

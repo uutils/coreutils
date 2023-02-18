@@ -950,7 +950,7 @@ fn test_ls_commas_trailing() {
         .arg("./test-commas-trailing-1")
         .arg("./test-commas-trailing-2")
         .succeeds()
-        .stdout_matches(&Regex::new(r"\S$").unwrap()); // matches if there is no whitespace at the end of stdout.
+        .stdout_matches(&Regex::new(r"\S\n$").unwrap());
 }
 
 #[test]

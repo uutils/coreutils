@@ -17,11 +17,11 @@ edition = "2021"
 path = "src/tac.rs"
 
 [dependencies]
-memchr = "2"
+memchr = { workspace=true }
 memmap2 = "0.5"
-regex = "1"
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.17", package="uucore", path="../../uucore" }
+regex = { workspace=true }
+clap = { workspace=true }
+uucore = { workspace=true }
 
 [[bin]]
 name = "tac"

@@ -37,8 +37,22 @@ struct Options {
     verbose: bool,
 }
 
-static ABOUT: &str = "Remove (unlink) the FILE(s)";
+const ABOUT: &str = "Remove (unlink) the FILE(s)";
 const USAGE: &str = "{} [OPTION]... FILE...";
+const LONG_USAGE: &str = "\
+By default, rm does not remove directories.  Use the --recursive (-r or -R)
+option to remove each listed directory, too, along with all of its contents
+
+To remove a file whose name starts with a '-', for example '-foo',
+use one of these commands:
+rm -- -foo
+
+rm ./-foo
+
+Note that if you use rm to remove a file, it might be possible to recover
+some of its contents, given sufficient expertise and/or time.  For greater
+assurance that the contents are truly unrecoverable, consider using shred.";
+
 static OPT_DIR: &str = "dir";
 static OPT_INTERACTIVE: &str = "interactive";
 static OPT_FORCE: &str = "force";
@@ -53,28 +67,9 @@ static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 
 static ARG_FILES: &str = "files";
 
-fn get_long_usage() -> String {
-    String::from(
-        "By default, rm does not remove directories.  Use the --recursive (-r or -R)
-        option to remove each listed directory, too, along with all of its contents
-
-        To remove a file whose name starts with a '-', for example '-foo',
-        use one of these commands:
-        rm -- -foo
-
-        rm ./-foo
-
-        Note that if you use rm to remove a file, it might be possible to recover
-        some of its contents, given sufficient expertise and/or time.  For greater
-        assurance that the contents are truly unrecoverable, consider using shred.",
-    )
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)

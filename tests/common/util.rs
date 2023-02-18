@@ -36,11 +36,6 @@ use std::{env, hint, thread};
 use tempfile::{Builder, TempDir};
 use uucore::Args;
 
-#[cfg(windows)]
-static PROGNAME: &str = concat!(env!("CARGO_PKG_NAME"), ".exe");
-#[cfg(not(windows))]
-static PROGNAME: &str = env!("CARGO_PKG_NAME");
-
 static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
 
@@ -603,7 +598,7 @@ impl CmdResult {
 
     /// asserts that
     /// 1.  the command resulted in stderr stream output that equals the
-    ///     passed in value, when both are trimmed of trailing whitespace
+    ///     passed in value
     /// 2.  the command resulted in empty (zero-length) stdout stream output
     #[track_caller]
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> &Self {
@@ -628,7 +623,7 @@ impl CmdResult {
 
     /// asserts that
     /// 1.  the command resulted in stderr stream output that equals the
-    ///     the following format when both are trimmed of trailing whitespace
+    ///     the following format
     ///     `"{util_name}: {msg}\nTry '{bin_path} {util_name} --help' for more information."`
     ///     This the expected format when a `UUsageError` is returned or when `show_error!` is called
     ///     `msg` should be the same as the one provided to `UUsageError::new` or `show_error!`
@@ -686,7 +681,7 @@ impl CmdResult {
     #[track_caller]
     pub fn stdout_matches(&self, regex: &regex::Regex) -> &Self {
         assert!(
-            regex.is_match(self.stdout_str().trim()),
+            regex.is_match(self.stdout_str()),
             "Stdout does not match regex:\n{}",
             self.stdout_str()
         );
@@ -696,7 +691,7 @@ impl CmdResult {
     #[track_caller]
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &Self {
         assert!(
-            !regex.is_match(self.stdout_str().trim()),
+            !regex.is_match(self.stdout_str()),
             "Stdout matches regex:\n{}",
             self.stdout_str()
         );
@@ -1101,13 +1096,7 @@ impl TestScenario {
     pub fn new(util_name: &str) -> Self {
         let tmpd = Rc::new(TempDir::new().unwrap());
         let ts = Self {
-            bin_path: {
-                // Instead of hard coding the path relative to the current
-                // directory, use Cargo's OUT_DIR to find path to executable.
-                // This allows tests to be run using profiles other than debug.
-                let target_dir = path_concat!(env!("OUT_DIR"), "..", "..", "..", PROGNAME);
-                PathBuf::from(AtPath::new(Path::new(&target_dir)).root_dir_resolved())
-            },
+            bin_path: PathBuf::from(env!("CARGO_BIN_EXE_coreutils")),
             util_name: String::from(util_name),
             fixtures: AtPath::new(tmpd.as_ref().path()),
             tmpd,

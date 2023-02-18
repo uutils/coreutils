@@ -417,7 +417,6 @@ fn test_with_pr_core_utils_tests() {
         let value = file_last_modified_time(&scenario, test_file_path);
         let mut arguments: Vec<&str> = flags
             .split(' ')
-            .into_iter()
             .filter(|i| i.trim() != "")
             .collect::<Vec<&str>>();
 

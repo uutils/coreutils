@@ -5,9 +5,6 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// TODO remove this when https://github.com/rust-lang/rust-clippy/issues/6902 is fixed
-#![allow(clippy::use_self)]
-
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
@@ -18,8 +15,14 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 
-static ABOUT: &str = "Report or omit repeated lines.";
+const ABOUT: &str = "Report or omit repeated lines.";
 const USAGE: &str = "{} [OPTION]... [INPUT [OUTPUT]]...";
+const LONG_USAGE: &str = "\
+    Filter adjacent matching lines from INPUT (or standard input),\n\
+    writing to OUTPUT (or standard output).\n\n\
+    Note: 'uniq' does not detect repeated lines unless they are adjacent.\n\
+    You may want to sort the input first, or use 'sort -u' without 'uniq'.";
+
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
     pub static CHECK_CHARS: &str = "check-chars";
@@ -244,20 +247,9 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Optio
     })
 }
 
-fn get_long_usage() -> String {
-    String::from(
-        "Filter adjacent matching lines from INPUT (or standard input),\n\
-        writing to OUTPUT (or standard output).
-        Note: 'uniq' does not detect repeated lines unless they are adjacent.\n\
-        You may want to sort the input first, or use 'sort -u' without 'uniq'.\n",
-    )
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)
