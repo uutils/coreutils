@@ -14,6 +14,11 @@ on: [push, pull_request]
 permissions:
   contents: read
 
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   gnu:
     permissions:
