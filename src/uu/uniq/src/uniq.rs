@@ -254,6 +254,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
+    println!("{:?}", matches.indices_of("6").unwrap().collect::<Vec<usize>>());
+
+    let mut occrs = {0..=9}
+    .map(|x| {
+        let s = x.to_string();
+        let q = s.as_str();
+        matches.indices_of(q).unwrap().map(
+            |n| {
+                if matches.get_flag(q) {
+                    Some((n,q.to_owned()))
+                } else {
+                    None
+                }
+            }
+        ).flatten().collect::<Vec<(usize,String)>>()
+    }
+    ).flatten().collect::<Vec<(usize,String)>>();
+
+    occrs.sort();
+    println!("{occrs:?}");
+
     let (in_file_name, out_file_name) = match files.len() {
         0 => ("-".to_owned(), "-".to_owned()),
         1 => (files[0].clone(), "-".to_owned()),
@@ -387,6 +408,56 @@ pub fn uu_app() -> Command {
                 .long(options::ZERO_TERMINATED)
                 .help("end lines with 0 byte, not newline")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("0")
+            .short('0')
+            .action(ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("1")
+            .short('1')
+            .action(ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("2")
+            .short('2')
+            .action(ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("3")
+            .short('3')
+            .action(ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("4")
+            .short('4')
+            .action(ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("5")
+            .short('5')
+            .action(ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("6")
+            .short('6')
+            .action(ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("7")
+            .short('7')
+            .action(ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("8")
+            .short('8')
+            .action(ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new("9")
+            .short('9')
+            .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(ARG_FILES)
