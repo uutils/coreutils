@@ -4737,11 +4737,9 @@ fn test_gnu_args_f() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let mut p = scene
-        .ucmd()
-        .set_stdin(Stdio::piped())
-        .arg("+f")
-        .run_no_wait();
+    let source = "file";
+    at.touch(source);
+    let mut p = scene.ucmd().args(&["+f", source]).run_no_wait();
     p.make_assertion_with_delay(500).is_alive();
     p.kill()
         .make_assertion()
@@ -4749,9 +4747,11 @@ fn test_gnu_args_f() {
         .no_stderr()
         .no_stdout();
 
-    let source = "file";
-    at.touch(source);
-    let mut p = scene.ucmd().args(&["+f", source]).run_no_wait();
+    let mut p = scene
+        .ucmd()
+        .set_stdin(Stdio::piped())
+        .arg("+f")
+        .run_no_wait();
     p.make_assertion_with_delay(500).is_alive();
     p.kill()
         .make_assertion()

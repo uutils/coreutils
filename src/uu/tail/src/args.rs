@@ -130,7 +130,7 @@ pub enum VerificationResult {
     NoOutput,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Settings {
     pub follow: Option<FollowMode>,
     pub max_unchanged_stats: u32,
@@ -144,13 +144,26 @@ pub struct Settings {
     pub inputs: VecDeque<Input>,
 }
 
-impl Settings {
-    pub fn from_obsolete_args(args: &parse::ObsoleteArgs, name: Option<OsString>) -> Self {
-        let mut settings: Self = Self {
-            sleep_sec: Duration::from_secs_f32(1.0),
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
             max_unchanged_stats: 5,
-            ..Default::default()
-        };
+            sleep_sec: Duration::from_secs_f32(1.0),
+            follow: Default::default(),
+            mode: Default::default(),
+            pid: Default::default(),
+            retry: Default::default(),
+            use_polling: Default::default(),
+            verbose: Default::default(),
+            presume_input_pipe: Default::default(),
+            inputs: Default::default(),
+        }
+    }
+}
+
+impl Settings {
+    pub fn from_obsolete_args(args: &parse::ObsoleteArgs, name: Option<&OsString>) -> Self {
+        let mut settings: Self = Default::default();
         if args.follow {
             settings.follow = if name.is_some() {
                 Some(FollowMode::Name)
@@ -170,24 +183,24 @@ impl Settings {
 
     pub fn from(matches: &clap::ArgMatches) -> UResult<Self> {
         let mut settings: Self = Self {
-            sleep_sec: Duration::from_secs_f32(1.0),
-            max_unchanged_stats: 5,
+            follow: if matches.get_flag(options::FOLLOW_RETRY) {
+                Some(FollowMode::Name)
+            } else if matches.value_source(options::FOLLOW) != Some(ValueSource::CommandLine) {
+                None
+            } else if matches.get_one::<String>(options::FOLLOW)
+                == Some(String::from("name")).as_ref()
+            {
+                Some(FollowMode::Name)
+            } else {
+                Some(FollowMode::Descriptor)
+            },
+            retry: matches.get_flag(options::RETRY) || matches.get_flag(options::FOLLOW_RETRY),
+            use_polling: matches.get_flag(options::USE_POLLING),
+            mode: FilterMode::from(matches)?,
+            verbose: matches.get_flag(options::verbosity::VERBOSE),
+            presume_input_pipe: matches.get_flag(options::PRESUME_INPUT_PIPE),
             ..Default::default()
         };
-
-        settings.follow = if matches.get_flag(options::FOLLOW_RETRY) {
-            Some(FollowMode::Name)
-        } else if matches.value_source(options::FOLLOW) != Some(ValueSource::CommandLine) {
-            None
-        } else if matches.get_one::<String>(options::FOLLOW) == Some(String::from("name")).as_ref()
-        {
-            Some(FollowMode::Name)
-        } else {
-            Some(FollowMode::Descriptor)
-        };
-
-        settings.retry =
-            matches.get_flag(options::RETRY) || matches.get_flag(options::FOLLOW_RETRY);
 
         if let Some(source) = matches.get_one::<String>(options::SLEEP_INT) {
             // Advantage of `fundu` over `Duration::(try_)from_secs_f64(source.parse().unwrap())`:
@@ -204,8 +217,6 @@ impl Settings {
                         UUsageError::new(1, format!("invalid number of seconds: '{source}'"))
                     })?;
         }
-
-        settings.use_polling = matches.get_flag(options::USE_POLLING);
 
         if let Some(s) = matches.get_one::<String>(options::MAX_UNCHANGED_STATS) {
             settings.max_unchanged_stats = match s.parse::<u32>() {
@@ -246,8 +257,6 @@ impl Settings {
             }
         }
 
-        settings.mode = FilterMode::from(matches)?;
-
         let mut inputs: VecDeque<Input> = matches
             .get_many::<String>(options::ARG_FILES)
             .map(|v| v.map(|string| Input::from(&string)).collect())
@@ -258,12 +267,9 @@ impl Settings {
             inputs.push_front(Input::default());
         }
 
-        settings.verbose = (matches.get_flag(options::verbosity::VERBOSE) || inputs.len() > 1)
-            && !matches.get_flag(options::verbosity::QUIET);
+        settings.verbose = inputs.len() > 1 && !matches.get_flag(options::verbosity::QUIET);
 
         settings.inputs = inputs;
-
-        settings.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         Ok(settings)
     }
@@ -342,6 +348,19 @@ impl Settings {
 
         VerificationResult::Ok
     }
+
+    pub fn is_default(&self) -> bool {
+        let default = Self::default();
+        self.max_unchanged_stats == default.max_unchanged_stats
+            && self.sleep_sec == default.sleep_sec
+            && self.follow == default.follow
+            && self.mode == default.mode
+            && self.pid == default.pid
+            && self.retry == default.retry
+            && self.use_polling == default.use_polling
+            && (self.verbose == default.verbose || self.inputs.len() > 1)
+            && self.presume_input_pipe == default.presume_input_pipe
+    }
 }
 
 pub fn parse_obsolete(args: &str) -> UResult<Option<parse::ObsoleteArgs>> {
@@ -389,28 +408,42 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
     })
 }
 
-pub fn parse_args(mut args: impl uucore::Args) -> UResult<Settings> {
-    let first = args.next().unwrap();
-    let second = match args.next() {
+pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
+    let args_vec: Vec<OsString> = args.collect();
+    let clap_result = match uu_app().try_get_matches_from(args_vec.clone()) {
+        Ok(matches) => {
+            let settings = Settings::from(&matches)?;
+            if !settings.is_default() {
+                // non-default settings can't have obsolete arguments
+                return Ok(settings);
+            }
+            Ok(settings)
+        }
+        Err(err) => Err(err.into()),
+    };
+
+    // clap parsing failed or resulted to default -> check for obsolete/deprecated args
+    // argv[0] is always present
+    let second = match args_vec.get(1) {
         Some(second) => second,
-        None => return Settings::from(&uu_app().try_get_matches_from(vec![first])?),
+        None => return clap_result,
     };
     let second_str = match second.to_str() {
         Some(second_str) => second_str,
         None => {
-            let second_string = second.to_string_lossy();
+            let invalid_string = second.to_string_lossy();
             return Err(USimpleError::new(
                 1,
-                format!("bad argument encoding: '{second_string}'"),
+                format!("bad argument encoding: '{invalid_string}'"),
             ));
         }
     };
     match parse_obsolete(second_str)? {
-        Some(obsolete_args) => Ok(Settings::from_obsolete_args(&obsolete_args, args.next())),
-        None => {
-            let args = vec![first, second].into_iter().chain(args);
-            Settings::from(&uu_app().try_get_matches_from(args)?)
-        }
+        Some(obsolete_args) => Ok(Settings::from_obsolete_args(
+            &obsolete_args,
+            args_vec.get(2),
+        )),
+        None => clap_result,
     }
 }
 
@@ -583,7 +616,7 @@ mod tests {
         let result = Settings::from_obsolete_args(&args, None);
         assert_eq!(result.follow, Some(FollowMode::Descriptor));
 
-        let result = Settings::from_obsolete_args(&args, Some("test".into()));
+        let result = Settings::from_obsolete_args(&args, Some(&"file".into()));
         assert_eq!(result.follow, Some(FollowMode::Name));
     }
 }
