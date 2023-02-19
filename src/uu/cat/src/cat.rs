@@ -33,10 +33,10 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
-use uucore::{format_usage, help_section, help_usage};
+use uucore::{format_usage, help_about, help_usage};
 
 const USAGE: &str = help_usage!("cat.md");
-const ABOUT: &str = help_section!("about", "cat.md");
+const ABOUT: &str = help_about!("cat.md");
 
 #[derive(Error, Debug)]
 enum CatError {
