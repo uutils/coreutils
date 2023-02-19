@@ -254,9 +254,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    //println!("{:?}", matches.indices_of("6").unwrap().collect::<Vec<usize>>());
-
-
     let (in_file_name, out_file_name) = match files.len() {
         0 => ("-".to_owned(), "-".to_owned()),
         1 => (files[0].clone(), "-".to_owned()),
@@ -266,28 +263,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-
-    let mut occrs = {0..=9}
-    .map(|x| {
-        let s = x.to_string();
-        let q = s.as_str();
-        matches.indices_of(q).unwrap().map(
-            |n| {
-                if matches.get_flag(q) {
-                    Some((n,q.to_owned()))
-                } else {
-                    None
-                }
-            }
-        ).flatten().collect::<Vec<(usize,String)>>()
-    }
-    ).flatten().collect::<Vec<(usize,String)>>();
+    let mut occrs = { 0..=9 }
+        .flat_map(|x| {
+            let s = x.to_string();
+            let q = s.as_str();
+            matches
+                .indices_of(q)
+                .unwrap()
+                .filter_map(|n| {
+                    if matches.get_flag(q) {
+                        Some((n, q.to_owned()))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<(usize, String)>>()
+        })
+        .collect::<Vec<(usize, String)>>();
 
     occrs.sort();
 
     let skip_fields_modern: Option<usize> = opt_parsed(options::SKIP_FIELDS, &matches)?;
 
-    let skip_fields_old = occrs.iter().map(|x| x.to_owned().1).collect::<String>().parse::<usize>().ok();
+    let skip_fields_old = occrs
+        .iter()
+        .map(|x| x.to_owned().1)
+        .collect::<String>()
+        .parse::<usize>()
+        .ok();
 
     let uniq = Uniq {
         repeats_only: matches.get_flag(options::REPEATED)
