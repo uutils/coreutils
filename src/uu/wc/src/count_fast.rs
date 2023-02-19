@@ -7,8 +7,7 @@ use super::WordCountable;
 use std::io::{self, ErrorKind, Read};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use libc::S_IFIFO;
-use libc::S_IFLNK;
+use libc::{S_IFIFO, S_IFLNK};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::{fs::OpenOptions, os::unix::io::AsRawFd};
 #[cfg(any(target_os = "linux", target_os = "android"))]
