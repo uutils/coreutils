@@ -468,7 +468,6 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
-
         // Obsolete syntax for "-f 1"
         TestCase {
             name: "obs30",
@@ -478,7 +477,6 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
-
         TestCase {
             name: "31",
             args: &["-f", "1"],
