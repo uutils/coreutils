@@ -58,12 +58,19 @@ highlight = "all"
 # For each duplicate dependency, indicate the name of the dependency which
 # introduces it.
 # spell-checker: disable
-skip = []
+skip = [
+    { name = "windows-sys" },
+    { name = "hermit-abi" },
+    { name = "rustix" },
+    { name = "linux-raw-sys" },
+    { name = "io-lifetimes" },
+]
 # spell-checker: enable
 
 # This section is considered when running `cargo deny check sources`.
 # More documentation about the 'sources' section can be found here:
 # https://embarkstudios.github.io/cargo-deny/checks/sources/cfg.html
+
 [sources]
 unknown-registry = "warn"
 unknown-git = "warn"
