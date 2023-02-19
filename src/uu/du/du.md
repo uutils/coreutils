@@ -1,12 +1,9 @@
 # du
 
-## Usage
 ```
 du [OPTION]... [FILE]...
 du [OPTION]... --files0-from=F
 ```
-
-## About
 
 Estimate file space usage
 
