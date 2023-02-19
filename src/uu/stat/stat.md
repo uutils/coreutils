@@ -1,13 +1,10 @@
 # stat
 
-## About
-
-Display file or file system status.
-
-## Usage
 ```
 stat [OPTION]... FILE...
 ```
+
+Display file or file system status.
 
 ## Long Usage
 

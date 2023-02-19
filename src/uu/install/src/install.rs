@@ -558,12 +558,6 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                 if let Err(e) = fs::create_dir_all(to_create) {
                     return Err(InstallError::CreateDirFailed(to_create.to_path_buf(), e).into());
                 }
-
-                // Silent the warning as we want to the error message
-                #[allow(clippy::question_mark)]
-                if mode::chmod(to_create, b.mode()).is_err() {
-                    return Err(InstallError::ChmodFailed(to_create.to_path_buf()).into());
-                }
             }
         }
     }
