@@ -348,39 +348,33 @@ impl Settings {
 
         VerificationResult::Ok
     }
-
-    pub fn is_default(&self) -> bool {
-        let default = Self::default();
-        self.max_unchanged_stats == default.max_unchanged_stats
-            && self.sleep_sec == default.sleep_sec
-            && self.follow == default.follow
-            && self.mode == default.mode
-            && self.pid == default.pid
-            && self.retry == default.retry
-            && self.use_polling == default.use_polling
-            && (self.verbose == default.verbose || self.inputs.len() > 1)
-            && self.presume_input_pipe == default.presume_input_pipe
-    }
 }
 
-pub fn parse_obsolete(args: &str) -> UResult<Option<parse::ObsoleteArgs>> {
-    match parse::parse_obsolete(args) {
-        Some(Ok(args)) => Ok(Some(args)),
+pub fn parse_obsolete(arg: &OsString, input: Option<&OsString>) -> UResult<Option<Settings>> {
+    match parse::parse_obsolete(arg) {
+        Some(Ok(args)) => Ok(Some(Settings::from_obsolete_args(&args, input))),
         None => Ok(None),
-        Some(Err(e)) => Err(USimpleError::new(
-            1,
-            match e {
-                parse::ParseError::OutOfRange => format!(
-                    "invalid number: {}: Numerical result out of range",
-                    args.quote()
-                ),
-                parse::ParseError::Overflow => format!("invalid number: {}", args.quote()),
-                parse::ParseError::Context => format!(
-                    "option used in invalid context -- {}",
-                    args.chars().nth(1).unwrap_or_default()
-                ),
-            },
-        )),
+        Some(Err(e)) => {
+            let arg_str = arg.to_string_lossy();
+            Err(USimpleError::new(
+                1,
+                match e {
+                    parse::ParseError::OutOfRange => format!(
+                        "invalid number: {}: Numerical result out of range",
+                        arg_str.quote()
+                    ),
+                    parse::ParseError::Overflow => format!("invalid number: {}", arg_str.quote()),
+                    // this ensures compatibility to GNU's error message (as tested in misc/tail)
+                    parse::ParseError::Context => format!(
+                        "option used in invalid context -- {}",
+                        arg_str.chars().nth(1).unwrap_or_default()
+                    ),
+                    parse::ParseError::InvalidEncoding => {
+                        format!("bad argument encoding: '{arg_str}'")
+                    }
+                },
+            ))
+        }
     }
 }
 
@@ -410,39 +404,41 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
 
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let args_vec: Vec<OsString> = args.collect();
-    let clap_result = match uu_app().try_get_matches_from(args_vec.clone()) {
-        Ok(matches) => {
-            let settings = Settings::from(&matches)?;
-            if !settings.is_default() {
-                // non-default settings can't have obsolete arguments
-                return Ok(settings);
-            }
-            Ok(settings)
-        }
+    let clap_args = uu_app().try_get_matches_from(args_vec.clone());
+    let clap_result = match clap_args {
+        Ok(matches) => Ok(Settings::from(&matches)?),
         Err(err) => Err(err.into()),
     };
 
-    // clap parsing failed or resulted to default -> check for obsolete/deprecated args
-    // argv[0] is always present
-    let second = match args_vec.get(1) {
-        Some(second) => second,
-        None => return clap_result,
-    };
-    let second_str = match second.to_str() {
-        Some(second_str) => second_str,
-        None => {
-            let invalid_string = second.to_string_lossy();
-            return Err(USimpleError::new(
-                1,
-                format!("bad argument encoding: '{invalid_string}'"),
-            ));
-        }
-    };
-    match parse_obsolete(second_str)? {
-        Some(obsolete_args) => Ok(Settings::from_obsolete_args(
-            &obsolete_args,
-            args_vec.get(2),
-        )),
+    // clap isn't able to handle obsolete syntax.
+    // therefore, we want to check further for obsolete arguments.
+    // argv[0] is always present, argv[1] might be obsolete arguments
+    // argv[2] might contain an input file, argv[3] isn't allowed in obsolete mode
+    if args_vec.len() != 2 && args_vec.len() != 3 {
+        return clap_result;
+    }
+
+    // At this point, there are a few possible cases:
+    //
+    //    1. clap has succeeded and the arguments would be invalid for the obsolete syntax.
+    //    2. The case of `tail -c 5` is ambiguous. clap parses this as `tail -c5`,
+    //       but it could also be interpreted as valid obsolete syntax (tail -c on file '5').
+    //       GNU chooses to interpret this as `tail -c5`, like clap.
+    //    3. `tail -f foo` is also ambiguous, but has the same effect in both cases. We can safely
+    //        use the clap result here.
+    //    4. clap succeeded for obsolete arguments starting with '+', but misinterprets them as
+    //       input files (e.g. 'tail +f').
+    //    5. clap failed because of unknown flags, but possibly valid obsolete arguments
+    //        (e.g. tail -l; tail -10c).
+    //
+    // In cases 4 & 5, we want to try parsing the obsolete arguments, which corresponds to
+    // checking whether clap succeeded or the first argument starts with '+'.
+    let possible_obsolete_args = &args_vec[1];
+    if clap_result.is_ok() && !possible_obsolete_args.to_string_lossy().starts_with('+') {
+        return clap_result;
+    }
+    match parse_obsolete(possible_obsolete_args, args_vec.get(2))? {
+        Some(settings) => Ok(settings),
         None => clap_result,
     }
 }
@@ -477,6 +473,7 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .require_equals(true)
                 .value_parser(["descriptor", "name"])
+                .overrides_with(options::FOLLOW)
                 .help("Print the file as it grows"),
         )
         .arg(

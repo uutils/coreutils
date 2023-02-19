@@ -28,8 +28,7 @@ pub struct Input {
 
 impl Input {
     pub fn from<T: AsRef<OsStr>>(string: &T) -> Self {
-        let valid_string = string.as_ref().to_str();
-        let kind = if valid_string.is_some() && valid_string.unwrap() == text::DASH {
+        let kind = if string.as_ref() == Path::new(text::DASH) {
             InputKind::Stdin
         } else {
             InputKind::File(PathBuf::from(string.as_ref()))
