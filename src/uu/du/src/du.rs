@@ -36,7 +36,9 @@ use uucore::error::FromIo;
 use uucore::error::{UError, UResult};
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size, ParseSizeError};
-use uucore::{crash, format_usage, help_section, help_usage, show, show_error, show_warning};
+use uucore::{
+    crash, format_usage, help_about, help_section, help_usage, show, show_error, show_warning,
+};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -73,7 +75,7 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const ABOUT: &str = help_section!("about", "du.md");
+const ABOUT: &str = help_about!("du.md");
 const LONG_HELP: &str = help_section!("long help", "du.md");
 const USAGE: &str = help_usage!("du.md");
 
