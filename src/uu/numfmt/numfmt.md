@@ -1,11 +1,8 @@
 # numfmt
 
-## Usage
 ```
 numfmt [OPTION]... [NUMBER]...
 ```
-
-## About
 
 Convert numbers from/to human-readable strings
 

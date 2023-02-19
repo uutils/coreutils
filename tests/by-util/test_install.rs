@@ -125,6 +125,37 @@ fn test_install_ancestors_mode_directories() {
 }
 
 #[test]
+fn test_install_ancestors_mode_directories_with_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ancestor1 = "ancestor1";
+    let ancestor2 = "ancestor1/ancestor2";
+    let target_file = "ancestor1/ancestor2/target_file";
+    let directories_arg = "-D";
+    let mode_arg = "--mode=200";
+    let file = "file";
+    let probe = "probe";
+
+    at.mkdir(probe);
+    let default_perms = at.metadata(probe).permissions().mode();
+
+    at.touch(file);
+
+    ucmd.args(&[mode_arg, directories_arg, file, target_file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(ancestor1));
+    assert!(at.dir_exists(ancestor2));
+    assert!(at.file_exists(target_file));
+
+    assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
+    assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
+
+    // Expected mode only on the target_file.
+    assert_eq!(0o100_200_u32, at.metadata(target_file).permissions().mode());
+}
+
+#[test]
 fn test_install_parent_directories() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ancestor1 = "ancestor1";

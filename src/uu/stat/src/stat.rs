@@ -13,7 +13,9 @@ use uucore::fsext::{
     pretty_filetype, pretty_fstype, pretty_time, read_fs_list, statfs, BirthTime, FsMeta,
 };
 use uucore::libc::mode_t;
-use uucore::{entries, format_usage, help_section, help_usage, show_error, show_warning};
+use uucore::{
+    entries, format_usage, help_about, help_section, help_usage, show_error, show_warning,
+};
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
@@ -24,7 +26,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 
-const ABOUT: &str = help_section!("about", "stat.md");
+const ABOUT: &str = help_about!("stat.md");
 const USAGE: &str = help_usage!("stat.md");
 const LONG_USAGE: &str = help_section!("long usage", "stat.md");
 

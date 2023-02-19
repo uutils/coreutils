@@ -39,11 +39,11 @@ use clap::{crate_version, Arg, Command};
 use gcd::Gcd;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::help_section;
-use uucore::show_error;
+use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
-const ABOUT: &str = help_section!("about", "dd.md");
+const ABOUT: &str = help_about!("dd.md");
 const AFTER_HELP: &str = help_section!("after help", "dd.md");
+const USAGE: &str = help_usage!("dd.md");
 const BUF_INIT_BYTE: u8 = 0xDD;
 
 /// Final settings after parsing
@@ -832,6 +832,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
         .infer_long_args(true)
         .arg(Arg::new(options::OPERANDS).num_args(1..))
