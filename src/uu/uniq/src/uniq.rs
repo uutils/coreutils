@@ -254,7 +254,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    println!("{:?}", matches.indices_of("6").unwrap().collect::<Vec<usize>>());
+    //println!("{:?}", matches.indices_of("6").unwrap().collect::<Vec<usize>>());
+
+
+    let (in_file_name, out_file_name) = match files.len() {
+        0 => ("-".to_owned(), "-".to_owned()),
+        1 => (files[0].clone(), "-".to_owned()),
+        2 => (files[0].clone(), files[1].clone()),
+        _ => {
+            unreachable!() // Cannot happen as clap will fail earlier
+        }
+    };
+
 
     let mut occrs = {0..=9}
     .map(|x| {
@@ -273,16 +284,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     ).flatten().collect::<Vec<(usize,String)>>();
 
     occrs.sort();
-    println!("{occrs:?}");
 
-    let (in_file_name, out_file_name) = match files.len() {
-        0 => ("-".to_owned(), "-".to_owned()),
-        1 => (files[0].clone(), "-".to_owned()),
-        2 => (files[0].clone(), files[1].clone()),
-        _ => {
-            unreachable!() // Cannot happen as clap will fail earlier
-        }
-    };
+    let skip_fields_modern: Option<usize> = opt_parsed(options::SKIP_FIELDS, &matches)?;
+
+    let skip_fields_old = occrs.iter().map(|x| x.to_owned().1).collect::<String>().parse::<usize>().ok();
 
     let uniq = Uniq {
         repeats_only: matches.get_flag(options::REPEATED)
@@ -292,7 +297,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             || matches.contains_id(options::GROUP),
         delimiters: get_delimiter(&matches),
         show_counts: matches.get_flag(options::COUNT),
-        skip_fields: opt_parsed(options::SKIP_FIELDS, &matches)?,
+        skip_fields: skip_fields_modern.or(skip_fields_old),
         slice_start: opt_parsed(options::SKIP_CHARS, &matches)?,
         slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
         ignore_case: matches.get_flag(options::IGNORE_CASE),
