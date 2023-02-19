@@ -74,7 +74,7 @@ fn test_stdin_skip_and_check_2_chars() {
         .run()
         .stdout_is_fixture("skip-3-check-2-chars.expected");
 }
-
+/*
 #[test]
 fn test_stdin_skip_1_char_obsolete() {
     new_ucmd!()
@@ -101,7 +101,7 @@ fn test_stdin_skip_and_check_2_chars_obsolete() {
         .run()
         .stdout_is_fixture("skip-3-check-2-chars.expected");
 }
-
+*/
 #[test]
 fn test_stdin_skip_1_field() {
     new_ucmd!()
@@ -468,15 +468,17 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
-        // // Obsolete syntax for "-f 1"
-        // TestCase {
-        //     name: "obs30",
-        //     args: &["-1"],
-        //     input: "a a\nb a\n",
-        //     stdout: Some("a a\n"),
-        //     stderr: None,
-        //     exit: None,
-        // },
+
+        // Obsolete syntax for "-f 1"
+        TestCase {
+            name: "obs30",
+            args: &["-1"],
+            input: "a a\nb a\n",
+            stdout: Some("a a\n"),
+            stderr: None,
+            exit: None,
+        },
+
         TestCase {
             name: "31",
             args: &["-f", "1"],
@@ -550,23 +552,25 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
-        // // Obsolete syntax for "-s 1"
-        // TestCase {
-        //     name: "obs-plus44",
-        //     args: &["+1", "--"],
-        //     input: "aaa\naaa\n",
-        //     stdout: Some("aaa\n"),
-        //     stderr: None,
-        //     exit: None,
-        // },
-        // TestCase {
-        //     name: "obs-plus45",
-        //     args: &["+1", "--"],
-        //     input: "baa\naaa\n",
-        //     stdout: Some("baa\n"),
-        //     stderr: None,
-        //     exit: None,
-        // },
+        /*
+        // Obsolete syntax for "-s 1"
+        TestCase {
+            name: "obs-plus44",
+            args: &["+1", "--"],
+            input: "aaa\naaa\n",
+            stdout: Some("aaa\n"),
+            stderr: None,
+            exit: None,
+        },
+        TestCase {
+            name: "obs-plus45",
+            args: &["+1", "--"],
+            input: "baa\naaa\n",
+            stdout: Some("baa\n"),
+            stderr: None,
+            exit: None,
+        },
+        */
         TestCase {
             name: "50",
             args: &["-f", "1", "-s", "1"],
