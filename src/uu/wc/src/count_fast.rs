@@ -1,4 +1,4 @@
-// cSpell:ignore lseek
+// cSpell:ignore lseek TYPEISSHM TYPEISTMO
 
 use crate::word_count::WordCount;
 
