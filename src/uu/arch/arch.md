@@ -1,11 +1,9 @@
 # arch
 
-## Usage
 ```
 arch
 ```
 
-## About
 ```
 Display machine architecture
 ```
