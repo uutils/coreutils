@@ -58,6 +58,7 @@ enum InstallError {
     DirNeedsArg(),
     CreateDirFailed(PathBuf, std::io::Error),
     ChmodFailed(PathBuf),
+    ChownFailed(PathBuf, String),
     InvalidTarget(PathBuf),
     TargetDirIsntDir(PathBuf),
     BackupFailed(PathBuf, PathBuf, std::io::Error),
@@ -99,6 +100,7 @@ impl Display for InstallError {
                 Display::fmt(&uio_error!(e, "failed to create {}", dir.quote()), f)
             }
             Self::ChmodFailed(file) => write!(f, "failed to chmod {}", file.quote()),
+            Self::ChownFailed(file, msg) => write!(f, "failed to chown {}: {}", file.quote(), msg),
             Self::InvalidTarget(target) => write!(
                 f,
                 "invalid target {}: No such file or directory",
@@ -393,30 +395,30 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     }
 
     let owner = matches
-            .get_one::<String>(OPT_OWNER)
-            .map(|s| s.as_str())
-            .unwrap_or("")
-            .to_string();
+        .get_one::<String>(OPT_OWNER)
+        .map(|s| s.as_str())
+        .unwrap_or("")
+        .to_string();
 
     let owner_id = if !owner.is_empty() {
         match usr2uid(&owner) {
             Ok(u) => Some(u),
-            _ => return Err(InstallError::InvalidUser(owner.clone()).into()),
+            Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
         }
     } else {
         None
     };
 
     let group = matches
-            .get_one::<String>(OPT_GROUP)
-            .map(|s| s.as_str())
-            .unwrap_or("")
-            .to_string();
+        .get_one::<String>(OPT_GROUP)
+        .map(|s| s.as_str())
+        .unwrap_or("")
+        .to_string();
 
     let group_id = if !group.is_empty() {
         match grp2gid(&group) {
             Ok(g) => Some(g),
-            _ => return Err(InstallError::InvalidGroup(group.clone()).into()),
+            Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
         }
     } else {
         None
@@ -490,11 +492,7 @@ fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
                 continue;
             }
 
-            if chown_optional_user_group(path, b).is_err() {
-                // Error messages are printed by the chown_optional_user_group function!
-                uucore::error::set_exit_code(1);
-                continue;
-            }
+            show_if_err!(chown_optional_user_group(path, b));
         }
         // If the exit code was set, or show! has been called at least once
         // (which sets the exit code as well), function execution will end after
@@ -669,24 +667,22 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
 /// return an empty error value.
 ///
 fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
-    let meta = match fs::metadata(path) {
-        Ok(meta) => meta,
-        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
-    };
-
-    let verbosity = Verbosity {
-        groups_only: b.owner_id.is_none(),
-        level: VerbosityLevel::Normal,
-    };
-
     if b.owner_id.is_some() || b.group_id.is_some() {
+        let meta = match fs::metadata(path) {
+            Ok(meta) => meta,
+            Err(e) => return Err(InstallError::MetadataFailed(e).into()),
+        };
+
+        // GNU coreutils doesn't print chown operations during install with verbose flag.
+        let verbosity = Verbosity {
+            groups_only: b.owner_id.is_none(),
+            level: VerbosityLevel::Normal,
+        };
+
         match wrap_chown(path, &meta, b.owner_id, b.group_id, false, verbosity) {
-            Ok(n) => {
-                if !n.is_empty() {
-                    show_error!("{}", n);
-                }
-            }
-            Err(e) => show_error!("{}", e),
+            Ok(msg) if b.verbose && !msg.is_empty() => println!("chown: {msg}"),
+            Ok(_) => {}
+            Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
         }
     }
 
