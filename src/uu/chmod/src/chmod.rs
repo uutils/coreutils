@@ -21,7 +21,7 @@ use uucore::{format_usage, show, show_error, help_about, help_usage, help_sectio
 
 const ABOUT: &str = help_about!("chmod.md");
 const USAGE: &str = help_usage!("chmod.md");
-const LONG_USAGE: &str = help_section!("long usage", "chmod.md");
+const LONG_USAGE: &str = help_section!("after help", "chmod.md");
 
 mod options {
     pub const CHANGES: &str = "changes";

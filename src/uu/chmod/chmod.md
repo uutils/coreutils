@@ -9,6 +9,6 @@ chmod [OPTION]... --reference=RFILE FILE...
 Change the mode of each FILE to MODE.
 With --reference, change the mode of each FILE to that of RFILE.
 
-## Long Usage
+## After Help
 
 Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.
