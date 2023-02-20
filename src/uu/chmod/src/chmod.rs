@@ -17,16 +17,11 @@ use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::{format_usage, show, show_error};
+use uucore::{format_usage, show, show_error, help_about, help_usage, help_section};
 
-const ABOUT: &str = "Change the mode of each FILE to MODE.\n\
-    With --reference, change the mode of each FILE to that of RFILE.";
-const USAGE: &str = "\
-       {} [OPTION]... MODE[,MODE]... FILE...
-       {} [OPTION]... OCTAL-MODE FILE...
-       {} [OPTION]... --reference=RFILE FILE...";
-const LONG_USAGE: &str =
-    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.";
+const ABOUT: &str = help_about!("chmod.md");
+const USAGE: &str = help_usage!("chmod.md");
+const LONG_USAGE: &str = help_section!("long usage", "chmod.md");
 
 mod options {
     pub const CHANGES: &str = "changes";
