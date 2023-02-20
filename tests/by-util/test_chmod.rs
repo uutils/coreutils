@@ -414,7 +414,7 @@ fn test_chmod_symlink_non_existing_file() {
     let non_existing = "test_chmod_symlink_non_existing_file";
     let test_symlink = "test_chmod_symlink_non_existing_file_symlink";
     let expected_stdout = &format!(
-        "failed to change mode of '{test_symlink}' from 0000 (---------) to 0000 (---------)"
+        "failed to change mode of '{test_symlink}' from 0000 (---------) to 1500 (r-x-----T)"
     );
     let expected_stderr = &format!("cannot operate on dangling symlink '{test_symlink}'");
 
@@ -442,6 +442,17 @@ fn test_chmod_symlink_non_existing_file() {
         .code_is(1)
         .no_stderr()
         .stdout_contains(expected_stdout);
+
+    // this should only include  the dangling symlink message
+    // NOT the failure to change mode
+    scene
+        .ucmd()
+        .arg("755")
+        .arg(test_symlink)
+        .run()
+        .code_is(1)
+        .no_stdout()
+        .stderr_contains(expected_stderr);
 }
 
 #[test]
@@ -616,7 +627,7 @@ fn test_chmod_file_symlink_after_non_existing_file() {
     let non_existing = "test_chmod_symlink_non_existing_file";
     let test_dangling_symlink = "test_chmod_symlink_non_existing_file_symlink";
     let expected_stdout = &format!(
-        "failed to change mode of '{test_dangling_symlink}' from 0000 (---------) to 0000 (---------)"
+        "failed to change mode of '{test_dangling_symlink}' from 0000 (---------) to 1500 (r-x-----T)"
     );
     let expected_stderr = &format!("cannot operate on dangling symlink '{test_dangling_symlink}'");
 
