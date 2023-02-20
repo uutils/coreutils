@@ -11,9 +11,9 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::{is_separator, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
-use uucore::{format_usage, help_usage, help_section};
+use uucore::{format_usage, help_usage, help_about};
 
-static ABOUT: &str = help_section!("about","basename.md");
+static ABOUT: &str = help_about!("basename.md");
 
 const USAGE: &str = help_usage!("basename.md");
 
