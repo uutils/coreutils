@@ -99,10 +99,13 @@ macro_rules! bin {
 
 /// Generate the usage string for clap.
 ///
-/// This function replaces all occurrences of `{}` with the execution phrase
-/// and returns the resulting `String`. It does **not** support
-/// more advanced formatting features such as `{0}`.
+/// This function does two things. It indents all but the first line to align
+/// the lines because clap adds "Usage: " to the first line. And it replaces
+/// all occurrences of `{}` with the execution phrase and returns the resulting
+/// `String`. It does **not** support more advanced formatting features such
+/// as `{0}`.
 pub fn format_usage(s: &str) -> String {
+    let s = s.replace('\n', &format!("\n{}", " ".repeat(7)));
     s.replace("{}", crate::execution_phrase())
 }
 
@@ -272,5 +275,14 @@ mod tests {
         let os_str = OsStr::from_bytes(&source[..]);
         test_invalid_utf8_args_lossy(os_str);
         test_invalid_utf8_args_ignore(os_str);
+    }
+
+    #[test]
+    fn test_format_usage() {
+        assert_eq!(format_usage("expr EXPRESSION"), "expr EXPRESSION");
+        assert_eq!(
+            format_usage("expr EXPRESSION\nexpr OPTION"),
+            "expr EXPRESSION\n       expr OPTION"
+        );
     }
 }
