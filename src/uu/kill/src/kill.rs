@@ -16,7 +16,7 @@ use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::signals::{signal_by_name_or_value, ALL_SIGNALS};
 use uucore::{format_usage, help_about, help_usage, show};
 
-static ABOUT: &str = help_about!("kill.md");
+const ABOUT: &str = help_about!("kill.md");
 const USAGE: &str = help_usage!("kill.md");
 
 pub mod options {
