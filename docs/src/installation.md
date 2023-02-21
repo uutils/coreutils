@@ -107,6 +107,13 @@ brew install uutils-coreutils
 port install coreutils-uutils
 ```
 
+## FreeBSD
+[![FreeBSD port](https://repology.org/badge/version-for-repo/freebsd/uutils-coreutils.svg)](https://repology.org/project/uutils-coreutils/versions)
+
+```sh
+pkg install uutils
+```
+
 ## Windows
 
 ### Scoop
