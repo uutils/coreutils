@@ -1,3 +1,4 @@
+<!-- spell-checker:ignore N'th M'th -->
 # numfmt
 
 ```

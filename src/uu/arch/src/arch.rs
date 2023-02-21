@@ -10,9 +10,9 @@ use platform_info::*;
 
 use clap::{crate_version, Command};
 use uucore::error::{FromIo, UResult};
-use uucore::{help_section};
+use uucore::{help_about, help_section};
 
-static ABOUT: &str = help_section!("about", "arch.md");
+static ABOUT: &str = help_about!("arch.md");
 static SUMMARY: &str = help_section!("after help", "arch.md");
 
 #[uucore::main]
