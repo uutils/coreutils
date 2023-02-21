@@ -263,7 +263,6 @@ feat_os_windows_legacy = [
 test = [ "uu_test" ]
 
 [workspace.dependencies]
-atty = "0.2"
 bigdecimal = "0.3"
 binary-heap-plus = "0.5.0"
 bstr = "1.0"
@@ -287,6 +286,7 @@ gcd = "2.2"
 glob = "0.3.0"
 half = "2.1"
 indicatif = "0.17"
+is-terminal = "0.4.3"
 itertools = "0.10.0"
 libc = "0.2.139"
 lscolors = { version = "0.13.0", default-features=false, features = ["nu-ansi-term"] }
@@ -476,7 +476,7 @@ time = { workspace=true, features=["local-offset"] }
 unindent = "0.1"
 uucore = { workspace=true, features=["entries", "process", "signals"] }
 walkdir = { workspace=true }
-atty = { workspace=true }
+is-terminal = { workspace=true }
 hex-literal = "0.3.1"
 rstest = "0.16.0"
 

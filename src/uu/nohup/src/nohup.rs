@@ -8,6 +8,7 @@
 // spell-checker:ignore (ToDO) execvp SIGHUP cproc vprocmgr cstrs homeout
 
 use clap::{crate_version, Arg, ArgAction, Command};
+use is_terminal::IsTerminal;
 use libc::{c_char, dup2, execvp, signal};
 use libc::{SIGHUP, SIG_IGN};
 use std::env;
@@ -129,7 +130,7 @@ pub fn uu_app() -> Command {
 }
 
 fn replace_fds() -> UResult<()> {
-    if atty::is(atty::Stream::Stdin) {
+    if std::io::stdin().is_terminal() {
         let new_stdin = File::open(Path::new("/dev/null"))
             .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
         if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
@@ -137,7 +138,7 @@ fn replace_fds() -> UResult<()> {
         }
     }
 
-    if atty::is(atty::Stream::Stdout) {
+    if std::io::stdout().is_terminal() {
         let new_stdout = find_stdout()?;
         let fd = new_stdout.as_raw_fd();
 
@@ -146,7 +147,7 @@ fn replace_fds() -> UResult<()> {
         }
     }
 
-    if atty::is(atty::Stream::Stderr) && unsafe { dup2(1, 2) } != 2 {
+    if std::io::stderr().is_terminal() && unsafe { dup2(1, 2) } != 2 {
         return Err(NohupError::CannotReplace("STDERR", Error::last_os_error()).into());
     }
     Ok(())
