@@ -24,7 +24,7 @@ static DEFAULT_PERM: u32 = 0o755;
 
 const ABOUT: &str = help_about!("mkdir.md");
 const USAGE: &str = help_usage!("mkdir.md");
-const LONG_USAGE: &str = help_section!("long usage", "mkdir.md");
+const AFTER_HELP: &str = help_section!("after help", "mkdir.md");
 
 mod options {
     pub const MODE: &str = "mode";
@@ -89,7 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
+    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
