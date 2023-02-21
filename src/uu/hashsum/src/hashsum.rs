@@ -14,11 +14,7 @@ use clap::crate_version;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command};
 use hex::encode;
-use md5::Md5;
 use regex::Regex;
-use sha1::Sha1;
-use sha2::{Sha224, Sha256, Sha384, Sha512};
-use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
@@ -27,11 +23,12 @@ use std::io::{self, stdin, BufRead, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
-use uucore::crash;
-use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::show_warning;
-use uucore::sum::{Digest, DigestWriter};
+use uucore::sum::{
+    Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224, Sha3_256,
+    Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
+};
+use uucore::{crash, display::Quotable, show_warning};
 
 const NAME: &str = "hashsum";
 
@@ -64,16 +61,8 @@ fn detect_algo(
         "sha256sum" => ("SHA256", Box::new(Sha256::new()) as Box<dyn Digest>, 256),
         "sha384sum" => ("SHA384", Box::new(Sha384::new()) as Box<dyn Digest>, 384),
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
-        "b2sum" => (
-            "BLAKE2",
-            Box::new(blake2b_simd::State::new()) as Box<dyn Digest>,
-            512,
-        ),
-        "b3sum" => (
-            "BLAKE3",
-            Box::new(blake3::Hasher::new()) as Box<dyn Digest>,
-            256,
-        ),
+        "b2sum" => ("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512),
+        "b3sum" => ("BLAKE3", Box::new(Blake3::new()) as Box<dyn Digest>, 256),
         "sha3sum" => match matches.get_one::<usize>("bits") {
             Some(224) => (
                 "SHA3-224",
@@ -166,10 +155,10 @@ fn detect_algo(
                     set_or_crash("SHA512", Box::new(Sha512::new()), 512);
                 }
                 if matches.get_flag("b2sum") {
-                    set_or_crash("BLAKE2", Box::new(blake2b_simd::State::new()), 512);
+                    set_or_crash("BLAKE2", Box::new(Blake2b::new()), 512);
                 }
                 if matches.get_flag("b3sum") {
-                    set_or_crash("BLAKE3", Box::new(blake3::Hasher::new()), 256);
+                    set_or_crash("BLAKE3", Box::new(Blake3::new()), 256);
                 }
                 if matches.get_flag("sha3") {
                     match matches.get_one::<usize>("bits") {

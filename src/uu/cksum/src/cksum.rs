@@ -8,9 +8,6 @@
 // spell-checker:ignore (ToDO) fname, algo
 use clap::{crate_version, Arg, Command};
 use hex::encode;
-use md5::Md5;
-use sha1::Sha1;
-use sha2::{Sha224, Sha256, Sha384, Sha512};
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
@@ -19,7 +16,10 @@ use std::path::Path;
 use uucore::{
     error::{FromIo, UResult},
     format_usage,
-    sum::{div_ceil, Digest, DigestWriter, BSD, CRC, SYSV},
+    sum::{
+        div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
+        BSD, CRC, SYSV,
+    },
 };
 
 const USAGE: &str = "{} [OPTIONS] [FILE]...";
@@ -36,12 +36,8 @@ fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize
         "sha256" => ("SHA256", Box::new(Sha256::new()) as Box<dyn Digest>, 256),
         "sha384" => ("SHA384", Box::new(Sha384::new()) as Box<dyn Digest>, 384),
         "sha512" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
-        "blake2b" => (
-            "BLAKE2",
-            Box::new(blake2b_simd::State::new()) as Box<dyn Digest>,
-            512,
-        ),
-        "sm3" => ("SM3", Box::new(sm3::Sm3::new()) as Box<dyn Digest>, 512),
+        "blake2b" => ("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512),
+        "sm3" => ("SM3", Box::new(Sm3::new()) as Box<dyn Digest>, 512),
         _ => panic!("unknown algorithm"),
     }
 }
@@ -81,8 +77,7 @@ where
         let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
 
-        // Refer to GNU sum.c implementation. The BSD checksum output is 5 digit integer
-        // https://github.com/coreutils/coreutils/blob/master/src/sum.c
+        // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
         match (options.algo_name, not_file) {
             ("SYSV", true) => println!(

@@ -1,4 +1,12 @@
-// spell-checker:ignore memmem
+// This file is part of the uutils coreutils package.
+//
+// (c) Yuan YangHao <yuanyanghau@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE file
+// that was distributed with this source code.
+
+// spell-checker:ignore memmem algo
+
 //! Implementations of digest functions, like md5 and sha1.
 //!
 //! The [`Digest`] trait represents the interface for providing inputs
@@ -30,17 +38,18 @@ pub trait Digest {
     }
 }
 
-impl Digest for blake2b_simd::State {
+pub struct Blake2b(blake2b_simd::State);
+impl Digest for Blake2b {
     fn new() -> Self {
-        Self::new()
+        Self(blake2b_simd::State::new())
     }
 
     fn hash_update(&mut self, input: &[u8]) {
-        self.update(input);
+        self.0.update(input);
     }
 
     fn hash_finalize(&mut self, out: &mut [u8]) {
-        let hash_result = &self.finalize();
+        let hash_result = &self.0.finalize();
         out.copy_from_slice(hash_result.as_bytes());
     }
 
@@ -53,17 +62,18 @@ impl Digest for blake2b_simd::State {
     }
 }
 
-impl Digest for blake3::Hasher {
+pub struct Blake3(blake3::Hasher);
+impl Digest for Blake3 {
     fn new() -> Self {
-        Self::new()
+        Self(blake3::Hasher::new())
     }
 
     fn hash_update(&mut self, input: &[u8]) {
-        self.update(input);
+        self.0.update(input);
     }
 
     fn hash_finalize(&mut self, out: &mut [u8]) {
-        let hash_result = &self.finalize();
+        let hash_result = &self.0.finalize();
         out.copy_from_slice(hash_result.as_bytes());
     }
 
@@ -76,23 +86,22 @@ impl Digest for blake3::Hasher {
     }
 }
 
-use sm3::{Digest as SM3_D, Sm3};
-
+pub struct Sm3(sm3::Sm3);
 impl Digest for Sm3 {
     fn new() -> Self {
-        <Self as sm3::Digest>::new()
+        Self(<sm3::Sm3 as sm3::Digest>::new())
     }
 
     fn hash_update(&mut self, input: &[u8]) {
-        self.update(input);
+        <sm3::Sm3 as sm3::Digest>::update(&mut self.0, input);
     }
 
     fn hash_finalize(&mut self, out: &mut [u8]) {
-        out.copy_from_slice(&self.clone().finalize());
+        out.copy_from_slice(&<sm3::Sm3 as sm3::Digest>::finalize(self.0.clone()));
     }
 
     fn reset(&mut self) {
-        *self = <Self as sm3::Digest>::new();
+        *self = Self::new();
     }
 
     fn output_bits(&self) -> usize {
@@ -108,7 +117,6 @@ pub struct CRC {
     size: usize,
     crc_table: [u32; CRC_TABLE_LEN],
 }
-
 impl CRC {
     fn generate_crc_table() -> [u32; CRC_TABLE_LEN] {
         let mut table = [0; CRC_TABLE_LEN];
@@ -196,7 +204,6 @@ pub fn div_ceil(a: usize, b: usize) -> usize {
 pub struct BSD {
     state: u16,
 }
-
 impl Digest for BSD {
     fn new() -> Self {
         Self { state: 0 }
@@ -231,7 +238,6 @@ impl Digest for BSD {
 pub struct SYSV {
     state: u32,
 }
-
 impl Digest for SYSV {
     fn new() -> Self {
         Self { state: 0 }
@@ -266,22 +272,22 @@ impl Digest for SYSV {
 
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
 macro_rules! impl_digest_common {
-    ($type: ty, $size: expr) => {
-        impl Digest for $type {
+    ($algo_type: ty, $size: expr) => {
+        impl Digest for $algo_type {
             fn new() -> Self {
-                Self::default()
+                Self(Default::default())
             }
 
             fn hash_update(&mut self, input: &[u8]) {
-                digest::Digest::update(self, input);
+                digest::Digest::update(&mut self.0, input);
             }
 
             fn hash_finalize(&mut self, out: &mut [u8]) {
-                digest::Digest::finalize_into_reset(self, out.into());
+                digest::Digest::finalize_into_reset(&mut self.0, out.into());
             }
 
             fn reset(&mut self) {
-                *self = <Self as Digest>::new();
+                *self = Self::new();
             }
 
             fn output_bits(&self) -> usize {
@@ -293,18 +299,18 @@ macro_rules! impl_digest_common {
 
 // Implements the Digest trait for sha2 / sha3 algorithms with variable output
 macro_rules! impl_digest_shake {
-    ($type: ty) => {
-        impl Digest for $type {
+    ($algo_type: ty) => {
+        impl Digest for $algo_type {
             fn new() -> Self {
-                Self::default()
+                Self(Default::default())
             }
 
             fn hash_update(&mut self, input: &[u8]) {
-                digest::Update::update(self, input);
+                digest::Update::update(&mut self.0, input);
             }
 
             fn hash_finalize(&mut self, out: &mut [u8]) {
-                digest::ExtendableOutputReset::finalize_xof_reset_into(self, out);
+                digest::ExtendableOutputReset::finalize_xof_reset_into(&mut self.0, out);
             }
 
             fn reset(&mut self) {
@@ -318,19 +324,32 @@ macro_rules! impl_digest_shake {
     };
 }
 
-impl_digest_common!(md5::Md5, 128);
-impl_digest_common!(sha1::Sha1, 160);
-impl_digest_common!(sha2::Sha224, 224);
-impl_digest_common!(sha2::Sha256, 256);
-impl_digest_common!(sha2::Sha384, 384);
-impl_digest_common!(sha2::Sha512, 512);
+pub struct Md5(md5::Md5);
+pub struct Sha1(sha1::Sha1);
+pub struct Sha224(sha2::Sha224);
+pub struct Sha256(sha2::Sha256);
+pub struct Sha384(sha2::Sha384);
+pub struct Sha512(sha2::Sha512);
+impl_digest_common!(Md5, 128);
+impl_digest_common!(Sha1, 160);
+impl_digest_common!(Sha224, 224);
+impl_digest_common!(Sha256, 256);
+impl_digest_common!(Sha384, 384);
+impl_digest_common!(Sha512, 512);
 
-impl_digest_common!(sha3::Sha3_224, 224);
-impl_digest_common!(sha3::Sha3_256, 256);
-impl_digest_common!(sha3::Sha3_384, 384);
-impl_digest_common!(sha3::Sha3_512, 512);
-impl_digest_shake!(sha3::Shake128);
-impl_digest_shake!(sha3::Shake256);
+pub struct Sha3_224(sha3::Sha3_224);
+pub struct Sha3_256(sha3::Sha3_256);
+pub struct Sha3_384(sha3::Sha3_384);
+pub struct Sha3_512(sha3::Sha3_512);
+impl_digest_common!(Sha3_224, 224);
+impl_digest_common!(Sha3_256, 256);
+impl_digest_common!(Sha3_384, 384);
+impl_digest_common!(Sha3_512, 512);
+
+pub struct Shake128(sha3::Shake128);
+pub struct Shake256(sha3::Shake256);
+impl_digest_shake!(Shake128);
+impl_digest_shake!(Shake256);
 
 /// A struct that writes to a digest.
 ///
