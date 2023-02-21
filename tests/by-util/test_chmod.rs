@@ -4,9 +4,8 @@ use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Mutex;
 
-extern crate libc;
-use uucore::mode::strip_minus_from_mode;
 extern crate chmod;
+extern crate libc;
 use self::libc::umask;
 
 static TEST_FILE: &str = "file";
@@ -504,35 +503,6 @@ fn test_chmod_symlink_non_existing_file_recursive() {
 }
 
 #[test]
-fn test_chmod_strip_minus_from_mode() {
-    let tests = vec![
-        // ( before, after )
-        ("chmod -v -xw -R FILE", "chmod -v xw -R FILE"),
-        ("chmod g=rwx FILE -c", "chmod g=rwx FILE -c"),
-        (
-            "chmod -c -R -w,o+w FILE --preserve-root",
-            "chmod -c -R w,o+w FILE --preserve-root",
-        ),
-        ("chmod -c -R +w FILE ", "chmod -c -R +w FILE "),
-        ("chmod a=r,=xX FILE", "chmod a=r,=xX FILE"),
-        (
-            "chmod -v --reference REF_FILE -R FILE",
-            "chmod -v --reference REF_FILE -R FILE",
-        ),
-        ("chmod -Rvc -w-x FILE", "chmod -Rvc w-x FILE"),
-        ("chmod 755 -v FILE", "chmod 755 -v FILE"),
-        ("chmod -v +0004 FILE -R", "chmod -v +0004 FILE -R"),
-        ("chmod -v -0007 FILE -R", "chmod -v 0007 FILE -R"),
-    ];
-
-    for test in tests {
-        let mut args: Vec<String> = test.0.split(' ').map(|v| v.to_string()).collect();
-        let _mode_had_minus_prefix = strip_minus_from_mode(&mut args);
-        assert_eq!(test.1, args.join(" "));
-    }
-}
-
-#[test]
 fn test_chmod_keep_setgid() {
     for (from, arg, to) in [
         (0o7777, "777", 0o46777),
@@ -691,7 +661,7 @@ fn test_gnu_options() {
 }
 
 #[test]
-fn test_gnu_reoccuring_options() {
+fn test_gnu_repeating_options() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("file");
