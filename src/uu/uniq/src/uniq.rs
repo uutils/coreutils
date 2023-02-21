@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command, ArgGroup};
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -245,6 +245,23 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Optio
     })
 }
 
+fn obsolete_skip_field_occurrencies(matches: &ArgMatches) -> Option<usize> {
+    for i in 0..=9 {
+        let mut s: String = i.to_string();
+        let v = matches.get_one::<String>(&s);
+
+        if matches.contains_id(s.as_str()) {
+            if v.is_some() {
+                s.push_str(v.unwrap());
+                return s.parse::<usize>().ok().or(Some(i));
+            } else {
+                return Some(i);
+            }
+        }
+    }
+    None
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
@@ -263,34 +280,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    let mut occrs = { 0..=9 }
-        .flat_map(|x| {
-            let s = x.to_string();
-            let q = s.as_str();
-            matches
-                .indices_of(q)
-                .unwrap()
-                .filter_map(|n| {
-                    if matches.get_flag(q) {
-                        Some((n, q.to_owned()))
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<(usize, String)>>()
-        })
-        .collect::<Vec<(usize, String)>>();
-
-    occrs.sort();
-
     let skip_fields_modern: Option<usize> = opt_parsed(options::SKIP_FIELDS, &matches)?;
 
-    let skip_fields_old = occrs
-        .iter()
-        .map(|x| x.to_owned().1)
-        .collect::<String>()
-        .parse::<usize>()
-        .ok();
+    let skip_fields_old = obsolete_skip_field_occurrencies(&matches);
 
     let uniq = Uniq {
         repeats_only: matches.get_flag(options::REPEATED)
@@ -420,52 +412,57 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new("0")
             .short('0')
-            .action(ArgAction::SetTrue)
+            .num_args(0..=1)
         )
         .arg(
             Arg::new("1")
             .short('1')
-            .action(ArgAction::SetTrue)
+            .num_args(0..=1)
         )
         .arg(
             Arg::new("2")
             .short('2')
-            .action(ArgAction::SetTrue)
+            .num_args(0..=1)
         )
         .arg(
             Arg::new("3")
             .short('3')
-            .action(ArgAction::SetTrue)
+            .num_args(0..=1)
         )
         .arg(
             Arg::new("4")
             .short('4')
-            .action(ArgAction::SetTrue)
+            .num_args(0..=1)
         )
         .arg(
             Arg::new("5")
             .short('5')
-            .action(ArgAction::SetTrue)
+            .num_args(0..=1)
         )
         .arg(
             Arg::new("6")
             .short('6')
-            .action(ArgAction::SetTrue)
+            .num_args(0..=1)
         )
         .arg(
             Arg::new("7")
             .short('7')
-            .action(ArgAction::SetTrue)
+            .num_args(0..=1)
         )
         .arg(
             Arg::new("8")
             .short('8')
-            .action(ArgAction::SetTrue)
+            .num_args(0..=1)
         )
         .arg(
             Arg::new("9")
             .short('9')
-            .action(ArgAction::SetTrue)
+            .num_args(0..=1)
+        )
+        .group(
+            ArgGroup::new("obsolete_skip_field")
+            .multiple(false)
+            .args(["0","1","2","3","4","5","6","7","8","9"])
         )
         .arg(
             Arg::new(ARG_FILES)
