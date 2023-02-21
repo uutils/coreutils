@@ -59,10 +59,16 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-    # num_cpus
-    { name = "hermit-abi", version = "0.2.6" },
-    # console (via indicatif)
-    { name = "windows-sys", version = "0.42.0" },
+    # is-terminal
+    { name = "hermit-abi", version = "0.3.1" },
+    # is-terminal
+    { name = "rustix", version = "0.36.8" },
+    # is-terminal (via rustix)
+    { name = "io-lifetimes", version = "1.0.5" },
+    # is-terminal
+    { name = "linux-raw-sys", version = "0.1.4" },
+    # is-terminal
+    { name = "windows-sys", version = "0.45.0" },
 ]
 # spell-checker: enable
 
