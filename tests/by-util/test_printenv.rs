@@ -8,7 +8,8 @@ fn test_get_all() {
     assert_eq!(env::var(key), Ok("VALUE".to_string()));
 
     TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .succeeds()
         .stdout_contains("HOME=")
         .stdout_contains("KEY=VALUE");
@@ -21,7 +22,8 @@ fn test_get_var() {
     assert_eq!(env::var(key), Ok("VALUE".to_string()));
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .arg("KEY")
         .succeeds();
 

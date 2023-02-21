@@ -300,19 +300,15 @@ fn test_invalid_utf8_integer_compare() {
     let source = [0x66, 0x6f, 0x80, 0x6f];
     let arg = OsStr::from_bytes(&source[..]);
 
-    let mut cmd = new_ucmd!();
-    cmd.arg("123").arg("-ne");
-    cmd.raw.arg(arg);
-
-    cmd.run()
+    new_ucmd!()
+        .args(&[OsStr::new("123"), OsStr::new("-ne"), arg])
+        .run()
         .code_is(2)
         .stderr_is("test: invalid integer $'fo\\x80o'\n");
 
-    let mut cmd = new_ucmd!();
-    cmd.raw.arg(arg);
-    cmd.arg("-eq").arg("456");
-
-    cmd.run()
+    new_ucmd!()
+        .args(&[arg, OsStr::new("-eq"), OsStr::new("456")])
+        .run()
         .code_is(2)
         .stderr_is("test: invalid integer $'fo\\x80o'\n");
 }
