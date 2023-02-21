@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command, ArgGroup};
+use clap::{crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -251,8 +251,8 @@ fn obsolete_skip_field_occurrencies(matches: &ArgMatches) -> Option<usize> {
         let v = matches.get_one::<String>(&s);
 
         if matches.contains_id(s.as_str()) {
-            if v.is_some() {
-                s.push_str(v.unwrap());
+            if let Some(k) = v {
+                s.push_str(k);
                 return s.parse::<usize>().ok().or(Some(i));
             } else {
                 return Some(i);
