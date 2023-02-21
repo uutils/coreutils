@@ -18,14 +18,13 @@ use uucore::error::{UResult, USimpleError};
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
-use uucore::{format_usage, show, show_if_err};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_if_err};
 
 static DEFAULT_PERM: u32 = 0o755;
 
-const ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
-const USAGE: &str = "{} [OPTION]... [USER]";
-const LONG_USAGE: &str =
-    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.";
+const ABOUT: &str = help_about!("mkdir.md");
+const USAGE: &str = help_usage!("mkdir.md");
+const LONG_USAGE: &str = help_section!("long usage", "mkdir.md");
 
 mod options {
     pub const MODE: &str = "mode";
