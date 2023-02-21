@@ -76,7 +76,7 @@ mod options {
 }
 
 const ABOUT: &str = help_about!("du.md");
-const LONG_HELP: &str = help_section!("long help", "du.md");
+const AFTER_HELP: &str = help_section!("after help", "du.md");
 const USAGE: &str = help_usage!("du.md");
 
 // TODO: Support Z & Y (currently limited by size of u64)
@@ -691,7 +691,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .disable_help_flag(true)

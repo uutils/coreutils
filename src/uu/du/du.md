@@ -7,7 +7,7 @@ du [OPTION]... --files0-from=F
 
 Estimate file space usage
 
-## Long Help
+## After Help
 
 Display values are in units of the first available SIZE from --block-size,
 and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.
