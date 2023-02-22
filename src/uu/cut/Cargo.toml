@@ -19,7 +19,7 @@ clap = { workspace=true }
 uucore = { workspace=true }
 memchr = { workspace=true }
 bstr = { workspace=true }
-atty = { workspace=true }
+is-terminal = { workspace=true }
 
 [[bin]]
 name = "cut"

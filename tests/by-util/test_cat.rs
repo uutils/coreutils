@@ -103,7 +103,7 @@ fn test_closes_file_descriptors() {
             "alpha.txt",
             "alpha.txt",
         ])
-        .with_limit(Resource::NOFILE, 9, 9)
+        .limit(Resource::NOFILE, 9, 9)
         .succeeds();
 }
 

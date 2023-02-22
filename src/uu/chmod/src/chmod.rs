@@ -190,15 +190,17 @@ impl Chmoder {
             let file = Path::new(filename);
             if !file.exists() {
                 if file.is_symlink() {
-                    println!(
-                        "failed to change mode of {} from 0000 (---------) to 0000 (---------)",
-                        filename.quote()
-                    );
                     if !self.quiet {
                         show!(USimpleError::new(
                             1,
                             format!("cannot operate on dangling symlink {}", filename.quote()),
                         ));
+                    }
+                    if self.verbose {
+                        println!(
+                            "failed to change mode of {} from 0000 (---------) to 1500 (r-x-----T)",
+                            filename.quote()
+                        );
                     }
                 } else if !self.quiet {
                     show!(USimpleError::new(

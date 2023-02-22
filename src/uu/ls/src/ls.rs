@@ -12,6 +12,7 @@ use clap::{
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
+use is_terminal::IsTerminal;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
@@ -451,7 +452,7 @@ impl Config {
             (Format::Commas, Some(options::format::COMMAS))
         } else if options.get_flag(options::format::COLUMNS) {
             (Format::Columns, Some(options::format::COLUMNS))
-        } else if atty::is(atty::Stream::Stdout) {
+        } else if std::io::stdout().is_terminal() {
             (Format::Columns, None)
         } else {
             (Format::OneLine, None)
@@ -557,7 +558,7 @@ impl Config {
             None => options.contains_id(options::COLOR),
             Some(val) => match val.as_str() {
                 "" | "always" | "yes" | "force" => true,
-                "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
+                "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
                 /* "never" | "no" | "none" | */ _ => false,
             },
         };
@@ -678,7 +679,7 @@ impl Config {
         } else if options.get_flag(options::SHOW_CONTROL_CHARS) {
             true
         } else {
-            !atty::is(atty::Stream::Stdout)
+            !std::io::stdout().is_terminal()
         };
 
         let opt_quoting_style = options
@@ -750,7 +751,7 @@ impl Config {
                 "never" | "no" | "none" => IndicatorStyle::None,
                 "always" | "yes" | "force" => IndicatorStyle::Classify,
                 "auto" | "tty" | "if-tty" => {
-                    if atty::is(atty::Stream::Stdout) {
+                    if std::io::stdout().is_terminal() {
                         IndicatorStyle::Classify
                     } else {
                         IndicatorStyle::None

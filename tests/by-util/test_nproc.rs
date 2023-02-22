@@ -20,7 +20,8 @@ fn test_nproc_all_omp() {
     assert!(nproc > 0);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "60")
         .succeeds();
 
@@ -28,7 +29,8 @@ fn test_nproc_all_omp() {
     assert_eq!(nproc_omp, 60);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "1") // Has no effect
         .arg("--all")
         .succeeds();
@@ -37,7 +39,8 @@ fn test_nproc_all_omp() {
 
     // If the parsing fails, returns the number of CPU
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "incorrectnumber") // returns the number CPU
         .succeeds();
     let nproc_omp: u8 = result.stdout_str().trim().parse().unwrap();
@@ -51,7 +54,8 @@ fn test_nproc_ignore() {
     if nproc_total > 1 {
         // Ignore all CPU but one
         let result = TestScenario::new(util_name!())
-            .ucmd_keepenv()
+            .ucmd()
+            .keep_env()
             .arg("--ignore")
             .arg((nproc_total - 1).to_string())
             .succeeds();
@@ -59,7 +63,8 @@ fn test_nproc_ignore() {
         assert_eq!(nproc, 1);
         // Ignore all CPU but one with a string
         let result = TestScenario::new(util_name!())
-            .ucmd_keepenv()
+            .ucmd()
+            .keep_env()
             .arg("--ignore= 1")
             .succeeds();
         let nproc: u8 = result.stdout_str().trim().parse().unwrap();
@@ -70,7 +75,8 @@ fn test_nproc_ignore() {
 #[test]
 fn test_nproc_ignore_all_omp() {
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "42")
         .arg("--ignore=40")
         .succeeds();
@@ -81,7 +87,8 @@ fn test_nproc_ignore_all_omp() {
 #[test]
 fn test_nproc_omp_limit() {
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "42")
         .env("OMP_THREAD_LIMIT", "0")
         .succeeds();
@@ -89,7 +96,8 @@ fn test_nproc_omp_limit() {
     assert_eq!(nproc, 42);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "42")
         .env("OMP_THREAD_LIMIT", "2")
         .succeeds();
@@ -97,7 +105,8 @@ fn test_nproc_omp_limit() {
     assert_eq!(nproc, 2);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "42")
         .env("OMP_THREAD_LIMIT", "2bad")
         .succeeds();
@@ -109,14 +118,16 @@ fn test_nproc_omp_limit() {
     assert!(nproc_system > 0);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_THREAD_LIMIT", "1")
         .succeeds();
     let nproc: u8 = result.stdout_str().trim().parse().unwrap();
     assert_eq!(nproc, 1);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "0")
         .env("OMP_THREAD_LIMIT", "")
         .succeeds();
@@ -124,7 +135,8 @@ fn test_nproc_omp_limit() {
     assert_eq!(nproc, nproc_system);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "")
         .env("OMP_THREAD_LIMIT", "")
         .succeeds();
@@ -132,7 +144,8 @@ fn test_nproc_omp_limit() {
     assert_eq!(nproc, nproc_system);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "2,2,1")
         .env("OMP_THREAD_LIMIT", "")
         .succeeds();
@@ -140,7 +153,8 @@ fn test_nproc_omp_limit() {
     assert_eq!(2, nproc);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "2,ignored")
         .env("OMP_THREAD_LIMIT", "")
         .succeeds();
@@ -148,7 +162,8 @@ fn test_nproc_omp_limit() {
     assert_eq!(2, nproc);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "2,2,1")
         .env("OMP_THREAD_LIMIT", "0")
         .succeeds();
@@ -156,7 +171,8 @@ fn test_nproc_omp_limit() {
     assert_eq!(2, nproc);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "2,2,1")
         .env("OMP_THREAD_LIMIT", "1bad")
         .succeeds();
@@ -164,7 +180,8 @@ fn test_nproc_omp_limit() {
     assert_eq!(2, nproc);
 
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .env("OMP_NUM_THREADS", "29,2,1")
         .env("OMP_THREAD_LIMIT", "1bad")
         .succeeds();

@@ -17,7 +17,7 @@ path = "src/nohup.rs"
 [dependencies]
 clap = { workspace=true }
 libc = { workspace=true }
-atty = { workspace=true }
+is-terminal = { workspace=true }
 uucore = { workspace=true, features=["fs"] }
 
 [[bin]]
