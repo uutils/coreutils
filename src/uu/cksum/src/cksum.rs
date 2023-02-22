@@ -25,20 +25,76 @@ use uucore::{
 const USAGE: &str = "{} [OPTIONS] [FILE]...";
 const ABOUT: &str = "Print CRC and size for each file";
 
+const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
+const ALGORITHM_OPTIONS_BSD: &str = "bsd";
+const ALGORITHM_OPTIONS_CRC: &str = "crc";
+const ALGORITHM_OPTIONS_MD5: &str = "md5";
+const ALGORITHM_OPTIONS_SHA1: &str = "sha1";
+const ALGORITHM_OPTIONS_SHA224: &str = "sha224";
+const ALGORITHM_OPTIONS_SHA256: &str = "sha256";
+const ALGORITHM_OPTIONS_SHA384: &str = "sha384";
+const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
+const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
+const ALGORITHM_OPTIONS_SM3: &str = "sm3";
+
 fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize) {
     match program {
-        "sysv" => ("SYSV", Box::new(SYSV::new()) as Box<dyn Digest>, 512),
-        "bsd" => ("BSD", Box::new(BSD::new()) as Box<dyn Digest>, 1024),
-        "crc" => ("CRC", Box::new(CRC::new()) as Box<dyn Digest>, 256),
-        "md5" => ("MD5", Box::new(Md5::new()) as Box<dyn Digest>, 128),
-        "sha1" => ("SHA1", Box::new(Sha1::new()) as Box<dyn Digest>, 160),
-        "sha224" => ("SHA224", Box::new(Sha224::new()) as Box<dyn Digest>, 224),
-        "sha256" => ("SHA256", Box::new(Sha256::new()) as Box<dyn Digest>, 256),
-        "sha384" => ("SHA384", Box::new(Sha384::new()) as Box<dyn Digest>, 384),
-        "sha512" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
-        "blake2b" => ("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512),
-        "sm3" => ("SM3", Box::new(Sm3::new()) as Box<dyn Digest>, 512),
-        _ => panic!("unknown algorithm"),
+        ALGORITHM_OPTIONS_SYSV => (
+            ALGORITHM_OPTIONS_SYSV,
+            Box::new(SYSV::new()) as Box<dyn Digest>,
+            512,
+        ),
+        ALGORITHM_OPTIONS_BSD => (
+            ALGORITHM_OPTIONS_BSD,
+            Box::new(BSD::new()) as Box<dyn Digest>,
+            1024,
+        ),
+        ALGORITHM_OPTIONS_CRC => (
+            ALGORITHM_OPTIONS_CRC,
+            Box::new(CRC::new()) as Box<dyn Digest>,
+            256,
+        ),
+        ALGORITHM_OPTIONS_MD5 => (
+            ALGORITHM_OPTIONS_MD5,
+            Box::new(Md5::new()) as Box<dyn Digest>,
+            128,
+        ),
+        ALGORITHM_OPTIONS_SHA1 => (
+            ALGORITHM_OPTIONS_SHA1,
+            Box::new(Sha1::new()) as Box<dyn Digest>,
+            160,
+        ),
+        ALGORITHM_OPTIONS_SHA224 => (
+            ALGORITHM_OPTIONS_SHA224,
+            Box::new(Sha224::new()) as Box<dyn Digest>,
+            224,
+        ),
+        ALGORITHM_OPTIONS_SHA256 => (
+            ALGORITHM_OPTIONS_SHA256,
+            Box::new(Sha256::new()) as Box<dyn Digest>,
+            256,
+        ),
+        ALGORITHM_OPTIONS_SHA384 => (
+            ALGORITHM_OPTIONS_SHA384,
+            Box::new(Sha384::new()) as Box<dyn Digest>,
+            384,
+        ),
+        ALGORITHM_OPTIONS_SHA512 => (
+            ALGORITHM_OPTIONS_SHA512,
+            Box::new(Sha512::new()) as Box<dyn Digest>,
+            512,
+        ),
+        ALGORITHM_OPTIONS_BLAKE2B => (
+            ALGORITHM_OPTIONS_BLAKE2B,
+            Box::new(Blake2b::new()) as Box<dyn Digest>,
+            512,
+        ),
+        ALGORITHM_OPTIONS_SM3 => (
+            ALGORITHM_OPTIONS_SM3,
+            Box::new(Sm3::new()) as Box<dyn Digest>,
+            512,
+        ),
+        _ => unreachable!("unknown algorithm: clap should have prevented this case"),
     }
 }
 
@@ -80,23 +136,23 @@ where
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
         match (options.algo_name, not_file) {
-            ("SYSV", true) => println!(
+            (ALGORITHM_OPTIONS_SYSV, true) => println!(
                 "{} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits)
             ),
-            ("SYSV", false) => println!(
+            (ALGORITHM_OPTIONS_SYSV, false) => println!(
                 "{} {} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits),
                 filename.display()
             ),
-            ("BSD", true) => println!(
+            (ALGORITHM_OPTIONS_BSD, true) => println!(
                 "{:0bsd_width$} {:bsd_width$}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits)
             ),
-            ("BSD", false) => println!(
+            (ALGORITHM_OPTIONS_BSD, false) => println!(
                 "{:0bsd_width$} {:bsd_width$} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits),
@@ -149,6 +205,21 @@ mod options {
     pub static ALGORITHM: &str = "algorithm";
 }
 
+const ALGORITHM_HELP_DESC: &str =
+    "DIGEST determines the digest algorithm and default output format:\n\
+\n\
+-a=sysv:    (equivalent to sum -s)\n\
+-a=bsd:     (equivalent to sum -r)\n\
+-a=crc:     (equivalent to cksum)\n\
+-a=md5:     (equivalent to md5sum)\n\
+-a=sha1:    (equivalent to sha1sum)\n\
+-a=sha224:  (equivalent to sha224sum)\n\
+-a=sha256:  (equivalent to sha256sum)\n\
+-a=sha384:  (equivalent to sha384sum)\n\
+-a=sha512:  (equivalent to sha512sum)\n\
+-a=blake2b: (equivalent to b2sum)\n\
+-a=sm3:     (only available through cksum)\n";
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
@@ -157,7 +228,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let algo_name: &str = match matches.get_one::<String>(options::ALGORITHM) {
         Some(v) => v,
-        None => "crc",
+        None => ALGORITHM_OPTIONS_CRC,
     };
 
     let (name, algo, bits) = detect_algo(algo_name);
@@ -192,6 +263,20 @@ pub fn uu_app() -> Command {
                 .long(options::ALGORITHM)
                 .short('a')
                 .help("select the digest type to use. See DIGEST below")
-                .value_name("ALGORITHM"),
+                .value_name("ALGORITHM")
+                .value_parser([
+                    ALGORITHM_OPTIONS_SYSV,
+                    ALGORITHM_OPTIONS_BSD,
+                    ALGORITHM_OPTIONS_CRC,
+                    ALGORITHM_OPTIONS_MD5,
+                    ALGORITHM_OPTIONS_SHA1,
+                    ALGORITHM_OPTIONS_SHA224,
+                    ALGORITHM_OPTIONS_SHA256,
+                    ALGORITHM_OPTIONS_SHA384,
+                    ALGORITHM_OPTIONS_SHA512,
+                    ALGORITHM_OPTIONS_BLAKE2B,
+                    ALGORITHM_OPTIONS_SM3,
+                ]),
         )
+        .after_help(ALGORITHM_HELP_DESC)
 }
