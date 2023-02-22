@@ -10,9 +10,10 @@ use platform_info::*;
 
 use clap::{crate_version, Command};
 use uucore::error::{FromIo, UResult};
+use uucore::{help_about, help_section};
 
-static ABOUT: &str = "Display machine architecture";
-static SUMMARY: &str = "Determine architecture name for current machine.";
+static ABOUT: &str = help_about!("arch.md");
+static SUMMARY: &str = help_section!("after help", "arch.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {

@@ -1,7 +1,11 @@
 <!-- spell-checker:ignore convs iseek oseek -->
 # dd
 
-## About
+```
+dd [OPERAND]...
+dd OPTION
+```
+
 Copy, and optionally convert, a file system resource
 
 ## After Help

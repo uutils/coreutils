@@ -1,14 +1,11 @@
 # expr
 
-## About
-
-Print the value of `EXPRESSION` to standard output
-
-## Usage
 ```
 expr [EXPRESSION]
 expr [OPTIONS]
 ```
+
+Print the value of `EXPRESSION` to standard output
 
 ## After help
 

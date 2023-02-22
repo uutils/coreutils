@@ -7,10 +7,10 @@
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
-use atty::Stream;
 use clap::crate_version;
 use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use fundu::DurationParser;
+use is_terminal::IsTerminal;
 use same_file::Handle;
 use std::collections::VecDeque;
 use std::ffi::OsString;
@@ -274,7 +274,7 @@ impl Settings {
                         .map_or(false, |meta| !meta.is_file())
                 });
 
-            if !blocking_stdin && atty::is(Stream::Stdin) {
+            if !blocking_stdin && std::io::stdin().is_terminal() {
                 show_warning!("following standard input indefinitely is ineffective");
             }
         }

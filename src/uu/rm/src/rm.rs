@@ -15,7 +15,7 @@ use std::ops::BitOr;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{format_usage, prompt_yes, show_error};
+use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show_error};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -37,21 +37,9 @@ struct Options {
     verbose: bool,
 }
 
-const ABOUT: &str = "Remove (unlink) the FILE(s)";
-const USAGE: &str = "{} [OPTION]... FILE...";
-const LONG_USAGE: &str = "\
-By default, rm does not remove directories.  Use the --recursive (-r or -R)
-option to remove each listed directory, too, along with all of its contents
-
-To remove a file whose name starts with a '-', for example '-foo',
-use one of these commands:
-rm -- -foo
-
-rm ./-foo
-
-Note that if you use rm to remove a file, it might be possible to recover
-some of its contents, given sufficient expertise and/or time.  For greater
-assurance that the contents are truly unrecoverable, consider using shred.";
+const ABOUT: &str = help_about!("rm.md");
+const USAGE: &str = help_usage!("rm.md");
+const AFTER_HELP: &str = help_section!("after help", "rm.md");
 
 static OPT_DIR: &str = "dir";
 static OPT_INTERACTIVE: &str = "interactive";
@@ -69,7 +57,7 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
+    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)

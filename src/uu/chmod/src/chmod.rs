@@ -12,12 +12,12 @@ use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{ExitCode, UResult, USimpleError, UUsageError};
+use uucore::error::{set_exit_code, ExitCode, UResult, USimpleError, UUsageError};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, show, show_error};
 
 const ABOUT: &str = "Change the mode of each FILE to MODE.\n\
     With --reference, change the mode of each FILE to that of RFILE.";
@@ -190,26 +190,31 @@ impl Chmoder {
             let file = Path::new(filename);
             if !file.exists() {
                 if file.is_symlink() {
-                    println!(
-                        "failed to change mode of {} from 0000 (---------) to 0000 (---------)",
-                        filename.quote()
-                    );
                     if !self.quiet {
-                        return Err(USimpleError::new(
+                        show!(USimpleError::new(
                             1,
                             format!("cannot operate on dangling symlink {}", filename.quote()),
                         ));
                     }
+                    if self.verbose {
+                        println!(
+                            "failed to change mode of {} from 0000 (---------) to 1500 (r-x-----T)",
+                            filename.quote()
+                        );
+                    }
                 } else if !self.quiet {
-                    return Err(USimpleError::new(
+                    show!(USimpleError::new(
                         1,
                         format!(
                             "cannot access {}: No such file or directory",
                             filename.quote()
-                        ),
+                        )
                     ));
                 }
-                return Err(ExitCode::new(1));
+                // GNU exits with exit code 1 even if -q or --quiet are passed
+                // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
+                set_exit_code(1);
+                continue;
             }
             if self.recursive && self.preserve_root && filename == "/" {
                 return Err(USimpleError::new(
