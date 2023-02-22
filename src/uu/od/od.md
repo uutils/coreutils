@@ -46,4 +46,4 @@ Any type specification can have a "z" suffix, which will add a ASCII dump at
     the end of the line.
 
 If an error occurred, a diagnostic message will be printed to stderr, and the
-exitcode will be non-zero.
+exit code will be non-zero.
