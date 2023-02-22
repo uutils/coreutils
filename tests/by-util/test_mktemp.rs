@@ -21,6 +21,7 @@ static TEST_TEMPLATE6: &str = "tempXXXlate"; // spell-checker:disable-line
 static TEST_TEMPLATE7: &str = "XXXtemplate"; // spell-checker:disable-line
 #[cfg(unix)]
 static TEST_TEMPLATE8: &str = "tempXXXl/ate";
+static TEST_TEMPLATE9: &str = "a.XXXX";
 #[cfg(windows)]
 static TEST_TEMPLATE8: &str = "tempXXXl\\ate";
 
@@ -567,6 +568,14 @@ fn test_template_path_separator() {
             "mktemp: invalid template, {}, contains directory separator\n",
             r"a\bXXX".quote()
         ));
+}
+
+/// Test that a prefix with a point is valid.
+#[test]
+fn test_prefix_template_separator() {
+    new_ucmd!()
+        .args(&["-t", TEST_TEMPLATE9])
+        .succeeds();
 }
 
 /// Test that a suffix with a path separator is invalid.
