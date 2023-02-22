@@ -20,18 +20,11 @@ use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult};
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
-static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
-static LONG_HELP: &str = "
-If standard input is terminal, it'll be replaced with /dev/null.
-If standard output is terminal, it'll be appended to nohup.out instead,
-or $HOME/nohup.out, if nohup.out open failed.
-If standard error is terminal, it'll be redirected to stdout.
-";
-const USAGE: &str = "\
-    {} COMMAND [ARG]...
-    {} FLAG";
+const ABOUT: &str = help_about!("nohup.md");
+const AFTER_HELP: &str = help_section!("after help", "nohup.md");
+const USAGE: &str = help_usage!("nohup.md");
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation
 static EXIT_CANCELED: i32 = 125;
@@ -116,7 +109,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .arg(
             Arg::new(options::CMD)
