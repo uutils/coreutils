@@ -1,3 +1,4 @@
+<!-- spell-checker:ignore ugoa -->
 # mkdir
 
 ```
