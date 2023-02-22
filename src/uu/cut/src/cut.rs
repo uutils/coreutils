@@ -9,6 +9,7 @@
 
 use bstr::io::BufReadExt;
 use clap::{crate_version, Arg, ArgAction, Command};
+use is_terminal::IsTerminal;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -136,7 +137,7 @@ enum Mode {
 }
 
 fn stdout_writer() -> Box<dyn Write> {
-    if atty::is(atty::Stream::Stdout) {
+    if std::io::stdout().is_terminal() {
         Box::new(stdout())
     } else {
         Box::new(BufWriter::new(stdout())) as Box<dyn Write>

@@ -12,6 +12,7 @@
 
 // last synced with: cat (GNU coreutils) 8.13
 use clap::{crate_version, Arg, ArgAction, Command};
+use is_terminal::IsTerminal;
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
@@ -332,7 +333,7 @@ fn cat_path(
             let stdin = io::stdin();
             let mut handle = InputHandle {
                 reader: stdin,
-                is_interactive: atty::is(atty::Stream::Stdin),
+                is_interactive: std::io::stdin().is_terminal(),
             };
             cat_handle(&mut handle, options, state)
         }

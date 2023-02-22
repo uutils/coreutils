@@ -17,7 +17,7 @@ path = "src/cat.rs"
 [dependencies]
 clap = { workspace=true }
 thiserror = { workspace = true }
-atty = { workspace=true }
+is-terminal = { workspace = true }
 uucore = { workspace=true, features=["fs", "pipes"] }
 
 [target.'cfg(unix)'.dependencies]
