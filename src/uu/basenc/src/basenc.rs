@@ -20,7 +20,10 @@ use std::io::{stdin, Read};
 use uucore::error::UClapError;
 
 use uucore::{help_about, help_section, help_usage};
+use uucore::{help_about, help_section, help_usage};
 
+const ABOUT: &str = help_about!("basenc.md");
+const USAGE: &str = help_usage!("basenc.md");
 const ABOUT: &str = help_about!("basenc.md");
 const USAGE: &str = help_usage!("basenc.md");
 
