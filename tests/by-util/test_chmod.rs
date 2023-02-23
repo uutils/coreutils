@@ -650,3 +650,24 @@ fn test_chmod_file_symlink_after_non_existing_file() {
         0o100764
     );
 }
+
+#[test]
+fn test_quiet_n_verbose_used_multiple_times() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("--verbose")
+        .arg("--verbose")
+        .arg("file")
+        .succeeds();
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("--quiet")
+        .arg("--quiet")
+        .arg("file")
+        .succeeds();
+}
