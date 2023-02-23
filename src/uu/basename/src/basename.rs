@@ -11,7 +11,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::{is_separator, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
-use uucore::{format_usage, help_usage, help_about};
+use uucore::{format_usage, help_about, help_usage};
 
 static ABOUT: &str = help_about!("basename.md");
 
