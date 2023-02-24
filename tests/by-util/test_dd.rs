@@ -1536,3 +1536,25 @@ fn test_multiple_processes_reading_stdin() {
         .succeeds()
         .stdout_only("def\n");
 }
+
+/// Test that discarding system file cache fails for stdin.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nocache_stdin_error() {
+    new_ucmd!()
+        .args(&["iflag=nocache", "count=0", "status=noxfer"])
+        .fails()
+        .code_is(1)
+        .stderr_only("dd: failed to discard cache for: 'standard input': Illegal seek\n0+0 records in\n0+0 records out\n");
+}
+
+/// Test for discarding system file cache.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nocache_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("f", b"a".repeat(1 << 20).as_slice());
+    ucmd.args(&["if=f", "of=/dev/null", "iflag=nocache", "status=noxfer"])
+        .succeeds()
+        .stderr_only("2048+0 records in\n2048+0 records out\n");
+}

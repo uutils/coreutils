@@ -785,12 +785,38 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
     // Optimization: if no blocks are to be written, then don't
     // bother allocating any buffers.
     if let Some(Num::Blocks(0) | Num::Bytes(0)) = i.settings.count {
+        // Even though we are not reading anything from the input
+        // file, we still need to honor the `nocache` flag, which
+        // requests that we inform the system that we no longer
+        // need the contents of the input file in a system cache.
+        //
+        // TODO Better error handling for overflowing `len`.
+        if i.settings.iflags.nocache {
+            let offset = 0;
+            let len = i.src.len()?.try_into().unwrap();
+            i.discard_cache(offset, len);
+        }
+        // Similarly, discard the system cache for the output file.
+        //
+        // TODO Better error handling for overflowing `len`.
+        if i.settings.oflags.nocache {
+            let offset = 0;
+            let len = o.dst.len()?.try_into().unwrap();
+            o.discard_cache(offset, len);
+        }
         return finalize(&mut o, rstat, wstat, start, &prog_tx, output_thread);
     };
 
     // Create a common buffer with a capacity of the block size.
     // This is the max size needed.
     let mut buf = vec![BUF_INIT_BYTE; bsize];
+
+    // Index in the input file where we are reading bytes and in
+    // the output file where we are writing bytes.
+    //
+    // These are updated on each iteration of the main loop.
+    let mut read_offset = 0;
+    let mut write_offset = 0;
 
     // The main read/write loop.
     //
@@ -810,6 +836,30 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
             break;
         }
         let wstat_update = o.write_blocks(&buf)?;
+
+        // Discard the system file cache for the read portion of
+        // the input file.
+        //
+        // TODO Better error handling for overflowing `offset` and `len`.
+        let read_len = rstat_update.bytes_total;
+        if i.settings.iflags.nocache {
+            let offset = read_offset.try_into().unwrap();
+            let len = read_len.try_into().unwrap();
+            i.discard_cache(offset, len);
+        }
+        read_offset += read_len;
+
+        // Discard the system file cache for the written portion
+        // of the output file.
+        //
+        // TODO Better error handling for overflowing `offset` and `len`.
+        let write_len = wstat_update.bytes_total;
+        if o.settings.oflags.nocache {
+            let offset = write_offset.try_into().unwrap();
+            let len = write_len.try_into().unwrap();
+            o.discard_cache(offset, len);
+        }
+        write_offset += write_len;
 
         // Update the read/write stats and inform the progress thread once per second.
         //
