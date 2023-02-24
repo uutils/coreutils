@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore pacman pamac nixpkgs -->
+<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva -->
 
 # Installation
 
