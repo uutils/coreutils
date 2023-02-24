@@ -317,13 +317,13 @@ impl<'a> Input<'a> {
                 _ => break,
             }
         }
-
         buf.truncate(bytes_total);
         Ok(ReadStat {
             reads_complete,
             reads_partial,
             // Records are not truncated when filling.
             records_truncated: 0,
+            bytes_total: bytes_total.try_into().unwrap(),
         })
     }
 
@@ -334,6 +334,7 @@ impl<'a> Input<'a> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
+        let mut bytes_total = 0;
 
         while base_idx < buf.len() {
             let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
@@ -342,11 +343,13 @@ impl<'a> Input<'a> {
             match self.read(&mut buf[base_idx..next_blk])? {
                 0 => break,
                 rlen if rlen < target_len => {
+                    bytes_total += rlen;
                     reads_partial += 1;
                     let padding = vec![pad; target_len - rlen];
                     buf.splice(base_idx + rlen..next_blk, padding.into_iter());
                 }
-                _ => {
+                rlen => {
+                    bytes_total += rlen;
                     reads_complete += 1;
                 }
             }
@@ -359,6 +362,7 @@ impl<'a> Input<'a> {
             reads_complete,
             reads_partial,
             records_truncated: 0,
+            bytes_total: bytes_total.try_into().unwrap(),
         })
     }
 }
