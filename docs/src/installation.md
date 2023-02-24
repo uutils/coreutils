@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore pacman pamac nixpkgs -->
+<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva -->
 
 # Installation
 
@@ -77,6 +77,13 @@ pamac install uutils-coreutils
 
 ```bash
 nix-env -iA nixos.uutils-coreutils
+```
+
+### OpenMandriva Lx
+[![openmandriva cooker package](https://repology.org/badge/version-for-repo/openmandriva_cooker/uutils-coreutils.svg)](https://repology.org/project/uutils-coreutils/versions)
+
+```bash
+dnf install uutils-coreutils
 ```
 
 ### Ubuntu
