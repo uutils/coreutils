@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE
 
 mod datastructures;
 use datastructures::*;
@@ -42,9 +42,16 @@ use std::time;
 
 use clap::{crate_version, Arg, Command};
 use gcd::Gcd;
+#[cfg(target_os = "linux")]
+use nix::{
+    errno::Errno,
+    fcntl::{posix_fadvise, PosixFadviseAdvice},
+};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+#[cfg(target_os = "linux")]
+use uucore::{show, show_if_err};
 
 const ABOUT: &str = help_about!("dd.md");
 const AFTER_HELP: &str = help_section!("after help", "dd.md");
@@ -131,6 +138,16 @@ impl Source {
         Self::StdinFile(f)
     }
 
+    /// The length of the data source in number of bytes.
+    ///
+    /// If it cannot be determined, then this function returns 0.
+    fn len(&self) -> std::io::Result<i64> {
+        match self {
+            Self::File(f) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
+            _ => Ok(0),
+        }
+    }
+
     fn skip(&mut self, n: u64) -> io::Result<u64> {
         match self {
             #[cfg(not(unix))]
@@ -154,6 +171,23 @@ impl Source {
             Self::File(f) => f.seek(io::SeekFrom::Start(n)),
             #[cfg(unix)]
             Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
+        }
+    }
+
+    /// Discard the system file cache for the given portion of the data source.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the data
+    /// source. This function informs the kernel that the specified
+    /// portion of the source is no longer needed. If not possible,
+    /// then this function returns an error.
+    #[cfg(target_os = "linux")]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+        match self {
+            Self::File(f) => {
+                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
+                posix_fadvise(f.as_raw_fd(), offset, len, advice)
+            }
+            _ => Err(Errno::ESPIPE), // "Illegal seek"
         }
     }
 }
@@ -296,6 +330,29 @@ impl<'a> Read for Input<'a> {
 }
 
 impl<'a> Input<'a> {
+    /// Discard the system file cache for the given portion of the input.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the input.
+    /// This function informs the kernel that the specified portion of
+    /// the input file is no longer needed. If not possible, then this
+    /// function prints an error message to stderr and sets the exit
+    /// status code to 1.
+    #[allow(unused_variables)]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+        #[cfg(target_os = "linux")]
+        {
+            show_if_err!(self
+                .src
+                .discard_cache(offset, len)
+                .map_err_context(|| "failed to discard cache for: 'standard input'".to_string()));
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            // TODO Is there a way to discard filesystem cache on
+            // these other operating systems?
+        }
+    }
+
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
@@ -451,6 +508,33 @@ impl Dest {
             _ => Ok(()),
         }
     }
+
+    /// Discard the system file cache for the given portion of the destination.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the
+    /// destination. This function informs the kernel that the
+    /// specified portion of the destination is no longer needed. If
+    /// not possible, then this function returns an error.
+    #[cfg(target_os = "linux")]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+        match self {
+            Self::File(f, _) => {
+                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
+                posix_fadvise(f.as_raw_fd(), offset, len, advice)
+            }
+            _ => Err(Errno::ESPIPE), // "Illegal seek"
+        }
+    }
+
+    /// The length of the data destination in number of bytes.
+    ///
+    /// If it cannot be determined, then this function returns 0.
+    fn len(&self) -> std::io::Result<i64> {
+        match self {
+            Self::File(f, _) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
+            _ => Ok(0),
+        }
+    }
 }
 
 /// Decide whether the given buffer is all zeros.
@@ -582,6 +666,29 @@ impl<'a> Output<'a> {
         opts.custom_flags(make_linux_oflags(&settings.oflags).unwrap_or(0));
         let dst = Dest::Fifo(opts.open(filename)?);
         Ok(Self { dst, settings })
+    }
+
+    /// Discard the system file cache for the given portion of the output.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the output.
+    /// This function informs the kernel that the specified portion of
+    /// the output file is no longer needed. If not possible, then
+    /// this function prints an error message to stderr and sets the
+    /// exit status code to 1.
+    #[allow(unused_variables)]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+        #[cfg(target_os = "linux")]
+        {
+            show_if_err!(self
+                .dst
+                .discard_cache(offset, len)
+                .map_err_context(|| "failed to discard cache for: 'standard output'".to_string()));
+        }
+        #[cfg(target_os = "linux")]
+        {
+            // TODO Is there a way to discard filesystem cache on
+            // these other operating systems?
+        }
     }
 
     /// Write the given bytes one block at a time.
