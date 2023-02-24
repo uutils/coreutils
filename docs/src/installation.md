@@ -79,6 +79,13 @@ pamac install uutils-coreutils
 nix-env -iA nixos.uutils-coreutils
 ```
 
+### OpenMandriva Lx
+[![openmandriva cooker package](https://repology.org/badge/version-for-repo/openmandriva_cooker/uutils-coreutils.svg)](https://repology.org/project/uutils-coreutils/versions)
+
+```bash
+dnf install uutils-coreutils
+```
+
 ### Ubuntu
 
 [![Ubuntu package](https://repology.org/badge/version-for-repo/ubuntu_23_04/uutils-coreutils.svg)](https://packages.ubuntu.com/source/lunar/rust-coreutils)
