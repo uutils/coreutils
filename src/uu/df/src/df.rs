@@ -19,7 +19,7 @@ use uucore::error::FromIo;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::fsext::{read_fs_list, MountInfo};
 use uucore::parse_size::ParseSizeError;
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_section, help_usage, show};
 
 use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 
@@ -33,16 +33,9 @@ use crate::columns::{Column, ColumnError};
 use crate::filesystem::Filesystem;
 use crate::table::Table;
 
-static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
-                      or all file systems by default.";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
-const LONG_HELP: &str = "Display values are in units of the first available SIZE from --block-size,
-and the DF_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.
-Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).
-
-SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
-Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
-of 1000).";
+const ABOUT: &str = help_about!("df.md");
+const USAGE: &str = help_usage!("df.md");
+const AFTER_HELP: &str = help_section!("after help", "df.md");
 
 static OPT_HELP: &str = "help";
 static OPT_ALL: &str = "all";
@@ -487,7 +480,7 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
