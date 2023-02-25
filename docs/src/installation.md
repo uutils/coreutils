@@ -55,10 +55,10 @@ export PATH=/usr/lib/cargo/bin/coreutils:$PATH
 
 ### Gentoo
 
-[![Gentoo package](https://repology.org/badge/version-for-repo/gentoo/uutils-coreutils.svg)](https://packages.gentoo.org/packages/sys-apps/uutils)
+[![Gentoo package](https://repology.org/badge/version-for-repo/gentoo/uutils-coreutils.svg)](https://packages.gentoo.org/packages/sys-apps/uutils-coreutils)
 
 ```bash
-emerge -pv sys-apps/uutils
+emerge -pv sys-apps/uutils-coreutils
 ```
 
 ### Manjaro
