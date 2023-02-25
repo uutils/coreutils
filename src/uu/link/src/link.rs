@@ -11,10 +11,10 @@ use std::fs::hard_link;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Call the link function to create a link named FILE2 to an existing FILE1.";
-const USAGE: &str = "{} FILE1 FILE2";
+static ABOUT: &str = help_about!("link.md");
+const USAGE: &str = help_usage!("link.md");
 
 pub mod options {
     pub static FILES: &str = "FILES";

@@ -20,11 +20,12 @@ use uucore::{
     error::{FromIo, UResult},
     format_usage,
     fs::{canonicalize, MissingHandling, ResolveMode},
+    help_about, help_usage,
 };
 use uucore::{error::UClapError, show, show_if_err};
 
-static ABOUT: &str = "Print the resolved path";
-const USAGE: &str = "{} [OPTION]... FILE...";
+static ABOUT: &str = help_about!("realpath.md");
+const USAGE: &str = help_usage!("realpath.md");
 
 static OPT_QUIET: &str = "quiet";
 static OPT_STRIP: &str = "strip";
