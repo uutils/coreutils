@@ -254,7 +254,7 @@ fn test_touch_set_both_time_and_reference() {
 }
 
 #[test]
-fn test_touch_set_both_date_and_reference() {
+fn test_touch_set_absolute_date_with_reference() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ref_file = "test_touch_reference";
     let file = "test_touch_set_both_date_and_reference";
@@ -266,7 +266,40 @@ fn test_touch_set_both_date_and_reference() {
     assert!(at.file_exists(ref_file));
 
     ucmd.args(&["-d", "Thu Jan 01 12:34:00 2015", "-r", ref_file, file])
-        .fails();
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+    assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+}
+
+#[test]
+fn test_touch_set_relative_date_with_reference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ref_file = "test_touch_reference";
+    let file = "test_touch_set_both_date_and_reference";
+
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+
+    at.touch(ref_file);
+    set_file_times(&at, ref_file, start_of_year, start_of_year);
+    assert!(at.file_exists(ref_file));
+
+    ucmd.args(&["-d", "+3 days", "-r", ref_file, file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let three_days_later = str_to_filetime("%Y%m%d%H%M", "201501040000");
+
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime.unix_seconds(), three_days_later.unix_seconds());
+    assert_eq!(mtime.unix_seconds(), three_days_later.unix_seconds());
 }
 
 #[test]

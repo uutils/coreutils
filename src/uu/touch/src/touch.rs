@@ -16,7 +16,7 @@ use std::ffi::OsString;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use time::macros::{format_description, offset, time};
-use time::Duration;
+use time::{Duration, OffsetDateTime};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::{format_usage, show};
@@ -29,7 +29,7 @@ pub mod options {
     pub mod sources {
         pub static DATE: &str = "date";
         pub static REFERENCE: &str = "reference";
-        pub static CURRENT: &str = "current";
+        pub static TIMESTAMP: &str = "timestamp";
     }
     pub static HELP: &str = "help";
     pub static ACCESS: &str = "access";
@@ -77,18 +77,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ),
         )
     })?;
+
+    // If --reference is being used, then stat the provided file.
+    let reference_file_times = matches
+        .get_one::<OsString>(options::sources::REFERENCE)
+        .map(|reference| stat(Path::new(reference), !matches.get_flag(options::NO_DEREF)))
+        .map_or(Ok(None), |stat_result| stat_result.map(Some))?;
+
     let (mut atime, mut mtime) =
-        if let Some(reference) = matches.get_one::<OsString>(options::sources::REFERENCE) {
-            stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?
+        if let Some(date) = matches.get_one::<String>(options::sources::DATE) {
+            // --date optionally uses a reference time for relative times.
+            parse_date(date, reference_file_times)?
+        } else if let Some(timestamp_arg) = matches.get_one::<String>(options::sources::TIMESTAMP) {
+            let time = parse_timestamp(timestamp_arg)?;
+            (time, time)
+        } else if let Some(ref_times) = reference_file_times {
+            ref_times
         } else {
-            let timestamp = if let Some(date) = matches.get_one::<String>(options::sources::DATE) {
-                parse_date(date)?
-            } else if let Some(current) = matches.get_one::<String>(options::sources::CURRENT) {
-                parse_timestamp(current)?
-            } else {
-                local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap())
-            };
-            (timestamp, timestamp)
+            let time = local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap());
+            (time, time)
         };
 
     for filename in files {
@@ -101,7 +108,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let path = pathbuf.as_path();
 
-        if let Err(e) = path.metadata() {
+        let metadata = if matches.get_flag(options::NO_DEREF) {
+            path.symlink_metadata()
+        } else {
+            path.metadata()
+        };
+
+        if let Err(e) = metadata {
             if e.kind() != std::io::ErrorKind::NotFound {
                 return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
             }
@@ -191,10 +204,11 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::sources::CURRENT)
+            Arg::new(options::sources::TIMESTAMP)
                 .short('t')
                 .help("use [[CC]YY]MMDDhhmm[.ss] instead of the current time")
-                .value_name("STAMP"),
+                .value_name("STAMP")
+                .conflicts_with_all([options::sources::DATE, options::sources::REFERENCE]),
         )
         .arg(
             Arg::new(options::sources::DATE)
@@ -254,18 +268,25 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
-        .group(ArgGroup::new(options::SOURCES).args([
-            options::sources::CURRENT,
-            options::sources::DATE,
-            options::sources::REFERENCE,
-        ]))
+        // We define a group so we can easily check if any date/time sources
+        // were specified, but handle conflicts between options in the arg
+        // definitions above since they're not quite all mutually exclusive.
+        .group(
+            ArgGroup::new(options::SOURCES)
+                .args([
+                    options::sources::TIMESTAMP,
+                    options::sources::DATE,
+                    options::sources::REFERENCE,
+                ])
+                .multiple(true),
+        )
 }
 
 fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
     let metadata = if follow {
-        fs::symlink_metadata(path)
-    } else {
         fs::metadata(path)
+    } else {
+        fs::symlink_metadata(path)
     }
     .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?;
 
@@ -333,7 +354,17 @@ const YYYYMMDDHHMM_OFFSET_FORMAT: &[time::format_description::FormatItem] = form
     [offset_hour sign:mandatory][offset_minute]"
 );
 
-fn parse_date(s: &str) -> UResult<FileTime> {
+fn filetime_to_offset_dt(ft: FileTime) -> OffsetDateTime {
+    OffsetDateTime::from_unix_timestamp(ft.unix_seconds())
+        .unwrap()
+        .checked_add(Duration::nanoseconds(ft.nanoseconds().into()))
+        .unwrap()
+}
+
+fn parse_date(
+    s: &str,
+    reference_file_times: Option<(FileTime, FileTime)>,
+) -> UResult<(FileTime, FileTime)> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
@@ -349,7 +380,8 @@ fn parse_date(s: &str) -> UResult<FileTime> {
     // ("%c", POSIX_LOCALE_FORMAT),
     //
     if let Ok(parsed) = time::PrimitiveDateTime::parse(s, &POSIX_LOCALE_FORMAT) {
-        return Ok(local_dt_to_filetime(to_local(parsed)));
+        let result = local_dt_to_filetime(to_local(parsed));
+        return Ok((result, result));
     }
 
     // Also support other formats found in the GNU tests like
@@ -362,55 +394,62 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         YYYYMMDDHHMM_OFFSET_FORMAT,
     ] {
         if let Ok(parsed) = time::PrimitiveDateTime::parse(s, &fmt) {
-            return Ok(dt_to_filename(parsed));
+            let result = dt_to_filename(parsed);
+            return Ok((result, result));
         }
     }
 
     // "Equivalent to %Y-%m-%d (the ISO 8601 date format). (C99)"
     // ("%F", ISO_8601_FORMAT),
     if let Ok(parsed) = time::Date::parse(s, &ISO_8601_FORMAT) {
-        return Ok(local_dt_to_filetime(to_local(
-            time::PrimitiveDateTime::new(parsed, time!(00:00)),
-        )));
+        let result =
+            local_dt_to_filetime(to_local(time::PrimitiveDateTime::new(parsed, time!(00:00))));
+        return Ok((result, result));
     }
 
     // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"
     if s.bytes().next() == Some(b'@') {
         if let Ok(ts) = &s[1..].parse::<i64>() {
             // Don't convert to local time in this case - seconds since epoch are not time-zone dependent
-            return Ok(local_dt_to_filetime(
-                time::OffsetDateTime::from_unix_timestamp(*ts).unwrap(),
-            ));
+            let result =
+                local_dt_to_filetime(time::OffsetDateTime::from_unix_timestamp(*ts).unwrap());
+            return Ok((result, result));
         }
     }
 
-    // Relative day, like "today", "tomorrow", or "yesterday".
-    match s {
-        "now" | "today" => {
-            let now_local = time::OffsetDateTime::now_local().unwrap();
-            return Ok(local_dt_to_filetime(now_local));
-        }
-        "tomorrow" => {
-            let duration = time::Duration::days(1);
-            let now_local = time::OffsetDateTime::now_local().unwrap();
-            let diff = now_local.checked_add(duration).unwrap();
-            return Ok(local_dt_to_filetime(diff));
-        }
-        "yesterday" => {
-            let duration = time::Duration::days(1);
-            let now_local = time::OffsetDateTime::now_local().unwrap();
-            let diff = now_local.checked_sub(duration).unwrap();
-            return Ok(local_dt_to_filetime(diff));
-        }
-        _ => {}
+    // Select the reference base time we'll use for relative dates/times.
+    let reference_times = if let Some((ref_atime, ref_mtime)) = reference_file_times {
+        (
+            filetime_to_offset_dt(ref_atime),
+            filetime_to_offset_dt(ref_mtime),
+        )
+    } else {
+        let now_local = time::OffsetDateTime::now_local().unwrap();
+        (now_local, now_local)
+    };
+
+    if let Some(duration) = try_parse_rel_dt(s) {
+        return Ok((
+            local_dt_to_filetime(reference_times.0.checked_add(duration).unwrap()),
+            local_dt_to_filetime(reference_times.1.checked_add(duration).unwrap()),
+        ));
     }
 
-    // Relative time, like "-1 hour" or "+3 days".
-    //
-    // TODO Add support for "year" and "month".
-    // TODO Add support for times without spaces like "-1hour".
+    Err(USimpleError::new(1, format!("Unable to parse date: {s}")))
+}
+
+fn try_parse_rel_dt(s: &str) -> Option<time::Duration> {
     let tokens: Vec<&str> = s.split_whitespace().collect();
-    let maybe_duration = match &tokens[..] {
+    match &tokens[..] {
+        // Relative day, like "today", "tomorrow", or "yesterday".
+        ["now"] | ["today"] => Some(time::Duration::ZERO),
+        ["tomorrow"] => Some(time::Duration::days(1)),
+        ["yesterday"] => Some(time::Duration::days(-1)),
+
+        // Relative time, like "-1 hour" or "+3 days".
+        //
+        // TODO Add support for "year" and "month".
+        // TODO Add support for times without spaces like "-1hour".
         [num_str, "fortnight" | "fortnights"] => num_str
             .parse::<i64>()
             .ok()
@@ -431,14 +470,7 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         }
         ["second" | "seconds" | "sec" | "secs"] => Some(time::Duration::seconds(1)),
         _ => None,
-    };
-    if let Some(duration) = maybe_duration {
-        let now_local = time::OffsetDateTime::now_local().unwrap();
-        let diff = now_local.checked_add(duration).unwrap();
-        return Ok(local_dt_to_filetime(diff));
     }
-
-    Err(USimpleError::new(1, format!("Unable to parse date: {s}")))
 }
 
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
@@ -517,7 +549,10 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 fn pathbuf_from_stdout() -> UResult<PathBuf> {
     #[cfg(all(unix, not(target_os = "android")))]
     {
-        Ok(PathBuf::from("/dev/stdout"))
+        // We look up the target of /dev/stdout to avoid cases in which
+        // we're invoked with --no-dereference and end up trying to
+        // touch /dev/stdout instead of what it's pointing to.
+        Ok(std::fs::read_link("/dev/stdout")?)
     }
     #[cfg(target_os = "android")]
     {
@@ -583,6 +618,9 @@ fn pathbuf_from_stdout() -> UResult<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use time;
+
     #[cfg(windows)]
     #[test]
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
@@ -593,5 +631,119 @@ mod tests {
             .expect("pathbuf_from_stdout should have failed")
             .to_string()
             .contains("GetFinalPathNameByHandleW failed with code 1"));
+    }
+
+    #[test]
+    fn touch_test_parse_invalid_relative_time() {
+        assert_eq!(try_parse_rel_dt("not-a-relative-time"), None);
+        assert_eq!(try_parse_rel_dt("2 not-a-units"), None);
+        assert_eq!(try_parse_rel_dt("1 day stray-token"), None);
+    }
+
+    #[test]
+    fn touch_test_parse_now() {
+        assert_eq!(try_parse_rel_dt("now"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("today"), Some(Duration::ZERO));
+    }
+
+    #[test]
+    fn touch_test_parse_seconds() {
+        assert_eq!(try_parse_rel_dt("0 seconds"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("-0 seconds"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("+0 seconds"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("second"), Some(time::Duration::seconds(1)));
+        assert_eq!(
+            try_parse_rel_dt("seconds"),
+            Some(time::Duration::seconds(1))
+        );
+        assert_eq!(try_parse_rel_dt("1 second"), Some(Duration::seconds(1)));
+        assert_eq!(try_parse_rel_dt("1 seconds"), Some(Duration::seconds(1)));
+        assert_eq!(try_parse_rel_dt("1   second"), Some(Duration::seconds(1)));
+        assert_eq!(try_parse_rel_dt("-2 seconds"), Some(Duration::seconds(-2)));
+        assert_eq!(try_parse_rel_dt("+3 seconds"), Some(Duration::seconds(3)));
+    }
+
+    #[test]
+    fn touch_test_parse_minutes() {
+        assert_eq!(try_parse_rel_dt("0 minutes"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("-0 minutes"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("+0 minutes"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("minute"), Some(time::Duration::minutes(1)));
+        assert_eq!(
+            try_parse_rel_dt("minutes"),
+            Some(time::Duration::minutes(1))
+        );
+        assert_eq!(try_parse_rel_dt("1 minute"), Some(Duration::minutes(1)));
+        assert_eq!(try_parse_rel_dt("1 minutes"), Some(Duration::minutes(1)));
+        assert_eq!(try_parse_rel_dt("1   minute"), Some(Duration::minutes(1)));
+        assert_eq!(try_parse_rel_dt("-2 minutes"), Some(Duration::minutes(-2)));
+        assert_eq!(try_parse_rel_dt("+3 minutes"), Some(Duration::minutes(3)));
+    }
+
+    #[test]
+    fn touch_test_parse_hours() {
+        assert_eq!(try_parse_rel_dt("0 hours"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("-0 hours"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("+0 hours"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("hour"), Some(time::Duration::hours(1)));
+        assert_eq!(try_parse_rel_dt("hours"), Some(time::Duration::hours(1)));
+        assert_eq!(try_parse_rel_dt("1 hour"), Some(Duration::hours(1)));
+        assert_eq!(try_parse_rel_dt("1 hours"), Some(Duration::hours(1)));
+        assert_eq!(try_parse_rel_dt("1   hour"), Some(Duration::hours(1)));
+        assert_eq!(try_parse_rel_dt("-2 hours"), Some(Duration::hours(-2)));
+        assert_eq!(try_parse_rel_dt("+3 hours"), Some(Duration::hours(3)));
+    }
+
+    #[test]
+    fn touch_test_parse_days() {
+        assert_eq!(try_parse_rel_dt("0 days"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("-0 days"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("+0 days"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("day"), Some(time::Duration::days(1)));
+        assert_eq!(try_parse_rel_dt("days"), Some(time::Duration::days(1)));
+        assert_eq!(try_parse_rel_dt("tomorrow"), Some(time::Duration::days(1)));
+        assert_eq!(
+            try_parse_rel_dt("yesterday"),
+            Some(time::Duration::days(-1))
+        );
+        assert_eq!(try_parse_rel_dt("1 day"), Some(Duration::days(1)));
+        assert_eq!(try_parse_rel_dt("1 days"), Some(Duration::days(1)));
+        assert_eq!(try_parse_rel_dt("1   day"), Some(Duration::days(1)));
+        assert_eq!(try_parse_rel_dt("-2 days"), Some(Duration::days(-2)));
+        assert_eq!(try_parse_rel_dt("+3 days"), Some(Duration::days(3)));
+    }
+
+    #[test]
+    fn touch_test_parse_n_weeks() {
+        assert_eq!(try_parse_rel_dt("0 weeks"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("-0 weeks"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("+0 weeks"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("week"), Some(time::Duration::weeks(1)));
+        assert_eq!(try_parse_rel_dt("weeks"), Some(time::Duration::weeks(1)));
+        assert_eq!(try_parse_rel_dt("1 week"), Some(Duration::weeks(1)));
+        assert_eq!(try_parse_rel_dt("1 weeks"), Some(Duration::weeks(1)));
+        assert_eq!(try_parse_rel_dt("1   week"), Some(Duration::weeks(1)));
+        assert_eq!(try_parse_rel_dt("-2 weeks"), Some(Duration::weeks(-2)));
+        assert_eq!(try_parse_rel_dt("+3 weeks"), Some(Duration::weeks(3)));
+    }
+
+    #[test]
+    fn touch_test_parse_n_fortnights() {
+        assert_eq!(try_parse_rel_dt("0 fortnights"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("-0 fortnights"), Some(Duration::ZERO));
+        assert_eq!(try_parse_rel_dt("+0 fortnights"), Some(Duration::ZERO));
+        assert_eq!(
+            try_parse_rel_dt("fortnight"),
+            Some(time::Duration::weeks(2))
+        );
+        assert_eq!(
+            try_parse_rel_dt("fortnights"),
+            Some(time::Duration::weeks(2))
+        );
+        assert_eq!(try_parse_rel_dt("1 fortnight"), Some(Duration::weeks(2)));
+        assert_eq!(try_parse_rel_dt("1 fortnights"), Some(Duration::weeks(2)));
+        assert_eq!(try_parse_rel_dt("1   fortnight"), Some(Duration::weeks(2)));
+        assert_eq!(try_parse_rel_dt("-2 fortnights"), Some(Duration::weeks(-4)));
+        assert_eq!(try_parse_rel_dt("+3 fortnights"), Some(Duration::weeks(6)));
     }
 }
