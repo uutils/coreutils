@@ -510,3 +510,10 @@ path = "src/bin/coreutils.rs"
 name = "uudoc"
 path = "src/bin/uudoc.rs"
 required-features = ["uudoc"]
+
+[profile.release]
+opt-level = "z"
+debug = false
+lto = "thin"
+incremental = false
+strip = true
