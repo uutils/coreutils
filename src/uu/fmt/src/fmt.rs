@@ -14,7 +14,7 @@ use std::io::{stdin, stdout, Write};
 use std::io::{BufReader, BufWriter, Read};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, show_warning};
+use uucore::{format_usage, help_about, help_usage, show_warning};
 
 use self::linebreak::break_lines;
 use self::parasplit::ParagraphStream;
@@ -22,8 +22,8 @@ use self::parasplit::ParagraphStream;
 mod linebreak;
 mod parasplit;
 
-static ABOUT: &str = "Reformat paragraphs from input files (or stdin) to stdout.";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+static ABOUT: &str = help_about!("fmt.md");
+const USAGE: &str = help_usage!("fmt.md");
 static MAX_WIDTH: usize = 2500;
 
 static OPT_CROWN_MARGIN: &str = "crown-margin";
