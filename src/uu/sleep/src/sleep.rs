@@ -69,7 +69,7 @@ fn sleep(args: &[&str]) -> UResult<()> {
             Duration::new(0, 0)
         }
     });
-    let sleep_dur = intervals.fold(Duration::new(0, 0), |acc, n| acc + n);
+    let sleep_dur = intervals.fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
     if arg_error {
         return Err(UUsageError::new(1, ""));
     };

@@ -129,29 +129,55 @@ fn test_sleep_wrong_time() {
     new_ucmd!().args(&["0.1s", "abc"]).fails();
 }
 
-// TODO These tests would obviously block for a very long time. We
-// only want to verify that there is no error here, so we could just
-// figure out a way to terminate the child process after a short
-// period of time.
+#[test]
+fn test_sleep_when_single_input_exceeds_max_duration_then_no_error() {
+    let mut child = new_ucmd!()
+        .arg(format!("{}", u64::MAX as u128 + 1))
+        .timeout(Duration::from_secs(10))
+        .run_no_wait();
 
-// #[test]
-#[allow(dead_code)]
-fn test_dont_overflow() {
-    new_ucmd!()
-        .arg("9223372036854775808d")
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    #[cfg(unix)]
+    child
+        .delay(100)
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .signal_is(9) // make sure it was us who terminated the process
+        .no_output();
+    #[cfg(windows)]
+    child
+        .delay(100)
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .failure()
+        .no_output();
 }
 
-// #[test]
-#[allow(dead_code)]
-fn test_sum_overflow() {
-    new_ucmd!()
-        .args(&["100000000000000d", "100000000000000d", "100000000000000d"])
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+#[test]
+fn test_sleep_when_multiple_inputs_exceed_max_duration_then_no_error() {
+    let mut child = new_ucmd!()
+        .arg(format!("{}", u64::MAX))
+        .arg("1")
+        .timeout(Duration::from_secs(10))
+        .run_no_wait();
+
+    #[cfg(unix)]
+    child
+        .delay(100)
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .signal_is(9) // make sure it was us who terminated the process
+        .no_output();
+    #[cfg(windows)]
+    child
+        .delay(100)
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .failure()
+        .no_output();
 }
 
 #[test]
