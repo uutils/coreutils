@@ -1,5 +1,3 @@
-// spell-checker:ignore (vars) RFILE
-
 #![allow(clippy::upper_case_acronyms)]
 
 use clap::builder::ValueParser;
