@@ -421,12 +421,9 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::FilePath),
         );
 
-    for i in ["0","1","2","3","4","5","6","7","8","9"] { //can't iterate over {0..=9} because it doesn't support Into<Id>
-        res = res.arg(
-            Arg::new(i)
-            .short(i.chars().next().unwrap())
-            .num_args(0..=1)
-        );
+    for i in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] {
+        //can't iterate over {0..=9} because it doesn't support Into<Id>
+        res = res.arg(Arg::new(i).short(i.chars().next().unwrap()).num_args(0..=1));
     }
 
     res
