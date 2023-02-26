@@ -74,36 +74,9 @@ fn test_stdin_skip_and_check_2_chars() {
         .run()
         .stdout_is_fixture("skip-3-check-2-chars.expected");
 }
-/*
-#[test]
-fn test_stdin_skip_1_char_obsolete() {
-    new_ucmd!()
-        .args(&["+1"])
-        .pipe_in_fixture(SKIP_CHARS)
-        .run()
-        .stdout_is_fixture("skip-1-char.expected");
-}
 
 #[test]
-fn test_stdin_skip_5_chars_obsolete() {
-    new_ucmd!()
-        .args(&["+5"])
-        .pipe_in_fixture(SKIP_CHARS)
-        .run()
-        .stdout_is_fixture("skip-5-chars.expected");
-}
-
-#[test]
-fn test_stdin_skip_and_check_2_chars_obsolete() {
-    new_ucmd!()
-        .args(&["+3", "-w2"])
-        .pipe_in_fixture(SKIP_CHARS)
-        .run()
-        .stdout_is_fixture("skip-3-check-2-chars.expected");
-}
-*/
-#[test]
-fn test_stdin_skip_1_field() {
+fn test_stdin_skip_2_fields() {
     new_ucmd!()
         .args(&["-f2"])
         .pipe_in_fixture(SKIP_FIELDS)
@@ -112,12 +85,30 @@ fn test_stdin_skip_1_field() {
 }
 
 #[test]
-fn test_stdin_skip_1_field_obsolete() {
+fn test_stdin_skip_2_fields_obsolete() {
     new_ucmd!()
         .args(&["-2"])
         .pipe_in_fixture(SKIP_FIELDS)
         .run()
         .stdout_is_fixture("skip-2-fields.expected");
+}
+
+#[test]
+fn test_stdin_skip_21_fields() {
+    new_ucmd!()
+        .args(&["-f21"])
+        .pipe_in_fixture(SKIP_FIELDS)
+        .run()
+        .stdout_is_fixture("skip-21-fields.expected");
+}
+
+#[test]
+fn test_stdin_skip_21_fields_obsolete() {
+    new_ucmd!()
+        .args(&["-21"])
+        .pipe_in_fixture(SKIP_FIELDS)
+        .run()
+        .stdout_is_fixture("skip-21-fields.expected");
 }
 
 #[test]
