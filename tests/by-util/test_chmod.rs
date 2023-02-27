@@ -671,3 +671,68 @@ fn test_quiet_n_verbose_used_multiple_times() {
         .arg("file")
         .succeeds();
 }
+
+#[test]
+fn test_gnu_invalid_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("u+gr").arg("file").fails();
+}
+
+#[test]
+fn test_gnu_options() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("-w").arg("file").succeeds();
+    scene.ucmd().arg("file").arg("-w").succeeds();
+    scene.ucmd().arg("-w").arg("--").arg("file").succeeds();
+}
+
+#[test]
+fn test_gnu_reoccuring_options() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("-w").arg("-w").arg("file").succeeds();
+    scene
+        .ucmd()
+        .arg("-w")
+        .arg("-w")
+        .arg("-w")
+        .arg("file")
+        .succeeds();
+}
+
+#[test]
+fn test_gnu_special_filenames() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let perms_before = Permissions::from_mode(0o100640);
+    let perms_after = Permissions::from_mode(0o100440);
+
+    make_file(&at.plus_as_string("--"), perms_before.mode());
+    scene.ucmd().arg("-w").arg("--").arg("--").succeeds();
+    assert_eq!(at.metadata("--").permissions(), perms_after);
+    set_permissions(at.plus("--"), perms_before.clone()).unwrap();
+    scene.ucmd().arg("--").arg("-w").arg("--").succeeds();
+    assert_eq!(at.metadata("--").permissions(), perms_after);
+    at.remove("--");
+
+    make_file(&at.plus_as_string("-w"), perms_before.mode());
+    scene.ucmd().arg("-w").arg("--").arg("-w").succeeds();
+    assert_eq!(at.metadata("-w").permissions(), perms_after);
+    set_permissions(at.plus("-w"), perms_before).unwrap();
+    scene.ucmd().arg("--").arg("-w").arg("-w").succeeds();
+    assert_eq!(at.metadata("-w").permissions(), perms_after);
+}
+
+#[test]
+fn test_gnu_special_options() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("--").arg("--").arg("file").succeeds();
+    scene.ucmd().arg("--").arg("--").fails();
+}
