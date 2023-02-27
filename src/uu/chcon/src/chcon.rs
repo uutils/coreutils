@@ -4,7 +4,7 @@
 
 use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::format_usage;
+use uucore::{help_about, help_usage};
 use uucore::{display::Quotable, show_error, show_warning};
 
 use clap::{Arg, ArgAction, Command};
@@ -22,12 +22,8 @@ mod fts;
 use errors::*;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static ABOUT: &str = "Change the SELinux security context of each FILE to CONTEXT. \n\
-                      With --reference, change the security context of each FILE to that of RFILE.";
-const USAGE: &str = "\
-    {} [OPTION]... CONTEXT FILE... \n    \
-    {} [OPTION]... [-u USER] [-r ROLE] [-l RANGE] [-t TYPE] FILE... \n    \
-    {} [OPTION]... --reference=RFILE FILE...";
+const ABOUT: &str = help_about!("chcon.md");
+const USAGE: &str = help_usage!("chcon.md");
 
 pub mod options {
     pub static HELP: &str = "help";
@@ -154,7 +150,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+        .override_usage(USAGE)
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
