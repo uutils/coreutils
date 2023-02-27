@@ -281,11 +281,7 @@ impl Params {
             .join(prefix_from_template)
             .display()
             .to_string();
-
-        // Check that the prefix is valid.
-        let prefix_of_template = Path::new(prefix_from_template).to_string_lossy();
-
-        if options.treat_as_template && prefix_of_template.contains(MAIN_SEPARATOR) {
+        if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::PrefixContainsDirSeparator(options.template));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
