@@ -4,8 +4,8 @@
 
 use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{help_about, help_usage};
 use uucore::{display::Quotable, show_error, show_warning};
+use uucore::{help_about, help_usage};
 
 use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
