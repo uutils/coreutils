@@ -65,6 +65,46 @@ struct Settings {
     status: Option<StatusLevel>,
 }
 
+use std::thread::sleep;
+use std::time::Duration;
+
+use std::sync::{
+    atomic::{AtomicBool, Ordering::Relaxed},
+    Arc,
+};
+
+#[derive(Debug, Clone)]
+pub struct Alarm {
+    interval: Duration,
+    trigger: Arc<AtomicBool>,
+}
+
+impl Alarm {
+    pub fn with_interval(interval: Duration) -> Alarm {
+        let trigger = Arc::new(AtomicBool::default());
+
+        let weak_trigger = Arc::downgrade(&trigger);
+        std::thread::spawn(move || loop {
+            sleep(interval);
+            if let Some(trigger) = weak_trigger.upgrade() {
+                trigger.store(true, Relaxed);
+            } else {
+                break;
+            }
+        });
+
+        Alarm { interval, trigger }
+    }
+
+    pub fn is_triggered(&self) -> bool {
+        self.trigger.swap(false, Relaxed)
+    }
+
+    pub fn get_interval(&self) -> Duration {
+        self.interval
+    }
+}
+
 /// A number in blocks or bytes
 ///
 /// Some values (seek, skip, iseek, oseek) can have values either in blocks or in bytes.
@@ -628,7 +668,6 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
     // information.
     let (prog_tx, rx) = mpsc::channel();
     let output_thread = thread::spawn(gen_prog_updater(rx, i.settings.status));
-    let mut progress_as_secs = 0;
 
     // Optimization: if no blocks are to be written, then don't
     // bother allocating any buffers.
@@ -639,6 +678,7 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
     // Create a common buffer with a capacity of the block size.
     // This is the max size needed.
     let mut buf = vec![BUF_INIT_BYTE; bsize];
+    let alarm = Alarm::with_interval(Duration::from_secs(1));
 
     // The main read/write loop.
     //
@@ -667,9 +707,8 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
         // error.
         rstat += rstat_update;
         wstat += wstat_update;
-        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), false);
-        if prog_update.duration.as_secs() >= progress_as_secs {
-            progress_as_secs = prog_update.duration.as_secs() + 1;
+        if alarm.is_triggered() {
+            let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), false);
             prog_tx.send(prog_update).unwrap_or(());
         }
     }
