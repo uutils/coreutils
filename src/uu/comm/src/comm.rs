@@ -13,13 +13,12 @@ use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
 use uucore::error::FromIo;
 use uucore::error::UResult;
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 
-static ABOUT: &str = "Compare two sorted files line by line";
-static LONG_HELP: &str = "";
-const USAGE: &str = "{} [OPTION]... FILE1 FILE2";
+const ABOUT: &str = help_about!("comm.md");
+const USAGE: &str = help_usage!("comm.md");
 
 mod options {
     pub const COLUMN_1: &str = "1";
@@ -160,7 +159,6 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
