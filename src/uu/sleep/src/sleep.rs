@@ -14,6 +14,7 @@ use uucore::{
 };
 
 use clap::{crate_version, Arg, ArgAction, Command};
+use fundu::{self, DurationParser};
 
 static ABOUT: &str = help_about!("sleep.md");
 const USAGE: &str = help_usage!("sleep.md");
@@ -61,10 +62,14 @@ pub fn uu_app() -> Command {
 
 fn sleep(args: &[&str]) -> UResult<()> {
     let mut arg_error = false;
+
+    use fundu::TimeUnit::*;
+    let parser = DurationParser::with_time_units(&[Second, Minute, Hour, Day]);
+
     let sleep_dur = args
         .iter()
         .filter_map(|input| {
-            uucore::parse_time::from_str(input.trim()).ok().or_else(|| {
+            parser.parse(input.trim()).ok().or_else(|| {
                 arg_error = true;
                 show_error!("invalid time interval '{input}'");
                 None
