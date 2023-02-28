@@ -95,19 +95,23 @@ fn output_delimiter_nul() {
         .stdout_only_fixture("ab_delimiter_nul.expected");
 }
 
-// even though (info) documentation suggests this is an option
-// in latest GNU Coreutils comm, it actually is not.
-// this test is essentially an alarm in case some well-intending
-// developer implements it.
-//marked as unimplemented as error message not set yet.
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn zero_terminated() {
     for param in ["-z", "--zero-terminated"] {
         new_ucmd!()
-            .args(&[param, "a", "b"])
-            .fails()
-            .stderr_only("error to be defined");
+            .args(&[param, "a_nul", "b_nul"])
+            .succeeds()
+            .stdout_only_fixture("ab_nul.expected");
+    }
+}
+
+#[test]
+fn zero_terminated_with_total() {
+    for param in ["-z", "--zero-terminated"] {
+        new_ucmd!()
+            .args(&[param, "--total", "a_nul", "b_nul"])
+            .succeeds()
+            .stdout_only_fixture("ab_nul_total.expected");
     }
 }
 
