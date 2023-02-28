@@ -1,3 +1,5 @@
+<!-- spell-checker:ignore RFILE -->
+
 # chcon
 
 ```
