@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use uucore::{
     error::{UResult, USimpleError, UUsageError},
-    format_usage, help_about, help_section, help_usage, show,
+    format_usage, help_about, help_section, help_usage, show_error,
 };
 
 use clap::{crate_version, Arg, ArgAction, Command};
@@ -61,15 +61,17 @@ pub fn uu_app() -> Command {
 
 fn sleep(args: &[&str]) -> UResult<()> {
     let mut arg_error = false;
-    let intervals = args.iter().map(|s| match uucore::parse_time::from_str(s) {
-        Ok(result) => result,
-        Err(err) => {
-            arg_error = true;
-            show!(USimpleError::new(1, err));
-            Duration::new(0, 0)
-        }
-    });
-    let sleep_dur = intervals.fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
+    let sleep_dur = args
+        .iter()
+        .filter_map(|input| {
+            uucore::parse_time::from_str(input.trim()).ok().or_else(|| {
+                arg_error = true;
+                show_error!("invalid time interval '{input}'");
+                None
+            })
+        })
+        .fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
+
     if arg_error {
         return Err(UUsageError::new(1, ""));
     };
