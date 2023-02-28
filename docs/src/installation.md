@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore pacman pamac nixpkgs -->
+<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva -->
 
 # Installation
 
@@ -55,10 +55,10 @@ export PATH=/usr/lib/cargo/bin/coreutils:$PATH
 
 ### Gentoo
 
-[![Gentoo package](https://repology.org/badge/version-for-repo/gentoo/uutils-coreutils.svg)](https://packages.gentoo.org/packages/sys-apps/uutils)
+[![Gentoo package](https://repology.org/badge/version-for-repo/gentoo/uutils-coreutils.svg)](https://packages.gentoo.org/packages/sys-apps/uutils-coreutils)
 
 ```bash
-emerge -pv sys-apps/uutils
+emerge -pv sys-apps/uutils-coreutils
 ```
 
 ### Manjaro
@@ -77,6 +77,13 @@ pamac install uutils-coreutils
 
 ```bash
 nix-env -iA nixos.uutils-coreutils
+```
+
+### OpenMandriva Lx
+[![openmandriva cooker package](https://repology.org/badge/version-for-repo/openmandriva_cooker/uutils-coreutils.svg)](https://repology.org/project/uutils-coreutils/versions)
+
+```bash
+dnf install uutils-coreutils
 ```
 
 ### Ubuntu
@@ -105,6 +112,13 @@ brew install uutils-coreutils
 
 ```
 port install coreutils-uutils
+```
+
+## FreeBSD
+[![FreeBSD port](https://repology.org/badge/version-for-repo/freebsd/uutils-coreutils.svg)](https://repology.org/project/uutils-coreutils/versions)
+
+```sh
+pkg install uutils
 ```
 
 ## Windows

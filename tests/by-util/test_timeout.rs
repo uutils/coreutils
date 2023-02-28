@@ -121,6 +121,14 @@ fn test_invalid_signal() {
         .usage_error("'invalid': invalid signal");
 }
 
+#[test]
+fn test_invalid_multi_byte_characters() {
+    new_ucmd!()
+        .args(&["10€", "sleep", "0"])
+        .fails()
+        .usage_error("invalid time interval '10€'");
+}
+
 /// Test that the long form of the `--kill-after` argument is recognized.
 #[test]
 fn test_kill_after_long() {

@@ -263,7 +263,6 @@ feat_os_windows_legacy = [
 test = [ "uu_test" ]
 
 [workspace.dependencies]
-atty = "0.2"
 bigdecimal = "0.3"
 binary-heap-plus = "0.5.0"
 bstr = "1.0"
@@ -287,6 +286,7 @@ gcd = "2.2"
 glob = "0.3.0"
 half = "2.1"
 indicatif = "0.17"
+is-terminal = "0.4.3"
 itertools = "0.10.0"
 libc = "0.2.139"
 lscolors = { version = "0.13.0", default-features=false, features = ["nu-ansi-term"] }
@@ -312,7 +312,7 @@ redox_syscall = "0.2"
 regex = "1.7.1"
 rust-ini = "0.18.0"
 same-file = "1.0.6"
-selinux = "0.3"
+selinux = "0.4"
 signal-hook = "0.3.14"
 smallvec = { version = "1.10", features = ["union"] }
 strum = "0.24.1"
@@ -331,6 +331,16 @@ winapi-util = "0.1.5"
 windows-sys = { version="0.42.0", default-features=false }
 xattr = "0.2.3"
 zip = { version = "0.6.3", default_features=false, features=["deflate"] }
+
+hex = "0.4.3"
+md-5 = "0.10.5"
+sha1 = "0.10.1"
+sha2 = "0.10.2"
+sha3 = "0.10.6"
+blake2b_simd = "1.0.1"
+blake3 = "1.3.2"
+sm3 = "0.4.1"
+digest = "0.10.6"
 
 uucore = { version=">=0.0.17", package="uucore", path="src/uucore" }
 uucore_procs = { version=">=0.0.17", package="uucore_procs", path="src/uucore_procs" }
@@ -476,13 +486,13 @@ time = { workspace=true, features=["local-offset"] }
 unindent = "0.1"
 uucore = { workspace=true, features=["entries", "process", "signals"] }
 walkdir = { workspace=true }
-atty = { workspace=true }
+is-terminal = { workspace=true }
 hex-literal = "0.3.1"
 rstest = "0.16.0"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
 procfs = { version = "0.14", default-features = false }
-rlimit = "0.8.3"
+rlimit = "0.9.1"
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace=true, features=["process", "signal", "user"] }

@@ -7,6 +7,8 @@ use std::{fs::File, io::Read, path::PathBuf};
 use proc_macro::{Literal, TokenStream, TokenTree};
 use quote::quote;
 
+const MARKDOWN_CODE_FENCES: &str = "```";
+
 //## rust proc-macro background info
 //* ref: <https://dev.to/naufraghi/procedural-macro-in-rust-101-k3f> @@ <http://archive.is/Vbr5e>
 //* ref: [path construction from LitStr](https://oschwald.github.io/maxminddb-rust/syn/struct.LitStr.html) @@ <http://archive.is/8YDua>
@@ -51,7 +53,19 @@ fn render_markdown(s: &str) -> String {
     s.replace('`', "")
 }
 
-/// Get the usage from the "Usage" section in the help file.
+/// Get the about text from the help file.
+///
+/// The about text is assumed to be the text between the first markdown
+/// code block and the next header, if any. It may span multiple lines.
+#[proc_macro]
+pub fn help_about(input: TokenStream) -> TokenStream {
+    let input: Vec<TokenTree> = input.into_iter().collect();
+    let filename = get_argument(&input, 0, "filename");
+    let text: String = parse_about(&read_help(&filename));
+    TokenTree::Literal(Literal::string(&text)).into()
+}
+
+/// Get the usage from the help file.
 ///
 /// The usage is assumed to be surrounded by markdown code fences. It may span
 /// multiple lines. The first word of each line is assumed to be the name of
@@ -61,7 +75,7 @@ fn render_markdown(s: &str) -> String {
 pub fn help_usage(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
-    let text: String = parse_usage(&parse_help("usage", &filename));
+    let text: String = parse_usage(&read_help(&filename));
     TokenTree::Literal(Literal::string(&text)).into()
 }
 
@@ -94,7 +108,7 @@ pub fn help_section(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let section = get_argument(&input, 0, "section");
     let filename = get_argument(&input, 1, "filename");
-    let text = parse_help(&section, &filename);
+    let text = parse_help_section(&section, &read_help(&filename));
     let rendered = render_markdown(&text);
     TokenTree::Literal(Literal::string(&rendered)).into()
 }
@@ -121,13 +135,11 @@ fn get_argument(input: &[TokenTree], index: usize, name: &str) -> String {
         .to_string()
 }
 
-/// Read the help file and extract a section
-fn parse_help(section: &str, filename: &str) -> String {
-    let section = section.to_lowercase();
-    let section = section.trim_matches('"');
+/// Read the help file
+fn read_help(filename: &str) -> String {
     let mut content = String::new();
-    let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
+    let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     path.push(filename);
 
     File::open(path)
@@ -135,7 +147,7 @@ fn parse_help(section: &str, filename: &str) -> String {
         .read_to_string(&mut content)
         .unwrap();
 
-    parse_help_section(section, &content)
+    content
 }
 
 /// Get a single section from content
@@ -146,6 +158,8 @@ fn parse_help_section(section: &str, content: &str) -> String {
         line.strip_prefix("##")
             .map_or(false, |l| l.trim().to_lowercase() == section)
     }
+
+    let section = &section.to_lowercase();
 
     // We cannot distinguish between an empty or non-existing section below,
     // so we do a quick test to check whether the section exists to provide
@@ -167,17 +181,17 @@ fn parse_help_section(section: &str, content: &str) -> String {
         .to_string()
 }
 
-/// Parses a markdown code block into a usage string
+/// Parses the first markdown code block into a usage string
 ///
 /// The code fences are removed and the name of the util is replaced
 /// with `{}` so that it can be replaced with the appropriate name
 /// at runtime.
 fn parse_usage(content: &str) -> String {
     content
-        .strip_suffix("```")
-        .unwrap()
         .lines()
-        .skip(1) // Skip the "```" of markdown syntax
+        .skip_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
+        .skip(1)
+        .take_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
         .map(|l| {
             // Replace the util name (assumed to be the first word) with "{}"
             // to be replaced with the runtime value later.
@@ -187,12 +201,31 @@ fn parse_usage(content: &str) -> String {
                 "{}\n".to_string()
             }
         })
-        .collect()
+        .collect::<Vec<_>>()
+        .join("")
+        .trim()
+        .to_string()
+}
+
+/// Parses the text between the first markdown code block and the next header, if any,
+/// into an about string.
+fn parse_about(content: &str) -> String {
+    content
+        .lines()
+        .skip_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
+        .skip(1)
+        .skip_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
+        .skip(1)
+        .take_while(|l| !l.starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_help_section, parse_usage};
+    use super::{parse_about, parse_help_section, parse_usage};
 
     #[test]
     fn section_parsing() {
@@ -207,6 +240,10 @@ mod tests {
 
         assert_eq!(
             parse_help_section("some section", input),
+            "This is some section"
+        );
+        assert_eq!(
+            parse_help_section("SOME SECTION", input),
             "This is some section"
         );
         assert_eq!(
@@ -233,7 +270,6 @@ mod tests {
     fn usage_parsing() {
         let input = "\
             # ls\n\
-            ## Usage\n\
             ```\n\
             ls -l\n\
             ```\n\
@@ -244,17 +280,55 @@ mod tests {
             This is the other section\n\
             with multiple lines\n";
 
-        assert_eq!(parse_usage(&parse_help_section("usage", input)), "{} -l",);
+        assert_eq!(parse_usage(input), "{} -l");
+    }
 
-        assert_eq!(
-            parse_usage(
-                "\
-                ```\n\
-                util [some] [options]\n\
-                ```\
-                "
-            ),
-            "{} [some] [options]"
-        );
+    #[test]
+    fn multi_line_usage_parsing() {
+        let input = "\
+            # ls\n\
+            ```\n\
+            ls -a\n\
+            ls -b\n\
+            ls -c\n\
+            ```\n\
+            ## some section\n\
+            This is some section\n";
+
+        assert_eq!(parse_usage(input), "{} -a\n{} -b\n{} -c");
+    }
+
+    #[test]
+    fn about_parsing() {
+        let input = "\
+            # ls\n\
+            ```\n\
+            ls -l\n\
+            ```\n\
+            \n\
+            This is the about section\n\
+            \n\
+            ## some section\n\
+            This is some section\n";
+
+        assert_eq!(parse_about(input), "This is the about section");
+    }
+
+    #[test]
+    fn multi_line_about_parsing() {
+        let input = "\
+            # ls\n\
+            ```\n\
+            ls -l\n\
+            ```\n\
+            \n\
+            about a\n\
+            \n\
+            about b\n\
+            \n\
+            ## some section\n\
+            This is some section\n";
+
+        assert_eq!(parse_about(input), "about a\n\nabout b");
     }
 }

@@ -10,20 +10,14 @@ use std::time::Duration;
 
 use uucore::{
     error::{UResult, USimpleError, UUsageError},
-    format_usage, show,
+    format_usage, help_about, help_section, help_usage, show,
 };
 
 use clap::{crate_version, Arg, ArgAction, Command};
 
-static ABOUT: &str = "Pause for NUMBER seconds.";
-const USAGE: &str = "\
-    {} NUMBER[SUFFIX]...
-    {} OPTION";
-static LONG_HELP: &str = "Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
-'m' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
-that require NUMBER be an integer, here NUMBER may be an arbitrary floating
-point number.  Given two or more arguments, pause for the amount of time
-specified by the sum of their values.";
+static ABOUT: &str = help_about!("sleep.md");
+const USAGE: &str = help_usage!("sleep.md");
+static AFTER_HELP: &str = help_section!("after help", "sleep.md");
 
 mod options {
     pub const NUMBER: &str = "NUMBER";
@@ -54,7 +48,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(

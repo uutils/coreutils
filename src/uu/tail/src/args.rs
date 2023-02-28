@@ -7,26 +7,20 @@
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
-use atty::Stream;
 use clap::crate_version;
 use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use fundu::DurationParser;
+use is_terminal::IsTerminal;
 use same_file::Handle;
 use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
-use uucore::{format_usage, show_warning};
+use uucore::{format_usage, help_about, help_usage, show_warning};
 
-const ABOUT: &str = "\
-    Print the last 10 lines of each FILE to standard output.\n\
-    With more than one FILE, precede each with a header giving the file name.\n\
-    With no FILE, or when FILE is -, read standard input.\n\
-    \n\
-    Mandatory arguments to long flags are mandatory for short flags too.\
-    ";
-const USAGE: &str = "{} [FLAG]... [FILE]...";
+const ABOUT: &str = help_about!("tail.md");
+const USAGE: &str = help_usage!("tail.md");
 
 pub mod options {
     pub mod verbosity {
@@ -274,7 +268,7 @@ impl Settings {
                         .map_or(false, |meta| !meta.is_file())
                 });
 
-            if !blocking_stdin && atty::is(Stream::Stdin) {
+            if !blocking_stdin && std::io::stdin().is_terminal() {
                 show_warning!("following standard input indefinitely is ineffective");
             }
         }
