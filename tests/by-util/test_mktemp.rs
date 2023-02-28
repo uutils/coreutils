@@ -578,6 +578,26 @@ fn test_prefix_template_separator() {
     new_ucmd!().args(&["-t", TEST_TEMPLATE9]).succeeds();
 }
 
+#[test]
+fn test_prefix_template_with_path_separator() {
+    #[cfg(not(windows))]
+    new_ucmd!()
+        .args(&["-t", "a/XXX"])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, {}, contains directory separator\n",
+            "a/XXX".quote()
+        ));
+    #[cfg(windows)]
+    new_ucmd!()
+        .args(&["-t", r"a\XXX"])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, {}, contains directory separator\n",
+            r"a\XXX".quote()
+        ));
+}
+
 /// Test that a suffix with a path separator is invalid.
 #[test]
 fn test_suffix_path_separator() {
