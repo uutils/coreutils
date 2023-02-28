@@ -29,6 +29,7 @@ pub mod options {
     pub static IGNORE_CASE: &str = "ignore-case";
     pub static REPEATED: &str = "repeated";
     pub static SKIP_FIELDS: &str = "skip-fields";
+    pub static OBSOLETE_SKIP_FIELDS: &str = "obsolete_skip_field";
     pub static SKIP_CHARS: &str = "skip-chars";
     pub static UNIQUE: &str = "unique";
     pub static ZERO_TERMINATED: &str = "zero-terminated";
@@ -58,6 +59,8 @@ struct Uniq {
     ignore_case: bool,
     zero_terminated: bool,
 }
+
+const OBSOLETE_SKIP_FIELDS_DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 macro_rules! write_line_terminator {
     ($writer:expr, $line_terminator:expr) => {
@@ -245,21 +248,38 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Optio
     })
 }
 
-fn obsolete_skip_field(matches: &ArgMatches) -> Option<usize> {
-    for i in 0..=9 {
-        let mut s: String = i.to_string();
-        let v = matches.get_one::<String>(&s);
+// gets number of fields to be skipped from the shorthand option `-N`
+//
+//```
+//uniq -12345
+//```
+// the first digit isn't interpreted by clap as part of the value
+// so `get_one()` would return `2345`, then to get the actual value
+// we loop over every possible first digit, append the value to it
+// and parse the resulting string as usize, an error at this point
+// means that a character which isn't a digit was given
+fn obsolete_skip_field(matches: &ArgMatches) -> UResult<Option<usize>> {
+    for opt_text in OBSOLETE_SKIP_FIELDS_DIGITS {
+        let argument = matches.get_one::<String>(opt_text);
+        if matches.contains_id(opt_text) {
+            let mut full = opt_text.to_owned();
+            if let Some(ar) = argument {
+                full.push_str(ar);
+            }
+            let value = full.parse::<usize>();
 
-        if matches.contains_id(s.as_str()) {
-            if let Some(k) = v {
-                s.push_str(k);
-                return s.parse::<usize>().ok().or(Some(i));
-            } else {
-                return Some(i);
+            if let Err(_reason) = value {
+                return Err(USimpleError {
+                    code: 42,
+                    message: format!("Invalid argument for skip-fields: {}", full),
+                }
+                .into());
+            } else if let Ok(val) = value {
+                return Ok(Some(val));
             }
         }
     }
-    None
+    Ok(None)
 }
 
 #[uucore::main]
@@ -282,7 +302,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let skip_fields_modern: Option<usize> = opt_parsed(options::SKIP_FIELDS, &matches)?;
 
-    let skip_fields_old = obsolete_skip_field(&matches);
+    let skip_fields_old: Option<usize> = obsolete_skip_field(&matches)?;
 
     let uniq = Uniq {
         repeats_only: matches.get_flag(options::REPEATED)
@@ -313,7 +333,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let mut res = Command::new(uucore::util_name())
+    let mut cmd = Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -410,10 +430,11 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .group(
-            ArgGroup::new("obsolete_skip_field")
-            .multiple(false)
-            .args(["0","1","2","3","4","5","6","7","8","9"])
-        )
+            ArgGroup::new(options::OBSOLETE_SKIP_FIELDS)
+            .multiple(false)                       // throw an error on `uniq -3 -21` and `uniq -f 4 -3` rather than giving a wrong result
+            .conflicts_with(options::SKIP_FIELDS)  // for consistency with other uutils arguments, while in gnu
+            .args(OBSOLETE_SKIP_FIELDS_DIGITS)     // `uniq -3 -21` would be equal to `uniq -f 321`
+        )                                          // and `uniq -f 4 -3` would be equal to `uniq -f 3`
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
@@ -421,12 +442,17 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::FilePath),
         );
 
-    for i in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] {
-        //can't iterate over {0..=9} because it doesn't support Into<Id>
-        res = res.arg(Arg::new(i).short(i.chars().next().unwrap()).num_args(0..=1));
+    for i in OBSOLETE_SKIP_FIELDS_DIGITS {
+        cmd = cmd.arg(
+            Arg::new(i)
+                .short(i.chars().next().unwrap())
+                .num_args(0..=1)
+                .hide_short_help(true)
+                .hide_long_help(true),
+        );
     }
 
-    res
+    cmd
 }
 
 fn get_delimiter(matches: &ArgMatches) -> Delimiters {
