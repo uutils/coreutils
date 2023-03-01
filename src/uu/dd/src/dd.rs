@@ -80,20 +80,18 @@ pub struct Alarm {
 }
 
 impl Alarm {
-    pub fn with_interval(interval: Duration) -> Alarm {
+    pub fn with_interval(interval: Duration) -> Self {
         let trigger = Arc::new(AtomicBool::default());
 
         let weak_trigger = Arc::downgrade(&trigger);
-        std::thread::spawn(move || loop {
-            sleep(interval);
-            if let Some(trigger) = weak_trigger.upgrade() {
+        std::thread::spawn(move || {
+            while let Some(trigger) = weak_trigger.upgrade() {
+                sleep(interval);
                 trigger.store(true, Relaxed);
-            } else {
-                break;
             }
         });
 
-        Alarm { interval, trigger }
+        Self { interval, trigger }
     }
 
     pub fn is_triggered(&self) -> bool {
