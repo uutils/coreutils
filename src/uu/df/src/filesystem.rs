@@ -229,7 +229,7 @@ mod tests {
         fn test_bad_path() {
             assert_eq!(
                 // This path better not exist....
-                mount_info_from_path(&[], "/ksjhdkljflksdjfklsdjfksdjlkfjsd", true).unwrap_err(),
+                mount_info_from_path(&[], "/non-existent-path", true).unwrap_err(),
                 FsError::InvalidPath
             );
         }
