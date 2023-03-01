@@ -248,16 +248,17 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Optio
     })
 }
 
-// gets number of fields to be skipped from the shorthand option `-N`
-//
-//```
-//uniq -12345
-//```
-// the first digit isn't interpreted by clap as part of the value
-// so `get_one()` would return `2345`, then to get the actual value
-// we loop over every possible first digit, append the value to it
-// and parse the resulting string as usize, an error at this point
-// means that a character which isn't a digit was given
+/// Gets number of fields to be skipped from the shorthand option `-N`
+///
+/// ```bash
+/// uniq -12345
+/// ```
+/// the first digit isn't interpreted by clap as part of the value
+/// so `get_one()` would return `2345`, then to get the actual value
+/// we loop over every possible first digit, only one of which can be
+/// found in the command line because they conflict with each other,
+/// append the value to it and parse the resulting string as usize,
+/// an error at this point means that a character that isn't a digit was given
 fn obsolete_skip_field(matches: &ArgMatches) -> UResult<Option<usize>> {
     for opt_text in OBSOLETE_SKIP_FIELDS_DIGITS {
         let argument = matches.get_one::<String>(opt_text);
@@ -268,14 +269,14 @@ fn obsolete_skip_field(matches: &ArgMatches) -> UResult<Option<usize>> {
             }
             let value = full.parse::<usize>();
 
-            if let Err(_reason) = value {
+            if let Ok(val) = value {
+                return Ok(Some(val));
+            } else {
                 return Err(USimpleError {
-                    code: 42,
+                    code: 1,
                     message: format!("Invalid argument for skip-fields: {}", full),
                 }
                 .into());
-            } else if let Ok(val) = value {
-                return Ok(Some(val));
             }
         }
     }
@@ -412,6 +413,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::SKIP_FIELDS)
                 .short('f')
                 .long(options::SKIP_FIELDS)
+                .overrides_with_all(OBSOLETE_SKIP_FIELDS_DIGITS)
                 .help("avoid comparing the first N fields")
                 .value_name("N"),
         )
@@ -430,11 +432,23 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .group(
+            // in GNU `uniq` every every digit of these arguments
+            // would be interpreted as a simple flag,
+            // these flags then are concatenated to get
+            // the number of fields to skip.
+            // in this way `uniq -1 -z -2` would be
+            // equal to `uniq -12 -q`, since this behavior
+            // is counterintuitive and it's hard to do in clap
+            // we handle it more like GNU `fold`: we have a flag
+            // for each possible initial digit, that takes the
+            // rest of the value as argument.
+            // we disallow explicitly multiple occurrences
+            // because then it would have a different behavior
+            // from GNU
             ArgGroup::new(options::OBSOLETE_SKIP_FIELDS)
-            .multiple(false)                       // throw an error on `uniq -3 -21` and `uniq -f 4 -3` rather than giving a wrong result
-            .conflicts_with(options::SKIP_FIELDS)  // for consistency with other uutils arguments, while in gnu
-            .args(OBSOLETE_SKIP_FIELDS_DIGITS)     // `uniq -3 -21` would be equal to `uniq -f 321`
-        )                                          // and `uniq -f 4 -3` would be equal to `uniq -f 3`
+            .multiple(false)
+            .args(OBSOLETE_SKIP_FIELDS_DIGITS)
+        )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
@@ -447,8 +461,7 @@ pub fn uu_app() -> Command {
             Arg::new(i)
                 .short(i.chars().next().unwrap())
                 .num_args(0..=1)
-                .hide_short_help(true)
-                .hide_long_help(true),
+                .hide(true),
         );
     }
 
