@@ -575,7 +575,9 @@ fn test_template_path_separator() {
 /// Test that a prefix with a point is valid.
 #[test]
 fn test_prefix_template_separator() {
-    new_ucmd!().args(&["-p", ".", "-t", TEST_TEMPLATE9]).succeeds();
+    new_ucmd!()
+        .args(&["-p", ".", "-t", TEST_TEMPLATE9])
+        .succeeds();
 }
 
 #[test]
