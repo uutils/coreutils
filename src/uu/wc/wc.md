@@ -1,7 +1,6 @@
 # wc
 
-## Usage
-```
+```sh
 wc [OPTION]... [FILE]...
 ```
 
