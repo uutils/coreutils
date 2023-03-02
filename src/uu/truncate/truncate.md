@@ -1,7 +1,5 @@
 # truncate
 
-## Usage
-
 ```sh
 truncate [OPTION]... [FILE]...
 ```
