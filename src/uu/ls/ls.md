@@ -1,6 +1,7 @@
 # ls
 
 ## Usage
+
 ```
 ls [OPTION]... [FILE]...
 ```
