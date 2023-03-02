@@ -98,7 +98,7 @@ impl Settings {
     }
 }
 
-static ABOUT: &str = help_about!("wc.md");
+const ABOUT: &str = help_about!("wc.md");
 const USAGE: &str = help_usage!("wc.md");
 
 pub mod options {
