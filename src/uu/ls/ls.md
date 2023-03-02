@@ -1,8 +1,6 @@
 # ls
 
-## Usage
-
-```
+```sh
 ls [OPTION]... [FILE]...
 ```
 
