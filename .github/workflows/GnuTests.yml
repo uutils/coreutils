@@ -86,7 +86,7 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl
+        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev
     - name: Add various locales
       shell: bash
       run: |
@@ -317,7 +317,7 @@ jobs:
       run: |
         ## Install dependencies
         sudo apt-get update
-        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl
+        sudo apt-get install -y autoconf autopoint bison texinfo gperf gcc g++ gdb python3-pyinotify jq valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev
     - name: Add various locales
       run: |
         ## Add various locales
