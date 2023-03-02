@@ -55,7 +55,7 @@ use uucore::{
     parse_size::parse_size,
     version_cmp::version_cmp,
 };
-use uucore::{parse_glob, show, show_error, show_warning, help_about, help_section, help_usage};
+use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
