@@ -106,6 +106,16 @@ fn zero_terminated() {
 }
 
 #[test]
+fn zero_terminated_provided_multiple_times() {
+    for param in ["-z", "--zero-terminated"] {
+        new_ucmd!()
+            .args(&[param, param, param, "a_nul", "b_nul"])
+            .succeeds()
+            .stdout_only_fixture("ab_nul.expected");
+    }
+}
+
+#[test]
 fn zero_terminated_with_total() {
     for param in ["-z", "--zero-terminated"] {
         new_ucmd!()

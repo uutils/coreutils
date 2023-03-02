@@ -236,6 +236,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ZERO_TERMINATED)
                 .long(options::ZERO_TERMINATED)
                 .short('z')
+                .overrides_with(options::ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline")
                 .action(ArgAction::SetTrue),
         )
