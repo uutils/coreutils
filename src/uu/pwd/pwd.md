@@ -1,8 +1,6 @@
 # pwd
 
-## Usage
-
-```
+```sh
 pwd [OPTION]... [FILE]...
 ```
 
