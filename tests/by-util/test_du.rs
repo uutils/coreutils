@@ -391,7 +391,12 @@ fn test_du_h_flag_empty_file() {
 fn test_du_time() {
     let ts = TestScenario::new(util_name!());
 
+    // du --time formats the timestamp according to the local timezone. We set the TZ
+    // environment variable to UTC in the commands below to ensure consistent outputs
+    // and test results regardless of the timezone of the machine this test runs in.
+
     ts.ccmd("touch")
+        .env("TZ", "UTC")
         .arg("-a")
         .arg("-t")
         .arg("201505150000")
@@ -399,19 +404,35 @@ fn test_du_time() {
         .succeeds();
 
     ts.ccmd("touch")
+        .env("TZ", "UTC")
         .arg("-m")
         .arg("-t")
         .arg("201606160000")
         .arg("date_test")
         .succeeds();
 
-    let result = ts.ucmd().arg("--time").arg("date_test").succeeds();
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
 
-    let result = ts.ucmd().arg("--time=atime").arg("date_test").succeeds();
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time=atime")
+        .arg("date_test")
+        .succeeds();
     result.stdout_only("0\t2015-05-15 00:00\tdate_test\n");
 
-    let result = ts.ucmd().arg("--time=ctime").arg("date_test").succeeds();
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time=ctime")
+        .arg("date_test")
+        .succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
 
     if birth_supported() {
