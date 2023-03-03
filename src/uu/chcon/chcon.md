@@ -7,5 +7,5 @@ chcon [OPTION]... [-u USER] [-r ROLE] [-l RANGE] [-t TYPE] FILE...
 chcon [OPTION]... --reference=RFILE FILE...
 ```
 
-Change the SELinux security context of each FILE to CONTEXT. 
+Change the SELinux security context of each FILE to CONTEXT.
 With --reference, change the security context of each FILE to that of RFILE.

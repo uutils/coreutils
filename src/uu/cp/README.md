@@ -1,18 +1,18 @@
 <!-- markdownlint-disable first-line-heading -->
 <!-- spell-checker:ignore (markdown) markdownlint -->
 
-## Feature list
+# Feature list
 
 <!-- spell-checker:ignore (options) linkgs reflink -->
 
-### To Do
+## To Do
 
 - [ ] cli-symbolic-links
 - [ ] context
 - [ ] copy-contents
 - [ ] sparse
 
-### Completed
+## Completed
 
 - [x] archive
 - [x] attributes-only
