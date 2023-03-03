@@ -3,9 +3,8 @@
 
 use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::{display::Quotable, show_error, show_warning};
-use uucore::{help_about, help_usage};
+use uucore::{format_usage, help_about, help_usage};
 
 use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
@@ -21,8 +20,8 @@ mod fts;
 
 use errors::*;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
-static ABOUT: &str = help_about!("chcon.md");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const ABOUT: &str = help_about!("chcon.md");
 const USAGE: &str = help_usage!("chcon.md");
 
 pub mod options {
