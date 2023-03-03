@@ -1,4 +1,7 @@
 # ls
+
+```
+ls [OPTION]... [FILE]...
 ```
 
 List directory contents.
