@@ -9,8 +9,8 @@
 
 use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
-use uucore::format_usage;
 use uucore::perms::{chown_base, options, IfFrom};
+use uucore::{format_usage, help_about, help_usage};
 
 use uucore::error::{FromIo, UResult, USimpleError};
 
@@ -19,11 +19,9 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-static ABOUT: &str = "Change file owner and group";
+static ABOUT: &str = help_about!("chown.md");
 
-const USAGE: &str = "\
-    {} [OPTION]... [OWNER][:[GROUP]] FILE...
-    {} [OPTION]... --reference=RFILE FILE...";
+const USAGE: &str = help_usage!("chown.md");
 
 fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)> {
     let filter = if let Some(spec) = matches.get_one::<String>(options::FROM) {
