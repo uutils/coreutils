@@ -1,6 +1,5 @@
 # ls
 
-```sh
 ls [OPTION]... [FILE]...
 ```
 
