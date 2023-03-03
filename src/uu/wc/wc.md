@@ -1,6 +1,5 @@
 # wc
 
-```sh
 wc [OPTION]... [FILE]...
 ```
 
