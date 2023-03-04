@@ -30,7 +30,7 @@ This can also be used to compare with version of ls built before your changes to
 
 Here is a `bash` script for doing this comparison:
 
-```bash
+```shell
 #!/bin/bash
 cargo build --no-default-features --features ls --release
 args="$@"
@@ -48,13 +48,13 @@ hyperfine "ls $args" "target/release/coreutils ls $args"
 
 With Cargo Flamegraph you can easily make a flamegraph of `ls`:
 
-```bash
+```shell
 cargo flamegraph --cmd coreutils -- ls [additional parameters]
 ```
 
 However, if the `-R` option is given, the output becomes pretty much useless due to recursion. We can fix this by merging all the direct recursive calls with `uniq`, below is a `bash` script that does this.
 
-```bash
+```shell
 #!/bin/bash
 cargo build --release --no-default-features --features ls
 perf record target/release/coreutils ls "$@"
