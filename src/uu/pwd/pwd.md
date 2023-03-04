@@ -1,6 +1,6 @@
 # pwd
 
-```sh
+```
 pwd [OPTION]... [FILE]...
 ```
 
