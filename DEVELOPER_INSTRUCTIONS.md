@@ -62,3 +62,7 @@ Your git commits will then automatically be checked. If a check fails, an error 
 ## Using Clippy
 
 The `msrv` key in the clippy configuration file `clippy.toml` is used to disable lints pertaining to newer features by specifying the minimum supported Rust version (MSRV). However, this key is only supported on `nightly`. To invoke clippy without errors, use `cargo +nightly clippy`. In order to also check tests and non-default crate features, use `cargo +nightly clippy --all-targets --all-features`.
+
+## Markdown linter
+
+We use <https://github.com/DavidAnson/markdownlint> to lint the Markdown files.
