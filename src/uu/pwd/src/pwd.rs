@@ -10,13 +10,13 @@ use clap::{crate_version, Arg, Command};
 use std::env;
 use std::io;
 use std::path::PathBuf;
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 
-static ABOUT: &str = "Display the full filename of the current working directory.";
-const USAGE: &str = "{} [OPTION]... FILE...";
+static ABOUT: &str = help_about!("pwd.md");
+const USAGE: &str = help_usage!("pwd.md");
 static OPT_LOGICAL: &str = "logical";
 static OPT_PHYSICAL: &str = "physical";
 
