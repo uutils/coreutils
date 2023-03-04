@@ -1,3 +1,5 @@
+<!-- spell-checker:ignore Dhhmm -->
+
 # date
 
 ```
