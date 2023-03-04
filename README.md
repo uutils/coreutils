@@ -12,7 +12,7 @@
 -----------------------------------------------
 
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME manpages -->
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org).
@@ -145,8 +145,8 @@ $ cargo install --path .
 
 This command will install uutils into Cargo's *bin* folder (*e.g.* `$HOME/.cargo/bin`).
 
-This does not install files necessary for shell completion. For shell completion to work,
-use `GNU Make` or see `Manually install shell completions`.
+This does not install files necessary for shell completion or manpages.
+For manpages or shell completion to work, use `GNU Make` or see `Manually install shell completions`/`Manually install manpages`.
 
 ### GNU Make
 
@@ -212,6 +212,20 @@ run:
 
 ```bash
 cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
+```
+
+### Manually install manpages
+
+To generate manpages, the syntax is:
+```bash
+cargo run manpage <utility>
+```
+
+So, to install the manpage for `ls` to `/usr/local/share/man/man1/ls.1`
+run:
+
+```bash
+cargo run manpage ls > /usr/local/share/man/man1/ls.1
 ```
 
 ## Un-installation
