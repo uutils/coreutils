@@ -27,7 +27,9 @@ use std::cmp;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
+use std::io::{self, Read, Seek, SeekFrom, Stdin, Stdout, Write};
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
@@ -90,30 +92,106 @@ impl Num {
     }
 }
 
-struct Input<'a, R: Read> {
-    src: R,
+/// Data sources.
+enum Source {
+    /// Input from stdin.
+    Stdin(Stdin),
+
+    /// Input from a file.
+    File(File),
+
+    /// Input from a named pipe, also known as a FIFO.
+    #[cfg(unix)]
+    Fifo(File),
+}
+
+impl Source {
+    fn skip(&mut self, n: u64) -> io::Result<u64> {
+        match self {
+            Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
+                Ok(m) if m < n => {
+                    show_error!("'standard input': cannot skip to specified offset");
+                    Ok(m)
+                }
+                Ok(m) => Ok(m),
+                Err(e) => Err(e),
+            },
+            Self::File(f) => f.seek(io::SeekFrom::Start(n)),
+            #[cfg(unix)]
+            Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
+        }
+    }
+}
+
+impl Read for Source {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Stdin(stdin) => stdin.read(buf),
+            Self::File(f) => f.read(buf),
+            #[cfg(unix)]
+            Self::Fifo(f) => f.read(buf),
+        }
+    }
+}
+
+/// The source of the data, configured with the given settings.
+///
+/// Use the [`Input::new_stdin`] or [`Input::new_file`] functions to
+/// construct a new instance of this struct. Then pass the instance to
+/// the [`dd_copy`] function to execute the main copy operation
+/// for `dd`.
+struct Input<'a> {
+    /// The source from which bytes will be read.
+    src: Source,
+
+    /// Configuration settings for how to read the data.
     settings: &'a Settings,
 }
 
-impl<'a> Input<'a, io::Stdin> {
-    fn new(settings: &'a Settings) -> UResult<Self> {
-        let mut input = Self {
-            src: io::stdin(),
-            settings,
+impl<'a> Input<'a> {
+    /// Instantiate this struct with stdin as a source.
+    fn new_stdin(settings: &'a Settings) -> UResult<Self> {
+        let mut src = Source::Stdin(io::stdin());
+        if settings.skip > 0 {
+            src.skip(settings.skip)?;
+        }
+        Ok(Self { src, settings })
+    }
+
+    /// Instantiate this struct with the named file as a source.
+    fn new_file(filename: &Path, settings: &'a Settings) -> UResult<Self> {
+        let src = {
+            let mut opts = OpenOptions::new();
+            opts.read(true);
+
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if let Some(libc_flags) = make_linux_iflags(&settings.iflags) {
+                opts.custom_flags(libc_flags);
+            }
+
+            opts.open(filename)
+                .map_err_context(|| format!("failed to open {}", filename.quote()))?
         };
 
+        let mut src = Source::File(src);
         if settings.skip > 0 {
-            if let Err(e) = input.read_skip(settings.skip) {
-                if let io::ErrorKind::UnexpectedEof = e.kind() {
-                    show_error!("'standard input': cannot skip to specified offset");
-                } else {
-                    return io::Result::Err(e)
-                        .map_err_context(|| "I/O error while skipping".to_string());
-                }
-            }
+            src.skip(settings.skip)?;
         }
+        Ok(Self { src, settings })
+    }
 
-        Ok(input)
+    /// Instantiate this struct with the named pipe as a source.
+    #[cfg(unix)]
+    fn new_fifo(filename: &Path, settings: &'a Settings) -> UResult<Self> {
+        let mut opts = OpenOptions::new();
+        opts.read(true);
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
+        let mut src = Source::Fifo(opts.open(filename)?);
+        if settings.skip > 0 {
+            src.skip(settings.skip)?;
+        }
+        Ok(Self { src, settings })
     }
 }
 
@@ -153,31 +231,7 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
     }
 }
 
-impl<'a> Input<'a, File> {
-    fn new(filename: &Path, settings: &'a Settings) -> UResult<Self> {
-        let mut src = {
-            let mut opts = OpenOptions::new();
-            opts.read(true);
-
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            if let Some(libc_flags) = make_linux_iflags(&settings.iflags) {
-                opts.custom_flags(libc_flags);
-            }
-
-            opts.open(filename)
-                .map_err_context(|| format!("failed to open {}", filename.quote()))?
-        };
-
-        if settings.skip > 0 {
-            src.seek(io::SeekFrom::Start(settings.skip))
-                .map_err_context(|| "failed to seek in input file".to_string())?;
-        }
-
-        Ok(Self { src, settings })
-    }
-}
-
-impl<'a, R: Read> Read for Input<'a, R> {
+impl<'a> Read for Input<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut base_idx = 0;
         let target_len = buf.len();
@@ -200,7 +254,7 @@ impl<'a, R: Read> Read for Input<'a, R> {
     }
 }
 
-impl<'a, R: Read> Input<'a, R> {
+impl<'a> Input<'a> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
@@ -266,20 +320,6 @@ impl<'a, R: Read> Input<'a, R> {
             records_truncated: 0,
         })
     }
-
-    /// Skips amount_to_read bytes from the Input by copying into a sink
-    fn read_skip(&mut self, amount_to_read: u64) -> std::io::Result<()> {
-        let copy_result = io::copy(&mut self.src.by_ref().take(amount_to_read), &mut io::sink());
-        if let Ok(n) = copy_result {
-            if n != amount_to_read {
-                io::Result::Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))
-            } else {
-                Ok(())
-            }
-        } else {
-            io::Result::Err(copy_result.unwrap_err())
-        }
-    }
 }
 
 enum Density {
@@ -297,6 +337,14 @@ enum Dest {
     /// The [`Density`] component indicates whether to attempt to
     /// write a sparse file when all-zero blocks are encountered.
     File(File, Density),
+
+    /// Output to a named pipe, also known as a FIFO.
+    #[cfg(unix)]
+    Fifo(File),
+
+    /// Output to nothing, dropping each byte written to the output.
+    #[cfg(unix)]
+    Sink,
 }
 
 impl Dest {
@@ -307,6 +355,13 @@ impl Dest {
                 f.flush()?;
                 f.sync_all()
             }
+            #[cfg(unix)]
+            Self::Fifo(f) => {
+                f.flush()?;
+                f.sync_all()
+            }
+            #[cfg(unix)]
+            Self::Sink => Ok(()),
         }
     }
 
@@ -317,6 +372,13 @@ impl Dest {
                 f.flush()?;
                 f.sync_data()
             }
+            #[cfg(unix)]
+            Self::Fifo(f) => {
+                f.flush()?;
+                f.sync_data()
+            }
+            #[cfg(unix)]
+            Self::Sink => Ok(()),
         }
     }
 
@@ -324,17 +386,24 @@ impl Dest {
         match self {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
             Self::File(f, _) => f.seek(io::SeekFrom::Start(n)),
+            #[cfg(unix)]
+            Self::Fifo(f) => {
+                // Seeking in a named pipe means *reading* from the pipe.
+                io::copy(&mut f.take(n), &mut io::sink())
+            }
+            #[cfg(unix)]
+            Self::Sink => Ok(0),
         }
     }
 
     /// Truncate the underlying file to the current stream position, if possible.
     fn truncate(&mut self) -> io::Result<()> {
         match self {
-            Self::Stdout(_) => Ok(()),
             Self::File(f, _) => {
                 let pos = f.stream_position()?;
                 f.set_len(pos)
             }
+            _ => Ok(()),
         }
     }
 }
@@ -357,6 +426,10 @@ impl Write for Dest {
             }
             Self::File(f, _) => f.write(buf),
             Self::Stdout(stdout) => stdout.write(buf),
+            #[cfg(unix)]
+            Self::Fifo(f) => f.write(buf),
+            #[cfg(unix)]
+            Self::Sink => Ok(buf.len()),
         }
     }
 
@@ -364,6 +437,10 @@ impl Write for Dest {
         match self {
             Self::Stdout(stdout) => stdout.flush(),
             Self::File(f, _) => f.flush(),
+            #[cfg(unix)]
+            Self::Fifo(f) => f.flush(),
+            #[cfg(unix)]
+            Self::Sink => Ok(()),
         }
     }
 }
@@ -372,7 +449,7 @@ impl Write for Dest {
 ///
 /// Use the [`Output::new_stdout`] or [`Output::new_file`] functions
 /// to construct a new instance of this struct. Then use the
-/// [`Output::dd_out`] function to execute the main copy operation for
+/// [`dd_copy`] function to execute the main copy operation for
 /// `dd`.
 struct Output<'a> {
     /// The destination to which bytes will be written.
@@ -433,6 +510,35 @@ impl<'a> Output<'a> {
         Ok(Self { dst, settings })
     }
 
+    /// Instantiate this struct with the given named pipe as a destination.
+    #[cfg(unix)]
+    fn new_fifo(filename: &Path, settings: &'a Settings) -> UResult<Self> {
+        // We simulate seeking in a FIFO by *reading*, so we open the
+        // file for reading. But then we need to close the file and
+        // re-open it for writing.
+        if settings.seek > 0 {
+            Dest::Fifo(File::open(filename)?).seek(settings.seek)?;
+        }
+        // If `count=0`, then we don't bother opening the file for
+        // writing because that would cause this process to block
+        // indefinitely.
+        if let Some(Num::Blocks(0) | Num::Bytes(0)) = settings.count {
+            let dst = Dest::Sink;
+            return Ok(Self { dst, settings });
+        }
+        // At this point, we know there is at least one block to write
+        // to the output, so we open the file for writing.
+        let mut opts = OpenOptions::new();
+        opts.write(true)
+            .create(!settings.oconv.nocreat)
+            .create_new(settings.oconv.excl)
+            .append(settings.oflags.append);
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        opts.custom_flags(make_linux_oflags(&settings.oflags).unwrap_or(0));
+        let dst = Dest::Fifo(opts.open(filename)?);
+        Ok(Self { dst, settings })
+    }
+
     /// Write the given bytes one block at a time.
     ///
     /// This may write partial blocks (for example, if the underlying
@@ -473,136 +579,135 @@ impl<'a> Output<'a> {
             Ok(())
         }
     }
+}
 
-    /// Copy the given input data to this output, consuming both.
-    ///
-    /// This method contains the main loop for the `dd` program. Bytes
-    /// are read in blocks from `i` and written in blocks to this
-    /// output. Read/write statistics are reported to stderr as
-    /// configured by the `status` command-line argument.
-    ///
-    /// # Errors
-    ///
-    /// If there is a problem reading from the input or writing to
-    /// this output.
-    fn dd_out<R: Read>(mut self, mut i: Input<R>) -> std::io::Result<()> {
-        // The read and write statistics.
+/// Copy the given input data to this output, consuming both.
+///
+/// This method contains the main loop for the `dd` program. Bytes
+/// are read in blocks from `i` and written in blocks to this
+/// output. Read/write statistics are reported to stderr as
+/// configured by the `status` command-line argument.
+///
+/// # Errors
+///
+/// If there is a problem reading from the input or writing to
+/// this output.
+fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
+    // The read and write statistics.
+    //
+    // These objects are counters, initialized to zero. After each
+    // iteration of the main loop, each will be incremented by the
+    // number of blocks read and written, respectively.
+    let mut rstat = ReadStat::default();
+    let mut wstat = WriteStat::default();
+
+    // The time at which the main loop starts executing.
+    //
+    // When `status=progress` is given on the command-line, the
+    // `dd` program reports its progress every second or so. Part
+    // of its report includes the throughput in bytes per second,
+    // which requires knowing how long the process has been
+    // running.
+    let start = time::Instant::now();
+
+    // A good buffer size for reading.
+    //
+    // This is an educated guess about a good buffer size based on
+    // the input and output block sizes.
+    let bsize = calc_bsize(i.settings.ibs, o.settings.obs);
+
+    // Start a thread that reports transfer progress.
+    //
+    // The `dd` program reports its progress after every block is written,
+    // at most every 1 second, and only if `status=progress` is given on
+    // the command-line or a SIGUSR1 signal is received. We
+    // perform this reporting in a new thread so as not to take
+    // any CPU time away from the actual reading and writing of
+    // data. We send a `ProgUpdate` from the transmitter `prog_tx`
+    // to the receives `rx`, and the receiver prints the transfer
+    // information.
+    let (prog_tx, rx) = mpsc::channel();
+    let output_thread = thread::spawn(gen_prog_updater(rx, i.settings.status));
+    let mut progress_as_secs = 0;
+
+    // Optimization: if no blocks are to be written, then don't
+    // bother allocating any buffers.
+    if let Some(Num::Blocks(0) | Num::Bytes(0)) = i.settings.count {
+        return finalize(&mut o, rstat, wstat, start, &prog_tx, output_thread);
+    };
+
+    // Create a common buffer with a capacity of the block size.
+    // This is the max size needed.
+    let mut buf = vec![BUF_INIT_BYTE; bsize];
+
+    // The main read/write loop.
+    //
+    // Each iteration reads blocks from the input and writes
+    // blocks to this output. Read/write statistics are updated on
+    // each iteration and cumulative statistics are reported to
+    // the progress reporting thread.
+    while below_count_limit(&i.settings.count, &rstat, &wstat) {
+        // Read a block from the input then write the block to the output.
         //
-        // These objects are counters, initialized to zero. After each
-        // iteration of the main loop, each will be incremented by the
-        // number of blocks read and written, respectively.
-        let mut rstat = ReadStat::default();
-        let mut wstat = WriteStat::default();
-
-        // The time at which the main loop starts executing.
-        //
-        // When `status=progress` is given on the command-line, the
-        // `dd` program reports its progress every second or so. Part
-        // of its report includes the throughput in bytes per second,
-        // which requires knowing how long the process has been
-        // running.
-        let start = time::Instant::now();
-
-        // A good buffer size for reading.
-        //
-        // This is an educated guess about a good buffer size based on
-        // the input and output block sizes.
-        let bsize = calc_bsize(i.settings.ibs, self.settings.obs);
-
-        // Start a thread that reports transfer progress.
-        //
-        // The `dd` program reports its progress after every block is written,
-        // at most every 1 second, and only if `status=progress` is given on
-        // the command-line or a SIGUSR1 signal is received. We
-        // perform this reporting in a new thread so as not to take
-        // any CPU time away from the actual reading and writing of
-        // data. We send a `ProgUpdate` from the transmitter `prog_tx`
-        // to the receives `rx`, and the receiver prints the transfer
-        // information.
-        let (prog_tx, rx) = mpsc::channel();
-        let output_thread = thread::spawn(gen_prog_updater(rx, i.settings.status));
-        let mut progress_as_secs = 0;
-
-        // Optimization: if no blocks are to be written, then don't
-        // bother allocating any buffers.
-        if let Some(Num::Blocks(0) | Num::Bytes(0)) = i.settings.count {
-            return self.finalize(rstat, wstat, start, &prog_tx, output_thread);
-        };
-
-        // Create a common buffer with a capacity of the block size.
-        // This is the max size needed.
-        let mut buf = vec![BUF_INIT_BYTE; bsize];
-
-        // The main read/write loop.
-        //
-        // Each iteration reads blocks from the input and writes
-        // blocks to this output. Read/write statistics are updated on
-        // each iteration and cumulative statistics are reported to
-        // the progress reporting thread.
-        while below_count_limit(&i.settings.count, &rstat, &wstat) {
-            // Read a block from the input then write the block to the output.
-            //
-            // As an optimization, make an educated guess about the
-            // best buffer size for reading based on the number of
-            // blocks already read and the number of blocks remaining.
-            let loop_bsize =
-                calc_loop_bsize(&i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
-            let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
-            if rstat_update.is_empty() {
-                break;
-            }
-            let wstat_update = self.write_blocks(&buf)?;
-
-            // Update the read/write stats and inform the progress thread once per second.
-            //
-            // If the receiver is disconnected, `send()` returns an
-            // error. Since it is just reporting progress and is not
-            // crucial to the operation of `dd`, let's just ignore the
-            // error.
-            rstat += rstat_update;
-            wstat += wstat_update;
-            let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), false);
-            if prog_update.duration.as_secs() >= progress_as_secs {
-                progress_as_secs = prog_update.duration.as_secs() + 1;
-                prog_tx.send(prog_update).unwrap_or(());
-            }
+        // As an optimization, make an educated guess about the
+        // best buffer size for reading based on the number of
+        // blocks already read and the number of blocks remaining.
+        let loop_bsize = calc_loop_bsize(&i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
+        let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
+        if rstat_update.is_empty() {
+            break;
         }
-        self.finalize(rstat, wstat, start, &prog_tx, output_thread)
+        let wstat_update = o.write_blocks(&buf)?;
+
+        // Update the read/write stats and inform the progress thread once per second.
+        //
+        // If the receiver is disconnected, `send()` returns an
+        // error. Since it is just reporting progress and is not
+        // crucial to the operation of `dd`, let's just ignore the
+        // error.
+        rstat += rstat_update;
+        wstat += wstat_update;
+        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), false);
+        if prog_update.duration.as_secs() >= progress_as_secs {
+            progress_as_secs = prog_update.duration.as_secs() + 1;
+            prog_tx.send(prog_update).unwrap_or(());
+        }
+    }
+    finalize(&mut o, rstat, wstat, start, &prog_tx, output_thread)
+}
+
+/// Flush output, print final stats, and join with the progress thread.
+fn finalize<T>(
+    output: &mut Output,
+    rstat: ReadStat,
+    wstat: WriteStat,
+    start: time::Instant,
+    prog_tx: &mpsc::Sender<ProgUpdate>,
+    output_thread: thread::JoinHandle<T>,
+) -> std::io::Result<()> {
+    // Flush the output, if configured to do so.
+    output.sync()?;
+
+    // Truncate the file to the final cursor location.
+    //
+    // Calling `set_len()` may result in an error (for example,
+    // when calling it on `/dev/null`), but we don't want to
+    // terminate the process when that happens. Instead, we
+    // suppress the error by calling `Result::ok()`. This matches
+    // the behavior of GNU `dd` when given the command-line
+    // argument `of=/dev/null`.
+    if !output.settings.oconv.notrunc {
+        output.dst.truncate().ok();
     }
 
-    /// Flush output, print final stats, and join with the progress thread.
-    fn finalize<T>(
-        &mut self,
-        rstat: ReadStat,
-        wstat: WriteStat,
-        start: time::Instant,
-        prog_tx: &mpsc::Sender<ProgUpdate>,
-        output_thread: thread::JoinHandle<T>,
-    ) -> std::io::Result<()> {
-        // Flush the output, if configured to do so.
-        self.sync()?;
-
-        // Truncate the file to the final cursor location.
-        //
-        // Calling `set_len()` may result in an error (for example,
-        // when calling it on `/dev/null`), but we don't want to
-        // terminate the process when that happens. Instead, we
-        // suppress the error by calling `Result::ok()`. This matches
-        // the behavior of GNU `dd` when given the command-line
-        // argument `of=/dev/null`.
-        if !self.settings.oconv.notrunc {
-            self.dst.truncate().ok();
-        }
-
-        // Print the final read/write statistics.
-        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), true);
-        prog_tx.send(prog_update).unwrap_or(());
-        // Wait for the output thread to finish
-        output_thread
-            .join()
-            .expect("Failed to join with the output thread.");
-        Ok(())
-    }
+    // Print the final read/write statistics.
+    let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), true);
+    prog_tx.send(prog_update).unwrap_or(());
+    // Wait for the output thread to finish
+    output_thread
+        .join()
+        .expect("Failed to join with the output thread.");
+    Ok(())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -645,12 +750,13 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     }
 }
 
-/// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevant helper functions as dictated by the operations requested by the user.
-fn read_helper<R: Read>(
-    i: &mut Input<R>,
-    buf: &mut Vec<u8>,
-    bsize: usize,
-) -> std::io::Result<ReadStat> {
+/// Read from an input (that is, a source of bytes) into the given buffer.
+///
+/// This function also performs any conversions as specified by
+/// `conv=swab` or `conv=block` command-line arguments. This function
+/// mutates the `buf` argument in-place. The returned [`ReadStat`]
+/// indicates how many blocks were read.
+fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> std::io::Result<ReadStat> {
     // Local Helper Fns -------------------------------------------------
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
@@ -778,6 +884,17 @@ fn is_stdout_redirected_to_seekable_file() -> bool {
     }
 }
 
+/// Decide whether the named file is a named pipe, also known as a FIFO.
+#[cfg(unix)]
+fn is_fifo(filename: &str) -> bool {
+    if let Ok(metadata) = std::fs::metadata(filename) {
+        if metadata.file_type().is_fifo() {
+            return true;
+        }
+    }
+    false
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
@@ -792,40 +909,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .collect::<Vec<_>>()[..],
     )?;
 
-    match (&settings.infile, &settings.outfile) {
-        (Some(infile), Some(outfile)) => {
-            let i = Input::<File>::new(Path::new(&infile), &settings)?;
-            let o = Output::new_file(Path::new(&outfile), &settings)?;
-            o.dd_out(i).map_err_context(|| "IO error".to_string())
+    let i = match settings.infile {
+        #[cfg(unix)]
+        Some(ref infile) if is_fifo(infile) => Input::new_fifo(Path::new(&infile), &settings)?,
+        Some(ref infile) => Input::new_file(Path::new(&infile), &settings)?,
+        None => Input::new_stdin(&settings)?,
+    };
+    let o = match settings.outfile {
+        #[cfg(unix)]
+        Some(ref outfile) if is_fifo(outfile) => Output::new_fifo(Path::new(&outfile), &settings)?,
+        Some(ref outfile) => Output::new_file(Path::new(&outfile), &settings)?,
+        None if is_stdout_redirected_to_seekable_file() => {
+            Output::new_file(Path::new(&stdout_canonicalized()), &settings)?
         }
-        (None, Some(outfile)) => {
-            let i = Input::<io::Stdin>::new(&settings)?;
-            let o = Output::new_file(Path::new(&outfile), &settings)?;
-            o.dd_out(i).map_err_context(|| "IO error".to_string())
-        }
-        (Some(infile), None) => {
-            let i = Input::<File>::new(Path::new(&infile), &settings)?;
-            if is_stdout_redirected_to_seekable_file() {
-                let filename = stdout_canonicalized();
-                let o = Output::new_file(Path::new(&filename), &settings)?;
-                o.dd_out(i).map_err_context(|| "IO error".to_string())
-            } else {
-                let o = Output::new_stdout(&settings)?;
-                o.dd_out(i).map_err_context(|| "IO error".to_string())
-            }
-        }
-        (None, None) => {
-            let i = Input::<io::Stdin>::new(&settings)?;
-            if is_stdout_redirected_to_seekable_file() {
-                let filename = stdout_canonicalized();
-                let o = Output::new_file(Path::new(&filename), &settings)?;
-                o.dd_out(i).map_err_context(|| "IO error".to_string())
-            } else {
-                let o = Output::new_stdout(&settings)?;
-                o.dd_out(i).map_err_context(|| "IO error".to_string())
-            }
-        }
-    }
+        None => Output::new_stdout(&settings)?,
+    };
+    dd_copy(i, o).map_err_context(|| "IO error".to_string())
 }
 
 pub fn uu_app() -> Command {

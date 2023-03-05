@@ -9,13 +9,11 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::Path;
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
-const ABOUT: &str = "Strip last component from file name";
-const USAGE: &str = "{} [OPTION] NAME...";
-const LONG_USAGE: &str = "\
-    Output each NAME with its last non-slash component and trailing slashes \n\
-    removed; if NAME contains no /'s, output '.' (meaning the current directory).";
+const ABOUT: &str = help_about!("dirname.md");
+const USAGE: &str = help_usage!("dirname.md");
+const AFTER_HELP: &str = help_section!("after help", "dirname.md");
 
 mod options {
     pub const ZERO: &str = "zero";
@@ -26,7 +24,7 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
+    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
     let separator = if matches.get_flag(options::ZERO) {
         "\0"

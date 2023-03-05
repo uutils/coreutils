@@ -16,7 +16,8 @@ path = "src/cksum.rs"
 
 [dependencies]
 clap = { workspace=true }
-uucore = { workspace=true }
+uucore = { workspace=true, features=["sum"] }
+hex = { workspace=true }
 
 [[bin]]
 name = "cksum"

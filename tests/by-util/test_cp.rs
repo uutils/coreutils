@@ -1539,7 +1539,7 @@ fn test_closes_file_descriptors() {
         .arg("--reflink=auto")
         .arg("dir_with_10_files/")
         .arg("dir_with_10_files_new/")
-        .with_limit(Resource::NOFILE, limit_fd, limit_fd)
+        .limit(Resource::NOFILE, limit_fd, limit_fd)
         .succeeds();
 }
 
@@ -1686,7 +1686,8 @@ fn test_cp_reflink_always_override() {
         .succeeds();
 
     if !scene
-        .cmd_keepenv("env")
+        .cmd("env")
+        .keep_env()
         .args(&["mkfs.btrfs", "--rootdir", ROOTDIR, DISK])
         .run()
         .succeeded()
@@ -1698,7 +1699,8 @@ fn test_cp_reflink_always_override() {
     scene.fixtures.mkdir(MOUNTPOINT);
 
     let mount = scene
-        .cmd_keepenv("sudo")
+        .cmd("sudo")
+        .keep_env()
         .args(&["-E", "--non-interactive", "mount", DISK, MOUNTPOINT])
         .run();
 
@@ -1724,7 +1726,8 @@ fn test_cp_reflink_always_override() {
         .succeeds();
 
     scene
-        .cmd_keepenv("sudo")
+        .cmd("sudo")
+        .keep_env()
         .args(&["-E", "--non-interactive", "umount", MOUNTPOINT])
         .succeeds();
 }
@@ -2518,9 +2521,9 @@ fn test_src_base_dot() {
     let at = ts.fixtures.clone();
     at.mkdir("x");
     at.mkdir("y");
-    let mut ucmd = UCommand::new(ts.bin_path, &Some(ts.util_name), at.plus("y"), true);
-
-    ucmd.args(&["--verbose", "-r", "../x/.", "."])
+    ts.ucmd()
+        .current_dir(at.plus("y"))
+        .args(&["--verbose", "-r", "../x/.", "."])
         .succeeds()
         .no_stderr()
         .no_stdout();
@@ -2573,4 +2576,15 @@ fn test_non_utf8_target() {
     let mut copied_file = PathBuf::from(dest);
     copied_file.push(TEST_HELLO_WORLD_SOURCE);
     assert!(at.file_exists(copied_file));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_cp_archive_on_directory_ending_dot() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir1");
+    at.mkdir("dir2");
+    at.touch("dir1/file");
+    ucmd.args(&["-a", "dir1/.", "dir2"]).succeeds();
+    assert!(at.file_exists("dir2/file"));
 }

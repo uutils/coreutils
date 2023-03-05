@@ -5,6 +5,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore manpages mangen
+
 use clap::{Arg, Command};
 use clap_complete::Shell;
 use std::cmp;
@@ -90,6 +92,10 @@ fn main() {
             gen_completions(args, &utils);
         }
 
+        if util == "manpage" {
+            gen_manpage(args, &utils);
+        }
+
         match utils.get(util) {
             Some(&(uumain, _)) => {
                 process::exit(uumain((vec![util_os].into_iter()).chain(args)));
@@ -163,6 +169,39 @@ fn gen_completions<T: uucore::Args>(
     let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + utility;
 
     clap_complete::generate(shell, &mut command, bin_name, &mut io::stdout());
+    io::stdout().flush().unwrap();
+    process::exit(0);
+}
+
+/// Generate the manpage for the utility in the first parameter
+fn gen_manpage<T: uucore::Args>(
+    args: impl Iterator<Item = OsString>,
+    util_map: &UtilityMap<T>,
+) -> ! {
+    let all_utilities: Vec<_> = std::iter::once("coreutils")
+        .chain(util_map.keys().copied())
+        .collect();
+
+    let matches = Command::new("manpage")
+        .about("Prints manpage to stdout")
+        .arg(
+            Arg::new("utility")
+                .value_parser(clap::builder::PossibleValuesParser::new(all_utilities))
+                .required(true),
+        )
+        .get_matches_from(std::iter::once(OsString::from("manpage")).chain(args));
+
+    let utility = matches.get_one::<String>("utility").unwrap();
+
+    let command = if utility == "coreutils" {
+        gen_coreutils_app(util_map)
+    } else {
+        util_map.get(utility).unwrap().1()
+    };
+
+    let man = clap_mangen::Man::new(command);
+    man.render(&mut io::stdout())
+        .expect("Man page generation failed");
     io::stdout().flush().unwrap();
     process::exit(0);
 }

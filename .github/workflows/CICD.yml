@@ -291,7 +291,13 @@ jobs:
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-
+    - uses: DavidAnson/markdownlint-cli2-action@v9
+      with:
+        command: fix
+        globs: |
+          *.md
+          docs/src/*.md
+          src/uu/*/*.md
 
   min_version:
     name: MinRustV # Minimum supported rust version (aka, MinSRV or MSRV)
@@ -406,6 +412,16 @@ jobs:
       shell: bash
       run: |
         make test
+      env:
+        RUST_BACKTRACE: "1"
+    - name: "`make install`"
+      shell: bash
+      run: |
+        DESTDIR=/tmp/ make PROFILE=release install
+        # Check that the manpage is present
+        test -f /tmp/usr/local/share/man/man1/whoami.1
+        # Check that the completion is present
+        test -f /tmp/usr/local/share/zsh/site-functions/_install
       env:
         RUST_BACKTRACE: "1"
 

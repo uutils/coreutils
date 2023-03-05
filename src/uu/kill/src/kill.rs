@@ -14,10 +14,10 @@ use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::signals::{signal_by_name_or_value, ALL_SIGNALS};
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 
-static ABOUT: &str = "Send signal to processes or list information about signals.";
-const USAGE: &str = "{} [OPTIONS]... PID...";
+static ABOUT: &str = help_about!("kill.md");
+const USAGE: &str = help_usage!("kill.md");
 
 pub mod options {
     pub static PIDS_OR_SIGNALS: &str = "pids_or_signals";

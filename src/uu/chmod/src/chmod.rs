@@ -17,16 +17,11 @@ use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::{format_usage, show, show_error};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
-const ABOUT: &str = "Change the mode of each FILE to MODE.\n\
-    With --reference, change the mode of each FILE to that of RFILE.";
-const USAGE: &str = "\
-       {} [OPTION]... MODE[,MODE]... FILE...
-       {} [OPTION]... OCTAL-MODE FILE...
-       {} [OPTION]... --reference=RFILE FILE...";
-const LONG_USAGE: &str =
-    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.";
+const ABOUT: &str = help_about!("chmod.md");
+const USAGE: &str = help_usage!("chmod.md");
+const LONG_USAGE: &str = help_section!("after help", "chmod.md");
 
 mod options {
     pub const CHANGES: &str = "changes";
@@ -110,6 +105,7 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
+        .args_override_self(true)
         .infer_long_args(true)
         .arg(
             Arg::new(options::CHANGES)
@@ -190,15 +186,17 @@ impl Chmoder {
             let file = Path::new(filename);
             if !file.exists() {
                 if file.is_symlink() {
-                    println!(
-                        "failed to change mode of {} from 0000 (---------) to 0000 (---------)",
-                        filename.quote()
-                    );
                     if !self.quiet {
                         show!(USimpleError::new(
                             1,
                             format!("cannot operate on dangling symlink {}", filename.quote()),
                         ));
+                    }
+                    if self.verbose {
+                        println!(
+                            "failed to change mode of {} from 0000 (---------) to 1500 (r-x-----T)",
+                            filename.quote()
+                        );
                     }
                 } else if !self.quiet {
                     show!(USimpleError::new(

@@ -23,6 +23,7 @@ use crossterm::{
     terminal,
 };
 
+use is_terminal::IsTerminal;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
@@ -83,7 +84,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             buff.clear();
         }
         reset_term(&mut stdout);
-    } else if atty::isnt(atty::Stream::Stdin) {
+    } else if !std::io::stdin().is_terminal() {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
         more(&buff, &mut stdout, None, silent)?;
