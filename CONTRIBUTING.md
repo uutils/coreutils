@@ -126,7 +126,7 @@ The Coreutils has different implementations, with different level of completions
 * [Initial Unix](https://github.com/dspinellis/unix-history-repo)
 
 However, when reimplementing the tools/options in Rust, don't read at their source codes 
-when they are using reciprocal licenses.
+when they are using reciprocal licenses (ex: GNU GPL, GNU LGPL, etc).
 
 
 ## Licensing
