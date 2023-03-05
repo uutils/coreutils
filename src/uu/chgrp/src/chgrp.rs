@@ -10,20 +10,17 @@
 use uucore::display::Quotable;
 pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::format_usage;
 use uucore::perms::{chown_base, options, IfFrom};
+use uucore::{format_usage, help_about, help_usage};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-static ABOUT: &str = "Change the group of each FILE to GROUP.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-
-const USAGE: &str = "\
-    {} [OPTION]... GROUP FILE...\n    \
-    {} [OPTION]... --reference=RFILE FILE...";
+static ABOUT: &str = help_about!("chgrp.md");
+const USAGE: &str = help_usage!("chgrp.md");
 
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)> {
     let dest_gid = if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
