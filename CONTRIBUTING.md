@@ -38,20 +38,19 @@ search the issues to make sure no one else is working on it.
 
 ## Platforms
 
-We take pride in supporting many operating systems and architectures. 
+We take pride in supporting many operating systems and architectures.
 
 **Tip:**
-For Windows, Microsoft provides some images (VMWare, Hyper-V, VirtualBox and Parallels) 
+For Windows, Microsoft provides some images (VMWare, Hyper-V, VirtualBox and Parallels)
 for development:
-https://developer.microsoft.com/windows/downloads/virtual-machines/
-
+<https://developer.microsoft.com/windows/downloads/virtual-machines/>
 
 ## Commit messages
 
 To help the project maintainers review pull requests from contributors across
 numerous utilities, the team has settled on conventions for commit messages.
 
-From http://git-scm.com/book/ch5-2.html:
+From <http://git-scm.com/book/ch5-2.html>:
 
 ```
 Short (50 chars or less) summary of changes

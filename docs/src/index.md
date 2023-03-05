@@ -1,4 +1,8 @@
+<!-- markdownlint-disable MD041 -->
+
 {{#include logo.svg}}
+
+<!-- markdownlint-disable MD033 -->
 
 <style>
     /* Make the logo a bit bigger and center */

@@ -9,13 +9,13 @@ Run `cargo build --release` before benchmarking after you make a change!
 
 ## Simple recursive ls
 
--   Get a large tree, for example linux kernel source tree.
--   Benchmark simple recursive ls with hyperfine: `hyperfine --warmup 2 "target/release/coreutils ls -R tree > /dev/null"`.
+- Get a large tree, for example linux kernel source tree.
+- Benchmark simple recursive ls with hyperfine: `hyperfine --warmup 2 "target/release/coreutils ls -R tree > /dev/null"`.
 
 ## Recursive ls with all and long options
 
--   Same tree as above
--   Benchmark recursive ls with -al -R options with hyperfine: `hyperfine --warmup 2 "target/release/coreutils ls -al -R tree > /dev/null"`.
+- Same tree as above
+- Benchmark recursive ls with -al -R options with hyperfine: `hyperfine --warmup 2 "target/release/coreutils ls -al -R tree > /dev/null"`.
 
 ## Comparing with GNU ls
 
@@ -29,7 +29,8 @@ Example: `hyperfine --warmup 2 "target/release/coreutils ls -al -R tree > /dev/n
 This can also be used to compare with version of ls built before your changes to ensure your change does not regress this.
 
 Here is a `bash` script for doing this comparison:
-```bash
+
+```shell
 #!/bin/bash
 cargo build --no-default-features --features ls --release
 args="$@"
@@ -46,12 +47,14 @@ hyperfine "ls $args" "target/release/coreutils ls $args"
 ## Cargo Flamegraph
 
 With Cargo Flamegraph you can easily make a flamegraph of `ls`:
-```bash
+
+```shell
 cargo flamegraph --cmd coreutils -- ls [additional parameters]
 ```
 
 However, if the `-R` option is given, the output becomes pretty much useless due to recursion. We can fix this by merging all the direct recursive calls with `uniq`, below is a `bash` script that does this.
-```bash
+
+```shell
 #!/bin/bash
 cargo build --release --no-default-features --features ls
 perf record target/release/coreutils ls "$@"
