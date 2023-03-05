@@ -1,3 +1,5 @@
+<!-- spell-checker:ignore reimplementing toybox -->
+
 # Contributing to coreutils
 
 Contributions are very welcome, and should target Rust's main branch until the
