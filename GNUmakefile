@@ -349,10 +349,12 @@ endif
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
 	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
+	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
 	$(foreach prog, $(INSTALLEES), \
 		$(BUILDDIR)/coreutils completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog); \
 		$(BUILDDIR)/coreutils completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog); \
 		$(BUILDDIR)/coreutils completion $(prog) fish > $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish; \
+		$(BUILDDIR)/coreutils manpage $(prog) > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX)$(prog).1; \
 	)
 
 uninstall:

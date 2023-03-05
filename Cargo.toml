@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) libselinux gethostid procfs bigdecimal kqueue fundu
+# spell-checker:ignore (libs) libselinux gethostid procfs bigdecimal kqueue fundu mangen
 
 [package]
 name = "coreutils"
@@ -271,6 +271,7 @@ byteorder = "1.3.2"
 chrono = { version="^0.4.23", default-features=false, features=["std", "alloc", "clock"]}
 clap = { version = "4.0", features = ["wrap_help", "cargo"] }
 clap_complete = "4.0"
+clap_mangen = "0.2"
 compare = "0.1.0"
 coz = { version = "0.1.3" }
 crossterm = ">=0.19"
@@ -352,6 +353,7 @@ clap = { workspace=true }
 once_cell = { workspace=true }
 uucore = { workspace=true }
 clap_complete = { workspace=true }
+clap_mangen = { workspace=true }
 phf = { workspace=true }
 selinux = { workspace=true, optional = true }
 textwrap = { workspace=true }
