@@ -113,6 +113,22 @@ install it and then run with:
 cargo deny --all-features check all
 ```
 
+## Other implementations
+
+The Coreutils has different implementations, with different level of completions:
+
+* [GNU's](https://git.savannah.gnu.org/gitweb/?p=coreutils.git)
+* [BSD](https://github.com/openbsd/src/tree/master/bin)
+* [Busybox](https://github.com/mirror/busybox/tree/master/coreutils)
+* [Toybox (Android)](https://github.com/landley/toybox/tree/master/toys/posix)
+* [V lang](https://github.com/vlang/coreutils)
+* [SerenityOS](https://github.com/SerenityOS/serenity/tree/master/Userland/Utilities)
+* [Initial Unix](https://github.com/dspinellis/unix-history-repo)
+
+However, when reimplementing the tools/options in Rust, don't read at their source codes 
+when they are using reciprocal licenses.
+
+
 ## Licensing
 
 uutils is distributed under the terms of the MIT License; see the `LICENSE` file
