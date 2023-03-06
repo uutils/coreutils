@@ -123,6 +123,12 @@ To simply build all available utilities:
 make
 ```
 
+In release mode:
+
+```shell
+make PROFILE=release
+```
+
 To build all but a few of the available utilities:
 
 ```shell
