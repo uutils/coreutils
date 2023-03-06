@@ -117,7 +117,7 @@ cargo deny --all-features check all
 
 ## Other implementations
 
-The Coreutils has different implementations, with different level of completions:
+The Coreutils has different implementations, with different levels of completions:
 
 * [GNU's](https://git.savannah.gnu.org/gitweb/?p=coreutils.git)
 * [BSD](https://github.com/openbsd/src/tree/master/bin)
@@ -127,7 +127,7 @@ The Coreutils has different implementations, with different level of completions
 * [SerenityOS](https://github.com/SerenityOS/serenity/tree/master/Userland/Utilities)
 * [Initial Unix](https://github.com/dspinellis/unix-history-repo)
 
-However, when reimplementing the tools/options in Rust, don't read at their source codes 
+However, when reimplementing the tools/options in Rust, don't read their source codes 
 when they are using reciprocal licenses (ex: GNU GPL, GNU LGPL, etc).
 
 
