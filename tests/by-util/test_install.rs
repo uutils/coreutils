@@ -28,8 +28,8 @@ fn test_install_basic() {
 
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
-    assert!(at.file_exists(&format!("{dir}/{file1}")));
-    assert!(at.file_exists(&format!("{dir}/{file2}")));
+    assert!(at.file_exists(format!("{dir}/{file1}")));
+    assert!(at.file_exists(format!("{dir}/{file2}")));
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn test_install_unimplemented_arg() {
         .fails()
         .stderr_contains("Unimplemented");
 
-    assert!(!at.file_exists(&format!("{dir}/{file}")));
+    assert!(!at.file_exists(format!("{dir}/{file}")));
 }
 
 #[test]
@@ -314,7 +314,7 @@ fn test_install_target_new_file() {
         .no_stderr();
 
     assert!(at.file_exists(file));
-    assert!(at.file_exists(&format!("{dir}/{file}")));
+    assert!(at.file_exists(format!("{dir}/{file}")));
 }
 
 #[test]
@@ -341,7 +341,7 @@ fn test_install_target_new_file_with_group() {
 
     result.success();
     assert!(at.file_exists(file));
-    assert!(at.file_exists(&format!("{dir}/{file}")));
+    assert!(at.file_exists(format!("{dir}/{file}")));
 }
 
 #[test]
@@ -368,7 +368,7 @@ fn test_install_target_new_file_with_owner() {
 
     result.success();
     assert!(at.file_exists(file));
-    assert!(at.file_exists(&format!("{dir}/{file}")));
+    assert!(at.file_exists(format!("{dir}/{file}")));
 }
 
 #[test]
@@ -447,13 +447,13 @@ fn test_install_nested_paths_copy_file() {
 
     at.mkdir(dir1);
     at.mkdir(dir2);
-    at.touch(&format!("{dir1}/{file1}"));
+    at.touch(format!("{dir1}/{file1}"));
 
     ucmd.arg(format!("{dir1}/{file1}"))
         .arg(dir2)
         .succeeds()
         .no_stderr();
-    assert!(at.file_exists(&format!("{dir2}/{file1}")));
+    assert!(at.file_exists(format!("{dir2}/{file1}")));
 }
 
 #[test]
@@ -487,7 +487,7 @@ fn test_install_failing_omitting_directory() {
         .fails()
         .code_is(1)
         .stderr_contains("omitting directory");
-    assert!(at.file_exists(&format!("{dir3}/{file1}")));
+    assert!(at.file_exists(format!("{dir3}/{file1}")));
 
     // install also fails, when only one source param is given
     scene
@@ -785,7 +785,7 @@ fn test_install_creating_leading_dirs_with_single_source_and_target_dir() {
         .succeeds()
         .no_stderr();
 
-    assert!(at.file_exists(&format!("{target_dir}/{source1}")));
+    assert!(at.file_exists(format!("{target_dir}/{source1}")));
 }
 
 #[test]
@@ -863,8 +863,8 @@ fn test_install_dir() {
 
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
-    assert!(at.file_exists(&format!("{dir}/{file1}")));
-    assert!(at.file_exists(&format!("{dir}/{file2}")));
+    assert!(at.file_exists(format!("{dir}/{file1}")));
+    assert!(at.file_exists(format!("{dir}/{file2}")));
 }
 //
 // test backup functionality
@@ -888,7 +888,7 @@ fn test_install_backup_short_no_args_files() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -913,7 +913,7 @@ fn test_install_backup_short_no_args_file_to_dir() {
 
     assert!(at.file_exists(file));
     assert!(at.file_exists(&expect));
-    assert!(at.file_exists(&format!("{expect}~")));
+    assert!(at.file_exists(format!("{expect}~")));
 }
 
 // Long --backup option is tested separately as it requires a slightly different
@@ -938,7 +938,7 @@ fn test_install_backup_long_no_args_files() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -963,7 +963,7 @@ fn test_install_backup_long_no_args_file_to_dir() {
 
     assert!(at.file_exists(file));
     assert!(at.file_exists(&expect));
-    assert!(at.file_exists(&format!("{expect}~")));
+    assert!(at.file_exists(format!("{expect}~")));
 }
 
 #[test]
@@ -988,7 +988,7 @@ fn test_install_backup_short_custom_suffix() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}{suffix}")));
+    assert!(at.file_exists(format!("{file_b}{suffix}")));
 }
 
 #[test]
@@ -1013,7 +1013,7 @@ fn test_install_backup_short_custom_suffix_hyphen_value() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}{suffix}")));
+    assert!(at.file_exists(format!("{file_b}{suffix}")));
 }
 
 #[test]
@@ -1038,7 +1038,7 @@ fn test_install_backup_custom_suffix_via_env() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}{suffix}")));
+    assert!(at.file_exists(format!("{file_b}{suffix}")));
 }
 
 #[test]
@@ -1061,7 +1061,7 @@ fn test_install_backup_numbered_with_t() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}.~1~")));
+    assert!(at.file_exists(format!("{file_b}.~1~")));
 }
 
 #[test]
@@ -1084,7 +1084,7 @@ fn test_install_backup_numbered_with_numbered() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}.~1~")));
+    assert!(at.file_exists(format!("{file_b}.~1~")));
 }
 
 #[test]
@@ -1107,7 +1107,7 @@ fn test_install_backup_existing() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -1130,7 +1130,7 @@ fn test_install_backup_nil() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -1156,7 +1156,7 @@ fn test_install_backup_numbered_if_existing_backup_existing() {
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
     assert!(at.file_exists(file_b_backup));
-    assert!(at.file_exists(&format!("{file_b}.~2~")));
+    assert!(at.file_exists(format!("{file_b}.~2~")));
 }
 
 #[test]
@@ -1182,7 +1182,7 @@ fn test_install_backup_numbered_if_existing_backup_nil() {
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
     assert!(at.file_exists(file_b_backup));
-    assert!(at.file_exists(&format!("{file_b}.~2~")));
+    assert!(at.file_exists(format!("{file_b}.~2~")));
 }
 
 #[test]
@@ -1205,7 +1205,7 @@ fn test_install_backup_simple() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -1228,7 +1228,7 @@ fn test_install_backup_never() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -1251,7 +1251,7 @@ fn test_install_backup_none() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(!at.file_exists(&format!("{file_b}~")));
+    assert!(!at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -1274,7 +1274,7 @@ fn test_install_backup_off() {
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(!at.file_exists(&format!("{file_b}~")));
+    assert!(!at.file_exists(format!("{file_b}~")));
 }
 
 #[test]

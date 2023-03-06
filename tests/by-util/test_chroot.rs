@@ -39,7 +39,7 @@ fn test_enter_chroot_fails() {
 fn test_no_such_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch(&at.plus_as_string("a"));
+    at.touch(at.plus_as_string("a"));
 
     ucmd.arg("a")
         .fails()
