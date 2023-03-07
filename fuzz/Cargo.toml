@@ -1,7 +1,7 @@
 # spell-checker:ignore libfuzzer
 
 [package]
-name = "uu_date-fuzz"
+name = "uucore-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
@@ -12,15 +12,18 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 
+[dependencies.uucore]
+path = "../src/uucore/"
+
 [dependencies.uu_date]
-path = ".."
+path = "../src/uu/date/"
 
 # Prevent this from interfering with workspaces
 [workspace]
 members = ["."]
 
 [[bin]]
-name = "fuzz_target_1"
-path = "fuzz_targets/fuzz_target_1.rs"
+name = "fuzz_date"
+path = "fuzz_targets/fuzz_date.rs"
 test = false
 doc = false
