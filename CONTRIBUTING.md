@@ -117,7 +117,7 @@ cargo deny --all-features check all
 
 ## Other implementations
 
-The Coreutils has different implementations, with different levels of completions:
+The Coreutils have different implementations, with different levels of completions:
 
 * [GNU's](https://git.savannah.gnu.org/gitweb/?p=coreutils.git)
 * [BSD](https://github.com/openbsd/src/tree/master/bin)
