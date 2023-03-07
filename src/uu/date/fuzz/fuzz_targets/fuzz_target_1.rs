@@ -7,7 +7,10 @@ use std::ffi::OsString;
 use uu_date::uumain;
 
 fuzz_target!(|data: &[u8]| {
-    let iter: Vec<OsString> = [""].into_iter().map(|e| OsString::from(e)).collect();
-    let it2 = iter.into_iter();
-    uumain(it2);
+    let delim: u8 = 0; // Null byte
+    let args = data
+        .split(|b| *b == delim)
+        .filter_map(|e| std::str::from_utf8(e).ok())
+        .map(|e| OsString::from(e));
+    uumain(args);
 });
