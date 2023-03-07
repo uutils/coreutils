@@ -27,3 +27,21 @@ name = "fuzz_date"
 path = "fuzz_targets/fuzz_date.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "fuzz_parse_glob"
+path = "fuzz_targets/fuzz_parse_glob.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_parse_size"
+path = "fuzz_targets/fuzz_parse_size.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_parse_time"
+path = "fuzz_targets/fuzz_parse_time.rs"
+test = false
+doc = false
