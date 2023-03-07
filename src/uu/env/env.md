@@ -1,7 +1,7 @@
 # env
 
 ```
-{} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]
+env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]
 ```
 
 

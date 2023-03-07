@@ -23,7 +23,7 @@ use std::os::unix::process::ExitStatusExt;
 use std::process;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, show_warning, help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 
 const ABOUT: &str = help_about!("env.md");
 const USAGE: &str = help_usage!("env.md");
