@@ -120,7 +120,7 @@ cargo deny --all-features check all
 The Coreutils have different implementations, with different levels of completions:
 
 * [GNU's](https://git.savannah.gnu.org/gitweb/?p=coreutils.git)
-* [BSD](https://github.com/openbsd/src/tree/master/bin)
+* [OpenBSD](https://github.com/openbsd/src/tree/master/bin)
 * [Busybox](https://github.com/mirror/busybox/tree/master/coreutils)
 * [Toybox (Android)](https://github.com/landley/toybox/tree/master/toys/posix)
 * [V lang](https://github.com/vlang/coreutils)
