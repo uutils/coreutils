@@ -19,7 +19,7 @@ use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
-use uucore::{format_usage, show, show_error, show_if_err, uio_error};
+use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
 
 use libc::{getegid, geteuid};
 use std::error::Error;
@@ -144,9 +144,8 @@ impl Behavior {
     }
 }
 
-static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
- DIRECTORY, while setting permission modes and owner/group";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("install.md");
+const USAGE: &str = help_usage!("install.md");
 
 static OPT_COMPARE: &str = "compare";
 static OPT_DIRECTORY: &str = "directory";
