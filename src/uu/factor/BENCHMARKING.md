@@ -53,19 +53,19 @@ which I recommend reading if you want to add benchmarks to `factor`.
      so each sample takes a very short time, minimizing variability and
      maximizing the numbers of samples we can take in a given time.
 
-2. Benchmarks are immutable (once merged in `uutils`)
+1. Benchmarks are immutable (once merged in `uutils`)
 
    Modifying a benchmark means previously-collected values cannot meaningfully
    be compared, silently giving nonsensical results.  If you must modify an
    existing benchmark, rename it.
 
-3. Test common cases
+1. Test common cases
 
    We are interested in overall performance, rather than specific edge-cases;
    use **reproducibly-randomized inputs**, sampling from either all possible
    input values or some subset of interest.
 
-4. Use [`criterion`], `criterion::black_box`, ...
+1. Use [`criterion`], `criterion::black_box`, ...
 
    `criterion` isn't perfect, but it is also much better than ad-hoc
    solutions in each benchmark.
@@ -103,7 +103,7 @@ characteristics:
 1. integer factoring algorithms are randomized, with large variance in
    execution time ;
 
-2. various inputs also have large differences in factoring time, that
+1. various inputs also have large differences in factoring time, that
    corresponds to no natural, linear ordering of the inputs.
 
 If (1) was untrue (i.e. if execution time wasn't random), we could faithfully

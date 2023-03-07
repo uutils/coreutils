@@ -55,17 +55,16 @@ use uucore::{
     parse_size::parse_size,
     version_cmp::version_cmp,
 };
-use uucore::{parse_glob, show, show_error, show_warning};
+use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
 
-const ABOUT: &str = r#"List directory contents.
-Ignore files and directories starting with a '.' by default"#;
-
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("ls.md");
+const AFTER_HELP: &str = help_section!("after help", "ls.md");
+const USAGE: &str = help_usage!("ls.md");
 
 pub mod options {
     pub mod format {
@@ -1621,10 +1620,7 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(ValueParser::os_string()),
         )
-        .after_help(
-            "The TIME_STYLE argument can be full-iso, long-iso, iso, locale or +FORMAT. FORMAT is interpreted like in date. \
-            Also the TIME_STYLE environment variable sets the default style to use.",
-        )
+        .after_help(AFTER_HELP)
 }
 
 /// Represents a Path along with it's associated data.

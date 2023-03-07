@@ -15,11 +15,15 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::windows::fs::symlink_file;
 #[cfg(not(windows))]
 use std::path::Path;
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
+#[cfg(target_os = "linux")]
+use std::ffi::OsString;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs as std_fs;
 use std::thread::sleep;
@@ -91,7 +95,7 @@ fn test_cp_existing_target() {
     assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
 
     // No backup should have been created
-    assert!(!at.file_exists(&format!("{TEST_EXISTING_FILE}~")));
+    assert!(!at.file_exists(format!("{TEST_EXISTING_FILE}~")));
 }
 
 #[test]
@@ -636,7 +640,7 @@ fn test_cp_backup_none() {
         .no_stderr();
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
-    assert!(!at.file_exists(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
+    assert!(!at.file_exists(format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
 }
 
 #[test]
@@ -650,7 +654,7 @@ fn test_cp_backup_off() {
         .no_stderr();
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
-    assert!(!at.file_exists(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
+    assert!(!at.file_exists(format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
 }
 
 #[test]
@@ -700,7 +704,7 @@ fn test_cp_deref() {
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
     // unlike -P/--no-deref, we expect a file, not a link
     assert!(at.file_exists(
-        &path_to_new_symlink
+        path_to_new_symlink
             .clone()
             .into_os_string()
             .into_string()
@@ -1062,7 +1066,7 @@ fn test_cp_deref_folder_to_folder() {
         .join(TEST_COPY_TO_FOLDER_NEW)
         .join(TEST_HELLO_WORLD_SOURCE_SYMLINK);
     assert!(at.file_exists(
-        &path_to_new_symlink
+        path_to_new_symlink
             .clone()
             .into_os_string()
             .into_string()
@@ -1225,8 +1229,8 @@ fn test_cp_archive_recursive() {
     let file_2 = at.subdir.join(TEST_COPY_TO_FOLDER).join("2");
     let file_2_link = at.subdir.join(TEST_COPY_TO_FOLDER).join("2.link");
 
-    at.touch(&file_1.to_string_lossy());
-    at.touch(&file_2.to_string_lossy());
+    at.touch(file_1);
+    at.touch(file_2);
 
     at.symlink_file("1", &file_1_link.to_string_lossy());
     at.symlink_file("2", &file_2_link.to_string_lossy());
@@ -1252,18 +1256,8 @@ fn test_cp_archive_recursive() {
         .run();
 
     println!("ls dest {}", result.stdout_str());
-    assert!(at.file_exists(
-        &at.subdir
-            .join(TEST_COPY_TO_FOLDER_NEW)
-            .join("1")
-            .to_string_lossy()
-    ));
-    assert!(at.file_exists(
-        &at.subdir
-            .join(TEST_COPY_TO_FOLDER_NEW)
-            .join("2")
-            .to_string_lossy()
-    ));
+    assert!(at.file_exists(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("1")));
+    assert!(at.file_exists(at.subdir.join(TEST_COPY_TO_FOLDER_NEW).join("2")));
 
     assert!(at.is_symlink(
         &at.subdir
@@ -1672,7 +1666,7 @@ fn test_cp_reflink_always_override() {
     let dst_path: &str = &vec![MOUNTPOINT, USERDIR, "dst"].concat();
 
     scene.fixtures.mkdir(ROOTDIR);
-    scene.fixtures.mkdir(&vec![ROOTDIR, USERDIR].concat());
+    scene.fixtures.mkdir(vec![ROOTDIR, USERDIR].concat());
 
     // Setup:
     // Because neither `mkfs.btrfs` not btrfs `mount` options allow us to have a mountpoint owned
@@ -2534,6 +2528,54 @@ fn test_src_base_dot() {
         .no_stderr()
         .no_stdout();
     assert!(!at.dir_exists("y/x"));
+}
+
+#[cfg(target_os = "linux")]
+fn non_utf8_name(suffix: &str) -> OsString {
+    use std::os::unix::ffi::OsStringExt;
+    let mut name = OsString::from_vec(vec![0xff, 0xff]);
+    name.push(suffix);
+    name
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_non_utf8_src() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src = non_utf8_name("src");
+    std::fs::File::create(at.plus(&src)).unwrap();
+    ucmd.args(&[src, "dest".into()])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.file_exists("dest"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_non_utf8_dest() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dest = non_utf8_name("dest");
+    ucmd.args(&[TEST_HELLO_WORLD_SOURCE.as_ref(), &*dest])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    assert!(at.file_exists(dest));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_non_utf8_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dest = non_utf8_name("dest");
+    at.mkdir(&dest);
+    ucmd.args(&["-t".as_ref(), &*dest, TEST_HELLO_WORLD_SOURCE.as_ref()])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    let mut copied_file = PathBuf::from(dest);
+    copied_file.push(TEST_HELLO_WORLD_SOURCE);
+    assert!(at.file_exists(copied_file));
 }
 
 #[test]

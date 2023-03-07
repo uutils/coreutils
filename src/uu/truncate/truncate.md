@@ -1,5 +1,6 @@
 # truncate
 
+```
 truncate [OPTION]... [FILE]...
 ```
 

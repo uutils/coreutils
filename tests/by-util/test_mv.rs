@@ -55,7 +55,7 @@ fn test_mv_move_file_into_dir() {
 
     ucmd.arg(file).arg(dir).succeeds().no_stderr();
 
-    assert!(at.file_exists(&format!("{dir}/{file}")));
+    assert!(at.file_exists(format!("{dir}/{file}")));
 }
 
 #[test]
@@ -67,17 +67,17 @@ fn test_mv_move_file_between_dirs() {
 
     at.mkdir(dir1);
     at.mkdir(dir2);
-    at.touch(&format!("{dir1}/{file}"));
+    at.touch(format!("{dir1}/{file}"));
 
-    assert!(at.file_exists(&format!("{dir1}/{file}")));
+    assert!(at.file_exists(format!("{dir1}/{file}")));
 
     ucmd.arg(&format!("{dir1}/{file}"))
         .arg(dir2)
         .succeeds()
         .no_stderr();
 
-    assert!(!at.file_exists(&format!("{dir1}/{file}")));
-    assert!(at.file_exists(&format!("{dir2}/{file}")));
+    assert!(!at.file_exists(format!("{dir1}/{file}")));
+    assert!(at.file_exists(format!("{dir2}/{file}")));
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn test_mv_strip_slashes() {
 
     scene.ucmd().arg(&source).arg(dir).fails();
 
-    assert!(!at.file_exists(&format!("{dir}/{file}")));
+    assert!(!at.file_exists(format!("{dir}/{file}")));
 
     scene
         .ucmd()
@@ -104,7 +104,7 @@ fn test_mv_strip_slashes() {
         .succeeds()
         .no_stderr();
 
-    assert!(at.file_exists(&format!("{dir}/{file}")));
+    assert!(at.file_exists(format!("{dir}/{file}")));
 }
 
 #[test]
@@ -124,8 +124,8 @@ fn test_mv_multiple_files() {
         .succeeds()
         .no_stderr();
 
-    assert!(at.file_exists(&format!("{target_dir}/{file_a}")));
-    assert!(at.file_exists(&format!("{target_dir}/{file_b}")));
+    assert!(at.file_exists(format!("{target_dir}/{file_a}")));
+    assert!(at.file_exists(format!("{target_dir}/{file_b}")));
 }
 
 #[test]
@@ -305,7 +305,7 @@ fn test_mv_simple_backup() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -324,7 +324,7 @@ fn test_mv_simple_backup_with_file_extension() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -339,7 +339,7 @@ fn test_mv_arg_backup_arg_first() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -360,7 +360,7 @@ fn test_mv_custom_backup_suffix() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}{suffix}")));
+    assert!(at.file_exists(format!("{file_b}{suffix}")));
 }
 
 #[test]
@@ -381,7 +381,7 @@ fn test_mv_custom_backup_suffix_hyphen_value() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}{suffix}")));
+    assert!(at.file_exists(format!("{file_b}{suffix}")));
 }
 
 #[test]
@@ -401,7 +401,7 @@ fn test_mv_custom_backup_suffix_via_env() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}{suffix}")));
+    assert!(at.file_exists(format!("{file_b}{suffix}")));
 }
 
 #[test]
@@ -420,7 +420,7 @@ fn test_mv_backup_numbered_with_t() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}.~1~")));
+    assert!(at.file_exists(format!("{file_b}.~1~")));
 }
 
 #[test]
@@ -439,7 +439,7 @@ fn test_mv_backup_numbered() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}.~1~")));
+    assert!(at.file_exists(format!("{file_b}.~1~")));
 }
 
 #[test]
@@ -458,7 +458,7 @@ fn test_mv_backup_existing() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -477,7 +477,7 @@ fn test_mv_backup_nil() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -498,7 +498,7 @@ fn test_mv_numbered_if_existing_backup_existing() {
 
     assert!(at.file_exists(file_b));
     assert!(at.file_exists(file_b_backup));
-    assert!(at.file_exists(&format!("{file_b}.~2~")));
+    assert!(at.file_exists(format!("{file_b}.~2~")));
 }
 
 #[test]
@@ -519,7 +519,7 @@ fn test_mv_numbered_if_existing_backup_nil() {
 
     assert!(at.file_exists(file_b));
     assert!(at.file_exists(file_b_backup));
-    assert!(at.file_exists(&format!("{file_b}.~2~")));
+    assert!(at.file_exists(format!("{file_b}.~2~")));
 }
 
 #[test]
@@ -538,7 +538,7 @@ fn test_mv_backup_simple() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -557,7 +557,7 @@ fn test_mv_backup_never() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{file_b}~")));
+    assert!(at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -576,7 +576,7 @@ fn test_mv_backup_none() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(!at.file_exists(&format!("{file_b}~")));
+    assert!(!at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -595,7 +595,7 @@ fn test_mv_backup_off() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(!at.file_exists(&format!("{file_b}~")));
+    assert!(!at.file_exists(format!("{file_b}~")));
 }
 
 #[test]
@@ -660,8 +660,8 @@ fn test_mv_target_dir() {
 
     assert!(!at.file_exists(file_a));
     assert!(!at.file_exists(file_b));
-    assert!(at.file_exists(&format!("{dir}/{file_a}")));
-    assert!(at.file_exists(&format!("{dir}/{file_b}")));
+    assert!(at.file_exists(format!("{dir}/{file_a}")));
+    assert!(at.file_exists(format!("{dir}/{file_b}")));
 }
 
 #[test]
@@ -675,7 +675,7 @@ fn test_mv_target_dir_single_source() {
     ucmd.arg("-t").arg(dir).arg(file).succeeds().no_stderr();
 
     assert!(!at.file_exists(file));
-    assert!(at.file_exists(&format!("{dir}/{file}")));
+    assert!(at.file_exists(format!("{dir}/{file}")));
 }
 
 #[test]

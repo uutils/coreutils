@@ -403,7 +403,7 @@ fn test_symlink_implicit_target_dir() {
     let file = &path.to_string_lossy();
 
     at.mkdir(dir);
-    at.touch(file);
+    at.touch(&path);
 
     ucmd.args(&["-s", file]).succeeds().no_stderr();
 
