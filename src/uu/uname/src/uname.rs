@@ -14,12 +14,11 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use platform_info::*;
 use uucore::{
     error::{FromIo, UResult},
-    format_usage,
+    format_usage, help_about, help_usage,
 };
 
-const ABOUT: &str = r#"Print certain system information.
-With no OPTION, same as -s."#;
-const USAGE: &str = "{} [OPTION]...";
+const ABOUT: &str = help_about!("uname.md");
+const USAGE: &str = help_usage!("uname.md");
 
 pub mod options {
     pub static ALL: &str = "all";
