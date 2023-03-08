@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/kill.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-nix = { version = "0.25", features = ["signal"] }
-uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["signals"] }
+clap = { workspace=true }
+nix = { workspace=true, features = ["signal"] }
+uucore = { workspace=true, features=["signals"] }
 
 [[bin]]
 name = "kill"

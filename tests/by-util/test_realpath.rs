@@ -192,7 +192,7 @@ fn test_realpath_existing() {
     ucmd.arg("-e")
         .arg(".")
         .succeeds()
-        .stdout_only(at.plus_as_string(&format!("{}\n", at.root_dir_resolved())));
+        .stdout_only(at.plus_as_string(format!("{}\n", at.root_dir_resolved())));
 }
 
 #[test]
@@ -300,7 +300,7 @@ fn test_relative_base_not_prefix_of_relative_to() {
         .succeeds();
 
     #[cfg(windows)]
-    result.stdout_matches(&Regex::new(r"^.*:\\usr\n.*:\\usr\\local$").unwrap());
+    result.stdout_matches(&Regex::new(r"^.*:\\usr\n.*:\\usr\\local\n$").unwrap());
 
     #[cfg(not(windows))]
     result.stdout_is("/usr\n/usr/local\n");
@@ -344,7 +344,7 @@ fn test_relative() {
     #[cfg(not(windows))]
     result.stdout_is("/tmp\n.\n");
     #[cfg(windows)]
-    result.stdout_matches(&Regex::new(r"^.*:\\tmp\n\.$").unwrap());
+    result.stdout_matches(&Regex::new(r"^.*:\\tmp\n\.\n$").unwrap());
 
     new_ucmd!()
         .args(&["-sm", "--relative-base=/", "--relative-to=/", "/", "/usr"])
@@ -357,7 +357,7 @@ fn test_relative() {
     #[cfg(not(windows))]
     result.stdout_is("/tmp\n.\n");
     #[cfg(windows)]
-    result.stdout_matches(&Regex::new(r"^.*:\\tmp\n\.$").unwrap());
+    result.stdout_matches(&Regex::new(r"^.*:\\tmp\n\.\n$").unwrap());
 
     new_ucmd!()
         .args(&["-sm", "--relative-base=/", "/", "/usr"])

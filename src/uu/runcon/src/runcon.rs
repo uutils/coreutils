@@ -3,7 +3,7 @@
 use clap::builder::ValueParser;
 use uucore::error::{UResult, UUsageError};
 
-use clap::{Arg, ArgAction, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
 use uucore::format_usage;
 
@@ -18,7 +18,6 @@ mod errors;
 use errors::error_exit_status;
 use errors::{Error, Result, RunconError};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = "Run command with specified security context.";
 const USAGE: &str = "\
     {} [CONTEXT COMMAND [ARG...]]
@@ -107,7 +106,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .after_help(DESCRIPTION)
         .override_usage(format_usage(USAGE))

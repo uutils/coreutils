@@ -115,8 +115,8 @@ fn process_utmpx() -> (Option<time_t>, usize) {
             USER_PROCESS => nusers += 1,
             BOOT_TIME => {
                 let dt = line.login_time();
-                if dt.second() > 0 {
-                    boot_time = Some(dt.second() as time_t);
+                if dt.unix_timestamp() > 0 {
+                    boot_time = Some(dt.unix_timestamp() as time_t);
                 }
             }
             _ => continue,

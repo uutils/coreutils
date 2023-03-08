@@ -21,10 +21,10 @@ To avoid distortions from IO, it is recommended to store input data in tmpfs.
 
 ## Without repetition
 
-By default, `shuf` samples without repetition. 
+By default, `shuf` samples without repetition.
 
-To benchmark only the randomization and not IO, we can pass the `-i` flag with 
-a range of numbers to randomly sample from. An example of a command that works 
+To benchmark only the randomization and not IO, we can pass the `-i` flag with
+a range of numbers to randomly sample from. An example of a command that works
 well for testing:
 
 ```shell

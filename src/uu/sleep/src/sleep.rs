@@ -10,20 +10,14 @@ use std::time::Duration;
 
 use uucore::{
     error::{UResult, USimpleError, UUsageError},
-    format_usage, show,
+    format_usage, help_about, help_section, help_usage, show_error,
 };
 
 use clap::{crate_version, Arg, ArgAction, Command};
 
-static ABOUT: &str = "Pause for NUMBER seconds.";
-const USAGE: &str = "\
-    {} NUMBER[SUFFIX]...
-    {} OPTION";
-static LONG_HELP: &str = "Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
-'m' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
-that require NUMBER be an integer, here NUMBER may be an arbitrary floating
-point number.  Given two or more arguments, pause for the amount of time
-specified by the sum of their values.";
+static ABOUT: &str = help_about!("sleep.md");
+const USAGE: &str = help_usage!("sleep.md");
+static AFTER_HELP: &str = help_section!("after help", "sleep.md");
 
 mod options {
     pub const NUMBER: &str = "NUMBER";
@@ -47,14 +41,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|s| s.as_str())
         .collect::<Vec<_>>();
 
-    return sleep(&numbers);
+    sleep(&numbers)
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
@@ -67,15 +61,17 @@ pub fn uu_app() -> Command {
 
 fn sleep(args: &[&str]) -> UResult<()> {
     let mut arg_error = false;
-    let intervals = args.iter().map(|s| match uucore::parse_time::from_str(s) {
-        Ok(result) => result,
-        Err(err) => {
-            arg_error = true;
-            show!(USimpleError::new(1, err));
-            Duration::new(0, 0)
-        }
-    });
-    let sleep_dur = intervals.fold(Duration::new(0, 0), |acc, n| acc + n);
+    let sleep_dur = args
+        .iter()
+        .filter_map(|input| {
+            uucore::parse_time::from_str(input.trim()).ok().or_else(|| {
+                arg_error = true;
+                show_error!("invalid time interval '{input}'");
+                None
+            })
+        })
+        .fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
+
     if arg_error {
         return Err(UUsageError::new(1, ""));
     };

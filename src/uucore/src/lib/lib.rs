@@ -46,6 +46,8 @@ pub use crate::features::lines;
 pub use crate::features::memo;
 #[cfg(feature = "ringbuffer")]
 pub use crate::features::ringbuffer;
+#[cfg(feature = "sum")]
+pub use crate::features::sum;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)

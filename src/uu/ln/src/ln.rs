@@ -11,7 +11,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
-use uucore::{format_usage, prompt_yes, show_error};
+use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show_error};
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -85,26 +85,9 @@ impl UError for LnError {
     }
 }
 
-fn long_usage() -> String {
-    String::from(
-        " In the 1st form, create a link to TARGET with the name LINK_NAME.
-        In the 2nd form, create a link to TARGET in the current directory.
-        In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
-        Create hard links by default, symbolic links with --symbolic.
-        By default, each destination (name of new link) should not already exist.
-        When creating hard links, each TARGET must exist.  Symbolic links
-        can hold arbitrary text; if later resolved, a relative link is
-        interpreted in relation to its parent directory.
-        ",
-    )
-}
-
-static ABOUT: &str = "change file owner and group";
-const USAGE: &str = "\
-    {} [OPTION]... [-T] TARGET LINK_NAME
-    {} [OPTION]... TARGET
-    {} [OPTION]... TARGET... DIRECTORY
-    {} [OPTION]... -t DIRECTORY TARGET...";
+const ABOUT: &str = help_about!("ln.md");
+const USAGE: &str = help_usage!("ln.md");
+const AFTER_HELP: &str = help_section!("after help", "ln.md");
 
 mod options {
     pub const FORCE: &str = "force";
@@ -124,14 +107,13 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // clap requires a 'static string
-    let long_usage = format!(
-        "{}\n{}",
-        long_usage(),
+    let after_help = format!(
+        "{}\n\n{}",
+        AFTER_HELP,
         backup_control::BACKUP_CONTROL_LONG_HELP
     );
 
-    let matches = uu_app().after_help(long_usage).try_get_matches_from(args)?;
+    let matches = uu_app().after_help(after_help).try_get_matches_from(args)?;
 
     /* the list of files */
 

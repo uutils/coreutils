@@ -3,19 +3,20 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
-// spell-checker:ignore tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed ushort
+// spell-checker:ignore clocal tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed ushort
 
 mod flags;
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{c_ushort, TIOCGWINSZ, TIOCSWINSZ};
+use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
 use nix::sys::termios::{
     cfgetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags, OutputFlags, Termios,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::io::{self, stdout};
 use std::ops::ControlFlow;
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 
@@ -102,7 +103,20 @@ impl<'a> Options<'a> {
             all: matches.get_flag(options::ALL),
             save: matches.get_flag(options::SAVE),
             file: match matches.get_one::<String>(options::FILE) {
-                Some(_f) => todo!(),
+                // Two notes here:
+                // 1. O_NONBLOCK is needed because according to GNU docs, a
+                //    POSIX tty can block waiting for carrier-detect if the
+                //    "clocal" flag is not set. If your TTY is not connected
+                //    to a modem, it is probably not relevant though.
+                // 2. We never close the FD that we open here, but the OS
+                //    will clean up the FD for us on exit, so it doesn't
+                //    matter. The alternative would be to have an enum of
+                //    BorrowedFd/OwnedFd to handle both cases.
+                Some(f) => std::fs::OpenOptions::new()
+                    .read(true)
+                    .custom_flags(O_NONBLOCK)
+                    .open(f)?
+                    .into_raw_fd(),
                 None => stdout().as_raw_fd(),
             },
             settings: matches

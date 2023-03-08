@@ -22,7 +22,7 @@ use uucore::display::Quotable;
 #[cfg(not(any(target_os = "macos", target_os = "redox")))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, help_about, help_usage, show_error};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
@@ -36,10 +36,8 @@ const MINUTE: &str = "minute";
 const SECOND: &str = "second";
 const NS: &str = "ns";
 
-const ABOUT: &str = "print or set the system date and time";
-const USAGE: &str = "\
-    {} [OPTION]... [+FORMAT]...
-    {} [OPTION]... [MMDDhhmm[[CC]YY][.ss]]";
+const ABOUT: &str = help_about!("date.md");
+const USAGE: &str = help_usage!("date.md");
 
 const OPT_DATE: &str = "date";
 const OPT_FORMAT: &str = "format";

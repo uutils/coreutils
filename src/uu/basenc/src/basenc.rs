@@ -19,14 +19,10 @@ use uucore::{
 use std::io::{stdin, Read};
 use uucore::error::UClapError;
 
-static ABOUT: &str = "\
-encode/decode data and print to standard output
-With no FILE, or when FILE is -, read standard input.
+use uucore::{help_about, help_usage};
 
-When decoding, the input may contain newlines in addition to the bytes of
-the formal alphabet. Use --ignore-garbage to attempt to recover
-from any other non-alphabet bytes in the encoded stream.
-";
+const ABOUT: &str = help_about!("basenc.md");
+const USAGE: &str = help_usage!("basenc.md");
 
 const ENCODINGS: &[(&str, Format)] = &[
     ("base64", Format::Base64),
@@ -38,8 +34,6 @@ const ENCODINGS: &[(&str, Format)] = &[
     ("base2msbf", Format::Base2Msbf),
     ("z85", Format::Z85),
 ];
-
-const USAGE: &str = "{} [OPTION]... [FILE]";
 
 pub fn uu_app() -> Command {
     let mut command = base_common::base_app(ABOUT, USAGE);

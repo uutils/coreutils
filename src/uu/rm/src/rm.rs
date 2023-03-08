@@ -8,7 +8,6 @@
 // spell-checker:ignore (path) eacces
 
 use clap::{crate_version, parser::ValueSource, Arg, ArgAction, Command};
-use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs::{self, File, Metadata};
 use std::io::ErrorKind;
@@ -16,7 +15,7 @@ use std::ops::BitOr;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{format_usage, prompt_yes, show_error};
+use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show_error};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -38,8 +37,10 @@ struct Options {
     verbose: bool,
 }
 
-static ABOUT: &str = "Remove (unlink) the FILE(s)";
-const USAGE: &str = "{} [OPTION]... FILE...";
+const ABOUT: &str = help_about!("rm.md");
+const USAGE: &str = help_usage!("rm.md");
+const AFTER_HELP: &str = help_section!("after help", "rm.md");
+
 static OPT_DIR: &str = "dir";
 static OPT_INTERACTIVE: &str = "interactive";
 static OPT_FORCE: &str = "force";
@@ -54,28 +55,9 @@ static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 
 static ARG_FILES: &str = "files";
 
-fn get_long_usage() -> String {
-    String::from(
-        "By default, rm does not remove directories.  Use the --recursive (-r or -R)
-        option to remove each listed directory, too, along with all of its contents
-
-        To remove a file whose name starts with a '-', for example '-foo',
-        use one of these commands:
-        rm -- -foo
-
-        rm ./-foo
-
-        Note that if you use rm to remove a file, it might be possible to recover
-        some of its contents, given sufficient expertise and/or time.  For greater
-        assurance that the contents are truly unrecoverable, consider using shred.",
-    )
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)
@@ -298,9 +280,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
         if options.interactive != InteractiveMode::Always && !options.verbose {
-            // we need the extra crate because apparently fs::remove_dir_all() does not function
-            // correctly on Windows
-            if let Err(e) = remove_dir_all(path) {
+            if let Err(e) = fs::remove_dir_all(path) {
                 had_err = true;
                 if e.kind() == std::io::ErrorKind::PermissionDenied {
                     // GNU compatibility (rm/fail-eacces.sh)
@@ -457,7 +437,7 @@ fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
     }
     if is_dir {
         // We can't use metadata.permissions.readonly for directories because it only works on files
-        // So we have to handle wether a directory is writable on not manually
+        // So we have to handle whether a directory is writable on not manually
         if let Ok(metadata) = fs::metadata(path) {
             handle_writable_directory(path, options, &metadata)
         } else {

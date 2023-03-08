@@ -11,28 +11,11 @@ use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
 use uucore::error::{FromIo, UResult};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
-const ABOUT: &str = "display a line of text";
-const USAGE: &str = "{} [OPTIONS]... [STRING]...";
-const AFTER_HELP: &str = r#"
- Echo the STRING(s) to standard output.
-
- If -e is in effect, the following sequences are recognized:
-
- \\\\      backslash
- \\a      alert (BEL)
- \\b      backspace
- \\c      produce no further output
- \\e      escape
- \\f      form feed
- \\n      new line
- \\r      carriage return
- \\t      horizontal tab
- \\v      vertical tab
- \\0NNN   byte with octal value NNN (1 to 3 digits)
- \\xHH    byte with hexadecimal value HH (1 to 2 digits)
-"#;
+const ABOUT: &str = help_about!("echo.md");
+const USAGE: &str = help_usage!("echo.md");
+const AFTER_HELP: &str = help_section!("after help", "echo.md");
 
 mod options {
     pub const STRING: &str = "STRING";

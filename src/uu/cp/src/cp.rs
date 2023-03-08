@@ -26,7 +26,7 @@ use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::string::ToString;
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
@@ -40,7 +40,7 @@ use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
     canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
-use uucore::{crash, format_usage, prompt_yes, show_error, show_warning};
+use uucore::{crash, format_usage, help_about, help_usage, prompt_yes, show_error, show_warning};
 
 use crate::copydir::copy_directory;
 
@@ -91,7 +91,7 @@ quick_error! {
         /// Invalid arguments to backup
         Backup(description: String) { display("{}\nTry '{} --help' for more information.", description, uucore::execution_phrase()) }
 
-        NotADirectory(path: String) { display("'{}' is not a directory", path) }
+        NotADirectory(path: PathBuf) { display("'{}' is not a directory", path.display()) }
     }
 }
 
@@ -222,19 +222,16 @@ pub struct Options {
     attributes: Attributes,
     recursive: bool,
     backup_suffix: String,
-    target_dir: Option<String>,
+    target_dir: Option<PathBuf>,
     update: bool,
     verbose: bool,
     progress_bar: bool,
 }
 
-static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
-static EXIT_ERR: i32 = 1;
+const ABOUT: &str = help_about!("cp.md");
+const USAGE: &str = help_usage!("cp.md");
 
-const USAGE: &str = "\
-    {} [OPTION]... [-T] SOURCE DEST
-    {} [OPTION]... SOURCE... DIRECTORY
-    {} [OPTION]... -t DIRECTORY SOURCE...";
+static EXIT_ERR: i32 = 1;
 
 // Argument constants
 mod options {
@@ -305,6 +302,7 @@ pub fn uu_app() -> Command {
                 .long(options::TARGET_DIRECTORY)
                 .value_name(options::TARGET_DIRECTORY)
                 .value_hint(clap::ValueHint::DirPath)
+                .value_parser(ValueParser::path_buf())
                 .help("copy all SOURCE arguments into target-directory"),
         )
         .arg(
@@ -523,7 +521,7 @@ pub fn uu_app() -> Command {
                 .long(options::SPARSE)
                 .value_name("WHEN")
                 .value_parser(["never", "auto", "always"])
-                .help("NotImplemented: control creation of sparse files. See below"),
+                .help("control creation of sparse files. See below"),
         )
         // TODO: implement the following args
         .arg(
@@ -558,7 +556,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::PATHS)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(ValueParser::path_buf()),
         )
 }
 
@@ -579,7 +578,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             clap::error::ErrorKind::DisplayVersion => print!("{}", app.render_version()),
             _ => return Err(Box::new(e.with_exit_code(1))),
         };
-    } else if let Ok(matches) = matches {
+    } else if let Ok(mut matches) = matches {
         let options = Options::from_matches(&matches)?;
 
         if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::NoBackup {
@@ -589,12 +588,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ));
         }
 
-        let paths: Vec<String> = matches
-            .get_many::<String>(options::PATHS)
-            .map(|v| v.map(ToString::to_string).collect())
+        let paths: Vec<PathBuf> = matches
+            .remove_many::<PathBuf>(options::PATHS)
+            .map(|v| v.collect())
             .unwrap_or_default();
 
-        let (sources, target) = parse_path_args(&paths, &options)?;
+        let (sources, target) = parse_path_args(paths, &options)?;
 
         if let Err(error) = copy(&sources, &target, &options) {
             match error {
@@ -757,11 +756,11 @@ impl Options {
         // Parse target directory options
         let no_target_dir = matches.get_flag(options::NO_TARGET_DIRECTORY);
         let target_dir = matches
-            .get_one::<String>(options::TARGET_DIRECTORY)
-            .map(ToString::to_string);
+            .get_one::<PathBuf>(options::TARGET_DIRECTORY)
+            .cloned();
 
         if let Some(dir) = &target_dir {
-            if !Path::new(dir).is_dir() {
+            if !dir.is_dir() {
                 return Err(Error::NotADirectory(dir.clone()));
             }
         };
@@ -918,9 +917,7 @@ impl TargetType {
 }
 
 /// Returns tuple of (Source paths, Target)
-fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<Source>, Target)> {
-    let mut paths = path_args.iter().map(PathBuf::from).collect::<Vec<_>>();
-
+fn parse_path_args(mut paths: Vec<Source>, options: &Options) -> CopyResult<(Vec<Source>, Target)> {
     if paths.is_empty() {
         // No files specified
         return Err("missing file operand".into());
@@ -936,7 +933,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
         Some(ref target) => {
             // All path args are sources, and the target dir was
             // specified separately
-            PathBuf::from(target)
+            target.clone()
         }
         None => {
             // If there was no explicit target-dir, then use the last

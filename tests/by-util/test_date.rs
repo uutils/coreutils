@@ -68,10 +68,10 @@ fn test_date_utc() {
 fn test_date_format_y() {
     let scene = TestScenario::new(util_name!());
 
-    let mut re = Regex::new(r"^\d{4}$").unwrap();
+    let mut re = Regex::new(r"^\d{4}\n$").unwrap();
     scene.ucmd().arg("+%Y").succeeds().stdout_matches(&re);
 
-    re = Regex::new(r"^\d{2}$").unwrap();
+    re = Regex::new(r"^\d{2}\n$").unwrap();
     scene.ucmd().arg("+%y").succeeds().stdout_matches(&re);
 }
 
@@ -82,7 +82,7 @@ fn test_date_format_m() {
     let mut re = Regex::new(r"\S+").unwrap();
     scene.ucmd().arg("+%b").succeeds().stdout_matches(&re);
 
-    re = Regex::new(r"^\d{2}$").unwrap();
+    re = Regex::new(r"^\d{2}\n$").unwrap();
     scene.ucmd().arg("+%m").succeeds().stdout_matches(&re);
 }
 
@@ -96,7 +96,7 @@ fn test_date_format_day() {
     re = Regex::new(r"\S+").unwrap();
     scene.ucmd().arg("+%A").succeeds().stdout_matches(&re);
 
-    re = Regex::new(r"^\d{1}$").unwrap();
+    re = Regex::new(r"^\d{1}\n$").unwrap();
     scene.ucmd().arg("+%u").succeeds().stdout_matches(&re);
 }
 
@@ -117,7 +117,7 @@ fn test_date_issue_3780() {
 #[test]
 fn test_date_nano_seconds() {
     // %N     nanoseconds (000000000..999999999)
-    let re = Regex::new(r"^\d{1,9}$").unwrap();
+    let re = Regex::new(r"^\d{1,9}\n$").unwrap();
     new_ucmd!().arg("+%N").succeeds().stdout_matches(&re);
 }
 

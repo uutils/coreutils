@@ -15,11 +15,11 @@ edition = "2021"
 path = "src/cut.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.17", package="uucore", path="../../uucore" }
-memchr = "2"
-bstr = "1.0"
-atty = "0.2"
+clap = { workspace=true }
+uucore = { workspace=true }
+memchr = { workspace=true }
+bstr = { workspace=true }
+is-terminal = { workspace=true }
 
 [[bin]]
 name = "cut"

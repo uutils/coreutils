@@ -12,6 +12,7 @@
 
 // last synced with: cat (GNU coreutils) 8.13
 use clap::{crate_version, Arg, ArgAction, Command};
+use is_terminal::IsTerminal;
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
@@ -33,11 +34,10 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
-static USAGE: &str = "{} [OPTION]... [FILE]...";
-static ABOUT: &str = "Concatenate FILE(s), or standard input, to standard output
-With no FILE, or when FILE is -, read standard input.";
+const USAGE: &str = help_usage!("cat.md");
+const ABOUT: &str = help_about!("cat.md");
 
 #[derive(Error, Debug)]
 enum CatError {
@@ -333,7 +333,7 @@ fn cat_path(
             let stdin = io::stdin();
             let mut handle = InputHandle {
                 reader: stdin,
-                is_interactive: atty::is(atty::Stream::Stdin),
+                is_interactive: std::io::stdin().is_terminal(),
             };
             cat_handle(&mut handle, options, state)
         }

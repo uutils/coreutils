@@ -48,15 +48,12 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     let r = ucmd.run();
     if !r.succeeded() {
         println!("{}", r.stderr_str());
-        panic!("{:?}: failed", ucmd.raw);
+        panic!("{ucmd}: failed");
     }
 
     let perms = at.metadata(TEST_FILE).permissions().mode();
     if perms != test.after {
-        panic!(
-            "{:?}: expected: {:o} got: {:o}",
-            ucmd.raw, test.after, perms
-        );
+        panic!("{}: expected: {:o} got: {:o}", ucmd, test.after, perms);
     }
 }
 
@@ -414,7 +411,7 @@ fn test_chmod_symlink_non_existing_file() {
     let non_existing = "test_chmod_symlink_non_existing_file";
     let test_symlink = "test_chmod_symlink_non_existing_file_symlink";
     let expected_stdout = &format!(
-        "failed to change mode of '{test_symlink}' from 0000 (---------) to 0000 (---------)"
+        "failed to change mode of '{test_symlink}' from 0000 (---------) to 1500 (r-x-----T)"
     );
     let expected_stderr = &format!("cannot operate on dangling symlink '{test_symlink}'");
 
@@ -442,6 +439,17 @@ fn test_chmod_symlink_non_existing_file() {
         .code_is(1)
         .no_stderr()
         .stdout_contains(expected_stdout);
+
+    // this should only include  the dangling symlink message
+    // NOT the failure to change mode
+    scene
+        .ucmd()
+        .arg("755")
+        .arg(test_symlink)
+        .run()
+        .code_is(1)
+        .no_stdout()
+        .stderr_contains(expected_stderr);
 }
 
 #[test]
@@ -573,4 +581,93 @@ fn test_mode_after_dash_dash() {
         &at,
         ucmd,
     );
+}
+
+#[test]
+fn test_chmod_file_after_non_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(TEST_FILE);
+    at.touch("file2");
+    set_permissions(at.plus(TEST_FILE), Permissions::from_mode(0o664)).unwrap();
+    set_permissions(at.plus("file2"), Permissions::from_mode(0o664)).unwrap();
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("does-not-exist")
+        .arg(TEST_FILE)
+        .fails()
+        .stderr_contains("chmod: cannot access 'does-not-exist': No such file or directory")
+        .code_is(1);
+
+    assert_eq!(at.metadata(TEST_FILE).permissions().mode(), 0o100764);
+
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("--q")
+        .arg("does-not-exist")
+        .arg("file2")
+        .fails()
+        .no_stderr()
+        .code_is(1);
+    assert_eq!(at.metadata("file2").permissions().mode(), 0o100764);
+}
+
+#[test]
+fn test_chmod_file_symlink_after_non_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let existing = "file";
+    let test_existing_symlink = "file_symlink";
+
+    let non_existing = "test_chmod_symlink_non_existing_file";
+    let test_dangling_symlink = "test_chmod_symlink_non_existing_file_symlink";
+    let expected_stdout = &format!(
+        "failed to change mode of '{test_dangling_symlink}' from 0000 (---------) to 1500 (r-x-----T)"
+    );
+    let expected_stderr = &format!("cannot operate on dangling symlink '{test_dangling_symlink}'");
+
+    at.touch(existing);
+    set_permissions(at.plus(existing), Permissions::from_mode(0o664)).unwrap();
+    at.symlink_file(non_existing, test_dangling_symlink);
+    at.symlink_file(existing, test_existing_symlink);
+
+    // this cannot succeed since the symbolic link dangles
+    // but the metadata for the existing target should change
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("-v")
+        .arg(test_dangling_symlink)
+        .arg(test_existing_symlink)
+        .fails()
+        .code_is(1)
+        .stdout_contains(expected_stdout)
+        .stderr_contains(expected_stderr);
+    assert_eq!(
+        at.metadata(test_existing_symlink).permissions().mode(),
+        0o100764
+    );
+}
+
+#[test]
+fn test_quiet_n_verbose_used_multiple_times() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("--verbose")
+        .arg("--verbose")
+        .arg("file")
+        .succeeds();
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("--quiet")
+        .arg("--quiet")
+        .arg("file")
+        .succeeds();
 }

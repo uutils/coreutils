@@ -18,14 +18,14 @@ edition = "2021"
 path = "src/install.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-filetime = "0.2"
-file_diff = "1.0.0"
-libc = ">= 0.2"
-uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["fs", "mode", "perms", "entries"] }
+clap = { workspace=true }
+filetime = { workspace=true }
+file_diff = { workspace=true }
+libc = { workspace=true }
+uucore = { workspace=true, features=["fs", "mode", "perms", "entries"] }
 
 [dev-dependencies]
-time = "0.3"
+time = { workspace=true }
 
 [[bin]]
 name = "install"

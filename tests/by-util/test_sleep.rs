@@ -1,3 +1,5 @@
+use rstest::rstest;
+
 // spell-checker:ignore dont
 use crate::common::util::*;
 
@@ -129,29 +131,96 @@ fn test_sleep_wrong_time() {
     new_ucmd!().args(&["0.1s", "abc"]).fails();
 }
 
-// TODO These tests would obviously block for a very long time. We
-// only want to verify that there is no error here, so we could just
-// figure out a way to terminate the child process after a short
-// period of time.
+#[test]
+fn test_sleep_when_single_input_exceeds_max_duration_then_no_error() {
+    let mut child = new_ucmd!()
+        .arg(format!("{}", u64::MAX as u128 + 1))
+        .timeout(Duration::from_secs(10))
+        .run_no_wait();
 
-// #[test]
-#[allow(dead_code)]
-fn test_dont_overflow() {
-    new_ucmd!()
-        .arg("9223372036854775808d")
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    #[cfg(unix)]
+    child
+        .delay(100)
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .signal_is(9) // make sure it was us who terminated the process
+        .no_output();
+    #[cfg(windows)]
+    child
+        .delay(100)
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .failure()
+        .no_output();
 }
 
-// #[test]
-#[allow(dead_code)]
-fn test_sum_overflow() {
+#[test]
+fn test_sleep_when_multiple_inputs_exceed_max_duration_then_no_error() {
+    let mut child = new_ucmd!()
+        .arg(format!("{}", u64::MAX))
+        .arg("1")
+        .timeout(Duration::from_secs(10))
+        .run_no_wait();
+
+    #[cfg(unix)]
+    child
+        .delay(100)
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .signal_is(9) // make sure it was us who terminated the process
+        .no_output();
+    #[cfg(windows)]
+    child
+        .delay(100)
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .failure()
+        .no_output();
+}
+
+#[rstest]
+#[case::whitespace_prefix(" 0.1s")]
+#[case::multiple_whitespace_prefix("   0.1s")]
+#[case::whitespace_suffix("0.1s ")]
+#[case::mixed_newlines_spaces_tabs("\n\t0.1s \n ")]
+fn test_sleep_when_input_has_whitespace_then_no_error(#[case] input: &str) {
     new_ucmd!()
-        .args(&["100000000000000d", "100000000000000d", "100000000000000d"])
+        .arg(input)
+        .timeout(Duration::from_secs(10))
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
+}
+
+#[rstest]
+#[case::only_space(" ")]
+#[case::only_tab("\t")]
+#[case::only_newline("\n")]
+fn test_sleep_when_input_has_only_whitespace_then_error(#[case] input: &str) {
+    new_ucmd!()
+        .arg(input)
+        .timeout(Duration::from_secs(10))
+        .fails()
+        .usage_error(format!("invalid time interval '{input}'"));
+}
+
+#[test]
+fn test_sleep_when_multiple_input_some_with_error_then_shows_all_errors() {
+    let expected = "invalid time interval 'abc'\n\
+        sleep: invalid time interval '1years'\n\
+        sleep: invalid time interval ' '";
+
+    // Even if one of the arguments is valid, but the rest isn't, we should still fail and exit early.
+    // So, the timeout of 10 seconds ensures we haven't executed `thread::sleep` with the only valid
+    // interval of `100000.0` seconds.
+    new_ucmd!()
+        .args(&["abc", "100000.0", "1years", " "])
+        .timeout(Duration::from_secs(10))
+        .fails()
+        .usage_error(expected);
 }
 
 #[test]

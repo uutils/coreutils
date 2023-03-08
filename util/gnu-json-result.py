@@ -3,9 +3,9 @@ Extract the GNU logs into a JSON file.
 """
 
 import json
-from pathlib import Path
+import re
 import sys
-from os import environ
+from pathlib import Path
 
 out = {}
 
@@ -20,7 +20,11 @@ for filepath in test_dir.glob("**/*.log"):
     try:
         with open(path) as f:
             content = f.read()
-            current[path.name] = content.split("\n")[-2].split(" ")[0]
+            result = re.search(
+                r"(PASS|FAIL|SKIP|ERROR) [^ ]+ \(exit status: \d+\)$", content
+            )
+            if result:
+                current[path.name] = result.group(1)
     except:
         pass
 

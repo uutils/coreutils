@@ -15,16 +15,15 @@ edition = "2021"
 path = "src/rm.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-walkdir = "2.2"
-remove_dir_all = "0.7.0"
-uucore = { version=">=0.0.17", package="uucore", path="../../uucore", features=["fs"] }
+clap = { workspace=true }
+walkdir = { workspace=true }
+uucore = { workspace=true, features=["fs"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.137"
+libc = { workspace=true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_Storage_FileSystem"] }
+windows-sys = { workspace=true, features = ["Win32_Storage_FileSystem"] }
 
 [[bin]]
 name = "rm"

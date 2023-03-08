@@ -49,5 +49,5 @@ fn test_long_output() {
         .ucmd()
         .arg("-l")
         .succeeds()
-        .stdout_matches(&Regex::new("[rwx-]{10}.*some-file1$").unwrap());
+        .stdout_matches(&Regex::new("[rwx-]{10}.*some-file1\n$").unwrap());
 }

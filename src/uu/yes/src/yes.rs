@@ -12,13 +12,13 @@ use std::io::{self, Result, Write};
 
 use clap::{Arg, ArgAction, Command};
 use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
 
-const ABOUT: &str = "repeatedly display a line with STRING (or 'y')";
-const USAGE: &str = "{} [STRING]...";
+const ABOUT: &str = help_about!("yes.md");
+const USAGE: &str = help_usage!("yes.md");
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough

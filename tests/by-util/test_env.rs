@@ -156,7 +156,8 @@ fn test_unset_variable() {
     // This test depends on the HOME variable being pre-defined by the
     // default shell
     let out = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .keep_env()
         .arg("-u")
         .arg("HOME")
         .succeeds()

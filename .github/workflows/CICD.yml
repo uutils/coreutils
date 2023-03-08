@@ -1,17 +1,17 @@
 name: CICD
 
-# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl 
+# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain
 # spell-checker:ignore (people) Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt utmpdump xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils 
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.60.0" ## MSRV v1.60.0
+  RUST_MIN_SRV: "1.64.0"
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
@@ -19,6 +19,11 @@ on: [push, pull_request]
 
 permissions:
   contents: read # to fetch code (actions/checkout)
+
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   cargo-deny:
@@ -66,7 +71,7 @@ jobs:
     ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
     - name: Install `rust` toolchain
       run: |
-        rustup toolchain install nightly --profile minimal
+        rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
     - uses: Swatinem/rust-cache@v2
     - name: Install `cargo-udeps`
@@ -117,8 +122,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
-        rustup toolchain install stable -c rustfmt --profile minimal
+        rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo fmt` testing"
@@ -178,7 +182,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable -c clippy --profile minimal
+        rustup toolchain install stable --no-self-update -c clippy --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo clippy` lint testing"
@@ -280,14 +284,20 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable -c clippy --profile minimal
+        rustup toolchain install stable --no-self-update -c clippy --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo doc` with warnings"
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-
+    - uses: DavidAnson/markdownlint-cli2-action@v9
+      with:
+        command: fix
+        globs: |
+          *.md
+          docs/src/*.md
+          src/uu/*/*.md
 
   min_version:
     name: MinRustV # Minimum supported rust version (aka, MinSRV or MSRV)
@@ -312,7 +322,7 @@ jobs:
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
       run: |
         ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
-        rustup toolchain install ${{ env.RUST_MIN_SRV }} --profile minimal
+        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
     - name: Confirm MinSRV compatible 'Cargo.lock'
@@ -367,7 +377,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable --profile minimal
+        rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo update` testing"
@@ -391,7 +401,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable --profile minimal
+        rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`make build`"
@@ -402,6 +412,16 @@ jobs:
       shell: bash
       run: |
         make test
+      env:
+        RUST_BACKTRACE: "1"
+    - name: "`make install`"
+      shell: bash
+      run: |
+        DESTDIR=/tmp/ make PROFILE=release install
+        # Check that the manpage is present
+        test -f /tmp/usr/local/share/man/man1/whoami.1
+        # Check that the completion is present
+        test -f /tmp/usr/local/share/zsh/site-functions/_install
       env:
         RUST_BACKTRACE: "1"
 
@@ -423,7 +443,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable --profile minimal
+        rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: Test
@@ -448,7 +468,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install nightly --profile minimal
+        rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
     - uses: Swatinem/rust-cache@v2
     - name: Test
@@ -476,7 +496,7 @@ jobs:
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
-        rustup toolchain install stable --profile minimal
+        rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: "`make install`"
@@ -665,7 +685,7 @@ jobs:
     - name: rust toolchain ~ install
       run: |
         ## rust toolchain ~ install
-        rustup toolchain install ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
+        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
       with:
@@ -871,7 +891,7 @@ jobs:
     - name: rust toolchain ~ install
       run: |
         ## rust toolchain ~ install
-        rustup toolchain install ${{ env.RUST_MIN_SRV }} --profile minimal
+        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
     - name: Build coreutils as multiple binaries
       shell: bash
@@ -1127,7 +1147,7 @@ jobs:
     - name: rust toolchain ~ install
       run: |
         ## rust toolchain ~ install
-        rustup toolchain install ${{ steps.vars.outputs.TOOLCHAIN }} --profile minimal
+        rustup toolchain install ${{ steps.vars.outputs.TOOLCHAIN }} --no-self-update --profile minimal
         rustup default ${{ steps.vars.outputs.TOOLCHAIN }}
     - uses: Swatinem/rust-cache@v2
     - name: Initialize toolchain-dependent workflow variables

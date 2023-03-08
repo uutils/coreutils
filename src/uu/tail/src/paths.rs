@@ -6,6 +6,7 @@
 // spell-checker:ignore tailable seekable stdlib (stdlib)
 
 use crate::text;
+use std::ffi::OsStr;
 use std::fs::{File, Metadata};
 use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
@@ -26,21 +27,20 @@ pub struct Input {
 }
 
 impl Input {
-    // TODO: from &str may be the better choice
-    pub fn from(string: String) -> Self {
-        let kind = if string == text::DASH {
+    pub fn from<T: AsRef<OsStr>>(string: &T) -> Self {
+        let kind = if string.as_ref() == Path::new(text::DASH) {
             InputKind::Stdin
         } else {
-            InputKind::File(PathBuf::from(&string))
+            InputKind::File(PathBuf::from(string.as_ref()))
         };
 
         let display_name = match kind {
-            InputKind::File(_) => string,
+            InputKind::File(_) => string.as_ref().to_string_lossy().to_string(),
             InputKind::Stdin => {
                 if cfg!(unix) {
                     text::STDIN_HEADER.to_string()
                 } else {
-                    string
+                    string.as_ref().to_string_lossy().to_string()
                 }
             }
         };

@@ -7,12 +7,12 @@
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
-![MSRV](https://img.shields.io/badge/MSRV-1.60.0-brightgreen)
+![MSRV](https://img.shields.io/badge/MSRV-1.64.0-brightgreen)
 
 -----------------------------------------------
 
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME manpages -->
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org).
@@ -21,11 +21,12 @@ or different behavior might be experienced.
 
 To install it:
 
-```
-$ cargo install coreutils
-$ ~/.cargo/bin/coreutils
+```shell
+cargo install coreutils
+~/.cargo/bin/coreutils
 ```
 
+<!-- markdownlint-disable-next-line MD026 -->
 ## Why?
 
 uutils aims to work on as many platforms as possible, to be able to use the
@@ -35,6 +36,7 @@ chosen not only because it is fast and safe, but is also excellent for
 writing cross-platform code.
 
 ## Documentation
+
 uutils has both user and developer documentation available:
 
 - [User Manual](https://uutils.github.io/user/)
@@ -46,13 +48,13 @@ Both can also be generated locally, the instructions for that can be found in th
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
 ## Requirements
 
-* Rust (`cargo`, `rustc`)
-* GNU Make (optional)
+- Rust (`cargo`, `rustc`)
+- GNU Make (optional)
 
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current Minimum Supported Rust Version (MSRV) is `1.60.0`.
+The current Minimum Supported Rust Version (MSRV) is `1.64.0`.
 
 ## Building
 
@@ -64,9 +66,9 @@ or GNU Make.
 
 For either method, we first need to fetch the repository:
 
-```bash
-$ git clone https://github.com/uutils/coreutils
-$ cd coreutils
+```shell
+git clone https://github.com/uutils/coreutils
+cd coreutils
 ```
 
 ### Cargo
@@ -74,8 +76,8 @@ $ cd coreutils
 Building uutils using Cargo is easy because the process is the same as for
 every other Rust program:
 
-```bash
-$ cargo build --release
+```shell
+cargo build --release
 ```
 
 This command builds the most portable common core set of uutils into a multicall
@@ -85,20 +87,20 @@ Additional platform-specific uutils are often available. Building these
 expanded sets of uutils for a platform (on that platform) is as simple as
 specifying it as a feature:
 
-```bash
-$ cargo build --release --features macos
+```shell
+cargo build --release --features macos
 # or ...
-$ cargo build --release --features windows
+cargo build --release --features windows
 # or ...
-$ cargo build --release --features unix
+cargo build --release --features unix
 ```
 
 If you don't want to build every utility available on your platform into the
 final binary, you can also specify which ones you want to build manually.
 For example:
 
-```bash
-$ cargo build --features "base32 cat echo rm" --no-default-features
+```shell
+cargo build --features "base32 cat echo rm" --no-default-features
 ```
 
 If you don't want to build the multicall binary and would prefer to build
@@ -107,8 +109,8 @@ is contained in its own package within the main repository, named
 "uu_UTILNAME". To build individual utilities, use cargo to build just the
 specific packages (using the `--package` [aka `-p`] option). For example:
 
-```bash
-$ cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
+```shell
+cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
 ```
 
 ### GNU Make
@@ -117,80 +119,86 @@ Building using `make` is a simple process as well.
 
 To simply build all available utilities:
 
-```bash
-$ make
+```shell
+make
+```
+
+In release mode:
+
+```shell
+make PROFILE=release
 ```
 
 To build all but a few of the available utilities:
 
-```bash
-$ make SKIP_UTILS='UTILITY_1 UTILITY_2'
+```shell
+make SKIP_UTILS='UTILITY_1 UTILITY_2'
 ```
 
 To build only a few of the available utilities:
 
-```bash
-$ make UTILS='UTILITY_1 UTILITY_2'
+```shell
+make UTILS='UTILITY_1 UTILITY_2'
 ```
 
 ## Installation
 
-### Cargo
+### Install with Cargo
 
 Likewise, installing can simply be done using:
 
-```bash
-$ cargo install --path .
+```shell
+cargo install --path .
 ```
 
 This command will install uutils into Cargo's *bin* folder (*e.g.* `$HOME/.cargo/bin`).
 
-This does not install files necessary for shell completion. For shell completion to work,
-use `GNU Make` or see `Manually install shell completions`.
+This does not install files necessary for shell completion or manpages.
+For manpages or shell completion to work, use `GNU Make` or see `Manually install shell completions`/`Manually install manpages`.
 
-### GNU Make
+### Install with GNU Make
 
 To install all available utilities:
 
-```bash
-$ make install
+```shell
+make install
 ```
 
 To install using `sudo` switch `-E` must be used:
 
-```bash
-$ sudo -E make install
+```shell
+sudo -E make install
 ```
 
 To install all but a few of the available utilities:
 
-```bash
-$ make SKIP_UTILS='UTILITY_1 UTILITY_2' install
+```shell
+make SKIP_UTILS='UTILITY_1 UTILITY_2' install
 ```
 
 To install only a few of the available utilities:
 
-```bash
-$ make UTILS='UTILITY_1 UTILITY_2' install
+```shell
+make UTILS='UTILITY_1 UTILITY_2' install
 ```
 
 To install every program with a prefix (e.g. uu-echo uu-cat):
 
-```bash
-$ make PROG_PREFIX=PREFIX_GOES_HERE install
+```shell
+make PROG_PREFIX=PREFIX_GOES_HERE install
 ```
 
 To install the multicall binary:
 
-```bash
-$ make MULTICALL=y install
+```shell
+make MULTICALL=y install
 ```
 
 Set install parent directory (default value is /usr/local):
 
-```bash
+```shell
 # DESTDIR is also supported
-$ make PREFIX=/my/path install
+make PREFIX=/my/path install
 ```
 
 Installing with `make` installs shell completions for all installed utilities
@@ -203,15 +211,30 @@ The `coreutils` binary can generate completions for the `bash`, `elvish`, `fish`
 and `zsh` shells. It prints the result to stdout.
 
 The syntax is:
-```bash
+
+```shell
 cargo run completion <utility> <shell>
 ```
 
 So, to install completions for `ls` on `bash` to `/usr/local/share/bash-completion/completions/ls`,
 run:
 
-```bash
+```shell
 cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
+```
+
+### Manually install manpages
+
+To generate manpages, the syntax is:
+```bash
+cargo run manpage <utility>
+```
+
+So, to install the manpage for `ls` to `/usr/local/share/man/man1/ls.1`
+run:
+
+```bash
+cargo run manpage ls > /usr/local/share/man/man1/ls.1
 ```
 
 ## Un-installation
@@ -220,106 +243,107 @@ Un-installation differs depending on how you have installed uutils.  If you used
 Cargo to install, use Cargo to uninstall.  If you used GNU Make to install, use
 Make to uninstall.
 
-### Cargo
+### Uninstall with Cargo
 
 To uninstall uutils:
 
-```bash
-$ cargo uninstall uutils
+```shell
+cargo uninstall uutils
 ```
 
-### GNU Make
+### Uninstall with GNU Make
 
 To uninstall all utilities:
 
-```bash
-$ make uninstall
+```shell
+make uninstall
 ```
 
 To uninstall every program with a set prefix:
 
-```bash
-$ make PROG_PREFIX=PREFIX_GOES_HERE uninstall
+```shell
+make PROG_PREFIX=PREFIX_GOES_HERE uninstall
 ```
 
 To uninstall the multicall binary:
 
-```bash
-$ make MULTICALL=y uninstall
+```shell
+make MULTICALL=y uninstall
 ```
 
 To uninstall from a custom parent directory:
 
-```bash
+```shell
 # DESTDIR is also supported
-$ make PREFIX=/my/path uninstall
+make PREFIX=/my/path uninstall
 ```
+
 <!-- ANCHOR_END: build (this mark is needed for mdbook) -->
 
 ## Testing
 
 Testing can be done using either Cargo or `make`.
 
-### Cargo
+### Testing with Cargo
 
 Just like with building, we follow the standard procedure for testing using
 Cargo:
 
-```bash
-$ cargo test
+```shell
+cargo test
 ```
 
 By default, `cargo test` only runs the common programs. To run also platform
 specific tests, run:
 
-```bash
-$ cargo test --features unix
+```shell
+cargo test --features unix
 ```
 
 If you would prefer to test a select few utilities:
 
-```bash
-$ cargo test --features "chmod mv tail" --no-default-features
+```shell
+cargo test --features "chmod mv tail" --no-default-features
 ```
 
 If you also want to test the core utilities:
 
-```bash
-$ cargo test  -p uucore -p coreutils
+```shell
+cargo test  -p uucore -p coreutils
 ```
 
 To debug:
 
-```bash
-$ gdb --args target/debug/coreutils ls
+```shell
+gdb --args target/debug/coreutils ls
 (gdb) b ls.rs:79
 (gdb) run
 ```
 
-### GNU Make
+### Testing with GNU Make
 
 To simply test all available utilities:
 
-```bash
-$ make test
+```shell
+make test
 ```
 
 To test all but a few of the available utilities:
 
-```bash
-$ make SKIP_UTILS='UTILITY_1 UTILITY_2' test
+```shell
+make SKIP_UTILS='UTILITY_1 UTILITY_2' test
 ```
 
 To test only a few of the available utilities:
 
-```bash
-$ make UTILS='UTILITY_1 UTILITY_2' test
+```shell
+make UTILS='UTILITY_1 UTILITY_2' test
 ```
 
 To include tests for unimplemented behavior:
 
-```bash
-$ make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
+```shell
+make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 ```
 
 ### Run Busybox Tests
@@ -329,20 +353,20 @@ requires `make`.
 
 To run busybox tests for all utilities for which busybox has tests
 
-```bash
-$ make busytest
+```shell
+make busytest
 ```
 
 To run busybox tests for a few of the available utilities
 
-```bash
-$ make UTILS='UTILITY_1 UTILITY_2' busytest
+```shell
+make UTILS='UTILITY_1 UTILITY_2' busytest
 ```
 
 To pass an argument like "-v" to the busybox test runtime
 
-```bash
-$ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
+```shell
+make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ```
 
 ### Comparing with GNU
@@ -355,15 +379,15 @@ breakdown of the GNU test results of the main branch can be found
 
 To run locally:
 
-```bash
-$ bash util/build-gnu.sh
-$ bash util/run-gnu-test.sh
+```shell
+bash util/build-gnu.sh
+bash util/run-gnu-test.sh
 # To run a single test:
-$ bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
+bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
 # To run several tests:
-$ bash util/run-gnu-test.sh tests/touch/not-owner.sh tests/rm/no-give-up.sh # for example
+bash util/run-gnu-test.sh tests/touch/not-owner.sh tests/rm/no-give-up.sh # for example
 # If this is a perl (.pl) test, to run in debug:
-$ DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
+DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
 ```
 
 Note that it relies on individual utilities (not the multicall binary).
@@ -387,7 +411,6 @@ To improve the GNU compatibility, the following process is recommended:
 1. Start to modify the Rust implementation to match the expected behavior
 1. Add a test to make sure that we don't regress (our test suite is super quick)
 
-
 ## Contributing
 
 To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
@@ -395,11 +418,12 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 ## Utilities
 
 Please note that this is not fully accurate:
-* Some new options can be added / removed in the GNU implementation;
-* Some error management might be missing;
-* Some behaviors might be different.
 
-See https://github.com/uutils/coreutils/issues/3336 for the main meta bugs
+- Some new options can be added / removed in the GNU implementation;
+- Some error management might be missing;
+- Some behaviors might be different.
+
+See <https://github.com/uutils/coreutils/issues/3336> for the main meta bugs
 (many are missing).
 
 | Done      | WIP       |

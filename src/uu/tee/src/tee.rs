@@ -6,21 +6,21 @@
 //  * file that was distributed with this source code.
 
 use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, Command};
-use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 // spell-checker:ignore nopipe
 
 #[cfg(unix)]
 use uucore::libc;
 
-static ABOUT: &str = "Copy standard input to each FILE, and also to standard output.";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("tee.md");
+const USAGE: &str = help_usage!("tee.md");
+const AFTER_HELP: &str = help_section!("after help", "tee.md");
 
 mod options {
     pub const APPEND: &str = "append";
@@ -89,7 +89,7 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .after_help("If a FILE is -, it refers to a file named - .")
+        .after_help(AFTER_HELP)
         .infer_long_args(true)
         .arg(
             Arg::new(options::APPEND)
@@ -301,7 +301,7 @@ impl Write for MultiWriter {
         let mut aborted = None;
         let mode = self.output_error_mode.clone();
         let mut errors = 0;
-        RetainMut::retain_mut(&mut self.writers, |writer| {
+        self.writers.retain_mut(|writer| {
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
@@ -332,7 +332,7 @@ impl Write for MultiWriter {
         let mut aborted = None;
         let mode = self.output_error_mode.clone();
         let mut errors = 0;
-        RetainMut::retain_mut(&mut self.writers, |writer| {
+        self.writers.retain_mut(|writer| {
             let result = writer.flush();
             match result {
                 Err(f) => {
