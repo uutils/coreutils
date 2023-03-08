@@ -223,10 +223,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Box::new(iter)
             }
             DateSource::File(ref path) => {
-                file = File::open(path).unwrap();
-                let lines = BufReader::new(file).lines();
-                let iter = lines.filter_map(Result::ok).map(parse_date);
-                Box::new(iter)
+                match File::open(path) {
+                    Ok(file) => {
+                        let lines = BufReader::new(file).lines();
+                        let iter = lines.filter_map(Result::ok).map(parse_date);
+                        Box::new(iter)
+                    }
+                    Err(_) => {
+                        eprintln!("Error: File not found at path {:?}", path);
+                        Box::new(std::iter::empty())
+                    }
+                }
             }
             DateSource::Now => {
                 let iter = std::iter::once(Ok(now));
