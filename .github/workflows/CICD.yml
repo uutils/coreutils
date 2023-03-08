@@ -37,8 +37,6 @@ jobs:
     ## ToDO: [2021-11-10; rivy] 'Style/deps' needs more informative output and better integration of results into the GHA dashboard
     name: Style/deps
     runs-on: ${{ matrix.job.os }}
-    # env:
-    #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
     strategy:
       fail-fast: false
       matrix:
@@ -73,7 +71,6 @@ jobs:
       run: |
         rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
-    - uses: Swatinem/rust-cache@v2
     - name: Install `cargo-udeps`
       run: cargo install cargo-udeps
       env:
@@ -93,8 +90,6 @@ jobs:
   style_format:
     name: Style/format
     runs-on: ${{ matrix.job.os }}
-    # env:
-    #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
     strategy:
       fail-fast: false
       matrix:
@@ -124,7 +119,6 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
         rustup default stable
-    - uses: Swatinem/rust-cache@v2
     - name: "`cargo fmt` testing"
       shell: bash
       run: |
@@ -184,8 +178,9 @@ jobs:
   style_lint:
     name: Style/lint
     runs-on: ${{ matrix.job.os }}
-    # env:
-    #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -195,6 +190,10 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -229,7 +228,6 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update -c clippy --profile minimal
         rustup default stable
-    - uses: Swatinem/rust-cache@v2
     - name: "`cargo clippy` lint testing"
       shell: bash
       run: |
@@ -244,15 +242,12 @@ jobs:
   style_spellcheck:
     name: Style/spelling
     runs-on: ${{ matrix.job.os }}
-    # env:
-    #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
     strategy:
       matrix:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -292,6 +287,9 @@ jobs:
   doc_warnings:
     name: Documentation/warnings
     runs-on: ${{ matrix.job.os }}
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -304,6 +302,10 @@ jobs:
 #          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -331,7 +333,6 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update -c clippy --profile minimal
         rustup default stable
-    - uses: Swatinem/rust-cache@v2
     - name: "`cargo doc` with warnings"
       shell: bash
       run: |
@@ -347,12 +348,19 @@ jobs:
   min_version:
     name: MinRustV # Minimum supported rust version (aka, MinSRV or MSRV)
     runs-on: ${{ matrix.job.os }}
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       matrix:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -369,7 +377,6 @@ jobs:
         ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
         rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
-    - uses: Swatinem/rust-cache@v2
     - name: Confirm MinSRV compatible 'Cargo.lock'
       shell: bash
       run: |
@@ -424,7 +431,6 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
-    - uses: Swatinem/rust-cache@v2
     - name: "`cargo update` testing"
       shell: bash
       run: |
@@ -436,6 +442,9 @@ jobs:
     name: Build/Makefile
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -443,12 +452,15 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
-    - uses: Swatinem/rust-cache@v2
     - name: "`make build`"
       shell: bash
       run: |
@@ -470,12 +482,14 @@ jobs:
       env:
         RUST_BACKTRACE: "1"
 
-
   build_rust_stable:
     name: Build/stable
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -485,12 +499,15 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
-    - uses: Swatinem/rust-cache@v2
     - name: Test
       run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
@@ -501,6 +518,9 @@ jobs:
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -510,12 +530,15 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
         rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
-    - uses: Swatinem/rust-cache@v2
     - name: Test
       run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
@@ -525,6 +548,9 @@ jobs:
     name: Binary sizes
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -532,6 +558,10 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: Install dependencies
       shell: bash
       run: |
@@ -543,7 +573,6 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
-    - uses: Swatinem/rust-cache@v2
     - name: "`make install`"
       shell: bash
       run: |
@@ -579,6 +608,8 @@ jobs:
     timeout-minutes: 90
     env:
       DOCKER_OPTS: '--volume /etc/passwd:/etc/passwd --volume /etc/group:/etc/group'
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -605,6 +636,10 @@ jobs:
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -732,9 +767,6 @@ jobs:
         ## rust toolchain ~ install
         rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
-    - uses: Swatinem/rust-cache@v2
-      with:
-        key: ${{ matrix.job.os }}-${{ matrix.job.target }}
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
@@ -844,6 +876,9 @@ jobs:
     name: Tests/BusyBox test suite
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -857,7 +892,10 @@ jobs:
         ## VARs setup
         echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -917,6 +955,9 @@ jobs:
     name: Tests/Toybox test suite
     needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -932,7 +973,10 @@ jobs:
         TEST_SUMMARY_FILE="toybox-result.json"
         outputs TEST_SUMMARY_FILE
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: rust toolchain ~ install
       run: |
         ## rust toolchain ~ install
@@ -1010,8 +1054,14 @@ jobs:
         arch: [x86] # , arm64-v8a
     env:
       TERMUX: v0.118.0
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
     - uses: actions/checkout@v3
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: AVD cache
       uses: actions/cache@v3
       id: avd-cache
@@ -1065,9 +1115,14 @@ jobs:
           - { os: macos-12 , features: unix } ## GHA MacOS-11.0 VM won't have VirtualBox; refs: <https://github.com/actions/virtual-environments/issues/4060> , <https://github.com/actions/virtual-environments/pull/4010>
     env:
       mem: 4096
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     - name: Prepare, build and test
       ## spell-checker:ignore (ToDO) sshfs usesh vmactions
       uses: vmactions/freebsd-vm@v0.3.0
@@ -1132,6 +1187,9 @@ jobs:
     name: Code Coverage
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     strategy:
       fail-fast: false
       matrix:
@@ -1141,6 +1199,10 @@ jobs:
           - { os: windows-latest , features: windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.2
+      with:
+        version: "v0.4.0-pre.9"
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
     - name: Initialize workflow variables
@@ -1194,7 +1256,6 @@ jobs:
         ## rust toolchain ~ install
         rustup toolchain install ${{ steps.vars.outputs.TOOLCHAIN }} --no-self-update --profile minimal
         rustup default ${{ steps.vars.outputs.TOOLCHAIN }}
-    - uses: Swatinem/rust-cache@v2
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
@@ -1260,3 +1321,4 @@ jobs:
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
         fail_ci_if_error: false
+
