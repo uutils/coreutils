@@ -194,7 +194,7 @@ fn test_error_filename_only() {
         .args(&["file"])
         .fails()
         .code_is(1)
-        .stderr_contains("error: The following required arguments were not provided:");
+        .stderr_contains("error: the following required arguments were not provided:");
 }
 
 #[test]

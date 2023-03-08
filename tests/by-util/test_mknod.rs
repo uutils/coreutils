@@ -92,14 +92,14 @@ fn test_mknod_character_device_requires_major_and_minor() {
         .arg("1")
         .arg("c")
         .fails()
-        .stderr_contains("Invalid value 'c'");
+        .stderr_contains("invalid value 'c'");
     new_ucmd!()
         .arg("test_file")
         .arg("c")
         .arg("c")
         .arg("1")
         .fails()
-        .stderr_contains("Invalid value 'c'");
+        .stderr_contains("invalid value 'c'");
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn test_mknod_invalid_arg() {
         .arg("--foo")
         .fails()
         .no_stdout()
-        .stderr_contains("Found argument '--foo' which wasn't expected");
+        .stderr_contains("unexpected argument '--foo' found");
 }
 
 #[test]
