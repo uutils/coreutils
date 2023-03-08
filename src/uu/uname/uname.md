@@ -1,6 +1,5 @@
 # uname
 
-
 ```
 uname [OPTION]...
 ```
