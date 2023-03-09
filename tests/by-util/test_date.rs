@@ -200,10 +200,7 @@ fn test_date_set_valid_2() {
 
 #[test]
 fn test_date_for_invalid_file() {
-    let result = new_ucmd!()
-        .arg("--file")
-        .arg("invalid_file")
-        .fails();
+    let result = new_ucmd!().arg("--file").arg("invalid_file").fails();
     result.no_stdout();
     assert_eq!(
         result.stderr_str().trim(),

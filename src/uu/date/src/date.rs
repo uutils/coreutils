@@ -222,21 +222,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let iter = std::iter::once(date);
                 Box::new(iter)
             }
-            DateSource::File(ref path) => {
-                match File::open(path) {
-                    Ok(file) => {
-                        let lines = BufReader::new(file).lines();
-                        let iter = lines.filter_map(Result::ok).map(parse_date);
-                        Box::new(iter)
-                    }
-                    Err(_err) => {
-                        return Err(USimpleError::new(
-                            2,
-                            format!("{}: No such file or directory", path.display()),
-                        ));
-                    }
+            DateSource::File(ref path) => match File::open(path) {
+                Ok(file) => {
+                    let lines = BufReader::new(file).lines();
+                    let iter = lines.filter_map(Result::ok).map(parse_date);
+                    Box::new(iter)
                 }
-            }
+                Err(_err) => {
+                    return Err(USimpleError::new(
+                        2,
+                        format!("{}: No such file or directory", path.display()),
+                    ));
+                }
+            },
             DateSource::Now => {
                 let iter = std::iter::once(Ok(now));
                 Box::new(iter)
