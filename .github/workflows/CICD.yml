@@ -137,7 +137,7 @@ jobs:
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   fuzz:
-    name: Run the Fuzzer
+    name: Run the fuzzers
     runs-on: ubuntu-latest
     env:
       RUN_FOR: 60
