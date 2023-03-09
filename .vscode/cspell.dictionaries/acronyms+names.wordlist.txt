@@ -50,6 +50,7 @@ Gmail
 GNU
 Illumos
 Irix
+libfuzzer
 MS-DOS
 MSDOS
 MacOS

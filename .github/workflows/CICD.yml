@@ -136,6 +136,51 @@ jobs:
         S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::${fault_type} file=\1,line=\2::${fault_prefix}: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt -- \"\1\"\`)/p" ; fault=true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
+  fuzz:
+    name: Run the fuzzers
+    runs-on: ubuntu-latest
+    env:
+      RUN_FOR: 60
+    steps:
+    - uses: actions/checkout@v3
+    - uses: Swatinem/rust-cache@v2
+    - name: Install `rust` toolchain
+      run: |
+        rustup toolchain install nightly --no-self-update --profile minimal
+        rustup default nightly
+    - name: Install `cargo-fuzz`
+      run: cargo install cargo-fuzz
+    - name: Run fuzz_date for XX seconds
+      # TODO: fix the issues
+      continue-on-error: true
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_date -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_parse_glob for XX seconds
+     # TODO: fix the issues
+      continue-on-error: true
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_parse_glob -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_parse_size for XX seconds
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_parse_size -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_parse_time for XX seconds
+      # TODO: fix the issues
+      continue-on-error: true
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_parse_time -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+
   style_lint:
     name: Style/lint
     runs-on: ${{ matrix.job.os }}
