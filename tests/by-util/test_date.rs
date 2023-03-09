@@ -199,6 +199,16 @@ fn test_date_set_valid_2() {
 }
 
 #[test]
+fn test_date_for_invalid_file() {
+    let result = new_ucmd!()
+        .arg("--file")
+        .arg("invalid_file")
+        .fails();
+    result.no_stdout();
+    assert!(result.stderr_str().starts_with("date: invalid_file: "));
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 /// TODO: expected to fail currently; change to succeeds() when required.
 fn test_date_set_valid_3() {
