@@ -205,8 +205,10 @@ fn test_date_for_invalid_file() {
         .arg("invalid_file")
         .fails();
     result.no_stdout();
-    // should fail
-    assert!(result.stderr_str().starts_with("date: "));
+    assert_eq!(
+        result.stderr_str().trim(),
+        "date: invalid_file: No such file or directory",
+    );
 }
 
 #[test]
