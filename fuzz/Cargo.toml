@@ -13,10 +13,10 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 
 [dependencies.uucore]
-path = "../src/uucore/"
+uucore = { workspace = true }
 
 [dependencies.uu_date]
-path = "../src/uu/date/"
+uu_date = { workspace = true }
 
 # Prevent this from interfering with workspaces
 [workspace]
