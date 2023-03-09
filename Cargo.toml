@@ -318,7 +318,7 @@ signal-hook = "0.3.14"
 smallvec = { version = "1.10", features = ["union"] }
 strum = "0.24.1"
 strum_macros = "0.24.2"
-tempfile = "3.3.0"
+tempfile = "3.4.0"
 term_grid = "0.1.5"
 terminal_size = "0.2.2"
 textwrap = { version="0.16.0", features=["terminal_size"] }
