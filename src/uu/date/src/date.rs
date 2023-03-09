@@ -232,7 +232,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     Err(_err) => {
                         return Err(USimpleError::new(
                             2,
-                            format!("date: {}: No such file or directory", path.display()),
+                            format!("{}: No such file or directory", path.display()),
                         ));
                     }
                 }
