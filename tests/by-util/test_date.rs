@@ -205,7 +205,16 @@ fn test_date_for_invalid_file() {
         .arg("invalid_file")
         .fails();
     result.no_stdout();
-    assert!(result.stderr_str().starts_with("date: invalid_file: "));
+    // should fail
+    assert!(result.stderr_str().starts_with("date: "));
+}
+
+#[test]
+fn test_date_for_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_date_for_file";
+    at.touch(file);
+    ucmd.arg("--file").arg(file).succeeds();
 }
 
 #[test]

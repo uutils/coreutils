@@ -204,7 +204,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return set_system_datetime(date);
     } else {
         // Declare a file here because it needs to outlive the `dates` iterator.
-        let file: File;
+        let _file: File;
 
         // Get the current time, either in the local time zone or UTC.
         let now: DateTime<FixedOffset> = if settings.utc {
@@ -229,9 +229,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         let iter = lines.filter_map(Result::ok).map(parse_date);
                         Box::new(iter)
                     }
-                    Err(_) => {
-                        eprintln!("date: {:?}: No such file or directory", path);
-                        Box::new(std::iter::empty())
+                    Err(_err) => {
+                        return Err(USimpleError::new(
+                            2,
+                            format!("date: {}: No such file or directory", path.display()),
+                        ));
                     }
                 }
             }
