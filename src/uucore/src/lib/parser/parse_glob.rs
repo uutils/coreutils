@@ -10,8 +10,8 @@ fn fix_negation(glob: &str) -> String {
     let mut chars = glob.chars().collect::<Vec<_>>();
 
     let mut i = 0;
-    while i < chars.len() {
-        if chars[i] == '[' && i + 4 <= glob.len() && chars[i + 1] == '^' {
+    while i + 4 <= chars.len() {
+        if chars[i] == '[' && chars[i + 1] == '^' {
             match chars[i + 3..].iter().position(|x| *x == ']') {
                 None => (),
                 Some(j) => {
