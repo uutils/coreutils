@@ -230,7 +230,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         Box::new(iter)
                     }
                     Err(_) => {
-                        eprintln!("Error: File not found at path {:?}", path);
+                        eprintln!("date: {:?}: No such file or directory", path);
                         Box::new(std::iter::empty())
                     }
                 }
