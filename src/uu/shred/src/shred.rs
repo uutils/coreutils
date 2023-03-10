@@ -25,7 +25,8 @@ use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::libc::S_IWUSR;
 use uucore::{format_usage, show, show_if_err, util_name};
 
-const BLOCK_SIZE: usize = 512;
+// This block size seems to match GNU (2^16 = 65536)
+const BLOCK_SIZE: usize = 1 << 16;
 const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
 // Patterns as shown in the GNU coreutils shred implementation
