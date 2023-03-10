@@ -22,7 +22,22 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::libc::S_IWUSR;
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_if_err, util_name};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_if_err};
+
+const ABOUT: &str = help_about!("shred.md");
+const USAGE: &str = help_usage!("shred.md");
+const AFTER_HELP: &str = help_section!("after help", "shred.md");
+
+pub mod options {
+    pub const FORCE: &str = "force";
+    pub const FILE: &str = "file";
+    pub const ITERATIONS: &str = "iterations";
+    pub const SIZE: &str = "size";
+    pub const REMOVE: &str = "remove";
+    pub const VERBOSE: &str = "verbose";
+    pub const EXACT: &str = "exact";
+    pub const ZERO: &str = "zero";
+}
 
 // This block size seems to match GNU (2^16 = 65536)
 const BLOCK_SIZE: usize = 1 << 16;
@@ -188,21 +203,6 @@ impl BytesWriter {
     }
 }
 
-const ABOUT: &str = help_about!("shred.md");
-const USAGE: &str = help_usage!("shred.md");
-const AFTER_HELP: &str = help_section!("after help", "shred.md");
-
-pub mod options {
-    pub const FORCE: &str = "force";
-    pub const FILE: &str = "file";
-    pub const ITERATIONS: &str = "iterations";
-    pub const SIZE: &str = "size";
-    pub const REMOVE: &str = "remove";
-    pub const VERBOSE: &str = "verbose";
-    pub const EXACT: &str = "exact";
-    pub const ZERO: &str = "zero";
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
@@ -347,11 +347,7 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
     let coefficient = match size_str.parse::<u64>() {
         Ok(u) => u,
         Err(_) => {
-            println!(
-                "{}: {}: Invalid file size",
-                util_name(),
-                size_str_opt.unwrap().maybe_quote()
-            );
+            show_error!("{}: Invalid file size", size_str_opt.unwrap().maybe_quote());
             std::process::exit(1);
         }
     };
@@ -465,18 +461,16 @@ fn wipe_file(
         if verbose {
             let pass_name: String = pass_name(&pass_type);
             if total_passes.to_string().len() == 1 {
-                println!(
-                    "{}: {}: pass {}/{} ({})... ",
-                    util_name(),
+                show_error!(
+                    "{}: pass {}/{} ({})... ",
                     path.maybe_quote(),
                     i + 1,
                     total_passes,
                     pass_name
                 );
             } else {
-                println!(
-                    "{}: {}: pass {:2.0}/{:2.0} ({})... ",
-                    util_name(),
+                show_error!(
+                    "{}: pass {:2.0}/{:2.0} ({})... ",
                     path.maybe_quote(),
                     i + 1,
                     total_passes,
@@ -535,13 +529,13 @@ fn get_file_size(path: &Path) -> Result<u64, io::Error> {
 // Repeatedly renames the file with strings of decreasing length (most likely all 0s)
 // Return the path of the file after its last renaming or None if error
 fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
-    let file_name_len: usize = orig_path.file_name().unwrap().to_str().unwrap().len();
+    let file_name_len = orig_path.file_name().unwrap().to_str().unwrap().len();
 
-    let mut last_path: PathBuf = PathBuf::from(orig_path);
+    let mut last_path = PathBuf::from(orig_path);
 
     for length in (1..=file_name_len).rev() {
         for name in FilenameGenerator::new(length) {
-            let new_path: PathBuf = orig_path.with_file_name(name);
+            let new_path = orig_path.with_file_name(name);
             // We don't want the filename to already exist (don't overwrite)
             // If it does, find another name that doesn't
             if new_path.exists() {
@@ -550,28 +544,24 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
             match fs::rename(&last_path, &new_path) {
                 Ok(()) => {
                     if verbose {
-                        println!(
-                            "{}: {}: renamed to {}",
-                            util_name(),
+                        show_error!(
+                            "{}: renamed to {}",
                             last_path.maybe_quote(),
                             new_path.quote()
                         );
                     }
 
                     // Sync every file rename
-                    {
-                        let new_file: File = File::open(new_path.clone())
-                            .expect("Failed to open renamed file for syncing");
-                        new_file.sync_all().expect("Failed to sync renamed file");
-                    }
+                    let new_file = File::open(new_path.clone())
+                        .expect("Failed to open renamed file for syncing");
+                    new_file.sync_all().expect("Failed to sync renamed file");
 
                     last_path = new_path;
                     break;
                 }
                 Err(e) => {
-                    println!(
-                        "{}: {}: Couldn't rename to {}: {}",
-                        util_name(),
+                    show_error!(
+                        "{}: Couldn't rename to {}: {}",
                         last_path.maybe_quote(),
                         new_path.quote(),
                         e
@@ -587,16 +577,15 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
 
 fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::Error> {
     if verbose {
-        println!("{}: {}: removing", util_name(), orig_filename.maybe_quote());
+        show_error!("{}: removing", orig_filename.maybe_quote());
     }
 
-    let renamed_path: Option<PathBuf> = wipe_name(path, verbose);
-    if let Some(rp) = renamed_path {
+    if let Some(rp) = wipe_name(path, verbose) {
         fs::remove_file(rp)?;
     }
 
     if verbose {
-        println!("{}: {}: removed", util_name(), orig_filename.maybe_quote());
+        show_error!("{}: removed", orig_filename.maybe_quote());
     }
 
     Ok(())
