@@ -14,10 +14,10 @@ use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 use uucore::format_usage;
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+use uucore::{help_about, help_usage};
 
-static ABOUT: &str = "Convert TO destination to the relative path from the FROM dir.
-If FROM path is omitted, current working dir will be used.";
-const USAGE: &str = "{} [-d DIR] TO [FROM]";
+const USAGE: &str = help_usage!("relpath.md");
+const ABOUT: &str = help_about!("relpath.md");
 
 mod options {
     pub const DIR: &str = "DIR";
