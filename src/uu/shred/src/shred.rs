@@ -9,15 +9,10 @@
 // spell-checker:ignore (words) wipesync
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use rand::prelude::SliceRandom;
-use rand::{rngs::StdRng, Rng, SeedableRng};
-use std::cell::{Cell, RefCell};
-use std::fs;
-use std::fs::{File, OpenOptions};
-use std::io;
-use std::io::prelude::*;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Seek, Write};
+use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
@@ -86,61 +81,61 @@ enum PassType {
     Random,
 }
 
-// Used to generate all possible filenames of a certain length using NAME_CHARSET as an alphabet
-struct FilenameGenerator {
-    name_len: usize,
-    name_charset_indices: RefCell<Vec<usize>>, // Store the indices of the letters of our filename in NAME_CHARSET
-    exhausted: Cell<bool>,
+/// Iterates over all possible filenames of a certain length using NAME_CHARSET as an alphabet
+struct FilenameIter {
+    // Store the indices of the letters of our filename in NAME_CHARSET
+    name_charset_indices: Vec<usize>,
+    exhausted: bool,
 }
 
-impl FilenameGenerator {
+impl FilenameIter {
     fn new(name_len: usize) -> Self {
-        let indices: Vec<usize> = vec![0; name_len];
         Self {
-            name_len,
-            name_charset_indices: RefCell::new(indices),
-            exhausted: Cell::new(false),
+            name_charset_indices: vec![0; name_len],
+            exhausted: false,
         }
     }
 }
 
-impl Iterator for FilenameGenerator {
+impl Iterator for FilenameIter {
     type Item = String;
 
     fn next(&mut self) -> Option<String> {
-        if self.exhausted.get() {
+        if self.exhausted {
             return None;
         }
 
-        let mut name_charset_indices = self.name_charset_indices.borrow_mut();
+        // First, make the return value using the current state
+        let ret: String = self
+            .name_charset_indices
+            .iter()
+            .map(|i| char::from(NAME_CHARSET[*i]))
+            .collect();
 
-        // Make the return value, then increment
-        let mut ret = String::new();
-        for i in name_charset_indices.iter() {
-            let c = char::from(NAME_CHARSET[*i]);
-            ret.push(c);
-        }
-
-        if name_charset_indices[0] == NAME_CHARSET.len() - 1 {
-            self.exhausted.set(true);
-        }
-        // Now increment the least significant index
-        for i in (0..self.name_len).rev() {
-            if name_charset_indices[i] == NAME_CHARSET.len() - 1 {
-                name_charset_indices[i] = 0; // Carry the 1
+        // Now increment the least significant index and possibly each next
+        // index if necessary.
+        for index in self.name_charset_indices.iter_mut().rev() {
+            if *index == NAME_CHARSET.len() - 1 {
+                // Carry the 1
+                *index = 0;
                 continue;
             } else {
-                name_charset_indices[i] += 1;
-                break;
+                *index += 1;
+                return Some(ret);
             }
         }
 
+        // If we get here, we flipped all bits back to 0, so we exhausted all options.
+        self.exhausted = true;
         Some(ret)
     }
 }
 
-// Used to generate blocks of bytes of size <= BLOCK_SIZE based on either a give pattern
-// or randomness
+/// Used to generate blocks of bytes of size <= BLOCK_SIZE based on either a give pattern
+/// or randomness
+// The lint warns about a large difference because StdRng is big, but the buffers are much
+// larger anyway, so it's fine.
+#[allow(clippy::large_enum_variant)]
 enum BytesWriter {
     Random {
         rng: StdRng,
@@ -162,7 +157,7 @@ enum BytesWriter {
 }
 
 impl BytesWriter {
-    fn from_pass_type(pass: PassType) -> Self {
+    fn from_pass_type(pass: &PassType) -> Self {
         match pass {
             PassType::Random => Self::Random {
                 rng: StdRng::from_entropy(),
@@ -173,11 +168,11 @@ impl BytesWriter {
                 // We prefill the pattern so that the buffer can be reused at each
                 // iteration as a small optimization.
                 let buffer = match pattern {
-                    Pattern::Single(byte) => [byte; PATTERN_BUFFER_SIZE],
+                    Pattern::Single(byte) => [*byte; PATTERN_BUFFER_SIZE],
                     Pattern::Multi(bytes) => {
                         let mut buf = [0; PATTERN_BUFFER_SIZE];
                         for chunk in buf.chunks_exact_mut(PATTERN_LENGTH) {
-                            chunk.copy_from_slice(&bytes);
+                            chunk.copy_from_slice(bytes);
                         }
                         buf
                     }
@@ -375,7 +370,7 @@ fn wipe_file(
     force: bool,
 ) -> UResult<()> {
     // Get these potential errors out of the way first
-    let path: &Path = Path::new(path_str);
+    let path = Path::new(path_str);
     if !path.exists() {
         return Err(USimpleError::new(
             1,
@@ -445,8 +440,8 @@ fn wipe_file(
         pass_sequence.push(PassType::Pattern(PATTERNS[0]));
     }
 
-    let total_passes: usize = pass_sequence.len();
-    let mut file: File = OpenOptions::new()
+    let total_passes = pass_sequence.len();
+    let mut file = OpenOptions::new()
         .write(true)
         .truncate(false)
         .open(path)
@@ -459,8 +454,8 @@ fn wipe_file(
 
     for (i, pass_type) in pass_sequence.into_iter().enumerate() {
         if verbose {
-            let pass_name: String = pass_name(&pass_type);
-            if total_passes.to_string().len() == 1 {
+            let pass_name = pass_name(&pass_type);
+            if total_passes < 10 {
                 show_error!(
                     "{}: pass {}/{} ({})... ",
                     path.maybe_quote(),
@@ -479,9 +474,9 @@ fn wipe_file(
             }
         }
         // size is an optional argument for exactly how many bytes we want to shred
-        show_if_err!(do_pass(&mut file, pass_type, exact, size)
-            .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
         // Ignore failed writes; just keep trying
+        show_if_err!(do_pass(&mut file, &pass_type, exact, size)
+            .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
     }
 
     if remove {
@@ -493,7 +488,7 @@ fn wipe_file(
 
 fn do_pass(
     file: &mut File,
-    pass_type: PassType,
+    pass_type: &PassType,
     exact: bool,
     file_size: u64,
 ) -> Result<(), io::Error> {
@@ -534,7 +529,9 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
     let mut last_path = PathBuf::from(orig_path);
 
     for length in (1..=file_name_len).rev() {
-        for name in FilenameGenerator::new(length) {
+        // Try all filenames of a given length.
+        // If every possible filename already exists, just reduce the length and try again
+        for name in FilenameIter::new(length) {
             let new_path = orig_path.with_file_name(name);
             // We don't want the filename to already exist (don't overwrite)
             // If it does, find another name that doesn't
@@ -569,7 +566,7 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                     return None;
                 }
             }
-        } // If every possible filename already exists, just reduce the length and try again
+        }
     }
 
     Some(last_path)
