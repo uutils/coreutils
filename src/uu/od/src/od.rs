@@ -48,10 +48,9 @@ use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_warning};
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
+
 const ABOUT: &str = help_about!("od.md");
-
 const USAGE: &str = help_usage!("od.md");
-
 const AFTER_HELP: &str = help_section!("after help", "od.md");
 
 pub(crate) mod options {
