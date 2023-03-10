@@ -29,36 +29,47 @@ use uucore::{format_usage, show, show_if_err, util_name};
 const BLOCK_SIZE: usize = 1 << 16;
 const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
-// Patterns as shown in the GNU coreutils shred implementation
-const PATTERNS: [&[u8]; 22] = [
-    b"\x00",
-    b"\xFF",
-    b"\x55",
-    b"\xAA",
-    b"\x24\x92\x49",
-    b"\x49\x24\x92",
-    b"\x6D\xB6\xDB",
-    b"\x92\x49\x24",
-    b"\xB6\xDB\x6D",
-    b"\xDB\x6D\xB6",
-    b"\x11",
-    b"\x22",
-    b"\x33",
-    b"\x44",
-    b"\x66",
-    b"\x77",
-    b"\x88",
-    b"\x99",
-    b"\xBB",
-    b"\xCC",
-    b"\xDD",
-    b"\xEE",
+const PATTERN_LENGTH: usize = 3;
+const PATTERN_BUFFER_SIZE: usize = BLOCK_SIZE + PATTERN_LENGTH - 1;
+
+/// Patterns that appear in order for the passes
+///
+/// They are all extended to 3 bytes for consistency, even though some could be
+/// expressed as single bytes.
+const PATTERNS: [Pattern; 22] = [
+    Pattern::Single(b'\x00'),
+    Pattern::Single(b'\xFF'),
+    Pattern::Single(b'\x55'),
+    Pattern::Single(b'\xAA'),
+    Pattern::Multi([b'\x24', b'\x92', b'\x49']),
+    Pattern::Multi([b'\x49', b'\x24', b'\x92']),
+    Pattern::Multi([b'\x6D', b'\xB6', b'\xDB']),
+    Pattern::Multi([b'\x92', b'\x49', b'\x24']),
+    Pattern::Multi([b'\xB6', b'\xDB', b'\x6D']),
+    Pattern::Multi([b'\xDB', b'\x6D', b'\xB6']),
+    Pattern::Single(b'\x11'),
+    Pattern::Single(b'\x22'),
+    Pattern::Single(b'\x33'),
+    Pattern::Single(b'\x44'),
+    Pattern::Single(b'\x66'),
+    Pattern::Single(b'\x77'),
+    Pattern::Single(b'\x88'),
+    Pattern::Single(b'\x99'),
+    Pattern::Single(b'\xBB'),
+    Pattern::Single(b'\xCC'),
+    Pattern::Single(b'\xDD'),
+    Pattern::Single(b'\xEE'),
 ];
 
-#[derive(Clone)]
-enum PassType<'a> {
-    Pattern(&'a [u8]),
-    Random(Box<StdRng>),
+#[derive(Clone, Copy)]
+enum Pattern {
+    Single(u8),
+    Multi([u8; 3]),
+}
+
+enum PassType {
+    Pattern(Pattern),
+    Random,
 }
 
 // Used to generate all possible filenames of a certain length using NAME_CHARSET as an alphabet
@@ -116,80 +127,65 @@ impl Iterator for FilenameGenerator {
 
 // Used to generate blocks of bytes of size <= BLOCK_SIZE based on either a give pattern
 // or randomness
-struct BytesGenerator {
-    total_bytes: u64,
-    bytes_generated: u64,
-    block_size: usize,
-    exact: bool, // if false, every block's size is block_size
-    bytes: [u8; BLOCK_SIZE],
+enum BytesWriter {
+    Random {
+        rng: StdRng,
+        buffer: [u8; BLOCK_SIZE],
+    },
+    // To write patterns we only write to the buffer once. To be able to do
+    // this, we need to extend the buffer with 2 bytes. We can then easily
+    // obtain a buffer starting with any character of the pattern that we
+    // want with an offset of either 0, 1 or 2.
+    //
+    // For example, if we have the pattern ABC, but we want to write a block
+    // of BLOCK_SIZE starting with B, we just pick the slice [1..BLOCK_SIZE+1]
+    // This means that we only have to fill the buffer once and can just reuse
+    // it afterwards.
+    Pattern {
+        offset: usize,
+        buffer: [u8; PATTERN_BUFFER_SIZE],
+    },
 }
 
-impl BytesGenerator {
-    fn new(exact: bool) -> Self {
-        let bytes = [0; BLOCK_SIZE];
-
-        Self {
-            total_bytes: 0,
-            bytes_generated: 0,
-            block_size: BLOCK_SIZE,
-            exact,
-            bytes,
-        }
-    }
-
-    pub fn reset(&mut self, total_bytes: u64) {
-        self.total_bytes = total_bytes;
-        self.bytes_generated = 0;
-    }
-
-    pub fn next_pass(&mut self, pass: &mut PassType) -> Option<&[u8]> {
-        // We go over the total_bytes limit when !self.exact and total_bytes isn't a multiple
-        // of self.block_size
-        if self.bytes_generated >= self.total_bytes {
-            return None;
-        }
-
-        let this_block_size = if !self.exact {
-            self.block_size
-        } else {
-            let bytes_left = self.total_bytes - self.bytes_generated;
-            if bytes_left >= self.block_size as u64 {
-                self.block_size
-            } else {
-                (bytes_left % self.block_size as u64) as usize
-            }
-        };
-
-        let bytes = &mut self.bytes[..this_block_size];
-
+impl BytesWriter {
+    fn from_pass_type(pass: PassType) -> Self {
         match pass {
-            PassType::Random(rng) => {
-                rng.fill(bytes);
-            }
+            PassType::Random => Self::Random {
+                rng: StdRng::from_entropy(),
+                buffer: [0; BLOCK_SIZE],
+            },
             PassType::Pattern(pattern) => {
-                let skip = if self.bytes_generated == 0 {
-                    0
-                } else {
-                    (pattern.len() as u64 % self.bytes_generated) as usize
-                };
-
                 // Copy the pattern in chunks rather than simply one byte at a time
-                let mut i = 0;
-                while i < this_block_size {
-                    let start = (i + skip) % pattern.len();
-                    let end = (this_block_size - i).min(pattern.len());
-                    let len = end - start;
-
-                    bytes[i..i + len].copy_from_slice(&pattern[start..end]);
-
-                    i += len;
-                }
+                // We prefill the pattern so that the buffer can be reused at each
+                // iteration as a small optimization.
+                let buffer = match pattern {
+                    Pattern::Single(byte) => [byte; PATTERN_BUFFER_SIZE],
+                    Pattern::Multi(bytes) => {
+                        let mut buf = [0; PATTERN_BUFFER_SIZE];
+                        for chunk in buf.chunks_exact_mut(PATTERN_LENGTH) {
+                            chunk.copy_from_slice(&bytes);
+                        }
+                        buf
+                    }
+                };
+                Self::Pattern { offset: 0, buffer }
             }
-        };
+        }
+    }
 
-        self.bytes_generated += this_block_size as u64;
-
-        Some(bytes)
+    fn bytes_for_pass(&mut self, size: usize) -> &[u8] {
+        match self {
+            Self::Random { rng, buffer } => {
+                let bytes = &mut buffer[..size];
+                rng.fill(bytes);
+                bytes
+            }
+            Self::Pattern { offset, buffer } => {
+                let bytes = &buffer[*offset..size + *offset];
+                *offset = (*offset + size) % PATTERN_LENGTH;
+                bytes
+            }
+        }
     }
 }
 
@@ -404,17 +400,9 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
 
 fn pass_name(pass_type: &PassType) -> String {
     match pass_type {
-        PassType::Random(_) => String::from("random"),
-        PassType::Pattern(bytes) => {
-            let mut s: String = String::new();
-            while s.len() < 6 {
-                for b in *bytes {
-                    let readable: String = format!("{b:x}");
-                    s.push_str(&readable);
-                }
-            }
-            s
-        }
+        PassType::Random => String::from("random"),
+        PassType::Pattern(Pattern::Single(byte)) => format!("{byte:x}{byte:x}{byte:x}"),
+        PassType::Pattern(Pattern::Multi([a, b, c])) => format!("{a:x}{b:x}{c:x}"),
     }
 }
 
@@ -470,7 +458,7 @@ fn wipe_file(
     if n_passes <= 3 {
         // Only random passes if n_passes <= 3
         for _ in 0..n_passes {
-            pass_sequence.push(PassType::Random(Box::new(StdRng::from_entropy())));
+            pass_sequence.push(PassType::Random);
         }
     } else {
         // First fill it with Patterns, shuffle it, then evenly distribute Random
@@ -478,11 +466,11 @@ fn wipe_file(
         let remainder = n_passes % PATTERNS.len(); // How many do we get through on our last time through?
 
         for _ in 0..n_full_arrays {
-            for p in &PATTERNS {
+            for p in PATTERNS {
                 pass_sequence.push(PassType::Pattern(p));
             }
         }
-        for pattern in PATTERNS.iter().take(remainder) {
+        for pattern in PATTERNS.into_iter().take(remainder) {
             pass_sequence.push(PassType::Pattern(pattern));
         }
         let mut rng = rand::thread_rng();
@@ -491,14 +479,13 @@ fn wipe_file(
         let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
                                           // Evenly space random passes; ensures one at the beginning and end
         for i in 0..n_random {
-            pass_sequence[i * (n_passes - 1) / (n_random - 1)] =
-                PassType::Random(Box::new(StdRng::from_entropy()));
+            pass_sequence[i * (n_passes - 1) / (n_random - 1)] = PassType::Random;
         }
     }
 
     // --zero specifies whether we want one final pass of 0x00 on our file
     if zero {
-        pass_sequence.push(PassType::Pattern(b"\x00"));
+        pass_sequence.push(PassType::Pattern(PATTERNS[0]));
     }
 
     let total_passes: usize = pass_sequence.len();
@@ -507,10 +494,6 @@ fn wipe_file(
         .truncate(false)
         .open(path)
         .map_err_context(|| format!("{}: failed to open for writing", path.maybe_quote()))?;
-
-    // NOTE: it does not really matter what we set for total_bytes and gen_type here, so just
-    //       use bogus values
-    let mut generator = BytesGenerator::new(exact);
 
     let size = match size {
         Some(size) => size,
@@ -541,7 +524,7 @@ fn wipe_file(
             }
         }
         // size is an optional argument for exactly how many bytes we want to shred
-        show_if_err!(do_pass(&mut file, &mut generator, pass_type, size)
+        show_if_err!(do_pass(&mut file, pass_type, exact, size)
             .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
         // Ignore failed writes; just keep trying
     }
@@ -555,15 +538,27 @@ fn wipe_file(
 
 fn do_pass(
     file: &mut File,
-    generator: &mut BytesGenerator,
-    mut pass_type: PassType,
+    pass_type: PassType,
+    exact: bool,
     file_size: u64,
 ) -> Result<(), io::Error> {
+    // We might be at the end of the file due to a previous iteration, so rewind.
     file.rewind()?;
 
-    generator.reset(file_size);
+    let mut writer = BytesWriter::from_pass_type(pass_type);
 
-    while let Some(block) = generator.next_pass(&mut pass_type) {
+    // We start by writing BLOCK_SIZE times as many time as possible.
+    for _ in 0..(file_size / BLOCK_SIZE as u64) {
+        let block = writer.bytes_for_pass(BLOCK_SIZE);
+        file.write_all(block)?;
+    }
+
+    // Now we might have some bytes left, so we write either that
+    // many bytes if exact is true, or BLOCK_SIZE bytes if not.
+    let bytes_left = (file_size % BLOCK_SIZE as u64) as usize;
+    if bytes_left > 0 {
+        let size = if exact { bytes_left } else { BLOCK_SIZE };
+        let block = writer.bytes_for_pass(size);
         file.write_all(block)?;
     }
 
@@ -573,9 +568,7 @@ fn do_pass(
 }
 
 fn get_file_size(path: &Path) -> Result<u64, io::Error> {
-    let size: u64 = fs::metadata(path)?.len();
-
-    Ok(size)
+    Ok(fs::metadata(path)?.len())
 }
 
 // Repeatedly renames the file with strings of decreasing length (most likely all 0s)
