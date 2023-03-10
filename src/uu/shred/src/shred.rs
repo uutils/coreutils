@@ -16,9 +16,13 @@ use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::prelude::*;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+#[cfg(unix)]
+use uucore::libc::S_IWUSR;
 use uucore::{format_usage, show, show_if_err, util_name};
 
 const BLOCK_SIZE: usize = 512;
@@ -462,6 +466,18 @@ fn wipe_file(
     if force {
         let metadata = fs::metadata(path).map_err_context(String::new)?;
         let mut perms = metadata.permissions();
+        #[cfg(unix)]
+        #[allow(clippy::useless_conversion)]
+        {
+            // NOTE: set_readonly(false) makes the file world-writable on Unix.
+            // NOTE: S_IWUSR type is u16 on macOS.
+            if (perms.mode() & u32::from(S_IWUSR)) == 0 {
+                perms.set_mode(u32::from(S_IWUSR));
+            }
+        }
+        #[cfg(not(unix))]
+        // TODO: Remove the following once https://github.com/rust-lang/rust-clippy/issues/10477 is resolved.
+        #[allow(clippy::permissions_set_readonly_false)]
         perms.set_readonly(false);
         fs::set_permissions(path, perms).map_err_context(String::new)?;
     }
