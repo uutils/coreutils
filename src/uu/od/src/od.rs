@@ -28,17 +28,17 @@ mod prn_int;
 use std::cmp;
 use std::fmt::Write;
 
-use crate::byteorder_io::*;
-use crate::formatteriteminfo::*;
+use crate::byteorder_io::ByteOrder;
+use crate::formatteriteminfo::FormatWriter;
 use crate::inputdecoder::{InputDecoder, MemoryDecoder};
 use crate::inputoffset::{InputOffset, Radix};
-use crate::multifilereader::*;
+use crate::multifilereader::{HasError, InputSource, MultifileReader};
 use crate::output_info::OutputInfo;
 use crate::parse_formats::{parse_format_flags, ParsedFormatterItemInfo};
 use crate::parse_inputs::{parse_inputs, CommandLineInputs};
 use crate::parse_nrofbytes::parse_number_of_bytes;
-use crate::partialreader::*;
-use crate::peekreader::*;
+use crate::partialreader::PartialReader;
+use crate::peekreader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
 use clap::ArgAction;
 use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
@@ -48,10 +48,9 @@ use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_warning};
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
+
 const ABOUT: &str = help_about!("od.md");
-
 const USAGE: &str = help_usage!("od.md");
-
 const AFTER_HELP: &str = help_section!("after help", "od.md");
 
 pub(crate) mod options {
@@ -460,7 +459,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-/// Loops through the input line by line, calling print_bytes to take care of the output.
+/// Loops through the input line by line, calling `print_bytes` to take care of the output.
 fn odfunc<I>(
     input_offset: &mut InputOffset,
     input_decoder: &mut InputDecoder<I>,
