@@ -10,7 +10,8 @@ fn fix_negation(glob: &str) -> String {
     let mut chars = glob.chars().collect::<Vec<_>>();
 
     let mut i = 0;
-    while i + 4 <= chars.len() {
+    // Add 3 to prevent out of bounds in loop
+    while i + 3 < chars.len() {
         if chars[i] == '[' && chars[i + 1] == '^' {
             match chars[i + 3..].iter().position(|x| *x == ']') {
                 None => (),
@@ -105,5 +106,8 @@ mod tests {
         assert_eq!(fix_negation("[^]"), "[^]");
         assert_eq!(fix_negation("[^"), "[^");
         assert_eq!(fix_negation("[][^]"), "[][^]");
+
+        // Issue #4479
+        assert_eq!(fix_negation("ààà[^"), "ààà[^");
     }
 }
