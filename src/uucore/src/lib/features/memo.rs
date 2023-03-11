@@ -116,7 +116,21 @@ impl Memo {
 /// ```
 pub fn printf(format_string: &str, args: &[String]) -> UResult<()> {
     let mut writer = stdout();
-    Memo::run_all(&mut writer, format_string, args)
+    let mut pre_writer = Vec::new();
+    Memo::run_all(&mut pre_writer, format_string, args)?;
+    if pre_writer.len() > usize::MAX {
+        return Err(USimpleError::new(
+            1,
+            format!("output string is too long (exceed usize::MAX)"),
+        ));
+    }
+    match writer.write(&pre_writer) {
+        Ok(_sz) => Ok(()),
+        Err(e) => Err(USimpleError::new(
+            1,
+            format!("failed to write formatted string to stdout: {e}"),
+        )),
+    }
 }
 
 /// Create a new formatted string.
