@@ -493,7 +493,7 @@ hex-literal = "0.3.1"
 rstest = "0.16.0"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
-procfs = { version = "0.14", default-features = false }
+procfs = { version = "0.15", default-features = false }
 rlimit = "0.9.1"
 
 [target.'cfg(unix)'.dev-dependencies]
