@@ -112,6 +112,15 @@ fn test_stdin_skip_21_fields_obsolete() {
 }
 
 #[test]
+fn test_stdin_skip_invalid_fields_obsolete() {
+    new_ucmd!()
+        .args(&["-5deadbeef"])
+        .run()
+        .failure()
+        .stderr_only("uniq: Invalid argument for skip-fields: 5deadbeef\n");
+}
+
+#[test]
 fn test_stdin_all_repeated() {
     new_ucmd!()
         .args(&["--all-repeated"])
