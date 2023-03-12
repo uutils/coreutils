@@ -15,7 +15,7 @@ fn test_missing_operand() {
 
     assert!(result
         .stderr_str()
-        .starts_with("error: The following required arguments were not provided"));
+        .starts_with("error: the following required arguments were not provided"));
 
     assert!(result.stderr_str().contains("<newroot>"));
 }
