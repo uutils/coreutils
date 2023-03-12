@@ -203,9 +203,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         return set_system_datetime(date);
     } else {
-        // Declare a file here because it needs to outlive the `dates` iterator.
-        let _file: File;
-
         // Get the current time, either in the local time zone or UTC.
         let now: DateTime<FixedOffset> = if settings.utc {
             let now = Utc::now();
