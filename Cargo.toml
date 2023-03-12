@@ -320,7 +320,7 @@ strum = "0.24.1"
 strum_macros = "0.24.2"
 tempfile = "3.4.0"
 term_grid = "0.1.5"
-terminal_size = "0.2.2"
+terminal_size = "0.2.5"
 textwrap = { version="0.16.0", features=["terminal_size"] }
 thiserror = "1.0"
 time = { version="0.3" }
