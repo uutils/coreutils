@@ -148,7 +148,7 @@ make UTILS='UTILITY_1 UTILITY_2'
 Likewise, installing can simply be done using:
 
 ```shell
-cargo install --path .
+cargo install --path . --locked
 ```
 
 This command will install uutils into Cargo's *bin* folder (*e.g.* `$HOME/.cargo/bin`).
