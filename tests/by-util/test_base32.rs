@@ -86,7 +86,7 @@ fn test_wrap() {
 fn test_wrap_no_arg() {
     for wrap_param in ["-w", "--wrap"] {
         let ts = TestScenario::new(util_name!());
-        let expected_stderr = "The argument '--wrap <COLS>' requires a value but none was supplied";
+        let expected_stderr = "a value is required for '--wrap <COLS>' but none was supplied";
         ts.ucmd()
             .arg(wrap_param)
             .fails()

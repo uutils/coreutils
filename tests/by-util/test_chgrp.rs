@@ -196,7 +196,7 @@ fn test_missing_files() {
         .arg("groupname")
         .fails()
         .stderr_contains(
-            "error: The following required arguments were not provided:\n  <FILE>...\n",
+            "error: the following required arguments were not provided:\n  <FILE>...\n",
         );
 }
 
