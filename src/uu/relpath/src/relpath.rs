@@ -12,9 +12,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
-use uucore::{help_about, help_usage};
 
 const USAGE: &str = help_usage!("relpath.md");
 const ABOUT: &str = help_about!("relpath.md");
