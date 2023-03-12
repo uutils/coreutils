@@ -76,6 +76,8 @@ struct Settings {
     oconv: OConvFlags,
     oflags: OFlags,
     status: Option<StatusLevel>,
+    /// Whether the output writer should buffer partial blocks until complete.
+    buffered: bool,
 }
 
 /// A timer which triggers on a given interval
@@ -126,6 +128,12 @@ impl Alarm {
 enum Num {
     Blocks(u64),
     Bytes(u64),
+}
+
+impl Default for Num {
+    fn default() -> Self {
+        Self::Blocks(0)
+    }
 }
 
 impl Num {

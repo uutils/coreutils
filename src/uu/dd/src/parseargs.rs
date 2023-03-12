@@ -35,39 +35,26 @@ pub enum ParseError {
 }
 
 /// Contains a temporary state during parsing of the arguments
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 pub struct Parser {
     infile: Option<String>,
     outfile: Option<String>,
-    ibs: usize,
-    obs: usize,
+    /// The block size option specified on the command-line, if any.
+    bs: Option<usize>,
+    /// The input block size option specified on the command-line, if any.
+    ibs: Option<usize>,
+    /// The output block size option specified on the command-line, if any.
+    obs: Option<usize>,
     cbs: Option<usize>,
     skip: Num,
     seek: Num,
     count: Option<Num>,
     conv: ConvFlags,
+    /// Whether a data-transforming `conv` option has been specified.
+    is_conv_specified: bool,
     iflag: IFlags,
     oflag: OFlags,
     status: Option<StatusLevel>,
-}
-
-impl Default for Parser {
-    fn default() -> Self {
-        Self {
-            ibs: 512,
-            obs: 512,
-            cbs: None,
-            infile: None,
-            outfile: None,
-            skip: Num::Blocks(0),
-            seek: Num::Blocks(0),
-            count: None,
-            conv: ConvFlags::default(),
-            iflag: IFlags::default(),
-            oflag: OFlags::default(),
-            status: None,
-        }
-    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -212,15 +199,34 @@ impl Parser {
             fsync: conv.fsync,
         };
 
+        // Input and output block sizes.
+        //
+        // The `bs` option takes precedence. If either is not
+        // provided, `ibs` and `obs` are each 512 bytes by default.
+        let (ibs, obs) = match self.bs {
+            None => (self.ibs.unwrap_or(512), self.obs.unwrap_or(512)),
+            Some(bs) => (bs, bs),
+        };
+
+        // Whether to buffer partial output blocks until they are completed.
+        //
+        // From the GNU `dd` documentation for the `bs=BYTES` option:
+        //
+        // > [...] if no data-transforming 'conv' option is specified,
+        // > input is copied to the output as soon as it's read, even if
+        // > it is smaller than the block size.
+        //
+        let buffered = self.bs.is_none() || self.is_conv_specified;
+
         let skip = self
             .skip
             .force_bytes_if(self.iflag.skip_bytes)
-            .to_bytes(self.ibs as u64);
+            .to_bytes(ibs as u64);
 
         let seek = self
             .seek
             .force_bytes_if(self.oflag.seek_bytes)
-            .to_bytes(self.obs as u64);
+            .to_bytes(obs as u64);
 
         let count = self.count.map(|c| c.force_bytes_if(self.iflag.count_bytes));
 
@@ -230,8 +236,9 @@ impl Parser {
             count,
             iconv,
             oconv,
-            ibs: self.ibs,
-            obs: self.obs,
+            ibs,
+            obs,
+            buffered,
             infile: self.infile,
             outfile: self.outfile,
             iflags: self.iflag,
@@ -244,18 +251,17 @@ impl Parser {
         match operand.split_once('=') {
             None => return Err(ParseError::UnrecognizedOperand(operand.to_string())),
             Some((k, v)) => match k {
-                "bs" => {
-                    let bs = Self::parse_bytes(k, v)?;
-                    self.ibs = bs;
-                    self.obs = bs;
-                }
+                "bs" => self.bs = Some(Self::parse_bytes(k, v)?),
                 "cbs" => self.cbs = Some(Self::parse_bytes(k, v)?),
-                "conv" => self.parse_conv_flags(v)?,
+                "conv" => {
+                    self.is_conv_specified = true;
+                    self.parse_conv_flags(v)?;
+                }
                 "count" => self.count = Some(Self::parse_n(v)?),
-                "ibs" => self.ibs = Self::parse_bytes(k, v)?,
+                "ibs" => self.ibs = Some(Self::parse_bytes(k, v)?),
                 "if" => self.infile = Some(v.to_string()),
                 "iflag" => self.parse_input_flags(v)?,
-                "obs" => self.obs = Self::parse_bytes(k, v)?,
+                "obs" => self.obs = Some(Self::parse_bytes(k, v)?),
                 "of" => self.outfile = Some(v.to_string()),
                 "oflag" => self.parse_output_flags(v)?,
                 "seek" | "oseek" => self.seek = Self::parse_n(v)?,
