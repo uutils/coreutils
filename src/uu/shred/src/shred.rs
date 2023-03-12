@@ -9,14 +9,16 @@
 // spell-checker:ignore (words) wipesync prefill
 
 use clap::{crate_version, Arg, ArgAction, Command};
+#[cfg(unix)]
+use libc::S_IWUSR;
 use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Seek, Write};
+#[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::libc::S_IWUSR;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_if_err};
 
 const ABOUT: &str = help_about!("shred.md");

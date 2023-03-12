@@ -3021,6 +3021,7 @@ name = "uu_shred"
 version = "0.0.17"
 dependencies = [
  "clap",
+ "libc",
  "rand",
  "uucore",
 ]
