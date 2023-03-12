@@ -50,7 +50,5 @@ fn test_multiple_arguments() {
         .arg("call_graph.txt")
         .arg("invalid_file")
         .fails()
-        .stderr_contains(
-            "Found argument 'invalid_file' which wasn't expected, or isn't valid in this context",
-        );
+        .stderr_contains("unexpected argument 'invalid_file' found");
 }

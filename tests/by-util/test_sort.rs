@@ -999,7 +999,7 @@ fn test_conflict_check_out() {
             .fails()
             .stderr_contains(
                 // the rest of the message might be subject to change
-                "error: The argument",
+                "error: the argument",
             );
     }
 }
