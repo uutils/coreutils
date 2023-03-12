@@ -1495,7 +1495,7 @@ fn test_cp_reflink_bad() {
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
         .fails()
-        .stderr_contains("error: 'bad' isn't a valid value for '--reflink[=<WHEN>]'");
+        .stderr_contains("error: invalid value 'bad' for '--reflink[=<WHEN>]'");
 }
 
 #[test]
