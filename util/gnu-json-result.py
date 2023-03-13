@@ -18,7 +18,7 @@ for filepath in test_dir.glob("**/*.log"):
             current[key] = {}
         current = current[key]
     try:
-        with open(path) as f:
+        with open(path, errors="ignore") as f:
             content = f.read()
             result = re.search(
                 r"(PASS|FAIL|SKIP|ERROR) [^ ]+ \(exit status: \d+\)$", content
