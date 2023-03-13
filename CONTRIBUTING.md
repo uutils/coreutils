@@ -1,3 +1,5 @@
+<!-- spell-checker:ignore reimplementing toybox -->
+
 # Contributing to coreutils
 
 Contributions are very welcome, and should target Rust's main branch until the
@@ -112,6 +114,22 @@ install it and then run with:
 ```
 cargo deny --all-features check all
 ```
+
+## Other implementations
+
+The Coreutils have different implementations, with different levels of completions:
+
+* [GNU's](https://git.savannah.gnu.org/gitweb/?p=coreutils.git)
+* [OpenBSD](https://github.com/openbsd/src/tree/master/bin)
+* [Busybox](https://github.com/mirror/busybox/tree/master/coreutils)
+* [Toybox (Android)](https://github.com/landley/toybox/tree/master/toys/posix)
+* [V lang](https://github.com/vlang/coreutils)
+* [SerenityOS](https://github.com/SerenityOS/serenity/tree/master/Userland/Utilities)
+* [Initial Unix](https://github.com/dspinellis/unix-history-repo)
+
+However, when reimplementing the tools/options in Rust, don't read their source codes 
+when they are using reciprocal licenses (ex: GNU GPL, GNU LGPL, etc).
+
 
 ## Licensing
 
