@@ -30,12 +30,80 @@ If you have any questions, feel free to ask them in the issues or on
 
 ## Platforms
 
-We take pride in supporting many operating systems and architectures.
+We take pride in supporting many operating systems and architectures. Any code
+you contribute must at least compile without warnings for all platforms in the
+CI. However, you can use `#[cfg(...)]` attributes to create platform dependent features.
 
-**Tip:**
-For Windows, Microsoft provides some images (VMWare, Hyper-V, VirtualBox and Parallels)
-for development:
+**Tip:** For Windows, Microsoft provides some images (VMWare, Hyper-V,
+VirtualBox and Parallels) for development:
 <https://developer.microsoft.com/windows/downloads/virtual-machines/>
+
+## Tools
+
+We have an extensive CI that will check your code before it can be merged. This
+section explains how to run those checks locally to avoid waiting for the CI.
+
+### pre-commit hooks
+
+A configuration for `pre-commit` is provided in the repository. It allows
+automatically checking every git commit you make to ensure it compiles, and
+passes `clippy` and `rustfmt` without warnings.
+
+To use the provided hook:
+
+1. [Install `pre-commit`](https://pre-commit.com/#install)
+1. Run `pre-commit install` while in the repository directory
+
+Your git commits will then automatically be checked. If a check fails, an error
+message will explain why, and your commit will be canceled. You can then make
+the suggested changes, and run `git commit ...` again.
+
+### clippy
+
+```shell
+cargo clippy --all-targets --all-features
+```
+
+The `msrv` key in the clippy configuration file `clippy.toml` is used to disable
+lints pertaining to newer features by specifying the minimum supported Rust
+version (MSRV).
+
+### rustfmt
+
+```shell
+cargo fmt --all
+```
+
+### cargo-deny
+
+This project uses [cargo-deny](https://github.com/EmbarkStudios/cargo-deny/) to
+detect duplicate dependencies, checks licenses, etc. To run it locally, first
+install it and then run with:
+
+```
+cargo deny --all-features check all
+```
+
+### Markdown linter
+
+We use [markdownlint](https://github.com/DavidAnson/markdownlint) to lint the
+Markdown files in the repository.
+
+### Spell checker
+
+We use `cspell` as spell checker for all files in the project. If you are using
+VS Code, you can install the
+[code spell checker](https://marketplace.visualstudio.com/items?itemName=streetsidesoftware.code-spell-checker)
+extension to enable spell checking within your editor. Otherwise, you can
+install [cspell](https://cspell.org/) separately.
+
+If you want to make the spell checker ignore a word, you can add
+
+```rust
+// spell-checker:ignore word_to_ignore
+```
+
+at the top of the file.
 
 ## Testing
 
@@ -225,15 +293,33 @@ uutils: add new utility
 gitignore: add temporary files
 ```
 
-## cargo-deny
+## Code coverage
 
-This project uses [cargo-deny](https://github.com/EmbarkStudios/cargo-deny/) to
-detect duplicate dependencies, checks licenses, etc. To run it locally, first
-install it and then run with:
+<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic -->
 
+Code coverage report can be generated using [grcov](https://github.com/mozilla/grcov).
+
+### Using Nightly Rust
+
+To generate [gcov-based](https://github.com/mozilla/grcov#example-how-to-generate-gcda-files-for-a-rust-project) coverage report
+
+```shell
+export CARGO_INCREMENTAL=0
+export RUSTFLAGS="-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+export RUSTDOCFLAGS="-Cpanic=abort"
+cargo build <options...> # e.g., --features feat_os_unix
+cargo test <options...> # e.g., --features feat_os_unix test_pathchk
+grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existing --ignore build.rs --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?\#\[derive\()" -o ./target/debug/coverage/
+# open target/debug/coverage/index.html in browser
 ```
-cargo deny --all-features check all
-```
+
+if changes are not reflected in the report then run `cargo clean` and run the above commands.
+
+### Using Stable Rust
+
+If you are using stable version of Rust that doesn't enable code coverage instrumentation by default
+then add `-Z-Zinstrument-coverage` flag to `RUSTFLAGS` env variable specified above.
+
 
 ## Other implementations
 
