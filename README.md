@@ -1,3 +1,7 @@
+<div align="center">
+
+![uutils logo](docs/src/logo.svg)
+
 # uutils coreutils
 
 [![Crates.io](https://img.shields.io/crates/v/coreutils.svg)](https://crates.io/crates/coreutils)
@@ -9,7 +13,9 @@
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 ![MSRV](https://img.shields.io/badge/MSRV-1.64.0-brightgreen)
 
------------------------------------------------
+</div>
+
+---
 
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
 <!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME manpages -->
