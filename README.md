@@ -1,3 +1,6 @@
+<!-- markdownlint-disable MD033 MD041 MD002 -->
+<!-- markdownlint-disable commands-show-output no-duplicate-heading -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation -->
 <div align="center">
 
 ![uutils logo](docs/src/logo.svg)
@@ -17,8 +20,6 @@
 
 ---
 
-<!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME manpages -->
 
 uutils coreutils is a cross-platform reimplementation of the GNU coreutils in
 [Rust](http://www.rust-lang.org). While all programs have been implemented, some

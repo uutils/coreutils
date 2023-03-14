@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore reimplementing toybox -->
+<!-- spell-checker:ignore reimplementing toybox RUNTEST -->
 
 # Contributing to coreutils
 
