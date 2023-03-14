@@ -2,21 +2,11 @@
 
 # Contributing to coreutils
 
-Contributions are very welcome, and should target Rust's main branch until the
-standard libraries are stabilized. You may *claim* an item on the to-do list by
-following these steps:
-
-1. Open an issue named "Implement [the utility of your choice]", e.g. "Implement
-   ls".
-1. State that you are working on this utility.
-1. Develop the utility.
-1. Add integration tests.
-1. Add the reference to your utility into Cargo.toml and Makefile.
-1. Remove utility from the to-do list in the README.
-1. Submit a pull request and close the issue.
-
-The steps above imply that, before starting to work on a utility, you should
-search the issues to make sure no one else is working on it.
+Contributions are very welcome via Pull Requests. If you don't know where to
+start, take a look at the
+[`good-first-issues`](https://github.com/uutils/coreutils/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
+If you have any questions, feel free to ask them in the issues or on
+[Discord](https://discord.gg/wQVJbvJ).
 
 ## Best practices
 
