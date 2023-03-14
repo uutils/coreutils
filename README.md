@@ -286,136 +286,13 @@ make PREFIX=/my/path uninstall
 
 <!-- ANCHOR_END: build (this mark is needed for mdbook) -->
 
-## Testing
-
-Testing can be done using either Cargo or `make`.
-
-### Testing with Cargo
-
-Just like with building, we follow the standard procedure for testing using
-Cargo:
-
-```shell
-cargo test
-```
-
-By default, `cargo test` only runs the common programs. To run also platform
-specific tests, run:
-
-```shell
-cargo test --features unix
-```
-
-If you would prefer to test a select few utilities:
-
-```shell
-cargo test --features "chmod mv tail" --no-default-features
-```
-
-If you also want to test the core utilities:
-
-```shell
-cargo test  -p uucore -p coreutils
-```
-
-To debug:
-
-```shell
-gdb --args target/debug/coreutils ls
-(gdb) b ls.rs:79
-(gdb) run
-```
-
-### Testing with GNU Make
-
-To simply test all available utilities:
-
-```shell
-make test
-```
-
-To test all but a few of the available utilities:
-
-```shell
-make SKIP_UTILS='UTILITY_1 UTILITY_2' test
-```
-
-To test only a few of the available utilities:
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' test
-```
-
-To include tests for unimplemented behavior:
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
-```
-
-### Run Busybox Tests
-
-This testing functionality is only available on *nix operating systems and
-requires `make`.
-
-To run busybox tests for all utilities for which busybox has tests
-
-```shell
-make busytest
-```
-
-To run busybox tests for a few of the available utilities
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' busytest
-```
-
-To pass an argument like "-v" to the busybox test runtime
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
-```
-
-### Comparing with GNU
+## GNU test suite compatibility
 
 Below is the evolution of how many GNU tests uutils passes. A more detailed
 breakdown of the GNU test results of the main branch can be found
 [in the user manual](https://uutils.github.io/user/test_coverage.html).
 
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
-
-To run locally:
-
-```shell
-bash util/build-gnu.sh
-bash util/run-gnu-test.sh
-# To run a single test:
-bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
-# To run several tests:
-bash util/run-gnu-test.sh tests/touch/not-owner.sh tests/rm/no-give-up.sh # for example
-# If this is a perl (.pl) test, to run in debug:
-DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
-```
-
-Note that it relies on individual utilities (not the multicall binary).
-
-### Improving the GNU compatibility
-
-The Python script `./util/remaining-gnu-error.py` shows the list of failing tests in the CI.
-
-To improve the GNU compatibility, the following process is recommended:
-
-1. Identify a test (the smaller, the better) on a program that you understand or is easy to understand. You can use the `./util/remaining-gnu-error.py` script to help with this decision.
-1. Build both the GNU and Rust coreutils using: `bash util/build-gnu.sh`
-1. Run the test with `bash util/run-gnu-test.sh <your test>`
-1. Start to modify `<your test>` to understand what is wrong. Examples:
-    1. Add `set -v` to have the bash verbose mode
-    1. Add `echo $?` where needed
-    1. When the variable `fail` is used in the test, `echo $fail` to see when the test started to fail
-    1. Bump the content of the output (ex: `cat err`)
-    1. ...
-1. Or, if the test is simple, extract the relevant information to create a new test case running both GNU & Rust implementation
-1. Start to modify the Rust implementation to match the expected behavior
-1. Add a test to make sure that we don't regress (our test suite is super quick)
 
 ## Contributing
 
