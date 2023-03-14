@@ -20,10 +20,9 @@
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
 <!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME manpages -->
 
-uutils is an attempt at writing universal (as in cross-platform) CLI
-utilities in [Rust](http://www.rust-lang.org).
-While all programs have been implemented, some options might be missing
-or different behavior might be experienced.
+uutils coreutils is a cross-platform reimplementation of the GNU coreutils in
+[Rust](http://www.rust-lang.org). While all programs have been implemented, some
+options might be missing or different behavior might be experienced.
 
 To install it:
 
@@ -33,13 +32,15 @@ cargo install coreutils
 ```
 
 <!-- markdownlint-disable-next-line MD026 -->
-## Why?
 
-uutils aims to work on as many platforms as possible, to be able to use the
-same utils on Linux, Mac, Windows and other platforms. This ensures, for
-example, that scripts can be easily transferred between platforms. Rust was
-chosen not only because it is fast and safe, but is also excellent for
-writing cross-platform code.
+## Goals
+
+uutils aims to be a drop-in replacement for the GNU utils. Differences with GNU
+are treated as bugs.
+
+uutils aims to work on as many platforms as possible, to be able to use the same
+utils on Linux, Mac, Windows and other platforms. This ensures, for example,
+that scripts can be easily transferred between platforms.
 
 ## Documentation
 
@@ -48,10 +49,11 @@ uutils has both user and developer documentation available:
 - [User Manual](https://uutils.github.io/user/)
 - [Developer Documentation](https://uutils.github.io/dev/coreutils/)
 
-Both can also be generated locally, the instructions for that can be found in the
-[coreutils docs](https://github.com/uutils/uutils.github.io) repository.
+Both can also be generated locally, the instructions for that can be found in
+the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
+
 ## Requirements
 
 - Rust (`cargo`, `rustc`)
@@ -59,13 +61,13 @@ Both can also be generated locally, the instructions for that can be found in th
 
 ### Rust Version
 
-uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current Minimum Supported Rust Version (MSRV) is `1.64.0`.
+uutils follows Rust's release channels and is tested against stable, beta and
+nightly. The current Minimum Supported Rust Version (MSRV) is `1.64.0`.
 
 ## Building
 
-There are currently two methods to build the uutils binaries: either Cargo
-or GNU Make.
+There are currently two methods to build the uutils binaries: either Cargo or
+GNU Make.
 
 > Building the full package, including all documentation, requires both Cargo
 > and Gnu Make on a Unix platform.
@@ -79,8 +81,8 @@ cd coreutils
 
 ### Cargo
 
-Building uutils using Cargo is easy because the process is the same as for
-every other Rust program:
+Building uutils using Cargo is easy because the process is the same as for every
+other Rust program:
 
 ```shell
 cargo build --release
@@ -89,9 +91,9 @@ cargo build --release
 This command builds the most portable common core set of uutils into a multicall
 (BusyBox-type) binary, named 'coreutils', on most Rust-supported platforms.
 
-Additional platform-specific uutils are often available. Building these
-expanded sets of uutils for a platform (on that platform) is as simple as
-specifying it as a feature:
+Additional platform-specific uutils are often available. Building these expanded
+sets of uutils for a platform (on that platform) is as simple as specifying it
+as a feature:
 
 ```shell
 cargo build --release --features macos
@@ -102,18 +104,18 @@ cargo build --release --features unix
 ```
 
 If you don't want to build every utility available on your platform into the
-final binary, you can also specify which ones you want to build manually.
-For example:
+final binary, you can also specify which ones you want to build manually. For
+example:
 
 ```shell
 cargo build --features "base32 cat echo rm" --no-default-features
 ```
 
-If you don't want to build the multicall binary and would prefer to build
-the utilities as individual binaries, that is also possible. Each utility
-is contained in its own package within the main repository, named
-"uu_UTILNAME". To build individual utilities, use cargo to build just the
-specific packages (using the `--package` [aka `-p`] option). For example:
+If you don't want to build the multicall binary and would prefer to build the
+utilities as individual binaries, that is also possible. Each utility is
+contained in its own package within the main repository, named "uu_UTILNAME". To
+build individual utilities, use cargo to build just the specific packages (using
+the `--package` [aka `-p`] option). For example:
 
 ```shell
 cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
@@ -157,10 +159,12 @@ Likewise, installing can simply be done using:
 cargo install --path . --locked
 ```
 
-This command will install uutils into Cargo's *bin* folder (*e.g.* `$HOME/.cargo/bin`).
+This command will install uutils into Cargo's _bin_ folder (_e.g._
+`$HOME/.cargo/bin`).
 
-This does not install files necessary for shell completion or manpages.
-For manpages or shell completion to work, use `GNU Make` or see `Manually install shell completions`/`Manually install manpages`.
+This does not install files necessary for shell completion or manpages. For
+manpages or shell completion to work, use `GNU Make` or see
+`Manually install shell completions`/`Manually install manpages`.
 
 ### Install with GNU Make
 
@@ -213,8 +217,8 @@ be generated; See `Manually install shell completions`.
 
 ### Manually install shell completions
 
-The `coreutils` binary can generate completions for the `bash`, `elvish`, `fish`, `powershell`
-and `zsh` shells. It prints the result to stdout.
+The `coreutils` binary can generate completions for the `bash`, `elvish`,
+`fish`, `powershell` and `zsh` shells. It prints the result to stdout.
 
 The syntax is:
 
@@ -222,8 +226,8 @@ The syntax is:
 cargo run completion <utility> <shell>
 ```
 
-So, to install completions for `ls` on `bash` to `/usr/local/share/bash-completion/completions/ls`,
-run:
+So, to install completions for `ls` on `bash` to
+`/usr/local/share/bash-completion/completions/ls`, run:
 
 ```shell
 cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
@@ -232,12 +236,12 @@ cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
 ### Manually install manpages
 
 To generate manpages, the syntax is:
+
 ```bash
 cargo run manpage <utility>
 ```
 
-So, to install the manpage for `ls` to `/usr/local/share/man/man1/ls.1`
-run:
+So, to install the manpage for `ls` to `/usr/local/share/man/man1/ls.1` run:
 
 ```bash
 cargo run manpage ls > /usr/local/share/man/man1/ls.1
@@ -245,8 +249,8 @@ cargo run manpage ls > /usr/local/share/man/man1/ls.1
 
 ## Un-installation
 
-Un-installation differs depending on how you have installed uutils.  If you used
-Cargo to install, use Cargo to uninstall.  If you used GNU Make to install, use
+Un-installation differs depending on how you have installed uutils. If you used
+Cargo to install, use Cargo to uninstall. If you used GNU Make to install, use
 Make to uninstall.
 
 ### Uninstall with Cargo
@@ -309,98 +313,98 @@ Please note that this is not fully accurate:
 See <https://github.com/uutils/coreutils/issues/3336> for the main meta bugs
 (many are missing).
 
-| Done      | WIP       |
-|-----------|-----------|
-| arch      | cp        |
-| base32    | date      |
-| base64    | dd        |
-| basename  | df        |
-| basenc    | expr      |
-| cat       | install   |
-| chcon     | ls        |
-| chgrp     | more      |
-| chmod     | numfmt    |
-| chown     | od (`--strings` and 128-bit data types missing) |
-| chroot    | pr        |
-| cksum     | printf    |
-| comm      | sort      |
-| csplit    | split     |
-| cut       | tac       |
-| dircolors | test      |
-| dirname   | dir       |
-| du        | vdir      |
-| echo      | stty      |
-| env       |           |
-| expand    |           |
-| factor    |           |
-| false     |           |
-| fmt       |           |
-| fold      |           |
-| groups    |           |
-| hashsum   |           |
-| head      |           |
-| hostid    |           |
-| hostname  |           |
-| id        |           |
-| join      |           |
-| kill      |           |
-| link      |           |
-| ln        |           |
-| logname   |           |
-| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) | |
-| mkdir     |           |
-| mkfifo    |           |
-| mknod     |           |
-| mktemp    |           |
-| mv        |           |
-| nice      |           |
-| nl        |           |
-| nohup     |           |
-| nproc     |           |
-| paste     |           |
-| pathchk   |           |
-| pinky     |           |
-| printenv  |           |
-| ptx       |           |
-| pwd       |           |
-| readlink  |           |
-| realpath  |           |
-| relpath   |           |
-| rm        |           |
-| rmdir     |           |
-| runcon    |           |
-| seq       |           |
-| shred     |           |
-| shuf      |           |
-| sleep     |           |
-| stat      |           |
-| stdbuf    |           |
-| sum       |           |
-| sync      |           |
-| tail      |           |
-| tee       |           |
-| timeout   |           |
-| touch     |           |
-| tr        |           |
-| true      |           |
-| truncate  |           |
-| tsort     |           |
-| tty       |           |
-| uname     |           |
-| unexpand  |           |
-| uniq      |           |
-| unlink    |           |
-| uptime    |           |
-| users     |           |
-| wc        |           |
-| who       |           |
-| whoami    |           |
-| yes       |           |
+| Done                                                                                                               | WIP                                             |
+| ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| arch                                                                                                               | cp                                              |
+| base32                                                                                                             | date                                            |
+| base64                                                                                                             | dd                                              |
+| basename                                                                                                           | df                                              |
+| basenc                                                                                                             | expr                                            |
+| cat                                                                                                                | install                                         |
+| chcon                                                                                                              | ls                                              |
+| chgrp                                                                                                              | more                                            |
+| chmod                                                                                                              | numfmt                                          |
+| chown                                                                                                              | od (`--strings` and 128-bit data types missing) |
+| chroot                                                                                                             | pr                                              |
+| cksum                                                                                                              | printf                                          |
+| comm                                                                                                               | sort                                            |
+| csplit                                                                                                             | split                                           |
+| cut                                                                                                                | tac                                             |
+| dircolors                                                                                                          | test                                            |
+| dirname                                                                                                            | dir                                             |
+| du                                                                                                                 | vdir                                            |
+| echo                                                                                                               | stty                                            |
+| env                                                                                                                |                                                 |
+| expand                                                                                                             |                                                 |
+| factor                                                                                                             |                                                 |
+| false                                                                                                              |                                                 |
+| fmt                                                                                                                |                                                 |
+| fold                                                                                                               |                                                 |
+| groups                                                                                                             |                                                 |
+| hashsum                                                                                                            |                                                 |
+| head                                                                                                               |                                                 |
+| hostid                                                                                                             |                                                 |
+| hostname                                                                                                           |                                                 |
+| id                                                                                                                 |                                                 |
+| join                                                                                                               |                                                 |
+| kill                                                                                                               |                                                 |
+| link                                                                                                               |                                                 |
+| ln                                                                                                                 |                                                 |
+| logname                                                                                                            |                                                 |
+| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs))    |                                                 |
+| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs))   |                                                 |
+| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) |                                                 |
+| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) |                                                 |
+| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) |                                                 |
+| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) |                                                 |
+| mkdir                                                                                                              |                                                 |
+| mkfifo                                                                                                             |                                                 |
+| mknod                                                                                                              |                                                 |
+| mktemp                                                                                                             |                                                 |
+| mv                                                                                                                 |                                                 |
+| nice                                                                                                               |                                                 |
+| nl                                                                                                                 |                                                 |
+| nohup                                                                                                              |                                                 |
+| nproc                                                                                                              |                                                 |
+| paste                                                                                                              |                                                 |
+| pathchk                                                                                                            |                                                 |
+| pinky                                                                                                              |                                                 |
+| printenv                                                                                                           |                                                 |
+| ptx                                                                                                                |                                                 |
+| pwd                                                                                                                |                                                 |
+| readlink                                                                                                           |                                                 |
+| realpath                                                                                                           |                                                 |
+| relpath                                                                                                            |                                                 |
+| rm                                                                                                                 |                                                 |
+| rmdir                                                                                                              |                                                 |
+| runcon                                                                                                             |                                                 |
+| seq                                                                                                                |                                                 |
+| shred                                                                                                              |                                                 |
+| shuf                                                                                                               |                                                 |
+| sleep                                                                                                              |                                                 |
+| stat                                                                                                               |                                                 |
+| stdbuf                                                                                                             |                                                 |
+| sum                                                                                                                |                                                 |
+| sync                                                                                                               |                                                 |
+| tail                                                                                                               |                                                 |
+| tee                                                                                                                |                                                 |
+| timeout                                                                                                            |                                                 |
+| touch                                                                                                              |                                                 |
+| tr                                                                                                                 |                                                 |
+| true                                                                                                               |                                                 |
+| truncate                                                                                                           |                                                 |
+| tsort                                                                                                              |                                                 |
+| tty                                                                                                                |                                                 |
+| uname                                                                                                              |                                                 |
+| unexpand                                                                                                           |                                                 |
+| uniq                                                                                                               |                                                 |
+| unlink                                                                                                             |                                                 |
+| uptime                                                                                                             |                                                 |
+| users                                                                                                              |                                                 |
+| wc                                                                                                                 |                                                 |
+| who                                                                                                                |                                                 |
+| whoami                                                                                                             |                                                 |
+| yes                                                                                                                |                                                 |
 
 ## License
 
