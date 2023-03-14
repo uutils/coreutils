@@ -296,115 +296,14 @@ Below is the evolution of how many GNU tests uutils passes. A more detailed
 breakdown of the GNU test results of the main branch can be found
 [in the user manual](https://uutils.github.io/user/test_coverage.html).
 
+See <https://github.com/uutils/coreutils/issues/3336> for the main meta bugs
+(many are missing).
+
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
 
 ## Contributing
 
 To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
-
-## Utilities
-
-Please note that this is not fully accurate:
-
-- Some new options can be added / removed in the GNU implementation;
-- Some error management might be missing;
-- Some behaviors might be different.
-
-See <https://github.com/uutils/coreutils/issues/3336> for the main meta bugs
-(many are missing).
-
-| Done                                                                                                               | WIP                                             |
-| ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
-| arch                                                                                                               | cp                                              |
-| base32                                                                                                             | date                                            |
-| base64                                                                                                             | dd                                              |
-| basename                                                                                                           | df                                              |
-| basenc                                                                                                             | expr                                            |
-| cat                                                                                                                | install                                         |
-| chcon                                                                                                              | ls                                              |
-| chgrp                                                                                                              | more                                            |
-| chmod                                                                                                              | numfmt                                          |
-| chown                                                                                                              | od (`--strings` and 128-bit data types missing) |
-| chroot                                                                                                             | pr                                              |
-| cksum                                                                                                              | printf                                          |
-| comm                                                                                                               | sort                                            |
-| csplit                                                                                                             | split                                           |
-| cut                                                                                                                | tac                                             |
-| dircolors                                                                                                          | test                                            |
-| dirname                                                                                                            | dir                                             |
-| du                                                                                                                 | vdir                                            |
-| echo                                                                                                               | stty                                            |
-| env                                                                                                                |                                                 |
-| expand                                                                                                             |                                                 |
-| factor                                                                                                             |                                                 |
-| false                                                                                                              |                                                 |
-| fmt                                                                                                                |                                                 |
-| fold                                                                                                               |                                                 |
-| groups                                                                                                             |                                                 |
-| hashsum                                                                                                            |                                                 |
-| head                                                                                                               |                                                 |
-| hostid                                                                                                             |                                                 |
-| hostname                                                                                                           |                                                 |
-| id                                                                                                                 |                                                 |
-| join                                                                                                               |                                                 |
-| kill                                                                                                               |                                                 |
-| link                                                                                                               |                                                 |
-| ln                                                                                                                 |                                                 |
-| logname                                                                                                            |                                                 |
-| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs))    |                                                 |
-| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs))   |                                                 |
-| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) |                                                 |
-| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) |                                                 |
-| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) |                                                 |
-| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/main/src/uu/hashsum/src/hashsum.rs)) |                                                 |
-| mkdir                                                                                                              |                                                 |
-| mkfifo                                                                                                             |                                                 |
-| mknod                                                                                                              |                                                 |
-| mktemp                                                                                                             |                                                 |
-| mv                                                                                                                 |                                                 |
-| nice                                                                                                               |                                                 |
-| nl                                                                                                                 |                                                 |
-| nohup                                                                                                              |                                                 |
-| nproc                                                                                                              |                                                 |
-| paste                                                                                                              |                                                 |
-| pathchk                                                                                                            |                                                 |
-| pinky                                                                                                              |                                                 |
-| printenv                                                                                                           |                                                 |
-| ptx                                                                                                                |                                                 |
-| pwd                                                                                                                |                                                 |
-| readlink                                                                                                           |                                                 |
-| realpath                                                                                                           |                                                 |
-| relpath                                                                                                            |                                                 |
-| rm                                                                                                                 |                                                 |
-| rmdir                                                                                                              |                                                 |
-| runcon                                                                                                             |                                                 |
-| seq                                                                                                                |                                                 |
-| shred                                                                                                              |                                                 |
-| shuf                                                                                                               |                                                 |
-| sleep                                                                                                              |                                                 |
-| stat                                                                                                               |                                                 |
-| stdbuf                                                                                                             |                                                 |
-| sum                                                                                                                |                                                 |
-| sync                                                                                                               |                                                 |
-| tail                                                                                                               |                                                 |
-| tee                                                                                                                |                                                 |
-| timeout                                                                                                            |                                                 |
-| touch                                                                                                              |                                                 |
-| tr                                                                                                                 |                                                 |
-| true                                                                                                               |                                                 |
-| truncate                                                                                                           |                                                 |
-| tsort                                                                                                              |                                                 |
-| tty                                                                                                                |                                                 |
-| uname                                                                                                              |                                                 |
-| unexpand                                                                                                           |                                                 |
-| uniq                                                                                                               |                                                 |
-| unlink                                                                                                             |                                                 |
-| uptime                                                                                                             |                                                 |
-| users                                                                                                              |                                                 |
-| wc                                                                                                                 |                                                 |
-| who                                                                                                                |                                                 |
-| whoami                                                                                                             |                                                 |
-| yes                                                                                                                |                                                 |
 
 ## License
 
