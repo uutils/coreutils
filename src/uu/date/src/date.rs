@@ -114,8 +114,8 @@ impl<'a> From<&'a str> for Iso8601Format {
             SECONDS | SECOND => Self::Seconds,
             NS => Self::Ns,
             DATE => Self::Date,
-            // Should be caught by clap
-            _ => panic!("Invalid format: {s}"),
+            // Note: This is caught by clap via `possible_values`
+            _ => unreachable!(),
         }
     }
 }
