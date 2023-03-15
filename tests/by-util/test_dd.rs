@@ -5,7 +5,7 @@ use crate::common::util::*;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
-#[cfg(all(not(windows), not(target_os = "macos")))]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
 use std::process::{Command, Stdio};
 #[cfg(not(windows))]
 use std::thread::sleep;
