@@ -15,14 +15,11 @@ use std::iter;
 use std::path::Path;
 use uucore::{
     error::{FromIo, UResult},
-    format_usage,
+    format_usage, help_about, help_section, help_usage,
     sum::{
         div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
         BSD, CRC, SYSV,
     },
-    help_about,
-    help_usage,
-    help_section,
 };
 
 const USAGE: &str = help_usage!("cksum.md");
