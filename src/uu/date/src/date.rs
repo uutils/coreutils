@@ -438,3 +438,22 @@ fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
         Ok(())
     }
 }
+
+mod tests {
+    use crate::uu_app;
+
+    fn get_matches_for(s: &str) -> Result<clap::ArgMatches, clap::error::Error> {
+        uu_app().try_get_matches_from(vec![uucore::util_name(), s])
+    }
+
+
+    #[test]
+    fn test_date_iso8601_valid() {
+        assert!(get_matches_for("-Ihour").is_ok());
+    }
+
+    #[test]
+    fn test_date_iso8601_invalid() {
+        assert!(get_matches_for("-I@").is_err());
+    }
+}
