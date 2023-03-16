@@ -44,6 +44,14 @@ fn test_date_rfc_3339() {
 }
 
 #[test]
+fn test_date_rfc_8601_default() {
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\n$").unwrap();
+    for param in ["--iso-8601", "--i"] {
+        new_ucmd!().arg(param).succeeds().stdout_matches(&re);
+    }
+}
+
+#[test]
 fn test_date_rfc_8601() {
     let re = Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2},\d{9}[+-]\d{2}:\d{2}\n$").unwrap();
     for param in ["--iso-8601", "--i"] {

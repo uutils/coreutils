@@ -292,6 +292,8 @@ pub fn uu_app() -> Command {
                 .long(OPT_ISO_8601)
                 .value_name("FMT")
                 .value_parser([DATE, HOUR, HOURS, MINUTE, MINUTES, SECOND, SECONDS, NS])
+                .num_args(0..=1)
+                .default_missing_value(OPT_DATE)
                 .help(ISO_8601_HELP_STRING),
         )
         .arg(
