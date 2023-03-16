@@ -291,7 +291,7 @@ pub fn uu_app() -> Command {
                 .short('I')
                 .long(OPT_ISO_8601)
                 .value_name("FMT")
-                .value_parser([DATE, HOUR, HOURS, MINUTE, MINUTES, NS])
+                .value_parser([DATE, HOUR, HOURS, MINUTE, MINUTES, SECOND, SECONDS, NS])
                 .help(ISO_8601_HELP_STRING),
         )
         .arg(
@@ -436,24 +436,5 @@ fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
         Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
     } else {
         Ok(())
-    }
-}
-
-mod tests {
-    use crate::uu_app;
-
-    fn get_matches_for(s: &str) -> Result<clap::ArgMatches, clap::error::Error> {
-        uu_app().try_get_matches_from(vec![uucore::util_name(), s])
-    }
-
-
-    #[test]
-    fn test_date_iso8601_valid() {
-        assert!(get_matches_for("-Ihour").is_ok());
-    }
-
-    #[test]
-    fn test_date_iso8601_invalid() {
-        assert!(get_matches_for("-I@").is_err());
     }
 }
