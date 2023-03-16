@@ -51,6 +51,13 @@ fn test_date_rfc_8601() {
 }
 
 #[test]
+fn test_date_rfc_8601_invalid_arg() {
+    for param in ["--iso-8601", "--i"] {
+        new_ucmd!().arg(format!("{param}=@")).fails();
+    }
+}
+
+#[test]
 fn test_date_rfc_8601_second() {
     for param in ["--iso-8601", "--i"] {
         new_ucmd!().arg(format!("{param}=second")).succeeds();

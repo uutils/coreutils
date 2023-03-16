@@ -114,8 +114,8 @@ impl<'a> From<&'a str> for Iso8601Format {
             SECONDS | SECOND => Self::Seconds,
             NS => Self::Ns,
             DATE => Self::Date,
-            // Should be caught by clap
-            _ => panic!("Invalid format: {s}"),
+            // Note: This is caught by clap via `possible_values`
+            _ => unreachable!(),
         }
     }
 }
@@ -291,6 +291,7 @@ pub fn uu_app() -> Command {
                 .short('I')
                 .long(OPT_ISO_8601)
                 .value_name("FMT")
+                .value_parser([DATE, HOUR, HOURS, MINUTE, MINUTES, SECOND, SECONDS, NS])
                 .help(ISO_8601_HELP_STRING),
         )
         .arg(
