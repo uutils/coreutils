@@ -11,10 +11,8 @@
 use chrono::{Local, TimeZone, Utc};
 use clap::{crate_version, Arg, ArgAction, Command};
 
-use uucore::{format_usage, help_about, help_usage};
-// import crate time from utmpx
-pub use uucore::libc;
 use uucore::libc::time_t;
+use uucore::{format_usage, help_about, help_usage};
 
 use uucore::error::{UResult, USimpleError};
 
