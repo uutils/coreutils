@@ -11,17 +11,15 @@
 use chrono::{Local, TimeZone, Utc};
 use clap::{crate_version, Arg, ArgAction, Command};
 
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 // import crate time from utmpx
 pub use uucore::libc;
 use uucore::libc::time_t;
 
 use uucore::error::{UResult, USimpleError};
 
-static ABOUT: &str = "Display the current time, the length of time the system has been up,\n\
-                      the number of users on the system, and the average number of jobs\n\
-                      in the run queue over the last 1, 5 and 15 minutes.";
-const USAGE: &str = "{} [OPTION]...";
+const ABOUT: &str = help_about!("uptime.md");
+const USAGE: &str = help_usage!("uptime.md");
 pub mod options {
     pub static SINCE: &str = "since";
 }
