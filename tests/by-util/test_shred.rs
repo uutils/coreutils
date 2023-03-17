@@ -25,7 +25,6 @@ fn test_shred_remove() {
     assert!(at.file_exists(file_b));
 }
 
-#[cfg(not(target_os = "freebsd"))]
 #[test]
 fn test_shred_force() {
     let scene = TestScenario::new(util_name!());
