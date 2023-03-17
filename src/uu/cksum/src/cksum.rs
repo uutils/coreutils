@@ -15,15 +15,16 @@ use std::iter;
 use std::path::Path;
 use uucore::{
     error::{FromIo, UResult},
-    format_usage,
+    format_usage, help_about, help_section, help_usage,
     sum::{
         div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
         BSD, CRC, SYSV,
     },
 };
 
-const USAGE: &str = "{} [OPTIONS] [FILE]...";
-const ABOUT: &str = "Print CRC and size for each file";
+const USAGE: &str = help_usage!("cksum.md");
+const ABOUT: &str = help_about!("cksum.md");
+const AFTER_HELP: &str = help_section!("after help", "cksum.md");
 
 const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
 const ALGORITHM_OPTIONS_BSD: &str = "bsd";
@@ -205,21 +206,6 @@ mod options {
     pub static ALGORITHM: &str = "algorithm";
 }
 
-const ALGORITHM_HELP_DESC: &str =
-    "DIGEST determines the digest algorithm and default output format:\n\
-\n\
--a=sysv:    (equivalent to sum -s)\n\
--a=bsd:     (equivalent to sum -r)\n\
--a=crc:     (equivalent to cksum)\n\
--a=md5:     (equivalent to md5sum)\n\
--a=sha1:    (equivalent to sha1sum)\n\
--a=sha224:  (equivalent to sha224sum)\n\
--a=sha256:  (equivalent to sha256sum)\n\
--a=sha384:  (equivalent to sha384sum)\n\
--a=sha512:  (equivalent to sha512sum)\n\
--a=blake2b: (equivalent to b2sum)\n\
--a=sm3:     (only available through cksum)\n";
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
@@ -278,5 +264,5 @@ pub fn uu_app() -> Command {
                     ALGORITHM_OPTIONS_SM3,
                 ]),
         )
-        .after_help(ALGORITHM_HELP_DESC)
+        .after_help(AFTER_HELP)
 }

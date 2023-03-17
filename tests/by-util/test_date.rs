@@ -44,16 +44,84 @@ fn test_date_rfc_3339() {
 }
 
 #[test]
-fn test_date_rfc_8601() {
+fn test_date_rfc_8601_default() {
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\n$").unwrap();
     for param in ["--iso-8601", "--i"] {
-        new_ucmd!().arg(format!("{param}=ns")).succeeds();
+        new_ucmd!().arg(param).succeeds().stdout_matches(&re);
+    }
+}
+
+#[test]
+fn test_date_rfc_8601() {
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2},\d{9}[+-]\d{2}:\d{2}\n$").unwrap();
+    for param in ["--iso-8601", "--i"] {
+        new_ucmd!()
+            .arg(format!("{param}=ns"))
+            .succeeds()
+            .stdout_matches(&re);
+    }
+}
+
+#[test]
+fn test_date_rfc_8601_invalid_arg() {
+    for param in ["--iso-8601", "--i"] {
+        new_ucmd!().arg(format!("{param}=@")).fails();
     }
 }
 
 #[test]
 fn test_date_rfc_8601_second() {
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}\n$").unwrap();
     for param in ["--iso-8601", "--i"] {
-        new_ucmd!().arg(format!("{param}=second")).succeeds();
+        new_ucmd!()
+            .arg(format!("{param}=second"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=seconds"))
+            .succeeds()
+            .stdout_matches(&re);
+    }
+}
+
+#[test]
+fn test_date_rfc_8601_minute() {
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}[+-]\d{2}:\d{2}\n$").unwrap();
+    for param in ["--iso-8601", "--i"] {
+        new_ucmd!()
+            .arg(format!("{param}=minute"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=minutes"))
+            .succeeds()
+            .stdout_matches(&re);
+    }
+}
+
+#[test]
+fn test_date_rfc_8601_hour() {
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}[+-]\d{2}:\d{2}\n$").unwrap();
+    for param in ["--iso-8601", "--i"] {
+        new_ucmd!()
+            .arg(format!("{param}=hour"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=hours"))
+            .succeeds()
+            .stdout_matches(&re);
+    }
+}
+
+#[test]
+fn test_date_rfc_8601_date() {
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\n$").unwrap();
+    for param in ["--iso-8601", "--i"] {
+        new_ucmd!()
+            .arg(format!("{param}=date"))
+            .succeeds()
+            .stdout_matches(&re);
     }
 }
 
