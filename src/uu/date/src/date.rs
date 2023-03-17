@@ -22,7 +22,7 @@ use uucore::display::Quotable;
 #[cfg(not(any(target_os = "macos", target_os = "redox")))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show_error};
+use uucore::{format_usage, help_about, help_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
@@ -257,7 +257,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         .replace("%f", "%N");
                     println!("{formatted}");
                 }
-                Err((input, _err)) => show_error!("invalid date {}", input.quote()),
+                Err((input, _err)) => show!(USimpleError::new(
+                    1,
+                    format!("invalid date {}", input.quote())
+                )),
             }
         }
     }
