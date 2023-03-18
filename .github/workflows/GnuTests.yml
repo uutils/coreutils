@@ -226,9 +226,17 @@ jobs:
           for LINE in ${REF_FAILING}
           do
             if ! grep -Fxq ${LINE}<<<"${NEW_FAILING}"; then
-              MSG="Congrats! The gnu test ${LINE} is no longer failing!"
-              echo "::warning ::$MSG"
-              echo $MSG >> ${COMMENT_LOG}
+              if ! grep ${LINE} ${IGNORE_INTERMITTENT}
+              then
+                MSG="Congrats! The gnu test ${LINE} is no longer failing!"
+                echo "::warning ::$MSG"
+                echo $MSG >> ${COMMENT_LOG}
+              else
+                MSG="Skipping an intermittent issue ${LINE}"
+                echo "::warning ::$MSG"
+                echo $MSG >> ${COMMENT_LOG}
+                echo ""
+              fi
             fi
           done
           for LINE in ${NEW_FAILING}
