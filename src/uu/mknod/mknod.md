@@ -9,9 +9,7 @@ Create the special file NAME of the given TYPE.
 ## After Help
 
 Mandatory arguments to long options are mandatory for short options too.
--m, --mode=MODE    set file permission bits to MODE, not a=rw - umask
---help     display this help and exit
---version  output version information and exit
+`-m`, `--mode=MODE`    set file permission bits to `MODE`, not `a=rw - umask`
 
 Both MAJOR and MINOR must be specified when TYPE is b, c, or u, and they
 must be omitted when TYPE is p.  If MAJOR or MINOR begins with 0x or 0X,
