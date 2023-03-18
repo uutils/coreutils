@@ -225,10 +225,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     let iter = lines.filter_map(Result::ok).map(parse_date);
                     Box::new(iter)
                 }
-                Err(_err) => {
+                Err(err) => {
                     return Err(USimpleError::new(
                         2,
-                        format!("{}: No such file or directory", path.display()),
+                        format!("{}: {}", path.display(), err.kind()),
                     ));
                 }
             },

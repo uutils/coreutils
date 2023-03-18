@@ -279,8 +279,15 @@ fn test_date_for_invalid_file() {
     result.no_stdout();
     assert_eq!(
         result.stderr_str().trim(),
-        "date: invalid_file: No such file or directory",
+        "date: invalid_file: entity not found",
     );
+}
+
+#[test]
+fn test_date_for_no_permission_file() {
+    let result = new_ucmd!().arg("-f").arg("/root").fails();
+    result.no_stdout();
+    assert_eq!(result.stderr_str().trim(), "date: /root: permission denied");
 }
 
 #[test]
