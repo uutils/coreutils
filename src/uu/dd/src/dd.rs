@@ -901,7 +901,7 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
     // blocks to this output. Read/write statistics are updated on
     // each iteration and cumulative statistics are reported to
     // the progress reporting thread.
-    while below_count_limit(&i.settings.count, &rstat, &wstat) {
+    while below_count_limit(&i.settings.count, &rstat) {
         // Read a block from the input then write the block to the output.
         //
         // As an optimization, make an educated guess about the
@@ -1108,16 +1108,10 @@ fn calc_loop_bsize(
 
 // Decide if the current progress is below a count=N limit or return
 // true if no such limit is set.
-fn below_count_limit(count: &Option<Num>, rstat: &ReadStat, wstat: &WriteStat) -> bool {
+fn below_count_limit(count: &Option<Num>, rstat: &ReadStat) -> bool {
     match count {
-        Some(Num::Blocks(n)) => {
-            let n = *n;
-            rstat.reads_complete + rstat.reads_partial <= n
-        }
-        Some(Num::Bytes(n)) => {
-            let n = (*n).try_into().unwrap();
-            wstat.bytes_total <= n
-        }
+        Some(Num::Blocks(n)) => rstat.reads_complete + rstat.reads_partial < *n,
+        Some(Num::Bytes(n)) => rstat.bytes_total < *n,
         None => true,
     }
 }
