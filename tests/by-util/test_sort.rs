@@ -1133,7 +1133,7 @@ fn test_tmp_files_deleted_on_sigint() {
         for _ in 0..40 {
             let lines = rand_pcg::Pcg32::seed_from_u64(123)
                 .sample_iter(rand::distributions::uniform::Uniform::new(0, 10000))
-                .take(100000)
+                .take(100_000)
                 .map(|x| x.to_string() + "\n")
                 .collect::<String>();
             file.write_all(lines.as_bytes()).unwrap();
