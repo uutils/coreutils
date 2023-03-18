@@ -300,3 +300,13 @@ fn test_invalid_format_string() {
     result.no_stdout();
     assert!(result.stderr_str().starts_with("date: invalid format "));
 }
+
+#[test]
+fn test_invalid_date_string() {
+    new_ucmd!()
+        .arg("-d")
+        .arg("foo")
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid date");
+}
