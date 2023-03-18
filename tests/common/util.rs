@@ -2812,7 +2812,7 @@ mod tests {
     #[should_panic]
     fn test_cmd_result_stdout_check_when_false_then_panics() {
         let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
-        result.stdout_check(|s| s.is_empty());
+        result.stdout_check(<[u8]>::is_empty);
     }
 
     #[cfg(feature = "echo")]
@@ -3055,9 +3055,10 @@ mod tests {
         // check `child.is_alive()` and `child.delay()` is working
         let mut trials = 10;
         while child.is_alive() {
-            if trials <= 0 {
-                panic!("Assertion failed: child process is still alive.")
-            }
+            assert!(
+                trials > 0,
+                "Assertion failed: child process is still alive."
+            );
 
             child.delay(500);
             trials -= 1;
