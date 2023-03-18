@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE
+// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE
 
 mod datastructures;
 use datastructures::*;
@@ -49,6 +49,8 @@ use nix::{
     fcntl::{posix_fadvise, PosixFadviseAdvice},
 };
 use uucore::display::Quotable;
+#[cfg(unix)]
+use uucore::error::set_exit_code;
 use uucore::error::{FromIo, UResult};
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 #[cfg(target_os = "linux")]
@@ -200,14 +202,25 @@ impl Source {
                 Err(e) => Err(e),
             },
             #[cfg(unix)]
-            Self::StdinFile(f) => match io::copy(&mut f.take(n), &mut io::sink()) {
-                Ok(m) if m < n => {
-                    show_error!("'standard input': cannot skip to specified offset");
-                    Ok(m)
+            Self::StdinFile(f) => {
+                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
+                    if len < n {
+                        // GNU compatibility:
+                        // this case prints the stats but sets the exit code to 1
+                        show_error!("'standard input': cannot skip: Invalid argument");
+                        set_exit_code(1);
+                        return Ok(len);
+                    }
                 }
-                Ok(m) => Ok(m),
-                Err(e) => Err(e),
-            },
+                match io::copy(&mut f.take(n), &mut io::sink()) {
+                    Ok(m) if m < n => {
+                        show_error!("'standard input': cannot skip to specified offset");
+                        Ok(m)
+                    }
+                    Ok(m) => Ok(m),
+                    Err(e) => Err(e),
+                }
+            }
             Self::File(f) => f.seek(io::SeekFrom::Start(n)),
             #[cfg(unix)]
             Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
@@ -527,7 +540,19 @@ impl Dest {
     fn seek(&mut self, n: u64) -> io::Result<u64> {
         match self {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
-            Self::File(f, _) => f.seek(io::SeekFrom::Start(n)),
+            Self::File(f, _) => {
+                #[cfg(unix)]
+                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
+                    if len < n {
+                        // GNU compatibility:
+                        // this case prints the stats but sets the exit code to 1
+                        show_error!("'standard output': cannot seek: Invalid argument");
+                        set_exit_code(1);
+                        return Ok(len);
+                    }
+                }
+                f.seek(io::SeekFrom::Start(n))
+            }
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
@@ -1131,6 +1156,20 @@ fn is_stdout_redirected_to_seekable_file() -> bool {
         }
         Err(_) => false,
     }
+}
+
+/// Try to get the len if it is a block device
+#[cfg(unix)]
+fn try_get_len_of_block_device(file: &mut File) -> io::Result<Option<u64>> {
+    let ftype = file.metadata()?.file_type();
+    if !ftype.is_block_device() {
+        return Ok(None);
+    }
+
+    // FIXME: this can be replaced by file.stream_len() when stable.
+    let len = file.seek(SeekFrom::End(0))?;
+    file.rewind()?;
+    Ok(Some(len))
 }
 
 /// Decide whether the named file is a named pipe, also known as a FIFO.
