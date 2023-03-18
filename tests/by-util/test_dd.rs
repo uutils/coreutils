@@ -1514,3 +1514,17 @@ fn test_skip_input_fifo() {
     assert!(output.stdout.is_empty());
     assert_eq!(&output.stderr, b"1+0 records in\n1+0 records out\n");
 }
+
+/// Test for reading part of stdin from each of two child processes.
+#[cfg(all(not(windows), feature = "printf"))]
+#[test]
+fn test_multiple_processes_reading_stdin() {
+    // TODO Investigate if this is possible on Windows.
+    let printf = format!("{TESTS_BINARY} printf 'abcdef\n'");
+    let dd_skip = format!("{TESTS_BINARY} dd bs=1 skip=3 count=0");
+    let dd = format!("{TESTS_BINARY} dd");
+    UCommand::new()
+        .arg(format!("{printf} | ( {dd_skip} && {dd} ) 2> /dev/null"))
+        .succeeds()
+        .stdout_only("def\n");
+}
