@@ -46,10 +46,8 @@ impl<'a> BufferedOutput<'a> {
     /// Flush the partial block stored in the internal buffer.
     pub(crate) fn flush(&mut self) -> std::io::Result<WriteStat> {
         let wstat = self.inner.write_blocks(&self.buf)?;
-        let n = wstat.bytes_total;
-        for _ in 0..n {
-            self.buf.remove(0);
-        }
+        let n = wstat.bytes_total.try_into().unwrap();
+        self.buf.drain(0..n);
         Ok(wstat)
     }
 
@@ -70,8 +68,19 @@ impl<'a> BufferedOutput<'a> {
     /// block. The returned [`WriteStat`] object will include the
     /// number of blocks written during execution of this function.
     pub(crate) fn write_blocks(&mut self, buf: &[u8]) -> std::io::Result<WriteStat> {
-        // Concatenate the old partial block with the new incoming bytes.
-        let towrite = [&self.buf, buf].concat();
+        // Split the incoming buffer into two parts: the bytes to write
+        // and the bytes to buffer for next time.
+        //
+        // If `buf` does not include enough bytes to form a full block,
+        // just buffer the whole thing and write zero blocks.
+        let n = self.buf.len() + buf.len();
+        let rem = n % self.inner.settings.obs;
+        let i = buf.len().saturating_sub(rem);
+        let (to_write, to_buffer) = buf.split_at(i);
+
+        // Concatenate the old partial block with the new bytes to form
+        // some number of complete blocks.
+        self.buf.extend_from_slice(to_write);
 
         // Write all complete blocks to the inner block writer.
         //
@@ -79,19 +88,15 @@ impl<'a> BufferedOutput<'a> {
         // partial block were `b"ab"` and the new incoming bytes were
         // `b"cdefg"`, then we would write blocks `b"abc"` and
         // b`"def"` to the inner block writer.
-        let n = towrite.len();
-        let rem = n % self.inner.settings.obs;
-        let wstat = self.inner.write_blocks(&towrite[..n - rem])?;
-        self.buf.clear();
+        let wstat = self.inner.write_blocks(&self.buf)?;
 
         // Buffer any remaining bytes as a partial block.
         //
         // Continuing the example above, the last byte `b"g"` would be
         // buffered as a partial block until the next call to
         // `write_blocks()`.
-        for byte in &towrite[n - rem..] {
-            self.buf.push(*byte);
-        }
+        self.buf.clear();
+        self.buf.extend_from_slice(to_buffer);
 
         Ok(wstat)
     }
