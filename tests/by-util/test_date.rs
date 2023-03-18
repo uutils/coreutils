@@ -267,6 +267,24 @@ fn test_date_set_valid_2() {
 }
 
 #[test]
+fn test_date_for_invalid_file() {
+    let result = new_ucmd!().arg("--file").arg("invalid_file").fails();
+    result.no_stdout();
+    assert_eq!(
+        result.stderr_str().trim(),
+        "date: invalid_file: No such file or directory",
+    );
+}
+
+#[test]
+fn test_date_for_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_date_for_file";
+    at.touch(file);
+    ucmd.arg("--file").arg(file).succeeds();
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 /// TODO: expected to fail currently; change to succeeds() when required.
 fn test_date_set_valid_3() {
