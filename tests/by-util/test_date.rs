@@ -43,7 +43,6 @@ fn test_date_rfc_3339() {
     }
 }
 
-
 #[test]
 fn test_date_rfc_3339_invalid_arg() {
     for param in ["--iso-3339", "--rfc-3"] {
