@@ -190,7 +190,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -303,7 +303,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -359,7 +359,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -455,7 +455,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
@@ -503,7 +503,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
@@ -535,7 +535,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
@@ -564,7 +564,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: Install dependencies
       shell: bash
       run: |
@@ -643,7 +643,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -900,7 +900,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -982,7 +982,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: rust toolchain ~ install
       run: |
         ## rust toolchain ~ install
@@ -1068,7 +1068,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: AVD cache
       uses: actions/cache@v3
       id: avd-cache
@@ -1130,7 +1130,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     - name: Prepare, build and test
       ## spell-checker:ignore (ToDO) sshfs usesh vmactions
       uses: vmactions/freebsd-vm@v0.3.0
@@ -1211,7 +1211,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.2
       with:
-        version: "v0.4.0-pre.9"
+        version: "v0.4.0-pre.11"
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
     - name: Initialize workflow variables
