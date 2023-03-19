@@ -82,10 +82,10 @@ fn _du_basics_subdir(s: &str) {
 ))]
 fn _du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "8\tsubdir/deeper\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "0\tsubdir/deeper\n");
+    } else {
+        assert_eq!(s, "8\tsubdir/deeper\n");
     }
 }
 
@@ -164,10 +164,10 @@ fn _du_soft_link(s: &str) {
 ))]
 fn _du_soft_link(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "16\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "16\tsubdir/links\n");
     }
 }
 
@@ -212,10 +212,10 @@ fn _du_hard_link(s: &str) {
 ))]
 fn _du_hard_link(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "16\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "16\tsubdir/links\n");
     }
 }
 
@@ -255,10 +255,10 @@ fn _du_d_flag(s: &str) {
 ))]
 fn _du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "28\t./subdir\n36\t.\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\t./subdir\n8\t.\n");
+    } else {
+        assert_eq!(s, "28\t./subdir\n36\t.\n");
     }
 }
 
@@ -303,10 +303,10 @@ fn _du_dereference(s: &str) {
 ))]
 fn _du_dereference(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "8\tsubdir/links/deeper_dir\n24\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "0\tsubdir/links/deeper_dir\n8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "8\tsubdir/links/deeper_dir\n24\tsubdir/links\n");
     }
 }
 

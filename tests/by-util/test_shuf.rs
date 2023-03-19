@@ -10,7 +10,7 @@ fn test_output_is_random_permutation() {
     let input_seq = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let input = input_seq
         .iter()
-        .map(|x| x.to_string())
+        .map(ToString::to_string)
         .collect::<Vec<String>>()
         .join("\n");
 
@@ -52,7 +52,7 @@ fn test_echo() {
         .args(
             &input_seq
                 .iter()
-                .map(|x| x.to_string())
+                .map(ToString::to_string)
                 .collect::<Vec<String>>(),
         )
         .succeeds();
@@ -74,7 +74,7 @@ fn test_head_count() {
     let input_seq = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let input = input_seq
         .iter()
-        .map(|x| x.to_string())
+        .map(ToString::to_string)
         .collect::<Vec<String>>()
         .join("\n");
 
@@ -105,7 +105,7 @@ fn test_repeat() {
     let input_seq = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let input = input_seq
         .iter()
-        .map(|x| x.to_string())
+        .map(ToString::to_string)
         .collect::<Vec<String>>()
         .join("\n");
 

@@ -138,3 +138,19 @@ fn test_kill_after_long() {
         .no_stdout()
         .no_stderr();
 }
+
+#[test]
+fn test_kill_subprocess() {
+    new_ucmd!()
+        .args(&[
+            // Make sure the CI can spawn the subprocess.
+            "10",
+            "sh",
+            "-c",
+            "sh -c \"trap 'echo xyz' TERM; sleep 30\"",
+        ])
+        .fails()
+        .code_is(124)
+        .stdout_contains("xyz")
+        .stderr_contains("Terminated");
+}

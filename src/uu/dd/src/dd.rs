@@ -27,11 +27,14 @@ use std::cmp;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Stdin, Stdout, Write};
-#[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
+use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
+#[cfg(unix)]
+use std::os::unix::{
+    fs::FileTypeExt,
+    io::{AsRawFd, FromRawFd},
+};
 use std::path::Path;
 use std::sync::mpsc;
 use std::thread;
@@ -93,12 +96,20 @@ impl Num {
 }
 
 /// Data sources.
+///
+/// Use [`Source::stdin_as_file`] if available to enable more
+/// fine-grained access to reading from stdin.
 enum Source {
     /// Input from stdin.
-    Stdin(Stdin),
+    #[cfg(not(unix))]
+    Stdin(io::Stdin),
 
     /// Input from a file.
     File(File),
+
+    /// Input from stdin, opened from its file descriptor.
+    #[cfg(unix)]
+    StdinFile(File),
 
     /// Input from a named pipe, also known as a FIFO.
     #[cfg(unix)]
@@ -106,9 +117,33 @@ enum Source {
 }
 
 impl Source {
+    /// Create a source from stdin using its raw file descriptor.
+    ///
+    /// This returns an instance of the `Source::StdinFile` variant,
+    /// using the raw file descriptor of [`std::io::Stdin`] to create
+    /// the [`std::fs::File`] parameter. You can use this instead of
+    /// `Source::Stdin` to allow reading from stdin without consuming
+    /// the entire contents of stdin when this process terminates.
+    #[cfg(unix)]
+    fn stdin_as_file() -> Self {
+        let fd = io::stdin().as_raw_fd();
+        let f = unsafe { File::from_raw_fd(fd) };
+        Self::StdinFile(f)
+    }
+
     fn skip(&mut self, n: u64) -> io::Result<u64> {
         match self {
+            #[cfg(not(unix))]
             Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
+                Ok(m) if m < n => {
+                    show_error!("'standard input': cannot skip to specified offset");
+                    Ok(m)
+                }
+                Ok(m) => Ok(m),
+                Err(e) => Err(e),
+            },
+            #[cfg(unix)]
+            Self::StdinFile(f) => match io::copy(&mut f.take(n), &mut io::sink()) {
                 Ok(m) if m < n => {
                     show_error!("'standard input': cannot skip to specified offset");
                     Ok(m)
@@ -126,8 +161,11 @@ impl Source {
 impl Read for Source {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
+            #[cfg(not(unix))]
             Self::Stdin(stdin) => stdin.read(buf),
             Self::File(f) => f.read(buf),
+            #[cfg(unix)]
+            Self::StdinFile(f) => f.read(buf),
             #[cfg(unix)]
             Self::Fifo(f) => f.read(buf),
         }
@@ -151,7 +189,10 @@ struct Input<'a> {
 impl<'a> Input<'a> {
     /// Instantiate this struct with stdin as a source.
     fn new_stdin(settings: &'a Settings) -> UResult<Self> {
+        #[cfg(not(unix))]
         let mut src = Source::Stdin(io::stdin());
+        #[cfg(unix)]
+        let mut src = Source::stdin_as_file();
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
