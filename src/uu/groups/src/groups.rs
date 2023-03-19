@@ -17,7 +17,12 @@
 
 use std::error::Error;
 use std::fmt::Display;
-use uucore::{display::Quotable, entries::{get_groups_gnu, gid2grp, Locate, Passwd}, error::{UError, UResult}, format_usage, help_about, help_usage, show};
+use uucore::{
+    display::Quotable,
+    entries::{get_groups_gnu, gid2grp, Locate, Passwd},
+    error::{UError, UResult},
+    format_usage, help_about, help_usage, show,
+};
 
 use clap::{crate_version, Arg, ArgAction, Command};
 
