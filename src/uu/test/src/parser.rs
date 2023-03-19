@@ -90,7 +90,7 @@ impl Symbol {
     }
 }
 
-/// Implement Display trait for Symbol to make it easier to print a Symbol
+/// Implement Display trait for Symbol to make it easier to print
 impl std::fmt::Display for Symbol {
     /// Format a Symbol for printing
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
