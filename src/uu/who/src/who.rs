@@ -18,7 +18,7 @@ use std::ffi::CStr;
 use std::fmt::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 mod options {
     pub const ALL: &str = "all";
@@ -38,8 +38,8 @@ mod options {
     pub const FILE: &str = "FILE"; // if length=1: FILE, if length=2: ARG1 ARG2
 }
 
-static ABOUT: &str = "Print information about users who are currently logged in.";
-const USAGE: &str = "{} [OPTION]... [ FILE | ARG1 ARG2 ]";
+const ABOUT: &str = help_about!("who.md");
+const USAGE: &str = help_usage!("who.md");
 
 #[cfg(target_os = "linux")]
 static RUNLEVEL_HELP: &str = "print current runlevel";
