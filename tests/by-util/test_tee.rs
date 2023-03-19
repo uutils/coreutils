@@ -130,7 +130,7 @@ mod linux_only {
     }
 
     fn run_tee(proc: &mut UCommand) -> (String, Output) {
-        let content = (1..=100000).map(|x| format!("{x}\n")).collect::<String>();
+        let content = (1..=100_000).map(|x| format!("{x}\n")).collect::<String>();
 
         #[allow(deprecated)]
         let output = proc
