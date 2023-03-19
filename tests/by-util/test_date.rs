@@ -44,6 +44,13 @@ fn test_date_rfc_3339() {
 }
 
 #[test]
+fn test_date_rfc_3339_invalid_arg() {
+    for param in ["--iso-3339", "--rfc-3"] {
+        new_ucmd!().arg(format!("{param}=foo")).fails();
+    }
+}
+
+#[test]
 fn test_date_rfc_8601_default() {
     let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\n$").unwrap();
     for param in ["--iso-8601", "--i"] {

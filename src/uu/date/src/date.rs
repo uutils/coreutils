@@ -314,6 +314,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RFC_3339)
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
+                .value_parser([DATE, SECOND, SECONDS, NS])
                 .help(RFC_3339_HELP_STRING),
         )
         .arg(
