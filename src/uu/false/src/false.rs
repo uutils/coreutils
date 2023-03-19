@@ -7,14 +7,9 @@
 use clap::{Arg, ArgAction, Command};
 use std::{ffi::OsString, io::Write};
 use uucore::error::{set_exit_code, UResult};
+use uucore::help_about;
 
-static ABOUT: &str = "\
-Returns false, an unsuccessful exit status.
-
-Immediately returns with the exit status `1`. When invoked with one of the recognized options it
-will try to write the help or version text. Any IO error during this operation is diagnosed, yet
-the program will also return `1`.
-";
+const ABOUT: &str = help_about!("false.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
