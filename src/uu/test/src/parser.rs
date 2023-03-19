@@ -90,6 +90,24 @@ impl Symbol {
     }
 }
 
+impl std::fmt::Display for Symbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match &self {
+            Self::LParen => OsString::from("("),
+            Self::Bang => OsString::from("!"),
+            Self::BoolOp(s)
+            | Self::Literal(s)
+            | Self::Op(Operator::String(s))
+            | Self::Op(Operator::Int(s))
+            | Self::Op(Operator::File(s))
+            | Self::UnaryOp(UnaryOperator::StrlenOp(s))
+            | Self::UnaryOp(UnaryOperator::FiletestOp(s)) => s.clone(),
+            Self::None => OsString::from("None"),
+        };
+        write!(f, "{}", s.to_string_lossy())
+    }
+}
+
 /// Recursive descent parser for test, which converts a list of OsStrings
 /// (typically command line arguments) into a stack of Symbols in postfix
 /// order.
@@ -208,7 +226,7 @@ impl Parser {
 
             // case 2: error if end of stream is `( <any_token>`
             [symbol] => {
-                show_error!("missing argument after ‘{:?}’", symbol);
+                show_error!("missing argument after ‘{}’", symbol);
                 std::process::exit(2);
             }
 
