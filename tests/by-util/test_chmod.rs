@@ -545,8 +545,8 @@ fn test_mode_after_dash_dash() {
     run_single_test(
         &TestCase {
             args: vec!["--", "-r", TEST_FILE],
-            before: 0o100777,
-            after: 0o100333,
+            before: 0o100_777,
+            after: 0o100_333,
         },
         &at,
         ucmd,
@@ -570,7 +570,7 @@ fn test_chmod_file_after_non_existing_file() {
         .stderr_contains("chmod: cannot access 'does-not-exist': No such file or directory")
         .code_is(1);
 
-    assert_eq!(at.metadata(TEST_FILE).permissions().mode(), 0o100764);
+    assert_eq!(at.metadata(TEST_FILE).permissions().mode(), 0o100_764);
 
     scene
         .ucmd()
@@ -581,7 +581,7 @@ fn test_chmod_file_after_non_existing_file() {
         .fails()
         .no_stderr()
         .code_is(1);
-    assert_eq!(at.metadata("file2").permissions().mode(), 0o100764);
+    assert_eq!(at.metadata("file2").permissions().mode(), 0o100_764);
 }
 
 #[test]
@@ -617,7 +617,7 @@ fn test_chmod_file_symlink_after_non_existing_file() {
         .stderr_contains(expected_stderr);
     assert_eq!(
         at.metadata(test_existing_symlink).permissions().mode(),
-        0o100764
+        0o100_764
     );
 }
 
@@ -679,8 +679,8 @@ fn test_gnu_repeating_options() {
 fn test_gnu_special_filenames() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let perms_before = Permissions::from_mode(0o100640);
-    let perms_after = Permissions::from_mode(0o100440);
+    let perms_before = Permissions::from_mode(0o100_640);
+    let perms_after = Permissions::from_mode(0o100_440);
 
     make_file(&at.plus_as_string("--"), perms_before.mode());
     scene.ucmd().arg("-w").arg("--").arg("--").succeeds();
