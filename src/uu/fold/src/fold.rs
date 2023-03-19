@@ -13,13 +13,12 @@ use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 const TAB_WIDTH: usize = 8;
 
-static USAGE: &str = "{} [OPTION]... [FILE]...";
-static ABOUT: &str = "Writes each file (or standard input if no files are given)
- to standard output whilst breaking long lines";
+const USAGE: &str = help_usage!("fold.md");
+const ABOUT: &str = help_about!("fold.md");
 
 mod options {
     pub const BYTES: &str = "bytes";
