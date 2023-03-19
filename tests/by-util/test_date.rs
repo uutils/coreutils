@@ -1,7 +1,5 @@
 extern crate regex;
 
-use std::os::unix::prelude::PermissionsExt;
-
 use self::regex::Regex;
 use crate::common::util::TestScenario;
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -291,10 +289,22 @@ fn test_date_for_no_permission_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.touch(FILE);
-    at.append(FILE, "no permission");
-
-    at.metadata(FILE).permissions().set_mode(0o000);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        at.touch(FILE);
+        at.append(FILE, "no permission");
+        at.metadata(FILE).permissions().set_mode(0o000);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::prelude::*;
+        OpenOptions::new()
+            .access_mode(0)
+            .create(true)
+            .open(at.append(FILE))
+            .unwrap();
+    }
     let result = scene.ucmd().arg("-f").arg(FILE).fails();
     result.no_stdout();
     assert_eq!(
