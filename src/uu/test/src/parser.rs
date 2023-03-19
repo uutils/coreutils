@@ -90,7 +90,9 @@ impl Symbol {
     }
 }
 
+/// Display trait for a Symbol
 impl std::fmt::Display for Symbol {
+    /// Display a Symbol as a string
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match &self {
             Self::LParen => OsString::from("("),
