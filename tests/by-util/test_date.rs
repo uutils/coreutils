@@ -285,27 +285,31 @@ fn test_date_for_invalid_file() {
 
 #[test]
 fn test_date_for_no_permission_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
     const FILE: &str = "file-no-perm-1";
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        at.touch(FILE);
-        at.append(FILE, "no permission");
-        at.metadata(FILE).permissions().set_mode(0o000);
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(at.plus(FILE))
+            .unwrap();
+        file.set_permissions(std::fs::Permissions::from_mode(0o222))
+            .unwrap();
     }
     #[cfg(windows)]
     {
         use std::os::windows::prelude::*;
-        OpenOptions::new()
-            .access_mode(0)
+        std::fs::OpenOptions::new()
             .create(true)
-            .open(at.append(FILE))
+            .write(true)
+            .share_mode(0)
+            .open(at.plus(FILE))
             .unwrap();
     }
-    let result = scene.ucmd().arg("-f").arg(FILE).fails();
+    let result = ucmd.arg("--file").arg(FILE).fails();
     result.no_stdout();
     assert_eq!(
         result.stderr_str().trim(),
