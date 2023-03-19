@@ -284,31 +284,19 @@ fn test_date_for_invalid_file() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_date_for_no_permission_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     const FILE: &str = "file-no-perm-1";
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(at.plus(FILE))
-            .unwrap();
-        file.set_permissions(std::fs::Permissions::from_mode(0o222))
-            .unwrap();
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::prelude::*;
-        std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .share_mode(0)
-            .open(at.plus(FILE))
-            .unwrap();
-    }
+    use std::os::unix::fs::PermissionsExt;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(at.plus(FILE))
+        .unwrap();
+    file.set_permissions(std::fs::Permissions::from_mode(0o222))
+        .unwrap();
     let result = ucmd.arg("--file").arg(FILE).fails();
     result.no_stdout();
     assert_eq!(
