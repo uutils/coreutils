@@ -425,7 +425,7 @@ fn test_touch_set_date3() {
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(1623786360, 0);
+    let expected = FileTime::from_unix_time(1_623_786_360, 0);
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime, expected);
@@ -466,7 +466,7 @@ fn test_touch_set_date5() {
     #[cfg(windows)]
     let expected = FileTime::from_unix_time(67413, 23456700);
     #[cfg(not(windows))]
-    let expected = FileTime::from_unix_time(67413, 23456789);
+    let expected = FileTime::from_unix_time(67413, 23_456_789);
 
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
@@ -485,7 +485,7 @@ fn test_touch_set_date6() {
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(946684800, 0);
+    let expected = FileTime::from_unix_time(946_684_800, 0);
 
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
@@ -504,7 +504,7 @@ fn test_touch_set_date7() {
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(1074254400, 0);
+    let expected = FileTime::from_unix_time(1_074_254_400, 0);
 
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
