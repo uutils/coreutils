@@ -9,7 +9,9 @@ use regex::Regex;
 #[cfg(not(windows))]
 use std::io::Write;
 
-use crate::common::util::{expected_result, TestScenario};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::common::util::expected_result;
+use crate::common::util::TestScenario;
 
 const SUB_DIR: &str = "subdir/deeper";
 const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";

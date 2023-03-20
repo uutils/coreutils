@@ -10,9 +10,11 @@
 extern crate tail;
 
 use crate::common::random::{AlphanumericNewline, RandomString};
+#[cfg(unix)]
+use crate::common::util::expected_result;
 #[cfg(not(windows))]
 use crate::common::util::is_ci;
-use crate::common::util::{expected_result, TestScenario};
+use crate::common::util::TestScenario;
 use pretty_assertions::assert_eq;
 use rand::distributions::Alphanumeric;
 use rstest::rstest;
