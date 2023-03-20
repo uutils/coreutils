@@ -935,8 +935,9 @@ fn test_missing_argument_after() {
 
     let result = ucmd.args(&["(", "foo"]).fails();
     result.no_stdout();
+    assert_eq!(result.exit_status().code().unwrap(), 2);
     assert_eq!(
         result.stderr_str().trim(),
-        "test: missing argument after ‘foo’"
+        "test: missing argument after 'foo'"
     );
 }
