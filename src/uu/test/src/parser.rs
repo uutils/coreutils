@@ -90,7 +90,8 @@ impl Symbol {
     }
 }
 
-/// Implement Display trait for Symbol to make it easier to print
+/// Implement Display trait for Symbol to make it easier to print useful errors.
+/// We will try to match the format in which the symbol appears in the input.
 impl std::fmt::Display for Symbol {
     /// Format a Symbol for printing
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -228,7 +229,7 @@ impl Parser {
 
             // case 2: error if end of stream is `( <any_token>`
             [symbol] => {
-                show_error!("missing argument after ‘{}’", symbol);
+                show_error!("missing argument after '{}'", symbol);
                 std::process::exit(2);
             }
 
