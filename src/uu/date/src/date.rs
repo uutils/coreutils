@@ -226,10 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     Box::new(iter)
                 }
                 Err(err) => {
-                    return Err(USimpleError::new(
-                        2,
-                        format!("{}: {}", path.display(), err.kind()),
-                    ));
+                    return Err(err.map_err_context(|| path.display().to_string()));
                 }
             },
             DateSource::Now => {

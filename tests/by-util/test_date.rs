@@ -279,7 +279,7 @@ fn test_date_for_invalid_file() {
     result.no_stdout();
     assert_eq!(
         result.stderr_str().trim(),
-        "date: invalid_file: entity not found",
+        "date: invalid_file: No such file or directory",
     );
 }
 
@@ -301,7 +301,7 @@ fn test_date_for_no_permission_file() {
     result.no_stdout();
     assert_eq!(
         result.stderr_str().trim(),
-        format!("date: {FILE}: permission denied")
+        format!("date: {FILE}: Permission denied")
     );
 }
 
