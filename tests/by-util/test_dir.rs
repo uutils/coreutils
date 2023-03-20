@@ -5,7 +5,7 @@ extern crate regex;
 extern crate tempfile;
 
 use self::regex::Regex;
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 /*
  * As dir use the same functions than ls, we don't have to retest them here.

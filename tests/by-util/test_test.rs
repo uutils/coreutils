@@ -10,7 +10,7 @@
 
 // spell-checker:ignore (words) egid euid pseudofloat
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::thread::sleep;
 
 #[test]

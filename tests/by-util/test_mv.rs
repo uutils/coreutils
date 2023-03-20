@@ -1,8 +1,8 @@
 extern crate filetime;
 extern crate time;
 
-use self::filetime::*;
-use crate::common::util::*;
+use self::filetime::FileTime;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {

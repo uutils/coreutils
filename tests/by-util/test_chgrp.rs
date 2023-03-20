@@ -1,7 +1,7 @@
 // spell-checker:ignore (words) nosuchgroup groupname
 
-use crate::common::util::*;
-use rust_users::*;
+use crate::common::util::TestScenario;
+use rust_users::get_effective_gid;
 
 #[test]
 fn test_invalid_option() {

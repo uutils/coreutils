@@ -9,8 +9,8 @@
 
 extern crate tail;
 
-use crate::common::random::*;
-use crate::common::util::*;
+use crate::common::random::{AlphanumericNewline, RandomString};
+use crate::common::util::{expected_result, is_ci, TestScenario};
 use pretty_assertions::assert_eq;
 use rand::distributions::Alphanumeric;
 use rstest::rstest;

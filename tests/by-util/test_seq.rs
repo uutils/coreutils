@@ -1,5 +1,5 @@
 // spell-checker:ignore lmnop xlmnop
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::process::Stdio;
 
 #[test]

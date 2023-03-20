@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (words) RFILE
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::io::{Seek, SeekFrom, Write};
 
 static FILE1: &str = "truncate_test_1";

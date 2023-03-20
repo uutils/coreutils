@@ -1,6 +1,6 @@
 extern crate regex;
 use self::regex::Regex;
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {

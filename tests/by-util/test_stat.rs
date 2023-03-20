@@ -5,7 +5,7 @@
 
 extern crate regex;
 
-use crate::common::util::*;
+use crate::common::util::{expected_result, TestScenario};
 
 #[test]
 fn test_invalid_arg() {

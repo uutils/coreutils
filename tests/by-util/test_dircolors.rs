@@ -1,5 +1,5 @@
 // spell-checker:ignore overridable
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 extern crate dircolors;
 use self::dircolors::{guess_syntax, OutputFmt, StrUtils};

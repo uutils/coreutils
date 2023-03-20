@@ -1,5 +1,5 @@
 #[cfg(not(target_os = "windows"))]
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[cfg(not(target_os = "windows"))]
 #[test]

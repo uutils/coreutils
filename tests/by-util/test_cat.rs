@@ -1,6 +1,6 @@
 // spell-checker:ignore NOFILE
 
-use crate::common::util::*;
+use crate::common::util::{vec_of_size, TestScenario};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
 use std::fs::OpenOptions;

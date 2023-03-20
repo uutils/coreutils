@@ -7,7 +7,7 @@ extern crate regex;
 extern crate tempfile;
 
 use self::regex::Regex;
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
 use std::collections::HashMap;

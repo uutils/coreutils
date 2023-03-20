@@ -5,7 +5,7 @@
 
 extern crate uucore;
 
-use crate::common::util::*;
+use crate::common::util::{expected_result, TestScenario};
 
 use self::uucore::entries::{Locate, Passwd};
 

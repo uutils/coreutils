@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use uucore::display::Quotable;
 // spell-checker:ignore (ToDO) taaaa tbbbb tcccc
 

@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot
 
-use crate::common::util::*;
+use crate::common::util::{is_ci, run_ucmd_as_root, TestScenario};
 
 #[test]
 fn test_invalid_arg() {
