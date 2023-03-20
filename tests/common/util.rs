@@ -693,6 +693,16 @@ impl CmdResult {
     }
 
     #[track_caller]
+    pub fn stderr_matches(&self, regex: &regex::Regex) -> &Self {
+        assert!(
+            regex.is_match(self.stderr_str()),
+            "Stderr does not match regex:\n{}",
+            self.stderr_str()
+        );
+        self
+    }
+
+    #[track_caller]
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &Self {
         assert!(
             !regex.is_match(self.stdout_str()),
