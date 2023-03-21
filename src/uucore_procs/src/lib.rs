@@ -170,11 +170,14 @@ fn parse_help_section(section: &str, content: &str) -> String {
         )
     }
 
+    // Prefix includes space to allow processing of section with level 3-6 headers
+    let section_header_prefix = "## ";
+
     content
         .lines()
         .skip_while(|&l| !is_section_header(l, section))
         .skip(1)
-        .take_while(|l| !l.starts_with("## "))
+        .take_while(|l| !l.starts_with(section_header_prefix))
         .collect::<Vec<_>>()
         .join("\n")
         .trim()
