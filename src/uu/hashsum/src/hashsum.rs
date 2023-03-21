@@ -29,8 +29,11 @@ use uucore::sum::{
     Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
 };
 use uucore::{crash, display::Quotable, show_warning};
+use uucore::{format_usage, help_about, help_usage};
 
 const NAME: &str = "hashsum";
+const ABOUT: &str = help_about!("hashsum.md");
+const USAGE: &str = help_usage!("hashsum.md");
 
 struct Options {
     algoname: &'static str,
@@ -298,7 +301,8 @@ pub fn uu_app_common() -> Command {
     const TEXT_HELP: &str = "read in text mode (default)";
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about("Compute and check message digests.")
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
             Arg::new("binary")
