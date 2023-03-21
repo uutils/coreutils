@@ -24,9 +24,7 @@ use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::format_usage;
-use uucore::help_about;
-use uucore::help_usage;
+use uucore::{format_usage, help_about, help_usage};
 use uucore::sum::{
     Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224, Sha3_256,
     Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
