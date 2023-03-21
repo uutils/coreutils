@@ -12,7 +12,7 @@ use self::touch::filetime::{self, FileTime};
 extern crate time;
 use time::macros::{datetime, format_description};
 
-use crate::common::util::*;
+use crate::common::util::{AtPath, TestScenario};
 use std::fs::remove_file;
 use std::path::PathBuf;
 

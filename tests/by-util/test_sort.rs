@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {

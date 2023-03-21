@@ -1,5 +1,5 @@
 // spell-checker:ignore regfile
-use crate::common::util::*;
+use crate::common::util::{get_root_path, TestScenario};
 
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 

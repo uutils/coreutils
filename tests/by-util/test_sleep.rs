@@ -1,7 +1,7 @@
 use rstest::rstest;
 
 // spell-checker:ignore dont
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 use std::time::{Duration, Instant};
 

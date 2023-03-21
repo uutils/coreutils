@@ -1,6 +1,6 @@
 // spell-checker:ignore parenb parmrk ixany iuclc onlcr ofdel icanon noflsh
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {

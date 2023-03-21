@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::env;
 use std::path::Path;
 use tempfile::tempdir;

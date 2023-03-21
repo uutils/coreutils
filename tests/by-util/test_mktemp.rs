@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) gpghome
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 use uucore::display::Quotable;
 

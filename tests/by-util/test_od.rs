@@ -6,8 +6,8 @@
 
 extern crate unindent;
 
-use self::unindent::*;
-use crate::common::util::*;
+use self::unindent::unindent;
+use crate::common::util::TestScenario;
 use std::env;
 use std::fs::remove_file;
 use std::fs::File;

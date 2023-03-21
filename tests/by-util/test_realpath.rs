@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::{get_root_path, TestScenario};
 
 #[cfg(windows)]
 use regex::Regex;

@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (methods) hexdigest
 
-use crate::common::util::*;
+use crate::common::util::{AtPath, TestScenario};
 
 use std::time::{Duration, SystemTime};
 

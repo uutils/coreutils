@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::borrow::Cow;
 use std::path::Path;
 

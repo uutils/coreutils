@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 const DIR: &str = "dir";
 const DIR_FILE: &str = "dir/file";

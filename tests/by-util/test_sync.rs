@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 extern crate tempfile;
 use std::fs;
 use tempfile::tempdir;

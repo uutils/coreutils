@@ -1,8 +1,8 @@
 // spell-checker:ignore (words) helloworld nodir objdump n'source
 
-use crate::common::util::*;
+use crate::common::util::{is_ci, TestScenario};
 use filetime::FileTime;
-use rust_users::*;
+use rust_users::{get_effective_gid, get_effective_uid};
 use std::os::unix::fs::PermissionsExt;
 #[cfg(not(any(windows, target_os = "freebsd")))]
 use std::process::Command;
