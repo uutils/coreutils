@@ -1,6 +1,6 @@
 # cut
 
-<!-- spell-checker:ignore sourcefile -->
+<!-- spell-checker:ignore sourcefile sourcefiles -->
 
 ```
 cut [-d|-w] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+
