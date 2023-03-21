@@ -16,15 +16,15 @@ use clap::{crate_version, Arg, ArgAction, Command};
 pub use factor::*;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::{show_error, show_warning};
+use uucore::{format_usage, help_about, help_usage, show_error, show_warning};
 
 mod miller_rabin;
 pub mod numeric;
 mod rho;
 pub mod table;
 
-static ABOUT: &str = r#"Print the prime factors of the given NUMBER(s).
-If none are specified, read from standard input."#;
+const ABOUT: &str = help_about!("factor.md");
+const USAGE: &str = help_usage!("factor.md");
 
 mod options {
     pub static NUMBER: &str = "NUMBER";
@@ -84,6 +84,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(Arg::new(options::NUMBER).action(ArgAction::Append))
 }
