@@ -120,9 +120,17 @@ static ARGV: Lazy<Vec<OsString>> = Lazy::new(|| wild::args_os().collect());
 
 static UTIL_NAME: Lazy<String> = Lazy::new(|| {
     if get_utility_is_second_arg() {
-        &ARGV[1]
+        let i = match ARGV[1].eq("manpage") {
+            true => 1,
+            false => 0,
+        };
+        &ARGV[1 + i]
     } else {
-        &ARGV[0]
+        let i = match ARGV[0].eq("manpage") {
+            true => 1,
+            false => 0,
+        };
+        &ARGV[i]
     }
     .to_string_lossy()
     .into_owned()
