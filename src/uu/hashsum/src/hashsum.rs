@@ -24,6 +24,9 @@ use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
 use uucore::error::{FromIo, UError, UResult};
+use uucore::format_usage;
+use uucore::help_about;
+use uucore::help_usage;
 use uucore::sum::{
     Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224, Sha3_256,
     Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
@@ -31,6 +34,8 @@ use uucore::sum::{
 use uucore::{crash, display::Quotable, show_warning};
 
 const NAME: &str = "hashsum";
+const ABOUT: &str = help_about!("hashsum.md");
+const USAGE: &str = help_usage!("hashsum.md");
 
 struct Options {
     algoname: &'static str,
@@ -298,7 +303,8 @@ pub fn uu_app_common() -> Command {
     const TEXT_HELP: &str = "read in text mode (default)";
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about("Compute and check message digests.")
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
             Arg::new("binary")
