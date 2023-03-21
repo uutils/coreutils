@@ -174,7 +174,7 @@ fn parse_help_section(section: &str, content: &str) -> String {
         .lines()
         .skip_while(|&l| !is_section_header(l, section))
         .skip(1)
-        .take_while(|l| !l.starts_with("##"))
+        .take_while(|l| !l.starts_with("## "))
         .collect::<Vec<_>>()
         .join("\n")
         .trim()
