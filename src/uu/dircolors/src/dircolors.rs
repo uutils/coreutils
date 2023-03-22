@@ -136,12 +136,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     } else if files[0].eq("-") {
         let fin = BufReader::new(std::io::stdin());
-        result = parse(fin.lines().filter_map(Result::ok), &out_format, files[0]);
+        result = parse(fin.lines().map_while(Result::ok), &out_format, files[0]);
     } else {
         match File::open(files[0]) {
             Ok(f) => {
                 let fin = BufReader::new(f);
-                result = parse(fin.lines().filter_map(Result::ok), &out_format, files[0]);
+                result = parse(fin.lines().map_while(Result::ok), &out_format, files[0]);
             }
             Err(e) => {
                 return Err(USimpleError::new(
