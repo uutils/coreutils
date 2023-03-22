@@ -206,6 +206,17 @@ export LS_COLORS
     check("[^a]_negation", "b_negation", expectation_if_match);
 }
 
+#[test]
+fn test_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir(DIR);
+    ucmd.env("SHELL", "/bin/bash")
+        .arg(DIR)
+        .succeeds()
+        .stdout_is("LS_COLORS='';\nexport LS_COLORS\n")
+        .no_stderr();
+}
+
 fn test_helper(file_name: &str, term: &str) {
     new_ucmd!()
         .env("TERM", term)
