@@ -229,7 +229,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 match File::open(path) {
                     Ok(file) => {
                         let lines = BufReader::new(file).lines();
-                        let iter = lines.filter_map(Result::ok).map(parse_date);
+                        let iter = lines.map_while(Result::ok).map(parse_date);
                         Box::new(iter)
                     }
                     Err(err) => {
