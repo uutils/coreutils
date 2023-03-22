@@ -464,7 +464,7 @@ fn test_touch_set_date5() {
     // Slightly different result on Windows for nano seconds
     // TODO: investigate
     #[cfg(windows)]
-    let expected = FileTime::from_unix_time(67413, 23456700);
+    let expected = FileTime::from_unix_time(67413, 23_456_700);
     #[cfg(not(windows))]
     let expected = FileTime::from_unix_time(67413, 23_456_789);
 
