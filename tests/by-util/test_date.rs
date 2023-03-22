@@ -284,6 +284,16 @@ fn test_date_for_invalid_file() {
 }
 
 #[test]
+fn test_date_for_dir_as_file() {
+    let result = new_ucmd!().arg("--file").arg("/").fails();
+    result.no_stdout();
+    assert_eq!(
+        result.stderr_str().trim(),
+        "date: expected file, got directory",
+    );
+}
+
+#[test]
 fn test_date_for_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_date_for_file";
