@@ -233,7 +233,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         Box::new(iter)
                     }
                     Err(err) => {
-                        let uio_error: Box<UIoError> = err.map_err_context(|| format!("{}", path.quote()));
+                        let uio_error: Box<UIoError> =
+                            err.map_err_context(|| format!("{}", path.quote()));
                         return Err(uio_error);
                     }
                 }
