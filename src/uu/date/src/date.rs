@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use uucore::display::Quotable;
 #[cfg(not(any(target_os = "macos", target_os = "redox")))]
 use uucore::error::FromIo;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UIoError, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
@@ -232,11 +232,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         let iter = lines.filter_map(Result::ok).map(parse_date);
                         Box::new(iter)
                     }
-                    Err(_err) => {
-                        return Err(USimpleError::new(
-                            2,
-                            format!("{}: No such file or directory", path.display()),
-                        ));
+                    Err(err) => {
+                        let uio_error: Box<UIoError> = err.map_err_context(|| format!("{}", path.quote()));
+                        return Err(uio_error);
                     }
                 }
             }
