@@ -256,6 +256,31 @@ mod tests {
     }
 
     #[test]
+    fn section_parsing_with_additional_headers() {
+        let input = "\
+            # ls\n\
+            ## after section\n\
+            This is some section\n\
+            \n\
+            ### level 3 header\n\
+            \n\
+            Additional text under the section.\n\
+            \n\
+            #### level 4 header\n\
+            \n\
+            Yet another paragraph\n";
+
+        assert_eq!(
+            parse_help_section("after section", input),
+            "This is some section\n\n\
+            ### level 3 header\n\n\
+            Additional text under the section.\n\n\
+            #### level 4 header\n\n\
+            Yet another paragraph"
+        );
+    }
+
+    #[test]
     #[should_panic]
     fn section_parsing_panic() {
         let input = "\
