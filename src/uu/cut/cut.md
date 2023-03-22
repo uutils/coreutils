@@ -17,7 +17,7 @@ a sequence (which columns to print), and provide a data source
 
 Use `--bytes` (`-b`) or `--characters` (`-c`) to specify byte mode
 
-Use --fields (-f) to specify field mode, where each line is broken into
+Use `--fields` (`-f`) to specify field mode, where each line is broken into
 fields identified by a delimiter character. For example for a typical CSV
 you could use this in combination with setting comma as the delimiter
 
@@ -81,7 +81,7 @@ Set the delimiter which separates fields in the file using the
 `--delimiter` (`-d`) option. Setting the delimiter is optional.
 If not set, a default delimiter of Tab will be used.
 
-If the -w option is provided, fields will be separated by any number
+If the `-w` option is provided, fields will be separated by any number
 of whitespace characters (Space and Tab). The output delimiter will
 be a Tab unless explicitly specified. Only one of `-d` or `-w` option can be specified.
 This is an extension adopted from FreeBSD.
