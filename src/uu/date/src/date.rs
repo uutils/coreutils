@@ -232,10 +232,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         let iter = lines.map_while(Result::ok).map(parse_date);
                         Box::new(iter)
                     }
-                    Err(err) => {
-                        let uio_error: Box<UIoError> =
-                            err.map_err_context(|| format!("{}", path.quote()));
-                        return Err(uio_error);
+                    Err(_err) => {
+                        return Err(USimpleError::new(
+                            2,
+                            String::new()
+                        ));
                     }
                 }
             }
