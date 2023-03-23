@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, prompt_yes, show};
+use uucore::{format_usage, help_about, help_usage, prompt_yes, show};
 
 use fs_extra::dir::{
     get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
@@ -53,12 +53,9 @@ pub enum OverwriteMode {
     Force,
 }
 
-static ABOUT: &str = "Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
+static ABOUT: &str = help_about!("mv.md");
 static LONG_HELP: &str = "";
-const USAGE: &str = "\
-    {} [OPTION]... [-T] SOURCE DEST
-    {} [OPTION]... SOURCE... DIRECTORY
-    {} [OPTION]... -t DIRECTORY SOURCE...";
+const USAGE: &str = help_usage!("mv.md");
 
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";
