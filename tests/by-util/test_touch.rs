@@ -49,12 +49,7 @@ fn str_to_filetime(format: &str, s: &str) -> FileTime {
         _ => panic!("unexpected dt format"),
     };
     let tm = time::PrimitiveDateTime::parse(s, &format_description).unwrap();
-    let d = match time::OffsetDateTime::now_local() {
-        Ok(now) => now,
-        Err(e) => {
-            panic!("Error {e} retrieving the OffsetDateTime::now_local");
-        }
-    };
+    let d = time::OffsetDateTime::now_utc();
     let offset_dt = tm.assume_offset(d.offset());
     FileTime::from_unix_time(offset_dt.unix_timestamp(), tm.nanosecond())
 }
