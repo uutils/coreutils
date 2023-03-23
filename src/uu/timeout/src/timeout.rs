@@ -17,8 +17,14 @@ use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
 use uucore::process::ChildExt;
-use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
-use uucore::{format_usage, show_error};
+
+#[cfg(unix)]
+use uucore::signals::enable_pipe_errors;
+
+use uucore::{
+    format_usage, show_error,
+    signals::{signal_by_name_or_value, signal_name_by_value},
+};
 
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
 const USAGE: &str = "{} [OPTION] DURATION COMMAND...";
@@ -285,21 +291,6 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
     signal
 }
 
-#[cfg(unix)]
-fn enable_pipe_errors() -> std::io::Result<()> {
-    let ret = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
-    if ret == libc::SIG_ERR {
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, ""));
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn enable_pipe_errors() -> std::io::Result<()> {
-    // Do nothing.
-    Ok(())
-}
-
 /// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
 
 fn timeout(
@@ -314,7 +305,7 @@ fn timeout(
     if !foreground {
         unsafe { libc::setpgid(0, 0) };
     }
-
+    #[cfg(unix)]
     enable_pipe_errors()?;
 
     let process = &mut process::Command::new(&cmd[0])
