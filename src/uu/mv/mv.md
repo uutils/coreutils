@@ -1,7 +1,6 @@
 # mv
 
 ```
-
 mv [OPTION]... [-T] SOURCE DEST
 mv [OPTION]... SOURCE... DIRECTORY
 mv [OPTION]... -t DIRECTORY SOURCE...

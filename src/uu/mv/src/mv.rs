@@ -53,8 +53,7 @@ pub enum OverwriteMode {
     Force,
 }
 
-static ABOUT: &str = help_about!("mv.md");
-static LONG_HELP: &str = "";
+const ABOUT: &str = help_about!("mv.md");
 const USAGE: &str = help_usage!("mv.md");
 
 static OPT_FORCE: &str = "force";
@@ -70,12 +69,7 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let help = format!(
-        "{}\n{}",
-        LONG_HELP,
-        backup_control::BACKUP_CONTROL_LONG_HELP
-    );
-    let mut app = uu_app().after_help(help);
+    let mut app = uu_app();
     let matches = app.try_get_matches_from_mut(args)?;
 
     if !matches.contains_id(OPT_TARGET_DIRECTORY)
