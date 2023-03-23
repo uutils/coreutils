@@ -4,4 +4,5 @@
 more [OPTIONS] <FILE>...
 ```
 
-A file perusal filter for CRT viewing.
+Display the contents of a text file
+
