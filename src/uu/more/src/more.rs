@@ -31,8 +31,8 @@ use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("more.md");
-const BELL: &str = "\x07";
 const USAGE: &str = help_usage!("more.md");
+const BELL: &str = "\x07";
 
 pub mod options {
     pub const SILENT: &str = "silent";
