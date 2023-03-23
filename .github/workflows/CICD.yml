@@ -188,9 +188,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -301,9 +299,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -357,9 +353,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -453,9 +447,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
@@ -501,9 +493,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
@@ -533,9 +523,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
@@ -562,9 +550,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Install dependencies
       shell: bash
       run: |
@@ -641,9 +627,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -898,9 +882,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -980,9 +962,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: rust toolchain ~ install
       run: |
         ## rust toolchain ~ install
@@ -1066,9 +1046,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: AVD cache
       uses: actions/cache@v3
       id: avd-cache
@@ -1128,9 +1106,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Prepare, build and test
       ## spell-checker:ignore (ToDO) sshfs usesh vmactions
       uses: vmactions/freebsd-vm@v0.3.0
@@ -1209,9 +1185,7 @@ jobs:
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.2
-      with:
-        version: "v0.4.0"
+      uses: mozilla-actions/sccache-action@v0.0.3
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
     - name: Initialize workflow variables
