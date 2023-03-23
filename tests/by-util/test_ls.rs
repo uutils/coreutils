@@ -7,6 +7,8 @@ extern crate regex;
 extern crate tempfile;
 
 use self::regex::Regex;
+#[cfg(feature = "feat_selinux")]
+use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
