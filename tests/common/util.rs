@@ -2515,7 +2515,9 @@ pub fn run_ucmd_as_root(
     ts: &TestScenario,
     args: &[&str],
 ) -> std::result::Result<CmdResult, String> {
-    if !is_ci() {
+    if is_ci() {
+        Err(format!("{UUTILS_INFO}: {}", "cannot run inside CI"))
+    } else {
         // check if we can run 'sudo'
         log_info("run", "sudo -E --non-interactive whoami");
         match Command::new("sudo")
@@ -2545,8 +2547,6 @@ pub fn run_ucmd_as_root(
             Ok(_output) => Err("\"sudo whoami\" didn't return \"root\"".to_string()),
             Err(e) => Err(format!("{UUTILS_WARNING}: {e}")),
         }
-    } else {
-        Err(format!("{UUTILS_INFO}: {}", "cannot run inside CI"))
     }
 }
 
@@ -3000,7 +3000,9 @@ mod tests {
     #[cfg(unix)]
     #[cfg(feature = "whoami")]
     fn test_run_ucmd_as_root() {
-        if !is_ci() {
+        if is_ci() {
+            println!("TEST SKIPPED (cannot run inside CI)");
+        } else {
             // Skip test if we can't guarantee non-interactive `sudo`, or if we're not "root"
             if let Ok(output) = Command::new("sudo")
                 .env("LC_ALL", "C")
@@ -3019,8 +3021,6 @@ mod tests {
             } else {
                 println!("TEST SKIPPED (cannot run sudo)");
             }
-        } else {
-            println!("TEST SKIPPED (cannot run inside CI)");
         }
     }
 
