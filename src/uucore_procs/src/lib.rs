@@ -170,11 +170,14 @@ fn parse_help_section(section: &str, content: &str) -> String {
         )
     }
 
+    // Prefix includes space to allow processing of section with level 3-6 headers
+    let section_header_prefix = "## ";
+
     content
         .lines()
         .skip_while(|&l| !is_section_header(l, section))
         .skip(1)
-        .take_while(|l| !l.starts_with("##"))
+        .take_while(|l| !l.starts_with(section_header_prefix))
         .collect::<Vec<_>>()
         .join("\n")
         .trim()
@@ -249,6 +252,31 @@ mod tests {
         assert_eq!(
             parse_help_section("another section", input),
             "This is the other section\nwith multiple lines"
+        );
+    }
+
+    #[test]
+    fn section_parsing_with_additional_headers() {
+        let input = "\
+            # ls\n\
+            ## after section\n\
+            This is some section\n\
+            \n\
+            ### level 3 header\n\
+            \n\
+            Additional text under the section.\n\
+            \n\
+            #### level 4 header\n\
+            \n\
+            Yet another paragraph\n";
+
+        assert_eq!(
+            parse_help_section("after section", input),
+            "This is some section\n\n\
+            ### level 3 header\n\n\
+            Additional text under the section.\n\n\
+            #### level 4 header\n\n\
+            Yet another paragraph"
         );
     }
 
