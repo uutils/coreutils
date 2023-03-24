@@ -47,6 +47,7 @@ static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical
 static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
 
 pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
+pub const PATH: &str = env!("PATH");
 
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
@@ -1170,14 +1171,12 @@ impl TestScenario {
 /// * [`UCommand::from_test_scenario`]: Run `coreutils UTIL_NAME` instead of the shell in the
 ///   temporary directory of the [`TestScenario`]
 /// * [`UCommand::current_dir`]: Sets the working directory
-/// * [`UCommand::keep_env`]: Keep environment variables instead of clearing them
 /// * ...
 #[derive(Debug, Default)]
 pub struct UCommand {
     args: VecDeque<OsString>,
     env_vars: Vec<(OsString, OsString)>,
     current_dir: Option<PathBuf>,
-    env_clear: bool,
     bin_path: Option<PathBuf>,
     util_name: Option<String>,
     has_run: bool,
@@ -1203,7 +1202,6 @@ impl UCommand {
     /// temporary directory for safety purposes.
     pub fn new() -> Self {
         Self {
-            env_clear: true,
             ..Default::default()
         }
     }
@@ -1250,12 +1248,6 @@ impl UCommand {
     /// temporary directory.
     fn temp_dir(&mut self, temp_dir: Rc<TempDir>) -> &mut Self {
         self.tmpd = Some(temp_dir);
-        self
-    }
-
-    /// Keep the environment variables instead of clearing them before running the command.
-    pub fn keep_env(&mut self) -> &mut Self {
-        self.env_clear = false;
         self
     }
 
@@ -1376,7 +1368,6 @@ impl UCommand {
     /// which this command will be run and `current_dir` will be set to this `temp_dir`.
     /// * `current_dir`: The temporary directory given by `temp_dir`.
     /// * `timeout`: `30 seconds`
-    /// * `env_clear`: `true`. (Almost) all environment variables will be cleared.
     /// * `stdin`: `Stdio::null()`
     /// * `ignore_stdin_write_error`: `false`
     /// * `stdout`, `stderr`: If not specified the output will be captured with [`CapturedOutput`]
@@ -1435,22 +1426,20 @@ impl UCommand {
             self.tmpd = Some(Rc::new(temp_dir));
         }
 
-        if self.env_clear {
-            command.env_clear();
-            if cfg!(windows) {
-                // spell-checker:ignore (dll) rsaenh
-                // %SYSTEMROOT% is required on Windows to initialize crypto provider
-                // ... and crypto provider is required for std::rand
-                // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
-                // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
-                if let Some(systemroot) = env::var_os("SYSTEMROOT") {
-                    command.env("SYSTEMROOT", systemroot);
-                }
-            } else {
-                // if someone is setting LD_PRELOAD, there's probably a good reason for it
-                if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
-                    command.env("LD_PRELOAD", ld_preload);
-                }
+        command.env_clear();
+        if cfg!(windows) {
+            // spell-checker:ignore (dll) rsaenh
+            // %SYSTEMROOT% is required on Windows to initialize crypto provider
+            // ... and crypto provider is required for std::rand
+            // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
+            // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
+            if let Some(systemroot) = env::var_os("SYSTEMROOT") {
+                command.env("SYSTEMROOT", systemroot);
+            }
+        } else {
+            // if someone is setting LD_PRELOAD, there's probably a good reason for it
+            if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
+                command.env("LD_PRELOAD", ld_preload);
             }
         }
 
@@ -2455,7 +2444,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
 
     let result = ts
         .cmd(util_name.as_ref())
-        .keep_env()
+        .env("PATH", PATH)
         .env("LC_ALL", "C")
         .args(args)
         .run();
@@ -2530,7 +2519,7 @@ pub fn run_ucmd_as_root(
                 // run ucmd as root:
                 Ok(ts
                     .cmd("sudo")
-                    .keep_env()
+                    .env("PATH", PATH)
                     .env("LC_ALL", "C")
                     .arg("-E")
                     .arg("--non-interactive")

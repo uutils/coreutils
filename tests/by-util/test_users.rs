@@ -23,7 +23,6 @@ fn test_users_check_name() {
     #[allow(clippy::needless_borrow)]
     let expected = TestScenario::new(&util_name)
         .cmd(util_name)
-        .keep_env()
         .env("LC_ALL", "C")
         .succeeds()
         .stdout_move_str();
