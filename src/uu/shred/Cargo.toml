@@ -18,6 +18,7 @@ path = "src/shred.rs"
 clap = { workspace=true }
 rand = { workspace=true }
 uucore = { workspace=true }
+libc = { workspace=true }
 
 [[bin]]
 name = "shred"
