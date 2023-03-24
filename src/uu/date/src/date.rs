@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use uucore::display::Quotable;
 #[cfg(not(any(target_os = "macos", target_os = "redox")))]
 use uucore::error::FromIo;
-use uucore::error::{UIoError, UResult, USimpleError};
+use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
