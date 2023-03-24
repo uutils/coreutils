@@ -29,6 +29,10 @@ use std::fs as std_fs;
 use std::thread::sleep;
 use std::time::Duration;
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(feature = "truncate")]
+use crate::common::util::PATH;
+
 static TEST_EXISTING_FILE: &str = "existing_file.txt";
 static TEST_HELLO_WORLD_SOURCE: &str = "hello_world.txt";
 static TEST_HELLO_WORLD_SOURCE_SYMLINK: &str = "hello_world.txt.link";
@@ -1687,7 +1691,7 @@ fn test_cp_reflink_always_override() {
 
     if !scene
         .cmd("env")
-        .keep_env()
+        .env("PATH", PATH)
         .args(&["mkfs.btrfs", "--rootdir", ROOTDIR, DISK])
         .run()
         .succeeded()
@@ -1700,7 +1704,7 @@ fn test_cp_reflink_always_override() {
 
     let mount = scene
         .cmd("sudo")
-        .keep_env()
+        .env("PATH", PATH)
         .args(&["-E", "--non-interactive", "mount", DISK, MOUNTPOINT])
         .run();
 
@@ -1727,7 +1731,7 @@ fn test_cp_reflink_always_override() {
 
     scene
         .cmd("sudo")
-        .keep_env()
+        .env("PATH", PATH)
         .args(&["-E", "--non-interactive", "umount", MOUNTPOINT])
         .succeeds();
 }

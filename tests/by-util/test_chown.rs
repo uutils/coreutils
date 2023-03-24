@@ -396,7 +396,7 @@ fn test_chown_only_user_id() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let result = scene.cmd("id").keep_env().arg("-u").run();
+    let result = scene.cmd("id").arg("-u").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
@@ -430,7 +430,7 @@ fn test_chown_fail_id() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let result = scene.cmd("id").keep_env().arg("-u").run();
+    let result = scene.cmd("id").arg("-u").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
@@ -487,7 +487,7 @@ fn test_chown_only_group_id() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let result = scene.cmd("id").keep_env().arg("-g").run();
+    let result = scene.cmd("id").arg("-g").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
@@ -551,14 +551,14 @@ fn test_chown_owner_group_id() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let result = scene.cmd("id").keep_env().arg("-u").run();
+    let result = scene.cmd("id").arg("-u").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
     let user_id = String::from(result.stdout_str().trim());
     assert!(!user_id.is_empty());
 
-    let result = scene.cmd("id").keep_env().arg("-g").run();
+    let result = scene.cmd("id").arg("-g").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
@@ -612,14 +612,14 @@ fn test_chown_owner_group_mix() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let result = scene.cmd("id").keep_env().arg("-u").run();
+    let result = scene.cmd("id").arg("-u").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
     let user_id = String::from(result.stdout_str().trim());
     assert!(!user_id.is_empty());
 
-    let result = scene.cmd("id").keep_env().arg("-gn").run();
+    let result = scene.cmd("id").arg("-gn").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }

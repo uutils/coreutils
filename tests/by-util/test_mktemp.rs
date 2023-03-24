@@ -426,7 +426,6 @@ fn test_mktemp_tmpdir_one_arg() {
 
     let result = scene
         .ucmd()
-        .keep_env()
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
         .succeeds();
@@ -440,7 +439,6 @@ fn test_mktemp_directory_tmpdir() {
 
     let result = scene
         .ucmd()
-        .keep_env()
         .arg("--directory")
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")

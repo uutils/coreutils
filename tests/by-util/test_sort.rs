@@ -32,7 +32,6 @@ fn test_buffer_sizes() {
     for buffer_size in &buffer_sizes {
         TestScenario::new(util_name!())
             .ucmd()
-            .keep_env()
             .arg("-n")
             .arg("-S")
             .arg(buffer_size)
@@ -46,7 +45,6 @@ fn test_buffer_sizes() {
             for buffer_size in &buffer_sizes {
                 TestScenario::new(util_name!())
                     .ucmd()
-                    .keep_env()
                     .arg("-n")
                     .arg("-S")
                     .arg(buffer_size)
@@ -921,7 +919,6 @@ fn test_compress_fail() {
     #[cfg(not(windows))]
     TestScenario::new(util_name!())
         .ucmd()
-        .keep_env()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -938,7 +935,6 @@ fn test_compress_fail() {
     #[cfg(windows)]
     TestScenario::new(util_name!())
         .ucmd()
-        .keep_env()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -954,7 +950,6 @@ fn test_compress_fail() {
 fn test_merge_batches() {
     TestScenario::new(util_name!())
         .ucmd()
-        .keep_env()
         .timeout(Duration::from_secs(120))
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
@@ -965,7 +960,6 @@ fn test_merge_batches() {
 fn test_merge_batch_size() {
     TestScenario::new(util_name!())
         .ucmd()
-        .keep_env()
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
@@ -1074,7 +1068,6 @@ fn test_output_is_input() {
     at.append("file", input);
     scene
         .ucmd()
-        .keep_env()
         .args(&["-m", "-u", "-o", "file", "file", "file", "file"])
         .succeeds();
     assert_eq!(at.read("file"), input);
