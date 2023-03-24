@@ -11,7 +11,7 @@ very expensive hardware probing to recover the data.
 
 ## After help
 
-Delete FILE(s) if `--remove` (`-u`) is specified.  The default is not to remove
+Delete `FILE(s)` if `--remove` (`-u`) is specified.  The default is not to remove
 the files because it is common to operate on device files like `/dev/hda`, and
 those files usually should not be removed.
 
