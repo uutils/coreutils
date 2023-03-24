@@ -489,7 +489,7 @@ unindent = "0.1"
 uucore = { workspace=true, features=["entries", "process", "signals"] }
 walkdir = { workspace=true }
 is-terminal = { workspace=true }
-hex-literal = "0.3.1"
+hex-literal = "0.3.4"
 rstest = "0.16.0"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
