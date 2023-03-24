@@ -11,7 +11,6 @@ fn test_invalid_arg() {
 fn test_uptime() {
     TestScenario::new(util_name!())
         .ucmd()
-        .keep_env()
         .succeeds()
         .stdout_contains("load average:")
         .stdout_contains(" up ");

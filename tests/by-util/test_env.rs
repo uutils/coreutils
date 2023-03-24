@@ -153,11 +153,9 @@ fn test_null_delimiter() {
 
 #[test]
 fn test_unset_variable() {
-    // This test depends on the HOME variable being pre-defined by the
-    // default shell
     let out = TestScenario::new(util_name!())
         .ucmd()
-        .keep_env()
+        .env("HOME", "FOO")
         .arg("-u")
         .arg("HOME")
         .succeeds()
