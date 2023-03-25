@@ -59,7 +59,7 @@ for d in data:
                 sys.exit(1)
 
         # if it is SKIP or ERROR, show it
-        if data[d][e] == "SKIP" or data[d][e] == "ERROR":
+        if data[d][e] in ("SKIP", "ERROR"):
             list_of_files.remove(a)
             error_or_skip_tests.append(a)
 
