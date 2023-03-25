@@ -335,7 +335,7 @@ zip = { version = "0.6.3", default_features=false, features=["deflate"] }
 
 hex = "0.4.3"
 md-5 = "0.10.5"
-sha1 = "0.10.1"
+sha1 = "0.10.5"
 sha2 = "0.10.2"
 sha3 = "0.10.6"
 blake2b_simd = "1.0.1"
