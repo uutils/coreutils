@@ -1,12 +1,12 @@
 /// Represents an error encountered while parsing a test expression
 #[derive(Debug)]
 pub enum ParseError {
-  ExpectedValue,
-  Expected(String),
-  ExtraArgument(String),
-  MissingArgument(String),
-  UnknownOperator(String),
-  InvalidInteger(String),
+    ExpectedValue,
+    Expected(String),
+    ExtraArgument(String),
+    MissingArgument(String),
+    UnknownOperator(String),
+    InvalidInteger(String),
 }
 
 /// A Result type for parsing test expressions
@@ -29,14 +29,7 @@ impl std::fmt::Display for ParseError {
 /// Implement UError trait for ParseError to make it easier to return useful error codes from main().
 impl uucore::error::UError for ParseError {
     fn code(&self) -> i32 {
-        match self {
-            Self::Expected(_) => 2,
-            Self::MissingArgument(_) => 2,
-            Self::ExtraArgument(_) => 2,
-            Self::UnknownOperator(_) => 2,
-            Self::ExpectedValue => 2,
-            Self::InvalidInteger(_) => 2,
-        }
+        2
     }
 }
 

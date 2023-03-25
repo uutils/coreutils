@@ -7,13 +7,12 @@
 
 // spell-checker:ignore (grammar) BOOLOP STRLEN FILETEST FILEOP INTOP STRINGOP ; (vars) LParen StrlenOp
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::iter::Peekable;
 
 use super::error::{ParseError, ParseResult};
 
 use uucore::display::Quotable;
-use uucore::error::UResult;
 
 /// Represents one of the binary comparison operators for strings, integers, or files
 #[derive(Debug, PartialEq, Eq)]
@@ -98,16 +97,16 @@ impl std::fmt::Display for Symbol {
     /// Format a Symbol for printing
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match &self {
-            Self::LParen => OsString::from("("),
-            Self::Bang => OsString::from("!"),
+            Self::LParen => OsStr::new("("),
+            Self::Bang => OsStr::new("!"),
             Self::BoolOp(s)
             | Self::Literal(s)
             | Self::Op(Operator::String(s))
             | Self::Op(Operator::Int(s))
             | Self::Op(Operator::File(s))
             | Self::UnaryOp(UnaryOperator::StrlenOp(s))
-            | Self::UnaryOp(UnaryOperator::FiletestOp(s)) => s.clone(),
-            Self::None => OsString::from("None"),
+            | Self::UnaryOp(UnaryOperator::FiletestOp(s)) => OsStr::new(s),
+            Self::None => OsStr::new("None"),
         };
         write!(f, "{}", s.quote())
     }
@@ -159,7 +158,7 @@ impl Parser {
     fn expect(&mut self, value: &str) -> ParseResult<()> {
         match self.next_token() {
             Symbol::Literal(s) if s == value => Ok(()),
-            _ => Err(ParseError::Expected(value.into())),
+            _ => Err(ParseError::Expected(value.quote().to_string())),
         }
     }
 
@@ -424,11 +423,11 @@ impl Parser {
 
     /// Parser entry point: parse the token stream `self.tokens`, storing the
     /// resulting `Symbol` stack in `self.stack`.
-    fn parse(&mut self) -> UResult<()> {
+    fn parse(&mut self) -> ParseResult<()> {
         self.expr()?;
 
         match self.tokens.next() {
-            Some(token) => Err(ParseError::ExtraArgument(token.quote().to_string()).into()),
+            Some(token) => Err(ParseError::ExtraArgument(token.quote().to_string())),
             None => Ok(()),
         }
     }
@@ -436,7 +435,7 @@ impl Parser {
 
 /// Parse the token stream `args`, returning a `Symbol` stack representing the
 /// operations to perform in postfix order.
-pub fn parse(args: Vec<OsString>) -> UResult<Vec<Symbol>> {
+pub fn parse(args: Vec<OsString>) -> ParseResult<Vec<Symbol>> {
     let mut p = Parser::new(args);
     p.parse()?;
     Ok(p.stack)
