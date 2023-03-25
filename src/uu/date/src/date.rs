@@ -226,19 +226,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         format!("expected file, got directory"),
                     ));
                 }
-                match File::open(path) {
-                    Ok(file) => {
-                        let lines = BufReader::new(file).lines();
-                        let iter = lines.map_while(Result::ok).map(parse_date);
-                        Box::new(iter)
-                    }
-                    Err(_err) => {
-                        return Err(USimpleError::new(
-                            2,
-                            String::new()
-                        ));
-                    }
-                }
+                let file = File::open(path).map_err_context(|| path.quote().to_string())?;
+                let lines = BufReader::new(file).lines();
+                let iter = lines.map_while(Result::ok).map(parse_date);
+                Box::new(iter)
+
             }
             DateSource::Now => {
                 let iter = std::iter::once(Ok(now));
