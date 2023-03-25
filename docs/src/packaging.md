@@ -3,7 +3,7 @@
 <!-- spell-checker:ignore debuginfo manpages backtraces -->
 
 > **Note**: This page is intended as a guide for packaging the uutils coreutils
-> for package maintainers. Normal users probably not need to read this. If you
+> for package maintainers. Normal users probably do not need to read this. If you
 > just want to install the coreutils, look at the
 > [installation](installation.md) instructions.
 
@@ -40,13 +40,13 @@ name of the utils you want to include and disable the default feature set.
 Additionally, support for SELinux must explicitly enabled with the
 `feat_selinux` feature.
 
-We recommend to include all the utils that a platform supports.
+We recommend including all the utilities that a platform supports.
 
 ## Compilation parameters
 
-There are several compile-time flags that allow you to tune the coreutils to you
-particular needs. Some distributions, for example, might choose to minimize the
-binary size as much as possible.
+There are several compile-time flags that allow you to tune the coreutils to
+your particular needs. Some distributions, for example, might choose to
+minimize the binary size as much as possible.
 
 This can be achieved by customizing the configuration passed to cargo. You can
 view the full documentation in the
