@@ -279,7 +279,7 @@ fn test_date_for_invalid_file() {
     result.no_stdout();
     assert_eq!(
         result.stderr_str().trim(),
-        "date: invalid_file: No such file or directory",
+        "date: 'invalid_file': No such file or directory",
     );
 }
 
