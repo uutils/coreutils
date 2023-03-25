@@ -913,6 +913,9 @@ impl FromStr for Threshold {
         let size = parse_size(&s[offset..])?;
 
         if s.starts_with('-') {
+            if size == 0 {
+                return Err(ParseSizeError::ParseFailure(s.to_string()));
+            }
             Ok(Self::Upper(size))
         } else {
             Ok(Self::Lower(size))
