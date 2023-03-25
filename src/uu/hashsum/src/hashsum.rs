@@ -284,8 +284,8 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         quiet,
         strict,
         warn,
+        zero,
     };
-    zero,
 
     match matches.get_many::<OsString>("FILE") {
         Some(files) => hashsum(opts, files.map(|f| f.as_os_str())),
