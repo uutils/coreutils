@@ -10,7 +10,10 @@
 use std::ffi::OsString;
 use std::iter::Peekable;
 
+use super::error::{ParseError, ParseResult};
+
 use uucore::display::Quotable;
+use uucore::error::UResult;
 
 /// Represents one of the binary comparison operators for strings, integers, or files
 #[derive(Debug, PartialEq, Eq)]
@@ -37,25 +40,6 @@ pub enum Symbol {
     Op(Operator),
     UnaryOp(UnaryOperator),
     None,
-}
-
-/// Represents an error encountered while parsing a test expression
-pub enum ParseError {
-    MissingArgument(OsString),
-    Expected(OsString),
-}
-
-/// A Result type for parsing test expressions
-type ParseResult<T> = Result<T, ParseError>;
-
-/// Display an error message for a ParseError
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Expected(s) => write!(f, "expected {}", s.to_string_lossy()),
-            Self::MissingArgument(s) => write!(f, "missing argument for {}", s.to_string_lossy()),
-        }
-    }
 }
 
 impl Symbol {
@@ -105,6 +89,27 @@ impl Symbol {
             | Self::UnaryOp(UnaryOperator::FiletestOp(s)) => s,
             Self::None => panic!(),
         })
+    }
+}
+
+/// Implement Display trait for Symbol to make it easier to print useful errors.
+/// We will try to match the format in which the symbol appears in the input.
+impl std::fmt::Display for Symbol {
+    /// Format a Symbol for printing
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match &self {
+            Self::LParen => OsString::from("("),
+            Self::Bang => OsString::from("!"),
+            Self::BoolOp(s)
+            | Self::Literal(s)
+            | Self::Op(Operator::String(s))
+            | Self::Op(Operator::Int(s))
+            | Self::Op(Operator::File(s))
+            | Self::UnaryOp(UnaryOperator::StrlenOp(s))
+            | Self::UnaryOp(UnaryOperator::FiletestOp(s)) => s.clone(),
+            Self::None => OsString::from("None"),
+        };
+        write!(f, "{}", s.quote())
     }
 }
 
@@ -224,7 +229,7 @@ impl Parser {
             }
 
             // case 2: error if end of stream is `( <any_token>`
-            [symbol] => Err(ParseError::MissingArgument(format!("{symbol:#?}").into())),
+            [symbol] => Err(ParseError::MissingArgument(format!("{symbol}"))),
 
             // case 3: `( uop <any_token> )` → parenthesized unary operation;
             //         this case ensures we don’t get confused by `( -f ) )`
@@ -407,7 +412,7 @@ impl Parser {
 
             match self.next_token() {
                 Symbol::None => {
-                    return Err(ParseError::MissingArgument(format!("{op:#?}").into()));
+                    return Err(ParseError::MissingArgument(format!("{op}")));
                 }
                 token => self.stack.push(token.into_literal()),
             }
@@ -419,11 +424,11 @@ impl Parser {
 
     /// Parser entry point: parse the token stream `self.tokens`, storing the
     /// resulting `Symbol` stack in `self.stack`.
-    fn parse(&mut self) -> Result<(), String> {
-        self.expr().map_err(|e| e.to_string())?;
+    fn parse(&mut self) -> UResult<()> {
+        self.expr()?;
 
         match self.tokens.next() {
-            Some(token) => Err(format!("extra argument {}", token.quote())),
+            Some(token) => Err(ParseError::ExtraArgument(token.quote().to_string()).into()),
             None => Ok(()),
         }
     }
@@ -431,7 +436,7 @@ impl Parser {
 
 /// Parse the token stream `args`, returning a `Symbol` stack representing the
 /// operations to perform in postfix order.
-pub fn parse(args: Vec<OsString>) -> Result<Vec<Symbol>, String> {
+pub fn parse(args: Vec<OsString>) -> UResult<Vec<Symbol>> {
     let mut p = Parser::new(args);
     p.parse()?;
     Ok(p.stack)
