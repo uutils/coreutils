@@ -40,7 +40,7 @@ name of the utils you want to include and disable the default feature set.
 Additionally, support for SELinux must explicitly enabled with the
 `feat_selinux` feature.
 
-We recommend including all the utilities that a platform supports
+We recommend including all the utilities that a platform supports.
 
 ## Compilation parameters
 
