@@ -8,6 +8,7 @@ import urllib
 import os
 import glob
 import json
+import sys
 
 base = "../gnu/tests/"
 urllib.request.urlretrieve(
@@ -51,7 +52,11 @@ for d in data:
 
         # the tests pass, we don't care anymore
         if data[d][e] == "PASS":
-            list_of_files.remove(a)
+            try:
+                list_of_files.remove(a)
+            except ValueError:
+                print("Could not find test '%s'. Maybe update the GNU repo?" % a)
+                sys.exit(1)
 
         # if it is SKIP or ERROR, show it
         if data[d][e] == "SKIP" or data[d][e] == "ERROR":
