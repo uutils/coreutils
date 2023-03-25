@@ -49,6 +49,9 @@ static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is
 pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 pub const PATH: &str = env!("PATH");
 
+/// Default environment variables to run the commands with
+const DEFAULT_ENV: [(&str, &str); 2] = [("LC_ALL", "C"), ("TZ", "UTC")];
+
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
     std::env::var("CI")
@@ -1332,6 +1335,18 @@ impl UCommand {
         self
     }
 
+    pub fn envs<I, K, V>(&mut self, iter: I) -> &mut Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        for (k, v) in iter {
+            self.env(k, v);
+        }
+        self
+    }
+
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn limit(
         &mut self,
@@ -1443,7 +1458,9 @@ impl UCommand {
             }
         }
 
-        command.envs(self.env_vars.iter().cloned());
+        command
+            .envs(DEFAULT_ENV)
+            .envs(self.env_vars.iter().cloned());
 
         if self.timeout.is_none() {
             self.timeout = Some(Duration::from_secs(30));
@@ -2445,7 +2462,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
     let result = ts
         .cmd(util_name.as_ref())
         .env("PATH", PATH)
-        .env("LC_ALL", "C")
+        .envs(DEFAULT_ENV)
         .args(args)
         .run();
 
@@ -2510,7 +2527,7 @@ pub fn run_ucmd_as_root(
         // check if we can run 'sudo'
         log_info("run", "sudo -E --non-interactive whoami");
         match Command::new("sudo")
-            .env("LC_ALL", "C")
+            .envs(DEFAULT_ENV)
             .args(["-E", "--non-interactive", "whoami"])
             .output()
         {
@@ -2520,7 +2537,7 @@ pub fn run_ucmd_as_root(
                 Ok(ts
                     .cmd("sudo")
                     .env("PATH", PATH)
-                    .env("LC_ALL", "C")
+                    .envs(DEFAULT_ENV)
                     .arg("-E")
                     .arg("--non-interactive")
                     .arg(&ts.bin_path)
