@@ -16,8 +16,6 @@ path = "src/uniq.rs"
 
 [dependencies]
 clap = { workspace=true }
-strum = { workspace=true }
-strum_macros = { workspace=true }
 uucore = { workspace=true }
 
 [[bin]]
