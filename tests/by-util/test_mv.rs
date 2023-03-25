@@ -165,7 +165,7 @@ fn test_mv_interactive() {
         .arg(file_a)
         .arg(file_b)
         .pipe_in("n")
-        .succeeds()
+        .fails()
         .no_stdout();
 
     assert!(at.file_exists(file_a));
