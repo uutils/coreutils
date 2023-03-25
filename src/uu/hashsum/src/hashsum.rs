@@ -47,6 +47,7 @@ struct Options {
     strict: bool,
     warn: bool,
     output_bits: usize,
+    zero: bool,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -269,6 +270,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let quiet = matches.get_flag("quiet") || status;
     let strict = matches.get_flag("strict");
     let warn = matches.get_flag("warn") && !status;
+    let zero = matches.get_flag("zero");
 
     let opts = Options {
         algoname: name,
@@ -283,6 +285,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         strict,
         warn,
     };
+    zero,
 
     match matches.get_many::<OsString>("FILE") {
         Some(files) => hashsum(opts, files.map(|f| f.as_os_str())),
@@ -357,6 +360,13 @@ pub fn uu_app_common() -> Command {
                 .short('w')
                 .long("warn")
                 .help("warn about improperly formatted checksum lines")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("zero")
+                .short('z')
+                .long("zero")
+                .help("end each output line with NUL, not newline")
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -613,6 +623,8 @@ where
                 println!("{} ({}) = {}", options.algoname, filename.display(), sum);
             } else if options.nonames {
                 println!("{sum}");
+            } else if options.zero {
+                print!("{} {}{}\0", sum, binary_marker, filename.display());
             } else {
                 println!("{} {}{}", sum, binary_marker, filename.display());
             }
