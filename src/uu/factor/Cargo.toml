@@ -23,7 +23,7 @@ smallvec = { workspace=true }
 uucore = { workspace=true }
 
 [dev-dependencies]
-paste = "1.0.6"
+paste = "1.0.12"
 quickcheck = "1.0.3"
 
 [[bin]]
