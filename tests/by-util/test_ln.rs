@@ -116,7 +116,7 @@ fn test_symlink_interactive() {
         .ucmd()
         .args(&["-i", "-s", file, link])
         .pipe_in("n")
-        .succeeds()
+        .fails()
         .no_stdout();
 
     assert!(at.file_exists(file));

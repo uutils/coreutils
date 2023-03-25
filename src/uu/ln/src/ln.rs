@@ -392,7 +392,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", dst.quote()) {
-                    return Ok(());
+                    return Err(LnError::SomeLinksFailed.into());
                 }
 
                 if fs::remove_file(dst).is_ok() {};
