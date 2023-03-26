@@ -10,6 +10,7 @@
 use pretty_assertions::assert_eq;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::prlimit;
+#[cfg(feature = "sleep")]
 use rstest::rstest;
 #[cfg(unix)]
 use std::borrow::Cow;
