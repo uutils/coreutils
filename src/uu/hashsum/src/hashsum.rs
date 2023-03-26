@@ -554,19 +554,28 @@ where
             // regular expression, otherwise we use the `{n}` modifier,
             // where `n` is the number of bytes.
             let bytes = options.digest.output_bits() / 4;
-            let modifier = if bytes > 0 {
+            let bytes_marker = if bytes > 0 {
                 format!("{{{bytes}}}")
             } else {
                 "+".to_string()
             };
-            let gnu_re = Regex::new(&format!(
-                r"^(?P<digest>[a-fA-F0-9]{modifier}) (?P<binary>[ \*])(?P<fileName>.*)",
-            ))
-            .map_err(|_| HashsumError::InvalidRegex)?;
+            // BSD reversed mode format is similar to the default mode, but doesn’t use a character to distinguish binary and text modes.
+            let mut bsd_reversed = None;
+
+            fn gnu_re_template(
+                bytes_marker: &str,
+                format_marker: &str,
+            ) -> Result<Regex, HashsumError> {
+                Regex::new(&format!(
+                    r"^(?P<digest>[a-fA-F0-9]{bytes_marker}) {format_marker}(?P<fileName>.*)"
+                ))
+                .map_err(|_| HashsumError::InvalidRegex)
+            }
+            let mut gnu_re = gnu_re_template(&bytes_marker, r"(?P<binary>[ \*])?")?;
             let bsd_re = Regex::new(&format!(
                 r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
                 algorithm = options.algoname,
-                digest_size = modifier,
+                digest_size = bytes_marker,
             ))
             .map_err(|_| HashsumError::InvalidRegex)?;
 
@@ -577,11 +586,32 @@ where
                     Err(e) => return Err(e.map_err_context(|| "failed to read file".to_string())),
                 };
                 let (ck_filename, sum, binary_check) = match gnu_re.captures(&line) {
-                    Some(caps) => (
-                        caps.name("fileName").unwrap().as_str(),
-                        caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
-                        caps.name("binary").unwrap().as_str() == "*",
-                    ),
+                    Some(caps) => {
+                        // We set the format during first pass, as mixing of formats is disallowed.
+                        if bsd_reversed.is_none() {
+                            let is_bsd_reversed = caps.name("binary").is_none();
+                            let format_marker = if is_bsd_reversed {
+                                ""
+                            } else {
+                                r"(?P<binary>[ \*])"
+                            }
+                            .to_string();
+
+                            bsd_reversed = Some(is_bsd_reversed);
+                            gnu_re = gnu_re_template(&bytes_marker, &format_marker)?;
+                        }
+
+                        // Default mode for Reversed BSD format is 'text'
+                        (
+                            caps.name("fileName").unwrap().as_str(),
+                            caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
+                            if bsd_reversed == Some(false) {
+                                caps.name("binary").unwrap().as_str() == "*"
+                            } else {
+                                false
+                            },
+                        )
+                    }
                     None => match bsd_re.captures(&line) {
                         Some(caps) => (
                             caps.name("fileName").unwrap().as_str(),
