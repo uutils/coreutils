@@ -200,10 +200,10 @@ impl FixedWidthNumber {
                 break;
             }
         }
-        if suffix_start != 0 {
-            Err(Overflow)
-        } else {
+        if suffix_start == 0 {
             Ok(Self { radix, digits })
+        } else {
+            Err(Overflow)
         }
     }
 

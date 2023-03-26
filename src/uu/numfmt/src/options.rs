@@ -190,14 +190,12 @@ impl FromStr for FormatOptions {
                 }
             }
 
-            if !precision.is_empty() {
-                if let Ok(p) = precision.parse() {
-                    options.precision = Some(p);
-                } else {
-                    return Err(format!("invalid precision in format '{s}'"));
-                }
-            } else {
+            if precision.is_empty() {
                 options.precision = Some(0);
+            } else if let Ok(p) = precision.parse() {
+                options.precision = Some(p);
+            } else {
+                return Err(format!("invalid precision in format '{s}'"));
             }
         }
 

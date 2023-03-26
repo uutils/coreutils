@@ -265,10 +265,10 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
         flag |= libc::O_SYNC;
     }
 
-    if flag != 0 {
-        Some(flag)
-    } else {
+    if flag == 0 {
         None
+    } else {
+        Some(flag)
     }
 }
 
@@ -784,10 +784,10 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
         flag |= libc::O_SYNC;
     }
 
-    if flag != 0 {
-        Some(flag)
-    } else {
+    if flag == 0 {
         None
+    } else {
+        Some(flag)
     }
 }
 

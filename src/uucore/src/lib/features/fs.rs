@@ -455,6 +455,8 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
     display_permissions_unix(mode, display_file_type)
 }
 
+// The logic below is more readable written this way.
+#[allow(clippy::if_not_else)]
 #[cfg(unix)]
 /// Display the permissions of a file on a unix like system
 pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String {

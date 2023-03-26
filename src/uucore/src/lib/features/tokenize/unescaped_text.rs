@@ -135,13 +135,13 @@ impl UnescapedText {
                     }
                     _ => {}
                 }
-                if !ignore {
+                if ignore {
+                    byte_vec.push(ch as u8);
+                } else {
                     let val = (Self::base_to_u32(min_len, max_len, base, it) % 256) as u8;
                     byte_vec.push(val);
                     let bvec = [val];
                     flush_bytes(writer, &bvec);
-                } else {
-                    byte_vec.push(ch as u8);
                 }
             }
             e => {

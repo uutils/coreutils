@@ -257,14 +257,14 @@ fn remove(files: &[String], options: &Options) -> bool {
                 // TODO: When the error is not about missing files
                 // (e.g., permission), even rm -f should fail with
                 // outputting the error, but there's no easy eay.
-                if !options.force {
+                if options.force {
+                    false
+                } else {
                     show_error!(
                         "cannot remove {}: No such file or directory",
                         filename.quote()
                     );
                     true
-                } else {
-                    false
                 }
             }
         }
