@@ -406,7 +406,7 @@ jobs:
     - name: Test
       run: cargo test -v ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
-        RUSTFLAGS: "-Awarnings --cfg unsound_local_offset"
+        RUSTFLAGS: "-Awarnings"
         RUST_BACKTRACE: "1"
 
   deps:

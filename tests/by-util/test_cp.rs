@@ -1211,7 +1211,7 @@ fn test_cp_no_deref_folder_to_folder() {
 #[cfg(target_os = "linux")]
 fn test_cp_archive() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let ts = time::OffsetDateTime::now_local().unwrap();
+    let ts = time::OffsetDateTime::now_utc();
     let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
     // set the file creation/modification an hour ago
     filetime::set_file_times(
@@ -1304,7 +1304,7 @@ fn test_cp_archive_recursive() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let ts = time::OffsetDateTime::now_local().unwrap();
+    let ts = time::OffsetDateTime::now_utc();
     let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
     // set the file creation/modification an hour ago
     filetime::set_file_times(
@@ -1337,7 +1337,7 @@ fn test_cp_preserve_timestamps() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_no_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let ts = time::OffsetDateTime::now_local().unwrap();
+    let ts = time::OffsetDateTime::now_utc();
     let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
     // set the file creation/modification an hour ago
     filetime::set_file_times(
