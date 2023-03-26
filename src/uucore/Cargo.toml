@@ -49,7 +49,7 @@ sm3 = { workspace=true }
 
 [target.'cfg(unix)'.dependencies]
 walkdir = { workspace=true, optional=true }
-nix = { workspace=true, features = ["fs", "uio", "zerocopy"] }
+nix = { workspace=true, features = ["fs", "uio", "zerocopy", "signal"] }
 
 [dev-dependencies]
 clap = { workspace=true }
