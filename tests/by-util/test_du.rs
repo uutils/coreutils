@@ -547,6 +547,17 @@ fn test_du_threshold() {
 }
 
 #[test]
+fn test_du_invalid_threshold() {
+    let ts = TestScenario::new(util_name!());
+
+    let threshold = "-0";
+
+    ts.ucmd()
+        .arg(format!("--threshold={threshold}"))
+        .fails();
+}
+
+#[test]
 fn test_du_apparent_size() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().arg("--apparent-size").succeeds();
