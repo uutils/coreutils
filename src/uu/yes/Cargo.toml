@@ -16,11 +16,13 @@ path = "src/yes.rs"
 
 [dependencies]
 clap = { workspace=true }
-libc = { workspace=true }
-uucore = { workspace=true, features=["pipes"] }
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+[target.'cfg(unix)'.dependencies]
+uucore = { workspace=true, features=["pipes", "signals"] }
 nix = { workspace=true }
+
+[target.'cfg(not(unix))'.dependencies]
+uucore = { workspace=true, features=["pipes"] }
 
 [[bin]]
 name = "yes"
