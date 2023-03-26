@@ -912,9 +912,9 @@ impl FromStr for Threshold {
 
         let size = parse_size(&s[offset..])?;
 
-        if s.starts_with('-') {
-				// Threshold of '-0' excludes everything besides 0 sized entries
-				// GNU's du threats '-0' as an invalid argument
+        if s.starts_with('-') {	
+            // Threshold of '-0' excludes everything besides 0 sized entries
+			// GNU's du threats '-0' as an invalid argument
             if size == 0 {
                 return Err(ParseSizeError::ParseFailure(s.to_string()));
             }
