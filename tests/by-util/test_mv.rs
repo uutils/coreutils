@@ -618,7 +618,7 @@ fn test_mv_update_option() {
 
     at.touch(file_a);
     at.touch(file_b);
-    let ts = time::OffsetDateTime::now_local().unwrap();
+    let ts = time::OffsetDateTime::now_utc();
     let now = FileTime::from_unix_time(ts.unix_timestamp(), ts.nanosecond());
     let later = FileTime::from_unix_time(ts.unix_timestamp() + 3600, ts.nanosecond());
     filetime::set_file_times(at.plus_as_string(file_a), now, now).unwrap();

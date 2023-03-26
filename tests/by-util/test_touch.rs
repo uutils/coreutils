@@ -103,10 +103,7 @@ fn test_touch_set_mdhm_time() {
 
     let start_of_year = str_to_filetime(
         "%Y%m%d%H%M",
-        &format!(
-            "{}01010000",
-            time::OffsetDateTime::now_local().unwrap().year()
-        ),
+        &format!("{}01010000", time::OffsetDateTime::now_utc().year()),
     );
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
