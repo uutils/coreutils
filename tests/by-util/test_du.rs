@@ -552,9 +552,7 @@ fn test_du_invalid_threshold() {
 
     let threshold = "-0";
 
-    ts.ucmd()
-        .arg(format!("--threshold={threshold}"))
-        .fails();
+    ts.ucmd().arg(format!("--threshold={threshold}")).fails();
 }
 
 #[test]
