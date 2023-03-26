@@ -391,7 +391,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
-                if !prompt_yes!("overwrite {}?", dst.quote()) {
+                if !prompt_yes!("replace {}?", dst.quote()) {
                     return Err(LnError::SomeLinksFailed.into());
                 }
 
