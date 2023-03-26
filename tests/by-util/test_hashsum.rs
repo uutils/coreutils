@@ -210,6 +210,82 @@ fn test_check_file_not_found_warning() {
 }
 
 #[test]
+fn test_check_md5sum() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    for f in &["a", " b", "*c", "dd", " "] {
+        at.write(f, &format!("{f}\n"));
+    }
+    at.write(
+        "check.md5sum",
+        "60b725f10c9c85c70d97880dfe8191b3  a\n\
+         bf35d7536c785cf06730d5a40301eba2   b\n\
+         f5b61709718c1ecf8db1aea8547d4698  *c\n\
+         b064a020db8018f18ff5ae367d01b212  dd\n\
+         d784fa8b6d98d27699781bd9a7cf19f0   ",
+    );
+    scene
+        .ccmd("md5sum")
+        .arg("--strict")
+        .arg("-c")
+        .arg("check.md5sum")
+        .succeeds()
+        .stdout_is("a: OK\n b: OK\n*c: OK\ndd: OK\n : OK\n")
+        .stderr_is("");
+}
+
+#[test]
+fn test_check_md5sum_reverse_bsd() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    for f in &["a", " b", "*c", "dd", " "] {
+        at.write(f, &format!("{f}\n"));
+    }
+    at.write(
+        "check.md5sum",
+        "60b725f10c9c85c70d97880dfe8191b3 a\n\
+         bf35d7536c785cf06730d5a40301eba2  b\n\
+         f5b61709718c1ecf8db1aea8547d4698 *c\n\
+         b064a020db8018f18ff5ae367d01b212 dd\n\
+         d784fa8b6d98d27699781bd9a7cf19f0  ",
+    );
+    scene
+        .ccmd("md5sum")
+        .arg("--strict")
+        .arg("-c")
+        .arg("check.md5sum")
+        .succeeds()
+        .stdout_is("a: OK\n b: OK\n*c: OK\ndd: OK\n : OK\n")
+        .stderr_is("");
+}
+
+#[test]
+fn test_check_md5sum_mixed_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    for f in &[" b", "*c", "dd", " "] {
+        at.write(f, &format!("{f}\n"));
+    }
+    at.write(
+        "check.md5sum",
+        "bf35d7536c785cf06730d5a40301eba2  b\n\
+         f5b61709718c1ecf8db1aea8547d4698 *c\n\
+         b064a020db8018f18ff5ae367d01b212 dd\n\
+         d784fa8b6d98d27699781bd9a7cf19f0  ",
+    );
+    scene
+        .ccmd("md5sum")
+        .arg("--strict")
+        .arg("-c")
+        .arg("check.md5sum")
+        .fails()
+        .code_is(1);
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
 }
