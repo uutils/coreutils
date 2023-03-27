@@ -314,7 +314,7 @@ regex = "1.7.1"
 rust-ini = "0.18.0"
 same-file = "1.0.6"
 selinux = "0.4"
-signal-hook = "0.3.14"
+signal-hook = "0.3.15"
 smallvec = { version = "1.10", features = ["union"] }
 tempfile = "3.4.0"
 term_grid = "0.1.5"
