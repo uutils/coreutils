@@ -589,8 +589,7 @@ mod tests {
         // We can trigger an error by not setting stdout to anything (will
         // fail with code 1)
         assert!(super::pathbuf_from_stdout()
-            .err()
-            .expect("pathbuf_from_stdout should have failed")
+            .expect_err("pathbuf_from_stdout should have failed")
             .to_string()
             .contains("GetFinalPathNameByHandleW failed with code 1"));
     }
