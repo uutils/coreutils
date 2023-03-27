@@ -143,11 +143,14 @@ impl Filesystem {
         mount: &MountInfo,
         file: Option<String>,
     ) -> Result<Self, FsError> {
-        if is_over_mounted(mounts, mount) {
-            Err(FsError::OverMounted)
-        } else {
-            Self::new(mount.clone(), file).ok_or(FsError::MountMissing)
+        #[cfg(unix)]
+        {
+            if is_over_mounted(mounts, mount) {
+                return Err(FsError::OverMounted);
+            }
         }
+
+        Self::new(mount.clone(), file).ok_or(FsError::MountMissing)
     }
 
     /// Find and create the filesystem that best matches a given path.
