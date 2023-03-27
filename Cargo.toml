@@ -310,7 +310,7 @@ rand = { version = "0.8", features = ["small_rng"] }
 rand_core = "0.6"
 rayon = "1.7"
 redox_syscall = "0.2"
-regex = "1.7.1"
+regex = "1.7.3"
 rust-ini = "0.18.0"
 same-file = "1.0.6"
 selinux = "0.4"
