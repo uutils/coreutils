@@ -607,17 +607,10 @@ jobs:
           - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf, features: feat_os_unix_gnueabihf, use-cross: use-cross, }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf , use-cross: use-cross }
           # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
-          # - { os: ubuntu-18.04   , target: i586-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross } ## note: older windows platform; not required, dev-FYI only
-          # - { os: ubuntu-18.04   , target: i586-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross } ## note: older windows platform; not required, dev-FYI only
           - { os: ubuntu-latest   , target: i686-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross }
           - { os: ubuntu-latest   , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-latest   , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
           - { os: ubuntu-latest   , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
-          # Commented until https://github.com/uutils/coreutils/issues/3210 is fixed
-          #- { os: ubuntu-18.04   , target: i686-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross }
-          #- { os: ubuntu-18.04   , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
-          #- { os: ubuntu-18.04   , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
-          #- { os: ubuntu-18.04   , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows } ## note: requires rust >= 1.43.0 to link correctly
