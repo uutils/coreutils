@@ -329,7 +329,7 @@ walkdir = "2.2"
 winapi-util = "0.1.5"
 windows-sys = { version="0.42.0", default-features=false }
 xattr = "0.2.3"
-zip = { version = "0.6.3", default_features=false, features=["deflate"] }
+zip = { version = "0.6.4", default_features=false, features=["deflate"] }
 
 hex = "0.4.3"
 md-5 = "0.10.5"
