@@ -56,29 +56,28 @@ fn unimplemented_flags_should_error() {
 
     // The following flags are not implemented
     for flag in ["cio", "nocache", "nolinks", "text", "binary"] {
-        let args = vec![format!("iflag={}", flag)];
+        let args = vec![format!("iflag={flag}")];
 
         if Parser::new()
             .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
             .is_ok()
         {
-            succeeded.push(format!("iflag={}", flag));
+            succeeded.push(format!("iflag={flag}"));
         }
 
-        let args = vec![format!("oflag={}", flag)];
+        let args = vec![format!("oflag={flag}")];
 
         if Parser::new()
             .parse(&args.iter().map(AsRef::as_ref).collect::<Vec<_>>()[..])
             .is_ok()
         {
-            succeeded.push(format!("iflag={}", flag));
+            succeeded.push(format!("iflag={flag}"));
         }
     }
 
     assert!(
         succeeded.is_empty(),
-        "The following flags did not panic as expected: {:?}",
-        succeeded
+        "The following flags did not panic as expected: {succeeded:?}"
     );
 }
 

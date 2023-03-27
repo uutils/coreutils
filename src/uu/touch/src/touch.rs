@@ -19,10 +19,10 @@ use time::macros::{format_description, offset, time};
 use time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 
-static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
-const USAGE: &str = "{} [OPTION]... [USER]";
+const ABOUT: &str = help_about!("touch.md");
+const USAGE: &str = help_usage!("touch.md");
 pub mod options {
     // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
     pub static SOURCES: &str = "sources";
@@ -46,7 +46,7 @@ fn to_local(tm: time::PrimitiveDateTime) -> time::OffsetDateTime {
     let offset = match time::OffsetDateTime::now_local() {
         Ok(lo) => lo.offset(),
         Err(e) => {
-            panic!("error: {}", e);
+            panic!("error: {e}");
         }
     };
     tm.assume_offset(offset)
@@ -71,8 +71,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let files = matches.get_many::<OsString>(ARG_FILES).ok_or_else(|| {
         USimpleError::new(
             1,
-            r##"missing file operand
-Try 'touch --help' for more information."##,
+            format!(
+                "missing file operand\nTry '{} --help' for more information.",
+                uucore::execution_phrase()
+            ),
         )
     })?;
     let (mut atime, mut mtime) =
@@ -436,7 +438,7 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         return Ok(local_dt_to_filetime(diff));
     }
 
-    Err(USimpleError::new(1, format!("Unable to parse date: {}", s)))
+    Err(USimpleError::new(1, format!("Unable to parse date: {s}")))
 }
 
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
@@ -556,7 +558,7 @@ fn pathbuf_from_stdout() -> UResult<PathBuf> {
             ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
                 return Err(USimpleError::new(
                     1,
-                    format!("GetFinalPathNameByHandleW failed with code {}", ret),
+                    format!("GetFinalPathNameByHandleW failed with code {ret}"),
                 ))
             }
             e if e == 0 => {
@@ -587,8 +589,7 @@ mod tests {
         // We can trigger an error by not setting stdout to anything (will
         // fail with code 1)
         assert!(super::pathbuf_from_stdout()
-            .err()
-            .expect("pathbuf_from_stdout should have failed")
+            .expect_err("pathbuf_from_stdout should have failed")
             .to_string()
             .contains("GetFinalPathNameByHandleW failed with code 1"));
     }

@@ -3,41 +3,39 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured
+//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized
 
 #![allow(dead_code)]
 
 use pretty_assertions::assert_eq;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::prlimit;
+#[cfg(feature = "sleep")]
 use rstest::rstest;
 #[cfg(unix)]
 use std::borrow::Cow;
+use std::collections::VecDeque;
 #[cfg(not(windows))]
 use std::ffi::CString;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, hard_link, remove_file, File, OpenOptions};
 use std::io::{self, BufWriter, Read, Result, Write};
 #[cfg(unix)]
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file, PermissionsExt};
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 #[cfg(windows)]
 use std::path::MAIN_SEPARATOR;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::rc::Rc;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, Instant};
 use std::{env, hint, thread};
 use tempfile::{Builder, TempDir};
-use uucore::Args;
-
-#[cfg(windows)]
-static PROGNAME: &str = concat!(env!("CARGO_PKG_NAME"), ".exe");
-#[cfg(not(windows))]
-static PROGNAME: &str = env!("CARGO_PKG_NAME");
 
 static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
@@ -48,6 +46,12 @@ static ALREADY_RUN: &str = " you have already run this UCommand, if you want to 
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
 static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
+
+pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
+pub const PATH: &str = env!("PATH");
+
+/// Default environment variables to run the commands with
+const DEFAULT_ENV: [(&str, &str); 2] = [("LC_ALL", "C"), ("TZ", "UTC")];
 
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
@@ -67,16 +71,13 @@ fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_p
 #[derive(Debug, Clone)]
 pub struct CmdResult {
     /// bin_path provided by `TestScenario` or `UCommand`
-    bin_path: String,
+    bin_path: PathBuf,
     /// util_name provided by `TestScenario` or `UCommand`
     util_name: Option<String>,
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
     /// exit status for command (if there is one)
-    code: Option<i32>,
-    /// zero-exit from running the Command?
-    /// see [`success`]
-    success: bool,
+    exit_status: Option<ExitStatus>,
     /// captured standard output after running the Command
     stdout: Vec<u8>,
     /// captured standard error after running the Command
@@ -84,24 +85,233 @@ pub struct CmdResult {
 }
 
 impl CmdResult {
-    pub fn new(
-        bin_path: String,
-        util_name: Option<String>,
+    pub fn new<S, T, U, V>(
+        bin_path: S,
+        util_name: Option<T>,
         tmpd: Option<Rc<TempDir>>,
-        code: Option<i32>,
-        success: bool,
-        stdout: &[u8],
-        stderr: &[u8],
-    ) -> Self {
+        exit_status: Option<ExitStatus>,
+        stdout: U,
+        stderr: V,
+    ) -> Self
+    where
+        S: Into<PathBuf>,
+        T: AsRef<str>,
+        U: Into<Vec<u8>>,
+        V: Into<Vec<u8>>,
+    {
         Self {
-            bin_path,
-            util_name,
+            bin_path: bin_path.into(),
+            util_name: util_name.map(|s| s.as_ref().into()),
             tmpd,
-            code,
-            success,
-            stdout: stdout.to_vec(),
-            stderr: stderr.to_vec(),
+            exit_status,
+            stdout: stdout.into(),
+            stderr: stderr.into(),
         }
+    }
+
+    /// Apply a function to `stdout` as bytes and return a new [`CmdResult`]
+    pub fn stdout_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a [u8]) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.exit_status,
+            function(&self.stdout),
+            self.stderr.as_slice(),
+        )
+    }
+
+    /// Apply a function to `stdout` as `&str` and return a new [`CmdResult`]
+    pub fn stdout_str_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a str) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.exit_status,
+            function(self.stdout_str()),
+            self.stderr.as_slice(),
+        )
+    }
+
+    /// Apply a function to `stderr` as bytes and return a new [`CmdResult`]
+    pub fn stderr_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a [u8]) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.exit_status,
+            self.stdout.as_slice(),
+            function(&self.stderr),
+        )
+    }
+
+    /// Apply a function to `stderr` as `&str` and return a new [`CmdResult`]
+    pub fn stderr_str_apply<'a, F, R>(&'a self, function: F) -> Self
+    where
+        F: Fn(&'a str) -> R,
+        R: Into<Vec<u8>>,
+    {
+        Self::new(
+            self.bin_path.clone(),
+            self.util_name.clone(),
+            self.tmpd.clone(),
+            self.exit_status,
+            self.stdout.as_slice(),
+            function(self.stderr_str()),
+        )
+    }
+
+    /// Assert `stdout` as bytes with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stdout_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a [u8]) -> bool,
+    {
+        assert!(
+            predicate(&self.stdout),
+            "Predicate for stdout as `bytes` evaluated to false.\nstdout='{:?}'\nstderr='{:?}'\n",
+            &self.stdout,
+            &self.stderr
+        );
+        self
+    }
+
+    /// Assert `stdout` as `&str` with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stdout_str_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a str) -> bool,
+    {
+        assert!(
+            predicate(self.stdout_str()),
+            "Predicate for stdout as `str` evaluated to false.\nstdout='{}'\nstderr='{}'\n",
+            self.stdout_str(),
+            self.stderr_str()
+        );
+        self
+    }
+
+    /// Assert `stderr` as bytes with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stderr_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a [u8]) -> bool,
+    {
+        assert!(
+            predicate(&self.stderr),
+            "Predicate for stderr as `bytes` evaluated to false.\nstdout='{:?}'\nstderr='{:?}'\n",
+            &self.stdout,
+            &self.stderr
+        );
+        self
+    }
+
+    /// Assert `stderr` as `&str` with a predicate function returning a `bool`.
+    #[track_caller]
+    pub fn stderr_str_check<'a, F>(&'a self, predicate: F) -> &Self
+    where
+        F: Fn(&'a str) -> bool,
+    {
+        assert!(
+            predicate(self.stderr_str()),
+            "Predicate for stderr as `str` evaluated to false.\nstdout='{}'\nstderr='{}'\n",
+            self.stdout_str(),
+            self.stderr_str()
+        );
+        self
+    }
+
+    /// Return the exit status of the child process, if any.
+    ///
+    /// Returns None if the child process is still running or hasn't been started.
+    pub fn try_exit_status(&self) -> Option<ExitStatus> {
+        self.exit_status
+    }
+
+    /// Return the exit status of the child process.
+    ///
+    /// # Panics
+    ///
+    /// If the child process is still running or hasn't been started.
+    pub fn exit_status(&self) -> ExitStatus {
+        self.try_exit_status()
+            .expect("Program must be run first or has not finished, yet")
+    }
+
+    /// Return the signal the child process received if any.
+    ///
+    /// # Platform specific behavior
+    ///
+    /// This method is only available on unix systems.
+    #[cfg(unix)]
+    pub fn signal(&self) -> Option<i32> {
+        self.exit_status().signal()
+    }
+
+    /// Assert that the given signal `value` equals the signal the child process received.
+    ///
+    /// See also [`std::os::unix::process::ExitStatusExt::signal`].
+    ///
+    /// # Platform specific behavior
+    ///
+    /// This assertion method is only available on unix systems.
+    #[cfg(unix)]
+    #[track_caller]
+    pub fn signal_is(&self, value: i32) -> &Self {
+        let actual = self.signal().unwrap_or_else(|| {
+            panic!(
+                "Expected process to be terminated by the '{}' signal, but exit status is: '{}'",
+                value,
+                self.try_exit_status()
+                    .map_or("Not available".to_string(), |e| e.to_string())
+            )
+        });
+
+        assert_eq!(actual, value);
+        self
+    }
+
+    /// Assert that the given signal `name` equals the signal the child process received.
+    ///
+    /// Strings like `SIGINT`, `INT` or a number like `15` are all valid names.  See also
+    /// [`std::os::unix::process::ExitStatusExt::signal`] and
+    /// [`uucore::signals::signal_by_name_or_value`]
+    ///
+    /// # Platform specific behavior
+    ///
+    /// This assertion method is only available on unix systems.
+    #[cfg(unix)]
+    #[track_caller]
+    pub fn signal_name_is(&self, name: &str) -> &Self {
+        use uucore::signals::signal_by_name_or_value;
+        let expected: i32 = signal_by_name_or_value(name)
+            .unwrap_or_else(|| panic!("Invalid signal name or value: '{name}'"))
+            .try_into()
+            .unwrap();
+
+        let actual = self.signal().unwrap_or_else(|| {
+            panic!(
+                "Expected process to be terminated by the '{}' signal, but exit status is: '{}'",
+                name,
+                self.try_exit_status()
+                    .map_or("Not available".to_string(), |e| e.to_string())
+            )
+        });
+
+        assert_eq!(actual, expected);
+        self
     }
 
     /// Returns a reference to the program's standard output as a slice of bytes
@@ -151,10 +361,10 @@ impl CmdResult {
     /// Returns the program's exit code
     /// Panics if not run or has not finished yet for example when run with `run_no_wait()`
     pub fn code(&self) -> i32 {
-        self.code
-            .expect("Program must be run first or has not finished, yet")
+        self.exit_status().code().unwrap()
     }
 
+    #[track_caller]
     pub fn code_is(&self, expected_code: i32) -> &Self {
         assert_eq!(self.code(), expected_code);
         self
@@ -171,13 +381,14 @@ impl CmdResult {
 
     /// Returns whether the program succeeded
     pub fn succeeded(&self) -> bool {
-        self.success
+        self.exit_status.map_or(true, |e| e.success())
     }
 
     /// asserts that the command resulted in a success (zero) status code
+    #[track_caller]
     pub fn success(&self) -> &Self {
         assert!(
-            self.success,
+            self.succeeded(),
             "Command was expected to succeed.\nstdout = {}\n stderr = {}",
             self.stdout_str(),
             self.stderr_str()
@@ -186,19 +397,14 @@ impl CmdResult {
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
+    #[track_caller]
     pub fn failure(&self) -> &Self {
         assert!(
-            !self.success,
+            !self.succeeded(),
             "Command was expected to fail.\nstdout = {}\n stderr = {}",
             self.stdout_str(),
             self.stderr_str()
         );
-        self
-    }
-
-    /// asserts that the command's exit code is the same as the given one
-    pub fn status_code(&self, code: i32) -> &Self {
-        assert_eq!(self.code, Some(code));
         self
     }
 
@@ -207,6 +413,7 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stdout will be or
     /// 2.  you know that stdout will also be empty
+    #[track_caller]
     pub fn no_stderr(&self) -> &Self {
         assert!(
             self.stderr.is_empty(),
@@ -222,6 +429,7 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
+    #[track_caller]
     pub fn no_stdout(&self) -> &Self {
         assert!(
             self.stdout.is_empty(),
@@ -232,6 +440,7 @@ impl CmdResult {
     }
 
     /// Assert that there is output to neither stderr nor stdout.
+    #[track_caller]
     pub fn no_output(&self) -> &Self {
         self.no_stdout().no_stderr()
     }
@@ -239,12 +448,14 @@ impl CmdResult {
     /// asserts that the command resulted in stdout stream output that equals the
     /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
     /// `stdout_only()` is a better choice unless stderr may or will be non-empty
+    #[track_caller]
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> &Self {
         assert_eq!(self.stdout_str(), String::from(msg.as_ref()));
         self
     }
 
     /// like `stdout_is`, but succeeds if any elements of `expected` matches stdout.
+    #[track_caller]
     pub fn stdout_is_any<T: AsRef<str> + std::fmt::Debug>(&self, expected: &[T]) -> &Self {
         assert!(
             expected.iter().any(|msg| self.stdout_str() == msg.as_ref()),
@@ -256,6 +467,7 @@ impl CmdResult {
     }
 
     /// Like `stdout_is` but newlines are normalized to `\n`.
+    #[track_caller]
     pub fn normalized_newlines_stdout_is<T: AsRef<str>>(&self, msg: T) -> &Self {
         let msg = msg.as_ref().replace("\r\n", "\n");
         assert_eq!(self.stdout_str().replace("\r\n", "\n"), msg);
@@ -264,12 +476,18 @@ impl CmdResult {
 
     /// asserts that the command resulted in stdout stream output,
     /// whose bytes equal those of the passed in slice
+    #[track_caller]
     pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
-        assert_eq!(self.stdout, msg.as_ref());
+        assert_eq!(self.stdout, msg.as_ref(),
+            "stdout as bytes wasn't equal to expected bytes. Result as strings:\nstdout  ='{:?}'\nexpected='{:?}'",
+            std::str::from_utf8(&self.stdout),
+            std::str::from_utf8(msg.as_ref()),
+        );
         self
     }
 
     /// like `stdout_is()`, but expects the contents of the file at the provided relative path
+    #[track_caller]
     pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is(String::from_utf8(contents).unwrap())
@@ -291,6 +509,7 @@ impl CmdResult {
     ///     new_ucmd!().succeeds().stdout_is_fixture_bytes("expected.bin");
     /// }
     /// ```
+    #[track_caller]
     pub fn stdout_is_fixture_bytes<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is_bytes(contents)
@@ -298,6 +517,7 @@ impl CmdResult {
 
     /// like `stdout_is_fixture()`, but replaces the data in fixture file based on values provided in `template_vars`
     /// command output
+    #[track_caller]
     pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(
         &self,
         file_rel_path: T,
@@ -312,6 +532,7 @@ impl CmdResult {
     }
 
     /// like `stdout_is_templated_fixture`, but succeeds if any replacement by `template_vars` results in the actual stdout.
+    #[track_caller]
     pub fn stdout_is_templated_fixture_any<T: AsRef<OsStr>>(
         &self,
         file_rel_path: T,
@@ -328,25 +549,32 @@ impl CmdResult {
         self.stdout_is_any(&possible_values.collect::<Vec<_>>());
     }
 
-    /// asserts that the command resulted in stderr stream output that equals the
-    /// passed in value, when both are trimmed of trailing whitespace
+    /// assert that the command resulted in stderr stream output that equals the
+    /// passed in value.
+    ///
     /// `stderr_only` is a better choice unless stdout may or will be non-empty
+    #[track_caller]
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &Self {
-        assert_eq!(
-            self.stderr_str().trim_end(),
-            String::from(msg.as_ref()).trim_end()
-        );
+        assert_eq!(self.stderr_str(), msg.as_ref());
         self
     }
 
     /// asserts that the command resulted in stderr stream output,
     /// whose bytes equal those of the passed in slice
+    #[track_caller]
     pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
-        assert_eq!(self.stderr, msg.as_ref());
+        assert_eq!(
+            &self.stderr,
+            msg.as_ref(),
+            "stderr as bytes wasn't equal to expected bytes. Result as strings:\nstderr  ='{:?}'\nexpected='{:?}'",
+            std::str::from_utf8(&self.stderr),
+            std::str::from_utf8(msg.as_ref())
+        );
         self
     }
 
     /// Like `stdout_is_fixture`, but for stderr
+    #[track_caller]
     pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stderr_is(String::from_utf8(contents).unwrap())
@@ -356,6 +584,7 @@ impl CmdResult {
     /// 1.  the command resulted in stdout stream output that equals the
     ///     passed in value
     /// 2.  the command resulted in empty (zero-length) stderr stream output
+    #[track_caller]
     pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> &Self {
         self.no_stderr().stdout_is(msg)
     }
@@ -364,11 +593,13 @@ impl CmdResult {
     /// 1.  the command resulted in a stdout stream whose bytes
     ///     equal those of the passed in value
     /// 2.  the command resulted in an empty stderr stream
+    #[track_caller]
     pub fn stdout_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
         self.no_stderr().stdout_is_bytes(msg)
     }
 
     /// like `stdout_only()`, but expects the contents of the file at the provided relative path
+    #[track_caller]
     pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &Self {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_only_bytes(contents)
@@ -376,8 +607,9 @@ impl CmdResult {
 
     /// asserts that
     /// 1.  the command resulted in stderr stream output that equals the
-    ///     passed in value, when both are trimmed of trailing whitespace
+    ///     passed in value
     /// 2.  the command resulted in empty (zero-length) stdout stream output
+    #[track_caller]
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> &Self {
         self.no_stdout().stderr_is(msg)
     }
@@ -386,33 +618,37 @@ impl CmdResult {
     /// 1.  the command resulted in a stderr stream whose bytes equal the ones
     ///     of the passed value
     /// 2.  the command resulted in an empty stdout stream
+    #[track_caller]
     pub fn stderr_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &Self {
         self.no_stdout().stderr_is_bytes(msg)
     }
 
+    #[track_caller]
     pub fn fails_silently(&self) -> &Self {
-        assert!(!self.success);
+        assert!(!self.succeeded());
         assert!(self.stderr.is_empty());
         self
     }
 
     /// asserts that
     /// 1.  the command resulted in stderr stream output that equals the
-    ///     the following format when both are trimmed of trailing whitespace
+    ///     the following format
     ///     `"{util_name}: {msg}\nTry '{bin_path} {util_name} --help' for more information."`
     ///     This the expected format when a `UUsageError` is returned or when `show_error!` is called
     ///     `msg` should be the same as the one provided to `UUsageError::new` or `show_error!`
     ///
     /// 2.  the command resulted in empty (zero-length) stdout stream output
+    #[track_caller]
     pub fn usage_error<T: AsRef<str>>(&self, msg: T) -> &Self {
         self.stderr_only(format!(
-            "{0}: {2}\nTry '{1} {0} --help' for more information.",
+            "{0}: {2}\nTry '{1} {0} --help' for more information.\n",
             self.util_name.as_ref().unwrap(), // This shouldn't be called using a normal command
-            self.bin_path,
+            self.bin_path.display(),
             msg.as_ref()
         ))
     }
 
+    #[track_caller]
     pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
             self.stdout_str().contains(cmp.as_ref()),
@@ -423,6 +659,7 @@ impl CmdResult {
         self
     }
 
+    #[track_caller]
     pub fn stderr_contains<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
             self.stderr_str().contains(cmp.as_ref()),
@@ -433,6 +670,7 @@ impl CmdResult {
         self
     }
 
+    #[track_caller]
     pub fn stdout_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
             !self.stdout_str().contains(cmp.as_ref()),
@@ -443,23 +681,36 @@ impl CmdResult {
         self
     }
 
+    #[track_caller]
     pub fn stderr_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(!self.stderr_str().contains(cmp.as_ref()));
         self
     }
 
+    #[track_caller]
     pub fn stdout_matches(&self, regex: &regex::Regex) -> &Self {
         assert!(
-            regex.is_match(self.stdout_str().trim()),
+            regex.is_match(self.stdout_str()),
             "Stdout does not match regex:\n{}",
             self.stdout_str()
         );
         self
     }
 
+    #[track_caller]
+    pub fn stderr_matches(&self, regex: &regex::Regex) -> &Self {
+        assert!(
+            regex.is_match(self.stderr_str()),
+            "Stderr does not match regex:\n{}",
+            self.stderr_str()
+        );
+        self
+    }
+
+    #[track_caller]
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &Self {
         assert!(
-            !regex.is_match(self.stdout_str().trim()),
+            !regex.is_match(self.stdout_str()),
             "Stdout matches regex:\n{}",
             self.stdout_str()
         );
@@ -514,14 +765,14 @@ impl AtPath {
         self.subdir.to_str().unwrap().to_owned()
     }
 
-    pub fn plus(&self, name: &str) -> PathBuf {
+    pub fn plus<P: AsRef<Path>>(&self, name: P) -> PathBuf {
         let mut pathbuf = self.subdir.clone();
         pathbuf.push(name);
         pathbuf
     }
 
-    pub fn plus_as_string(&self, name: &str) -> String {
-        String::from(self.plus(name).to_str().unwrap())
+    pub fn plus_as_string<P: AsRef<Path>>(&self, name: P) -> String {
+        self.plus(name).display().to_string()
     }
 
     fn minus(&self, name: &str) -> PathBuf {
@@ -644,7 +895,8 @@ impl AtPath {
         fs::remove_dir(self.plus(dir)).unwrap();
     }
 
-    pub fn mkdir(&self, dir: &str) {
+    pub fn mkdir<P: AsRef<Path>>(&self, dir: P) {
+        let dir = dir.as_ref();
         log_info("mkdir", self.plus_as_string(dir));
         fs::create_dir(self.plus(dir)).unwrap();
     }
@@ -661,7 +913,8 @@ impl AtPath {
         }
     }
 
-    pub fn touch(&self, file: &str) {
+    pub fn touch<P: AsRef<Path>>(&self, file: P) {
+        let file = file.as_ref();
         log_info("touch", self.plus_as_string(file));
         File::create(self.plus(file)).unwrap();
     }
@@ -784,7 +1037,7 @@ impl AtPath {
         }
     }
 
-    pub fn file_exists(&self, path: &str) -> bool {
+    pub fn file_exists<P: AsRef<Path>>(&self, path: P) -> bool {
         match fs::metadata(self.plus(path)) {
             Ok(m) => m.is_file(),
             Err(_) => false,
@@ -861,24 +1114,21 @@ pub struct TestScenario {
 }
 
 impl TestScenario {
-    pub fn new(util_name: &str) -> Self {
+    pub fn new<T>(util_name: T) -> Self
+    where
+        T: AsRef<str>,
+    {
         let tmpd = Rc::new(TempDir::new().unwrap());
         let ts = Self {
-            bin_path: {
-                // Instead of hard coding the path relative to the current
-                // directory, use Cargo's OUT_DIR to find path to executable.
-                // This allows tests to be run using profiles other than debug.
-                let target_dir = path_concat!(env!("OUT_DIR"), "..", "..", "..", PROGNAME);
-                PathBuf::from(AtPath::new(Path::new(&target_dir)).root_dir_resolved())
-            },
-            util_name: String::from(util_name),
+            bin_path: PathBuf::from(TESTS_BINARY),
+            util_name: util_name.as_ref().into(),
             fixtures: AtPath::new(tmpd.as_ref().path()),
             tmpd,
         };
         let mut fixture_path_builder = env::current_dir().unwrap();
         fixture_path_builder.push(TESTS_DIR);
         fixture_path_builder.push(FIXTURES_DIR);
-        fixture_path_builder.push(util_name);
+        fixture_path_builder.push(util_name.as_ref());
         if let Ok(m) = fs::metadata(&fixture_path_builder) {
             if m.is_dir() {
                 recursive_copy(&fixture_path_builder, &ts.fixtures.subdir).unwrap();
@@ -890,58 +1140,48 @@ impl TestScenario {
     /// Returns builder for invoking the target uutils binary. Paths given are
     /// treated relative to the environment's unique temporary test directory.
     pub fn ucmd(&self) -> UCommand {
-        self.composite_cmd(&self.bin_path, &self.util_name, true)
-    }
-
-    /// Returns builder for invoking the target uutils binary. Paths given are
-    /// treated relative to the environment's unique temporary test directory.
-    pub fn composite_cmd<S: AsRef<OsStr>, T: AsRef<OsStr>>(
-        &self,
-        bin: S,
-        util_name: T,
-        env_clear: bool,
-    ) -> UCommand {
-        UCommand::new_from_tmp(bin, &Some(util_name), self.tmpd.clone(), env_clear)
+        UCommand::from_test_scenario(self)
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
-    pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp::<S, S>(bin, &None, self.tmpd.clone(), true)
+    pub fn cmd<S: Into<PathBuf>>(&self, bin_path: S) -> UCommand {
+        let mut command = UCommand::new();
+        command.bin_path(bin_path);
+        command.temp_dir(self.tmpd.clone());
+        command
     }
 
     /// Returns builder for invoking any uutils command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
-    pub fn ccmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        self.composite_cmd(&self.bin_path, bin, true)
-    }
-
-    // different names are used rather than an argument
-    // because the need to keep the environment is exceedingly rare.
-    pub fn ucmd_keepenv(&self) -> UCommand {
-        self.composite_cmd(&self.bin_path, &self.util_name, false)
-    }
-
-    /// Returns builder for invoking any system command. Paths given are treated
-    /// relative to the environment's unique temporary test directory.
-    /// Differs from the builder returned by `cmd` in that `cmd_keepenv` does not call
-    /// `Command::env_clear` (Clears the entire environment map for the child process.)
-    pub fn cmd_keepenv<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp::<S, S>(bin, &None, self.tmpd.clone(), false)
+    pub fn ccmd<S: AsRef<str>>(&self, util_name: S) -> UCommand {
+        UCommand::with_util(util_name, self.tmpd.clone())
     }
 }
 
-/// A `UCommand` is a wrapper around an individual Command that provides several additional features
+/// A `UCommand` is a builder wrapping an individual Command that provides several additional features:
 /// 1. it has convenience functions that are more ergonomic to use for piping in stdin, spawning the command
 ///       and asserting on the results.
 /// 2. it tracks arguments provided so that in test cases which may provide variations of an arg in loops
 ///     the test failure can display the exact call which preceded an assertion failure.
-/// 3. it provides convenience construction arguments to set the Command working directory and/or clear its environment.
-#[derive(Debug)]
+/// 3. it provides convenience construction methods to set the Command uutils utility and temporary directory.
+///
+/// Per default `UCommand` runs a command given as an argument in a shell, platform independently.
+/// It does so with safety in mind, so the working directory is set to an individual temporary
+/// directory and the environment variables are cleared per default.
+///
+/// The default behavior can be changed with builder methods:
+/// * [`UCommand::with_util`]: Run `coreutils UTIL_NAME` instead of the shell
+/// * [`UCommand::from_test_scenario`]: Run `coreutils UTIL_NAME` instead of the shell in the
+///   temporary directory of the [`TestScenario`]
+/// * [`UCommand::current_dir`]: Sets the working directory
+/// * ...
+#[derive(Debug, Default)]
 pub struct UCommand {
-    pub raw: Command,
-    comm_string: String,
-    bin_path: String,
+    args: VecDeque<OsString>,
+    env_vars: Vec<(OsString, OsString)>,
+    current_dir: Option<PathBuf>,
+    bin_path: Option<PathBuf>,
     util_name: Option<String>,
     has_run: bool,
     ignore_stdin_write_error: bool,
@@ -957,72 +1197,73 @@ pub struct UCommand {
 }
 
 impl UCommand {
-    pub fn new<T: AsRef<OsStr>, S: AsRef<OsStr>, U: AsRef<OsStr>>(
-        bin_path: T,
-        util_name: &Option<S>,
-        curdir: U,
-        env_clear: bool,
-    ) -> Self {
-        let bin_path = bin_path.as_ref();
-        let util_name = util_name.as_ref().map(std::convert::AsRef::as_ref);
-
-        let mut ucmd = Self {
-            tmpd: None,
-            has_run: false,
-            raw: {
-                let mut cmd = Command::new(bin_path);
-                cmd.current_dir(curdir.as_ref());
-                if env_clear {
-                    cmd.env_clear();
-                    if cfg!(windows) {
-                        // spell-checker:ignore (dll) rsaenh
-                        // %SYSTEMROOT% is required on Windows to initialize crypto provider
-                        // ... and crypto provider is required for std::rand
-                        // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
-                        // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
-                        if let Some(systemroot) = env::var_os("SYSTEMROOT") {
-                            cmd.env("SYSTEMROOT", systemroot);
-                        }
-                    } else {
-                        // if someone is setting LD_PRELOAD, there's probably a good reason for it
-                        if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
-                            cmd.env("LD_PRELOAD", ld_preload);
-                        }
-                    }
-                }
-                cmd
-            },
-            comm_string: String::from(bin_path.to_str().unwrap()),
-            bin_path: bin_path.to_str().unwrap().to_string(),
-            util_name: util_name.map(|un| un.to_str().unwrap().to_string()),
-            ignore_stdin_write_error: false,
-            bytes_into_stdin: None,
-            stdin: None,
-            stdout: None,
-            stderr: None,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            limits: vec![],
-            stderr_to_stdout: false,
-            timeout: Some(Duration::from_secs(30)),
-        };
-
-        if let Some(un) = util_name {
-            ucmd.arg(un);
+    /// Create a new plain [`UCommand`].
+    ///
+    /// Executes a command that must be given as argument (for example with [`UCommand::arg`] in a
+    /// shell (`sh -c` on unix platforms or `cmd /C` on windows).
+    ///
+    /// Per default the environment is cleared and the working directory is set to an individual
+    /// temporary directory for safety purposes.
+    pub fn new() -> Self {
+        Self {
+            ..Default::default()
         }
+    }
 
+    /// Create a [`UCommand`] for a specific uutils utility.
+    ///
+    /// Sets the temporary directory to `tmpd` and the execution binary to the path where
+    /// `coreutils` is found.
+    pub fn with_util<T>(util_name: T, tmpd: Rc<TempDir>) -> Self
+    where
+        T: AsRef<str>,
+    {
+        let mut ucmd = Self::new();
+        ucmd.util_name = Some(util_name.as_ref().into());
+        ucmd.bin_path(TESTS_BINARY).temp_dir(tmpd);
         ucmd
     }
 
-    pub fn new_from_tmp<T: AsRef<OsStr>, S: AsRef<OsStr>>(
-        bin_path: T,
-        util_name: &Option<S>,
-        tmpd: Rc<TempDir>,
-        env_clear: bool,
-    ) -> Self {
-        let tmpd_path_buf = String::from(tmpd.as_ref().path().to_str().unwrap());
-        let mut ucmd: Self = Self::new(bin_path, util_name, tmpd_path_buf, env_clear);
-        ucmd.tmpd = Some(tmpd);
-        ucmd
+    /// Create a [`UCommand`] from a [`TestScenario`].
+    ///
+    /// The temporary directory and uutils utility are inherited from the [`TestScenario`] and the
+    /// execution binary is set to `coreutils`.
+    pub fn from_test_scenario(scene: &TestScenario) -> Self {
+        Self::with_util(&scene.util_name, scene.tmpd.clone())
+    }
+
+    /// Set the execution binary.
+    ///
+    /// Make sure the binary found at this path is executable. It's safest to provide the
+    /// canonicalized path instead of just the name of the executable, since path resolution is not
+    /// guaranteed to work on all platforms.
+    fn bin_path<T>(&mut self, bin_path: T) -> &mut Self
+    where
+        T: Into<PathBuf>,
+    {
+        self.bin_path = Some(bin_path.into());
+        self
+    }
+
+    /// Set the temporary directory.
+    ///
+    /// Per default an individual temporary directory is created for every [`UCommand`]. If not
+    /// specified otherwise with [`UCommand::current_dir`] the working directory is set to this
+    /// temporary directory.
+    fn temp_dir(&mut self, temp_dir: Rc<TempDir>) -> &mut Self {
+        self.tmpd = Some(temp_dir);
+        self
+    }
+
+    /// Set the working directory for this [`UCommand`]
+    ///
+    /// Per default the working directory is set to the [`UCommands`] temporary directory.
+    pub fn current_dir<T>(&mut self, current_dir: T) -> &mut Self
+    where
+        T: Into<PathBuf>,
+    {
+        self.current_dir = Some(current_dir.into());
+        self
     }
 
     pub fn set_stdin<T: Into<Stdio>>(&mut self, stdin: T) -> &mut Self {
@@ -1048,29 +1289,14 @@ impl UCommand {
     /// Add a parameter to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut Self {
-        assert!(!self.has_run, "{}", ALREADY_RUN);
-        self.comm_string.push(' ');
-        self.comm_string
-            .push_str(arg.as_ref().to_str().unwrap_or_default());
-        self.raw.arg(arg.as_ref());
+        self.args.push_back(arg.as_ref().into());
         self
     }
 
     /// Add multiple parameters to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut Self {
-        assert!(!self.has_run, "{}", MULTIPLE_STDIN_MEANINGLESS);
-        let strings = args
-            .iter()
-            .map(|s| s.as_ref().to_os_string())
-            .collect_ignore();
-
-        for s in strings {
-            self.comm_string.push(' ');
-            self.comm_string.push_str(&s);
-        }
-
-        self.raw.args(args.as_ref());
+        self.args.extend(args.iter().map(|s| s.as_ref().into()));
         self
     }
 
@@ -1081,6 +1307,7 @@ impl UCommand {
             "{}",
             MULTIPLE_STDIN_MEANINGLESS
         );
+        self.set_stdin(Stdio::piped());
         self.bytes_into_stdin = Some(input.into());
         self
     }
@@ -1104,13 +1331,25 @@ impl UCommand {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        assert!(!self.has_run, "{}", ALREADY_RUN);
-        self.raw.env(key, val);
+        self.env_vars
+            .push((key.as_ref().into(), val.as_ref().into()));
+        self
+    }
+
+    pub fn envs<I, K, V>(&mut self, iter: I) -> &mut Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        for (k, v) in iter {
+            self.env(k, v);
+        }
         self
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub fn with_limit(
+    pub fn limit(
         &mut self,
         resource: rlimit::Resource,
         soft_limit: u64,
@@ -1132,27 +1371,112 @@ impl UCommand {
         self
     }
 
-    /// Spawns the command, feeds the stdin if any, and returns the
-    /// child process immediately.
-    pub fn run_no_wait(&mut self) -> UChild {
-        assert!(!self.has_run, "{}", ALREADY_RUN);
-        self.has_run = true;
-        log_info("run", &self.comm_string);
+    /// Build the `std::process::Command` and apply the defaults on fields which were not specified
+    /// by the user.
+    ///
+    /// These __defaults__ are:
+    /// * `bin_path`: Depending on the platform and os, the native shell (unix -> `/bin/sh` etc.).
+    /// This default also requires to set the first argument to `-c` on unix (`/C` on windows) if
+    /// this argument wasn't specified explicitly by the user.
+    /// * `util_name`: `None`. If neither `bin_path` nor `util_name` were given the arguments are
+    /// run in a shell (See `bin_path` above).
+    /// * `temp_dir`: If `current_dir` was not set, a new temporary directory will be created in
+    /// which this command will be run and `current_dir` will be set to this `temp_dir`.
+    /// * `current_dir`: The temporary directory given by `temp_dir`.
+    /// * `timeout`: `30 seconds`
+    /// * `stdin`: `Stdio::null()`
+    /// * `ignore_stdin_write_error`: `false`
+    /// * `stdout`, `stderr`: If not specified the output will be captured with [`CapturedOutput`]
+    /// * `stderr_to_stdout`: `false`
+    /// * `bytes_into_stdin`: `None`
+    /// * `limits`: `None`.
+    fn build(&mut self) -> (Command, Option<CapturedOutput>, Option<CapturedOutput>) {
+        if self.bin_path.is_some() {
+            if let Some(util_name) = &self.util_name {
+                self.args.push_front(util_name.into());
+            }
+        } else if let Some(util_name) = &self.util_name {
+            self.bin_path = Some(PathBuf::from(TESTS_BINARY));
+            self.args.push_front(util_name.into());
+        // neither `bin_path` nor `util_name` was set so we apply the default to run the arguments
+        // in a platform specific shell
+        } else if cfg!(unix) {
+            #[cfg(target_os = "android")]
+            let bin_path = PathBuf::from("/system/bin/sh");
+            #[cfg(not(target_os = "android"))]
+            let bin_path = PathBuf::from("/bin/sh");
+
+            self.bin_path = Some(bin_path);
+            let c_arg = OsString::from("-c");
+            if !self.args.contains(&c_arg) {
+                self.args.push_front(c_arg);
+            }
+        } else {
+            self.bin_path = Some(PathBuf::from("cmd"));
+            let c_arg = OsString::from("/C");
+            let k_arg = OsString::from("/K");
+            if !self
+                .args
+                .iter()
+                .any(|s| s.eq_ignore_ascii_case(&c_arg) || s.eq_ignore_ascii_case(&k_arg))
+            {
+                self.args.push_front(c_arg);
+            }
+        };
+
+        // unwrap is safe here because we have set `self.bin_path` before
+        let mut command = Command::new(self.bin_path.as_ref().unwrap());
+        command.args(&self.args);
+
+        // We use a temporary directory as working directory if not specified otherwise with
+        // `current_dir()`. If neither `current_dir` nor a temporary directory is available, then we
+        // create our own.
+        if let Some(current_dir) = &self.current_dir {
+            command.current_dir(current_dir);
+        } else if let Some(temp_dir) = &self.tmpd {
+            command.current_dir(temp_dir.path());
+        } else {
+            let temp_dir = tempfile::tempdir().unwrap();
+            self.current_dir = Some(temp_dir.path().into());
+            command.current_dir(temp_dir.path());
+            self.tmpd = Some(Rc::new(temp_dir));
+        }
+
+        command.env_clear();
+        if cfg!(windows) {
+            // spell-checker:ignore (dll) rsaenh
+            // %SYSTEMROOT% is required on Windows to initialize crypto provider
+            // ... and crypto provider is required for std::rand
+            // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
+            // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
+            if let Some(systemroot) = env::var_os("SYSTEMROOT") {
+                command.env("SYSTEMROOT", systemroot);
+            }
+        } else {
+            // if someone is setting LD_PRELOAD, there's probably a good reason for it
+            if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
+                command.env("LD_PRELOAD", ld_preload);
+            }
+        }
+
+        command
+            .envs(DEFAULT_ENV)
+            .envs(self.env_vars.iter().cloned());
+
+        if self.timeout.is_none() {
+            self.timeout = Some(Duration::from_secs(30));
+        }
 
         let mut captured_stdout = None;
         let mut captured_stderr = None;
-        let command = if self.stderr_to_stdout {
+        if self.stderr_to_stdout {
             let mut output = CapturedOutput::default();
 
-            let command = self
-                .raw
-                // TODO: use Stdio::null() as default to avoid accidental deadlocks ?
-                .stdin(self.stdin.take().unwrap_or_else(Stdio::piped))
+            command
+                .stdin(self.stdin.take().unwrap_or_else(Stdio::null))
                 .stdout(Stdio::from(output.try_clone().unwrap()))
                 .stderr(Stdio::from(output.try_clone().unwrap()));
             captured_stdout = Some(output);
-
-            command
         } else {
             let stdout = if self.stdout.is_some() {
                 self.stdout.take().unwrap()
@@ -1172,16 +1496,27 @@ impl UCommand {
                 stdio
             };
 
-            self.raw
-                // TODO: use Stdio::null() as default to avoid accidental deadlocks ?
-                .stdin(self.stdin.take().unwrap_or_else(Stdio::piped))
+            command
+                .stdin(self.stdin.take().unwrap_or_else(Stdio::null))
                 .stdout(stdout)
-                .stderr(stderr)
+                .stderr(stderr);
         };
+
+        (command, captured_stdout, captured_stderr)
+    }
+
+    /// Spawns the command, feeds the stdin if any, and returns the
+    /// child process immediately.
+    pub fn run_no_wait(&mut self) -> UChild {
+        assert!(!self.has_run, "{}", ALREADY_RUN);
+        self.has_run = true;
+
+        let (mut command, captured_stdout, captured_stderr) = self.build();
+        log_info("run", self.to_string());
 
         let child = command.spawn().unwrap();
 
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         for &(resource, soft_limit, hard_limit) in &self.limits {
             prlimit(
                 child.id() as i32,
@@ -1218,6 +1553,7 @@ impl UCommand {
 
     /// Spawns the command, feeds the stdin if any, waits for the result,
     /// asserts success, and returns a command result.
+    #[track_caller]
     pub fn succeeds(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.success();
@@ -1226,6 +1562,7 @@ impl UCommand {
 
     /// Spawns the command, feeds the stdin if any, waits for the result,
     /// asserts failure, and returns a command result.
+    #[track_caller]
     pub fn fails(&mut self) -> CmdResult {
         let cmd_result = self.run();
         cmd_result.failure();
@@ -1235,6 +1572,17 @@ impl UCommand {
     pub fn get_full_fixture_path(&self, file_rel_path: &str) -> String {
         let tmpdir_path = self.tmpd.as_ref().unwrap().path();
         format!("{}/{file_rel_path}", tmpdir_path.to_str().unwrap())
+    }
+}
+
+impl std::fmt::Display for UCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut comm_string: Vec<String> = vec![self
+            .bin_path
+            .as_ref()
+            .map_or(String::new(), |p| p.display().to_string())];
+        comm_string.extend(self.args.iter().map(|s| s.to_string_lossy().to_string()));
+        f.write_str(&comm_string.join(" "))
     }
 }
 
@@ -1354,12 +1702,10 @@ impl<'a> UChildAssertion<'a> {
     }
 
     fn with_output(&mut self, mode: AssertionMode) -> CmdResult {
-        let (code, success) = match self.uchild.is_alive() {
-            true => (None, true),
-            false => {
-                let status = self.uchild.raw.wait().unwrap();
-                (status.code(), status.success())
-            }
+        let exit_status = if self.uchild.is_alive() {
+            None
+        } else {
+            Some(self.uchild.raw.wait().unwrap())
         };
         let (stdout, stderr) = match mode {
             AssertionMode::All => (
@@ -1372,15 +1718,14 @@ impl<'a> UChildAssertion<'a> {
                 self.uchild.stderr_exact_bytes(expected_stderr_size),
             ),
         };
-        CmdResult {
-            bin_path: self.uchild.bin_path.clone(),
-            util_name: self.uchild.util_name.clone(),
-            tmpd: self.uchild.tmpd.clone(),
-            code,
-            success,
+        CmdResult::new(
+            self.uchild.bin_path.clone(),
+            self.uchild.util_name.clone(),
+            self.uchild.tmpd.clone(),
+            exit_status,
             stdout,
             stderr,
-        }
+        )
     }
 
     // Make assertions of [`CmdResult`] with all output from start of the process until now.
@@ -1415,6 +1760,7 @@ impl<'a> UChildAssertion<'a> {
     }
 
     // Assert that the child process is alive
+    #[track_caller]
     pub fn is_alive(&mut self) -> &mut Self {
         match self
             .uchild
@@ -1436,6 +1782,7 @@ impl<'a> UChildAssertion<'a> {
     }
 
     // Assert that the child process has exited
+    #[track_caller]
     pub fn is_not_alive(&mut self) -> &mut Self {
         match self
             .uchild
@@ -1458,7 +1805,7 @@ impl<'a> UChildAssertion<'a> {
 /// Abstraction for a [`std::process::Child`] to handle the child process.
 pub struct UChild {
     raw: Child,
-    bin_path: String,
+    bin_path: PathBuf,
     util_name: Option<String>,
     captured_stdout: Option<CapturedOutput>,
     captured_stderr: Option<CapturedOutput>,
@@ -1478,7 +1825,7 @@ impl UChild {
     ) -> Self {
         Self {
             raw: child,
-            bin_path: ucommand.bin_path.clone(),
+            bin_path: ucommand.bin_path.clone().unwrap(),
             util_name: ucommand.util_name.clone(),
             captured_stdout,
             captured_stderr,
@@ -1604,8 +1951,7 @@ impl UChild {
             bin_path,
             util_name,
             tmpd,
-            code: output.status.code(),
-            success: output.status.success(),
+            exit_status: Some(output.status),
             stdout: output.stdout,
             stderr: output.stderr,
         })
@@ -1987,7 +2333,7 @@ pub fn host_name_for(util_name: &str) -> Cow<str> {
         if util_name.starts_with('g') && util_name != "groups" {
             util_name.into()
         } else {
-            format!("g{}", util_name).into()
+            format!("g{util_name}").into()
         }
     }
     #[cfg(target_os = "linux")]
@@ -2110,12 +2456,14 @@ fn parse_coreutil_version(version_string: &str) -> f32 {
 ///```
 #[cfg(unix)]
 pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<CmdResult, String> {
-    println!("{}", check_coreutil_version(&ts.util_name, VERSION_MIN)?);
-    let util_name = &host_name_for(&ts.util_name);
+    let util_name = ts.util_name.as_str();
+    println!("{}", check_coreutil_version(util_name, VERSION_MIN)?);
+    let util_name = host_name_for(util_name);
 
     let result = ts
-        .cmd_keepenv(util_name.as_ref())
-        .env("LC_ALL", "C")
+        .cmd(util_name.as_ref())
+        .env("PATH", PATH)
+        .envs(DEFAULT_ENV)
         .args(args)
         .run();
 
@@ -2138,8 +2486,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
         ts.bin_path.as_os_str().to_str().unwrap().to_string(),
         Some(ts.util_name.clone()),
         Some(result.tmpd()),
-        Some(result.code()),
-        result.succeeded(),
+        result.exit_status,
         stdout.as_bytes(),
         stderr.as_bytes(),
     ))
@@ -2175,11 +2522,13 @@ pub fn run_ucmd_as_root(
     ts: &TestScenario,
     args: &[&str],
 ) -> std::result::Result<CmdResult, String> {
-    if !is_ci() {
+    if is_ci() {
+        Err(format!("{UUTILS_INFO}: {}", "cannot run inside CI"))
+    } else {
         // check if we can run 'sudo'
         log_info("run", "sudo -E --non-interactive whoami");
         match Command::new("sudo")
-            .env("LC_ALL", "C")
+            .envs(DEFAULT_ENV)
             .args(["-E", "--non-interactive", "whoami"])
             .output()
         {
@@ -2187,8 +2536,9 @@ pub fn run_ucmd_as_root(
                 // we can run sudo and we're root
                 // run ucmd as root:
                 Ok(ts
-                    .cmd_keepenv("sudo")
-                    .env("LC_ALL", "C")
+                    .cmd("sudo")
+                    .env("PATH", PATH)
+                    .envs(DEFAULT_ENV)
                     .arg("-E")
                     .arg("--non-interactive")
                     .arg(&ts.bin_path)
@@ -2204,8 +2554,6 @@ pub fn run_ucmd_as_root(
             Ok(_output) => Err("\"sudo whoami\" didn't return \"root\"".to_string()),
             Err(e) => Err(format!("{UUTILS_WARNING}: {e}")),
         }
-    } else {
-        Err(format!("{UUTILS_INFO}: {}", "cannot run inside CI"))
     }
 }
 
@@ -2215,151 +2563,138 @@ mod tests {
     // spell-checker:ignore (tests) asdfsadfa
     use super::*;
 
+    pub fn run_cmd<T: AsRef<OsStr>>(cmd: T) -> CmdResult {
+        UCommand::new().arg(cmd).run()
+    }
+
     #[test]
-    fn test_code_is() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: Some(32),
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.code_is(32);
+    fn test_command_result_when_no_output_with_exit_32() {
+        let result = run_cmd("exit 32");
+
+        if cfg!(windows) {
+            std::assert!(result.bin_path.ends_with("cmd"));
+        } else {
+            std::assert!(result.bin_path.ends_with("sh"));
+        }
+
+        std::assert!(result.util_name.is_none());
+        std::assert!(result.tmpd.is_some());
+
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 32);
+        result.code_is(32);
+        assert!(!result.succeeded());
+        result.failure();
+        result.fails_silently();
+        assert!(result.stderr.is_empty());
+        assert!(result.stdout.is_empty());
+        result.no_output();
+        result.no_stderr();
+        result.no_stdout();
     }
 
     #[test]
     #[should_panic]
-    fn test_code_is_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: Some(32),
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.code_is(1);
+    fn test_command_result_when_exit_32_then_success_panic() {
+        run_cmd("exit 32").success();
     }
 
     #[test]
-    fn test_failure() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.failure();
+    fn test_command_result_when_no_output_with_exit_0() {
+        let result = run_cmd("exit 0");
+
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 0);
+        result.code_is(0);
+        assert!(result.succeeded());
+        result.success();
+        assert!(result.stderr.is_empty());
+        assert!(result.stdout.is_empty());
+        result.no_output();
+        result.no_stderr();
+        result.no_stdout();
     }
 
     #[test]
     #[should_panic]
-    fn test_failure_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.failure();
-    }
-
-    #[test]
-    fn test_success() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.success();
+    fn test_command_result_when_exit_0_then_failure_panics() {
+        run_cmd("exit 0").failure();
     }
 
     #[test]
     #[should_panic]
-    fn test_success_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: false,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.success();
+    fn test_command_result_when_exit_0_then_silent_failure_panics() {
+        run_cmd("exit 0").fails_silently();
     }
 
     #[test]
-    fn test_no_stderr_output() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "".into(),
-        };
-        res.no_stderr();
-        res.no_stdout();
+    fn test_command_result_when_stdout_with_exit_0() {
+        #[cfg(windows)]
+        let (result, vector, string) = (
+            run_cmd("echo hello& exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\r', b'\n'],
+            "hello\r\n",
+        );
+        #[cfg(not(windows))]
+        let (result, vector, string) = (
+            run_cmd("echo hello; exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\n'],
+            "hello\n",
+        );
+
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 0);
+        result.code_is(0);
+        assert!(result.succeeded());
+        result.success();
+        assert!(result.stderr.is_empty());
+        std::assert_eq!(result.stdout, vector);
+        result.no_stderr();
+        result.stdout_is(string);
+        result.stdout_is_bytes(&vector);
+        result.stdout_only(string);
+        result.stdout_only_bytes(&vector);
     }
 
     #[test]
-    #[should_panic]
-    fn test_no_stderr_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "asdfsadfa".into(),
-        };
+    fn test_command_result_when_stderr_with_exit_0() {
+        #[cfg(windows)]
+        let (result, vector, string) = (
+            run_cmd("echo hello>&2& exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\r', b'\n'],
+            "hello\r\n",
+        );
+        #[cfg(not(windows))]
+        let (result, vector, string) = (
+            run_cmd("echo hello >&2; exit 0"),
+            vec![b'h', b'e', b'l', b'l', b'o', b'\n'],
+            "hello\n",
+        );
 
-        res.no_stderr();
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_no_stdout_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "asdfsadfa".into(),
-            stderr: "".into(),
-        };
-
-        res.no_stdout();
+        assert!(result.exit_status.is_some());
+        std::assert_eq!(result.code(), 0);
+        result.code_is(0);
+        assert!(result.succeeded());
+        result.success();
+        assert!(result.stdout.is_empty());
+        result.no_stdout();
+        std::assert_eq!(result.stderr, vector);
+        result.stderr_is(string);
+        result.stderr_is_bytes(&vector);
+        result.stderr_only(string);
+        result.stderr_only_bytes(&vector);
     }
 
     #[test]
     fn test_std_does_not_contain() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
         res.stdout_does_not_contain("unlikely");
         res.stderr_does_not_contain("unlikely");
     }
@@ -2367,15 +2702,10 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_stdout_does_not_contain_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd("echo This is a likely error message& exit 0");
+        #[cfg(not(windows))]
+        let res = run_cmd("echo This is a likely error message; exit 0");
 
         res.stdout_does_not_contain("likely");
     }
@@ -2383,30 +2713,25 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_stderr_does_not_contain_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd("echo This is a likely error message>&2 & exit 0");
+        #[cfg(not(windows))]
+        let res = run_cmd("echo This is a likely error message >&2; exit 0");
 
         res.stderr_does_not_contain("likely");
     }
 
     #[test]
     fn test_stdout_matches() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2 ) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
+
         let positive = regex::Regex::new(".*likely.*").unwrap();
         let negative = regex::Regex::new(".*unlikely.*").unwrap();
         res.stdout_matches(&positive);
@@ -2416,68 +2741,186 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_stdout_matches_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
-        let negative = regex::Regex::new(".*unlikely.*").unwrap();
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
 
+        let negative = regex::Regex::new(".*unlikely.*").unwrap();
         res.stdout_matches(&negative);
     }
 
     #[test]
     #[should_panic]
     fn test_stdout_not_matches_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "This is a likely error message\n".into(),
-            stderr: "This is a likely error message\n".into(),
-        };
-        let positive = regex::Regex::new(".*likely.*").unwrap();
+        #[cfg(windows)]
+        let res = run_cmd(
+            "(echo This is a likely error message& echo This is a likely error message>&2) & exit 0",
+        );
+        #[cfg(not(windows))]
+        let res = run_cmd(
+            "echo This is a likely error message; echo This is a likely error message >&2; exit 0",
+        );
 
+        let positive = regex::Regex::new(".*likely.*").unwrap();
         res.stdout_does_not_match(&positive);
     }
 
+    #[cfg(feature = "echo")]
     #[test]
     fn test_normalized_newlines_stdout_is() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "A\r\nB\nC".into(),
-            stderr: "".into(),
-        };
+        let ts = TestScenario::new("echo");
+        let res = ts.ucmd().args(&["-ne", "A\r\nB\nC"]).run();
 
         res.normalized_newlines_stdout_is("A\r\nB\nC");
         res.normalized_newlines_stdout_is("A\nB\nC");
         res.normalized_newlines_stdout_is("A\nB\r\nC");
     }
 
+    #[cfg(feature = "echo")]
     #[test]
     #[should_panic]
     fn test_normalized_newlines_stdout_is_fail() {
-        let res = CmdResult {
-            bin_path: String::new(),
-            util_name: None,
-            tmpd: None,
-            code: None,
-            success: true,
-            stdout: "A\r\nB\nC".into(),
-            stderr: "".into(),
-        };
+        let ts = TestScenario::new("echo");
+        let res = ts.ucmd().args(&["-ne", "A\r\nB\nC"]).run();
 
         res.normalized_newlines_stdout_is("A\r\nB\nC\n");
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    fn test_cmd_result_stdout_check_and_stdout_str_check() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+
+        result.stdout_str_check(|stdout| stdout.ends_with("world\n"));
+        result.stdout_check(|stdout| stdout.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.no_stderr();
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    fn test_cmd_result_stderr_check_and_stderr_str_check() {
+        let ts = TestScenario::new("echo");
+        let result = run_cmd(format!(
+            "{} {} Hello world >&2",
+            ts.bin_path.display(),
+            ts.util_name
+        ));
+
+        result.stderr_str_check(|stderr| stderr.ends_with("world\n"));
+        result.stderr_check(|stderr| stderr.get(0..2).unwrap().eq(&[b'H', b'e']));
+        result.no_stdout();
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stdout_str_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stdout_str_check(str::is_empty);
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stdout_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stdout_check(<[u8]>::is_empty);
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stderr_str_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stderr_str_check(|s| !s.is_empty());
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stderr_check_when_false_then_panics() {
+        let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
+        result.stderr_check(|s| !s.is_empty());
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    #[should_panic]
+    fn test_cmd_result_stdout_check_when_predicate_panics_then_panic() {
+        let result = TestScenario::new("echo").ucmd().run();
+        result.stdout_str_check(|_| panic!("Just testing"));
+    }
+
+    #[cfg(feature = "echo")]
+    #[cfg(unix)]
+    #[test]
+    fn test_cmd_result_signal_when_normal_exit_then_no_signal() {
+        let result = TestScenario::new("echo").ucmd().run();
+        assert!(result.signal().is_none());
+    }
+
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    #[test]
+    #[should_panic = "Program must be run first or has not finished"]
+    fn test_cmd_result_signal_when_still_running_then_panic() {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+
+        child
+            .make_assertion()
+            .is_alive()
+            .with_current_output()
+            .signal();
+    }
+
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    #[test]
+    fn test_cmd_result_signal_when_kill_then_signal() {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+
+        child.kill();
+        child
+            .make_assertion()
+            .is_not_alive()
+            .with_current_output()
+            .signal_is(9)
+            .signal_name_is("SIGKILL")
+            .signal_name_is("KILL")
+            .signal_name_is("9")
+            .signal()
+            .expect("Signal was none");
+
+        let result = child.wait().unwrap();
+        result
+            .signal_is(9)
+            .signal_name_is("SIGKILL")
+            .signal_name_is("KILL")
+            .signal_name_is("9")
+            .signal()
+            .expect("Signal was none");
+    }
+
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    #[rstest]
+    #[case::signal_full_name_lower_case("sigkill")]
+    #[case::signal_short_name_lower_case("kill")]
+    #[case::signal_only_part_of_name("IGKILL")] // spell-checker: disable-line
+    #[case::signal_just_sig("SIG")]
+    #[case::signal_value_too_high("100")]
+    #[case::signal_value_negative("-1")]
+    #[should_panic = "Invalid signal name or value"]
+    fn test_cmd_result_signal_when_invalid_signal_name_then_panic(#[case] signal_name: &str) {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+        child.kill();
+        let result = child.wait().unwrap();
+        result.signal_name_is(signal_name);
     }
 
     #[test]
@@ -2564,7 +3007,9 @@ mod tests {
     #[cfg(unix)]
     #[cfg(feature = "whoami")]
     fn test_run_ucmd_as_root() {
-        if !is_ci() {
+        if is_ci() {
+            println!("TEST SKIPPED (cannot run inside CI)");
+        } else {
             // Skip test if we can't guarantee non-interactive `sudo`, or if we're not "root"
             if let Ok(output) = Command::new("sudo")
                 .env("LC_ALL", "C")
@@ -2583,8 +3028,6 @@ mod tests {
             } else {
                 println!("TEST SKIPPED (cannot run sudo)");
             }
-        } else {
-            println!("TEST SKIPPED (cannot run inside CI)");
         }
     }
 
@@ -2629,9 +3072,10 @@ mod tests {
         // check `child.is_alive()` and `child.delay()` is working
         let mut trials = 10;
         while child.is_alive() {
-            if trials <= 0 {
-                panic!("Assertion failed: child process is still alive.")
-            }
+            assert!(
+                trials > 0,
+                "Assertion failed: child process is still alive."
+            );
 
             child.delay(500);
             trials -= 1;
@@ -2668,7 +3112,7 @@ mod tests {
     #[test]
     fn test_uchild_when_pipe_in() {
         let ts = TestScenario::new("cat");
-        let mut child = ts.ucmd().run_no_wait();
+        let mut child = ts.ucmd().set_stdin(Stdio::piped()).run_no_wait();
         child.pipe_in("content");
         child.wait().unwrap().stdout_only("content").success();
 
@@ -2693,6 +3137,7 @@ mod tests {
 
         let mut child = ts
             .ucmd()
+            .set_stdin(Stdio::piped())
             .stderr_to_stdout()
             .args(&["-riv", "a"])
             .run_no_wait();
@@ -2793,10 +3238,7 @@ mod tests {
             Err(error) if error.kind() == io::ErrorKind::Other => {
                 std::assert_eq!(error.to_string(), "wait: Timeout of '1s' reached");
             }
-            Err(error) => panic!(
-                "Assertion failed: Expected error with timeout but was: {}",
-                error
-            ),
+            Err(error) => panic!("Assertion failed: Expected error with timeout but was: {error}"),
             Ok(_) => panic!("Assertion failed: Expected timeout of `wait`."),
         }
     }
@@ -2825,10 +3267,7 @@ mod tests {
             Err(error) if error.kind() == io::ErrorKind::Other => {
                 std::assert_eq!(error.to_string(), "kill: Timeout of '0s' reached");
             }
-            Err(error) => panic!(
-                "Assertion failed: Expected error with timeout but was: {}",
-                error
-            ),
+            Err(error) => panic!("Assertion failed: Expected error with timeout but was: {error}"),
             Ok(_) => panic!("Assertion failed: Expected timeout of `try_kill`."),
         }
     }
@@ -2863,5 +3302,53 @@ mod tests {
     fn test_ucommand_when_run_with_timeout_higher_then_execution_time_then_no_panic() {
         let ts = TestScenario::new("sleep");
         ts.ucmd().timeout(Duration::from_secs(60)).arg("1.0").run();
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    fn test_ucommand_when_default() {
+        let shell_cmd = format!("{TESTS_BINARY} echo -n hello");
+
+        let mut command = UCommand::new();
+        command.arg(&shell_cmd).succeeds().stdout_is("hello");
+
+        #[cfg(target_os = "android")]
+        let (expected_bin, expected_arg) = (PathBuf::from("/system/bin/sh"), OsString::from("-c"));
+        #[cfg(all(unix, not(target_os = "android")))]
+        let (expected_bin, expected_arg) = (PathBuf::from("/bin/sh"), OsString::from("-c"));
+        #[cfg(windows)]
+        let (expected_bin, expected_arg) = (PathBuf::from("cmd"), OsString::from("/C"));
+
+        std::assert_eq!(&expected_bin, command.bin_path.as_ref().unwrap());
+        assert!(command.util_name.is_none());
+        std::assert_eq!(command.args, &[expected_arg, OsString::from(&shell_cmd)]);
+        assert!(command.tmpd.is_some());
+    }
+
+    #[cfg(feature = "echo")]
+    #[test]
+    fn test_ucommand_with_util() {
+        let tmpd = tempfile::tempdir().unwrap();
+        let mut command = UCommand::with_util("echo", Rc::new(tmpd));
+
+        command
+            .args(&["-n", "hello"])
+            .succeeds()
+            .stdout_only("hello");
+
+        std::assert_eq!(
+            &PathBuf::from(TESTS_BINARY),
+            command.bin_path.as_ref().unwrap()
+        );
+        std::assert_eq!("echo", &command.util_name.unwrap());
+        std::assert_eq!(
+            &[
+                OsString::from("echo"),
+                OsString::from("-n"),
+                OsString::from("hello")
+            ],
+            command.args.make_contiguous()
+        );
+        assert!(command.tmpd.is_some());
     }
 }

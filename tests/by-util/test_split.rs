@@ -8,7 +8,7 @@ extern crate regex;
 
 use self::rand::{thread_rng, Rng};
 use self::regex::Regex;
-use crate::common::util::*;
+use crate::common::util::{AtPath, TestScenario};
 use rand::SeedableRng;
 #[cfg(not(windows))]
 use std::env;
@@ -320,7 +320,7 @@ fn test_split_lines_number() {
         .args(&["--lines", "2fb", "file"])
         .fails()
         .code_is(1)
-        .stderr_only("split: invalid number of lines: '2fb'");
+        .stderr_only("split: invalid number of lines: '2fb'\n");
 }
 
 #[test]
@@ -329,13 +329,15 @@ fn test_split_invalid_bytes_size() {
         .args(&["-b", "1024R"])
         .fails()
         .code_is(1)
-        .stderr_only("split: invalid number of bytes: '1024R'");
+        .stderr_only("split: invalid number of bytes: '1024R'\n");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-b", "1Y"])
         .fails()
         .code_is(1)
-        .stderr_only("split: invalid number of bytes: '1Y': Value too large for defined data type");
+        .stderr_only(
+            "split: invalid number of bytes: '1Y': Value too large for defined data type\n",
+        );
     #[cfg(target_pointer_width = "32")]
     {
         let sizes = ["1000G", "10T"];
@@ -357,7 +359,7 @@ fn test_split_chunks_num_chunks_oversized_32() {
             .args(&["--number", "5000000000", "file"])
             .fails()
             .code_is(1)
-            .stderr_only("split: Number of chunks too big");
+            .stderr_only("split: Number of chunks too big\n");
     }
 }
 
@@ -367,7 +369,7 @@ fn test_split_stdin_num_chunks() {
         .args(&["--number=1"])
         .fails()
         .code_is(1)
-        .stderr_only("split: -: cannot determine file size");
+        .stderr_only("split: -: cannot determine file size\n");
 }
 
 fn file_read(at: &AtPath, filename: &str) -> String {
@@ -423,7 +425,7 @@ fn test_numeric_dynamic_suffix_length() {
     ucmd.args(&["-d", "-b", "1", "ninetyonebytes.txt"])
         .succeeds();
     for i in 0..90 {
-        let filename = format!("x{:02}", i);
+        let filename = format!("x{i:02}");
         let contents = file_read(&at, &filename);
         assert_eq!(contents, "a");
     }
@@ -445,7 +447,7 @@ fn test_hex_dynamic_suffix_length() {
     ucmd.args(&["-x", "-b", "1", "twohundredfortyonebytes.txt"])
         .succeeds();
     for i in 0..240 {
-        let filename = format!("x{:02x}", i);
+        let filename = format!("x{i:02x}");
         let contents = file_read(&at, &filename);
         assert_eq!(contents, "a");
     }
@@ -457,7 +459,7 @@ fn test_suffixes_exhausted() {
     new_ucmd!()
         .args(&["-b", "1", "-a", "1", "asciilowercase.txt"])
         .fails()
-        .stderr_only("split: output file suffixes exhausted");
+        .stderr_only("split: output file suffixes exhausted\n");
 }
 
 #[test]
@@ -699,7 +701,7 @@ fn test_guard_input() {
     ts.ucmd()
         .args(&["-C", "6", "xaa"])
         .fails()
-        .stderr_only("split: 'xaa' would overwrite input; aborting");
+        .stderr_only("split: 'xaa' would overwrite input; aborting\n");
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
 }
 

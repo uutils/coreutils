@@ -1,5 +1,5 @@
 // spell-checker:ignore aabbaa aabbcc aabc abbb abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -925,7 +925,7 @@ fn check_against_gnu_tr_tests_bs_at_end() {
         .pipe_in(r"\")
         .succeeds()
         .stdout_is("x")
-        .stderr_is("tr: warning: an unescaped backslash at end of string is not portable");
+        .stderr_is("tr: warning: an unescaped backslash at end of string is not portable\n");
 }
 
 #[test]
@@ -938,7 +938,7 @@ fn check_against_gnu_tr_tests_ross_0a() {
         .args(&["-cs", "[:upper:]", "X[Y*]"])
         .pipe_in("")
         .fails()
-        .stderr_is("tr: when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
+        .stderr_is("tr: when translating with complemented character classes,\nstring2 must map all characters in the domain to one\n");
 }
 
 #[test]
@@ -1048,6 +1048,24 @@ fn check_against_gnu_tr_tests_empty_cc() {
         .pipe_in("")
         .fails()
         .stderr_is("tr: missing character class name '[::]'\n");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_repeat_set1() {
+    new_ucmd!()
+        .args(&["[a*]", "a"])
+        .pipe_in("")
+        .fails()
+        .stderr_is("tr: the [c*] repeat construct may not appear in string1\n");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_repeat_set2() {
+    new_ucmd!()
+        .args(&["a", "[a*][a*]"])
+        .pipe_in("")
+        .fails()
+        .stderr_is("tr: only one [c*] repeat construct may appear in string2\n");
 }
 
 #[test]

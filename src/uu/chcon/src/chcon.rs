@@ -1,13 +1,11 @@
 // spell-checker:ignore (vars) RFILE
-
 #![allow(clippy::upper_case_acronyms)]
 
 use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::format_usage;
-use uucore::{display::Quotable, show_error, show_warning};
+use uucore::{display::Quotable, format_usage, help_about, help_usage, show_error, show_warning};
 
-use clap::{Arg, ArgAction, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -21,13 +19,8 @@ mod fts;
 
 use errors::*;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
-static ABOUT: &str = "Change the SELinux security context of each FILE to CONTEXT. \n\
-                      With --reference, change the security context of each FILE to that of RFILE.";
-const USAGE: &str = "\
-    {} [OPTION]... CONTEXT FILE... \n    \
-    {} [OPTION]... [-u USER] [-r ROLE] [-l RANGE] [-t TYPE] FILE... \n    \
-    {} [OPTION]... --reference=RFILE FILE...";
+const ABOUT: &str = help_about!("chcon.md");
+const USAGE: &str = help_usage!("chcon.md");
 
 pub mod options {
     pub static HELP: &str = "help";
@@ -70,7 +63,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(r.into());
             }
 
-            return Err(UUsageError::new(libc::EXIT_FAILURE, format!("{}.\n", r)));
+            return Err(UUsageError::new(libc::EXIT_FAILURE, format!("{r}.\n")));
         }
     };
 
@@ -152,7 +145,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

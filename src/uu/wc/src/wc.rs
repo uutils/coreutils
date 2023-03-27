@@ -15,7 +15,7 @@ use count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast};
 use countable::WordCountable;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 use word_count::{TitledWordCount, WordCount};
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
@@ -98,9 +98,8 @@ impl Settings {
     }
 }
 
-static ABOUT: &str = "Display newline, word, and byte counts for each FILE, and a total line if
-more than one FILE is specified. With no FILE, or when FILE is -, read standard input.";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("wc.md");
+const USAGE: &str = help_usage!("wc.md");
 
 pub mod options {
     pub static BYTES: &str = "bytes";
@@ -185,7 +184,7 @@ impl Display for WcError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::FilesDisabled(message) | Self::StdinReprNotAllowed(message) => {
-                write!(f, "{}", message)
+                write!(f, "{message}")
             }
         }
     }
@@ -613,7 +612,7 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
         if let Err(err) = print_stats(settings, &total_result, number_width) {
             show!(USimpleError::new(
                 1,
-                format!("failed to print total: {}", err)
+                format!("failed to print total: {err}")
             ));
         }
     }

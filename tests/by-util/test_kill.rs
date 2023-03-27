@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use regex::Regex;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command};

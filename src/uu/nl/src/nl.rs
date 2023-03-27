@@ -14,13 +14,12 @@ use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 mod helper;
 
-static NAME: &str = "nl";
-static ABOUT: &str = "number lines of files";
-static USAGE: &str = "{} [OPTION]... [FILE]...";
+static ABOUT: &str = help_about!("nl.md");
+static USAGE: &str = help_usage!("nl.md");
 
 // Settings store options used by nl to produce its output.
 pub struct Settings {
@@ -141,7 +140,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
@@ -351,7 +349,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
             // want to print one in the first place, or it is a blank
             // line but we are still collecting more blank lines via
             // the option --join-blank-lines.
-            println!("{}", line);
+            println!("{line}");
             continue;
         }
         // If we make it here, then either we are printing a non-empty

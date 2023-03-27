@@ -18,7 +18,7 @@ use std::ffi::CStr;
 use std::fmt::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 mod options {
     pub const ALL: &str = "all";
@@ -38,8 +38,8 @@ mod options {
     pub const FILE: &str = "FILE"; // if length=1: FILE, if length=2: ARG1 ARG2
 }
 
-static ABOUT: &str = "Print information about users who are currently logged in.";
-const USAGE: &str = "{} [OPTION]... [ FILE | ARG1 ARG2 ]";
+const ABOUT: &str = help_about!("who.md");
+const USAGE: &str = help_usage!("who.md");
 
 #[cfg(target_os = "linux")]
 static RUNLEVEL_HELP: &str = "print current runlevel";
@@ -392,7 +392,7 @@ impl Who {
     fn print_runlevel(&self, ut: &Utmpx) {
         let last = (ut.pid() / 256) as u8 as char;
         let curr = (ut.pid() % 256) as u8 as char;
-        let runlvline = format!("run-level {}", curr);
+        let runlvline = format!("run-level {curr}");
         let comment = format!("last={}", if last == 'N' { 'S' } else { 'N' });
 
         self.print_line(
@@ -508,7 +508,7 @@ impl Who {
         } else {
             ut.host()
         };
-        let hoststr = if s.is_empty() { s } else { format!("({})", s) };
+        let hoststr = if s.is_empty() { s } else { format!("({s})") };
 
         self.print_line(
             ut.user().as_ref(),
@@ -539,24 +539,24 @@ impl Who {
         let mut buf = String::with_capacity(64);
         let msg = vec![' ', state].into_iter().collect::<String>();
 
-        write!(buf, "{:<8}", user).unwrap();
+        write!(buf, "{user:<8}").unwrap();
         if self.include_mesg {
             buf.push_str(&msg);
         }
-        write!(buf, " {:<12}", line).unwrap();
+        write!(buf, " {line:<12}").unwrap();
         // "%b %e %H:%M" (LC_ALL=C)
         let time_size = 3 + 2 + 2 + 1 + 2;
-        write!(buf, " {:<1$}", time, time_size).unwrap();
+        write!(buf, " {time:<time_size$}").unwrap();
 
         if !self.short_output {
             if self.include_idle {
-                write!(buf, " {:<6}", idle).unwrap();
+                write!(buf, " {idle:<6}").unwrap();
             }
-            write!(buf, " {:>10}", pid).unwrap();
+            write!(buf, " {pid:>10}").unwrap();
         }
-        write!(buf, " {:<8}", comment).unwrap();
+        write!(buf, " {comment:<8}").unwrap();
         if self.include_exit {
-            write!(buf, " {:<12}", exit).unwrap();
+            write!(buf, " {exit:<12}").unwrap();
         }
         println!("{}", buf.trim_end());
     }

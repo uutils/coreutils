@@ -3,7 +3,7 @@
 use clap::builder::ValueParser;
 use uucore::error::{UResult, UUsageError};
 
-use clap::{Arg, ArgAction, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
 use uucore::format_usage;
 
@@ -18,7 +18,6 @@ mod errors;
 use errors::error_exit_status;
 use errors::{Error, Result, RunconError};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = "Run command with specified security context.";
 const USAGE: &str = "\
     {} [CONTEXT COMMAND [ARG...]]
@@ -52,7 +51,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 match r.kind() {
                     clap::error::ErrorKind::DisplayHelp
                     | clap::error::ErrorKind::DisplayVersion => {
-                        println!("{}", r);
+                        println!("{r}");
                         return Ok(());
                     }
                     _ => {}
@@ -60,7 +59,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             return Err(UUsageError::new(
                 error_exit_status::ANOTHER_ERROR,
-                format!("{}", r),
+                format!("{r}"),
             ));
         }
     };
@@ -107,7 +106,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .after_help(DESCRIPTION)
         .override_usage(format_usage(USAGE))
@@ -264,7 +263,7 @@ fn print_current_context() -> Result<()> {
 
     if let Some(context) = context {
         let context = context.as_ref().to_str()?;
-        println!("{}", context);
+        println!("{context}");
     } else {
         println!();
     }

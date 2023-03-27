@@ -8,18 +8,17 @@
 // spell-checker:ignore (ToDO) delim mkdelim
 
 use std::cmp::Ordering;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
-use uucore::error::FromIo;
-use uucore::error::UResult;
-use uucore::format_usage;
+use uucore::error::{FromIo, UResult};
+use uucore::{format_usage, help_about, help_usage};
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 
-static ABOUT: &str = "compare two sorted files line by line";
-static LONG_HELP: &str = "";
-const USAGE: &str = "{} [OPTION]... FILE1 FILE2";
+const ABOUT: &str = help_about!("comm.md");
+const USAGE: &str = help_usage!("comm.md");
 
 mod options {
     pub const COLUMN_1: &str = "1";
@@ -29,52 +28,101 @@ mod options {
     pub const DELIMITER_DEFAULT: &str = "\t";
     pub const FILE_1: &str = "FILE1";
     pub const FILE_2: &str = "FILE2";
+    pub const TOTAL: &str = "total";
+    pub const ZERO_TERMINATED: &str = "zero-terminated";
 }
 
-fn mkdelim(col: usize, opts: &ArgMatches) -> String {
-    let mut s = String::new();
+fn column_width(col: &str, opts: &ArgMatches) -> usize {
+    if opts.get_flag(col) {
+        0
+    } else {
+        1
+    }
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy)]
+enum LineEnding {
+    Newline = b'\n',
+    Nul = 0,
+}
+
+impl From<LineEnding> for u8 {
+    fn from(line_ending: LineEnding) -> Self {
+        line_ending as Self
+    }
+}
+
+impl From<bool> for LineEnding {
+    fn from(is_zero_terminated: bool) -> Self {
+        if is_zero_terminated {
+            Self::Nul
+        } else {
+            Self::Newline
+        }
+    }
+}
+
+impl Display for LineEnding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Newline => writeln!(f),
+            Self::Nul => write!(f, "\0"),
+        }
+    }
+}
+
+enum Input {
+    Stdin(Stdin),
+    FileIn(BufReader<File>),
+}
+
+struct LineReader {
+    line_ending: LineEnding,
+    input: Input,
+}
+
+impl LineReader {
+    fn new(input: Input, line_ending: LineEnding) -> Self {
+        Self { input, line_ending }
+    }
+
+    fn read_line(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        let line_ending = self.line_ending.into();
+
+        let result = match &mut self.input {
+            Input::Stdin(r) => r.lock().read_until(line_ending, buf),
+            Input::FileIn(r) => r.read_until(line_ending, buf),
+        };
+
+        if !buf.ends_with(&[line_ending]) {
+            buf.push(line_ending);
+        }
+
+        result
+    }
+}
+
+fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
     let delim = match opts.get_one::<String>(options::DELIMITER).unwrap().as_str() {
         "" => "\0",
         delim => delim,
     };
 
-    if col > 1 && !opts.get_flag(options::COLUMN_1) {
-        s.push_str(delim.as_ref());
-    }
-    if col > 2 && !opts.get_flag(options::COLUMN_2) {
-        s.push_str(delim.as_ref());
-    }
+    let width_col_1 = column_width(options::COLUMN_1, opts);
+    let width_col_2 = column_width(options::COLUMN_2, opts);
 
-    s
-}
+    let delim_col_2 = delim.repeat(width_col_1);
+    let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
 
-fn ensure_nl(line: &mut String) {
-    if !line.ends_with('\n') {
-        line.push('\n');
-    }
-}
-
-enum LineReader {
-    Stdin(Stdin),
-    FileIn(BufReader<File>),
-}
-
-impl LineReader {
-    fn read_line(&mut self, buf: &mut String) -> io::Result<usize> {
-        match *self {
-            Self::Stdin(ref mut r) => r.read_line(buf),
-            Self::FileIn(ref mut r) => r.read_line(buf),
-        }
-    }
-}
-
-fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
-    let delim: Vec<String> = (0..4).map(|col| mkdelim(col, opts)).collect();
-
-    let ra = &mut String::new();
+    let ra = &mut Vec::new();
     let mut na = a.read_line(ra);
-    let rb = &mut String::new();
+    let rb = &mut Vec::new();
     let mut nb = b.read_line(rb);
+
+    let mut total_col_1 = 0;
+    let mut total_col_2 = 0;
+    let mut total_col_3 = 0;
 
     while na.is_ok() || nb.is_ok() {
         let ord = match (na.is_ok(), nb.is_ok()) {
@@ -92,41 +140,48 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
         match ord {
             Ordering::Less => {
                 if !opts.get_flag(options::COLUMN_1) {
-                    ensure_nl(ra);
-                    print!("{}{}", delim[1], ra);
+                    print!("{}", String::from_utf8_lossy(ra));
                 }
                 ra.clear();
                 na = a.read_line(ra);
+                total_col_1 += 1;
             }
             Ordering::Greater => {
                 if !opts.get_flag(options::COLUMN_2) {
-                    ensure_nl(rb);
-                    print!("{}{}", delim[2], rb);
+                    print!("{delim_col_2}{}", String::from_utf8_lossy(rb));
                 }
                 rb.clear();
                 nb = b.read_line(rb);
+                total_col_2 += 1;
             }
             Ordering::Equal => {
                 if !opts.get_flag(options::COLUMN_3) {
-                    ensure_nl(ra);
-                    print!("{}{}", delim[3], ra);
+                    print!("{delim_col_3}{}", String::from_utf8_lossy(ra));
                 }
                 ra.clear();
                 rb.clear();
                 na = a.read_line(ra);
                 nb = b.read_line(rb);
+                total_col_3 += 1;
             }
         }
     }
+
+    if opts.get_flag(options::TOTAL) {
+        let line_ending = LineEnding::from(opts.get_flag(options::ZERO_TERMINATED));
+        print!("{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}total{line_ending}");
+    }
 }
 
-fn open_file(name: &str) -> io::Result<LineReader> {
-    match name {
-        "-" => Ok(LineReader::Stdin(stdin())),
-        _ => {
-            let f = File::open(Path::new(name))?;
-            Ok(LineReader::FileIn(BufReader::new(f)))
-        }
+fn open_file(name: &str, line_ending: LineEnding) -> io::Result<LineReader> {
+    if name == "-" {
+        Ok(LineReader::new(Input::Stdin(stdin()), line_ending))
+    } else {
+        let f = File::open(Path::new(name))?;
+        Ok(LineReader::new(
+            Input::FileIn(BufReader::new(f)),
+            line_ending,
+        ))
     }
 }
 
@@ -135,10 +190,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
     let matches = uu_app().try_get_matches_from(args)?;
+    let line_ending = LineEnding::from(matches.get_flag(options::ZERO_TERMINATED));
     let filename1 = matches.get_one::<String>(options::FILE_1).unwrap();
     let filename2 = matches.get_one::<String>(options::FILE_2).unwrap();
-    let mut f1 = open_file(filename1).map_err_context(|| filename1.to_string())?;
-    let mut f2 = open_file(filename2).map_err_context(|| filename2.to_string())?;
+    let mut f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string())?;
+    let mut f2 = open_file(filename2, line_ending).map_err_context(|| filename2.to_string())?;
 
     comm(&mut f1, &mut f2, &matches);
     Ok(())
@@ -148,7 +204,6 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
@@ -178,6 +233,14 @@ pub fn uu_app() -> Command {
                 .hide_default_value(true),
         )
         .arg(
+            Arg::new(options::ZERO_TERMINATED)
+                .long(options::ZERO_TERMINATED)
+                .short('z')
+                .overrides_with(options::ZERO_TERMINATED)
+                .help("line delimiter is NUL, not newline")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(options::FILE_1)
                 .required(true)
                 .value_hint(clap::ValueHint::FilePath),
@@ -186,5 +249,11 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE_2)
                 .required(true)
                 .value_hint(clap::ValueHint::FilePath),
+        )
+        .arg(
+            Arg::new(options::TOTAL)
+                .long(options::TOTAL)
+                .help("output a summary")
+                .action(ArgAction::SetTrue),
         )
 }

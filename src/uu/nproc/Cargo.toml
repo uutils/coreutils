@@ -1,6 +1,6 @@
 [package]
 name = "uu_nproc"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "nproc ~ (uutils) display the number of processing units available"
@@ -15,10 +15,9 @@ edition = "2021"
 path = "src/nproc.rs"
 
 [dependencies]
-libc = "0.2.137"
-num_cpus = "1.14"
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["fs"] }
+libc = { workspace=true }
+clap = { workspace=true }
+uucore = { workspace=true, features=["fs"] }
 
 [[bin]]
 name = "nproc"

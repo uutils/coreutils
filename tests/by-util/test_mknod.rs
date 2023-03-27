@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 #[cfg(not(windows))]
@@ -77,14 +77,14 @@ fn test_mknod_character_device_requires_major_and_minor() {
         .arg("test_file")
         .arg("c")
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stderr_contains("Special files require major and minor device numbers.");
     new_ucmd!()
         .arg("test_file")
         .arg("c")
         .arg("1")
         .fails()
-        .status_code(1)
+        .code_is(1)
         .stderr_contains("Special files require major and minor device numbers.");
     new_ucmd!()
         .arg("test_file")
@@ -92,14 +92,14 @@ fn test_mknod_character_device_requires_major_and_minor() {
         .arg("1")
         .arg("c")
         .fails()
-        .stderr_contains("Invalid value 'c'");
+        .stderr_contains("invalid value 'c'");
     new_ucmd!()
         .arg("test_file")
         .arg("c")
         .arg("c")
         .arg("1")
         .fails()
-        .stderr_contains("Invalid value 'c'");
+        .stderr_contains("invalid value 'c'");
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn test_mknod_invalid_arg() {
         .arg("--foo")
         .fails()
         .no_stdout()
-        .stderr_contains("Found argument '--foo' which wasn't expected");
+        .stderr_contains("unexpected argument '--foo' found");
 }
 
 #[test]
@@ -122,6 +122,6 @@ fn test_mknod_invalid_mode() {
         .arg("p")
         .fails()
         .no_stdout()
-        .status_code(1)
+        .code_is(1)
         .stderr_contains("invalid mode");
 }

@@ -1,12 +1,11 @@
-use crate::common::util::*;
+use crate::common::util::{AtPath, TestScenario, UCommand};
 use once_cell::sync::Lazy;
 use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Mutex;
 
-extern crate libc;
-use uucore::mode::strip_minus_from_mode;
 extern crate chmod;
+extern crate libc;
 use self::libc::umask;
 
 static TEST_FILE: &str = "file";
@@ -48,15 +47,12 @@ fn run_single_test(test: &TestCase, at: &AtPath, mut ucmd: UCommand) {
     let r = ucmd.run();
     if !r.succeeded() {
         println!("{}", r.stderr_str());
-        panic!("{:?}: failed", ucmd.raw);
+        panic!("{ucmd}: failed");
     }
 
     let perms = at.metadata(TEST_FILE).permissions().mode();
     if perms != test.after {
-        panic!(
-            "{:?}: expected: {:o} got: {:o}",
-            ucmd.raw, test.after, perms
-        );
+        panic!("{}: expected: {:o} got: {:o}", ucmd, test.after, perms);
     }
 }
 
@@ -216,7 +212,7 @@ fn test_chmod_ugoa() {
         .fails()
         .code_is(1)
         // spell-checker:disable-next-line
-        .stderr_is("chmod: file: new permissions are r-xrwxrwx, not r-xr-xr-x");
+        .stderr_is("chmod: file: new permissions are r-xrwxrwx, not r-xr-xr-x\n");
     assert_eq!(
         metadata(at.plus("file")).unwrap().permissions().mode(),
         0o100577
@@ -314,7 +310,7 @@ fn test_permission_denied() {
         .arg("o=r")
         .arg("d")
         .fails()
-        .stderr_is("chmod: 'd/no-x/y': Permission denied");
+        .stderr_is("chmod: 'd/no-x/y': Permission denied\n");
 }
 
 #[test]
@@ -341,7 +337,7 @@ fn test_chmod_recursive() {
         .arg("a")
         .arg("z")
         .fails()
-        .stderr_is("chmod: Permission denied");
+        .stderr_is("chmod: Permission denied\n");
 
     assert_eq!(at.metadata("z/y").permissions().mode(), 0o100444);
     assert_eq!(at.metadata("a/a").permissions().mode(), 0o100444);
@@ -414,10 +410,9 @@ fn test_chmod_symlink_non_existing_file() {
     let non_existing = "test_chmod_symlink_non_existing_file";
     let test_symlink = "test_chmod_symlink_non_existing_file_symlink";
     let expected_stdout = &format!(
-        "failed to change mode of '{}' from 0000 (---------) to 0000 (---------)",
-        test_symlink
+        "failed to change mode of '{test_symlink}' from 0000 (---------) to 1500 (r-x-----T)"
     );
-    let expected_stderr = &format!("cannot operate on dangling symlink '{}'", test_symlink);
+    let expected_stderr = &format!("cannot operate on dangling symlink '{test_symlink}'");
 
     at.symlink_file(non_existing, test_symlink);
 
@@ -443,6 +438,17 @@ fn test_chmod_symlink_non_existing_file() {
         .code_is(1)
         .no_stderr()
         .stdout_contains(expected_stdout);
+
+    // this should only include  the dangling symlink message
+    // NOT the failure to change mode
+    scene
+        .ucmd()
+        .arg("755")
+        .arg(test_symlink)
+        .run()
+        .code_is(1)
+        .no_stdout()
+        .stderr_contains(expected_stderr);
 }
 
 #[test]
@@ -455,10 +461,7 @@ fn test_chmod_symlink_non_existing_file_recursive() {
     let test_directory = "test_chmod_symlink_non_existing_file_directory";
 
     at.mkdir(test_directory);
-    at.symlink_file(
-        non_existing,
-        &format!("{}/{}", test_directory, test_symlink),
-    );
+    at.symlink_file(non_existing, &format!("{test_directory}/{test_symlink}"));
 
     // this should succeed
     scene
@@ -472,8 +475,7 @@ fn test_chmod_symlink_non_existing_file_recursive() {
 
     let expected_stdout = &format!(
         // spell-checker:disable-next-line
-        "mode of '{}' retained as 0755 (rwxr-xr-x)",
-        test_directory
+        "mode of '{test_directory}' retained as 0755 (rwxr-xr-x)"
     );
 
     // '-v': this should succeed without stderr
@@ -498,35 +500,6 @@ fn test_chmod_symlink_non_existing_file_recursive() {
         .succeeds()
         .stdout_contains(expected_stdout)
         .no_stderr();
-}
-
-#[test]
-fn test_chmod_strip_minus_from_mode() {
-    let tests = vec![
-        // ( before, after )
-        ("chmod -v -xw -R FILE", "chmod -v xw -R FILE"),
-        ("chmod g=rwx FILE -c", "chmod g=rwx FILE -c"),
-        (
-            "chmod -c -R -w,o+w FILE --preserve-root",
-            "chmod -c -R w,o+w FILE --preserve-root",
-        ),
-        ("chmod -c -R +w FILE ", "chmod -c -R +w FILE "),
-        ("chmod a=r,=xX FILE", "chmod a=r,=xX FILE"),
-        (
-            "chmod -v --reference REF_FILE -R FILE",
-            "chmod -v --reference REF_FILE -R FILE",
-        ),
-        ("chmod -Rvc -w-x FILE", "chmod -Rvc w-x FILE"),
-        ("chmod 755 -v FILE", "chmod 755 -v FILE"),
-        ("chmod -v +0004 FILE -R", "chmod -v +0004 FILE -R"),
-        ("chmod -v -0007 FILE -R", "chmod -v 0007 FILE -R"),
-    ];
-
-    for test in tests {
-        let mut args: Vec<String> = test.0.split(' ').map(|v| v.to_string()).collect();
-        let _mode_had_minus_prefix = strip_minus_from_mode(&mut args);
-        assert_eq!(test.1, args.join(" "));
-    }
 }
 
 #[test]
@@ -572,10 +545,164 @@ fn test_mode_after_dash_dash() {
     run_single_test(
         &TestCase {
             args: vec!["--", "-r", TEST_FILE],
-            before: 0o100777,
-            after: 0o100333,
+            before: 0o100_777,
+            after: 0o100_333,
         },
         &at,
         ucmd,
     );
+}
+
+#[test]
+fn test_chmod_file_after_non_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(TEST_FILE);
+    at.touch("file2");
+    set_permissions(at.plus(TEST_FILE), Permissions::from_mode(0o664)).unwrap();
+    set_permissions(at.plus("file2"), Permissions::from_mode(0o664)).unwrap();
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("does-not-exist")
+        .arg(TEST_FILE)
+        .fails()
+        .stderr_contains("chmod: cannot access 'does-not-exist': No such file or directory")
+        .code_is(1);
+
+    assert_eq!(at.metadata(TEST_FILE).permissions().mode(), 0o100_764);
+
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("--q")
+        .arg("does-not-exist")
+        .arg("file2")
+        .fails()
+        .no_stderr()
+        .code_is(1);
+    assert_eq!(at.metadata("file2").permissions().mode(), 0o100_764);
+}
+
+#[test]
+fn test_chmod_file_symlink_after_non_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let existing = "file";
+    let test_existing_symlink = "file_symlink";
+
+    let non_existing = "test_chmod_symlink_non_existing_file";
+    let test_dangling_symlink = "test_chmod_symlink_non_existing_file_symlink";
+    let expected_stdout = &format!(
+        "failed to change mode of '{test_dangling_symlink}' from 0000 (---------) to 1500 (r-x-----T)"
+    );
+    let expected_stderr = &format!("cannot operate on dangling symlink '{test_dangling_symlink}'");
+
+    at.touch(existing);
+    set_permissions(at.plus(existing), Permissions::from_mode(0o664)).unwrap();
+    at.symlink_file(non_existing, test_dangling_symlink);
+    at.symlink_file(existing, test_existing_symlink);
+
+    // this cannot succeed since the symbolic link dangles
+    // but the metadata for the existing target should change
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("-v")
+        .arg(test_dangling_symlink)
+        .arg(test_existing_symlink)
+        .fails()
+        .code_is(1)
+        .stdout_contains(expected_stdout)
+        .stderr_contains(expected_stderr);
+    assert_eq!(
+        at.metadata(test_existing_symlink).permissions().mode(),
+        0o100_764
+    );
+}
+
+#[test]
+fn test_quiet_n_verbose_used_multiple_times() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("--verbose")
+        .arg("--verbose")
+        .arg("file")
+        .succeeds();
+    scene
+        .ucmd()
+        .arg("u+x")
+        .arg("--quiet")
+        .arg("--quiet")
+        .arg("file")
+        .succeeds();
+}
+
+#[test]
+fn test_gnu_invalid_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("u+gr").arg("file").fails();
+}
+
+#[test]
+fn test_gnu_options() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("-w").arg("file").succeeds();
+    scene.ucmd().arg("file").arg("-w").succeeds();
+    scene.ucmd().arg("-w").arg("--").arg("file").succeeds();
+}
+
+#[test]
+fn test_gnu_repeating_options() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("-w").arg("-w").arg("file").succeeds();
+    scene
+        .ucmd()
+        .arg("-w")
+        .arg("-w")
+        .arg("-w")
+        .arg("file")
+        .succeeds();
+}
+
+#[test]
+fn test_gnu_special_filenames() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let perms_before = Permissions::from_mode(0o100_640);
+    let perms_after = Permissions::from_mode(0o100_440);
+
+    make_file(&at.plus_as_string("--"), perms_before.mode());
+    scene.ucmd().arg("-w").arg("--").arg("--").succeeds();
+    assert_eq!(at.metadata("--").permissions(), perms_after);
+    set_permissions(at.plus("--"), perms_before.clone()).unwrap();
+    scene.ucmd().arg("--").arg("-w").arg("--").succeeds();
+    assert_eq!(at.metadata("--").permissions(), perms_after);
+    at.remove("--");
+
+    make_file(&at.plus_as_string("-w"), perms_before.mode());
+    scene.ucmd().arg("-w").arg("--").arg("-w").succeeds();
+    assert_eq!(at.metadata("-w").permissions(), perms_after);
+    set_permissions(at.plus("-w"), perms_before).unwrap();
+    scene.ucmd().arg("--").arg("-w").arg("-w").succeeds();
+    assert_eq!(at.metadata("-w").permissions(), perms_after);
+}
+
+#[test]
+fn test_gnu_special_options() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("--").arg("--").arg("file").succeeds();
+    scene.ucmd().arg("--").arg("--").fails();
 }

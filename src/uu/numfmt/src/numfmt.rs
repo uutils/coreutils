@@ -14,16 +14,15 @@ use std::io::{BufRead, Write};
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::format_usage;
 use uucore::ranges::Range;
-use uucore::{help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 pub mod errors;
 pub mod format;
 pub mod options;
 mod units;
 
-const ABOUT: &str = help_section!("about", "numfmt.md");
+const ABOUT: &str = help_about!("numfmt.md");
 const AFTER_HELP: &str = help_section!("after help", "numfmt.md");
 const USAGE: &str = help_usage!("numfmt.md");
 
@@ -46,7 +45,7 @@ where
     for (idx, line) in lines.by_ref().enumerate() {
         match line {
             Ok(l) if idx < options.header => {
-                println!("{}", l);
+                println!("{l}");
                 Ok(())
             }
             Ok(l) => match format_and_print(&l, options) {
@@ -403,8 +402,8 @@ mod tests {
         let mock_buffer = MockBuffer {};
         let result = handle_buffer(BufReader::new(mock_buffer), &get_valid_options())
             .expect_err("returned Ok after receiving IO error");
-        let result_debug = format!("{:?}", result);
-        let result_display = format!("{}", result);
+        let result_debug = format!("{result:?}");
+        let result_display = format!("{result}");
         assert_eq!(result_debug, "IoError(\"broken pipe\")");
         assert_eq!(result_display, "broken pipe");
         assert_eq!(result.code(), 1);
@@ -415,8 +414,8 @@ mod tests {
         let input_value = b"135\nhello";
         let result = handle_buffer(BufReader::new(&input_value[..]), &get_valid_options())
             .expect_err("returned Ok after receiving improperly formatted input");
-        let result_debug = format!("{:?}", result);
-        let result_display = format!("{}", result);
+        let result_debug = format!("{result:?}");
+        let result_display = format!("{result}");
         assert_eq!(
             result_debug,
             "FormattingError(\"invalid suffix in input: 'hello'\")"

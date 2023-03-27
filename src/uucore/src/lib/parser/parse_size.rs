@@ -196,7 +196,7 @@ impl fmt::Display for ParseSizeError {
         let s = match self {
             Self::InvalidSuffix(s) | Self::ParseFailure(s) | Self::SizeTooBig(s) => s,
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 
@@ -292,21 +292,21 @@ mod tests {
         ];
 
         for &(c, exp) in &suffixes {
-            let s = format!("2{}B", c); // KB
+            let s = format!("2{c}B"); // KB
             assert_eq!(Ok((2 * (1000_u128).pow(exp)) as u64), parse_size(&s));
-            let s = format!("2{}", c); // K
+            let s = format!("2{c}"); // K
             assert_eq!(Ok((2 * (1024_u128).pow(exp)) as u64), parse_size(&s));
-            let s = format!("2{}iB", c); // KiB
+            let s = format!("2{c}iB"); // KiB
             assert_eq!(Ok((2 * (1024_u128).pow(exp)) as u64), parse_size(&s));
             let s = format!("2{}iB", c.to_lowercase()); // kiB
             assert_eq!(Ok((2 * (1024_u128).pow(exp)) as u64), parse_size(&s));
 
             // suffix only
-            let s = format!("{}B", c); // KB
+            let s = format!("{c}B"); // KB
             assert_eq!(Ok(((1000_u128).pow(exp)) as u64), parse_size(&s));
-            let s = format!("{}", c); // K
+            let s = format!("{c}"); // K
             assert_eq!(Ok(((1024_u128).pow(exp)) as u64), parse_size(&s));
-            let s = format!("{}iB", c); // KiB
+            let s = format!("{c}iB"); // KiB
             assert_eq!(Ok(((1024_u128).pow(exp)) as u64), parse_size(&s));
             let s = format!("{}iB", c.to_lowercase()); // kiB
             assert_eq!(Ok(((1024_u128).pow(exp)) as u64), parse_size(&s));
@@ -421,9 +421,9 @@ mod tests {
 
         assert_eq!(Ok(1024), parser.parse("1"));
         assert_eq!(Ok(2 * 1024), parser.parse("2"));
-        assert_eq!(Ok(1 * 1000 * 1000), parser.parse("1MB"));
-        assert_eq!(Ok(1 * 1024 * 1024), parser.parse("1M"));
-        assert_eq!(Ok(1 * 1024 * 1024 * 1024), parser.parse("1G"));
+        assert_eq!(Ok(1000 * 1000), parser.parse("1MB"));
+        assert_eq!(Ok(1024 * 1024), parser.parse("1M"));
+        assert_eq!(Ok(1024 * 1024 * 1024), parser.parse("1G"));
 
         assert!(parser.parse("1T").is_err());
         assert!(parser.parse("1P").is_err());
@@ -438,9 +438,9 @@ mod tests {
 
         assert_eq!(Ok(1024), parser.parse("1"));
         assert_eq!(Ok(2 * 1024), parser.parse("2"));
-        assert_eq!(Ok(1 * 1000 * 1000), parser.parse("1MB"));
-        assert_eq!(Ok(1 * 1024 * 1024), parser.parse("1M"));
-        assert_eq!(Ok(1 * 1024 * 1024 * 1024), parser.parse("1G"));
+        assert_eq!(Ok(1000 * 1000), parser.parse("1MB"));
+        assert_eq!(Ok(1024 * 1024), parser.parse("1M"));
+        assert_eq!(Ok(1024 * 1024 * 1024), parser.parse("1G"));
 
         assert_eq!(Ok(1), parser.parse("1b"));
         assert_eq!(Ok(1024), parser.parse("1024b"));

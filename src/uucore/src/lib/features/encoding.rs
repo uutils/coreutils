@@ -165,7 +165,7 @@ pub fn wrap_write<W: Write>(mut writer: W, line_wrap: usize, res: &str) -> io::R
     use std::cmp::min;
 
     if line_wrap == 0 {
-        return write!(writer, "{}", res);
+        return write!(writer, "{res}");
     }
 
     let mut start = 0;

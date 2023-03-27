@@ -8,11 +8,11 @@
 use std::io::{stdin, Read};
 
 use clap::Command;
-use uucore::{encoding::Format, error::UResult, help_section, help_usage};
+use uucore::{encoding::Format, error::UResult, help_about, help_usage};
 
 pub mod base_common;
 
-const ABOUT: &str = help_section!("about", "base32.md");
+const ABOUT: &str = help_about!("base32.md");
 const USAGE: &str = help_usage!("base32.md");
 
 #[uucore::main]

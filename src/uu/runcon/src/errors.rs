@@ -77,11 +77,11 @@ pub(crate) fn write_full_error<W>(writer: &mut W, err: &dyn std::error::Error) -
 where
     W: Write,
 {
-    write!(writer, "{}", err)?;
+    write!(writer, "{err}")?;
     let mut err = err;
     while let Some(source) = err.source() {
         err = source;
-        write!(writer, ": {}", err)?;
+        write!(writer, ": {err}")?;
     }
     write!(writer, ".")?;
     Ok(())

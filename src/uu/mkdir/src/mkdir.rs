@@ -18,22 +18,19 @@ use uucore::error::{UResult, USimpleError};
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
-use uucore::{format_usage, show, show_if_err};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_if_err};
 
 static DEFAULT_PERM: u32 = 0o755;
 
-static ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
-const USAGE: &str = "{} [OPTION]... [USER]";
+const ABOUT: &str = help_about!("mkdir.md");
+const USAGE: &str = help_usage!("mkdir.md");
+const AFTER_HELP: &str = help_section!("after help", "mkdir.md");
 
 mod options {
     pub const MODE: &str = "mode";
     pub const PARENTS: &str = "parents";
     pub const VERBOSE: &str = "verbose";
     pub const DIRS: &str = "dirs";
-}
-
-fn get_long_usage() -> &'static str {
-    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'."
 }
 
 #[cfg(windows)]
@@ -55,7 +52,7 @@ fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, St
                 } else {
                     let cmode = if mode_had_minus_prefix {
                         // clap parsing is finished, now put prefix back
-                        format!("-{}", mode)
+                        format!("-{mode}")
                     } else {
                         mode.to_string()
                     };
@@ -92,9 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
     let dirs = matches
         .get_many::<OsString>(options::DIRS)

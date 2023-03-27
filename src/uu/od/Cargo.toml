@@ -1,6 +1,6 @@
 [package]
 name = "uu_od"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "od ~ (uutils) display formatted representation of input"
@@ -15,10 +15,10 @@ edition = "2021"
 path = "src/od.rs"
 
 [dependencies]
-byteorder = "1.3.2"
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-half = "2.1"
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
+byteorder = { workspace=true }
+clap = { workspace=true }
+half = { workspace=true }
+uucore = { workspace=true }
 
 [[bin]]
 name = "od"

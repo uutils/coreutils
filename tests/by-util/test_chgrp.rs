@@ -1,7 +1,7 @@
 // spell-checker:ignore (words) nosuchgroup groupname
 
-use crate::common::util::*;
-use rust_users::*;
+use crate::common::util::TestScenario;
+use rust_users::get_effective_gid;
 
 #[test]
 fn test_invalid_option() {
@@ -48,7 +48,7 @@ fn test_invalid_group() {
         .arg("__nosuchgroup__")
         .arg("/")
         .fails()
-        .stderr_is("chgrp: invalid group: '__nosuchgroup__'");
+        .stderr_is("chgrp: invalid group: '__nosuchgroup__'\n");
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn test_preserve_root() {
             .arg("-R")
             .arg("bin").arg(d)
             .fails()
-            .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+            .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe\n");
     }
 }
 
@@ -111,16 +111,16 @@ fn test_preserve_root_symlink() {
             .arg("-HR")
             .arg("bin").arg(file)
             .fails()
-            .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+            .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe\n");
     }
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("///dev", file);
     ucmd.arg("--preserve-root")
         .arg("-HR")
-        .arg("bin").arg(format!(".//{}/..//..//../../", file))
+        .arg("bin").arg(format!(".//{file}/..//..//../../"))
         .fails()
-        .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+        .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe\n");
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("/", "__root__");
@@ -128,7 +128,7 @@ fn test_preserve_root_symlink() {
         .arg("-R")
         .arg("bin").arg("__root__/.")
         .fails()
-        .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe");
+        .stderr_is("chgrp: it is dangerous to operate recursively on '/'\nchgrp: use --no-preserve-root to override this failsafe\n");
 }
 
 #[test]
@@ -143,7 +143,7 @@ fn test_reference() {
             .arg("--reference=/etc/passwd")
             .arg("/etc")
             .fails()
-            .stderr_is("chgrp: changing group of '/etc': Operation not permitted (os error 1)\nfailed to change group of '/etc' from root to root");
+            .stderr_is("chgrp: changing group of '/etc': Operation not permitted (os error 1)\nfailed to change group of '/etc' from root to root\n");
     }
 }
 
@@ -196,7 +196,7 @@ fn test_missing_files() {
         .arg("groupname")
         .fails()
         .stderr_contains(
-            "error: The following required arguments were not provided:\n  <FILE>...\n",
+            "error: the following required arguments were not provided:\n  <FILE>...\n",
         );
 }
 
@@ -270,7 +270,7 @@ fn test_permission_denied() {
             .arg(group.as_raw().to_string())
             .arg("dir")
             .fails()
-            .stderr_only("chgrp: cannot access 'dir': Permission denied");
+            .stderr_only("chgrp: cannot access 'dir': Permission denied\n");
     }
 }
 
@@ -289,7 +289,7 @@ fn test_subdir_permission_denied() {
             .arg(group.as_raw().to_string())
             .arg("dir")
             .fails()
-            .stderr_only("chgrp: cannot access 'dir/subdir': Permission denied");
+            .stderr_only("chgrp: cannot access 'dir/subdir': Permission denied\n");
     }
 }
 

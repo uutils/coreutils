@@ -1,6 +1,8 @@
 // spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot
 
-use crate::common::util::*;
+#[cfg(not(target_os = "android"))]
+use crate::common::util::is_ci;
+use crate::common::util::{run_ucmd_as_root, TestScenario};
 
 #[test]
 fn test_invalid_arg() {
@@ -15,7 +17,7 @@ fn test_missing_operand() {
 
     assert!(result
         .stderr_str()
-        .starts_with("error: The following required arguments were not provided"));
+        .starts_with("error: the following required arguments were not provided"));
 
     assert!(result.stderr_str().contains("<newroot>"));
 }
@@ -39,11 +41,11 @@ fn test_enter_chroot_fails() {
 fn test_no_such_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch(&at.plus_as_string("a"));
+    at.touch(at.plus_as_string("a"));
 
     ucmd.arg("a")
         .fails()
-        .stderr_is("chroot: cannot change root directory to 'a': no such directory")
+        .stderr_is("chroot: cannot change root directory to 'a': no such directory\n")
         .code_is(125);
 }
 
@@ -94,7 +96,7 @@ fn test_preference_of_userspec() {
         .arg("fake")
         .arg("-G")
         .arg("ABC,DEF")
-        .arg(format!("--userspec={}:{}", username, group_name))
+        .arg(format!("--userspec={username}:{group_name}"))
         .fails();
 
     result.code_is(125);
@@ -113,10 +115,7 @@ fn test_default_shell() {
     at.mkdir(dir);
 
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    let expected = format!(
-        "chroot: failed to run command '{}': No such file or directory",
-        shell
-    );
+    let expected = format!("chroot: failed to run command '{shell}': No such file or directory");
 
     if let Ok(result) = run_ucmd_as_root(&ts, &[dir]) {
         result.stderr_contains(expected);

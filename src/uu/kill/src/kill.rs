@@ -14,10 +14,10 @@ use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::signals::{signal_by_name_or_value, ALL_SIGNALS};
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 
-static ABOUT: &str = "Send signal to processes or list information about signals.";
-const USAGE: &str = "{} [OPTIONS]... PID...";
+static ABOUT: &str = help_about!("kill.md");
+const USAGE: &str = help_usage!("kill.md");
 
 pub mod options {
     pub static PIDS_OR_SIGNALS: &str = "pids_or_signals";
@@ -146,11 +146,11 @@ fn table() {
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
-        if signal == signal_name_or_value || (format!("SIG{}", signal)) == signal_name_or_value {
-            println!("{}", value);
+        if signal == signal_name_or_value || (format!("SIG{signal}")) == signal_name_or_value {
+            println!("{value}");
             return Ok(());
         } else if signal_name_or_value == value.to_string() {
-            println!("{}", signal);
+            println!("{signal}");
             return Ok(());
         }
     }
@@ -165,7 +165,7 @@ fn print_signals() {
         if idx > 0 {
             print!(" ");
         }
-        print!("{}", signal);
+        print!("{signal}");
     }
     println!();
 }
@@ -205,7 +205,7 @@ fn kill(sig: Signal, pids: &[i32]) {
     for &pid in pids {
         if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
             show!(Error::from_raw_os_error(e as i32)
-                .map_err_context(|| format!("sending signal to {} failed", pid)));
+                .map_err_context(|| format!("sending signal to {pid} failed")));
         }
     }
 }

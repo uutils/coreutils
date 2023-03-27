@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 const DIR: &str = "dir";
 const DIR_FILE: &str = "dir/file";
@@ -57,7 +57,7 @@ fn test_rmdir_nonempty_directory_no_parents() {
 
     ucmd.arg(DIR)
         .fails()
-        .stderr_is(format!("rmdir: failed to remove 'dir': {}", NOT_EMPTY));
+        .stderr_is(format!("rmdir: failed to remove 'dir': {NOT_EMPTY}\n"));
 
     assert!(at.dir_exists(DIR));
 }
@@ -70,8 +70,7 @@ fn test_rmdir_nonempty_directory_with_parents() {
     at.touch(NESTED_DIR_FILE);
 
     ucmd.arg("-p").arg(NESTED_DIR).fails().stderr_is(format!(
-        "rmdir: failed to remove 'dir/ect/ory': {}",
-        NOT_EMPTY
+        "rmdir: failed to remove 'dir/ect/ory': {NOT_EMPTY}\n"
     ));
 
     assert!(at.dir_exists(NESTED_DIR));
@@ -119,8 +118,7 @@ fn test_rmdir_not_a_directory() {
         .fails()
         .no_stdout()
         .stderr_is(format!(
-            "rmdir: failed to remove 'file': {}",
-            NOT_A_DIRECTORY
+            "rmdir: failed to remove 'file': {NOT_A_DIRECTORY}\n"
         ));
 }
 
@@ -152,8 +150,7 @@ fn test_verbose_multi() {
              rmdir: removing directory, 'dir'\n",
         )
         .stderr_is(format!(
-            "rmdir: failed to remove 'does_not_exist': {}",
-            NOT_FOUND
+            "rmdir: failed to remove 'does_not_exist': {NOT_FOUND}\n"
         ));
 }
 
@@ -171,23 +168,18 @@ fn test_verbose_nested_failure() {
             "rmdir: removing directory, 'dir/ect/ory'\n\
              rmdir: removing directory, 'dir/ect'\n",
         )
-        .stderr_is(format!("rmdir: failed to remove 'dir/ect': {}", NOT_EMPTY));
+        .stderr_is(format!("rmdir: failed to remove 'dir/ect': {NOT_EMPTY}\n"));
 }
 
 #[cfg(unix)]
 #[test]
 fn test_rmdir_ignore_nonempty_no_permissions() {
-    use std::fs;
-
     let (at, mut ucmd) = at_and_ucmd!();
 
     // We make the *parent* dir read-only to prevent deleting the dir in it.
     at.mkdir_all("dir/ect/ory");
     at.touch("dir/ect/ory/file");
-    let dir_ect = at.plus("dir/ect");
-    let mut perms = fs::metadata(&dir_ect).unwrap().permissions();
-    perms.set_readonly(true);
-    fs::set_permissions(&dir_ect, perms.clone()).unwrap();
+    at.set_mode("dir/ect", 0o555);
 
     // rmdir should now get a permissions error that it interprets as
     // a non-empty error.
@@ -199,8 +191,7 @@ fn test_rmdir_ignore_nonempty_no_permissions() {
     assert!(at.dir_exists("dir/ect/ory"));
 
     // Politely restore permissions for cleanup
-    perms.set_readonly(false);
-    fs::set_permissions(&dir_ect, perms).unwrap();
+    at.set_mode("dir/ect", 0o755);
 }
 
 #[test]
@@ -211,8 +202,7 @@ fn test_rmdir_remove_symlink_file() {
     at.symlink_file("file", "fl");
 
     ucmd.arg("fl/").fails().stderr_is(format!(
-        "rmdir: failed to remove 'fl/': {}",
-        NOT_A_DIRECTORY
+        "rmdir: failed to remove 'fl/': {NOT_A_DIRECTORY}\n"
     ));
 }
 
@@ -227,7 +217,7 @@ fn test_rmdir_remove_symlink_dir() {
 
     ucmd.arg("dl/")
         .fails()
-        .stderr_is("rmdir: failed to remove 'dl/': Symbolic link not followed");
+        .stderr_is("rmdir: failed to remove 'dl/': Symbolic link not followed\n");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -239,5 +229,5 @@ fn test_rmdir_remove_symlink_dangling() {
 
     ucmd.arg("dl/")
         .fails()
-        .stderr_is("rmdir: failed to remove 'dl/': Symbolic link not followed");
+        .stderr_is("rmdir: failed to remove 'dl/': Symbolic link not followed\n");
 }

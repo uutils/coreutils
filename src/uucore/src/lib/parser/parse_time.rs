@@ -51,7 +51,10 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
     if len == 0 {
         return Err("empty string".to_owned());
     }
-    let slice = &string[..len - 1];
+    let slice = match string.get(..len - 1) {
+        Some(s) => s,
+        None => return Err(format!("invalid time interval {}", string.quote())),
+    };
     let (numstr, times) = match string.chars().next_back().unwrap() {
         's' => (slice, 1),
         'm' => (slice, 60),
@@ -110,6 +113,11 @@ mod tests {
     #[test]
     fn test_error_invalid_unit() {
         assert!(from_str("123X").is_err());
+    }
+
+    #[test]
+    fn test_error_multi_bytes_characters() {
+        assert!(from_str("10€").is_err());
     }
 
     #[test]

@@ -23,11 +23,15 @@ use crossterm::{
     terminal,
 };
 
+use is_terminal::IsTerminal;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::{format_usage, help_about, help_usage};
 
+const ABOUT: &str = help_about!("more.md");
+const USAGE: &str = help_usage!("more.md");
 const BELL: &str = "\x07";
 
 pub mod options {
@@ -83,7 +87,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             buff.clear();
         }
         reset_term(&mut stdout);
-    } else if atty::isnt(atty::Stream::Stdin) {
+    } else if !std::io::stdin().is_terminal() {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
         more(&buff, &mut stdout, None, silent)?;
@@ -96,7 +100,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about("A file perusal filter for CRT viewing.")
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .version(crate_version!())
         .infer_long_args(true)
         .arg(
@@ -383,9 +388,7 @@ impl<'a> Pager<'a> {
             .take(self.content_rows.into());
 
         for line in displayed_lines {
-            stdout
-                .write_all(format!("\r{}\n", line).as_bytes())
-                .unwrap();
+            stdout.write_all(format!("\r{line}\n").as_bytes()).unwrap();
         }
     }
 
@@ -399,15 +402,14 @@ impl<'a> Pager<'a> {
             )
         };
 
-        let status = format!("--More--({})", status_inner);
+        let status = format!("--More--({status_inner})");
 
         let banner = match (self.silent, wrong_key) {
             (true, Some(key)) => format!(
-                "{} [Unknown key: '{}'. Press 'h' for instructions. (unimplemented)]",
-                status, key
+                "{status} [Unknown key: '{key}'. Press 'h' for instructions. (unimplemented)]"
             ),
-            (true, None) => format!("{}[Press space to continue, 'q' to quit.]", status),
-            (false, Some(_)) => format!("{}{}", status, BELL),
+            (true, None) => format!("{status}[Press space to continue, 'q' to quit.]"),
+            (false, Some(_)) => format!("{status}{BELL}"),
             (false, None) => status,
         };
 

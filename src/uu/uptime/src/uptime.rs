@@ -11,17 +11,13 @@
 use chrono::{Local, TimeZone, Utc};
 use clap::{crate_version, Arg, ArgAction, Command};
 
-use uucore::format_usage;
-// import crate time from utmpx
-pub use uucore::libc;
 use uucore::libc::time_t;
+use uucore::{format_usage, help_about, help_usage};
 
 use uucore::error::{UResult, USimpleError};
 
-static ABOUT: &str = "Display the current time, the length of time the system has been up,\n\
-                      the number of users on the system, and the average number of jobs\n\
-                      in the run queue over the last 1, 5 and 15 minutes.";
-const USAGE: &str = "{} [OPTION]...";
+const ABOUT: &str = help_about!("uptime.md");
+const USAGE: &str = help_usage!("uptime.md");
 pub mod options {
     pub static SINCE: &str = "since";
 }
@@ -115,8 +111,8 @@ fn process_utmpx() -> (Option<time_t>, usize) {
             USER_PROCESS => nusers += 1,
             BOOT_TIME => {
                 let dt = line.login_time();
-                if dt.second() > 0 {
-                    boot_time = Some(dt.second() as time_t);
+                if dt.unix_timestamp() > 0 {
+                    boot_time = Some(dt.unix_timestamp() as time_t);
                 }
             }
             _ => continue,
@@ -133,7 +129,7 @@ fn process_utmpx() -> (Option<time_t>, usize) {
 fn print_nusers(nusers: usize) {
     match nusers.cmp(&1) {
         std::cmp::Ordering::Equal => print!("1 user,  "),
-        std::cmp::Ordering::Greater => print!("{} users,  ", nusers),
+        std::cmp::Ordering::Greater => print!("{nusers} users,  "),
         _ => {}
     };
 }
@@ -180,10 +176,10 @@ fn print_uptime(upsecs: i64) {
     let uphours = (upsecs - (updays * 86400)) / 3600;
     let upmins = (upsecs - (updays * 86400) - (uphours * 3600)) / 60;
     match updays.cmp(&1) {
-        std::cmp::Ordering::Equal => print!("up {:1} day, {:2}:{:02},  ", updays, uphours, upmins),
+        std::cmp::Ordering::Equal => print!("up {updays:1} day, {uphours:2}:{upmins:02},  "),
         std::cmp::Ordering::Greater => {
-            print!("up {:1} days, {:2}:{:02},  ", updays, uphours, upmins);
+            print!("up {updays:1} days, {uphours:2}:{upmins:02},  ");
         }
-        _ => print!("up  {:2}:{:02}, ", uphours, upmins),
+        _ => print!("up  {uphours:2}:{upmins:02}, "),
     };
 }

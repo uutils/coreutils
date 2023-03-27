@@ -115,6 +115,7 @@ impl FileInformation {
             not(target_os = "android"),
             not(target_os = "freebsd"),
             not(target_arch = "aarch64"),
+            not(target_arch = "riscv64"),
             target_pointer_width = "64"
         ))]
         return self.0.st_nlink;
@@ -125,6 +126,7 @@ impl FileInformation {
                 target_os = "android",
                 target_os = "freebsd",
                 target_arch = "aarch64",
+                target_arch = "riscv64",
                 not(target_pointer_width = "64")
             )
         ))]
@@ -439,9 +441,9 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
             '-'
         };
 
-        format!("{0}r{1}xr{1}xr{1}x", file_type, write)
+        format!("{file_type}r{write}xr{write}xr{write}x")
     } else {
-        format!("r{0}xr{0}xr{0}x", write)
+        format!("r{write}xr{write}xr{write}x")
     }
 }
 

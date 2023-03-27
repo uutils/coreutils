@@ -5,157 +5,185 @@
 
 use std::ffi::OsString;
 
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+pub struct ObsoleteArgs {
+    pub num: u64,
+    pub plus: bool,
+    pub lines: bool,
+    pub follow: bool,
+}
+
+impl Default for ObsoleteArgs {
+    fn default() -> Self {
+        Self {
+            num: 10,
+            plus: false,
+            lines: true,
+            follow: false,
+        }
+    }
+}
+
 #[derive(PartialEq, Eq, Debug)]
 pub enum ParseError {
-    Syntax,
+    OutOfRange,
     Overflow,
+    Context,
+    InvalidEncoding,
 }
 /// Parses obsolete syntax
-/// tail -NUM\[kmzv\] // spell-checker:disable-line
-pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>, ParseError>> {
-    let mut chars = src.char_indices();
-    if let Some((_, '-')) = chars.next() {
-        let mut num_end = 0usize;
-        let mut has_num = false;
-        let mut last_char = 0 as char;
-        for (n, c) in &mut chars {
-            if c.is_ascii_digit() {
-                has_num = true;
-                num_end = n;
-            } else {
-                last_char = c;
-                break;
-            }
-        }
-        if has_num {
-            match src[1..=num_end].parse::<usize>() {
-                Ok(num) => {
-                    let mut quiet = false;
-                    let mut verbose = false;
-                    let mut zero_terminated = false;
-                    let mut multiplier = None;
-                    let mut c = last_char;
-                    loop {
-                        // not that here, we only match lower case 'k', 'c', and 'm'
-                        match c {
-                            // we want to preserve order
-                            // this also saves us 1 heap allocation
-                            'q' => {
-                                quiet = true;
-                                verbose = false;
-                            }
-                            'v' => {
-                                verbose = true;
-                                quiet = false;
-                            }
-                            'z' => zero_terminated = true,
-                            'c' => multiplier = Some(1),
-                            'b' => multiplier = Some(512),
-                            'k' => multiplier = Some(1024),
-                            'm' => multiplier = Some(1024 * 1024),
-                            '\0' => {}
-                            _ => return Some(Err(ParseError::Syntax)),
-                        }
-                        if let Some((_, next)) = chars.next() {
-                            c = next;
-                        } else {
-                            break;
-                        }
-                    }
-                    let mut options = Vec::new();
-                    if quiet {
-                        options.push(OsString::from("-q"));
-                    }
-                    if verbose {
-                        options.push(OsString::from("-v"));
-                    }
-                    if zero_terminated {
-                        options.push(OsString::from("-z"));
-                    }
-                    if let Some(n) = multiplier {
-                        options.push(OsString::from("-c"));
-                        let num = match num.checked_mul(n) {
-                            Some(n) => n,
-                            None => return Some(Err(ParseError::Overflow)),
-                        };
-                        options.push(OsString::from(format!("{}", num)));
-                    } else {
-                        options.push(OsString::from("-n"));
-                        options.push(OsString::from(format!("{}", num)));
-                    }
-                    Some(Ok(options.into_iter()))
-                }
-                Err(_) => Some(Err(ParseError::Overflow)),
-            }
+/// tail -\[NUM\]\[bcl\]\[f\] and tail +\[NUM\]\[bcl\]\[f\] // spell-checker:disable-line
+pub fn parse_obsolete(src: &OsString) -> Option<Result<ObsoleteArgs, ParseError>> {
+    let mut rest = match src.to_str() {
+        Some(src) => src,
+        None => return Some(Err(ParseError::InvalidEncoding)),
+    };
+    let sign = if let Some(r) = rest.strip_prefix('-') {
+        rest = r;
+        '-'
+    } else if let Some(r) = rest.strip_prefix('+') {
+        rest = r;
+        '+'
+    } else {
+        return None;
+    };
+
+    let end_num = rest
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(rest.len());
+    let has_num = !rest[..end_num].is_empty();
+    let num: u64 = if has_num {
+        if let Ok(num) = rest[..end_num].parse() {
+            num
         } else {
-            None
+            return Some(Err(ParseError::OutOfRange));
         }
     } else {
-        None
+        10
+    };
+    rest = &rest[end_num..];
+
+    let mode = if let Some(r) = rest.strip_prefix('l') {
+        rest = r;
+        'l'
+    } else if let Some(r) = rest.strip_prefix('c') {
+        rest = r;
+        'c'
+    } else if let Some(r) = rest.strip_prefix('b') {
+        rest = r;
+        'b'
+    } else {
+        'l'
+    };
+
+    let follow = rest.contains('f');
+    if !rest.chars().all(|f| f == 'f') {
+        // GNU allows an arbitrary amount of following fs, but nothing else
+        if sign == '-' && has_num {
+            return Some(Err(ParseError::Context));
+        }
+        return None;
     }
+
+    let multiplier = if mode == 'b' { 512 } else { 1 };
+    let num = match num.checked_mul(multiplier) {
+        Some(n) => n,
+        None => return Some(Err(ParseError::Overflow)),
+    };
+
+    Some(Ok(ObsoleteArgs {
+        num,
+        plus: sign == '+',
+        lines: mode == 'l',
+        follow,
+    }))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn obsolete(src: &str) -> Option<Result<Vec<String>, ParseError>> {
-        let r = parse_obsolete(src);
-        match r {
-            Some(s) => match s {
-                Ok(v) => Some(Ok(v.map(|s| s.to_str().unwrap().to_owned()).collect())),
-                Err(e) => Some(Err(e)),
-            },
-            None => None,
-        }
-    }
-    fn obsolete_result(src: &[&str]) -> Option<Result<Vec<String>, ParseError>> {
-        Some(Ok(src.iter().map(|s| s.to_string()).collect()))
-    }
     #[test]
     fn test_parse_numbers_obsolete() {
-        assert_eq!(obsolete("-5"), obsolete_result(&["-n", "5"]));
-        assert_eq!(obsolete("-100"), obsolete_result(&["-n", "100"]));
-        assert_eq!(obsolete("-5m"), obsolete_result(&["-c", "5242880"]));
-        assert_eq!(obsolete("-1k"), obsolete_result(&["-c", "1024"]));
-        assert_eq!(obsolete("-2b"), obsolete_result(&["-c", "1024"]));
-        assert_eq!(obsolete("-1mmk"), obsolete_result(&["-c", "1024"]));
-        assert_eq!(obsolete("-1vz"), obsolete_result(&["-v", "-z", "-n", "1"]));
         assert_eq!(
-            obsolete("-1vzqvq"), // spell-checker:disable-line
-            obsolete_result(&["-q", "-z", "-n", "1"])
+            parse_obsolete(&OsString::from("+2c")),
+            Some(Ok(ObsoleteArgs {
+                num: 2,
+                plus: true,
+                lines: false,
+                follow: false,
+            }))
         );
-        assert_eq!(obsolete("-1vzc"), obsolete_result(&["-v", "-z", "-c", "1"]));
         assert_eq!(
-            obsolete("-105kzm"),
-            obsolete_result(&["-z", "-c", "110100480"])
+            parse_obsolete(&OsString::from("-5")),
+            Some(Ok(ObsoleteArgs {
+                num: 5,
+                plus: false,
+                lines: true,
+                follow: false,
+            }))
+        );
+        assert_eq!(
+            parse_obsolete(&OsString::from("+100f")),
+            Some(Ok(ObsoleteArgs {
+                num: 100,
+                plus: true,
+                lines: true,
+                follow: true,
+            }))
+        );
+        assert_eq!(
+            parse_obsolete(&OsString::from("-2b")),
+            Some(Ok(ObsoleteArgs {
+                num: 1024,
+                plus: false,
+                lines: false,
+                follow: false,
+            }))
         );
     }
     #[test]
     fn test_parse_errors_obsolete() {
-        assert_eq!(obsolete("-5n"), Some(Err(ParseError::Syntax)));
-        assert_eq!(obsolete("-5c5"), Some(Err(ParseError::Syntax)));
+        assert_eq!(
+            parse_obsolete(&OsString::from("-5n")),
+            Some(Err(ParseError::Context))
+        );
+        assert_eq!(
+            parse_obsolete(&OsString::from("-5c5")),
+            Some(Err(ParseError::Context))
+        );
+        assert_eq!(
+            parse_obsolete(&OsString::from("-1vzc")),
+            Some(Err(ParseError::Context))
+        );
+        assert_eq!(
+            parse_obsolete(&OsString::from("-5m")),
+            Some(Err(ParseError::Context))
+        );
+        assert_eq!(
+            parse_obsolete(&OsString::from("-1k")),
+            Some(Err(ParseError::Context))
+        );
+        assert_eq!(
+            parse_obsolete(&OsString::from("-1mmk")),
+            Some(Err(ParseError::Context))
+        );
+        assert_eq!(
+            parse_obsolete(&OsString::from("-105kzm")),
+            Some(Err(ParseError::Context))
+        );
+        assert_eq!(
+            parse_obsolete(&OsString::from("-1vz")),
+            Some(Err(ParseError::Context))
+        );
+        assert_eq!(
+            parse_obsolete(&OsString::from("-1vzqvq")), // spell-checker:disable-line
+            Some(Err(ParseError::Context))
+        );
     }
     #[test]
     fn test_parse_obsolete_no_match() {
-        assert_eq!(obsolete("-k"), None);
-        assert_eq!(obsolete("asd"), None);
-    }
-    #[test]
-    #[cfg(target_pointer_width = "64")]
-    fn test_parse_obsolete_overflow_x64() {
-        assert_eq!(
-            obsolete("-1000000000000000m"),
-            Some(Err(ParseError::Overflow))
-        );
-        assert_eq!(
-            obsolete("-10000000000000000000000"),
-            Some(Err(ParseError::Overflow))
-        );
-    }
-    #[test]
-    #[cfg(target_pointer_width = "32")]
-    fn test_parse_obsolete_overflow_x32() {
-        assert_eq!(obsolete("-42949672960"), Some(Err(ParseError::Overflow)));
-        assert_eq!(obsolete("-42949672k"), Some(Err(ParseError::Overflow)));
+        assert_eq!(parse_obsolete(&OsString::from("-k")), None);
+        assert_eq!(parse_obsolete(&OsString::from("asd")), None);
+        assert_eq!(parse_obsolete(&OsString::from("-cc")), None);
     }
 }

@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) asdf
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -113,4 +113,80 @@ fn test_stdin_larger_than_128_bytes() {
 
     assert_eq!(cksum, 945_881_979);
     assert_eq!(bytes_cnt, 2058);
+}
+
+#[test]
+fn test_sha1_single_file() {
+    new_ucmd!()
+        .arg("-a=sha1")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("ab1dd0bae1d8883a3d18a66de6afbd28252cfbef 772 lorem_ipsum.txt\n");
+}
+
+#[test]
+fn test_sm3_single_file() {
+    new_ucmd!()
+        .arg("-a=sm3")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is(
+        "6d296b805d060bfed22808df308dbb9b4317794dd4ed6740a10770a782699bc2 772 lorem_ipsum.txt\n",
+    );
+}
+
+#[test]
+fn test_bsd_single_file() {
+    new_ucmd!()
+        .arg("-a=bsd")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_only_fixture("bsd_single_file.expected");
+}
+
+#[test]
+fn test_bsd_multiple_files() {
+    new_ucmd!()
+        .arg("-a=bsd")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .stdout_only_fixture("bsd_multiple_files.expected");
+}
+
+#[test]
+fn test_bsd_stdin() {
+    new_ucmd!()
+        .arg("-a=bsd")
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_only_fixture("bsd_stdin.expected");
+}
+
+#[test]
+fn test_sysv_single_file() {
+    new_ucmd!()
+        .arg("-a=sysv")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_only_fixture("sysv_single_file.expected");
+}
+
+#[test]
+fn test_sysv_multiple_files() {
+    new_ucmd!()
+        .arg("-a=sysv")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .stdout_only_fixture("sysv_multiple_files.expected");
+}
+
+#[test]
+fn test_sysv_stdin() {
+    new_ucmd!()
+        .arg("-a=sysv")
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_only_fixture("sysv_stdin.expected");
 }

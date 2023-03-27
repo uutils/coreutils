@@ -22,9 +22,9 @@ impl PartialEq for FormatWriter {
         use crate::formatteriteminfo::FormatWriter::*;
 
         match (self, other) {
-            (&IntWriter(ref a), &IntWriter(ref b)) => a == b,
-            (&FloatWriter(ref a), &FloatWriter(ref b)) => a == b,
-            (&MultibyteWriter(ref a), &MultibyteWriter(ref b)) => *a as usize == *b as usize,
+            (IntWriter(a), IntWriter(b)) => a == b,
+            (FloatWriter(a), FloatWriter(b)) => a == b,
+            (MultibyteWriter(a), MultibyteWriter(b)) => *a as usize == *b as usize,
             _ => false,
         }
     }

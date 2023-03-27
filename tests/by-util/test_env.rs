@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::env;
 use std::path::Path;
 use tempfile::tempdir;
@@ -90,7 +90,7 @@ fn test_unset_invalid_variables() {
     // with this error: Error { kind: InvalidInput, message: "nul byte found in provided data" }
     for var in ["", "a=b"] {
         new_ucmd!().arg("-u").arg(var).run().stderr_only(format!(
-            "env: cannot unset {}: Invalid argument",
+            "env: cannot unset {}: Invalid argument\n",
             var.quote()
         ));
     }
@@ -130,7 +130,7 @@ fn test_empty_name() {
         .arg("-i")
         .arg("=xyz")
         .run()
-        .stderr_only("env: warning: no name specified for value 'xyz'");
+        .stderr_only("env: warning: no name specified for value 'xyz'\n");
 }
 
 #[test]
@@ -153,10 +153,9 @@ fn test_null_delimiter() {
 
 #[test]
 fn test_unset_variable() {
-    // This test depends on the HOME variable being pre-defined by the
-    // default shell
     let out = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .env("HOME", "FOO")
         .arg("-u")
         .arg("HOME")
         .succeeds()

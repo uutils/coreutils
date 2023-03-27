@@ -93,7 +93,7 @@ impl<'a> Context<'a> {
     fn new(root: &'a Path, target: &'a Path) -> std::io::Result<Self> {
         let current_dir = env::current_dir()?;
         let root_path = current_dir.join(root);
-        let root_parent = if target.exists() {
+        let root_parent = if target.exists() && !root.to_str().unwrap().ends_with("/.") {
             root_path.parent().map(|p| p.to_path_buf())
         } else {
             Some(root_path)
@@ -380,7 +380,7 @@ pub(crate) fn copy_directory(
     // the target directory.
     let context = match Context::new(root, target) {
         Ok(c) => c,
-        Err(e) => return Err(format!("failed to get current directory {}", e).into()),
+        Err(e) => return Err(format!("failed to get current directory {e}").into()),
     };
 
     // Traverse the contents of the directory, copying each one.
@@ -405,7 +405,7 @@ pub(crate) fn copy_directory(
         }
     }
     // Copy the attributes from the root directory to the target directory.
-    copy_attributes(root, target, &options.preserve_attributes)?;
+    copy_attributes(root, target, &options.attributes)?;
     Ok(())
 }
 

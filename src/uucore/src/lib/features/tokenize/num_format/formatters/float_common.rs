@@ -226,7 +226,7 @@ pub fn get_primitive_dec(
     last_dec_place: usize,
     sci_mode: Option<bool>,
 ) -> FormatPrimitive {
-    let mut f: FormatPrimitive = Default::default();
+    let mut f = FormatPrimitive::default();
 
     // add negative sign section
     if initial_prefix.sign == -1 {
@@ -304,11 +304,11 @@ pub fn get_primitive_dec(
             mantissa += 1;
         }
         f.suffix = Some(if mantissa >= 0 {
-            format!("{}+{:02}", si_ind, mantissa)
+            format!("{si_ind}+{mantissa:02}")
         } else {
             // negative sign is considered in format!s
             // leading zeroes
-            format!("{}{:03}", si_ind, mantissa)
+            format!("{si_ind}{mantissa:03}")
         });
         f.pre_decimal = Some(pre_dec_draft);
     } else if dec_place_chg {

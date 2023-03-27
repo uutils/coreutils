@@ -32,12 +32,13 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # surface MSRV from CICD workflow
         RUST_MIN_SRV=$(grep -P "^\s+RUST_MIN_SRV:" .github/workflows/CICD.yml | grep -Po "(?<=\x22)\d+[.]\d+(?:[.]\d+)?(?=\x22)" )
         outputs RUST_MIN_SRV
     - name: Install `rust` toolchain (v${{ steps.vars.outputs.RUST_MIN_SRV }})
       run: |
+        ## Install `rust` toolchain (v${{ steps.vars.outputs.RUST_MIN_SRV }})
         rustup toolchain install ${{ steps.vars.outputs.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ steps.vars.outputs.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
@@ -94,7 +95,7 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
-        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
@@ -102,6 +103,7 @@ jobs:
         outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
       run: |
+        ## Install `rust` toolchain
         rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
         rustup toolchain install stable -c rustfmt --profile minimal
         rustup default stable

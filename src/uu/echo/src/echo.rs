@@ -11,29 +11,11 @@ use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
 use uucore::error::{FromIo, UResult};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
-const NAME: &str = "echo";
-const ABOUT: &str = "display a line of text";
-const USAGE: &str = "{} [OPTIONS]... [STRING]...";
-const AFTER_HELP: &str = r#"
- Echo the STRING(s) to standard output.
-
- If -e is in effect, the following sequences are recognized:
-
- \\\\      backslash
- \\a      alert (BEL)
- \\b      backspace
- \\c      produce no further output
- \\e      escape
- \\f      form feed
- \\n      new line
- \\r      carriage return
- \\t      horizontal tab
- \\v      vertical tab
- \\0NNN   byte with octal value NNN (1 to 3 digits)
- \\xHH    byte with hexadecimal value HH (1 to 2 digits)
-"#;
+const ABOUT: &str = help_about!("echo.md");
+const USAGE: &str = help_usage!("echo.md");
+const AFTER_HELP: &str = help_section!("after help", "echo.md");
 
 mod options {
     pub const STRING: &str = "STRING";
@@ -104,7 +86,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 
         // because printing char slices is apparently not available in the standard library
         for ch in &buffer[start..] {
-            write!(output, "{}", ch)?;
+            write!(output, "{ch}")?;
         }
     }
 
@@ -129,7 +111,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
         // Final argument must have multiple(true) or the usage string equivalent.
@@ -175,7 +156,7 @@ fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
                 break;
             }
         } else {
-            write!(output, "{}", input)?;
+            write!(output, "{input}")?;
         }
     }
 

@@ -16,11 +16,11 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 
 use uucore::{
     error::{FromIo, UResult},
-    format_usage,
+    format_usage, help_about, help_usage,
 };
 
-static ABOUT: &str = "Display or set the system's host name.";
-const USAGE: &str = "{} [OPTION]... [HOSTNAME]";
+const ABOUT: &str = help_about!("hostname.md");
+const USAGE: &str = help_usage!("hostname.md");
 
 static OPT_DOMAIN: &str = "domain";
 static OPT_IP_ADDRESS: &str = "ip-address";
@@ -164,7 +164,7 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
             }
         }
 
-        println!("{}", hostname);
+        println!("{hostname}");
 
         Ok(())
     }

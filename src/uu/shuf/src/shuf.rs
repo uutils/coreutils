@@ -15,7 +15,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 mod rand_read_adapter;
 
@@ -25,15 +25,8 @@ enum Mode {
     InputRange((usize, usize)),
 }
 
-static NAME: &str = "shuf";
-static USAGE: &str = "\
-    {} [OPTION]... [FILE]
-    {} -e [OPTION]... [ARG]...
-    {} -i LO-HI [OPTION]...";
-static ABOUT: &str = "\
-    Shuffle the input by outputting a random permutation of input lines. \
-    Each output permutation is equally likely. \
-    With no FILE, or when FILE is -, read standard input.";
+static USAGE: &str = help_usage!("shuf.md");
+static ABOUT: &str = help_about!("shuf.md");
 
 struct Options {
     head_count: usize,
@@ -110,7 +103,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             shuf_bytes(&mut evec, options)?;
         }
         Mode::InputRange((b, e)) => {
-            let rvec = (b..e).map(|x| format!("{}", x)).collect::<Vec<String>>();
+            let rvec = (b..e).map(|x| format!("{x}")).collect::<Vec<String>>();
             let mut rvec = rvec.iter().map(String::as_bytes).collect::<Vec<&[u8]>>();
             shuf_bytes(&mut rvec, options)?;
         }
@@ -127,7 +120,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))

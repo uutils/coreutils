@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
 
-use crate::common::util::*;
+use crate::common::util::{is_ci, run_ucmd_as_root, CmdResult, TestScenario};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rust_users::get_effective_uid;
 
@@ -138,7 +138,7 @@ fn test_chown_only_owner_colon() {
 
     scene
         .ucmd()
-        .arg(format!("{}:", user_name))
+        .arg(format!("{user_name}:"))
         .arg("--verbose")
         .arg(file1)
         .succeeds()
@@ -146,7 +146,7 @@ fn test_chown_only_owner_colon() {
 
     scene
         .ucmd()
-        .arg(format!("{}.", user_name))
+        .arg(format!("{user_name}."))
         .arg("--verbose")
         .arg(file1)
         .succeeds()
@@ -244,7 +244,7 @@ fn test_chown_owner_group() {
 
     let result = scene
         .ucmd()
-        .arg(format!("{}:{}", user_name, group_name))
+        .arg(format!("{user_name}:{group_name}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -309,7 +309,7 @@ fn test_chown_various_input() {
 
     let result = scene
         .ucmd()
-        .arg(format!("{}:{}", user_name, group_name))
+        .arg(format!("{user_name}:{group_name}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -321,7 +321,7 @@ fn test_chown_various_input() {
     // check that username.groupname is understood
     let result = scene
         .ucmd()
-        .arg(format!("{}.{}", user_name, group_name))
+        .arg(format!("{user_name}.{group_name}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -365,7 +365,7 @@ fn test_chown_only_group() {
 
     let result = scene
         .ucmd()
-        .arg(format!(":{}", user_name))
+        .arg(format!(":{user_name}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -396,7 +396,7 @@ fn test_chown_only_user_id() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let result = scene.cmd_keepenv("id").arg("-u").run();
+    let result = scene.cmd("id").arg("-u").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
@@ -430,7 +430,7 @@ fn test_chown_fail_id() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let result = scene.cmd_keepenv("id").arg("-u").run();
+    let result = scene.cmd("id").arg("-u").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
@@ -442,14 +442,14 @@ fn test_chown_fail_id() {
 
     scene
         .ucmd()
-        .arg(format!("{}:", user_id))
+        .arg(format!("{user_id}:"))
         .arg(file1)
         .fails()
         .stderr_contains("invalid spec");
 
     scene
         .ucmd()
-        .arg(format!("{}.", user_id))
+        .arg(format!("{user_id}."))
         .arg(file1)
         .fails()
         .stderr_contains("invalid spec");
@@ -487,7 +487,7 @@ fn test_chown_only_group_id() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let result = scene.cmd_keepenv("id").arg("-g").run();
+    let result = scene.cmd("id").arg("-g").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
@@ -499,7 +499,7 @@ fn test_chown_only_group_id() {
 
     let result = scene
         .ucmd()
-        .arg(format!(":{}", group_id))
+        .arg(format!(":{group_id}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -551,14 +551,14 @@ fn test_chown_owner_group_id() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let result = scene.cmd_keepenv("id").arg("-u").run();
+    let result = scene.cmd("id").arg("-u").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
     let user_id = String::from(result.stdout_str().trim());
     assert!(!user_id.is_empty());
 
-    let result = scene.cmd_keepenv("id").arg("-g").run();
+    let result = scene.cmd("id").arg("-g").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
@@ -570,7 +570,7 @@ fn test_chown_owner_group_id() {
 
     let result = scene
         .ucmd()
-        .arg(format!("{}:{}", user_id, group_id))
+        .arg(format!("{user_id}:{group_id}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -583,7 +583,7 @@ fn test_chown_owner_group_id() {
 
     let result = scene
         .ucmd()
-        .arg(format!("{}.{}", user_id, group_id))
+        .arg(format!("{user_id}.{group_id}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -612,14 +612,14 @@ fn test_chown_owner_group_mix() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let result = scene.cmd_keepenv("id").arg("-u").run();
+    let result = scene.cmd("id").arg("-u").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
     let user_id = String::from(result.stdout_str().trim());
     assert!(!user_id.is_empty());
 
-    let result = scene.cmd_keepenv("id").arg("-gn").run();
+    let result = scene.cmd("id").arg("-gn").run();
     if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
@@ -631,7 +631,7 @@ fn test_chown_owner_group_mix() {
 
     let result = scene
         .ucmd()
-        .arg(format!("{}:{}", user_id, group_name))
+        .arg(format!("{user_id}:{group_name}"))
         .arg("--verbose")
         .arg(file1)
         .run();
@@ -662,10 +662,10 @@ fn test_chown_recursive() {
 
     at.mkdir_all("a/b/c");
     at.mkdir("z");
-    at.touch(&at.plus_as_string("a/a"));
-    at.touch(&at.plus_as_string("a/b/b"));
-    at.touch(&at.plus_as_string("a/b/c/c"));
-    at.touch(&at.plus_as_string("z/y"));
+    at.touch(at.plus_as_string("a/a"));
+    at.touch(at.plus_as_string("a/b/b"));
+    at.touch(at.plus_as_string("a/b/c/c"));
+    at.touch(at.plus_as_string("z/y"));
 
     let result = scene
         .ucmd()

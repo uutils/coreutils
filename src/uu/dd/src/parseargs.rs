@@ -394,7 +394,7 @@ impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnrecognizedOperand(arg) => {
-                write!(f, "Unrecognized operand '{}'", arg)
+                write!(f, "Unrecognized operand '{arg}'")
             }
             Self::MultipleFmtTable => {
                 write!(
@@ -415,37 +415,37 @@ impl std::fmt::Display for ParseError {
                 // Additional message about 'dd --help' is displayed only in this situation.
                 write!(
                     f,
-                    "invalid input flag: ‘{}’\nTry 'dd --help' for more information.",
-                    arg
+                    "invalid input flag: ‘{}’\nTry '{} --help' for more information.",
+                    arg,
+                    uucore::execution_phrase()
                 )
             }
             Self::ConvFlagNoMatch(arg) => {
-                write!(f, "Unrecognized conv=CONV -> {}", arg)
+                write!(f, "Unrecognized conv=CONV -> {arg}")
             }
             Self::MultiplierStringParseFailure(arg) => {
-                write!(f, "Unrecognized byte multiplier -> {}", arg)
+                write!(f, "Unrecognized byte multiplier -> {arg}")
             }
             Self::MultiplierStringOverflow(arg) => {
                 write!(
                     f,
-                    "Multiplier string would overflow on current system -> {}",
-                    arg
+                    "Multiplier string would overflow on current system -> {arg}"
                 )
             }
             Self::BlockUnblockWithoutCBS => {
                 write!(f, "conv=block or conv=unblock specified without cbs=N")
             }
             Self::StatusLevelNotRecognized(arg) => {
-                write!(f, "status=LEVEL not recognized -> {}", arg)
+                write!(f, "status=LEVEL not recognized -> {arg}")
             }
             Self::BsOutOfRange(arg) => {
-                write!(f, "{}=N cannot fit into memory", arg)
+                write!(f, "{arg}=N cannot fit into memory")
             }
             Self::Unimplemented(arg) => {
-                write!(f, "feature not implemented on this system -> {}", arg)
+                write!(f, "feature not implemented on this system -> {arg}")
             }
             Self::InvalidNumber(arg) => {
-                write!(f, "invalid number: ‘{}’", arg)
+                write!(f, "invalid number: ‘{arg}’")
             }
         }
     }

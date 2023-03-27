@@ -8,19 +8,21 @@
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
 use clap::{crate_version, Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{ExitCode, UResult, USimpleError, UUsageError};
+use uucore::error::{set_exit_code, ExitCode, UResult, USimpleError, UUsageError};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
-static ABOUT: &str = "Change the mode of each FILE to MODE.
- With --reference, change the mode of each FILE to that of RFILE.";
+const ABOUT: &str = help_about!("chmod.md");
+const USAGE: &str = help_usage!("chmod.md");
+const LONG_USAGE: &str = help_section!("after help", "chmod.md");
 
 mod options {
     pub const CHANGES: &str = "changes";
@@ -34,26 +36,65 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const USAGE: &str = "\
-    {} [OPTION]... MODE[,MODE]... FILE...
-    {} [OPTION]... OCTAL-MODE FILE...
-    {} [OPTION]... --reference=RFILE FILE...";
+/// Extract negative modes (starting with '-') from the rest of the arguments.
+///
+/// This is mainly required for GNU compatibility, where "non-positional negative" modes are used
+/// as the actual positional MODE. Some examples of these cases are:
+/// * "chmod -w -r file", which is the same as "chmod -w,-r file"
+/// * "chmod -w file -r", which is the same as "chmod -w,-r file"
+///
+/// These can currently not be handled by clap.
+/// Therefore it might be possible that a pseudo MODE is inserted to pass clap parsing.
+/// The pseudo MODE is later replaced by the extracted (and joined) negative modes.
+fn extract_negative_modes(mut args: impl uucore::Args) -> (Option<String>, Vec<OsString>) {
+    // we look up the args until "--" is found
+    // "-mode" will be extracted into parsed_cmode_vec
+    let (parsed_cmode_vec, pre_double_hyphen_args): (Vec<OsString>, Vec<OsString>) =
+        args.by_ref().take_while(|a| a != "--").partition(|arg| {
+            let arg = if let Some(arg) = arg.to_str() {
+                arg.to_string()
+            } else {
+                return false;
+            };
+            arg.len() >= 2
+                && arg.starts_with('-')
+                && matches!(
+                    arg.chars().nth(1).unwrap(),
+                    'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7'
+                )
+        });
 
-fn get_long_usage() -> &'static str {
-    "Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'."
+    let mut clean_args = Vec::new();
+    if !parsed_cmode_vec.is_empty() {
+        // we need a pseudo cmode for clap, which won't be used later.
+        // this is required because clap needs the default "chmod MODE FILE" scheme.
+        clean_args.push("w".into());
+    }
+    clean_args.extend(pre_double_hyphen_args);
+
+    if let Some(arg) = args.next() {
+        // as there is still something left in the iterator, we previously consumed the "--"
+        // -> add it to the args again
+        clean_args.push("--".into());
+        clean_args.push(arg);
+    }
+    clean_args.extend(args);
+
+    let parsed_cmode = Some(
+        parsed_cmode_vec
+            .iter()
+            .map(|s| s.to_str().unwrap())
+            .collect::<Vec<&str>>()
+            .join(","),
+    )
+    .filter(|s| !s.is_empty());
+    (parsed_cmode, clean_args)
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut args = args.collect_lossy();
-
-    // Before we can parse 'args' with clap (and previously getopts),
-    // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
-    let mode_had_minus_prefix = mode::strip_minus_from_mode(&mut args);
-
-    let after_help = get_long_usage();
-
-    let matches = uu_app().after_help(after_help).try_get_matches_from(args)?;
+    let (parsed_cmode, args) = extract_negative_modes(args.skip(1)); // skip binary name
+    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
 
     let changes = matches.get_flag(options::CHANGES);
     let quiet = matches.get_flag(options::QUIET);
@@ -72,13 +113,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
         None => None,
     };
-    let modes = matches.get_one::<String>(options::MODE).unwrap(); // should always be Some because required
-    let cmode = if mode_had_minus_prefix {
-        // clap parsing is finished, now put prefix back
-        format!("-{}", modes)
+
+    let modes = matches.get_one::<String>(options::MODE);
+    let cmode = if let Some(parsed_cmode) = parsed_cmode {
+        parsed_cmode
     } else {
-        modes.to_string()
+        modes.unwrap().to_string() // modes is required
     };
+    // FIXME: enable non-utf8 paths
     let mut files: Vec<String> = matches
         .get_many::<String>(options::FILE)
         .map(|v| v.map(ToString::to_string).collect())
@@ -115,7 +157,9 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
+        .args_override_self(true)
         .infer_long_args(true)
+        .no_binary_name(true)
         .arg(
             Arg::new(options::CHANGES)
                 .long(options::CHANGES)
@@ -195,26 +239,31 @@ impl Chmoder {
             let file = Path::new(filename);
             if !file.exists() {
                 if file.is_symlink() {
-                    println!(
-                        "failed to change mode of {} from 0000 (---------) to 0000 (---------)",
-                        filename.quote()
-                    );
                     if !self.quiet {
-                        return Err(USimpleError::new(
+                        show!(USimpleError::new(
                             1,
                             format!("cannot operate on dangling symlink {}", filename.quote()),
                         ));
                     }
+                    if self.verbose {
+                        println!(
+                            "failed to change mode of {} from 0000 (---------) to 1500 (r-x-----T)",
+                            filename.quote()
+                        );
+                    }
                 } else if !self.quiet {
-                    return Err(USimpleError::new(
+                    show!(USimpleError::new(
                         1,
                         format!(
                             "cannot access {}: No such file or directory",
                             filename.quote()
-                        ),
+                        )
                     ));
                 }
-                return Err(ExitCode::new(1));
+                // GNU exits with exit code 1 even if -q or --quiet are passed
+                // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
+                set_exit_code(1);
+                continue;
             }
             if self.recursive && self.preserve_root && filename == "/" {
                 return Err(USimpleError::new(
@@ -378,5 +427,36 @@ impl Chmoder {
             }
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_negative_modes() {
+        // "chmod -w -r file" becomes "chmod -w,-r file". clap does not accept "-w,-r" as MODE.
+        // Therefore, "w" is added as pseudo mode to pass clap.
+        let (c, a) = extract_negative_modes(vec!["-w", "-r", "file"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, vec!["w", "file"]);
+
+        // "chmod -w file -r" becomes "chmod -w,-r file". clap does not accept "-w,-r" as MODE.
+        // Therefore, "w" is added as pseudo mode to pass clap.
+        let (c, a) = extract_negative_modes(vec!["-w", "file", "-r"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w,-r".to_string()));
+        assert_eq!(a, vec!["w", "file"]);
+
+        // "chmod -w -- -r file" becomes "chmod -w -r file", where "-r" is interpreted as file.
+        // Again, "w" is needed as pseudo mode.
+        let (c, a) = extract_negative_modes(vec!["-w", "--", "-r", "f"].iter().map(OsString::from));
+        assert_eq!(c, Some("-w".to_string()));
+        assert_eq!(a, vec!["w", "--", "-r", "f"]);
+
+        // "chmod -- -r file" becomes "chmod -r file".
+        let (c, a) = extract_negative_modes(vec!["--", "-r", "file"].iter().map(OsString::from));
+        assert_eq!(c, None);
+        assert_eq!(a, vec!["--", "-r", "file"]);
     }
 }

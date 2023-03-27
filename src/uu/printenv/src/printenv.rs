@@ -9,10 +9,10 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::env;
-use uucore::{error::UResult, format_usage};
+use uucore::{error::UResult, format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Display the values of the specified environment VARIABLE(s), or (with no VARIABLE) display name and value pairs for them all.";
-const USAGE: &str = "{} [VARIABLE]... [OPTION]...";
+const ABOUT: &str = help_about!("printenv.md");
+const USAGE: &str = help_usage!("printenv.md");
 
 static OPT_NULL: &str = "null";
 
@@ -35,7 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if variables.is_empty() {
         for (env_var, value) in env::vars() {
-            print!("{}={}{}", env_var, value, separator);
+            print!("{env_var}={value}{separator}");
         }
         return Ok(());
     }
@@ -48,7 +48,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             continue;
         }
         if let Ok(var) = env::var(env_var) {
-            print!("{}{}", var, separator);
+            print!("{var}{separator}");
         } else {
             error_found = true;
         }

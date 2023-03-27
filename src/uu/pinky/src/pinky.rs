@@ -22,7 +22,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::PathBuf;
 use uucore::format_usage;
 
-static ABOUT: &str = "lightweight finger";
+static ABOUT: &str = "Lightweight finger";
 const USAGE: &str = "{} [OPTION]... [USER]...";
 
 mod options {
@@ -241,11 +241,11 @@ fn idle_string(when: i64) -> String {
             // less than 1day
             let hours = duration / (60 * 60);
             let minutes = (duration % (60 * 60)) / 60;
-            format!("{:02}:{:02}", hours, minutes)
+            format!("{hours:02}:{minutes:02}")
         } else {
             // more than 1day
             let days = duration / (24 * 3600);
-            format!("{}d", days)
+            format!("{days}d")
         }
     })
 }
@@ -303,7 +303,7 @@ impl Pinky {
                 None
             };
             if let Some(fullname) = fullname {
-                print!(" {:<19.19}", fullname);
+                print!(" {fullname:<19.19}");
             } else {
                 print!(" {:19}", "        ???");
             }
@@ -324,7 +324,7 @@ impl Pinky {
         let mut s = ut.host();
         if self.include_where && !s.is_empty() {
             s = ut.canon_host()?;
-            print!(" {}", s);
+            print!(" {s}");
         }
 
         println!();
@@ -363,15 +363,15 @@ impl Pinky {
 
     fn long_pinky(&self) {
         for u in &self.names {
-            print!("Login name: {:<28}In real life: ", u);
+            print!("Login name: {u:<28}In real life: ");
             if let Ok(pw) = Passwd::locate(u.as_str()) {
                 let fullname = gecos_to_fullname(&pw).unwrap_or_default();
                 let user_dir = pw.user_dir.unwrap_or_default();
                 let user_shell = pw.user_shell.unwrap_or_default();
-                println!(" {}", fullname);
+                println!(" {fullname}");
                 if self.include_home_and_shell {
-                    print!("Directory: {:<29}", user_dir);
-                    println!("Shell:  {}", user_shell);
+                    print!("Directory: {user_dir:<29}");
+                    println!("Shell:  {user_shell}");
                 }
                 if self.include_project {
                     let mut p = PathBuf::from(&user_dir);

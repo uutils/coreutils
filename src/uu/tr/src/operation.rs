@@ -37,21 +37,21 @@ pub enum BadSequence {
 impl Display for BadSequence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MissingCharClassName => writeln!(f, "missing character class name '[::]'"),
+            Self::MissingCharClassName => write!(f, "missing character class name '[::]'"),
             Self::MissingEquivalentClassChar => {
-                writeln!(f, "missing equivalence class character '[==]'")
+                write!(f, "missing equivalence class character '[==]'")
             }
             Self::MultipleCharRepeatInSet2 => {
-                writeln!(f, "only one [c*] repeat construct may appear in string2")
+                write!(f, "only one [c*] repeat construct may appear in string2")
             }
             Self::CharRepeatInSet1 => {
-                writeln!(f, "the [c*] repeat construct may not appear in string1")
+                write!(f, "the [c*] repeat construct may not appear in string1")
             }
             Self::InvalidRepeatCount(count) => {
-                writeln!(f, "invalid repeat count '{}' in [c*n] construct", count)
+                write!(f, "invalid repeat count '{count}' in [c*n] construct")
             }
             Self::EmptySet2WhenNotTruncatingSet1 => {
-                writeln!(f, "when not truncating set1, string2 must be non-empty")
+                write!(f, "when not truncating set1, string2 must be non-empty")
             }
         }
     }

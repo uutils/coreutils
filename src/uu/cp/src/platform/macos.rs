@@ -69,9 +69,7 @@ pub(crate) fn copy_on_write(
         // support COW).
         match reflink_mode {
             ReflinkMode::Always => {
-                return Err(
-                    format!("failed to clone {:?} from {:?}: {}", source, dest, error).into(),
-                )
+                return Err(format!("failed to clone {source:?} from {dest:?}: {error}").into())
             }
             _ => {
                 if source_is_fifo {

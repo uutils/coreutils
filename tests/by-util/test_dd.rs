@@ -1,10 +1,16 @@
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
+#[cfg(not(windows))]
+use crate::common::util::{UCommand, TESTS_BINARY};
+
+use regex::Regex;
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+use std::process::{Command, Stdio};
 #[cfg(not(windows))]
 use std::thread::sleep;
 #[cfg(not(windows))]
@@ -211,35 +217,35 @@ fn test_x_multiplier() {
 fn test_zero_multiplier_warning() {
     for arg in ["count", "seek", "skip"] {
         new_ucmd!()
-            .args(&[format!("{}=0", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=0").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .no_stderr();
 
         new_ucmd!()
-            .args(&[format!("{}=00x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=00x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .no_stderr();
 
         new_ucmd!()
-            .args(&[format!("{}=0x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=0x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
 
         new_ucmd!()
-            .args(&[format!("{}=0x0x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=0x0x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
             .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\ndd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
 
         new_ucmd!()
-            .args(&[format!("{}=1x0x1", arg).as_str(), "status=none"])
+            .args(&[format!("{arg}=1x0x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
             .no_stdout()
@@ -259,7 +265,9 @@ fn test_final_stats_noxfer() {
 fn test_final_stats_unspec() {
     new_ucmd!()
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0.0 B/s\n")
+        .stderr_contains("0+0 records in\n0+0 records out\n0 bytes copied, ")
+        .stderr_matches(&Regex::new(r"\d\.\d+(e-\d\d)? s, ").unwrap())
+        .stderr_contains("0.0 B/s")
         .success();
 }
 
@@ -325,7 +333,7 @@ fn test_nocreat_causes_failure_when_outfile_not_present() {
         .pipe_in("")
         .fails()
         .stderr_only(
-            "dd: failed to open 'this-file-does-not-exist.txt': No such file or directory",
+            "dd: failed to open 'this-file-does-not-exist.txt': No such file or directory\n",
         );
     assert!(!fix.file_exists(fname));
 }
@@ -373,9 +381,11 @@ fn test_existing_file_truncated() {
 #[test]
 fn test_null_stats() {
     new_ucmd!()
-        .args(&["if=null.txt"])
+        .arg("if=null.txt")
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0.0 B/s\n")
+        .stderr_contains("0+0 records in\n0+0 records out\n0 bytes copied, ")
+        .stderr_matches(&Regex::new(r"\d\.\d+(e-\d\d)? s, ").unwrap())
+        .stderr_contains("0.0 B/s")
         .success();
 }
 
@@ -461,7 +471,7 @@ fn test_oversized_bs_32_bit() {
             .run()
             .no_stdout()
             .failure()
-            .status_code(1)
+            .code_is(1)
             .stderr_is(format!("dd: {}=N cannot fit into memory\n", bs_param));
     }
 }
@@ -496,7 +506,7 @@ fn test_ascii_10k_to_stdout() {
 #[test]
 fn test_zeros_to_file() {
     let tname = "zero-256k";
-    let test_fn = format!("{}.txt", tname);
+    let test_fn = format!("{tname}.txt");
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
     assert_fixture_exists!(test_fn);
 
@@ -516,7 +526,7 @@ fn test_zeros_to_file() {
 #[test]
 fn test_to_file_with_ibs_obs() {
     let tname = "zero-256k";
-    let test_fn = format!("{}.txt", tname);
+    let test_fn = format!("{tname}.txt");
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
     assert_fixture_exists!(test_fn);
 
@@ -608,7 +618,7 @@ fn test_self_transfer() {
 #[test]
 fn test_unicode_filenames() {
     let tname = "😎💚🦊";
-    let test_fn = format!("{}.txt", tname);
+    let test_fn = format!("{tname}.txt");
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
     assert_fixture_exists!(test_fn);
 
@@ -1284,14 +1294,14 @@ fn test_invalid_number_arg_gnu_compatibility() {
 
     for command in commands {
         new_ucmd!()
-            .args(&[format!("{}=", command)])
+            .args(&[format!("{command}=")])
             .fails()
-            .stderr_is("dd: invalid number: ‘’");
+            .stderr_is("dd: invalid number: ‘’\n");
 
         new_ucmd!()
-            .args(&[format!("{}=29d", command)])
+            .args(&[format!("{command}=29d")])
             .fails()
-            .stderr_is("dd: invalid number: ‘29d’");
+            .stderr_is("dd: invalid number: ‘29d’\n");
     }
 }
 
@@ -1301,14 +1311,14 @@ fn test_invalid_flag_arg_gnu_compatibility() {
 
     for command in commands {
         new_ucmd!()
-            .args(&[format!("{}=", command)])
+            .args(&[format!("{command}=")])
             .fails()
-            .stderr_is("dd: invalid input flag: ‘’\nTry 'dd --help' for more information.");
+            .usage_error("invalid input flag: ‘’");
 
         new_ucmd!()
-            .args(&[format!("{}=29d", command)])
+            .args(&[format!("{command}=29d")])
             .fails()
-            .stderr_is("dd: invalid input flag: ‘29d’\nTry 'dd --help' for more information.");
+            .usage_error("invalid input flag: ‘29d’");
     }
 }
 
@@ -1317,19 +1327,19 @@ fn test_invalid_file_arg_gnu_compatibility() {
     new_ucmd!()
         .args(&["if="])
         .fails()
-        .stderr_is("dd: failed to open '': No such file or directory");
+        .stderr_is("dd: failed to open '': No such file or directory\n");
 
     new_ucmd!()
         .args(&["if=81as9bn8as9g302az8ns9.pdf.zip.pl.com"])
         .fails()
         .stderr_is(
-            "dd: failed to open '81as9bn8as9g302az8ns9.pdf.zip.pl.com': No such file or directory",
+            "dd: failed to open '81as9bn8as9g302az8ns9.pdf.zip.pl.com': No such file or directory\n",
         );
 
     new_ucmd!()
         .args(&["of="])
         .fails()
-        .stderr_is("dd: failed to open '': No such file or directory");
+        .stderr_is("dd: failed to open '': No such file or directory\n");
 
     new_ucmd!()
         .args(&["of=81as9bn8as9g302az8ns9.pdf.zip.pl.com"])
@@ -1441,4 +1451,88 @@ fn test_sparse() {
     // The number of bytes in the file should be accurate though the
     // number of blocks stored on disk may be zero.
     assert_eq!(at.metadata("infile").len(), at.metadata("outfile").len());
+}
+
+// TODO These FIFO tests should work on macos, but some issue is
+// causing our implementation of dd to wait indefinitely when it
+// shouldn't.
+
+/// Test that a seek on an output FIFO results in a read.
+#[test]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+fn test_seek_output_fifo() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+
+    // TODO When `dd` is a bit more advanced, we could use the uutils
+    // version of dd here as well.
+    let child = Command::new("dd")
+        .current_dir(&at.subdir)
+        .args([
+            "count=1",
+            "if=/dev/zero",
+            &format!("of={}", at.plus_as_string("fifo")),
+            "status=noxfer",
+        ])
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to execute child process");
+
+    ts.ucmd()
+        .args(&["count=0", "seek=1", "of=fifo", "status=noxfer"])
+        .succeeds()
+        .stderr_only("0+0 records in\n0+0 records out\n");
+
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(&output.stderr, b"1+0 records in\n1+0 records out\n");
+}
+
+/// Test that a skip on an input FIFO results in a read.
+#[test]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+fn test_skip_input_fifo() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+
+    // TODO When `dd` is a bit more advanced, we could use the uutils
+    // version of dd here as well.
+    let child = Command::new("dd")
+        .current_dir(&at.subdir)
+        .args([
+            "count=1",
+            "if=/dev/zero",
+            &format!("of={}", at.plus_as_string("fifo")),
+            "status=noxfer",
+        ])
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to execute child process");
+
+    ts.ucmd()
+        .args(&["count=0", "skip=1", "if=fifo", "status=noxfer"])
+        .succeeds()
+        .stderr_only("0+0 records in\n0+0 records out\n");
+
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(&output.stderr, b"1+0 records in\n1+0 records out\n");
+}
+
+/// Test for reading part of stdin from each of two child processes.
+#[cfg(all(not(windows), feature = "printf"))]
+#[test]
+fn test_multiple_processes_reading_stdin() {
+    // TODO Investigate if this is possible on Windows.
+    let printf = format!("{TESTS_BINARY} printf 'abcdef\n'");
+    let dd_skip = format!("{TESTS_BINARY} dd bs=1 skip=3 count=0");
+    let dd = format!("{TESTS_BINARY} dd");
+    UCommand::new()
+        .arg(format!("{printf} | ( {dd_skip} && {dd} ) 2> /dev/null"))
+        .succeeds()
+        .stdout_only("def\n");
 }

@@ -1,6 +1,6 @@
 [package]
 name = "uu_du"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "du ~ (uutils) display disk usage"
@@ -15,14 +15,14 @@ edition = "2021"
 path = "src/du.rs"
 
 [dependencies]
-chrono = { version="^0.4.23", default-features=false, features=["std", "alloc", "clock"]}
+chrono = { workspace=true }
 # For the --exclude & --exclude-from options
-glob = "0.3.0"
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
+glob = { workspace=true }
+clap = { workspace=true }
+uucore = { workspace=true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.42.0", default-features = false, features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
+windows-sys = { workspace=true, features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
 
 [[bin]]
 name = "du"

@@ -1,27 +1,21 @@
-use crate::common::util::*;
-use std::env;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_get_all() {
-    let key = "KEY";
-    env::set_var(key, "VALUE");
-    assert_eq!(env::var(key), Ok("VALUE".to_string()));
-
     TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .env("HOME", "FOO")
+        .env("KEY", "VALUE")
         .succeeds()
-        .stdout_contains("HOME=")
+        .stdout_contains("HOME=FOO")
         .stdout_contains("KEY=VALUE");
 }
 
 #[test]
 fn test_get_var() {
-    let key = "KEY";
-    env::set_var(key, "VALUE");
-    assert_eq!(env::var(key), Ok("VALUE".to_string()));
-
     let result = TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
+        .env("KEY", "VALUE")
         .arg("KEY")
         .succeeds();
 

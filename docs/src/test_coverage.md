@@ -1,5 +1,7 @@
 # GNU Test Coverage
 
+<!-- markdownlint-disable MD033 -->
+
 uutils is actively tested against the GNU coreutils test suite. The results
 below are automatically updated every day.
 

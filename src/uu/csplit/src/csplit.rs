@@ -13,7 +13,7 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{crash_if_err, format_usage};
+use uucore::{crash_if_err, format_usage, help_about, help_section, help_usage};
 
 mod csplit_error;
 mod patterns;
@@ -22,9 +22,9 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-static ABOUT: &str = "split a file into sections determined by context lines";
-static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
-const USAGE: &str = "{} [OPTION]... FILE PATTERN...";
+const ABOUT: &str = help_about!("csplit.md");
+const AFTER_HELP: &str = help_section!("after help", "csplit.md");
+const USAGE: &str = help_usage!("csplit.md");
 
 mod options {
     pub const SUFFIX_FORMAT: &str = "suffix-format";
@@ -574,7 +574,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -583,7 +583,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -595,7 +595,7 @@ mod tests {
                 );
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         input_splitter.rewind_buffer();
@@ -605,7 +605,7 @@ mod tests {
                 assert_eq!(line, String::from("bbb"));
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -613,7 +613,7 @@ mod tests {
                 assert_eq!(line, String::from("ccc"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -621,7 +621,7 @@ mod tests {
                 assert_eq!(line, String::from("ddd"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         assert!(input_splitter.next().is_none());
@@ -646,7 +646,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -655,7 +655,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -664,7 +664,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(2, line), None);
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         input_splitter.rewind_buffer();
@@ -675,7 +675,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -683,7 +683,7 @@ mod tests {
                 assert_eq!(line, String::from("aaa"));
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -691,7 +691,7 @@ mod tests {
                 assert_eq!(line, String::from("bbb"));
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -699,7 +699,7 @@ mod tests {
                 assert_eq!(line, String::from("ccc"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         match input_splitter.next() {
@@ -707,7 +707,7 @@ mod tests {
                 assert_eq!(line, String::from("ddd"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {item:?}"),
         };
 
         assert!(input_splitter.next().is_none());
@@ -814,5 +814,5 @@ pub fn uu_app() -> Command {
                 .action(clap::ArgAction::Append)
                 .required(true),
         )
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
 }

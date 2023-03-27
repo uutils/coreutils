@@ -182,8 +182,6 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parametrized_check;
-
     fn test_add<A: DoubleInt>() {
         for n in 0..100 {
             let n = 2 * n + 1;
@@ -192,13 +190,22 @@ mod tests {
                 let m_x = m.to_mod(x);
                 for y in 0..=x {
                     let m_y = m.to_mod(y);
-                    println!("{n:?}, {x:?}, {y:?}", n = n, x = x, y = y);
+                    println!("{n:?}, {x:?}, {y:?}");
                     assert_eq!((x + y) % n, m.to_u64(m.add(m_x, m_y)));
                 }
             }
         }
     }
-    parametrized_check!(test_add);
+
+    #[test]
+    fn add_u32() {
+        test_add::<u32>();
+    }
+
+    #[test]
+    fn add_u64() {
+        test_add::<u64>();
+    }
 
     fn test_multiplication<A: DoubleInt>() {
         for n in 0..100 {
@@ -213,7 +220,16 @@ mod tests {
             }
         }
     }
-    parametrized_check!(test_multiplication);
+
+    #[test]
+    fn multiplication_u32() {
+        test_multiplication::<u32>();
+    }
+
+    #[test]
+    fn multiplication_u64() {
+        test_multiplication::<u64>();
+    }
 
     fn test_roundtrip<A: DoubleInt>() {
         for n in 0..100 {
@@ -225,5 +241,14 @@ mod tests {
             }
         }
     }
-    parametrized_check!(test_roundtrip);
+
+    #[test]
+    fn roundtrip_u32() {
+        test_roundtrip::<u32>();
+    }
+
+    #[test]
+    fn roundtrip_u64() {
+        test_roundtrip::<u64>();
+    }
 }

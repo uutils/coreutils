@@ -3,19 +3,20 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
-// spell-checker:ignore tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed ushort
+// spell-checker:ignore clocal tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed ushort
 
 mod flags;
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{c_ushort, TIOCGWINSZ, TIOCSWINSZ};
+use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
 use nix::sys::termios::{
     cfgetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags, OutputFlags, Termios,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::io::{self, stdout};
 use std::ops::ControlFlow;
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 
@@ -30,7 +31,6 @@ use uucore::format_usage;
 use flags::BAUD_RATES;
 use flags::{CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
-const NAME: &str = "stty";
 const USAGE: &str = "\
     {} [-F DEVICE | --file=DEVICE] [SETTING]...
     {} [-F DEVICE | --file=DEVICE] [-a|--all]
@@ -103,7 +103,20 @@ impl<'a> Options<'a> {
             all: matches.get_flag(options::ALL),
             save: matches.get_flag(options::SAVE),
             file: match matches.get_one::<String>(options::FILE) {
-                Some(_f) => todo!(),
+                // Two notes here:
+                // 1. O_NONBLOCK is needed because according to GNU docs, a
+                //    POSIX tty can block waiting for carrier-detect if the
+                //    "clocal" flag is not set. If your TTY is not connected
+                //    to a modem, it is probably not relevant though.
+                // 2. We never close the FD that we open here, but the OS
+                //    will clean up the FD for us on exit, so it doesn't
+                //    matter. The alternative would be to have an enum of
+                //    BorrowedFd/OwnedFd to handle both cases.
+                Some(f) => std::fs::OpenOptions::new()
+                    .read(true)
+                    .custom_flags(O_NONBLOCK)
+                    .open(f)?
+                    .into_raw_fd(),
                 None => stdout().as_raw_fd(),
             },
             settings: matches
@@ -171,7 +184,7 @@ fn stty(opts: &Options) -> UResult<()> {
             if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
                 return Err(USimpleError::new(
                     1,
-                    format!("invalid argument '{}'", setting),
+                    format!("invalid argument '{setting}'"),
                 ));
             }
         }
@@ -196,7 +209,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    print!("speed {} baud; ", speed);
+    print!("speed {speed} baud; ");
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
@@ -210,7 +223,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *baud_rate == speed {
-            print!("speed {} baud; ", text);
+            print!("speed {text} baud; ");
             break;
         }
     }
@@ -227,7 +240,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         // so we get the underlying libc::termios struct to get that information.
         let libc_termios: nix::libc::termios = termios.clone().into();
         let line = libc_termios.c_line;
-        print!("line = {};", line);
+        print!("line = {line};");
     }
 
     println!();
@@ -259,14 +272,14 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
         let val = flag.is_in(termios, group);
         if group.is_some() {
             if val && (!sane || opts.all) {
-                print!("{} ", name);
+                print!("{name} ");
                 printed = true;
             }
         } else if opts.all || val != sane {
             if !val {
                 print!("-");
             }
-            print!("{} ", name);
+            print!("{name} ");
             printed = true;
         }
     }
@@ -324,7 +337,6 @@ fn apply_flag<T: TermiosFlag>(
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .about(SUMMARY)

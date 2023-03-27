@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -64,7 +64,7 @@ fn test_invalid_file() {
 
     at.mkdir("a");
 
-    ucmd.arg("a").fails().stderr_is("sum: a: Is a directory");
+    ucmd.arg("a").fails().stderr_is("sum: a: Is a directory\n");
 }
 
 #[test]
@@ -73,5 +73,5 @@ fn test_invalid_metadata() {
 
     ucmd.arg("b")
         .fails()
-        .stderr_is("sum: b: No such file or directory");
+        .stderr_is("sum: b: No such file or directory\n");
 }

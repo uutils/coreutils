@@ -5,110 +5,205 @@
 //  For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) fname
+// spell-checker:ignore (ToDO) fname, algo
 use clap::{crate_version, Arg, Command};
+use hex::encode;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
+use std::iter;
 use std::path::Path;
-use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, show};
+use uucore::{
+    error::{FromIo, UResult},
+    format_usage, help_about, help_section, help_usage,
+    sum::{
+        div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
+        BSD, CRC, SYSV,
+    },
+};
 
-// NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
-const CRC_TABLE_LEN: usize = 256;
-const CRC_TABLE: [u32; CRC_TABLE_LEN] = generate_crc_table();
+const USAGE: &str = help_usage!("cksum.md");
+const ABOUT: &str = help_about!("cksum.md");
+const AFTER_HELP: &str = help_section!("after help", "cksum.md");
 
-const NAME: &str = "cksum";
-const USAGE: &str = "{} [OPTIONS] [FILE]...";
-const ABOUT: &str = "Print CRC and size for each file";
+const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
+const ALGORITHM_OPTIONS_BSD: &str = "bsd";
+const ALGORITHM_OPTIONS_CRC: &str = "crc";
+const ALGORITHM_OPTIONS_MD5: &str = "md5";
+const ALGORITHM_OPTIONS_SHA1: &str = "sha1";
+const ALGORITHM_OPTIONS_SHA224: &str = "sha224";
+const ALGORITHM_OPTIONS_SHA256: &str = "sha256";
+const ALGORITHM_OPTIONS_SHA384: &str = "sha384";
+const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
+const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
+const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 
-const fn generate_crc_table() -> [u32; CRC_TABLE_LEN] {
-    let mut table = [0; CRC_TABLE_LEN];
+fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize) {
+    match program {
+        ALGORITHM_OPTIONS_SYSV => (
+            ALGORITHM_OPTIONS_SYSV,
+            Box::new(SYSV::new()) as Box<dyn Digest>,
+            512,
+        ),
+        ALGORITHM_OPTIONS_BSD => (
+            ALGORITHM_OPTIONS_BSD,
+            Box::new(BSD::new()) as Box<dyn Digest>,
+            1024,
+        ),
+        ALGORITHM_OPTIONS_CRC => (
+            ALGORITHM_OPTIONS_CRC,
+            Box::new(CRC::new()) as Box<dyn Digest>,
+            256,
+        ),
+        ALGORITHM_OPTIONS_MD5 => (
+            ALGORITHM_OPTIONS_MD5,
+            Box::new(Md5::new()) as Box<dyn Digest>,
+            128,
+        ),
+        ALGORITHM_OPTIONS_SHA1 => (
+            ALGORITHM_OPTIONS_SHA1,
+            Box::new(Sha1::new()) as Box<dyn Digest>,
+            160,
+        ),
+        ALGORITHM_OPTIONS_SHA224 => (
+            ALGORITHM_OPTIONS_SHA224,
+            Box::new(Sha224::new()) as Box<dyn Digest>,
+            224,
+        ),
+        ALGORITHM_OPTIONS_SHA256 => (
+            ALGORITHM_OPTIONS_SHA256,
+            Box::new(Sha256::new()) as Box<dyn Digest>,
+            256,
+        ),
+        ALGORITHM_OPTIONS_SHA384 => (
+            ALGORITHM_OPTIONS_SHA384,
+            Box::new(Sha384::new()) as Box<dyn Digest>,
+            384,
+        ),
+        ALGORITHM_OPTIONS_SHA512 => (
+            ALGORITHM_OPTIONS_SHA512,
+            Box::new(Sha512::new()) as Box<dyn Digest>,
+            512,
+        ),
+        ALGORITHM_OPTIONS_BLAKE2B => (
+            ALGORITHM_OPTIONS_BLAKE2B,
+            Box::new(Blake2b::new()) as Box<dyn Digest>,
+            512,
+        ),
+        ALGORITHM_OPTIONS_SM3 => (
+            ALGORITHM_OPTIONS_SM3,
+            Box::new(Sm3::new()) as Box<dyn Digest>,
+            512,
+        ),
+        _ => unreachable!("unknown algorithm: clap should have prevented this case"),
+    }
+}
 
-    let mut i = 0;
-    while i < CRC_TABLE_LEN {
-        table[i] = crc_entry(i as u8);
+struct Options {
+    algo_name: &'static str,
+    digest: Box<dyn Digest + 'static>,
+    output_bits: usize,
+}
 
-        i += 1;
+/// Calculate checksum
+///
+/// # Arguments
+///
+/// * `options` - CLI options for the assigning checksum algorithm
+/// * `files` - A iterator of OsStr which is a bunch of files that are using for calculating checksum
+#[allow(clippy::cognitive_complexity)]
+fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
+where
+    I: Iterator<Item = &'a OsStr>,
+{
+    for filename in files {
+        let filename = Path::new(filename);
+        let stdin_buf;
+        let file_buf;
+        let not_file = filename == OsStr::new("-");
+        let mut file = BufReader::new(if not_file {
+            stdin_buf = stdin();
+            Box::new(stdin_buf) as Box<dyn Read>
+        } else if filename.is_dir() {
+            Box::new(BufReader::new(io::empty())) as Box<dyn Read>
+        } else {
+            file_buf =
+                File::open(filename).map_err_context(|| filename.to_str().unwrap().to_string())?;
+            Box::new(file_buf) as Box<dyn Read>
+        });
+        let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
+            .map_err_context(|| "failed to read input".to_string())?;
+
+        // The BSD checksum output is 5 digit integer
+        let bsd_width = 5;
+        match (options.algo_name, not_file) {
+            (ALGORITHM_OPTIONS_SYSV, true) => println!(
+                "{} {}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(sz, options.output_bits)
+            ),
+            (ALGORITHM_OPTIONS_SYSV, false) => println!(
+                "{} {} {}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(sz, options.output_bits),
+                filename.display()
+            ),
+            (ALGORITHM_OPTIONS_BSD, true) => println!(
+                "{:0bsd_width$} {:bsd_width$}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(sz, options.output_bits)
+            ),
+            (ALGORITHM_OPTIONS_BSD, false) => println!(
+                "{:0bsd_width$} {:bsd_width$} {}",
+                sum.parse::<u16>().unwrap(),
+                div_ceil(sz, options.output_bits),
+                filename.display()
+            ),
+            (_, true) => println!("{sum} {sz}"),
+            (_, false) => println!("{sum} {sz} {}", filename.display()),
+        }
     }
 
-    table
+    Ok(())
 }
 
-const fn crc_entry(input: u8) -> u32 {
-    let mut crc = (input as u32) << 24;
+fn digest_read<T: Read>(
+    digest: &mut Box<dyn Digest>,
+    reader: &mut BufReader<T>,
+    output_bits: usize,
+) -> io::Result<(String, usize)> {
+    digest.reset();
 
-    let mut i = 0;
-    while i < 8 {
-        let if_condition = crc & 0x8000_0000;
-        let if_body = (crc << 1) ^ 0x04c1_1db7;
-        let else_body = crc << 1;
+    // Read bytes from `reader` and write those bytes to `digest`.
+    //
+    // If `binary` is `false` and the operating system is Windows, then
+    // `DigestWriter` replaces "\r\n" with "\n" before it writes the
+    // bytes into `digest`. Otherwise, it just inserts the bytes as-is.
+    //
+    // In order to support replacing "\r\n", we must call `finalize()`
+    // in order to support the possibility that the last character read
+    // from the reader was "\r". (This character gets buffered by
+    // `DigestWriter` and only written if the following character is
+    // "\n". But when "\r" is the last character read, we need to force
+    // it to be written.)
+    let mut digest_writer = DigestWriter::new(digest, true);
+    let output_size = std::io::copy(reader, &mut digest_writer)? as usize;
+    digest_writer.finalize();
 
-        // NOTE: i feel like this is easier to understand than emulating an if statement in bitwise
-        //       ops
-        let condition_table = [else_body, if_body];
-
-        crc = condition_table[(if_condition != 0) as usize];
-        i += 1;
-    }
-
-    crc
-}
-
-#[inline]
-fn crc_update(crc: u32, input: u8) -> u32 {
-    (crc << 8) ^ CRC_TABLE[((crc >> 24) as usize ^ input as usize) & 0xFF]
-}
-
-#[inline]
-fn crc_final(mut crc: u32, mut length: usize) -> u32 {
-    while length != 0 {
-        crc = crc_update(crc, length as u8);
-        length >>= 8;
-    }
-
-    !crc
-}
-
-fn init_byte_array() -> Vec<u8> {
-    vec![0; 1024 * 1024]
-}
-
-#[inline]
-fn cksum(fname: &str) -> io::Result<(u32, usize)> {
-    let mut crc = 0u32;
-    let mut size = 0usize;
-
-    let mut rd: Box<dyn Read> = match fname {
-        "-" => Box::new(stdin()),
-        _ => {
-            let p = Path::new(fname);
-
-            // Directories should not give an error, but should be interpreted
-            // as empty files to match GNU semantics.
-            if p.is_dir() {
-                Box::new(BufReader::new(io::empty())) as Box<dyn Read>
-            } else {
-                Box::new(BufReader::new(File::open(p)?)) as Box<dyn Read>
-            }
-        }
-    };
-
-    let mut bytes = init_byte_array();
-    loop {
-        let num_bytes = rd.read(&mut bytes)?;
-        if num_bytes == 0 {
-            return Ok((crc_final(crc, size), size));
-        }
-        for &b in bytes[..num_bytes].iter() {
-            crc = crc_update(crc, b);
-        }
-        size += num_bytes;
+    if digest.output_bits() > 0 {
+        Ok((digest.result_str(), output_size))
+    } else {
+        // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
+        let mut bytes = Vec::new();
+        bytes.resize((output_bits + 7) / 8, 0);
+        digest.hash_finalize(&mut bytes);
+        Ok((encode(bytes), output_size))
     }
 }
 
 mod options {
     pub static FILE: &str = "file";
+    pub static ALGORITHM: &str = "algorithm";
 }
 
 #[uucore::main]
@@ -117,29 +212,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
-        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
-        None => vec![],
+    let algo_name: &str = match matches.get_one::<String>(options::ALGORITHM) {
+        Some(v) => v,
+        None => ALGORITHM_OPTIONS_CRC,
     };
 
-    if files.is_empty() {
-        let (crc, size) = cksum("-")?;
-        println!("{} {}", crc, size);
-        return Ok(());
-    }
+    let (name, algo, bits) = detect_algo(algo_name);
+    let opts = Options {
+        algo_name: name,
+        digest: algo,
+        output_bits: bits,
+    };
 
-    for fname in &files {
-        match cksum(fname.as_ref()).map_err_context(|| format!("{}", fname.maybe_quote())) {
-            Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
-            Err(err) => show!(err),
-        };
-    }
+    match matches.get_many::<String>(options::FILE) {
+        Some(files) => cksum(opts, files.map(OsStr::new))?,
+        None => cksum(opts, iter::once(OsStr::new("-")))?,
+    };
+
     Ok(())
 }
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .name(NAME)
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -150,4 +244,25 @@ pub fn uu_app() -> Command {
                 .action(clap::ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
+        .arg(
+            Arg::new(options::ALGORITHM)
+                .long(options::ALGORITHM)
+                .short('a')
+                .help("select the digest type to use. See DIGEST below")
+                .value_name("ALGORITHM")
+                .value_parser([
+                    ALGORITHM_OPTIONS_SYSV,
+                    ALGORITHM_OPTIONS_BSD,
+                    ALGORITHM_OPTIONS_CRC,
+                    ALGORITHM_OPTIONS_MD5,
+                    ALGORITHM_OPTIONS_SHA1,
+                    ALGORITHM_OPTIONS_SHA224,
+                    ALGORITHM_OPTIONS_SHA256,
+                    ALGORITHM_OPTIONS_SHA384,
+                    ALGORITHM_OPTIONS_SHA512,
+                    ALGORITHM_OPTIONS_BLAKE2B,
+                    ALGORITHM_OPTIONS_SM3,
+                ]),
+        )
+        .after_help(AFTER_HELP)
 }

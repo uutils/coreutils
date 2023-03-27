@@ -9,7 +9,9 @@ use regex::Regex;
 #[cfg(not(windows))]
 use std::io::Write;
 
-use crate::common::util::*;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::common::util::expected_result;
+use crate::common::util::TestScenario;
 
 const SUB_DIR: &str = "subdir/deeper";
 const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";
@@ -82,10 +84,10 @@ fn _du_basics_subdir(s: &str) {
 ))]
 fn _du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "8\tsubdir/deeper\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "0\tsubdir/deeper\n");
+    } else {
+        assert_eq!(s, "8\tsubdir/deeper\n");
     }
 }
 
@@ -95,24 +97,24 @@ fn test_du_invalid_size() {
     let ts = TestScenario::new(util_name!());
     for s in args {
         ts.ucmd()
-            .arg(format!("--{}=1fb4t", s))
+            .arg(format!("--{s}=1fb4t"))
             .arg("/tmp")
             .fails()
             .code_is(1)
-            .stderr_only(format!("du: invalid suffix in --{} argument '1fb4t'", s));
+            .stderr_only(format!("du: invalid suffix in --{s} argument '1fb4t'\n"));
         ts.ucmd()
-            .arg(format!("--{}=x", s))
+            .arg(format!("--{s}=x"))
             .arg("/tmp")
             .fails()
             .code_is(1)
-            .stderr_only(format!("du: invalid --{} argument 'x'", s));
+            .stderr_only(format!("du: invalid --{s} argument 'x'\n"));
         #[cfg(not(target_pointer_width = "128"))]
         ts.ucmd()
-            .arg(format!("--{}=1Y", s))
+            .arg(format!("--{s}=1Y"))
             .arg("/tmp")
             .fails()
             .code_is(1)
-            .stderr_only(format!("du: --{} argument '1Y' too large", s));
+            .stderr_only(format!("du: --{s} argument '1Y' too large\n"));
     }
 }
 
@@ -164,10 +166,10 @@ fn _du_soft_link(s: &str) {
 ))]
 fn _du_soft_link(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "16\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "16\tsubdir/links\n");
     }
 }
 
@@ -212,10 +214,10 @@ fn _du_hard_link(s: &str) {
 ))]
 fn _du_hard_link(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "16\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "16\tsubdir/links\n");
     }
 }
 
@@ -255,10 +257,10 @@ fn _du_d_flag(s: &str) {
 ))]
 fn _du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "28\t./subdir\n36\t.\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\t./subdir\n8\t.\n");
+    } else {
+        assert_eq!(s, "28\t./subdir\n36\t.\n");
     }
 }
 
@@ -303,10 +305,10 @@ fn _du_dereference(s: &str) {
 ))]
 fn _du_dereference(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "8\tsubdir/links/deeper_dir\n24\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "0\tsubdir/links/deeper_dir\n8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "8\tsubdir/links/deeper_dir\n24\tsubdir/links\n");
     }
 }
 
@@ -391,7 +393,12 @@ fn test_du_h_flag_empty_file() {
 fn test_du_time() {
     let ts = TestScenario::new(util_name!());
 
+    // du --time formats the timestamp according to the local timezone. We set the TZ
+    // environment variable to UTC in the commands below to ensure consistent outputs
+    // and test results regardless of the timezone of the machine this test runs in.
+
     ts.ccmd("touch")
+        .env("TZ", "UTC")
         .arg("-a")
         .arg("-t")
         .arg("201505150000")
@@ -399,19 +406,35 @@ fn test_du_time() {
         .succeeds();
 
     ts.ccmd("touch")
+        .env("TZ", "UTC")
         .arg("-m")
         .arg("-t")
         .arg("201606160000")
         .arg("date_test")
         .succeeds();
 
-    let result = ts.ucmd().arg("--time").arg("date_test").succeeds();
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("date_test")
+        .succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
 
-    let result = ts.ucmd().arg("--time=atime").arg("date_test").succeeds();
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time=atime")
+        .arg("date_test")
+        .succeeds();
     result.stdout_only("0\t2015-05-15 00:00\tdate_test\n");
 
-    let result = ts.ucmd().arg("--time=ctime").arg("date_test").succeeds();
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time=ctime")
+        .arg("date_test")
+        .succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
 
     if birth_supported() {
@@ -511,16 +534,25 @@ fn test_du_threshold() {
     let threshold = if cfg!(windows) { "7K" } else { "10K" };
 
     ts.ucmd()
-        .arg(format!("--threshold={}", threshold))
+        .arg(format!("--threshold={threshold}"))
         .succeeds()
         .stdout_contains("links")
         .stdout_does_not_contain("deeper_dir");
 
     ts.ucmd()
-        .arg(format!("--threshold=-{}", threshold))
+        .arg(format!("--threshold=-{threshold}"))
         .succeeds()
         .stdout_does_not_contain("links")
         .stdout_contains("deeper_dir");
+}
+
+#[test]
+fn test_du_invalid_threshold() {
+    let ts = TestScenario::new(util_name!());
+
+    let threshold = "-0";
+
+    ts.ucmd().arg(format!("--threshold={threshold}")).fails();
 }
 
 #[test]

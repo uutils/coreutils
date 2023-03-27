@@ -5,6 +5,11 @@ features that are not supported by GNU coreutils. We take care not to introduce
 features that are incompatible with the GNU coreutils. Below is a list of uutils
 extensions.
 
+## `env`
+
+`env` has an additional `-f`/`--file` flag that can parse `.env` files and set
+variables accordingly. This feature is adopted from `dotenv` style packages.
+
 ## `cp`
 
 `cp` can display a progress bar when the `-g`/`--progress` flag is set.
@@ -33,3 +38,8 @@ We provide a simple implementation of `more`, which is not part of GNU
 coreutils. We do not aim for full compatibility with the `more` utility from
 `util-linux`. Features from more modern pagers (like `less` and `bat`) are
 therefore welcomed.
+
+## `cut`
+
+`cut` can separate fields by whitespace (Space and Tab) with `-w` flag. This
+feature is adopted from [FreeBSD](https://www.freebsd.org/cgi/man.cgi?cut).

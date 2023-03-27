@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 // spell-checker:ignore checkfile, nonames, testf, ntestf
 macro_rules! get_hash(
     ($str:expr) => (
@@ -134,7 +134,7 @@ fn test_check_file_not_found_warning() {
         .arg(at.subdir.join("testf.sha1"))
         .succeeds()
         .stdout_is("sha1sum: testf: No such file or directory\ntestf: FAILED open or read\n")
-        .stderr_is("sha1sum: warning: 1 listed file could not be read");
+        .stderr_is("sha1sum: warning: 1 listed file could not be read\n");
 }
 
 #[test]

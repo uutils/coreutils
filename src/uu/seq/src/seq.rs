@@ -210,21 +210,11 @@ fn write_value_float(
 ) -> std::io::Result<()> {
     let value_as_str =
         if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
-            format!(
-                "{value:>width$.precision$}",
-                value = value,
-                width = width,
-                precision = precision,
-            )
+            format!("{value:>width$.precision$}")
         } else {
-            format!(
-                "{value:>0width$.precision$}",
-                value = value,
-                width = width,
-                precision = precision,
-            )
+            format!("{value:>0width$.precision$}")
         };
-    write!(writer, "{}", value_as_str)
+    write!(writer, "{value_as_str}")
 }
 
 /// Write a big int formatted according to the given parameters.
@@ -237,16 +227,16 @@ fn write_value_int(
 ) -> std::io::Result<()> {
     let value_as_str = if pad {
         if *value == ExtendedBigInt::MinusZero && is_first_iteration {
-            format!("-{value:>0width$}", value = value, width = width - 1,)
+            format!("-{value:>0width$}", width = width - 1)
         } else {
-            format!("{value:>0width$}", value = value, width = width,)
+            format!("{value:>0width$}")
         }
     } else if *value == ExtendedBigInt::MinusZero && is_first_iteration {
-        format!("-{}", value)
+        format!("-{value}")
     } else {
-        format!("{}", value)
+        format!("{value}")
     };
-    write!(writer, "{}", value_as_str)
+    write!(writer, "{value_as_str}")
 }
 
 // TODO `print_seq()` and `print_seq_integers()` are nearly identical,
@@ -270,7 +260,7 @@ fn print_seq(
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
-            write!(stdout, "{}", separator)?;
+            write!(stdout, "{separator}")?;
         }
         // If there was an argument `-f FORMAT`, then use that format
         // template instead of the default formatting strategy.
@@ -286,7 +276,7 @@ fn print_seq(
         // strings.
         match format {
             Some(f) => {
-                let s = format!("{}", value);
+                let s = format!("{value}");
                 if let Err(x) = printf(f, &[s]) {
                     show!(x);
                     exit(1);
@@ -305,7 +295,7 @@ fn print_seq(
         is_first_iteration = false;
     }
     if !is_first_iteration {
-        write!(stdout, "{}", terminator)?;
+        write!(stdout, "{terminator}")?;
     }
     stdout.flush()?;
     Ok(())
@@ -340,7 +330,7 @@ fn print_seq_integers(
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
-            write!(stdout, "{}", separator)?;
+            write!(stdout, "{separator}")?;
         }
         // If there was an argument `-f FORMAT`, then use that format
         // template instead of the default formatting strategy.
@@ -351,7 +341,7 @@ fn print_seq_integers(
         // TODO See similar comment about formatting in `print_seq()`.
         match format {
             Some(f) => {
-                let s = format!("{}", value);
+                let s = format!("{value}");
                 if let Err(x) = printf(f, &[s]) {
                     show!(x);
                     exit(1);
@@ -365,7 +355,7 @@ fn print_seq_integers(
     }
 
     if !is_first_iteration {
-        write!(stdout, "{}", terminator)?;
+        write!(stdout, "{terminator}")?;
     }
     Ok(())
 }

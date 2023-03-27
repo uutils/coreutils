@@ -14,28 +14,11 @@ use std::ffi::CString;
 
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
-static ABOUT: &str = "Create the special file NAME of the given TYPE.";
-static USAGE: &str = "{} [OPTION]... NAME TYPE [MAJOR MINOR]";
-static LONG_HELP: &str = "Mandatory arguments to long options are mandatory for short options too.
--m, --mode=MODE    set file permission bits to MODE, not a=rw - umask
---help     display this help and exit
---version  output version information and exit
-
-Both MAJOR and MINOR must be specified when TYPE is b, c, or u, and they
-must be omitted when TYPE is p.  If MAJOR or MINOR begins with 0x or 0X,
-it is interpreted as hexadecimal; otherwise, if it begins with 0, as octal;
-otherwise, as decimal.  TYPE may be:
-
-b      create a block (buffered) special file
-c, u   create a character (unbuffered) special file
-p      create a FIFO
-
-NOTE: your shell may have its own version of mknod, which usually supersedes
-the version described here.  Please refer to your shell's documentation
-for details about the options it supports.
-";
+const ABOUT: &str = help_about!("mknod.md");
+const USAGE: &str = help_usage!("mknod.md");
+const AFTER_HELP: &str = help_section!("after help", "mknod.md");
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
@@ -142,7 +125,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
         .about(ABOUT)
         .infer_long_args(true)
         .arg(
@@ -184,7 +167,7 @@ fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {
     match matches.get_one::<String>("mode") {
         None => Ok(MODE_RW_UGO),
         Some(str_mode) => uucore::mode::parse_mode(str_mode)
-            .map_err(|e| format!("invalid mode ({})", e))
+            .map_err(|e| format!("invalid mode ({e})"))
             .and_then(|mode| {
                 if mode > 0o777 {
                     Err("mode must specify only file permission bits".to_string())

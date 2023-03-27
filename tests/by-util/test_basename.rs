@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) reallylongexecutable
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 #[cfg(any(unix, target_os = "redox"))]
 use std::ffi::OsStr;
 

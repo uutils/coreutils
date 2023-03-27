@@ -7,22 +7,22 @@
 
 use std::time::Duration;
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
         new_ucmd!()
-            .arg(format!("{}.txt", file_name))
+            .arg(format!("{file_name}.txt"))
             .args(&args.split_whitespace().collect::<Vec<&str>>())
             .succeeds()
-            .stdout_is_fixture(format!("{}.expected", file_name));
+            .stdout_is_fixture(format!("{file_name}.expected"));
 
         new_ucmd!()
-            .arg(format!("{}.txt", file_name))
+            .arg(format!("{file_name}.txt"))
             .arg("--debug")
             .args(&args.split_whitespace().collect::<Vec<&str>>())
             .succeeds()
-            .stdout_is_fixture(format!("{}.expected.debug", file_name));
+            .stdout_is_fixture(format!("{file_name}.expected.debug"));
     }
 }
 
@@ -31,7 +31,7 @@ fn test_buffer_sizes() {
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
         TestScenario::new(util_name!())
-            .ucmd_keepenv()
+            .ucmd()
             .arg("-n")
             .arg("-S")
             .arg(buffer_size)
@@ -44,7 +44,7 @@ fn test_buffer_sizes() {
             let buffer_sizes = ["1000G", "10T"];
             for buffer_size in &buffer_sizes {
                 TestScenario::new(util_name!())
-                    .ucmd_keepenv()
+                    .ucmd()
                     .arg("-n")
                     .arg("-S")
                     .arg(buffer_size)
@@ -63,14 +63,14 @@ fn test_invalid_buffer_size() {
         .arg("asd")
         .fails()
         .code_is(2)
-        .stderr_only("sort: invalid --buffer-size argument 'asd'");
+        .stderr_only("sort: invalid --buffer-size argument 'asd'\n");
 
     new_ucmd!()
         .arg("-S")
         .arg("100f")
         .fails()
         .code_is(2)
-        .stderr_only("sort: invalid suffix in --buffer-size argument '100f'");
+        .stderr_only("sort: invalid suffix in --buffer-size argument '100f'\n");
 
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
@@ -80,7 +80,7 @@ fn test_invalid_buffer_size() {
         .arg("ext_sort.txt")
         .fails()
         .code_is(2)
-        .stderr_only("sort: --buffer-size argument '1Y' too large");
+        .stderr_only("sort: --buffer-size argument '1Y' too large\n");
 
     #[cfg(target_pointer_width = "32")]
     {
@@ -94,7 +94,7 @@ fn test_invalid_buffer_size() {
                 .fails()
                 .code_is(2)
                 .stderr_only(format!(
-                    "sort: --buffer-size argument '{}' too large",
+                    "sort: --buffer-size argument '{}' too large\n",
                     buffer_size
                 ));
         }
@@ -529,7 +529,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: failed to parse key '1.': failed to parse character index '': cannot parse integer from empty string");
+        .stderr_only("sort: failed to parse key '1.': failed to parse character index '': cannot parse integer from empty string\n");
 }
 
 #[test]
@@ -537,7 +537,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.1x': invalid option: 'x'");
+        .stderr_only("sort: failed to parse key '1.1x': invalid option: 'x'\n");
 }
 
 #[test]
@@ -545,7 +545,7 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: failed to parse key '0.1': field index can not be 0");
+        .stderr_only("sort: failed to parse key '0.1': field index can not be 0\n");
 }
 
 #[test]
@@ -553,7 +553,7 @@ fn test_keys_invalid_char_zero() {
     new_ucmd!()
         .args(&["-k", "1.0"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.0': invalid character index 0 for the start position of a field");
+        .stderr_only("sort: failed to parse key '1.0': invalid character index 0 for the start position of a field\n");
 }
 
 #[test]
@@ -801,7 +801,7 @@ fn test_check_unique() {
         .pipe_in("A\nA\n")
         .fails()
         .code_is(1)
-        .stderr_only("sort: -:2: disorder: A");
+        .stderr_only("sort: -:2: disorder: A\n");
 }
 
 #[test]
@@ -810,21 +810,21 @@ fn test_dictionary_and_nonprinting_conflicts() {
     for restricted_arg in ["d", "i"] {
         for conflicting_arg in &conflicting_args {
             new_ucmd!()
-                .arg(&format!("-{}{}", restricted_arg, conflicting_arg))
+                .arg(&format!("-{restricted_arg}{conflicting_arg}"))
                 .fails();
         }
         for conflicting_arg in &conflicting_args {
             new_ucmd!()
                 .args(&[
-                    format!("-{}", restricted_arg).as_str(),
+                    format!("-{restricted_arg}").as_str(),
                     "-k",
-                    &format!("1,1{}", conflicting_arg),
+                    &format!("1,1{conflicting_arg}"),
                 ])
                 .succeeds();
         }
         for conflicting_arg in &conflicting_args {
             new_ucmd!()
-                .args(&["-k", &format!("1{},1{}", restricted_arg, conflicting_arg)])
+                .args(&["-k", &format!("1{restricted_arg},1{conflicting_arg}")])
                 .fails();
         }
     }
@@ -844,12 +844,12 @@ fn test_nonexistent_file() {
     new_ucmd!()
         .arg("nonexistent.txt")
         .fails()
-        .status_code(2)
+        .code_is(2)
         .stderr_only(
             #[cfg(not(windows))]
-            "sort: cannot read: nonexistent.txt: No such file or directory",
+            "sort: cannot read: nonexistent.txt: No such file or directory\n",
             #[cfg(windows)]
-            "sort: cannot read: nonexistent.txt: The system cannot find the file specified.",
+            "sort: cannot read: nonexistent.txt: The system cannot find the file specified.\n",
         );
 }
 
@@ -918,7 +918,7 @@ fn test_compress_merge() {
 fn test_compress_fail() {
     #[cfg(not(windows))]
     TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -928,13 +928,13 @@ fn test_compress_fail() {
             "10",
         ])
         .fails()
-        .stderr_only("sort: couldn't execute compress program: errno 2");
+        .stderr_only("sort: couldn't execute compress program: errno 2\n");
     // With coverage, it fails with a different error:
     // "thread 'main' panicked at 'called `Option::unwrap()` on ...
     // So, don't check the output
     #[cfg(windows)]
     TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -949,7 +949,7 @@ fn test_compress_fail() {
 #[test]
 fn test_merge_batches() {
     TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
         .timeout(Duration::from_secs(120))
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
@@ -959,7 +959,7 @@ fn test_merge_batches() {
 #[test]
 fn test_merge_batch_size() {
     TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
@@ -993,7 +993,7 @@ fn test_conflict_check_out() {
             .fails()
             .stderr_contains(
                 // the rest of the message might be subject to change
-                "error: The argument",
+                "error: the argument",
             );
     }
 }
@@ -1015,12 +1015,12 @@ fn test_verifies_out_file() {
             .pipe_in(input)
             .ignore_stdin_write_error()
             .fails()
-            .status_code(2)
+            .code_is(2)
             .stderr_only(
                 #[cfg(not(windows))]
-                "sort: open failed: nonexistent_dir/nonexistent_file: No such file or directory",
+                "sort: open failed: nonexistent_dir/nonexistent_file: No such file or directory\n",
                 #[cfg(windows)]
-                "sort: open failed: nonexistent_dir/nonexistent_file: The system cannot find the path specified.",
+                "sort: open failed: nonexistent_dir/nonexistent_file: The system cannot find the path specified.\n",
             );
     }
 }
@@ -1036,7 +1036,7 @@ fn test_verifies_files_after_keys() {
             "nonexistent_dir/input_file",
         ])
         .fails()
-        .status_code(2)
+        .code_is(2)
         .stderr_contains("failed to parse key");
 }
 
@@ -1046,8 +1046,8 @@ fn test_verifies_input_files() {
     new_ucmd!()
         .args(&["/dev/random", "nonexistent_file"])
         .fails()
-        .status_code(2)
-        .stderr_is("sort: cannot read: nonexistent_file: No such file or directory");
+        .code_is(2)
+        .stderr_is("sort: cannot read: nonexistent_file: No such file or directory\n");
 }
 
 #[test]
@@ -1067,7 +1067,7 @@ fn test_output_is_input() {
     at.touch("file");
     at.append("file", input);
     scene
-        .ucmd_keepenv()
+        .ucmd()
         .args(&["-m", "-u", "-o", "file", "file", "file", "file"])
         .succeeds();
     assert_eq!(at.read("file"), input);
@@ -1104,7 +1104,7 @@ fn test_wrong_args_exit_code() {
     new_ucmd!()
         .arg("--misspelled")
         .fails()
-        .status_code(2)
+        .code_is(2)
         .stderr_contains("--misspelled");
 }
 
@@ -1126,7 +1126,7 @@ fn test_tmp_files_deleted_on_sigint() {
         for _ in 0..40 {
             let lines = rand_pcg::Pcg32::seed_from_u64(123)
                 .sample_iter(rand::distributions::uniform::Uniform::new(0, 10000))
-                .take(100000)
+                .take(100_000)
                 .map(|x| x.to_string() + "\n")
                 .collect::<String>();
             file.write_all(lines.as_bytes()).unwrap();

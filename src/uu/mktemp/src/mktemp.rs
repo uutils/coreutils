@@ -11,7 +11,7 @@
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 use std::env;
 use std::error::Error;
@@ -28,8 +28,8 @@ use std::os::unix::prelude::PermissionsExt;
 use rand::Rng;
 use tempfile::Builder;
 
-static ABOUT: &str = "create a temporary file or directory.";
-const USAGE: &str = "{} [OPTION]... [TEMPLATE]";
+const ABOUT: &str = help_about!("mktemp.md");
+const USAGE: &str = help_usage!("mktemp.md");
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
@@ -313,7 +313,7 @@ impl Params {
         // the template is "XXXabc", then `suffix` is "abc.txt".
         let suffix_from_option = options.suffix.unwrap_or_default();
         let suffix_from_template = &options.template[j..];
-        let suffix = format!("{}{}", suffix_from_template, suffix_from_option);
+        let suffix = format!("{suffix_from_template}{suffix_from_option}");
         if suffix.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::SuffixContainsDirSeparator(suffix));
         }

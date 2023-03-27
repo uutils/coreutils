@@ -192,13 +192,9 @@ impl Utmpx {
     }
     /// A.K.A. ut.ut_tv
     pub fn login_time(&self) -> time::OffsetDateTime {
-        #[cfg(all(not(target_os = "freebsd"), not(target_vendor = "apple")))]
-        let ts_nanos: i128 = (self.inner.ut_tv.tv_sec as i64 * 1_000_000_000_i64
-            + self.inner.ut_tv.tv_usec as i64 * 1_000_i64)
-            .into();
-        #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-        let ts_nanos: i128 = (self.inner.ut_tv.tv_sec * 1_000_000_000_i64
-            + self.inner.ut_tv.tv_usec as i64 * 1_000_i64)
+        #[allow(clippy::unnecessary_cast)]
+        let ts_nanos: i128 = (1_000_000_000_i64 * self.inner.ut_tv.tv_sec as i64
+            + 1_000_i64 * self.inner.ut_tv.tv_usec as i64)
             .into();
         let local_offset = time::OffsetDateTime::now_local().unwrap().offset();
         time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
@@ -249,7 +245,7 @@ impl Utmpx {
                         return Ok(if display.is_empty() {
                             ai_canonname
                         } else {
-                            format!("{}:{}", ai_canonname, display)
+                            format!("{ai_canonname}:{display}")
                         });
                     }
                 }

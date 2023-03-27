@@ -1,5 +1,5 @@
 // spell-checker:ignore dont
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -13,7 +13,7 @@ fn test_invalid_arg() {
 fn test_subcommand_return_code() {
     new_ucmd!().arg("1").arg("true").succeeds();
 
-    new_ucmd!().arg("1").arg("false").run().status_code(1);
+    new_ucmd!().arg("1").arg("false").run().code_is(1);
 }
 
 #[test]
@@ -48,11 +48,11 @@ fn test_verbose() {
         new_ucmd!()
             .args(&[verbose_flag, ".1", "sleep", "10"])
             .fails()
-            .stderr_only("timeout: sending signal TERM to command 'sleep'");
+            .stderr_only("timeout: sending signal TERM to command 'sleep'\n");
         new_ucmd!()
             .args(&[verbose_flag, "-s0", "-k.1", ".1", "sleep", "10"])
             .fails()
-            .stderr_only("timeout: sending signal EXIT to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'");
+            .stderr_only("timeout: sending signal EXIT to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'\n");
     }
 }
 
@@ -121,6 +121,14 @@ fn test_invalid_signal() {
         .usage_error("'invalid': invalid signal");
 }
 
+#[test]
+fn test_invalid_multi_byte_characters() {
+    new_ucmd!()
+        .args(&["10€", "sleep", "0"])
+        .fails()
+        .usage_error("invalid time interval '10€'");
+}
+
 /// Test that the long form of the `--kill-after` argument is recognized.
 #[test]
 fn test_kill_after_long() {
@@ -129,4 +137,20 @@ fn test_kill_after_long() {
         .succeeds()
         .no_stdout()
         .no_stderr();
+}
+
+#[test]
+fn test_kill_subprocess() {
+    new_ucmd!()
+        .args(&[
+            // Make sure the CI can spawn the subprocess.
+            "10",
+            "sh",
+            "-c",
+            "sh -c \"trap 'echo xyz' TERM; sleep 30\"",
+        ])
+        .fails()
+        .code_is(124)
+        .stdout_contains("xyz")
+        .stderr_contains("Terminated");
 }

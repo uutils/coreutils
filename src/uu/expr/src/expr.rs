@@ -8,7 +8,7 @@
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::{
     error::{UResult, USimpleError},
-    format_usage, help_section, help_usage,
+    format_usage, help_about, help_section, help_usage,
 };
 
 mod syntax_tree;
@@ -23,7 +23,7 @@ mod options {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about(help_section!("about", "expr.md"))
+        .about(help_about!("expr.md"))
         .override_usage(format_usage(help_usage!("expr.md")))
         .after_help(help_section!("after help", "expr.md"))
         .infer_long_args(true)
@@ -73,8 +73,8 @@ fn process_expr(token_strings: &[&str]) -> Result<String, String> {
 }
 
 fn print_expr_ok(expr_result: &str) -> UResult<()> {
-    println!("{}", expr_result);
-    if expr_result == "0" || expr_result.is_empty() {
+    println!("{expr_result}");
+    if expr_result.parse::<i32>() == Ok(0) || expr_result.is_empty() {
         Err(1.into())
     } else {
         Ok(())

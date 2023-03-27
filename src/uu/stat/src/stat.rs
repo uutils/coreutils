@@ -13,7 +13,9 @@ use uucore::fsext::{
     pretty_filetype, pretty_fstype, pretty_time, read_fs_list, statfs, BirthTime, FsMeta,
 };
 use uucore::libc::mode_t;
-use uucore::{entries, format_usage, show_error, show_warning};
+use uucore::{
+    entries, format_usage, help_about, help_section, help_usage, show_error, show_warning,
+};
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
@@ -24,8 +26,9 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 
-const ABOUT: &str = "Display file or file system status.";
-const USAGE: &str = "{} [OPTION]... FILE...";
+const ABOUT: &str = help_about!("stat.md");
+const USAGE: &str = help_usage!("stat.md");
+const LONG_USAGE: &str = help_section!("long usage", "stat.md");
 
 mod options {
     pub const DEREFERENCE: &str = "dereference";
@@ -535,7 +538,7 @@ impl Stater {
 
                     for t in tokens.iter() {
                         match *t {
-                            Token::Char(c) => print!("{}", c),
+                            Token::Char(c) => print!("{c}"),
                             Token::Directive {
                                 flag,
                                 width,
@@ -588,7 +591,7 @@ impl Stater {
                                             let dst = match fs::read_link(&file) {
                                                 Ok(path) => path,
                                                 Err(e) => {
-                                                    println!("{}", e);
+                                                    println!("{e}");
                                                     return 1;
                                                 }
                                             };
@@ -668,7 +671,7 @@ impl Stater {
 
                     for t in tokens.iter() {
                         match *t {
-                            Token::Char(c) => print!("{}", c),
+                            Token::Char(c) => print!("{c}"),
                             Token::Directive {
                                 flag,
                                 width,
@@ -751,67 +754,9 @@ impl Stater {
     }
 }
 
-fn get_long_usage() -> &'static str {
-    "
-The valid format sequences for files (without --file-system):
-
-  %a   access rights in octal (note '#' and '0' printf flags)
-  %A   access rights in human readable form
-  %b   number of blocks allocated (see %B)
-  %B   the size in bytes of each block reported by %b
-  %C   SELinux security context string
-  %d   device number in decimal
-  %D   device number in hex
-  %f   raw mode in hex
-  %F   file type
-  %g   group ID of owner
-  %G   group name of owner
-  %h   number of hard links
-  %i   inode number
-  %m   mount point
-  %n   file name
-  %N   quoted file name with dereference if symbolic link
-  %o   optimal I/O transfer size hint
-  %s   total size, in bytes
-  %t   major device type in hex, for character/block device special files
-  %T   minor device type in hex, for character/block device special files
-  %u   user ID of owner
-  %U   user name of owner
-  %w   time of file birth, human-readable; - if unknown
-  %W   time of file birth, seconds since Epoch; 0 if unknown
-  %x   time of last access, human-readable
-  %X   time of last access, seconds since Epoch
-  %y   time of last data modification, human-readable
-  %Y   time of last data modification, seconds since Epoch
-  %z   time of last status change, human-readable
-  %Z   time of last status change, seconds since Epoch
-
-Valid format sequences for file systems:
-
-  %a   free blocks available to non-superuser
-  %b   total data blocks in file system
-  %c   total file nodes in file system
-  %d   free file nodes in file system
-  %f   free blocks in file system
-  %i   file system ID in hex
-  %l   maximum length of filenames
-  %n   file name
-  %s   block size (for faster transfers)
-  %S   fundamental block size (for block counts)
-  %t   file system type in hex
-  %T   file system type in human readable form
-
-NOTE: your shell may have its own version of stat, which usually supersedes
-the version described here.  Please refer to your shell's documentation
-for details about the options it supports.
-"
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
 
     let stater = Stater::new(&matches)?;
     let exit_status = stater.exec();

@@ -1,6 +1,6 @@
 [package]
 name = "uu_test"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "test ~ (uutils) evaluate comparison and file type expressions"
@@ -15,12 +15,12 @@ edition = "2021"
 path = "src/test.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-libc = "0.2.137"
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
+clap = { workspace=true }
+libc = { workspace=true }
+uucore = { workspace=true }
 
 [target.'cfg(target_os = "redox")'.dependencies]
-redox_syscall = "0.2"
+redox_syscall = { workspace=true }
 
 [[bin]]
 name = "test"

@@ -347,7 +347,7 @@ impl<'a, 'b> MDWriter<'a, 'b> {
             .trim()
             .to_string();
 
-        if result != "" {
+        if !result.is_empty() {
             Some(result)
         } else {
             None

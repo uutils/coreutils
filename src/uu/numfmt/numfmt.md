@@ -1,36 +1,35 @@
-<!-- spell-checker:ignore N'th M'th -->
 # numfmt
 
-## Usage
+<!-- spell-checker:ignore N'th M'th -->
+
 ```
 numfmt [OPTION]... [NUMBER]...
 ```
-
-## About
 
 Convert numbers from/to human-readable strings
 
 ## After Help
 
 `UNIT` options:
- - `none`: no auto-scaling is done; suffixes will trigger an error
- - `auto`: accept optional single/two letter suffix:
 
-       1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
+- `none`: no auto-scaling is done; suffixes will trigger an error
+- `auto`: accept optional single/two letter suffix:
 
- - `si`: accept optional single letter suffix:
+    1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
 
-       1K = 1000, 1M = 1000000, ...
+- `si`: accept optional single letter suffix:
 
- - `iec`: accept optional single letter suffix:
+    1K = 1000, 1M = 1000000, ...
 
-       1K = 1024, 1M = 1048576, ...
+- `iec`: accept optional single letter suffix:
+
+    1K = 1024, 1M = 1048576, ...
 
 - `iec-i`: accept optional two-letter suffix:
 
-       1Ki = 1024, 1Mi = 1048576, ...
+    1Ki = 1024, 1Mi = 1048576, ...
 
-`FIELDS` supports `cut(1)` style field ranges:
+- `FIELDS` supports `cut(1)` style field ranges:
 
     N    N'th field, counted from 1
     N-   from N'th field, to end of line

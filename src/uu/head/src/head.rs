@@ -11,21 +11,15 @@ use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::lines::lines;
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 
 const BUF_SIZE: usize = 65536;
 
 /// The capacity in bytes for buffered writers.
 const BUFWRITER_CAPACITY: usize = 16_384; // 16 kilobytes
 
-const ABOUT: &str = "\
-                     Print the first 10 lines of each FILE to standard output.\n\
-                     With more than one FILE, precede each with a header giving the file name.\n\
-                     With no FILE, or when FILE is -, read standard input.\n\
-                     \n\
-                     Mandatory arguments to long flags are mandatory for short flags too.\
-                     ";
-const USAGE: &str = "{} [FLAG]... [FILE]...";
+const ABOUT: &str = help_about!("head.md");
+const USAGE: &str = help_usage!("head.md");
 
 mod options {
     pub const BYTES_NAME: &str = "BYTES";
@@ -134,7 +128,7 @@ impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
         if let Some(v) = matches.get_one::<String>(options::BYTES_NAME) {
             let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {}", err))?;
+                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {err}"))?;
             if all_but_last {
                 Ok(Self::AllButLastBytes(n))
             } else {
@@ -142,14 +136,14 @@ impl Mode {
             }
         } else if let Some(v) = matches.get_one::<String>(options::LINES_NAME) {
             let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {}", err))?;
+                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {err}"))?;
             if all_but_last {
                 Ok(Self::AllButLastLines(n))
             } else {
                 Ok(Self::FirstLines(n))
             }
         } else {
-            Ok(Default::default())
+            Ok(Self::default())
         }
     }
 }
@@ -387,13 +381,13 @@ where
             }
             // if it were just `n`,
             if lines == n + 1 {
-                input.seek(SeekFrom::Start(0))?;
+                input.rewind()?;
                 return Ok(size - i);
             }
             i += 1;
         }
         if size - i == 0 {
-            input.seek(SeekFrom::Start(0))?;
+            input.rewind()?;
             return Ok(0);
         }
     }
@@ -459,7 +453,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if let Err(e) = usize::try_from(n) {
                         show!(USimpleError::new(
                             1,
-                            format!("{}: number of bytes is too large", e)
+                            format!("{e}: number of bytes is too large")
                         ));
                         continue;
                     };
@@ -493,7 +487,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     if !first {
                         println!();
                     }
-                    println!("==> {} <==", name);
+                    println!("==> {name} <==");
                 }
                 head_file(&mut file, options)
             }
@@ -506,7 +500,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             };
             show!(USimpleError::new(
                 1,
-                format!("error reading {}: Input/output error", name)
+                format!("error reading {name}: Input/output error")
             ));
         }
         first = false;

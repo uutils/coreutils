@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -28,8 +28,11 @@ fn test_uname_processor() {
 
 #[test]
 fn test_uname_hardware_platform() {
-    let result = new_ucmd!().arg("-i").succeeds();
-    assert_eq!(result.stdout_str().trim_end(), "unknown");
+    new_ucmd!()
+        .arg("-i")
+        .succeeds()
+        .stdout_str_apply(str::trim_end)
+        .stdout_only("unknown");
 }
 
 #[test]
@@ -104,10 +107,11 @@ fn test_uname_operating_system() {
         .succeeds()
         .stdout_is("Redox\n");
     #[cfg(target_os = "windows")]
-    new_ucmd!()
-        .arg("--operating-system")
-        .succeeds()
-        .stdout_is("Windows NT\n");
+    {
+        let result = new_ucmd!().arg("--operating-system").succeeds();
+        println!("{:?}", result.stdout_str());
+        assert!(result.stdout_str().starts_with("MS/Windows"));
+    }
 }
 
 #[test]
@@ -116,4 +120,12 @@ fn test_uname_help() {
         .arg("--help")
         .succeeds()
         .stdout_contains("system information");
+}
+
+#[test]
+fn test_uname_output_for_invisible_chars() {
+    // let re = regex::Regex::new("[^[[:print:]]]").unwrap(); // matches invisible (and emojis)
+    let re = regex::Regex::new("[^[[:print:]]\\p{Other_Symbol}]").unwrap(); // matches invisible (not emojis)
+    let result = new_ucmd!().arg("--all").succeeds();
+    assert_eq!(re.find(result.stdout_str().trim_end()), None);
 }

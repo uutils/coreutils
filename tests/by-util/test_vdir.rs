@@ -5,7 +5,7 @@ extern crate regex;
 extern crate tempfile;
 
 use self::regex::Regex;
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 /*
  * As vdir use the same functions than ls, we don't have to retest them here.
@@ -29,7 +29,7 @@ fn test_default_output() {
     scene
         .ucmd()
         .succeeds()
-        .stdout_matches(&Regex::new("[rwx-]{10}.*some-file1$").unwrap());
+        .stdout_matches(&Regex::new("[rwx-]{10}.*some-file1\n$").unwrap());
 }
 
 #[test]

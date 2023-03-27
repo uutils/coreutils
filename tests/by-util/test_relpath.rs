@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::borrow::Cow;
 use std::path::Path;
 
@@ -87,7 +87,7 @@ fn test_relpath_with_from_no_d() {
             .arg(to)
             .arg(from)
             .succeeds()
-            .stdout_only(&format!("{}\n", expected));
+            .stdout_only(&format!("{expected}\n"));
     }
 }
 
@@ -108,7 +108,7 @@ fn test_relpath_with_from_with_d() {
             .ucmd()
             .arg(to)
             .arg(from)
-            .arg(&format!("-d{}", pwd))
+            .arg(&format!("-d{pwd}"))
             .succeeds()
             .stdout_move_str();
         // relax rules for windows test environment
@@ -138,10 +138,10 @@ fn test_relpath_no_from_no_d() {
 
         let _result_stdout = scene.ucmd().arg(to).succeeds().stdout_move_str();
         #[cfg(not(windows))]
-        assert_eq!(_result_stdout, format!("{}\n", to));
+        assert_eq!(_result_stdout, format!("{to}\n"));
         // relax rules for windows test environment
         #[cfg(windows)]
-        assert!(_result_stdout.ends_with(&format!("{}\n", to)));
+        assert!(_result_stdout.ends_with(&format!("{to}\n")));
     }
 }
 
@@ -159,7 +159,7 @@ fn test_relpath_no_from_with_d() {
         let _result_stdout = scene
             .ucmd()
             .arg(to)
-            .arg(&format!("-d{}", pwd))
+            .arg(&format!("-d{pwd}"))
             .succeeds()
             .stdout_move_str();
         // relax rules for windows test environment

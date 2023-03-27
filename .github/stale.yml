@@ -1,8 +1,8 @@
 # spell-checker:ignore (labels) wontfix
  # Number of days of inactivity before an issue/PR becomes stale
-daysUntilStale: 365
+daysUntilStale: 1095
 # Number of days of inactivity before a stale issue/PR is closed
-daysUntilClose: 365
+daysUntilClose: 1095
 # Issues with these labels will never be considered stale
 exemptLabels:
   - pinned

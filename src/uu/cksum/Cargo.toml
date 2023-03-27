@@ -1,6 +1,6 @@
 [package]
 name = "uu_cksum"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "cksum ~ (uutils) display CRC and size of input"
@@ -15,8 +15,9 @@ edition = "2021"
 path = "src/cksum.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore" }
+clap = { workspace=true }
+uucore = { workspace=true, features=["sum"] }
+hex = { workspace=true }
 
 [[bin]]
 name = "cksum"

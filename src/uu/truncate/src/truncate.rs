@@ -14,8 +14,8 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
@@ -73,8 +73,9 @@ impl TruncateMode {
     }
 }
 
-static ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("truncate.md");
+const AFTER_HELP: &str = help_section!("after help", "truncate.md");
+const USAGE: &str = help_usage!("truncate.md");
 
 pub mod options {
     pub static IO_BLOCKS: &str = "io-blocks";
@@ -84,32 +85,10 @@ pub mod options {
     pub static ARG_FILES: &str = "files";
 }
 
-fn get_long_usage() -> String {
-    String::from(
-        "
-    SIZE is an integer with an optional prefix and optional unit.
-    The available units (K, M, G, T, P, E, Z, and Y) use the following format:
-        'KB' =>           1000 (kilobytes)
-        'K'  =>           1024 (kibibytes)
-        'MB' =>      1000*1000 (megabytes)
-        'M'  =>      1024*1024 (mebibytes)
-        'GB' => 1000*1000*1000 (gigabytes)
-        'G'  => 1024*1024*1024 (gibibytes)
-    SIZE may also be prefixed by one of the following to adjust the size of each
-    file based on its current size:
-        '+'  => extend by
-        '-'  => reduce by
-        '<'  => at most
-        '>'  => at least
-        '/'  => round down to multiple of
-        '%'  => round up to multiple of",
-    )
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app()
-        .after_help(get_long_usage())
+        .after_help(AFTER_HELP)
         .try_get_matches_from(args)
         .map_err(|e| {
             e.print().expect("Error writing clap::Error");
@@ -231,7 +210,7 @@ fn truncate_reference_and_size(
     create: bool,
 ) -> UResult<()> {
     let mode = match parse_mode_and_size(size_string) {
-        Err(e) => return Err(USimpleError::new(1, format!("Invalid number: {}", e))),
+        Err(e) => return Err(USimpleError::new(1, format!("Invalid number: {e}"))),
         Ok(TruncateMode::Absolute(_)) => {
             return Err(USimpleError::new(
                 1,
@@ -338,7 +317,7 @@ fn truncate_reference_file_only(
 /// If at least one file is a named pipe (also known as a fifo).
 fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> UResult<()> {
     let mode = parse_mode_and_size(size_string)
-        .map_err(|e| USimpleError::new(1, format!("Invalid number: {}", e)))?;
+        .map_err(|e| USimpleError::new(1, format!("Invalid number: {e}")))?;
     if let TruncateMode::RoundDown(0) | TruncateMode::RoundUp(0) = mode {
         return Err(USimpleError::new(1, "division by zero"));
     }

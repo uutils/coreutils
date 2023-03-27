@@ -19,8 +19,11 @@ use crate::operation::DeleteOperation;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 
-static ABOUT: &str = "translate or delete characters";
+const ABOUT: &str = "Translate or delete characters";
 const USAGE: &str = "{} [OPTION]... SET1 [SET2]";
+const LONG_USAGE: &str = "\
+    Translate, squeeze, and/or delete characters from standard input, \
+    writing to standard output.";
 
 mod options {
     pub const COMPLEMENT: &str = "complement";
@@ -30,19 +33,11 @@ mod options {
     pub const SETS: &str = "sets";
 }
 
-fn get_long_usage() -> String {
-    "Translate, squeeze, and/or delete characters from standard input, \
-     writing to standard output."
-        .to_string()
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app()
-        .after_help(get_long_usage())
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
 
     let delete_flag = matches.get_flag(options::DELETE);
     let complement_flag = matches.get_flag(options::COMPLEMENT);

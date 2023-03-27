@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, prompt_yes, show};
+use uucore::{format_usage, help_about, help_usage, prompt_yes, show};
 
 use fs_extra::dir::{
     get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
@@ -53,12 +53,8 @@ pub enum OverwriteMode {
     Force,
 }
 
-static ABOUT: &str = "Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
-static LONG_HELP: &str = "";
-const USAGE: &str = "\
-    {} [OPTION]... [-T] SOURCE DEST
-    {} [OPTION]... SOURCE... DIRECTORY
-    {} [OPTION]... -t DIRECTORY SOURCE...";
+const ABOUT: &str = help_about!("mv.md");
+const USAGE: &str = help_usage!("mv.md");
 
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";
@@ -73,12 +69,7 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let help = format!(
-        "{}\n{}",
-        LONG_HELP,
-        backup_control::BACKUP_CONTROL_LONG_HELP
-    );
-    let mut app = uu_app().after_help(help);
+    let mut app = uu_app().after_help(backup_control::BACKUP_CONTROL_LONG_HELP);
     let matches = app.try_get_matches_from_mut(args)?;
 
     if !matches.contains_id(OPT_TARGET_DIRECTORY)
@@ -91,8 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         app.error(
             ErrorKind::TooFewValues,
             format!(
-                "The argument '<{}>...' requires at least 2 values, but only 1 was provided",
-                ARG_FILES
+                "The argument '<{ARG_FILES}>...' requires at least 2 values, but only 1 was provided"
             ),
         )
         .exit();
@@ -284,12 +274,12 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
 
             if target.is_dir() {
                 if b.no_target_dir {
-                    if !source.is_dir() {
-                        Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
-                    } else {
+                    if source.is_dir() {
                         rename(source, target, b, None).map_err_context(|| {
                             format!("cannot move {} to {}", source.quote(), target.quote())
                         })
+                    } else {
+                        Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
                     }
                 } else {
                     move_files_into_dir(&[source.clone()], target, b)
@@ -310,7 +300,7 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
                 )
                 .into())
             } else {
-                rename(source, target, b, None).map_err(|e| USimpleError::new(1, format!("{}", e)))
+                rename(source, target, b, None).map_err(|e| USimpleError::new(1, format!("{e}")))
             }
         }
         _ => {
@@ -430,7 +420,7 @@ fn rename(
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
-                    return Ok(());
+                    return Err(io::Error::new(io::ErrorKind::Other, ""));
                 }
             }
             OverwriteMode::Force => {}
@@ -473,9 +463,9 @@ fn rename(
 
         match multi_progress {
             Some(pb) => pb.suspend(|| {
-                println!("{}", message);
+                println!("{message}");
             }),
-            None => println!("{}", message),
+            None => println!("{message}"),
         };
     }
     Ok(())
@@ -547,7 +537,7 @@ fn rename_with_fallback(
                         io::ErrorKind::PermissionDenied,
                         "Permission denied",
                     )),
-                    _ => Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", err))),
+                    _ => Err(io::Error::new(io::ErrorKind::Other, format!("{err:?}"))),
                 };
             }
         } else {

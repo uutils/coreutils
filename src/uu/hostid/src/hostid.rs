@@ -9,10 +9,10 @@
 
 use clap::{crate_version, Command};
 use libc::c_long;
-use uucore::{error::UResult, format_usage};
+use uucore::{error::UResult, format_usage, help_about, help_usage};
 
-const USAGE: &str = "{} [options]";
-const ABOUT: &str = "Print the numeric identifier (in hexadecimal) for the current host";
+const USAGE: &str = help_usage!("hostid.md");
+const ABOUT: &str = help_about!("hostid.md");
 
 // currently rust libc interface doesn't include gethostid
 extern "C" {
@@ -50,5 +50,5 @@ fn hostid() {
     let mask = 0xffff_ffff;
 
     result &= mask;
-    println!("{:0>8x}", result);
+    println!("{result:0>8x}");
 }

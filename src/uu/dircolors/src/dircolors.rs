@@ -16,6 +16,7 @@ use std::io::{BufRead, BufReader};
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::{help_about, help_section, help_usage};
 
 mod options {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -25,13 +26,9 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-static USAGE: &str = "{} [OPTION]... [FILE]";
-static ABOUT: &str = "Output commands to set the LS_COLORS environment variable.";
-static LONG_HELP: &str = "
- If FILE is specified, read it to determine which colors to use for which
- file types and extensions.  Otherwise, a precompiled database is used.
- For details on the format of these files, run 'dircolors --print-database'
-";
+const USAGE: &str = help_usage!("dircolors.md");
+const ABOUT: &str = help_about!("dircolors.md");
+const AFTER_HELP: &str = help_section!("after help", "dircolors.md");
 
 mod colors;
 use self::colors::INTERNAL_DB;
@@ -103,7 +100,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             ));
         }
-        println!("{}", INTERNAL_DB);
+        println!("{INTERNAL_DB}");
         return Ok(());
     }
 
@@ -157,7 +154,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match result {
         Ok(s) => {
-            println!("{}", s);
+            println!("{s}");
             Ok(())
         }
         Err(s) => {
@@ -170,7 +167,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
@@ -368,23 +365,23 @@ where
             if state != ParseState::Pass {
                 if key.starts_with('.') {
                     if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{1}m*{0}\t{1}\x1b[0m\n", key, val).as_str());
+                        result.push_str(format!("\x1b[{val}m*{key}\t{val}\x1b[0m\n").as_str());
                     } else {
-                        result.push_str(format!("*{}={}:", key, val).as_str());
+                        result.push_str(format!("*{key}={val}:").as_str());
                     }
                 } else if key.starts_with('*') {
                     if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{1}m{0}\t{1}\x1b[0m\n", key, val).as_str());
+                        result.push_str(format!("\x1b[{val}m{key}\t{val}\x1b[0m\n").as_str());
                     } else {
-                        result.push_str(format!("{}={}:", key, val).as_str());
+                        result.push_str(format!("{key}={val}:").as_str());
                     }
                 } else if lower == "options" || lower == "color" || lower == "eightbit" {
                     // Slackware only. Ignore
                 } else if let Some(s) = table.get(lower.as_str()) {
                     if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{1}m{0}\t{1}\x1b[0m\n", s, val).as_str());
+                        result.push_str(format!("\x1b[{val}m{s}\t{val}\x1b[0m\n").as_str());
                     } else {
-                        result.push_str(format!("{}={}:", s, val).as_str());
+                        result.push_str(format!("{s}={val}:").as_str());
                     }
                 } else {
                     return Err(format!(

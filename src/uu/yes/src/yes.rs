@@ -7,18 +7,18 @@
 
 /* last synced with: yes (GNU coreutils) 8.13 */
 
-use std::borrow::Cow;
-use std::io::{self, Result, Write};
-
 use clap::{Arg, ArgAction, Command};
+use std::borrow::Cow;
+use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
-
+#[cfg(unix)]
+use uucore::signals::enable_pipe_errors;
+use uucore::{format_usage, help_about, help_usage};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
 
-const ABOUT: &str = "repeatedly display a line with STRING (or 'y')";
-const USAGE: &str = "{} [STRING]...";
+const ABOUT: &str = help_about!("yes.md");
+const USAGE: &str = help_usage!("yes.md");
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough
@@ -43,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     match exec(bytes) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
-        Err(err) => Err(USimpleError::new(1, format!("standard output: {}", err))),
+        Err(err) => Err(USimpleError::new(1, format!("standard output: {err}"))),
     }
 }
 
@@ -69,25 +69,10 @@ fn prepare_buffer<'a>(input: &'a str, buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u8
     }
 }
 
-#[cfg(unix)]
-fn enable_pipe_errors() -> Result<()> {
-    let ret = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
-    if ret == libc::SIG_ERR {
-        return Err(io::Error::new(io::ErrorKind::Other, ""));
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn enable_pipe_errors() -> Result<()> {
-    // Do nothing.
-    Ok(())
-}
-
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-
+    #[cfg(unix)]
     enable_pipe_errors()?;
 
     #[cfg(any(target_os = "linux", target_os = "android"))]

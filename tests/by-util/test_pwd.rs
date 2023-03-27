@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use crate::common::util::*;
+use crate::common::util::{TestScenario, UCommand};
 
 #[test]
 fn test_invalid_arg() {
@@ -60,7 +60,7 @@ fn symlinked_env() -> Env {
     // Note: on Windows this requires admin permissions
     at.symlink_dir("subdir", "symdir");
     let root = PathBuf::from(at.root_dir_resolved());
-    ucmd.raw.current_dir(root.join("symdir"));
+    ucmd.current_dir(root.join("symdir"));
     #[cfg(not(windows))]
     ucmd.env("PWD", root.join("symdir"));
     Env {

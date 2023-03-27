@@ -1,6 +1,6 @@
 [package]
 name = "uu_yes"
-version = "0.0.16"
+version = "0.0.17"
 authors = ["uutils developers"]
 license = "MIT"
 description = "yes ~ (uutils) repeatedly display a line with STRING (or 'y')"
@@ -15,12 +15,14 @@ edition = "2021"
 path = "src/yes.rs"
 
 [dependencies]
-clap = { version = "4.0", features = ["wrap_help", "cargo"] }
-libc = "0.2.137"
-uucore = { version=">=0.0.16", package="uucore", path="../../uucore", features=["pipes"] }
+clap = { workspace=true }
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-nix = { version = "0.25", default-features = false }
+[target.'cfg(unix)'.dependencies]
+uucore = { workspace=true, features=["pipes", "signals"] }
+nix = { workspace=true }
+
+[target.'cfg(not(unix))'.dependencies]
+uucore = { workspace=true, features=["pipes"] }
 
 [[bin]]
 name = "yes"

@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) araba merci
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_default() {
@@ -176,7 +176,7 @@ fn test_disable_escapes() {
         .arg("-E")
         .arg(input_str)
         .succeeds()
-        .stdout_only(format!("{}\n", input_str));
+        .stdout_only(format!("{input_str}\n"));
 }
 
 #[test]

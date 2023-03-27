@@ -12,6 +12,7 @@ use clap::{
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
+use is_terminal::IsTerminal;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
@@ -54,17 +55,16 @@ use uucore::{
     parse_size::parse_size,
     version_cmp::version_cmp,
 };
-use uucore::{parse_glob, show, show_error, show_warning};
+use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
 
-const ABOUT: &str = r#"List directory contents.
-Ignore files and directories starting with a '.' by default"#;
-
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("ls.md");
+const AFTER_HELP: &str = help_section!("after help", "ls.md");
+const USAGE: &str = help_usage!("ls.md");
 
 pub mod options {
     pub mod format {
@@ -197,7 +197,7 @@ impl Display for LsError {
                 )
             }
             Self::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
-            Self::IOError(e) => write!(f, "general io error: {}", e),
+            Self::IOError(e) => write!(f, "general io error: {e}"),
             Self::IOErrorContext(e, p, _) => {
                 let error_kind = e.kind();
                 let errno = e.raw_os_error().unwrap_or(1i32);
@@ -451,7 +451,7 @@ impl Config {
             (Format::Commas, Some(options::format::COMMAS))
         } else if options.get_flag(options::format::COLUMNS) {
             (Format::Columns, Some(options::format::COLUMNS))
-        } else if atty::is(atty::Stream::Stdout) {
+        } else if std::io::stdout().is_terminal() {
             (Format::Columns, None)
         } else {
             (Format::OneLine, None)
@@ -557,7 +557,7 @@ impl Config {
             None => options.contains_id(options::COLOR),
             Some(val) => match val.as_str() {
                 "" | "always" | "yes" | "force" => true,
-                "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
+                "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
                 /* "never" | "no" | "none" | */ _ => false,
             },
         };
@@ -678,7 +678,7 @@ impl Config {
         } else if options.get_flag(options::SHOW_CONTROL_CHARS) {
             true
         } else {
-            !atty::is(atty::Stream::Stdout)
+            !std::io::stdout().is_terminal()
         };
 
         let opt_quoting_style = options
@@ -750,7 +750,7 @@ impl Config {
                 "never" | "no" | "none" => IndicatorStyle::None,
                 "always" | "yes" | "force" => IndicatorStyle::Classify,
                 "auto" | "tty" | "if-tty" => {
-                    if atty::is(atty::Stream::Stdout) {
+                    if std::io::stdout().is_terminal() {
                         IndicatorStyle::Classify
                     } else {
                         IndicatorStyle::None
@@ -1620,10 +1620,7 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(ValueParser::os_string()),
         )
-        .after_help(
-            "The TIME_STYLE argument can be full-iso, long-iso, iso, locale or +FORMAT. FORMAT is interpreted like in date. \
-            Also the TIME_STYLE environment variable sets the default style to use.",
-        )
+        .after_help(AFTER_HELP)
 }
 
 /// Represents a Path along with it's associated data.
@@ -2067,11 +2064,11 @@ fn display_dir_entry_size(
 }
 
 fn pad_left(string: &str, count: usize) -> String {
-    format!("{:>width$}", string, width = count)
+    format!("{string:>count$}")
 }
 
 fn pad_right(string: &str, count: usize) -> String {
-    format!("{:<width$}", string, width = count)
+    format!("{string:<count$}")
 }
 
 fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) -> UResult<()> {
@@ -2118,7 +2115,7 @@ fn display_additional_leading_info(
         };
         // extra space is insert to align the sizes, as needed for all formats, except for the comma format.
         if config.format == Format::Commas {
-            write!(result, "{} ", s).unwrap();
+            write!(result, "{s} ").unwrap();
         } else {
             write!(result, "{} ", pad_left(&s, padding.block_size)).unwrap();
         };
@@ -2139,13 +2136,13 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             if config.inode || config.alloc_size {
                 let more_info =
                     display_additional_leading_info(item, &padding_collection, config, out)?;
-                write!(out, "{}", more_info)?;
+                write!(out, "{more_info}")?;
             }
             #[cfg(not(unix))]
             if config.alloc_size {
                 let more_info =
                     display_additional_leading_info(item, &padding_collection, config, out)?;
-                write!(out, "{}", more_info)?;
+                write!(out, "{more_info}")?;
             }
             display_item_long(item, &padding_collection, config, out)?;
         }
@@ -2276,7 +2273,7 @@ fn display_grid(
 
         match grid.fit_into_width(width as usize) {
             Some(output) => {
-                write!(out, "{}", output)?;
+                write!(out, "{output}")?;
             }
             // Width is too small for the grid, so we fit it in one column
             None => {
@@ -2440,7 +2437,7 @@ fn display_item_long(
         write!(
             out,
             "{}{} {}",
-            format_args!("{}?????????", leading_char),
+            format_args!("{leading_char}?????????"),
             if item.security_context.len() > 1 {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
                 // but not other alternate access method.
@@ -2875,7 +2872,7 @@ fn display_file_name(
             } else {
                 path.security_context.to_owned()
             };
-            name = format!("{} {}", security_context, name);
+            name = format!("{security_context} {name}");
             width += security_context.len() + 1;
         }
     }
