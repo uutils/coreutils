@@ -13,9 +13,10 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use uucore::error::{FromIo, UResult};
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Write lines consisting of the sequentially corresponding lines from each
-FILE, separated by TABs, to standard output.";
+const ABOUT: &str = help_about!("paste.md");
+const USAGE: &str = help_usage!("paste.md");
 
 mod options {
     pub const DELIMITER: &str = "delimiters";
@@ -76,6 +77,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SERIAL)
