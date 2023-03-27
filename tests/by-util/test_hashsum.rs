@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 // spell-checker:ignore checkfile, nonames, testf, ntestf
 macro_rules! get_hash(
     ($str:expr) => (

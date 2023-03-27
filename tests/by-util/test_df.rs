@@ -1,7 +1,7 @@
 // spell-checker:ignore udev pcent iuse itotal iused ipcent
 use std::collections::HashSet;
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {

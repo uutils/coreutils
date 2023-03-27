@@ -7,7 +7,7 @@
 
 use std::time::Duration;
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -31,7 +31,7 @@ fn test_buffer_sizes() {
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
         TestScenario::new(util_name!())
-            .ucmd_keepenv()
+            .ucmd()
             .arg("-n")
             .arg("-S")
             .arg(buffer_size)
@@ -44,7 +44,7 @@ fn test_buffer_sizes() {
             let buffer_sizes = ["1000G", "10T"];
             for buffer_size in &buffer_sizes {
                 TestScenario::new(util_name!())
-                    .ucmd_keepenv()
+                    .ucmd()
                     .arg("-n")
                     .arg("-S")
                     .arg(buffer_size)
@@ -918,7 +918,7 @@ fn test_compress_merge() {
 fn test_compress_fail() {
     #[cfg(not(windows))]
     TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -934,7 +934,7 @@ fn test_compress_fail() {
     // So, don't check the output
     #[cfg(windows)]
     TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -949,7 +949,7 @@ fn test_compress_fail() {
 #[test]
 fn test_merge_batches() {
     TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
         .timeout(Duration::from_secs(120))
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
@@ -959,7 +959,7 @@ fn test_merge_batches() {
 #[test]
 fn test_merge_batch_size() {
     TestScenario::new(util_name!())
-        .ucmd_keepenv()
+        .ucmd()
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
@@ -993,7 +993,7 @@ fn test_conflict_check_out() {
             .fails()
             .stderr_contains(
                 // the rest of the message might be subject to change
-                "error: The argument",
+                "error: the argument",
             );
     }
 }
@@ -1067,7 +1067,7 @@ fn test_output_is_input() {
     at.touch("file");
     at.append("file", input);
     scene
-        .ucmd_keepenv()
+        .ucmd()
         .args(&["-m", "-u", "-o", "file", "file", "file", "file"])
         .succeeds();
     assert_eq!(at.read("file"), input);
@@ -1126,7 +1126,7 @@ fn test_tmp_files_deleted_on_sigint() {
         for _ in 0..40 {
             let lines = rand_pcg::Pcg32::seed_from_u64(123)
                 .sample_iter(rand::distributions::uniform::Uniform::new(0, 10000))
-                .take(100000)
+                .take(100_000)
                 .map(|x| x.to_string() + "\n")
                 .collect::<String>();
             file.write_all(lines.as_bytes()).unwrap();

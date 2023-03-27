@@ -12,6 +12,7 @@ use clap::{
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
+use is_terminal::IsTerminal;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
@@ -54,17 +55,16 @@ use uucore::{
     parse_size::parse_size,
     version_cmp::version_cmp,
 };
-use uucore::{parse_glob, show, show_error, show_warning};
+use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
 
-const ABOUT: &str = r#"List directory contents.
-Ignore files and directories starting with a '.' by default"#;
-
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("ls.md");
+const AFTER_HELP: &str = help_section!("after help", "ls.md");
+const USAGE: &str = help_usage!("ls.md");
 
 pub mod options {
     pub mod format {
@@ -451,7 +451,7 @@ impl Config {
             (Format::Commas, Some(options::format::COMMAS))
         } else if options.get_flag(options::format::COLUMNS) {
             (Format::Columns, Some(options::format::COLUMNS))
-        } else if atty::is(atty::Stream::Stdout) {
+        } else if std::io::stdout().is_terminal() {
             (Format::Columns, None)
         } else {
             (Format::OneLine, None)
@@ -557,7 +557,7 @@ impl Config {
             None => options.contains_id(options::COLOR),
             Some(val) => match val.as_str() {
                 "" | "always" | "yes" | "force" => true,
-                "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
+                "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
                 /* "never" | "no" | "none" | */ _ => false,
             },
         };
@@ -678,7 +678,7 @@ impl Config {
         } else if options.get_flag(options::SHOW_CONTROL_CHARS) {
             true
         } else {
-            !atty::is(atty::Stream::Stdout)
+            !std::io::stdout().is_terminal()
         };
 
         let opt_quoting_style = options
@@ -750,7 +750,7 @@ impl Config {
                 "never" | "no" | "none" => IndicatorStyle::None,
                 "always" | "yes" | "force" => IndicatorStyle::Classify,
                 "auto" | "tty" | "if-tty" => {
-                    if atty::is(atty::Stream::Stdout) {
+                    if std::io::stdout().is_terminal() {
                         IndicatorStyle::Classify
                     } else {
                         IndicatorStyle::None
@@ -1620,10 +1620,7 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(ValueParser::os_string()),
         )
-        .after_help(
-            "The TIME_STYLE argument can be full-iso, long-iso, iso, locale or +FORMAT. FORMAT is interpreted like in date. \
-            Also the TIME_STYLE environment variable sets the default style to use.",
-        )
+        .after_help(AFTER_HELP)
 }
 
 /// Represents a Path along with it's associated data.

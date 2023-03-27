@@ -11,7 +11,7 @@
 
 use clap::{crate_version, Command};
 use std::ffi::CStr;
-use uucore::{error::UResult, show_error};
+use uucore::{error::UResult, format_usage, help_about, help_usage, show_error};
 
 extern "C" {
     // POSIX requires using getlogin (or equivalent code)
@@ -29,7 +29,8 @@ fn get_userlogin() -> Option<String> {
     }
 }
 
-static ABOUT: &str = "Print user's login name";
+const ABOUT: &str = help_about!("logname.md");
+const USAGE: &str = help_usage!("logname.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -48,7 +49,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .override_usage(uucore::execution_phrase())
+        .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)
 }

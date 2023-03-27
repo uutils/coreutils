@@ -8,7 +8,7 @@ extern crate regex;
 
 use self::rand::{thread_rng, Rng};
 use self::regex::Regex;
-use crate::common::util::*;
+use crate::common::util::{AtPath, TestScenario};
 use rand::SeedableRng;
 #[cfg(not(windows))]
 use std::env;

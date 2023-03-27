@@ -10,6 +10,7 @@
 // spell-checker:ignore (ToDO) ttyname filedesc
 
 use clap::{crate_version, Arg, ArgAction, Command};
+use is_terminal::IsTerminal;
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use uucore::error::{set_exit_code, UResult};
@@ -30,7 +31,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // If silent, we don't need the name, only whether or not stdin is a tty.
     if silent {
-        return if atty::is(atty::Stream::Stdin) {
+        return if std::io::stdin().is_terminal() {
             Ok(())
         } else {
             Err(1.into())

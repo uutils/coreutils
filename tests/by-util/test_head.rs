@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 static INPUT: &str = "lorem_ipsum.txt";
 

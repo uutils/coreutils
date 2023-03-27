@@ -5,23 +5,31 @@ GNU version of `head`, you can use a benchmarking tool like
 [hyperfine][0]. On Ubuntu 18.04 or later, you can install `hyperfine` by
 running
 
-    sudo apt-get install hyperfine
+```shell
+sudo apt-get install hyperfine
+```
 
 Next, build the `head` binary under the release profile:
 
-    cargo build --release -p uu_head
+```shell
+cargo build --release -p uu_head
+```
 
 Now, get a text file to test `head` on. I used the *Complete Works of
 William Shakespeare*, which is in the public domain in the United States
 and most other parts of the world.
 
-    wget -O shakespeare.txt https://www.gutenberg.org/files/100/100-0.txt
+```shell
+wget -O shakespeare.txt https://www.gutenberg.org/files/100/100-0.txt
+```
 
 This particular file has about 170,000 lines, each of which is no longer
 than 96 characters:
 
-    $ wc -lL shakespeare.txt
-    170592      96 shakespeare.txt
+```shell
+$ wc -lL shakespeare.txt
+170592      96 shakespeare.txt
+```
 
 You could use files of different shapes and sizes to test the
 performance of `head` in different situations. For a larger file, you
@@ -32,9 +40,11 @@ contains about 130 million lines.
 Finally, you can compare the performance of the two versions of `head`
 by running, for example,
 
-    hyperfine \
-        "head -n 100000 shakespeare.txt" \
-        "target/release/head -n 100000 shakespeare.txt"
+```shell
+hyperfine \
+    "head -n 100000 shakespeare.txt" \
+    "target/release/head -n 100000 shakespeare.txt"
+```
 
 [0]: https://github.com/sharkdp/hyperfine
 [1]: https://www.wikidata.org/wiki/Wikidata:Database_download

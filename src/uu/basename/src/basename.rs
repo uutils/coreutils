@@ -11,13 +11,11 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::{is_separator, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{UResult, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = r#"Print NAME with any leading directory components removed
-If specified, also remove a trailing SUFFIX"#;
+static ABOUT: &str = help_about!("basename.md");
 
-const USAGE: &str = "{} NAME [SUFFIX]
-    {} OPTION... NAME...";
+const USAGE: &str = help_usage!("basename.md");
 
 pub mod options {
     pub static MULTIPLE: &str = "multiple";

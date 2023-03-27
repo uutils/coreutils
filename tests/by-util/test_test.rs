@@ -10,7 +10,7 @@
 
 // spell-checker:ignore (words) egid euid pseudofloat
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::thread::sleep;
 
 #[test]
@@ -300,19 +300,15 @@ fn test_invalid_utf8_integer_compare() {
     let source = [0x66, 0x6f, 0x80, 0x6f];
     let arg = OsStr::from_bytes(&source[..]);
 
-    let mut cmd = new_ucmd!();
-    cmd.arg("123").arg("-ne");
-    cmd.raw.arg(arg);
-
-    cmd.run()
+    new_ucmd!()
+        .args(&[OsStr::new("123"), OsStr::new("-ne"), arg])
+        .run()
         .code_is(2)
         .stderr_is("test: invalid integer $'fo\\x80o'\n");
 
-    let mut cmd = new_ucmd!();
-    cmd.raw.arg(arg);
-    cmd.arg("-eq").arg("456");
-
-    cmd.run()
+    new_ucmd!()
+        .args(&[arg, OsStr::new("-eq"), OsStr::new("456")])
+        .run()
         .code_is(2)
         .stderr_is("test: invalid integer $'fo\\x80o'\n");
 }
@@ -931,4 +927,17 @@ fn test_long_integer() {
             "')'",
         ])
         .fails();
+}
+
+#[test]
+fn test_missing_argument_after() {
+    let mut ucmd = new_ucmd!();
+
+    let result = ucmd.args(&["(", "foo"]).fails();
+    result.no_stdout();
+    assert_eq!(result.exit_status().code().unwrap(), 2);
+    assert_eq!(
+        result.stderr_str().trim(),
+        "test: missing argument after 'foo'"
+    );
 }

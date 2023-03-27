@@ -23,13 +23,11 @@ use std::os::unix::process::ExitStatusExt;
 use std::process;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, show_warning};
+use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 
-const ABOUT: &str = "Set each NAME to VALUE in the environment and run COMMAND";
-const USAGE: &str = "{} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
-const AFTER_HELP: &str = "\
-A mere - implies -i. If no COMMAND, print the resulting environment.
-";
+const ABOUT: &str = help_about!("env.md");
+const USAGE: &str = help_usage!("env.md");
+const AFTER_HELP: &str = help_section!("after help", "env.md");
 
 struct Options<'a> {
     ignore_env: bool,

@@ -23,11 +23,15 @@ use crossterm::{
     terminal,
 };
 
+use is_terminal::IsTerminal;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::{format_usage, help_about, help_usage};
 
+const ABOUT: &str = help_about!("more.md");
+const USAGE: &str = help_usage!("more.md");
 const BELL: &str = "\x07";
 
 pub mod options {
@@ -83,7 +87,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             buff.clear();
         }
         reset_term(&mut stdout);
-    } else if atty::isnt(atty::Stream::Stdin) {
+    } else if !std::io::stdin().is_terminal() {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
         more(&buff, &mut stdout, None, silent)?;
@@ -96,7 +100,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .about("A file perusal filter for CRT viewing.")
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .version(crate_version!())
         .infer_long_args(true)
         .arg(

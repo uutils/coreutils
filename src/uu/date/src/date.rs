@@ -22,7 +22,7 @@ use uucore::display::Quotable;
 #[cfg(not(any(target_os = "macos", target_os = "redox")))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, help_about, help_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
@@ -36,10 +36,8 @@ const MINUTE: &str = "minute";
 const SECOND: &str = "second";
 const NS: &str = "ns";
 
-const ABOUT: &str = "Print or set the system date and time";
-const USAGE: &str = "\
-    {} [OPTION]... [+FORMAT]...
-    {} [OPTION]... [MMDDhhmm[[CC]YY][.ss]]";
+const ABOUT: &str = help_about!("date.md");
+const USAGE: &str = help_usage!("date.md");
 
 const OPT_DATE: &str = "date";
 const OPT_FORMAT: &str = "format";
@@ -116,8 +114,8 @@ impl<'a> From<&'a str> for Iso8601Format {
             SECONDS | SECOND => Self::Seconds,
             NS => Self::Ns,
             DATE => Self::Date,
-            // Should be caught by clap
-            _ => panic!("Invalid format: {s}"),
+            // Note: This is caught by clap via `possible_values`
+            _ => unreachable!(),
         }
     }
 }
@@ -205,9 +203,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         return set_system_datetime(date);
     } else {
-        // Declare a file here because it needs to outlive the `dates` iterator.
-        let file: File;
-
         // Get the current time, either in the local time zone or UTC.
         let now: DateTime<FixedOffset> = if settings.utc {
             let now = Utc::now();
@@ -224,12 +219,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let iter = std::iter::once(date);
                 Box::new(iter)
             }
-            DateSource::File(ref path) => {
-                file = File::open(path).unwrap();
-                let lines = BufReader::new(file).lines();
-                let iter = lines.filter_map(Result::ok).map(parse_date);
-                Box::new(iter)
-            }
+            DateSource::File(ref path) => match File::open(path) {
+                Ok(file) => {
+                    let lines = BufReader::new(file).lines();
+                    let iter = lines.filter_map(Result::ok).map(parse_date);
+                    Box::new(iter)
+                }
+                Err(_err) => {
+                    return Err(USimpleError::new(
+                        2,
+                        format!("{}: No such file or directory", path.display()),
+                    ));
+                }
+            },
             DateSource::Now => {
                 let iter = std::iter::once(Ok(now));
                 Box::new(iter)
@@ -259,7 +261,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         .replace("%f", "%N");
                     println!("{formatted}");
                 }
-                Err((input, _err)) => show_error!("invalid date {}", input.quote()),
+                Err((input, _err)) => show!(USimpleError::new(
+                    1,
+                    format!("invalid date {}", input.quote())
+                )),
             }
         }
     }
@@ -293,6 +298,9 @@ pub fn uu_app() -> Command {
                 .short('I')
                 .long(OPT_ISO_8601)
                 .value_name("FMT")
+                .value_parser([DATE, HOUR, HOURS, MINUTE, MINUTES, SECOND, SECONDS, NS])
+                .num_args(0..=1)
+                .default_missing_value(OPT_DATE)
                 .help(ISO_8601_HELP_STRING),
         )
         .arg(
@@ -306,6 +314,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RFC_3339)
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
+                .value_parser([DATE, SECOND, SECONDS, NS])
                 .help(RFC_3339_HELP_STRING),
         )
         .arg(

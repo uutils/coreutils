@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::path::PathBuf;
 
 #[test]
@@ -116,7 +116,7 @@ fn test_symlink_interactive() {
         .ucmd()
         .args(&["-i", "-s", file, link])
         .pipe_in("n")
-        .succeeds()
+        .fails()
         .no_stdout();
 
     assert!(at.file_exists(file));
@@ -403,7 +403,7 @@ fn test_symlink_implicit_target_dir() {
     let file = &path.to_string_lossy();
 
     at.mkdir(dir);
-    at.touch(file);
+    at.touch(&path);
 
     ucmd.args(&["-s", file]).succeeds().no_stderr();
 

@@ -11,15 +11,16 @@ use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 // spell-checker:ignore nopipe
 
 #[cfg(unix)]
-use uucore::libc;
+use uucore::signals::{enable_pipe_errors, ignore_interrupts};
 
-static ABOUT: &str = "Copy standard input to each FILE, and also to standard output.";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("tee.md");
+const USAGE: &str = help_usage!("tee.md");
+const AFTER_HELP: &str = help_section!("after help", "tee.md");
 
 mod options {
     pub const APPEND: &str = "append";
@@ -88,7 +89,7 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .after_help("If a FILE is -, it refers to a file named - .")
+        .after_help(AFTER_HELP)
         .infer_long_args(true)
         .arg(
             Arg::new(options::APPEND)
@@ -134,44 +135,19 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[cfg(unix)]
-fn ignore_interrupts() -> Result<()> {
-    let ret = unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) };
-    if ret == libc::SIG_ERR {
-        return Err(Error::new(ErrorKind::Other, ""));
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn ignore_interrupts() -> Result<()> {
-    // Do nothing.
-    Ok(())
-}
-
-#[cfg(unix)]
-fn enable_pipe_errors() -> Result<()> {
-    let ret = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
-    if ret == libc::SIG_ERR {
-        return Err(Error::new(ErrorKind::Other, ""));
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn enable_pipe_errors() -> Result<()> {
-    // Do nothing.
-    Ok(())
-}
-
 fn tee(options: &Options) -> Result<()> {
-    if options.ignore_interrupts {
-        ignore_interrupts()?;
-    }
-    if options.output_error.is_none() {
-        enable_pipe_errors()?;
-    }
+    #[cfg(unix)]
+    {
+        // ErrorKind::Other is raised by MultiWriter when all writers have exited.
+        // This is therefore just a clever way to stop all writers
 
+        if options.ignore_interrupts {
+            ignore_interrupts().map_err(|_| Error::from(ErrorKind::Other))?;
+        }
+        if options.output_error.is_none() {
+            enable_pipe_errors().map_err(|_| Error::from(ErrorKind::Other))?;
+        }
+    }
     let mut writers: Vec<NamedWriter> = options
         .files
         .clone()

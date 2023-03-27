@@ -14,16 +14,15 @@ use std::io::{BufRead, Write};
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::format_usage;
 use uucore::ranges::Range;
-use uucore::{help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 pub mod errors;
 pub mod format;
 pub mod options;
 mod units;
 
-const ABOUT: &str = help_section!("about", "numfmt.md");
+const ABOUT: &str = help_about!("numfmt.md");
 const AFTER_HELP: &str = help_section!("after help", "numfmt.md");
 const USAGE: &str = help_usage!("numfmt.md");
 

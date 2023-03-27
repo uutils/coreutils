@@ -45,7 +45,7 @@ be roughly equivalent to the total bytes copied (`blocksize` x `count`).
 
 Some useful invocations for testing would be the following:
 
-```
+```shell
 hyperfine "./target/release/dd bs=4k count=1000000 < /dev/zero > /dev/null"
 hyperfine "./target/release/dd bs=1M count=20000 < /dev/zero > /dev/null"
 hyperfine "./target/release/dd bs=1G count=10 < /dev/zero > /dev/null"
@@ -57,7 +57,7 @@ Typically you would choose a small blocksize for measuring the performance of
 typically does some set amount of work per block which only depends on the size
 of the block if conversions are used.
 
-As an example, https://github.com/uutils/coreutils/pull/3600 made a change to
+As an example, <https://github.com/uutils/coreutils/pull/3600> made a change to
 reuse the same buffer between block copies, avoiding the need to reallocate a
 new block of memory for each copy. The impact of that change mostly had an
 impact on large block size copies because those are the circumstances where the

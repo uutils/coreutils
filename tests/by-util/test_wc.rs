@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::{vec_of_size, TestScenario};
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
 

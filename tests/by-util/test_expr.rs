@@ -1,6 +1,6 @@
 // spell-checker:ignore αbcdef ; (people) kkos
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_simple_values() {

@@ -10,7 +10,6 @@ use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::str::FromStr;
-use strum_macros::{AsRefStr, EnumString};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
@@ -38,8 +37,7 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-#[derive(PartialEq, Clone, Copy, AsRefStr, EnumString)]
-#[strum(serialize_all = "snake_case")]
+#[derive(PartialEq, Clone, Copy)]
 enum Delimiters {
     Append,
     Prepend,
@@ -403,7 +401,14 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
         .get_one::<String>(options::ALL_REPEATED)
         .or_else(|| matches.get_one::<String>(options::GROUP));
     if let Some(delimiter_arg) = value {
-        Delimiters::from_str(delimiter_arg).unwrap() // All possible values for ALL_REPEATED are Delimiters (of type `&str`)
+        match delimiter_arg.as_ref() {
+            "append" => Delimiters::Append,
+            "prepend" => Delimiters::Prepend,
+            "separate" => Delimiters::Separate,
+            "both" => Delimiters::Both,
+            "none" => Delimiters::None,
+            _ => unreachable!("Should have been caught by possible values in clap"),
+        }
     } else if matches.contains_id(options::GROUP) {
         Delimiters::Separate
     } else {

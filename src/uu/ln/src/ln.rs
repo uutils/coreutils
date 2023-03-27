@@ -11,7 +11,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
-use uucore::{format_usage, prompt_yes, show_error};
+use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show_error};
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -85,21 +85,9 @@ impl UError for LnError {
     }
 }
 
-const ABOUT: &str = "Change file owner and group";
-const USAGE: &str = "\
-       {} [OPTION]... [-T] TARGET LINK_NAME
-       {} [OPTION]... TARGET
-       {} [OPTION]... TARGET... DIRECTORY
-       {} [OPTION]... -t DIRECTORY TARGET...";
-const LONG_USAGE: &str = "\
-    In the 1st form, create a link to TARGET with the name LINK_NAME.\n\
-    In the 2nd form, create a link to TARGET in the current directory.\n\
-    In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.\n\
-    Create hard links by default, symbolic links with --symbolic.\n\
-    By default, each destination (name of new link) should not already exist.\n\
-    When creating hard links, each TARGET must exist.  Symbolic links\n\
-    can hold arbitrary text; if later resolved, a relative link is\n\
-    interpreted in relation to its parent directory.";
+const ABOUT: &str = help_about!("ln.md");
+const USAGE: &str = help_usage!("ln.md");
+const AFTER_HELP: &str = help_section!("after help", "ln.md");
 
 mod options {
     pub const FORCE: &str = "force";
@@ -119,13 +107,13 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let long_usage = format!(
+    let after_help = format!(
         "{}\n\n{}",
-        LONG_USAGE,
+        AFTER_HELP,
         backup_control::BACKUP_CONTROL_LONG_HELP
     );
 
-    let matches = uu_app().after_help(long_usage).try_get_matches_from(args)?;
+    let matches = uu_app().after_help(after_help).try_get_matches_from(args)?;
 
     /* the list of files */
 
@@ -403,8 +391,8 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
-                if !prompt_yes!("overwrite {}?", dst.quote()) {
-                    return Ok(());
+                if !prompt_yes!("replace {}?", dst.quote()) {
+                    return Err(LnError::SomeLinksFailed.into());
                 }
 
                 if fs::remove_file(dst).is_ok() {};

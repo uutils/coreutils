@@ -1,4 +1,5 @@
-#  Multi-call binary
+# Multi-call binary
+
 uutils includes a multi-call binary from which the utils can be invoked. This
 reduces the binary size of the binary and can be useful for portability.
 
@@ -12,6 +13,7 @@ coreutils [util] [util options]
 The `--help` flag will print a list of available utils.
 
 ## Example
-```
+
+```shell
 coreutils ls -l
 ```

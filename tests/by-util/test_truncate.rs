@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (words) RFILE
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::io::{Seek, SeekFrom, Write};
 
 static FILE1: &str = "truncate_test_1";
@@ -194,7 +194,7 @@ fn test_error_filename_only() {
         .args(&["file"])
         .fails()
         .code_is(1)
-        .stderr_contains("error: The following required arguments were not provided:");
+        .stderr_contains("error: the following required arguments were not provided:");
 }
 
 #[test]

@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use glob::glob;
 
 /// Returns a string of numbers with the given range, each on a new line.

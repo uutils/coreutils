@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::thread::sleep;
 
 // General observation: nohup.out will not be created in tests run by cargo test

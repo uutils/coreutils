@@ -16,6 +16,7 @@ use std::io::{BufRead, BufReader};
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::{help_about, help_section, help_usage};
 
 mod options {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -25,13 +26,9 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-static USAGE: &str = "{} [OPTION]... [FILE]";
-static ABOUT: &str = "Output commands to set the LS_COLORS environment variable.";
-static LONG_HELP: &str = "
- If FILE is specified, read it to determine which colors to use for which
- file types and extensions.  Otherwise, a precompiled database is used.
- For details on the format of these files, run 'dircolors --print-database'
-";
+const USAGE: &str = help_usage!("dircolors.md");
+const ABOUT: &str = help_about!("dircolors.md");
+const AFTER_HELP: &str = help_section!("after help", "dircolors.md");
 
 mod colors;
 use self::colors::INTERNAL_DB;
@@ -170,7 +167,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(

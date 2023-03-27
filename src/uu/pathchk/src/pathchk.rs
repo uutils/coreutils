@@ -13,7 +13,7 @@ use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UResult, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 // operating mode
 enum Mode {
@@ -23,8 +23,8 @@ enum Mode {
     Both,    // a combination of `Basic` and `Extra`
 }
 
-static ABOUT: &str = "Check whether file names are valid or portable";
-const USAGE: &str = "{} [OPTION]... NAME...";
+const ABOUT: &str = help_about!("pathchk.md");
+const USAGE: &str = help_usage!("pathchk.md");
 
 mod options {
     pub const POSIX: &str = "posix";

@@ -1,10 +1,16 @@
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
+#[cfg(not(windows))]
+use crate::common::util::{UCommand, TESTS_BINARY};
+
+use regex::Regex;
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+use std::process::{Command, Stdio};
 #[cfg(not(windows))]
 use std::thread::sleep;
 #[cfg(not(windows))]
@@ -259,7 +265,9 @@ fn test_final_stats_noxfer() {
 fn test_final_stats_unspec() {
     new_ucmd!()
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0.0 B/s\n")
+        .stderr_contains("0+0 records in\n0+0 records out\n0 bytes copied, ")
+        .stderr_matches(&Regex::new(r"\d\.\d+(e-\d\d)? s, ").unwrap())
+        .stderr_contains("0.0 B/s")
         .success();
 }
 
@@ -373,9 +381,11 @@ fn test_existing_file_truncated() {
 #[test]
 fn test_null_stats() {
     new_ucmd!()
-        .args(&["if=null.txt"])
+        .arg("if=null.txt")
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0.0 B/s\n")
+        .stderr_contains("0+0 records in\n0+0 records out\n0 bytes copied, ")
+        .stderr_matches(&Regex::new(r"\d\.\d+(e-\d\d)? s, ").unwrap())
+        .stderr_contains("0.0 B/s")
         .success();
 }
 
@@ -1441,4 +1451,88 @@ fn test_sparse() {
     // The number of bytes in the file should be accurate though the
     // number of blocks stored on disk may be zero.
     assert_eq!(at.metadata("infile").len(), at.metadata("outfile").len());
+}
+
+// TODO These FIFO tests should work on macos, but some issue is
+// causing our implementation of dd to wait indefinitely when it
+// shouldn't.
+
+/// Test that a seek on an output FIFO results in a read.
+#[test]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+fn test_seek_output_fifo() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+
+    // TODO When `dd` is a bit more advanced, we could use the uutils
+    // version of dd here as well.
+    let child = Command::new("dd")
+        .current_dir(&at.subdir)
+        .args([
+            "count=1",
+            "if=/dev/zero",
+            &format!("of={}", at.plus_as_string("fifo")),
+            "status=noxfer",
+        ])
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to execute child process");
+
+    ts.ucmd()
+        .args(&["count=0", "seek=1", "of=fifo", "status=noxfer"])
+        .succeeds()
+        .stderr_only("0+0 records in\n0+0 records out\n");
+
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(&output.stderr, b"1+0 records in\n1+0 records out\n");
+}
+
+/// Test that a skip on an input FIFO results in a read.
+#[test]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+fn test_skip_input_fifo() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+
+    // TODO When `dd` is a bit more advanced, we could use the uutils
+    // version of dd here as well.
+    let child = Command::new("dd")
+        .current_dir(&at.subdir)
+        .args([
+            "count=1",
+            "if=/dev/zero",
+            &format!("of={}", at.plus_as_string("fifo")),
+            "status=noxfer",
+        ])
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to execute child process");
+
+    ts.ucmd()
+        .args(&["count=0", "skip=1", "if=fifo", "status=noxfer"])
+        .succeeds()
+        .stderr_only("0+0 records in\n0+0 records out\n");
+
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(&output.stderr, b"1+0 records in\n1+0 records out\n");
+}
+
+/// Test for reading part of stdin from each of two child processes.
+#[cfg(all(not(windows), feature = "printf"))]
+#[test]
+fn test_multiple_processes_reading_stdin() {
+    // TODO Investigate if this is possible on Windows.
+    let printf = format!("{TESTS_BINARY} printf 'abcdef\n'");
+    let dd_skip = format!("{TESTS_BINARY} dd bs=1 skip=3 count=0");
+    let dd = format!("{TESTS_BINARY} dd");
+    UCommand::new()
+        .arg(format!("{printf} | ( {dd_skip} && {dd} ) 2> /dev/null"))
+        .succeeds()
+        .stdout_only("def\n");
 }
