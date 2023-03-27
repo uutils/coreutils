@@ -23,7 +23,7 @@ uucore_procs = { workspace=true }
 dns-lookup = { version="1.0.5", optional=true }
 dunce = "1.0.3"
 wild = "2.0"
-glob = "0.3.0"
+glob = "0.3.1"
 # * optional
 itertools = { version="0.10.0", optional=true }
 thiserror = { workspace=true, optional=true }
