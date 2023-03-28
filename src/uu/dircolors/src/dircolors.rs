@@ -12,6 +12,7 @@ use std::borrow::Borrow;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::Path;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::display::Quotable;
@@ -42,7 +43,6 @@ pub enum OutputFmt {
 }
 
 pub fn guess_syntax() -> OutputFmt {
-    use std::path::Path;
     match env::var("SHELL") {
         Ok(ref s) if !s.is_empty() => {
             let shell_path: &Path = s.as_ref();
@@ -138,15 +138,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let fin = BufReader::new(std::io::stdin());
         result = parse(fin.lines().filter_map(Result::ok), &out_format, files[0]);
     } else {
-        match File::open(files[0]) {
+        let path = Path::new(files[0]);
+        if path.is_dir() {
+            return Err(USimpleError::new(
+                2,
+                format!("expected file, got directory {}", path.quote()),
+            ));
+        }
+        match File::open(path) {
             Ok(f) => {
                 let fin = BufReader::new(f);
-                result = parse(fin.lines().filter_map(Result::ok), &out_format, files[0]);
+                result = parse(
+                    fin.lines().filter_map(Result::ok),
+                    &out_format,
+                    &path.to_string_lossy(),
+                );
             }
             Err(e) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("{}: {}", files[0].maybe_quote(), e),
+                    format!("{}: {}", path.maybe_quote(), e),
                 ));
             }
         }
