@@ -295,10 +295,10 @@ impl MountInfo {
                 fs_type_buf.len() as u32,
             )
         };
-        let fs_type = if 0 != success {
-            Some(LPWSTR2String(&fs_type_buf))
-        } else {
+        let fs_type = if 0 == success {
             None
+        } else {
+            Some(LPWSTR2String(&fs_type_buf))
         };
         let mut mn_info = Self {
             dev_id: volume_name,
@@ -862,10 +862,10 @@ pub fn pretty_time(sec: i64, nsec: i64) -> String {
 pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
     match mode & S_IFMT {
         S_IFREG => {
-            if size != 0 {
-                "regular file"
-            } else {
+            if size == 0 {
                 "regular empty file"
+            } else {
+                "regular file"
             }
         }
         S_IFDIR => "directory",

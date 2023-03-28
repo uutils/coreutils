@@ -204,7 +204,7 @@ jobs:
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='--all-features' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
@@ -231,7 +231,7 @@ jobs:
         fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
         fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -- -W clippy::manual_string_new -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
+        S=$(cargo clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -- -W clippy::manual_string_new -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   style_spellcheck:
@@ -315,7 +315,7 @@ jobs:
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='--all-features' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
@@ -406,7 +406,7 @@ jobs:
     - name: Test
       run: cargo test -v ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
-        RUSTFLAGS: "-Awarnings --cfg unsound_local_offset"
+        RUSTFLAGS: "-Awarnings"
         RUST_BACKTRACE: "1"
 
   deps:
@@ -606,19 +606,11 @@ jobs:
           # { os , target , cargo-options , features , use-cross , toolchain }
           - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf, features: feat_os_unix_gnueabihf, use-cross: use-cross, }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf , use-cross: use-cross }
-          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
           # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
-          # - { os: ubuntu-18.04   , target: i586-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross } ## note: older windows platform; not required, dev-FYI only
-          # - { os: ubuntu-18.04   , target: i586-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross } ## note: older windows platform; not required, dev-FYI only
           - { os: ubuntu-latest   , target: i686-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross }
           - { os: ubuntu-latest   , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-latest   , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
           - { os: ubuntu-latest   , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
-          # Commented until https://github.com/uutils/coreutils/issues/3210 is fixed
-          #- { os: ubuntu-18.04   , target: i686-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross }
-          #- { os: ubuntu-18.04   , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
-          #- { os: ubuntu-18.04   , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
-          #- { os: ubuntu-18.04   , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows } ## note: requires rust >= 1.43.0 to link correctly
@@ -1026,146 +1018,6 @@ jobs:
       with:
         name: toybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
-
-  test_android:
-    name: Test Android builds
-    needs: [ min_version, deps ]
-    runs-on: macos-latest
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        api-level: [28]
-        target: [default]
-        arch: [x86] # , arm64-v8a
-    env:
-      TERMUX: v0.118.0
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-    - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: AVD cache
-      uses: actions/cache@v3
-      id: avd-cache
-      with:
-        path: |
-          ~/.android/avd/*
-          ~/.android/avd/*/snapshots/*
-          ~/.android/adb*
-        key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
-    - name: Create and cache emulator image
-      if: steps.avd-cache.outputs.cache-hit != 'true'
-      uses: reactivecircus/android-emulator-runner@v2
-      with:
-        api-level: ${{ matrix.api-level }}
-        target: ${{ matrix.target }}
-        arch: ${{ matrix.arch }}
-        ram-size: 2048M
-        disk-size: 5120M
-        force-avd-creation: true
-        emulator-options: -no-snapshot-load -noaudio -no-boot-anim -camera-back none
-        script: |
-          wget https://github.com/termux/termux-app/releases/download/${{ env.TERMUX }}/termux-app_${{ env.TERMUX }}+github-debug_${{ matrix.arch }}.apk
-          util/android-commands.sh snapshot termux-app_${{ env.TERMUX }}+github-debug_${{ matrix.arch }}.apk
-          adb -s emulator-5554 emu avd snapshot save ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
-          echo "Emulator image created."
-          pkill -9 qemu-system-x86_64
-    - name: Build and Test on Android
-      uses: reactivecircus/android-emulator-runner@v2
-      with:
-        api-level: ${{ matrix.api-level }}
-        target: ${{ matrix.target }}
-        arch: ${{ matrix.arch }}
-        ram-size: 2048M
-        disk-size: 5120M
-        force-avd-creation: false
-        emulator-options: -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -snapshot ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
-        script: |
-          util/android-commands.sh sync
-          util/android-commands.sh build
-          util/android-commands.sh tests
-
-  test_freebsd:
-    name: Tests/FreeBSD test suite
-    needs: [ min_version, deps ]
-    runs-on: ${{ matrix.job.os }}
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: macos-12 , features: unix } ## GHA MacOS-11.0 VM won't have VirtualBox; refs: <https://github.com/actions/virtual-environments/issues/4060> , <https://github.com/actions/virtual-environments/pull/4010>
-    env:
-      mem: 4096
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-    - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Prepare, build and test
-      ## spell-checker:ignore (ToDO) sshfs usesh vmactions
-      uses: vmactions/freebsd-vm@v0.3.0
-      with:
-        usesh: true
-        # sync: sshfs
-        prepare: pkg install -y curl gmake sudo
-        run: |
-          ## Prepare, build, and test
-          # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
-          # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
-          set -e
-          #
-          # We need a file-descriptor file system to test test_ls::test_ls_io_errors
-          mount -t fdescfs fdesc /dev/fd
-          #
-          TEST_USER=tester
-          REPO_NAME=${GITHUB_WORKSPACE##*/}
-          WORKSPACE_PARENT="/Users/runner/work/${REPO_NAME}"
-          WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
-          #
-          pw adduser -n ${TEST_USER} -d /root/ -g wheel -c "Coreutils user to build" -w random
-          # chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
-          chown -R ${TEST_USER}:wheel /root/ "/Users/runner/work/${REPO_NAME}"/
-          whoami
-          #
-          # Further work needs to be done in a sudo as we are changing users
-          sudo -i -u ${TEST_USER} sh << EOF
-          set -e
-          whoami
-          curl https://sh.rustup.rs -sSf --output rustup.sh
-          sh rustup.sh -y --profile=minimal
-          . $HOME/.cargo/env
-          ## Info
-          # environment
-          echo "## environment"
-          echo "CI='${CI}'"
-          echo "REPO_NAME='${REPO_NAME}'"
-          echo "TEST_USER='${TEST_USER}'"
-          echo "WORKSPACE_PARENT='${WORKSPACE_PARENT}'"
-          echo "WORKSPACE='${WORKSPACE}'"
-          env | sort
-          # tooling info
-          echo "## tooling info"
-          cargo -V
-          rustc -V
-          #
-          # To ensure that files are cleaned up, we don't want to exit on error
-          set +e
-          cd "${WORKSPACE}"
-          unset FAULT
-          cargo build || FAULT=1
-          export RUST_BACKTRACE=1
-          if (test -z "\$FAULT"); then cargo test --features '${{ matrix.job.features }}' || FAULT=1 ; fi
-          if (test -z "\$FAULT"); then cargo test --all-features -p uucore || FAULT=1 ; fi
-          # Clean to avoid to rsync back the files
-          cargo clean
-          if (test -n "\$FAULT"); then exit 1 ; fi
-          EOF
 
   coverage:
     name: Code Coverage

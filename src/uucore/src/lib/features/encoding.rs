@@ -67,10 +67,10 @@ pub fn encode(f: Format, input: &[u8]) -> Result<String, EncodeError> {
         Z85 => {
             // According to the spec we should not accept inputs whose len is not a multiple of 4.
             // However, the z85 crate implements a padded encoding and accepts such inputs. We have to manually check for them.
-            if input.len() % 4 != 0 {
-                return Err(EncodeError::Z85InputLenNotMultipleOf4);
-            } else {
+            if input.len() % 4 == 0 {
                 z85::encode(input)
+            } else {
+                return Err(EncodeError::Z85InputLenNotMultipleOf4);
             }
         }
     })

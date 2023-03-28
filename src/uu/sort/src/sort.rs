@@ -185,7 +185,9 @@ impl Display for SortError {
                 line,
                 silent,
             } => {
-                if !silent {
+                if *silent {
+                    Ok(())
+                } else {
                     write!(
                         f,
                         "{}:{}: disorder: {}",
@@ -193,8 +195,6 @@ impl Display for SortError {
                         line_number,
                         line
                     )
-                } else {
-                    Ok(())
                 }
             }
             Self::OpenFailed { path, error } => {
@@ -582,7 +582,15 @@ impl<'a> Line<'a> {
                     selection.start += num_range.start;
                     selection.end = selection.start + num_range.len();
 
-                    if num_range != (0..0) {
+                    if num_range == (0..0) {
+                        // This was not a valid number.
+                        // Report no match at the first non-whitespace character.
+                        let leading_whitespace = self.line[selection.clone()]
+                            .find(|c: char| !c.is_whitespace())
+                            .unwrap_or(0);
+                        selection.start += leading_whitespace;
+                        selection.end += leading_whitespace;
+                    } else {
                         // include a trailing si unit
                         if selector.settings.mode == SortMode::HumanNumeric
                             && self.line[selection.end..initial_selection.end]
@@ -597,14 +605,6 @@ impl<'a> Line<'a> {
                         {
                             selection.start -= 1;
                         }
-                    } else {
-                        // This was not a valid number.
-                        // Report no match at the first non-whitespace character.
-                        let leading_whitespace = self.line[selection.clone()]
-                            .find(|c: char| !c.is_whitespace())
-                            .unwrap_or(0);
-                        selection.start += leading_whitespace;
-                        selection.end += leading_whitespace;
                     }
                 }
                 SortMode::GeneralNumeric => {
@@ -1572,10 +1572,7 @@ fn compare_by<'a>(
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
     for selector in &global_settings.selectors {
-        let (a_str, b_str) = if !selector.needs_selection {
-            // We can select the whole line.
-            (a.line, b.line)
-        } else {
+        let (a_str, b_str) = if selector.needs_selection {
             let selections = (
                 a_line_data.selections
                     [a.index * global_settings.precomputed.selections_per_line + selection_index],
@@ -1584,6 +1581,9 @@ fn compare_by<'a>(
             );
             selection_index += 1;
             selections
+        } else {
+            // We can select the whole line.
+            (a.line, b.line)
         };
 
         let settings = &selector.settings;

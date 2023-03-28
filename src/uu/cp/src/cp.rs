@@ -78,6 +78,7 @@ quick_error! {
         StripPrefixError(err: StripPrefixError) { from() }
 
         /// Result of a skipped file
+        /// Currently happens when "no" is selected in interactive mode
         Skipped { }
 
         /// Result of a skipped file
@@ -1018,7 +1019,11 @@ fn show_error_if_needed(error: &Error) -> bool {
         // When using --no-clobber, we don't want to show
         // an error message
         Error::NotAllFilesCopied => (),
-        Error::Skipped => (),
+        Error::Skipped => {
+            // touch a b && echo "n"|cp -i a b && echo $?
+            // should return an error from GNU 9.2
+            return true;
+        }
         _ => {
             show_error!("{}", error);
             return true;

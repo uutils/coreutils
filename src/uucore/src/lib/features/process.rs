@@ -58,10 +58,10 @@ pub trait ChildExt {
 
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
-        if unsafe { libc::kill(self.id() as pid_t, signal as i32) } != 0 {
-            Err(io::Error::last_os_error())
-        } else {
+        if unsafe { libc::kill(self.id() as pid_t, signal as i32) } == 0 {
             Ok(())
+        } else {
+            Err(io::Error::last_os_error())
         }
     }
 
@@ -70,10 +70,10 @@ impl ChildExt for Child {
         if unsafe { libc::signal(signal as i32, libc::SIG_IGN) } != 0 {
             return Err(io::Error::last_os_error());
         }
-        if unsafe { libc::kill(0, signal as i32) } != 0 {
-            Err(io::Error::last_os_error())
-        } else {
+        if unsafe { libc::kill(0, signal as i32) } == 0 {
             Ok(())
+        } else {
+            Err(io::Error::last_os_error())
         }
     }
 

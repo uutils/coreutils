@@ -8,9 +8,11 @@
 
 // spell-checker:ignore (vars) egid euid FiletestOp StrlenOp
 
+pub(crate) mod error;
 mod parser;
 
 use clap::{crate_version, Command};
+use error::{ParseError, ParseResult};
 use parser::{parse, Operator, Symbol, UnaryOperator};
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -128,23 +130,18 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let result = parse(args).and_then(|mut stack| eval(&mut stack));
+    let result = parse(args).map(|mut stack| eval(&mut stack))??;
 
-    match result {
-        Ok(result) => {
-            if result {
-                Ok(())
-            } else {
-                Err(1.into())
-            }
-        }
-        Err(e) => Err(USimpleError::new(2, e)),
+    if result {
+        Ok(())
+    } else {
+        Err(1.into())
     }
 }
 
 /// Evaluate a stack of Symbols, returning the result of the evaluation or
 /// an error message if evaluation failed.
-fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
+fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
     macro_rules! pop_literal {
         () => {
             match stack.pop() {
@@ -186,7 +183,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                     return Ok(true);
                 }
                 _ => {
-                    return Err(format!("missing argument after '{op:?}'"));
+                    return Err(ParseError::MissingArgument(op.quote().to_string()));
                 }
             };
 
@@ -233,7 +230,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
 
             Ok(if op == "-a" { a && b } else { a || b })
         }
-        _ => Err("expected value".to_string()),
+        _ => Err(ParseError::ExpectedValue),
     }
 }
 
@@ -241,19 +238,17 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
 /// `a` is the left hand side
 /// `b` is the left hand side
 /// `op` the operation (ex: -eq, -lt, etc)
-fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
-    let format_err = |value: &OsStr| format!("invalid integer {}", value.quote());
-
+fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     // Parse the two inputs
     let a: i128 = a
         .to_str()
         .and_then(|s| s.parse().ok())
-        .ok_or_else(|| format_err(a))?;
+        .ok_or_else(|| ParseError::InvalidInteger(a.quote().to_string()))?;
 
     let b: i128 = b
         .to_str()
         .and_then(|s| s.parse().ok())
-        .ok_or_else(|| format_err(b))?;
+        .ok_or_else(|| ParseError::InvalidInteger(b.quote().to_string()))?;
 
     // Do the maths
     Ok(match op.to_str() {
@@ -263,7 +258,7 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
         Some("-ge") => a >= b,
         Some("-lt") => a < b,
         Some("-le") => a <= b,
-        _ => return Err(format!("unknown operator {}", op.quote())),
+        _ => return Err(ParseError::UnknownOperator(op.quote().to_string())),
     })
 }
 
@@ -271,7 +266,7 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
 /// `a` is the left hand side
 /// `b` is the left hand side
 /// `op` the operation (ex: -ef, -nt, etc)
-fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
+fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     // Don't manage the error. GNU doesn't show error when doing
     // test foo -nt bar
     let f_a = match fs::metadata(a) {
@@ -290,14 +285,14 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
         Some("-ef") => unimplemented!(),
         Some("-nt") => f_a.modified().unwrap() > f_b.modified().unwrap(),
         Some("-ot") => f_a.created().unwrap() > f_b.created().unwrap(),
-        _ => return Err(format!("unknown operator {}", op.quote())),
+        _ => return Err(ParseError::UnknownOperator(op.quote().to_string())),
     })
 }
 
-fn isatty(fd: &OsStr) -> Result<bool, String> {
+fn isatty(fd: &OsStr) -> ParseResult<bool> {
     fd.to_str()
         .and_then(|s| s.parse().ok())
-        .ok_or_else(|| format!("invalid integer {}", fd.quote()))
+        .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))
         .map(|i| {
             #[cfg(not(target_os = "redox"))]
             unsafe {

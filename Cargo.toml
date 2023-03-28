@@ -265,17 +265,17 @@ test = [ "uu_test" ]
 [workspace.dependencies]
 bigdecimal = "0.3"
 binary-heap-plus = "0.5.0"
-bstr = "1.0"
+bstr = "1.4"
 bytecount = "0.6.3"
-byteorder = "1.3.2"
+byteorder = "1.4.3"
 chrono = { version="^0.4.24", default-features=false, features=["std", "alloc", "clock"]}
 clap = { version = "4.1", features = ["wrap_help", "cargo"] }
-clap_complete = "4.0"
+clap_complete = "4.1"
 clap_mangen = "0.2"
 compare = "0.1.0"
 coz = { version = "0.1.3" }
 crossterm = ">=0.19"
-ctrlc = { version = "3.0", features = ["termination"] }
+ctrlc = { version = "3.2", features = ["termination"] }
 exacl = "0.9.0"
 file_diff = "1.0.0"
 filetime = "0.2"
@@ -284,16 +284,16 @@ fs_extra = "1.1.0"
 fts-sys = "0.2"
 fundu = "0.4.3"
 gcd = "2.2"
-glob = "0.3.0"
+glob = "0.3.1"
 half = "2.1"
 indicatif = "0.17"
-is-terminal = "0.4.3"
-itertools = "0.10.0"
+is-terminal = "0.4.5"
+itertools = "0.10.5"
 libc = "0.2.139"
 lscolors = { version = "0.13.0", default-features=false, features = ["nu-ansi-term"] }
 memchr = "2"
 nix = { version="0.26", default-features=false }
-nom = "7.1.1"
+nom = "7.1.3"
 notify = { version = "=5.0.0", features=["macos_kqueue"]}
 num_cpus = "1.14"
 num-bigint = "0.4.3"
@@ -301,7 +301,7 @@ num-traits = "0.2.15"
 number_prefix = "0.4"
 once_cell = "1.13.1"
 onig = { version = "~6.4", default-features = false }
-ouroboros = "0.15.5"
+ouroboros = "0.15.6"
 phf = "0.11.1"
 phf_codegen = "0.11.1"
 platform-info = "1.0.2"
@@ -310,14 +310,12 @@ rand = { version = "0.8", features = ["small_rng"] }
 rand_core = "0.6"
 rayon = "1.7"
 redox_syscall = "0.2"
-regex = "1.7.1"
+regex = "1.7.3"
 rust-ini = "0.18.0"
 same-file = "1.0.6"
 selinux = "0.4"
-signal-hook = "0.3.14"
+signal-hook = "0.3.15"
 smallvec = { version = "1.10", features = ["union"] }
-strum = "0.24.1"
-strum_macros = "0.24.2"
 tempfile = "3.4.0"
 term_grid = "0.1.5"
 terminal_size = "0.2.5"
@@ -325,18 +323,18 @@ textwrap = { version="0.16.0", features=["terminal_size"] }
 thiserror = "1.0"
 time = { version="0.3" }
 unicode-segmentation = "1.9.0"
-unicode-width = "0.1.8"
+unicode-width = "0.1.10"
 utf-8 = "0.7.6"
 walkdir = "2.2"
 winapi-util = "0.1.5"
 windows-sys = { version="0.42.0", default-features=false }
 xattr = "0.2.3"
-zip = { version = "0.6.3", default_features=false, features=["deflate"] }
+zip = { version = "0.6.4", default_features=false, features=["deflate"] }
 
 hex = "0.4.3"
 md-5 = "0.10.5"
-sha1 = "0.10.1"
-sha2 = "0.10.2"
+sha1 = "0.10.5"
+sha2 = "0.10.6"
 sha3 = "0.10.6"
 blake2b_simd = "1.0.1"
 blake3 = "1.3.3"

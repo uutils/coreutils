@@ -203,9 +203,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     for i in 0..=users.len() {
-        let possible_pw = if !state.user_specified {
-            None
-        } else {
+        let possible_pw = if state.user_specified {
             match Passwd::locate(users[i].as_str()) {
                 Ok(p) => Some(p),
                 Err(_) => {
@@ -218,6 +216,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                 }
             }
+        } else {
+            None
         };
 
         // GNU's `id` does not support the flags: -p/-P/-A.

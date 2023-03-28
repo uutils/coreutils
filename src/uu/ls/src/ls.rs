@@ -2008,16 +2008,16 @@ fn enter_directory(
                     continue;
                 }
                 Ok(rd) => {
-                    if !listed_ancestors
+                    if listed_ancestors
                         .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
                     {
-                        out.flush()?;
-                        show!(LsError::AlreadyListedError(e.p_buf.clone()));
-                    } else {
                         writeln!(out, "\n{}:", e.p_buf.display())?;
                         enter_directory(e, rd, config, out, listed_ancestors)?;
                         listed_ancestors
                             .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
+                    } else {
+                        out.flush()?;
+                        show!(LsError::AlreadyListedError(e.p_buf.clone()));
                     }
                 }
             }
@@ -2867,10 +2867,10 @@ fn display_file_name(
     // to get correct alignment from later calls to`display_grid()`.
     if config.context {
         if let Some(pad_count) = prefix_context {
-            let security_context = if !matches!(config.format, Format::Commas) {
-                pad_left(&path.security_context, pad_count)
-            } else {
+            let security_context = if matches!(config.format, Format::Commas) {
                 path.security_context.to_owned()
+            } else {
+                pad_left(&path.security_context, pad_count)
             };
             name = format!("{security_context} {name}");
             width += security_context.len() + 1;

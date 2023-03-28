@@ -375,9 +375,7 @@ impl Stater {
                     });
                 }
                 '\\' => {
-                    if !use_printf {
-                        tokens.push(Token::Char('\\'));
-                    } else {
+                    if use_printf {
                         i += 1;
                         if i >= bound {
                             show_warning!("backslash at end of format");
@@ -414,6 +412,8 @@ impl Stater {
                                 tokens.push(Token::Char(c));
                             }
                         }
+                    } else {
+                        tokens.push(Token::Char('\\'));
                     }
                 }
 
@@ -519,7 +519,67 @@ impl Stater {
             OsString::from(file)
         };
 
-        if !self.show_fs {
+        if self.show_fs {
+            #[cfg(unix)]
+            let p = file.as_bytes();
+            #[cfg(not(unix))]
+            let p = file.into_string().unwrap();
+            match statfs(p) {
+                Ok(meta) => {
+                    let tokens = &self.default_tokens;
+
+                    for t in tokens.iter() {
+                        match *t {
+                            Token::Char(c) => print!("{c}"),
+                            Token::Directive {
+                                flag,
+                                width,
+                                precision,
+                                format,
+                            } => {
+                                let output = match format {
+                                    // free blocks available to non-superuser
+                                    'a' => OutputType::Unsigned(meta.avail_blocks()),
+                                    // total data blocks in file system
+                                    'b' => OutputType::Unsigned(meta.total_blocks()),
+                                    // total file nodes in file system
+                                    'c' => OutputType::Unsigned(meta.total_file_nodes()),
+                                    // free file nodes in file system
+                                    'd' => OutputType::Unsigned(meta.free_file_nodes()),
+                                    // free blocks in file system
+                                    'f' => OutputType::Unsigned(meta.free_blocks()),
+                                    // file system ID in hex
+                                    'i' => OutputType::UnsignedHex(meta.fsid()),
+                                    // maximum length of filenames
+                                    'l' => OutputType::Unsigned(meta.namelen()),
+                                    // file name
+                                    'n' => OutputType::Str(display_name.to_string()),
+                                    // block size (for faster transfers)
+                                    's' => OutputType::Unsigned(meta.io_size()),
+                                    // fundamental block size (for block counts)
+                                    'S' => OutputType::Integer(meta.block_size()),
+                                    // file system type in hex
+                                    't' => OutputType::UnsignedHex(meta.fs_type() as u64),
+                                    // file system type in human readable form
+                                    'T' => OutputType::Str(pretty_fstype(meta.fs_type()).into()),
+                                    _ => OutputType::Unknown,
+                                };
+
+                                print_it(&output, flag, width, precision);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    show_error!(
+                        "cannot read file system information for {}: {}",
+                        display_name.quote(),
+                        e
+                    );
+                    return 1;
+                }
+            }
+        } else {
             let result = if self.follow || stdin_is_fifo && display_name == "-" {
                 fs::metadata(&file)
             } else {
@@ -657,66 +717,6 @@ impl Stater {
                 }
                 Err(e) => {
                     show_error!("cannot stat {}: {}", display_name.quote(), e);
-                    return 1;
-                }
-            }
-        } else {
-            #[cfg(unix)]
-            let p = file.as_bytes();
-            #[cfg(not(unix))]
-            let p = file.into_string().unwrap();
-            match statfs(p) {
-                Ok(meta) => {
-                    let tokens = &self.default_tokens;
-
-                    for t in tokens.iter() {
-                        match *t {
-                            Token::Char(c) => print!("{c}"),
-                            Token::Directive {
-                                flag,
-                                width,
-                                precision,
-                                format,
-                            } => {
-                                let output = match format {
-                                    // free blocks available to non-superuser
-                                    'a' => OutputType::Unsigned(meta.avail_blocks()),
-                                    // total data blocks in file system
-                                    'b' => OutputType::Unsigned(meta.total_blocks()),
-                                    // total file nodes in file system
-                                    'c' => OutputType::Unsigned(meta.total_file_nodes()),
-                                    // free file nodes in file system
-                                    'd' => OutputType::Unsigned(meta.free_file_nodes()),
-                                    // free blocks in file system
-                                    'f' => OutputType::Unsigned(meta.free_blocks()),
-                                    // file system ID in hex
-                                    'i' => OutputType::UnsignedHex(meta.fsid()),
-                                    // maximum length of filenames
-                                    'l' => OutputType::Unsigned(meta.namelen()),
-                                    // file name
-                                    'n' => OutputType::Str(display_name.to_string()),
-                                    // block size (for faster transfers)
-                                    's' => OutputType::Unsigned(meta.io_size()),
-                                    // fundamental block size (for block counts)
-                                    'S' => OutputType::Integer(meta.block_size()),
-                                    // file system type in hex
-                                    't' => OutputType::UnsignedHex(meta.fs_type() as u64),
-                                    // file system type in human readable form
-                                    'T' => OutputType::Str(pretty_fstype(meta.fs_type()).into()),
-                                    _ => OutputType::Unknown,
-                                };
-
-                                print_it(&output, flag, width, precision);
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    show_error!(
-                        "cannot read file system information for {}: {}",
-                        display_name.quote(),
-                        e
-                    );
                     return 1;
                 }
             }

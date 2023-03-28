@@ -274,10 +274,10 @@ impl Chmoder {
                     )
                 ));
             }
-            if !self.recursive {
-                r = self.chmod_file(file).and(r);
-            } else {
+            if self.recursive {
                 r = self.walk_dir(file);
+            } else {
+                r = self.chmod_file(file).and(r);
             }
         }
         r
@@ -360,10 +360,10 @@ impl Chmoder {
                             naively_expected_new_mode = naive_mode;
                         }
                         Err(f) => {
-                            if !self.quiet {
-                                return Err(USimpleError::new(1, f));
-                            } else {
+                            if self.quiet {
                                 return Err(ExitCode::new(1));
+                            } else {
+                                return Err(USimpleError::new(1, f));
                             }
                         }
                     }
