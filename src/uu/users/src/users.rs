@@ -41,10 +41,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(AsRef::as_ref).collect())
         .unwrap_or_default();
 
-    let filename = if !files.is_empty() {
-        files[0]
-    } else {
+    let filename = if files.is_empty() {
         utmpx::DEFAULT_FILE.as_ref()
+    } else {
+        files[0]
     };
 
     let mut users = Utmpx::iter_all_records_from(filename)

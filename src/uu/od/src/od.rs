@@ -171,12 +171,7 @@ impl OdOptions {
             None => Radix::Octal,
             Some(s) => {
                 let st = s.as_bytes();
-                if st.len() != 1 {
-                    return Err(USimpleError::new(
-                        1,
-                        "Radix must be one of [d, o, n, x]".to_string(),
-                    ));
-                } else {
+                if st.len() == 1 {
                     let radix: char = *(st
                         .first()
                         .expect("byte string of length 1 lacks a 0th elem"))
@@ -193,6 +188,11 @@ impl OdOptions {
                             ))
                         }
                     }
+                } else {
+                    return Err(USimpleError::new(
+                        1,
+                        "Radix must be one of [d, o, n, x]".to_string(),
+                    ));
                 }
             }
         };

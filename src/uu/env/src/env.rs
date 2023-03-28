@@ -299,7 +299,10 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
         env::set_var(name, val);
     }
 
-    if !opts.program.is_empty() {
+    if opts.program.is_empty() {
+        // no program provided, so just dump all env vars to stdout
+        print_env(opts.null);
+    } else {
         // we need to execute a command
         let (prog, args) = build_command(&mut opts.program);
 
@@ -344,9 +347,6 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
             Err(_) => return Err(126.into()),
             Ok(_) => (),
         }
-    } else {
-        // no program provided, so just dump all env vars to stdout
-        print_env(opts.null);
     }
 
     Ok(())

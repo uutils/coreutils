@@ -197,30 +197,7 @@ impl SubParser {
             self.text_so_far.push(ch);
             match ch {
                 '-' | '*' | '0'..='9' => {
-                    if !self.past_decimal {
-                        if self.min_width_is_asterisk || self.specifiers_found {
-                            return Err(SubError::InvalidSpec(self.text_so_far.clone()).into());
-                        }
-                        if self.min_width_tmp.is_none() {
-                            self.min_width_tmp = Some(String::new());
-                        }
-                        match self.min_width_tmp.as_mut() {
-                            Some(x) => {
-                                if (ch == '-' || ch == '*') && !x.is_empty() {
-                                    return Err(
-                                        SubError::InvalidSpec(self.text_so_far.clone()).into()
-                                    );
-                                }
-                                if ch == '*' {
-                                    self.min_width_is_asterisk = true;
-                                }
-                                x.push(ch);
-                            }
-                            None => {
-                                panic!("should be unreachable");
-                            }
-                        }
-                    } else {
+                    if self.past_decimal {
                         // second field should never have a
                         // negative value
                         if self.second_field_is_asterisk || ch == '-' || self.specifiers_found {
@@ -245,13 +222,36 @@ impl SubParser {
                                 panic!("should be unreachable");
                             }
                         }
+                    } else {
+                        if self.min_width_is_asterisk || self.specifiers_found {
+                            return Err(SubError::InvalidSpec(self.text_so_far.clone()).into());
+                        }
+                        if self.min_width_tmp.is_none() {
+                            self.min_width_tmp = Some(String::new());
+                        }
+                        match self.min_width_tmp.as_mut() {
+                            Some(x) => {
+                                if (ch == '-' || ch == '*') && !x.is_empty() {
+                                    return Err(
+                                        SubError::InvalidSpec(self.text_so_far.clone()).into()
+                                    );
+                                }
+                                if ch == '*' {
+                                    self.min_width_is_asterisk = true;
+                                }
+                                x.push(ch);
+                            }
+                            None => {
+                                panic!("should be unreachable");
+                            }
+                        }
                     }
                 }
                 '.' => {
-                    if !self.past_decimal {
-                        self.past_decimal = true;
-                    } else {
+                    if self.past_decimal {
                         return Err(SubError::InvalidSpec(self.text_so_far.clone()).into());
+                    } else {
+                        self.past_decimal = true;
                     }
                 }
                 x if legal_fields.binary_search(&x).is_ok() => {

@@ -336,7 +336,9 @@ impl Iterator for UtmpxIter {
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
             let res = getutxent();
-            if !res.is_null() {
+            if res.is_null() {
+                None
+            } else {
                 // The data behind this pointer will be replaced by the next
                 // call to getutxent(), so we have to read it now.
                 // All the strings live inline in the struct as arrays, which
@@ -344,8 +346,6 @@ impl Iterator for UtmpxIter {
                 Some(Utmpx {
                     inner: ptr::read(res as *const _),
                 })
-            } else {
-                None
             }
         }
     }

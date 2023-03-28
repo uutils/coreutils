@@ -414,10 +414,10 @@ fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
 
     let result = unsafe { clock_settime(CLOCK_REALTIME, &timespec) };
 
-    if result != 0 {
-        Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
-    } else {
+    if result == 0 {
         Ok(())
+    } else {
+        Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
     }
 }
 

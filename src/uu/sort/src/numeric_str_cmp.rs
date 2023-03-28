@@ -198,15 +198,13 @@ pub fn human_numeric_str_cmp(
     let a_unit = get_unit(a.chars().next_back());
     let b_unit = get_unit(b.chars().next_back());
     let ordering = a_unit.cmp(&b_unit);
-    if ordering != Ordering::Equal {
-        if a_info.sign == Sign::Negative {
-            ordering.reverse()
-        } else {
-            ordering
-        }
-    } else {
+    if ordering == Ordering::Equal {
         // 3. Number
         numeric_str_cmp((a, a_info), (b, b_info))
+    } else if a_info.sign == Sign::Negative {
+        ordering.reverse()
+    } else {
+        ordering
     }
 }
 

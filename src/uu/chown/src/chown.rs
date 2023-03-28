@@ -198,7 +198,9 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     let user = args.next().unwrap_or("");
     let group = args.next().unwrap_or("");
 
-    let uid = if !user.is_empty() {
+    let uid = if user.is_empty() {
+        None
+    } else {
         Some(match Passwd::locate(user) {
             Ok(u) => u.uid, // We have been able to get the uid
             Err(_) =>
@@ -225,10 +227,10 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
                 }
             }
         })
-    } else {
-        None
     };
-    let gid = if !group.is_empty() {
+    let gid = if group.is_empty() {
+        None
+    } else {
         Some(match Group::locate(group) {
             Ok(g) => g.gid,
             Err(_) => match group.parse() {
@@ -241,8 +243,6 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
                 }
             },
         })
-    } else {
-        None
     };
 
     if user.chars().next().map(char::is_numeric).unwrap_or(false)

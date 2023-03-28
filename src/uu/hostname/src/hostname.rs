@@ -41,10 +41,10 @@ mod wsa {
             let mut data = std::mem::MaybeUninit::<WSADATA>::uninit();
             WSAStartup(0x0202, data.as_mut_ptr())
         };
-        if err != 0 {
-            Err(io::Error::from_raw_os_error(err))
-        } else {
+        if err == 0 {
             Ok(WsaHandle(()))
+        } else {
+            Err(io::Error::from_raw_os_error(err))
         }
     }
 
