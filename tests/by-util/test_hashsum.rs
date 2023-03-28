@@ -52,7 +52,7 @@ macro_rules! test_digest {
                 .no_stderr()
                 .stdout_is("input.txt: OK\n");
         }
-        
+
         #[test]
         fn test_zero() {
             let ts = TestScenario::new("hashsum");
