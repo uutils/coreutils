@@ -289,7 +289,7 @@ fn test_date_for_dir_as_file() {
     result.no_stdout();
     assert_eq!(
         result.stderr_str().trim(),
-        "date: expected file, got directory",
+        "date: expected file, got directory '/'",
     );
 }
 

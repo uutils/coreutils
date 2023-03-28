@@ -19,7 +19,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use uucore::display::Quotable;
-#[cfg(not(any(target_os = "macos", target_os = "redox")))]
+#[cfg(not(any(target_os = "redox")))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show};
@@ -223,7 +223,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 if path.is_dir() {
                     return Err(USimpleError::new(
                         2,
-                        format!("expected file, got directory"),
+                        format!("expected file, got directory {}", path.quote()),
                     ));
                 }
                 let file = File::open(path)
