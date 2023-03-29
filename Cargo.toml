@@ -322,7 +322,7 @@ terminal_size = "0.2.5"
 textwrap = { version="0.16.0", features=["terminal_size"] }
 thiserror = "1.0"
 time = { version="0.3" }
-unicode-segmentation = "1.9.0"
+unicode-segmentation = "1.10.1"
 unicode-width = "0.1.10"
 utf-8 = "0.7.6"
 walkdir = "2.2"
