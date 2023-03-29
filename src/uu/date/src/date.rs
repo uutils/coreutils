@@ -19,7 +19,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use uucore::display::Quotable;
-#[cfg(not(any(target_os = "macos", target_os = "redox")))]
+#[cfg(not(any(target_os = "redox")))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show};
@@ -219,19 +219,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let iter = std::iter::once(date);
                 Box::new(iter)
             }
-            DateSource::File(ref path) => match File::open(path) {
-                Ok(file) => {
-                    let lines = BufReader::new(file).lines();
-                    let iter = lines.filter_map(Result::ok).map(parse_date);
-                    Box::new(iter)
-                }
-                Err(_err) => {
+            DateSource::File(ref path) => {
+                if path.is_dir() {
                     return Err(USimpleError::new(
                         2,
-                        format!("{}: No such file or directory", path.display()),
+                        format!("expected file, got directory {}", path.quote()),
                     ));
                 }
-            },
+                let file = File::open(path)
+                    .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
+                let lines = BufReader::new(file).lines();
+                let iter = lines.map_while(Result::ok).map(parse_date);
+                Box::new(iter)
+            }
             DateSource::Now => {
                 let iter = std::iter::once(Ok(now));
                 Box::new(iter)
