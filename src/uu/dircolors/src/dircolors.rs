@@ -149,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Ok(f) => {
                 let fin = BufReader::new(f);
                 result = parse(
-                    fin.lines().filter_map(Result::ok),
+                    fin.lines().map_while(Result::ok),
                     &out_format,
                     &path.to_string_lossy(),
                 );
