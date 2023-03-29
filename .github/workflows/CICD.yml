@@ -145,8 +145,6 @@ jobs:
     - name: Install `cargo-fuzz`
       run: cargo install cargo-fuzz
     - name: Run fuzz_date for XX seconds
-      # TODO: fix https://github.com/uutils/coreutils/issues/4494
-      continue-on-error: true
       shell: bash
       run: |
         ## Run it
