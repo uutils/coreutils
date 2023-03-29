@@ -287,7 +287,7 @@ gcd = "2.2"
 glob = "0.3.1"
 half = "2.1"
 indicatif = "0.17"
-is-terminal = "0.4.5"
+is-terminal = "0.4.6"
 itertools = "0.10.5"
 libc = "0.2.139"
 lscolors = { version = "0.13.0", default-features=false, features = ["nu-ansi-term"] }
