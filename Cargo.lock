@@ -872,9 +872,9 @@ dependencies = [
 
 [[package]]
 name = "exacl"
-version = "0.10.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cfeb22a59deb24c3262c43ffcafd1eb807180f371f9fcc99098d181b5d639be"
+checksum = "129c7b60e19ea8393c47b2110f8e3cea800530fd962380ef110d1fef6591faee"
 dependencies = [
  "bitflags",
  "log",
