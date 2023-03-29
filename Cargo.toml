@@ -269,7 +269,7 @@ bstr = "1.4"
 bytecount = "0.6.3"
 byteorder = "1.4.3"
 chrono = { version="^0.4.24", default-features=false, features=["std", "alloc", "clock"]}
-clap = { version = "4.1", features = ["wrap_help", "cargo"] }
+clap = { version = "4.2", features = ["wrap_help", "cargo"] }
 clap_complete = "4.1"
 clap_mangen = "0.2"
 compare = "0.1.0"
