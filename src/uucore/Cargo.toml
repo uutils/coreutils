@@ -22,7 +22,7 @@ clap = { workspace=true }
 uucore_procs = { workspace=true }
 dns-lookup = { version="1.0.8", optional=true }
 dunce = "1.0.3"
-wild = "2.0"
+wild = "2.1"
 glob = "0.3.1"
 # * optional
 itertools = { version="0.10.5", optional=true }
