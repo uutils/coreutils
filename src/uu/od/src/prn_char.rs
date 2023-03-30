@@ -1,6 +1,6 @@
 use std::str::from_utf8;
 
-use crate::formatteriteminfo::*;
+use crate::formatteriteminfo::{FormatWriter, FormatterItemInfo};
 
 pub static FORMAT_ITEM_A: FormatterItemInfo = FormatterItemInfo {
     byte_size: 1,

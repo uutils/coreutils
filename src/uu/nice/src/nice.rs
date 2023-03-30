@@ -15,7 +15,7 @@ use std::ptr;
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::{
     error::{set_exit_code, UClapError, UResult, USimpleError, UUsageError},
-    format_usage, show_error,
+    format_usage, help_about, help_usage, show_error,
 };
 
 pub mod options {
@@ -23,12 +23,8 @@ pub mod options {
     pub static COMMAND: &str = "COMMAND";
 }
 
-const ABOUT: &str = "\
-    Run COMMAND with an adjusted niceness, which affects process scheduling. \
-    With no COMMAND, print the current niceness.  Niceness values range from at \
-    least -20 (most favorable to the process) to 19 (least favorable to the \
-    process).";
-const USAGE: &str = "{} [OPTIONS] [COMMAND [ARGS]]";
+const ABOUT: &str = help_about!("nice.md");
+const USAGE: &str = help_usage!("nice.md");
 
 fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
     if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {

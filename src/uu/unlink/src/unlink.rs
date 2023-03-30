@@ -16,8 +16,10 @@ use clap::{crate_version, Arg, Command};
 
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Unlink the file at FILE.";
+const ABOUT: &str = help_about!("unlink.md");
+const USAGE: &str = help_usage!("unlink.md");
 static OPT_PATH: &str = "FILE";
 
 #[uucore::main]
@@ -33,6 +35,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_PATH)

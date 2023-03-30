@@ -19,16 +19,10 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::num::ParseIntError;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
-const USAGE: &str = "\
-    {} [OPTION]... [INPUT]...
-    {} -G [OPTION]... [INPUT [OUTPUT]]";
-
-const ABOUT: &str = "\
-    Output a permuted index, including context, of the words in the input files. \n\n\
-    Mandatory arguments to long options are mandatory for short options too.\n\
-    With no FILE, or when FILE is -, read standard input. Default is '-F /'.";
+const USAGE: &str = help_usage!("ptx.md");
+const ABOUT: &str = help_about!("ptx.md");
 
 const REGEX_CHARCLASS: &str = "^-]\\";
 

@@ -9,7 +9,9 @@ use regex::Regex;
 #[cfg(not(windows))]
 use std::io::Write;
 
-use crate::common::util::*;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::common::util::expected_result;
+use crate::common::util::TestScenario;
 
 const SUB_DIR: &str = "subdir/deeper";
 const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";
@@ -82,10 +84,10 @@ fn _du_basics_subdir(s: &str) {
 ))]
 fn _du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "8\tsubdir/deeper\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "0\tsubdir/deeper\n");
+    } else {
+        assert_eq!(s, "8\tsubdir/deeper\n");
     }
 }
 
@@ -164,10 +166,10 @@ fn _du_soft_link(s: &str) {
 ))]
 fn _du_soft_link(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "16\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "16\tsubdir/links\n");
     }
 }
 
@@ -212,10 +214,10 @@ fn _du_hard_link(s: &str) {
 ))]
 fn _du_hard_link(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "16\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "16\tsubdir/links\n");
     }
 }
 
@@ -255,10 +257,10 @@ fn _du_d_flag(s: &str) {
 ))]
 fn _du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "28\t./subdir\n36\t.\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\t./subdir\n8\t.\n");
+    } else {
+        assert_eq!(s, "28\t./subdir\n36\t.\n");
     }
 }
 
@@ -303,10 +305,10 @@ fn _du_dereference(s: &str) {
 ))]
 fn _du_dereference(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "8\tsubdir/links/deeper_dir\n24\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "0\tsubdir/links/deeper_dir\n8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "8\tsubdir/links/deeper_dir\n24\tsubdir/links\n");
     }
 }
 
@@ -542,6 +544,15 @@ fn test_du_threshold() {
         .succeeds()
         .stdout_does_not_contain("links")
         .stdout_contains("deeper_dir");
+}
+
+#[test]
+fn test_du_invalid_threshold() {
+    let ts = TestScenario::new(util_name!());
+
+    let threshold = "-0";
+
+    ts.ucmd().arg(format!("--threshold={threshold}")).fails();
 }
 
 #[test]

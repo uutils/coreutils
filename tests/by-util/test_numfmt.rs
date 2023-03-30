@@ -1,6 +1,6 @@
 // spell-checker:ignore (paths) gnutest
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {

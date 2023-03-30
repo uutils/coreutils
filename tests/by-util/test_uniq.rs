@@ -1,7 +1,7 @@
 use std::io::Write;
 
 // spell-checker:ignore nabcd
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 static INPUT: &str = "sorted.txt";
 static OUTPUT: &str = "sorted-output.txt";

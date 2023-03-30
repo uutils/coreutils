@@ -29,8 +29,11 @@ use uucore::sum::{
     Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
 };
 use uucore::{crash, display::Quotable, show_warning};
+use uucore::{format_usage, help_about, help_usage};
 
 const NAME: &str = "hashsum";
+const ABOUT: &str = help_about!("hashsum.md");
+const USAGE: &str = help_usage!("hashsum.md");
 
 struct Options {
     algoname: &'static str,
@@ -44,6 +47,7 @@ struct Options {
     strict: bool,
     warn: bool,
     output_bits: usize,
+    zero: bool,
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -266,6 +270,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let quiet = matches.get_flag("quiet") || status;
     let strict = matches.get_flag("strict");
     let warn = matches.get_flag("warn") && !status;
+    let zero = matches.get_flag("zero");
 
     let opts = Options {
         algoname: name,
@@ -279,6 +284,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         quiet,
         strict,
         warn,
+        zero,
     };
 
     match matches.get_many::<OsString>("FILE") {
@@ -298,7 +304,8 @@ pub fn uu_app_common() -> Command {
     const TEXT_HELP: &str = "read in text mode (default)";
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about("Compute and check message digests.")
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
             Arg::new("binary")
@@ -353,6 +360,13 @@ pub fn uu_app_common() -> Command {
                 .short('w')
                 .long("warn")
                 .help("warn about improperly formatted checksum lines")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("zero")
+                .short('z')
+                .long("zero")
+                .help("end each output line with NUL, not newline")
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -609,6 +623,8 @@ where
                 println!("{} ({}) = {}", options.algoname, filename.display(), sum);
             } else if options.nonames {
                 println!("{sum}");
+            } else if options.zero {
+                print!("{} {}{}\0", sum, binary_marker, filename.display());
             } else {
                 println!("{} {}{}", sum, binary_marker, filename.display());
             }

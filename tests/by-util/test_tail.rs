@@ -9,8 +9,12 @@
 
 extern crate tail;
 
-use crate::common::random::*;
-use crate::common::util::*;
+use crate::common::random::{AlphanumericNewline, RandomString};
+#[cfg(unix)]
+use crate::common::util::expected_result;
+#[cfg(not(windows))]
+use crate::common::util::is_ci;
+use crate::common::util::TestScenario;
 use pretty_assertions::assert_eq;
 use rand::distributions::Alphanumeric;
 use rstest::rstest;
@@ -4459,7 +4463,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same
 }
 
 #[rstest]
-#[case::exponent_exceed_float_max("1.0e2048")]
+#[case::exponent_exceed_float_max("1.0e100000")]
 #[case::underscore_delimiter("1_000")]
 #[case::only_point(".")]
 #[case::space_in_primes("' '")]

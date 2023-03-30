@@ -90,8 +90,8 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
 
 /// interprets inputs when --traditional is on the command line
 ///
-/// normally returns CommandLineInputs::FileAndOffset, but if no offset is found,
-/// it returns CommandLineInputs::FileNames (also to differentiate from the offset == 0)
+/// normally returns `CommandLineInputs::FileAndOffset`, but if no offset is found,
+/// it returns `CommandLineInputs::FileNames` (also to differentiate from the offset == 0)
 pub fn parse_inputs_traditional(input_strings: &[&str]) -> Result<CommandLineInputs, String> {
     match input_strings.len() {
         0 => Ok(CommandLineInputs::FileNames(vec!["-".to_string()])),

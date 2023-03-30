@@ -3,7 +3,7 @@ use std::process::{ExitStatus, Stdio};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[cfg(unix)]
 fn check_termination(result: &ExitStatus) {

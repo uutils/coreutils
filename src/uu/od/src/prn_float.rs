@@ -3,7 +3,7 @@ use std::f32;
 use std::f64;
 use std::num::FpCategory;
 
-use crate::formatteriteminfo::*;
+use crate::formatteriteminfo::{FormatWriter, FormatterItemInfo};
 
 pub static FORMAT_ITEM_F16: FormatterItemInfo = FormatterItemInfo {
     byte_size: 2,

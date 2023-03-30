@@ -19,7 +19,7 @@ use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
-use uucore::{format_usage, show, show_error, show_if_err, uio_error};
+use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
 
 use libc::{getegid, geteuid};
 use std::error::Error;
@@ -144,9 +144,8 @@ impl Behavior {
     }
 }
 
-static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
- DIRECTORY, while setting permission modes and owner/group";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("install.md");
+const USAGE: &str = help_usage!("install.md");
 
 static OPT_COMPARE: &str = "compare";
 static OPT_DIRECTORY: &str = "directory";
@@ -400,13 +399,13 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         .unwrap_or("")
         .to_string();
 
-    let owner_id = if !owner.is_empty() {
+    let owner_id = if owner.is_empty() {
+        None
+    } else {
         match usr2uid(&owner) {
             Ok(u) => Some(u),
             Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
         }
-    } else {
-        None
     };
 
     let group = matches
@@ -415,13 +414,13 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         .unwrap_or("")
         .to_string();
 
-    let group_id = if !group.is_empty() {
+    let group_id = if group.is_empty() {
+        None
+    } else {
         match grp2gid(&group) {
             Ok(g) => Some(g),
             Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
         }
-    } else {
-        None
     };
 
     Ok(Behavior {

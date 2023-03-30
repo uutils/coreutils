@@ -19,6 +19,6 @@ of 1000).
 
 PATTERN allows some advanced exclusions. For example, the following syntaxes
 are supported:
-? will match only one character
-* will match zero or more characters
-{a,b} will match a or b
+`?` will match only one character
+`*` will match zero or more characters
+`{a,b}` will match a or b

@@ -1,11 +1,15 @@
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
+#[cfg(not(windows))]
+use crate::common::util::{UCommand, TESTS_BINARY};
+
+use regex::Regex;
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
-#[cfg(all(not(windows), not(target_os = "macos")))]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
 use std::process::{Command, Stdio};
 #[cfg(not(windows))]
 use std::thread::sleep;
@@ -261,7 +265,9 @@ fn test_final_stats_noxfer() {
 fn test_final_stats_unspec() {
     new_ucmd!()
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0.0 B/s\n")
+        .stderr_contains("0+0 records in\n0+0 records out\n0 bytes copied, ")
+        .stderr_matches(&Regex::new(r"\d\.\d+(e-\d\d)? s, ").unwrap())
+        .stderr_contains("0.0 B/s")
         .success();
 }
 
@@ -375,9 +381,11 @@ fn test_existing_file_truncated() {
 #[test]
 fn test_null_stats() {
     new_ucmd!()
-        .args(&["if=null.txt"])
+        .arg("if=null.txt")
         .run()
-        .stderr_only("0+0 records in\n0+0 records out\n0 bytes copied, 0.0 s, 0.0 B/s\n")
+        .stderr_contains("0+0 records in\n0+0 records out\n0 bytes copied, ")
+        .stderr_matches(&Regex::new(r"\d\.\d+(e-\d\d)? s, ").unwrap())
+        .stderr_contains("0.0 B/s")
         .success();
 }
 
@@ -1513,4 +1521,18 @@ fn test_skip_input_fifo() {
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
     assert_eq!(&output.stderr, b"1+0 records in\n1+0 records out\n");
+}
+
+/// Test for reading part of stdin from each of two child processes.
+#[cfg(all(not(windows), feature = "printf"))]
+#[test]
+fn test_multiple_processes_reading_stdin() {
+    // TODO Investigate if this is possible on Windows.
+    let printf = format!("{TESTS_BINARY} printf 'abcdef\n'");
+    let dd_skip = format!("{TESTS_BINARY} dd bs=1 skip=3 count=0");
+    let dd = format!("{TESTS_BINARY} dd");
+    UCommand::new()
+        .arg(format!("{printf} | ( {dd_skip} && {dd} ) 2> /dev/null"))
+        .succeeds()
+        .stdout_only("def\n");
 }

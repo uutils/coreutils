@@ -42,7 +42,7 @@ jobs:
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
         repo_default_branch="${{ github.event.repository.default_branch }}"
-        repo_GNU_ref="v9.1"
+        repo_GNU_ref="v9.2"
         repo_reference_branch="${{ github.event.repository.default_branch }}"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
@@ -203,7 +203,7 @@ jobs:
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
         # https://github.com/uutils/coreutils/issues/4294
         # https://github.com/uutils/coreutils/issues/4295
-        IGNORE_INTERMITTENT='tests/tail-2/inotify-dir-recreate tests/misc/timeout tests/rm/rm1'
+        IGNORE_INTERMITTENT='.github/workflows/ignore-intermittent.txt'
 
         mkdir -p ${{ steps.vars.outputs.path_reference }}
 
@@ -226,9 +226,17 @@ jobs:
           for LINE in ${REF_FAILING}
           do
             if ! grep -Fxq ${LINE}<<<"${NEW_FAILING}"; then
-              MSG="Congrats! The gnu test ${LINE} is no longer failing!"
-              echo "::warning ::$MSG"
-              echo $MSG >> ${COMMENT_LOG}
+              if ! grep ${LINE} ${IGNORE_INTERMITTENT}
+              then
+                MSG="Congrats! The gnu test ${LINE} is no longer failing!"
+                echo "::warning ::$MSG"
+                echo $MSG >> ${COMMENT_LOG}
+              else
+                MSG="Skipping an intermittent issue ${LINE}"
+                echo "::warning ::$MSG"
+                echo $MSG >> ${COMMENT_LOG}
+                echo ""
+              fi
             fi
           done
           for LINE in ${NEW_FAILING}
@@ -305,7 +313,7 @@ jobs:
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
-        ref: 'v9.1'
+        ref: 'v9.2'
         submodules: recursive
     - name: Install `rust` toolchain
       run: |

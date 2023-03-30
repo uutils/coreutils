@@ -1,7 +1,7 @@
 // spell-checker:ignore (words) nosuchgroup groupname
 
-use crate::common::util::*;
-use rust_users::*;
+use crate::common::util::TestScenario;
+use rust_users::get_effective_gid;
 
 #[test]
 fn test_invalid_option() {
@@ -196,7 +196,7 @@ fn test_missing_files() {
         .arg("groupname")
         .fails()
         .stderr_contains(
-            "error: The following required arguments were not provided:\n  <FILE>...\n",
+            "error: the following required arguments were not provided:\n  <FILE>...\n",
         );
 }
 

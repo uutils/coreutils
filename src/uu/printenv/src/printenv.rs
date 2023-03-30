@@ -9,10 +9,10 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::env;
-use uucore::{error::UResult, format_usage};
+use uucore::{error::UResult, format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Display the values of the specified environment VARIABLE(s), or (with no VARIABLE) display name and value pairs for them all.";
-const USAGE: &str = "{} [VARIABLE]... [OPTION]...";
+const ABOUT: &str = help_about!("printenv.md");
+const USAGE: &str = help_usage!("printenv.md");
 
 static OPT_NULL: &str = "null";
 

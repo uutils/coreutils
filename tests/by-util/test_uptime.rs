@@ -1,6 +1,6 @@
 extern crate regex;
 use self::regex::Regex;
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -11,7 +11,6 @@ fn test_invalid_arg() {
 fn test_uptime() {
     TestScenario::new(util_name!())
         .ucmd()
-        .keep_env()
         .succeeds()
         .stdout_contains("load average:")
         .stdout_contains(" up ");

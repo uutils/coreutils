@@ -185,14 +185,14 @@ pub fn tokens_to_ast(
 
         maybe_dump_rpn(&out_stack);
         let result = ast_from_rpn(&mut out_stack);
-        if !out_stack.is_empty() {
+        if out_stack.is_empty() {
+            maybe_dump_ast(&result);
+            result
+        } else {
             Err(
                 "syntax error (first RPN token does not represent the root of the expression AST)"
                     .to_owned(),
             )
-        } else {
-            maybe_dump_ast(&result);
-            result
         }
     })
 }

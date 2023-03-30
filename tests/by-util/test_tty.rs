@@ -1,6 +1,6 @@
 use std::fs::File;
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 #[cfg(not(windows))]

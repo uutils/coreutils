@@ -19,10 +19,10 @@ use time::macros::{format_description, offset, time};
 use time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 
-static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
-const USAGE: &str = "{} [OPTION]... [USER]";
+const ABOUT: &str = help_about!("touch.md");
+const USAGE: &str = help_usage!("touch.md");
 pub mod options {
     // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
     pub static SOURCES: &str = "sources";
@@ -589,8 +589,7 @@ mod tests {
         // We can trigger an error by not setting stdout to anything (will
         // fail with code 1)
         assert!(super::pathbuf_from_stdout()
-            .err()
-            .expect("pathbuf_from_stdout should have failed")
+            .expect_err("pathbuf_from_stdout should have failed")
             .to_string()
             .contains("GetFinalPathNameByHandleW failed with code 1"));
     }

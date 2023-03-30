@@ -1,5 +1,6 @@
-<!-- spell-checker:ignore ugoa -->
 # mkdir
+
+<!-- spell-checker:ignore ugoa -->
 
 ```
 mkdir [OPTION]... [USER]

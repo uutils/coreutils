@@ -1,5 +1,5 @@
 // spell-checker:ignore lmnop xlmnop
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::process::Stdio;
 
 #[test]
@@ -36,18 +36,12 @@ fn test_hex_rejects_sign_after_identifier() {
         .args(&["-0x-123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains(
-            "Found argument '-0' which wasn't expected, or isn't valid in this context",
-        )
-        .stderr_contains("For more information try '--help'");
+        .stderr_contains("unexpected argument '-0' found");
     new_ucmd!()
         .args(&["-0x+123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains(
-            "Found argument '-0' which wasn't expected, or isn't valid in this context",
-        )
-        .stderr_contains("For more information try '--help'");
+        .stderr_contains("unexpected argument '-0' found");
 }
 
 #[test]

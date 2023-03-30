@@ -55,17 +55,16 @@ use uucore::{
     parse_size::parse_size,
     version_cmp::version_cmp,
 };
-use uucore::{parse_glob, show, show_error, show_warning};
+use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
 
-const ABOUT: &str = r#"List directory contents.
-Ignore files and directories starting with a '.' by default"#;
-
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("ls.md");
+const AFTER_HELP: &str = help_section!("after help", "ls.md");
+const USAGE: &str = help_usage!("ls.md");
 
 pub mod options {
     pub mod format {
@@ -1621,10 +1620,7 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::AnyPath)
                 .value_parser(ValueParser::os_string()),
         )
-        .after_help(
-            "The TIME_STYLE argument can be full-iso, long-iso, iso, locale or +FORMAT. FORMAT is interpreted like in date. \
-            Also the TIME_STYLE environment variable sets the default style to use.",
-        )
+        .after_help(AFTER_HELP)
 }
 
 /// Represents a Path along with it's associated data.
@@ -2012,16 +2008,16 @@ fn enter_directory(
                     continue;
                 }
                 Ok(rd) => {
-                    if !listed_ancestors
+                    if listed_ancestors
                         .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
                     {
-                        out.flush()?;
-                        show!(LsError::AlreadyListedError(e.p_buf.clone()));
-                    } else {
                         writeln!(out, "\n{}:", e.p_buf.display())?;
                         enter_directory(e, rd, config, out, listed_ancestors)?;
                         listed_ancestors
                             .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
+                    } else {
+                        out.flush()?;
+                        show!(LsError::AlreadyListedError(e.p_buf.clone()));
                     }
                 }
             }
@@ -2871,10 +2867,10 @@ fn display_file_name(
     // to get correct alignment from later calls to`display_grid()`.
     if config.context {
         if let Some(pad_count) = prefix_context {
-            let security_context = if !matches!(config.format, Format::Commas) {
-                pad_left(&path.security_context, pad_count)
-            } else {
+            let security_context = if matches!(config.format, Format::Commas) {
                 path.security_context.to_owned()
+            } else {
+                pad_left(&path.security_context, pad_count)
             };
             name = format!("{security_context} {name}");
             width += security_context.len() + 1;

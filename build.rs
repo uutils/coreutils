@@ -20,6 +20,8 @@ pub fn main() {
     for (key, val) in env::vars() {
         if val == "1" && key.starts_with(ENV_FEATURE_PREFIX) {
             let krate = key[ENV_FEATURE_PREFIX.len()..].to_lowercase();
+            // Allow this as we have a bunch of info in the comments
+            #[allow(clippy::match_same_arms)]
             match krate.as_ref() {
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" => continue, // common/standard feature names
                 "nightly" | "test_unimplemented" => continue, // crate-local custom features

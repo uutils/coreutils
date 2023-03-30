@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(not(windows))]

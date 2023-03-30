@@ -5,7 +5,7 @@ use clap::builder::ValueParser;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{display::Quotable, format_usage, help_about, help_usage, show_error, show_warning};
 
-use clap::{Arg, ArgAction, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
@@ -19,7 +19,6 @@ mod fts;
 
 use errors::*;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = help_about!("chcon.md");
 const USAGE: &str = help_usage!("chcon.md");
 
@@ -146,7 +145,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

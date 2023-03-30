@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use crate::common::util::*;
+use crate::common::util::{TestScenario, UCommand};
 
 #[test]
 fn test_invalid_arg() {

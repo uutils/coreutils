@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -52,7 +52,7 @@ fn test_link_one_argument() {
     let file = "test_link_argument";
     ucmd.args(&[file])
         .fails()
-        .stderr_contains("requires 2 values");
+        .stderr_contains("2 values required");
 }
 
 #[test]
@@ -65,5 +65,5 @@ fn test_link_three_arguments() {
     ];
     ucmd.args(&arguments[..])
         .fails()
-        .stderr_contains("requires 2 values");
+        .stderr_contains("2 values required");
 }

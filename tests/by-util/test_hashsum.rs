@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 // spell-checker:ignore checkfile, nonames, testf, ntestf
 macro_rules! get_hash(
     ($str:expr) => (
@@ -52,6 +52,14 @@ macro_rules! test_digest {
                 .no_stderr()
                 .stdout_is("input.txt: OK\n");
         }
+
+        #[test]
+        fn test_zero() {
+            let ts = TestScenario::new("hashsum");
+            assert_eq!(ts.fixtures.read(EXPECTED_FILE),
+                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--zero").arg("input.txt").succeeds().no_stderr().stdout_str()));
+        }
+
 
         #[cfg(windows)]
         #[test]
