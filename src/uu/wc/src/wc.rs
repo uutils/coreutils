@@ -9,6 +9,7 @@
 
 mod count_fast;
 mod countable;
+mod utf8;
 mod word_count;
 use clap::builder::ValueParser;
 use count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast};
