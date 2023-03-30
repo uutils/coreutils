@@ -328,7 +328,7 @@ utf-8 = "0.7.6"
 walkdir = "2.3"
 winapi-util = "0.1.5"
 windows-sys = { version="0.42.0", default-features=false }
-xattr = "0.2.3"
+xattr = "1.0.0"
 zip = { version = "0.6.4", default_features=false, features=["deflate"] }
 
 hex = "0.4.3"
