@@ -483,7 +483,7 @@ regex = { workspace=true }
 sha1 = { version="0.10", features=["std"] }
 tempfile = { workspace=true }
 time = { workspace=true, features=["local-offset"] }
-unindent = "0.1"
+unindent = "0.2"
 uucore = { workspace=true, features=["entries", "process", "signals"] }
 walkdir = { workspace=true }
 is-terminal = { workspace=true }
