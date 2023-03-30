@@ -952,9 +952,9 @@ dependencies = [
 
 [[package]]
 name = "fundu"
-version = "0.4.3"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46d94380e064d45b7067806001781761c861c9c4785bca7baf98361fa2149b32"
+checksum = "bd020eeb034c9fc682e8fe6b9a28e1c0eda92eeb347c38776c09a0b227cdf9e5"
 
 [[package]]
 name = "futures"
