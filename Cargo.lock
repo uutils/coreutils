@@ -2529,7 +2529,7 @@ dependencies = [
  "clap",
  "libc",
  "uucore",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -2585,7 +2585,7 @@ dependencies = [
  "clap",
  "glob",
  "uucore",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -2708,7 +2708,7 @@ dependencies = [
  "clap",
  "hostname",
  "uucore",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -3010,7 +3010,7 @@ dependencies = [
  "libc",
  "uucore",
  "walkdir",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -3155,7 +3155,7 @@ dependencies = [
  "libc",
  "nix",
  "uucore",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -3182,7 +3182,7 @@ dependencies = [
  "same-file",
  "uucore",
  "winapi-util",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -3222,7 +3222,7 @@ dependencies = [
  "filetime",
  "time",
  "uucore",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -3356,7 +3356,7 @@ dependencies = [
  "clap",
  "libc",
  "uucore",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -3399,7 +3399,7 @@ dependencies = [
  "walkdir",
  "wild",
  "winapi-util",
- "windows-sys 0.42.0",
+ "windows-sys 0.45.0",
  "z85",
 ]
 
