@@ -35,7 +35,7 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
-use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+use term_grid::{Alignment, Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
 #[cfg(any(
     target_os = "linux",
@@ -2878,6 +2878,7 @@ fn display_file_name(
     }
 
     Cell {
+        alignment: Alignment::Left,
         contents: name,
         width,
     }
