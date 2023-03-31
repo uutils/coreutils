@@ -19,6 +19,7 @@ use std::fs;
 use std::io;
 #[cfg(unix)]
 use std::os::unix;
+use std::os::unix::prelude::MetadataExt;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
@@ -258,10 +259,27 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
                 return Err(MvError::NoSuchFile(source.quote().to_string()).into());
             }
 
+            // Check if target and source are hard linked
+            let mut is_hard_link = false;
+
+            if target.symlink_metadata().is_ok() {
+                let source_inode = source.symlink_metadata().unwrap().ino();
+                let target_inode = target.symlink_metadata().unwrap().ino();
+
+                // Check for a hard link
+                if source_inode.eq(&target_inode) {
+                    is_hard_link = true;
+                }
+            }
+
             // GNU semantics are: if the source and target are the same, no move occurs and we print an error
-            if source.eq(target) {
+            if source.eq(target) || is_hard_link {
                 // Done to match GNU semantics for the dot file
-                if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
+                if source.eq(Path::new("."))
+                    || source.ends_with("/.")
+                    || source.is_file()
+                    || is_hard_link
+                {
                     return Err(MvError::SameFile(
                         source.quote().to_string(),
                         target.quote().to_string(),
