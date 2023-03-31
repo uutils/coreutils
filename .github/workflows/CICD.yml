@@ -572,15 +572,32 @@ jobs:
       shell: bash
       run: |
         ## Compute uutil release sizes
-        SIZE=$(du -s target/size-release/usr/local/bin/|awk '{print $1}')
-        SIZE_MULTI=$(du -s target/size-multi-release/usr/local/bin/|awk '{print $1}')
+        DATE=$(date --rfc-email)
+        find target/size-release/usr/local/bin -type f -printf '%f\0' | sort -z |
+          while IFS= read -r -d '' name; do
+            size=$(du -s target/size-release/usr/local/bin/$name | awk '{print $1}')
+            echo "\"$name\""
+            echo "$size"
+          done | \
+            jq -n \
+                --arg date "$DATE" \
+                --arg sha "$GITHUB_SHA" \
+                'reduce inputs as $name ({}; . + { ($name): input }) | { ($date): {sha: $sha, sizes: map_values(.)} }' > individual-size-result.json
+        SIZE=$(cat individual-size-result.json | jq '[.[] | .sizes | .[]] | reduce .[] as $num (0; . + $num)')
+        SIZE_MULTI=$(du -s target/size-multi-release/usr/local/bin/coreutils | awk '{print $1}')
         jq -n \
-              --arg date "$(date --rfc-email)" \
+              --arg date "$DATE" \
               --arg sha "$GITHUB_SHA" \
               --arg size "$SIZE" \
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
-    - uses: actions/upload-artifact@v3
+    - name: Upload the individual size result
+      uses: actions/upload-artifact@v3
+      with:
+        name: individual-size-result
+        path: individual-size-result.json
+    - name: Upload the size result
+      uses: actions/upload-artifact@v3
       with:
         name: size-result
         path: size-result.json
