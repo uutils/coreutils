@@ -897,6 +897,21 @@ fn test_mv_into_self_data() {
     assert!(at.file_exists(file2));
     assert!(!at.file_exists(file1));
 }
+
+#[test]
+fn test_mv_same_file_hard_link() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let origin = "test_mv_same_file_hard_link_origin";
+    let link = "test_mv_same_file_hard_link_link";
+
+    at.touch(origin);
+    at.hard_link(origin, link);
+
+    ucmd.arg(origin)
+        .arg(link)
+        .fails()
+        .stderr_is(format!("mv: '{origin}' and '{link}' are the same file\n",));
+}
 // Todo:
 
 // $ at.touch a b
