@@ -424,10 +424,12 @@ fn test_files0_from() {
     new_ucmd!()
         .args(&["--files0-from=files0_list.txt"])
         .run()
-        .stdout_is(
-            "  13  109  772 lorem_ipsum.txt\n  18  204 1115 moby_dick.txt\n   5   57  302 \
-             alice_in_wonderland.txt\n  36  370 2189 total\n",
-        );
+        .stdout_is(concat!(
+            "  13  109  772 lorem_ipsum.txt\n",
+            "  18  204 1115 moby_dick.txt\n",
+            "   5   57  302 alice_in_wonderland.txt\n",
+            "  36  370 2189 total\n",
+        ));
 }
 
 #[test]
@@ -436,7 +438,7 @@ fn test_files0_from_with_stdin() {
         .args(&["--files0-from=-"])
         .pipe_in("lorem_ipsum.txt")
         .run()
-        .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
+        .stdout_is("13 109 772 lorem_ipsum.txt\n");
 }
 
 #[test]
@@ -445,10 +447,12 @@ fn test_files0_from_with_stdin_in_file() {
         .args(&["--files0-from=files0_list_with_stdin.txt"])
         .pipe_in_fixture("alice_in_wonderland.txt")
         .run()
-        .stdout_is(
-            "     13     109     772 lorem_ipsum.txt\n     18     204    1115 moby_dick.txt\n      5      57     302 \
-             -\n     36     370    2189 total\n",
-        );
+        .stdout_is(concat!(
+            "     13     109     772 lorem_ipsum.txt\n",
+            "     18     204    1115 moby_dick.txt\n",
+            "      5      57     302 -\n",
+            "     36     370    2189 total\n",
+        ));
 }
 
 #[test]
