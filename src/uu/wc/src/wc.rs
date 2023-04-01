@@ -42,22 +42,35 @@ struct Settings {
     show_words: bool,
     show_max_line_length: bool,
     files0_from_stdin_mode: bool,
-    title_quoting_style: QuotingStyle,
     total_when: TotalWhen,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        // Defaults if none of -c, -m, -l, -w, nor -L are specified.
+        Self {
+            show_bytes: true,
+            show_chars: false,
+            show_lines: true,
+            show_words: true,
+            show_max_line_length: false,
+            files0_from_stdin_mode: false,
+            total_when: TotalWhen::default(),
+        }
+    }
 }
 
 impl Settings {
     fn new(matches: &ArgMatches) -> Self {
-        let title_quoting_style = QuotingStyle::Shell {
-            escape: true,
-            always_quote: false,
-            show_control: false,
-        };
-
         let files0_from_stdin_mode = match matches.get_one::<String>(options::FILES0_FROM) {
             Some(files_0_from) => files_0_from == STDIN_REPR,
             None => false,
         };
+
+        let total_when = matches
+            .get_one::<String>(options::TOTAL)
+            .map(Into::into)
+            .unwrap_or_default();
 
         let settings = Self {
             show_bytes: matches.get_flag(options::BYTES),
@@ -66,46 +79,38 @@ impl Settings {
             show_words: matches.get_flag(options::WORDS),
             show_max_line_length: matches.get_flag(options::MAX_LINE_LENGTH),
             files0_from_stdin_mode,
-            title_quoting_style,
-            total_when: matches.get_one::<String>(options::TOTAL).unwrap().into(),
+            total_when,
         };
 
-        if settings.show_bytes
-            || settings.show_chars
-            || settings.show_lines
-            || settings.show_words
-            || settings.show_max_line_length
-        {
-            return settings;
-        }
-
-        Self {
-            show_bytes: true,
-            show_chars: false,
-            show_lines: true,
-            show_words: true,
-            show_max_line_length: false,
-            files0_from_stdin_mode,
-            title_quoting_style: settings.title_quoting_style,
-            total_when: settings.total_when,
+        if settings.number_enabled() > 0 {
+            settings
+        } else {
+            Self {
+                files0_from_stdin_mode,
+                total_when,
+                ..Default::default()
+            }
         }
     }
 
     fn number_enabled(&self) -> u32 {
-        let mut result = 0;
-        result += self.show_bytes as u32;
-        result += self.show_chars as u32;
-        result += self.show_lines as u32;
-        result += self.show_max_line_length as u32;
-        result += self.show_words as u32;
-        result
+        [
+            self.show_bytes,
+            self.show_chars,
+            self.show_lines,
+            self.show_max_line_length,
+            self.show_words,
+        ]
+        .into_iter()
+        .map(Into::<u32>::into)
+        .sum()
     }
 }
 
 const ABOUT: &str = help_about!("wc.md");
 const USAGE: &str = help_usage!("wc.md");
 
-pub mod options {
+mod options {
     pub static BYTES: &str = "bytes";
     pub static CHAR: &str = "chars";
     pub static FILES0_FROM: &str = "files0-from";
@@ -117,6 +122,12 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 static STDIN_REPR: &str = "-";
+
+static QS_ESCAPE: &QuotingStyle = &QuotingStyle::Shell {
+    escape: true,
+    always_quote: false,
+    show_control: false,
+};
 
 enum StdinKind {
     /// Stdin specified on command-line with "-".
@@ -147,35 +158,34 @@ impl From<&OsStr> for Input {
 
 impl Input {
     /// Converts input to title that appears in stats.
-    fn to_title(&self, quoting_style: &QuotingStyle) -> Option<String> {
+    fn to_title(&self) -> Option<String> {
         match self {
-            Self::Path(path) => Some(escape_name(&path.clone().into_os_string(), quoting_style)),
-            Self::Stdin(StdinKind::Explicit) => {
-                Some(escape_name(OsStr::new(STDIN_REPR), quoting_style))
-            }
+            Self::Path(path) => Some(escape_name(path.as_os_str(), QS_ESCAPE)),
+            Self::Stdin(StdinKind::Explicit) => Some(STDIN_REPR.into()),
             Self::Stdin(StdinKind::Implicit) => None,
         }
     }
 
-    fn path_display(&self, quoting_style: &QuotingStyle) -> String {
+    fn path_display(&self) -> String {
         match self {
-            Self::Path(path) => escape_name(&path.clone().into_os_string(), quoting_style),
-            Self::Stdin(_) => escape_name(OsStr::new("standard input"), quoting_style),
+            Self::Path(path) => escape_name(OsStr::new(&path), QS_ESCAPE),
+            Self::Stdin(_) => escape_name(OsStr::new("standard input"), QS_ESCAPE),
         }
     }
 }
 
 /// When to show the "total" line
-#[derive(PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq)]
 enum TotalWhen {
+    #[default]
     Auto,
     Always,
     Only,
     Never,
 }
 
-impl From<&String> for TotalWhen {
-    fn from(s: &String) -> Self {
+impl<T: AsRef<str>> From<T> for TotalWhen {
+    fn from(s: T) -> Self {
         match s.as_ref() {
             "auto" => Self::Auto,
             "always" => Self::Always,
@@ -261,11 +271,11 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILES0_FROM)
                 .long(options::FILES0_FROM)
                 .value_name("F")
-                .help(
-                    "read input from the files specified by
-    NUL-terminated names in file F;
-    If F is - then read names from standard input",
-                )
+                .help(concat!(
+                    "read input from the files specified by\n",
+                    "  NUL-terminated names in file F;\n",
+                    "  If F is - then read names from standard input"
+                ))
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -286,10 +296,12 @@ pub fn uu_app() -> Command {
             Arg::new(options::TOTAL)
                 .long(options::TOTAL)
                 .value_parser(["auto", "always", "only", "never"])
-                .default_value("auto")
-                .hide_default_value(true)
                 .value_name("WHEN")
-                .help("when to print a line with total counts"),
+                .hide_possible_values(true)
+                .help(concat!(
+                    "when to print a line with total counts;\n",
+                    "  WHEN can be: auto, always, only, never"
+                )),
         )
         .arg(
             Arg::new(options::WORDS)
@@ -627,28 +639,20 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
             CountResult::Interrupted(word_count, error) => {
                 show!(USimpleError::new(
                     1,
-                    format!(
-                        "{}: {}",
-                        input.path_display(&settings.title_quoting_style),
-                        error
-                    )
+                    format!("{}: {}", input.path_display(), error)
                 ));
                 word_count
             }
             CountResult::Failure(error) => {
                 show!(USimpleError::new(
                     1,
-                    format!(
-                        "{}: {}",
-                        input.path_display(&settings.title_quoting_style),
-                        error
-                    )
+                    format!("{}: {}", input.path_display(), error)
                 ));
                 continue;
             }
         };
         total_word_count += word_count;
-        let result = word_count.with_title(input.to_title(&settings.title_quoting_style));
+        let result = word_count.with_title(input.to_title());
 
         if are_stats_visible {
             if let Err(err) = print_stats(settings, &result, number_width) {
