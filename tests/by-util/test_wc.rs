@@ -375,7 +375,7 @@ fn test_read_from_directory_error() {
     #[cfg(not(windows))]
     const STDERR: &str = ".: Is a directory";
     #[cfg(windows)]
-    const STDERR: &str = ".: Access is denied";
+    const STDERR: &str = ".: Permission denied";
 
     #[cfg(not(windows))]
     const STDOUT: &str = "      0       0       0 .\n";
@@ -392,10 +392,7 @@ fn test_read_from_directory_error() {
 /// Test that getting counts from nonexistent file is an error.
 #[test]
 fn test_read_from_nonexistent_file() {
-    #[cfg(not(windows))]
     const MSG: &str = "bogusfile: No such file or directory";
-    #[cfg(windows)]
-    const MSG: &str = "bogusfile: The system cannot find the file specified";
     new_ucmd!()
         .args(&["bogusfile"])
         .fails()

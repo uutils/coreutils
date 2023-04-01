@@ -17,7 +17,7 @@ use countable::WordCountable;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
 use uucore::{format_usage, help_about, help_usage, show};
-use word_count::{TitledWordCount, WordCount};
+use word_count::WordCount;
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 
@@ -29,7 +29,7 @@ use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult};
 use uucore::quoting_style::{escape_name, QuotingStyle};
 
 /// The minimum character width for formatting counts when reading from stdin.
@@ -621,93 +621,72 @@ fn compute_number_width(inputs: &[Input], settings: &Settings) -> usize {
 fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
     let mut total_word_count = WordCount::default();
 
-    let (number_width, are_stats_visible, total_row_title) =
-        if settings.total_when == TotalWhen::Only {
-            (1, false, None)
-        } else {
-            let number_width = compute_number_width(inputs, settings);
-            let title = Some(String::from("total"));
-
-            (number_width, true, title)
-        };
-
+    let (number_width, are_stats_visible) = match settings.total_when {
+        TotalWhen::Only => (1, false),
+        _ => (compute_number_width(inputs, settings), true),
+    };
     let is_total_row_visible = settings.total_when.is_total_row_visible(inputs.len());
 
     for input in inputs {
         let word_count = match word_count_from_input(input, settings) {
             CountResult::Success(word_count) => word_count,
-            CountResult::Interrupted(word_count, error) => {
-                show!(USimpleError::new(
-                    1,
-                    format!("{}: {}", input.path_display(), error)
-                ));
+            CountResult::Interrupted(word_count, err) => {
+                show!(err.map_err_context(|| input.path_display()));
                 word_count
             }
-            CountResult::Failure(error) => {
-                show!(USimpleError::new(
-                    1,
-                    format!("{}: {}", input.path_display(), error)
-                ));
+            CountResult::Failure(err) => {
+                show!(err.map_err_context(|| input.path_display()));
                 continue;
             }
         };
         total_word_count += word_count;
-        let result = word_count.with_title(input.to_title());
-
         if are_stats_visible {
-            if let Err(err) = print_stats(settings, &result, number_width) {
-                show!(USimpleError::new(
-                    1,
-                    format!(
-                        "failed to print result for {}: {}",
-                        &result.title.unwrap_or_else(|| String::from("<stdin>")),
-                        err,
-                    ),
-                ));
+            let maybe_title = input.to_title();
+            let maybe_title_str = maybe_title.as_deref();
+            if let Err(err) = print_stats(settings, &word_count, maybe_title_str, number_width) {
+                let title = maybe_title_str.unwrap_or("<stdin>");
+                show!(err.map_err_context(|| format!("failed to print result for {title}")));
             }
         }
     }
 
     if is_total_row_visible {
-        let total_result = total_word_count.with_title(total_row_title);
-        if let Err(err) = print_stats(settings, &total_result, number_width) {
-            show!(USimpleError::new(
-                1,
-                format!("failed to print total: {err}")
-            ));
+        let title = are_stats_visible.then_some("total");
+        if let Err(err) = print_stats(settings, &total_word_count, title, number_width) {
+            show!(err.map_err_context(|| "failed to print total".into()));
         }
     }
 
-    // Although this appears to be returning `Ok`, the exit code may
-    // have been set to a non-zero value by a call to `show!()` above.
+    // Although this appears to be returning `Ok`, the exit code may have been set to a non-zero
+    // value by a call to `record_error!()` above.
     Ok(())
 }
 
 fn print_stats(
     settings: &Settings,
-    result: &TitledWordCount,
+    result: &WordCount,
+    title: Option<&str>,
     number_width: usize,
 ) -> io::Result<()> {
-    let mut columns = Vec::new();
+    let mut stdout = io::stdout().lock();
 
-    if settings.show_lines {
-        columns.push(format!("{:1$}", result.count.lines, number_width));
-    }
-    if settings.show_words {
-        columns.push(format!("{:1$}", result.count.words, number_width));
-    }
-    if settings.show_chars {
-        columns.push(format!("{:1$}", result.count.chars, number_width));
-    }
-    if settings.show_bytes {
-        columns.push(format!("{:1$}", result.count.bytes, number_width));
-    }
-    if settings.show_max_line_length {
-        columns.push(format!("{:1$}", result.count.max_line_length, number_width));
-    }
-    if let Some(title) = &result.title {
-        columns.push(title.clone());
+    let maybe_cols = [
+        (settings.show_lines, result.lines),
+        (settings.show_words, result.words),
+        (settings.show_chars, result.chars),
+        (settings.show_bytes, result.bytes),
+        (settings.show_max_line_length, result.max_line_length),
+    ];
+
+    let mut space = "";
+    for (_, num) in maybe_cols.iter().filter(|(show, _)| *show) {
+        write!(stdout, "{space}{num:number_width$}")?;
+        space = " ";
     }
 
-    writeln!(io::stdout().lock(), "{}", columns.join(" "))
+    if let Some(title) = title {
+        writeln!(stdout, "{space}{title}")
+    } else {
+        writeln!(stdout)
+    }
 }
