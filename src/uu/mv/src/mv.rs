@@ -17,11 +17,10 @@ use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io;
-#[cfg(unix)]
-use std::os::unix;
-use std::os::unix::prelude::MetadataExt;
 #[cfg(windows)]
 use std::os::windows;
+#[cfg(unix)]
+use std::os::{unix, unix::prelude::MetadataExt};
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
@@ -262,13 +261,20 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
             // Check if target and source are hard linked
             let mut is_hard_link = false;
 
-            if target.symlink_metadata().is_ok() {
-                let source_inode = source.symlink_metadata().unwrap().ino();
-                let target_inode = target.symlink_metadata().unwrap().ino();
-
-                // Check for a hard link
-                if source_inode.eq(&target_inode) {
-                    is_hard_link = true;
+            if let Ok(target_metadata) = target.symlink_metadata() {
+                // Hard links are not allowed for directories
+                if !target_metadata.is_dir() {
+                    let target_inode = target_metadata.ino();
+                    let source_inode = match source.symlink_metadata() {
+                        Ok(metadata) => metadata.ino(),
+                        Err(_) => {
+                            return Err(MvError::NoSuchFile(source.quote().to_string()).into())
+                        }
+                    };
+                    // Check for a hard link
+                    if source_inode.eq(&target_inode) {
+                        is_hard_link = true;
+                    }
                 }
             }
 
