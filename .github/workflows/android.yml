@@ -13,7 +13,7 @@ concurrency:
 jobs:
   test_android:
     name: Test builds
-    runs-on: macos-latest
+    runs-on: ubuntu-latest-4-cores
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -26,6 +26,12 @@ jobs:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
+    # See https://github.blog/changelog/2023-02-23-hardware-accelerated-android-virtualization-on-actions-windows-and-linux-larger-hosted-runners/
+    - name: Enable KVM group perms
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
     - uses: actions/checkout@v3
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
@@ -38,7 +44,7 @@ jobs:
           ~/.android/avd/*
           ~/.android/avd/*/snapshots/*
           ~/.android/adb*
-        key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
+        key: avd-${{ runner.os }}-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
     - name: Create and cache emulator image
       if: steps.avd-cache.outputs.cache-hit != 'true'
       uses: reactivecircus/android-emulator-runner@v2
