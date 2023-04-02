@@ -1,6 +1,6 @@
 [package]
 name = "uu_shuf"
-version = "0.0.17"
+version = "0.0.18"
 authors = ["uutils developers"]
 license = "MIT"
 description = "shuf ~ (uutils) display random permutations of input lines"
