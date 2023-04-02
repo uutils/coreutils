@@ -4,4 +4,4 @@
 pinky [OPTION]... [USER]...
 ```
 
-Lightweight finger
+Displays brief user information on Unix-based systems
