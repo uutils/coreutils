@@ -20,10 +20,10 @@ use std::os::unix::fs::MetadataExt;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::PathBuf;
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Lightweight finger";
-const USAGE: &str = "{} [OPTION]... [USER]...";
+const ABOUT: &str = help_about!("pinky.md");
+const USAGE: &str = help_usage!("pinky.md");
 
 mod options {
     pub const LONG_FORMAT: &str = "long_format";
