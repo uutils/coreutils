@@ -22,7 +22,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::PathBuf;
 use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = help_about!("pinky.md");
+const ABOUT: &str = help_about!("pinky.md");
 const USAGE: &str = help_usage!("pinky.md");
 
 mod options {
