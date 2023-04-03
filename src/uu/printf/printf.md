@@ -163,11 +163,11 @@ All string fields have a 'max width' parameter
 the escaped literal list above, and translate them to literal characters.
 e.g. \\n will be transformed into a newline character.
 
-      One special rule about %b mode is that octal literals are interpreted differently
-      In arguments passed by %b, pass octal-interpreted literals must be in the form of \\0NNN
-      instead of \\NNN. (Although, for legacy reasons, octal literals in the form of \\NNN will
-      still be interpreted and not throw a warning, you will have problems if you use this for a
-      literal whose code begins with zero, as it will be viewed as in \\0NNN form.)
+    One special rule about %b mode is that octal literals are interpreted differently
+    In arguments passed by %b, pass octal-interpreted literals must be in the form of \\0NNN
+    instead of \\NNN. (Although, for legacy reasons, octal literals in the form of \\NNN will
+    still be interpreted and not throw a warning, you will have problems if you use this for a
+    literal whose code begins with zero, as it will be viewed as in \\0NNN form.)
 
 CHAR SUBSTITUTIONS
 The character field does not have a secondary parameter.
@@ -214,9 +214,9 @@ estimated or adjusted beyond input values.
 behaves differently from %f and %E, please see posix printf spec for full details,
 some examples of different behavior:
 
-          Sci Note has 6 significant digits by default
-          Trailing zeroes are removed
-          Instead of being truncated, digit after last is rounded
+    Sci Note has 6 significant digits by default
+    Trailing zeroes are removed
+    Instead of being truncated, digit after last is rounded
 
 Like other behavior in this utility, the design choices of floating point
 behavior in this utility is selected to reproduce in exact
