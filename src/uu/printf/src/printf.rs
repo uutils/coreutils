@@ -4,8 +4,8 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::error::{UResult, UUsageError};
-use uucore::{format_usage, help_about, help_usage, help_section};
 use uucore::memo::printf;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
