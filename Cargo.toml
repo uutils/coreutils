@@ -289,7 +289,7 @@ half = "2.2"
 indicatif = "0.17"
 is-terminal = "0.4.6"
 itertools = "0.10.5"
-libc = "0.2.140"
+libc = "0.2.141"
 lscolors = { version = "0.13.0", default-features=false, features = ["nu-ansi-term"] }
 memchr = "2"
 nix = { version="0.26", default-features=false }
