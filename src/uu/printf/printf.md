@@ -16,7 +16,7 @@ prints format string at least once, repeating as long as there are remaining arg
 output prints escaped literals in the format string as character literals
 output replaces anonymous fields with the next unused argument, formatted according to the field.
 
-Prints the , replacing escaped character sequences with character literals
+Prints the `,` replacing escaped character sequences with character literals
 and substitution field sequences with passed arguments
 
 literally, with the exception of the below
