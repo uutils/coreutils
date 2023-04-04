@@ -1,3 +1,5 @@
+<!-- spell-checker:ignore formatstring templating parameterizing -->
+
 # printf
 
 ```
