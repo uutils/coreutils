@@ -79,7 +79,7 @@ Fields
             output below that width is padded with leading zeroes
 
 * `%f` or `%F`: decimal floating point value
-* `%e or %E`: scientific notation floating point value
+* `%e` or `%E`: scientific notation floating point value
 * `%g or %G`: shorter of specially interpreted decimal or SciNote floating point value.
             second parameter is
               -max places after decimal point for floating point output
