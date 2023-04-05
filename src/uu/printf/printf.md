@@ -80,7 +80,7 @@ Fields
 
 * `%f` or `%F`: decimal floating point value
 * `%e` or `%E`: scientific notation floating point value
-* `%g or %G`: shorter of specially interpreted decimal or SciNote floating point value.
+* `%g` or `%G`: shorter of specially interpreted decimal or SciNote floating point value.
             second parameter is
               -max places after decimal point for floating point output
               -max number of significant digits for scientific notation output
