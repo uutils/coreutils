@@ -1,4 +1,3 @@
-// This file is part of the uutils coreutils package.
 //
 // (c) Orvar Segerström <orvarsegerstrom@gmail.com>
 // (c) Sokovikov Evgeniy  <skv-headless@yandex.ru>
@@ -17,10 +16,10 @@ use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io;
-#[cfg(windows)]
-use std::os::windows;
 #[cfg(unix)]
 use std::os::{unix, unix::prelude::MetadataExt};
+#[cfg(windows)]
+use std::os::{windows, windows::fs::MetadataExt};
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
@@ -261,19 +260,21 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
             // Check if target and source are hard linked
             let mut is_hard_link = false;
 
-            if let Ok(target_metadata) = target.symlink_metadata() {
+            if let Ok(target_meta) = fs::symlink_metadata(target) {
                 // Hard links are not allowed for directories
-                if !target_metadata.is_dir() {
-                    let target_inode = target_metadata.ino();
-                    let source_inode = match source.symlink_metadata() {
-                        Ok(metadata) => metadata.ino(),
-                        Err(_) => {
-                            return Err(MvError::NoSuchFile(source.quote().to_string()).into())
-                        }
-                    };
+                if !target_meta.is_dir() {
+                    let source_meta = fs::symlink_metadata(source)
+                        .map_err(|_| MvError::NoSuchFile(source.quote().to_string()))?;
                     // Check for a hard link
-                    if source_inode.eq(&target_inode) {
-                        is_hard_link = true;
+                    #[cfg(unix)]
+                    {
+                        is_hard_link = source_meta.ino() == target_meta.ino();
+                    }
+                    #[cfg(windows)]
+                    {
+                        let source_id = source_meta.file_index();
+                        let target_id = target_meta.file_index();
+                        is_hard_link = source_id == target_id;
                     }
                 }
             }
@@ -444,7 +445,7 @@ fn rename(
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
-                    return Err(io::Error::new(io::ErrorKind::Other, ""));
+                    return Ok(());
                 }
             }
             OverwriteMode::Force => {}
