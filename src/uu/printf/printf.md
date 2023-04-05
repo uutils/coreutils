@@ -187,7 +187,7 @@ All integer fields have a 'pad with zero' parameter
 `%.4i` means an integer which if it is less than 4 digits in length,
 is padded with leading zeros until it is 4 digits in length.
 
-* `%d or %i`: 64-bit integer
+* `%d` or `%i`: 64-bit integer
 
 * `%u`: 64-bit unsigned integer
 
