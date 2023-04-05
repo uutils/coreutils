@@ -71,7 +71,7 @@ Fields
 
 * `%c`: char no second parameter
 
-* `%i or %d`: 64-bit integer
+* `%i` or `%d`: 64-bit integer
 * `%u`:       64 bit unsigned integer
 * `%x or %X`: 64-bit unsigned integer as hex
 * `%o`:       64-bit unsigned integer as octal
