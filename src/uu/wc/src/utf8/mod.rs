@@ -1,3 +1,4 @@
+// spell-checker:ignore Sapin
 mod read;
 
 pub use read::{BufReadDecoder, BufReadDecoderError};
