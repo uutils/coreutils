@@ -117,9 +117,9 @@ defaults can be found in the full substitution help below
 
 special prefixes to numeric arguments
 
-* `0 (e.g. 010)`:    interpret argument as octal (integer output fields only)
-* `0x (e.g. 0xABC)`: interpret argument as hex (numeric output fields only)
-* `\' (e.g. \'a)`:   interpret argument as a character constant
+* `0`:  (e.g. 010)   interpret argument as octal (integer output fields only)
+* `0x`: (e.g. 0xABC) interpret argument as hex (numeric output fields only)
+* `\'`: (e.g. \'a)   interpret argument as a character constant
 
 #### HOW TO USE SUBSTITUTIONS
 
