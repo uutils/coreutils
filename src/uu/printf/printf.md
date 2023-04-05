@@ -131,7 +131,10 @@ printf 'the letter %X comes before the letter %X' 10 11
 ```
 
 will print
-'the letter A comes before the letter B'
+
+```
+the letter A comes before the letter B
+```
 
 because the substitution field `%X` means
 'take an integer argument and write it as a hexadecimal number'
@@ -144,10 +147,13 @@ printf 'it is %i F in %s \n' 22 Portland 25 Boston 27 New York
 ```
 
 will print
-'it is 22 F in Portland
+
+```
+it is 22 F in Portland
 it is 25 F in Boston
 it is 27 F in Boston
-'
+```
+
 If a format string is printed but there are less arguments remaining
 than there are substitution fields, substitution fields without
 an argument will default to empty strings, or for numeric fields
