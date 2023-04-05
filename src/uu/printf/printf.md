@@ -133,7 +133,7 @@ printf 'the letter %X comes before the letter %X' 10 11
 will print
 'the letter A comes before the letter B'
 
-because the substitution field %X means
+because the substitution field `%X` means
 'take an integer argument and write it as a hexadecimal number'
 
 Passing more arguments than are in the format string will cause the format string to be
