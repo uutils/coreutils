@@ -214,7 +214,7 @@ higher, you can expect variation in output between GNU coreutils printf and this
       default. There is not past-double behavior parity with Coreutils printf, values are not
       estimated or adjusted beyond input values.
 
-* `%e or %E`: floating point value presented in scientific notation
+* `%e` or `%E`: floating point value presented in scientific notation
             7 significant digits by default
             `%E` means use to use uppercase E for the mantissa.
 
