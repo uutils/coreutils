@@ -218,7 +218,7 @@ higher, you can expect variation in output between GNU coreutils printf and this
             7 significant digits by default
             `%E` means use to use uppercase E for the mantissa.
 
-* `%g or %G`: floating point value presented in the shortest of decimal and scientific notation
+* `%g` or `%G`: floating point value presented in the shortest of decimal and scientific notation
             behaves differently from `%f` and `%E`, please see posix printf spec for full details,
             some examples of different behavior:
             Sci Note has 6 significant digits by default
