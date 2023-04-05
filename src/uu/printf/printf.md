@@ -73,7 +73,7 @@ Fields
 
 * `%i` or `%d`: 64-bit integer
 * `%u`:       64 bit unsigned integer
-* `%x or %X`: 64-bit unsigned integer as hex
+* `%x` or `%X`: 64-bit unsigned integer as hex
 * `%o`:       64-bit unsigned integer as octal
             second parameter is min-width, integer
             output below that width is padded with leading zeroes
