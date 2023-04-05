@@ -191,7 +191,7 @@ is padded with leading zeros until it is 4 digits in length.
 
 * `%u`: 64-bit unsigned integer
 
-* `%x or %X`: 64-bit unsigned integer printed in Hexadecimal (base 16)
+* `%x` or `%X`: 64-bit unsigned integer printed in Hexadecimal (base 16)
             `%X` instead of `%x` means to use uppercase letters for 'a' through 'f'
 
 * `%o`: 64-bit unsigned integer printed in octal (base 8)
