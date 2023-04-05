@@ -221,3 +221,13 @@ fn test_helper(file_name: &str, term: &str) {
         .run()
         .stdout_is_fixture(format!("{file_name}.sh.expected"));
 }
+
+#[test]
+fn test_dircolors_for_dir_as_file() {
+    let result = new_ucmd!().args(&["-c", "/"]).fails();
+    result.no_stdout();
+    assert_eq!(
+        result.stderr_str().trim(),
+        "dircolors: expected file, got directory '/'",
+    );
+}
