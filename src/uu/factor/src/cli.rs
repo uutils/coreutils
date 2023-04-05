@@ -27,7 +27,28 @@ const ABOUT: &str = help_about!("factor.md");
 const USAGE: &str = help_usage!("factor.md");
 
 mod options {
+    pub static EXPONENTS: &str = "exponents";
+    pub static HELP: &str = "help";
     pub static NUMBER: &str = "NUMBER";
+}
+
+mod exponent_options {
+
+    pub static mut PRINT_EXPONENTS: bool = false;
+
+    // Safety
+    //
+    // This function contains unsafe code that modifies the static mutable variable
+    // PRINT_EXPONENTS.
+    // This function is called ones inside uumain if the -h or --exponents flag
+    // is found.
+    // If print_exponents() is called and PRINT_EXPONENTS is true then the p^e
+    // output format will be used.
+    pub fn print_exponents() {
+        unsafe {
+            PRINT_EXPONENTS = true;
+        }
+    }
 }
 
 fn print_factors_str(
@@ -50,6 +71,11 @@ fn print_factors_str(
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
+
+    if matches.get_flag(options::EXPONENTS) {
+        exponent_options::print_exponents();
+    };
+
     let stdout = stdout();
     // We use a smaller buffer here to pass a gnu test. 4KiB appears to be the default pipe size for bash.
     let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
@@ -86,5 +112,19 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .disable_help_flag(true)
         .arg(Arg::new(options::NUMBER).action(ArgAction::Append))
+        .arg(
+            Arg::new(options::EXPONENTS)
+                .short('h')
+                .long(options::EXPONENTS)
+                .help("Print factors in the form p^e")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::HELP)
+                .long(options::HELP)
+                .help("Print help information.")
+                .action(ArgAction::Help),
+        )
 }

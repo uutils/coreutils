@@ -9,6 +9,7 @@ use smallvec::SmallVec;
 use std::cell::RefCell;
 use std::fmt;
 
+use crate::exponent_options::PRINT_EXPONENTS;
 use crate::numeric::{Arithmetic, Montgomery};
 use crate::{miller_rabin, rho, table};
 
@@ -98,8 +99,17 @@ impl fmt::Display for Factors {
         v.sort_unstable();
 
         for (p, exp) in v.iter() {
-            for _ in 0..*exp {
-                write!(f, " {p}")?;
+            // Safety
+            //
+            // Using PRINT_EXPONENTS here is safe because it is only ever set to
+            // true in the uumain function, and the uumain function is the only
+            // function that calls this function.
+            if unsafe { PRINT_EXPONENTS } && *exp > 1 {
+                write!(f, " {p}^{exp}")?;
+            } else {
+                for _ in 0..*exp {
+                    write!(f, " {p}")?;
+                }
             }
         }
 
