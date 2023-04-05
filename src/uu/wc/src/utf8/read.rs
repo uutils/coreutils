@@ -1,3 +1,4 @@
+// spell-checker:ignore bytestream
 use super::*;
 use std::error::Error;
 use std::fmt;
