@@ -15,12 +15,9 @@ use std::time::{Duration, SystemTime};
 #[path = "../../src/uu/factor/sieve.rs"]
 mod sieve;
 
-extern crate conv;
-extern crate rand;
-
-use self::rand::distributions::{Distribution, Uniform};
-use self::rand::{rngs::SmallRng, Rng, SeedableRng};
 use self::sieve::Sieve;
+use rand::distributions::{Distribution, Uniform};
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 
 const NUM_PRIMES: usize = 10000;
 const NUM_TESTS: usize = 100;
@@ -81,7 +78,6 @@ fn test_parallel() {
 
 #[test]
 fn test_first_1000_integers() {
-    extern crate sha1;
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
 
