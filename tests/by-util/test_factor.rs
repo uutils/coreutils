@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (methods) hexdigest
 
-use crate::common::util::{AtPath, TestScenario};
+use crate::common::util::TestScenario;
 
 use std::time::{Duration, SystemTime};
 
@@ -33,6 +33,7 @@ fn test_invalid_arg() {
 #[test]
 #[cfg(feature = "sort")]
 fn test_parallel() {
+    use crate::common::util::AtPath;
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
     use std::{fs::OpenOptions, time::Duration};
@@ -117,7 +118,7 @@ fn test_cli_args() {
 
 #[test]
 fn test_random() {
-    use conv::prelude::*;
+    use conv::prelude::ValueFrom;
 
     let log_num_primes = f64::value_from(NUM_PRIMES).unwrap().log2().ceil();
     let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();
