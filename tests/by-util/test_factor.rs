@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (methods) hexdigest
 
-use crate::common::util::{AtPath, TestScenario};
+use crate::common::util::TestScenario;
 
 use std::time::{Duration, SystemTime};
 
@@ -33,6 +33,7 @@ fn test_invalid_arg() {
 #[test]
 #[cfg(feature = "sort")]
 fn test_parallel() {
+    use crate::common::util::AtPath;
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
     use std::{fs::OpenOptions, time::Duration};
