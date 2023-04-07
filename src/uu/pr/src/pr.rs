@@ -21,33 +21,11 @@ use time::OffsetDateTime;
 use quick_error::quick_error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
-const ABOUT: &str =
-    "Write content of given file or standard input to standard output with pagination filter";
-const AFTER_HELP: &str =
-    "    +PAGE\n            Begin output at page number page of the formatted input.
-    -COLUMN\n            Produce multi-column output. See --column
-
-The pr utility is a printing and pagination filter
-for text files.  When multiple input files are specified,
-each is read, formatted, and written to standard
-output.  By default, the input is separated
-into 66-line pages, each with
-
-o   A 5-line header with the page number, date,
-    time, and the pathname of the file.
-
-o   A 5-line trailer consisting of blank lines.
-
-If standard output is associated with a terminal,
-diagnostic messages are suppressed until the pr
-utility has completed processing.
-
-When multiple column output is specified, text columns
-are of equal width.  By default text columns
-are separated by at least one <blank>.  Input lines
-that do not fit into a text column are truncated.
-Lines are not truncated under single column output.";
+const ABOUT: &str = help_about!("pr.md");
+const USAGE: &str = help_usage!("pr.md");
+const AFTER_HELP: &str = help_section!("after help", "pr.md");
 const TAB: char = '\t';
 const LINES_PER_PAGE: usize = 66;
 const LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
@@ -195,6 +173,7 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .args_override_self(true)
         .disable_help_flag(true)

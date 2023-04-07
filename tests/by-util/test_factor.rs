@@ -8,19 +8,16 @@
 
 // spell-checker:ignore (methods) hexdigest
 
-use crate::common::util::{AtPath, TestScenario};
+use crate::common::util::TestScenario;
 
 use std::time::{Duration, SystemTime};
 
 #[path = "../../src/uu/factor/sieve.rs"]
 mod sieve;
 
-extern crate conv;
-extern crate rand;
-
-use self::rand::distributions::{Distribution, Uniform};
-use self::rand::{rngs::SmallRng, Rng, SeedableRng};
 use self::sieve::Sieve;
+use rand::distributions::{Distribution, Uniform};
+use rand::{rngs::SmallRng, Rng, SeedableRng};
 
 const NUM_PRIMES: usize = 10000;
 const NUM_TESTS: usize = 100;
@@ -33,6 +30,7 @@ fn test_invalid_arg() {
 #[test]
 #[cfg(feature = "sort")]
 fn test_parallel() {
+    use crate::common::util::AtPath;
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
     use std::{fs::OpenOptions, time::Duration};
@@ -80,7 +78,6 @@ fn test_parallel() {
 
 #[test]
 fn test_first_1000_integers() {
-    extern crate sha1;
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
 
@@ -117,7 +114,7 @@ fn test_cli_args() {
 
 #[test]
 fn test_random() {
-    use conv::prelude::*;
+    use conv::prelude::ValueFrom;
 
     let log_num_primes = f64::value_from(NUM_PRIMES).unwrap().log2().ceil();
     let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();

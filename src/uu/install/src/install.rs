@@ -399,13 +399,13 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         .unwrap_or("")
         .to_string();
 
-    let owner_id = if !owner.is_empty() {
+    let owner_id = if owner.is_empty() {
+        None
+    } else {
         match usr2uid(&owner) {
             Ok(u) => Some(u),
             Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
         }
-    } else {
-        None
     };
 
     let group = matches
@@ -414,13 +414,13 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         .unwrap_or("")
         .to_string();
 
-    let group_id = if !group.is_empty() {
+    let group_id = if group.is_empty() {
+        None
+    } else {
         match grp2gid(&group) {
             Ok(g) => Some(g),
             Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
         }
-    } else {
-        None
     };
 
     Ok(Behavior {

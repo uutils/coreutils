@@ -53,6 +53,14 @@ macro_rules! test_digest {
                 .stdout_is("input.txt: OK\n");
         }
 
+        #[test]
+        fn test_zero() {
+            let ts = TestScenario::new("hashsum");
+            assert_eq!(ts.fixtures.read(EXPECTED_FILE),
+                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("--zero").arg("input.txt").succeeds().no_stderr().stdout_str()));
+        }
+
+
         #[cfg(windows)]
         #[test]
         fn test_text_mode() {

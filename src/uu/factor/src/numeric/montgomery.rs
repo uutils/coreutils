@@ -82,10 +82,10 @@ impl<T: DoubleInt> Montgomery<T> {
         // (x + n*m) / R
         // in case of overflow, this is (2¹²⁸ + xnm)/2⁶⁴ - n = xnm/2⁶⁴ + (2⁶⁴ - n)
         let y = T::from_double_width(xnm >> t_bits)
-            + if !overflow {
-                T::zero()
-            } else {
+            + if overflow {
                 n.wrapping_neg()
+            } else {
+                T::zero()
             };
 
         if y >= *n {
@@ -132,10 +132,10 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
         let (r, overflow) = a.overflowing_add(&b);
 
         // In case of overflow, a+b = 2⁶⁴ + r = (2⁶⁴ - n) + r (working mod n)
-        let r = if !overflow {
-            r
-        } else {
+        let r = if overflow {
             r + self.n.wrapping_neg()
+        } else {
+            r
         };
 
         // Normalize to [0; n[
