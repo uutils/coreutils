@@ -251,14 +251,39 @@ fn test_touch_set_both_date_and_reference() {
     let ref_file = "test_touch_reference";
     let file = "test_touch_set_both_date_and_reference";
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501011234");
 
     at.touch(ref_file);
     set_file_times(&at, ref_file, start_of_year, start_of_year);
     assert!(at.file_exists(ref_file));
 
     ucmd.args(&["-d", "Thu Jan 01 12:34:00 2015", "-r", ref_file, file])
-        .fails();
+        .succeeds()
+        .no_stderr();
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, start_of_year);
+    assert_eq!(mtime, start_of_year);
+}
+
+#[test]
+fn test_touch_set_both_offset_date_and_reference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ref_file = "test_touch_reference";
+    let file = "test_touch_set_both_date_and_reference";
+
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501011234");
+    let five_days_later = str_to_filetime("%Y%m%d%H%M", "201501061234");
+
+    at.touch(ref_file);
+    set_file_times(&at, ref_file, start_of_year, start_of_year);
+    assert!(at.file_exists(ref_file));
+
+    ucmd.args(&["-d", "+5 days", "-r", ref_file, file])
+        .succeeds()
+        .no_stderr();
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, five_days_later);
+    assert_eq!(mtime, five_days_later);
 }
 
 #[test]
