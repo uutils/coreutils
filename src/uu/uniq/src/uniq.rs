@@ -446,8 +446,8 @@ pub fn uu_app() -> Command {
             // because then it would have a different behavior
             // from GNU
             ArgGroup::new(options::OBSOLETE_SKIP_FIELDS)
-            .multiple(false)
-            .args(OBSOLETE_SKIP_FIELDS_DIGITS)
+                .multiple(false)
+                .args(OBSOLETE_SKIP_FIELDS_DIGITS)
         )
         .arg(
             Arg::new(ARG_FILES)
