@@ -87,7 +87,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let mut seconds = offset.whole_seconds();
                 let mut nanos = offset.subsec_nanoseconds();
                 if nanos < 0 {
-                    nanos = 1_000_000_000 + nanos;
+                    nanos += 1_000_000_000;
                     seconds -= 1;
                 }
 
