@@ -77,19 +77,57 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ),
         )
     })?;
-    let (mut atime, mut mtime) =
-        if let Some(reference) = matches.get_one::<OsString>(options::sources::REFERENCE) {
-            stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?
-        } else {
-            let timestamp = if let Some(date) = matches.get_one::<String>(options::sources::DATE) {
-                parse_date(date)?
-            } else if let Some(current) = matches.get_one::<String>(options::sources::CURRENT) {
-                parse_timestamp(current)?
+    let (mut atime, mut mtime) = match (
+        matches.get_one::<OsString>(options::sources::REFERENCE),
+        matches.get_one::<String>(options::sources::DATE),
+    ) {
+        (Some(reference), Some(date)) => {
+            let (atime, mtime) = stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?;
+            if let Some(offset) = parse_relative_time(date) {
+                let mut seconds = offset.whole_seconds();
+                let mut nanos = offset.subsec_nanoseconds();
+                if nanos < 0 {
+                    nanos += 1_000_000_000;
+                    seconds -= 1;
+                }
+
+                let ref_atime_secs = atime.unix_seconds();
+                let ref_atime_nanos = atime.nanoseconds();
+                let atime = FileTime::from_unix_time(
+                    ref_atime_secs + seconds,
+                    ref_atime_nanos + nanos as u32,
+                );
+
+                let ref_mtime_secs = mtime.unix_seconds();
+                let ref_mtime_nanos = mtime.nanoseconds();
+                let mtime = FileTime::from_unix_time(
+                    ref_mtime_secs + seconds,
+                    ref_mtime_nanos + nanos as u32,
+                );
+
+                (atime, mtime)
             } else {
-                local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap())
-            };
+                let timestamp = parse_date(date)?;
+                (timestamp, timestamp)
+            }
+        }
+        (Some(reference), None) => {
+            stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?
+        }
+        (None, Some(date)) => {
+            let timestamp = parse_date(date)?;
             (timestamp, timestamp)
-        };
+        }
+        (None, None) => {
+            let timestamp =
+                if let Some(current) = matches.get_one::<String>(options::sources::CURRENT) {
+                    parse_timestamp(current)?
+                } else {
+                    local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap())
+                };
+            (timestamp, timestamp)
+        }
+    };
 
     for filename in files {
         // FIXME: find a way to avoid having to clone the path
@@ -202,7 +240,8 @@ pub fn uu_app() -> Command {
                 .long(options::sources::DATE)
                 .allow_hyphen_values(true)
                 .help("parse argument and use it instead of current time")
-                .value_name("STRING"),
+                .value_name("STRING")
+                .conflicts_with(options::sources::CURRENT),
         )
         .arg(
             Arg::new(options::MODIFICATION)
@@ -234,7 +273,8 @@ pub fn uu_app() -> Command {
                 .help("use this file's times instead of the current time")
                 .value_name("FILE")
                 .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .conflicts_with(options::sources::CURRENT),
         )
         .arg(
             Arg::new(options::TIME)
@@ -254,11 +294,15 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
-        .group(ArgGroup::new(options::SOURCES).args([
-            options::sources::CURRENT,
-            options::sources::DATE,
-            options::sources::REFERENCE,
-        ]))
+        .group(
+            ArgGroup::new(options::SOURCES)
+                .args([
+                    options::sources::CURRENT,
+                    options::sources::DATE,
+                    options::sources::REFERENCE,
+                ])
+                .multiple(true),
+        )
 }
 
 fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
@@ -384,33 +428,22 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         }
     }
 
-    // Relative day, like "today", "tomorrow", or "yesterday".
-    match s {
-        "now" | "today" => {
-            let now_local = time::OffsetDateTime::now_local().unwrap();
-            return Ok(local_dt_to_filetime(now_local));
-        }
-        "tomorrow" => {
-            let duration = time::Duration::days(1);
-            let now_local = time::OffsetDateTime::now_local().unwrap();
-            let diff = now_local.checked_add(duration).unwrap();
-            return Ok(local_dt_to_filetime(diff));
-        }
-        "yesterday" => {
-            let duration = time::Duration::days(1);
-            let now_local = time::OffsetDateTime::now_local().unwrap();
-            let diff = now_local.checked_sub(duration).unwrap();
-            return Ok(local_dt_to_filetime(diff));
-        }
-        _ => {}
+    if let Some(duration) = parse_relative_time(s) {
+        let now_local = time::OffsetDateTime::now_local().unwrap();
+        let diff = now_local.checked_add(duration).unwrap();
+        return Ok(local_dt_to_filetime(diff));
     }
 
+    Err(USimpleError::new(1, format!("Unable to parse date: {s}")))
+}
+
+fn parse_relative_time(s: &str) -> Option<Duration> {
     // Relative time, like "-1 hour" or "+3 days".
     //
     // TODO Add support for "year" and "month".
     // TODO Add support for times without spaces like "-1hour".
     let tokens: Vec<&str> = s.split_whitespace().collect();
-    let maybe_duration = match &tokens[..] {
+    match &tokens[..] {
         [num_str, "fortnight" | "fortnights"] => num_str
             .parse::<i64>()
             .ok()
@@ -430,15 +463,11 @@ fn parse_date(s: &str) -> UResult<FileTime> {
             num_str.parse::<i64>().ok().map(time::Duration::seconds)
         }
         ["second" | "seconds" | "sec" | "secs"] => Some(time::Duration::seconds(1)),
+        ["now" | "today"] => Some(time::Duration::ZERO),
+        ["yesterday"] => Some(time::Duration::days(-1)),
+        ["tomorrow"] => Some(time::Duration::days(1)),
         _ => None,
-    };
-    if let Some(duration) = maybe_duration {
-        let now_local = time::OffsetDateTime::now_local().unwrap();
-        let diff = now_local.checked_add(duration).unwrap();
-        return Ok(local_dt_to_filetime(diff));
     }
-
-    Err(USimpleError::new(1, format!("Unable to parse date: {s}")))
 }
 
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
