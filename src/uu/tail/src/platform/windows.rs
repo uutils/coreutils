@@ -19,9 +19,8 @@ pub struct ProcessChecker {
 }
 
 impl ProcessChecker {
-    pub fn new(process_id: self::Pid) -> Self {
-        #[allow(non_snake_case)]
-        let FALSE: BOOL = 0;
+    pub fn new(process_id: Pid) -> Self {
+        const FALSE: BOOL = 0;
         let h = unsafe { OpenProcess(PROCESS_SYNCHRONIZE, FALSE, process_id) };
         Self {
             dead: h == 0,
@@ -50,6 +49,6 @@ impl Drop for ProcessChecker {
     }
 }
 
-pub fn supports_pid_checks(_pid: self::Pid) -> bool {
+pub fn supports_pid_checks(_pid: Pid) -> bool {
     true
 }
