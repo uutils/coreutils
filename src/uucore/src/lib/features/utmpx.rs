@@ -227,7 +227,6 @@ impl Utmpx {
         let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
 
         if !hostname.is_empty() {
-            extern crate dns_lookup;
             use dns_lookup::{getaddrinfo, AddrInfoHints};
 
             const AI_CANONNAME: i32 = 0x2;

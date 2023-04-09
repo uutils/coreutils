@@ -1,7 +1,6 @@
 // Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
 // spell-checker:ignore backticks
 
-extern crate proc_macro;
 use std::{fs::File, io::Read, path::PathBuf};
 
 use proc_macro::{Literal, TokenStream, TokenTree};

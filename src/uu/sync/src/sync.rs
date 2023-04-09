@@ -7,8 +7,6 @@
 
 /* Last synced with: sync (GNU coreutils) 8.13 */
 
-extern crate libc;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::errno::Errno;
@@ -34,7 +32,6 @@ static ARG_FILES: &str = "files";
 
 #[cfg(unix)]
 mod platform {
-    use super::libc;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::fs::File;
     #[cfg(any(target_os = "linux", target_os = "android"))]
