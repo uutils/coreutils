@@ -121,7 +121,7 @@ fn test_du_invalid_size() {
 fn test_du_basics_bad_name() {
     new_ucmd!()
         .arg("bad_name")
-        .succeeds() // TODO: replace with ".fails()" once `du` is fixed
+        .fails()
         .stderr_only("du: bad_name: No such file or directory\n");
 }
 
