@@ -42,13 +42,10 @@ use std::ptr;
 use std::sync::{Mutex, MutexGuard};
 
 pub use self::ut::*;
-use libc::utmpx;
-// pub use libc::getutxid;
-// pub use libc::getutxline;
-// pub use libc::pututxline;
 pub use libc::endutxent;
 pub use libc::getutxent;
 pub use libc::setutxent;
+use libc::utmpx;
 #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "netbsd"))]
 pub use libc::utmpxname;
 
