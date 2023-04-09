@@ -6,7 +6,6 @@
 // spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty
 #[cfg(not(windows))]
 use regex::Regex;
-#[cfg(not(windows))]
 use std::io::Write;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -850,4 +849,28 @@ fn test_du_exclude_invalid_syntax() {
         .arg("azerty")
         .fails()
         .stderr_contains("du: Invalid exclude syntax");
+}
+
+#[test]
+fn test_du_symlink_fail() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.symlink_file("non-existing.txt", "target.txt");
+
+    ts.ucmd().arg("-L").arg("target.txt").fails().code_is(1);
+}
+
+#[test]
+fn test_du_symlink_multiple_fail() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.symlink_file("non-existing.txt", "target.txt");
+    let mut file1 = at.make_file("file1");
+    file1.write_all(b"azeaze").unwrap();
+
+    let result = ts.ucmd().arg("-L").arg("target.txt").arg("file1").fails();
+    assert_eq!(result.code(), 1);
+    result.stdout_contains("4\tfile1\n");
 }

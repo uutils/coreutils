@@ -33,7 +33,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
 use uucore::error::FromIo;
-use uucore::error::{UError, UResult};
+use uucore::error::{set_exit_code, UError, UResult};
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::{
@@ -655,6 +655,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 path_string.maybe_quote(),
                 "No such file or directory"
             );
+            set_exit_code(1);
         }
     }
 
