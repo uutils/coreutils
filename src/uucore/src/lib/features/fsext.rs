@@ -11,7 +11,6 @@
 
 // spell-checker:ignore DATETIME subsecond (arch) bitrig ; (fs) cifs smbfs
 
-extern crate time;
 use time::macros::format_description;
 use time::UtcOffset;
 
