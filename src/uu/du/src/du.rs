@@ -68,6 +68,7 @@ mod options {
     pub const TIME_STYLE: &str = "time-style";
     pub const ONE_FILE_SYSTEM: &str = "one-file-system";
     pub const DEREFERENCE: &str = "dereference";
+    pub const DEREFERENCE_ARGS: &str = "dereference-args";
     pub const INODES: &str = "inodes";
     pub const EXCLUDE: &str = "exclude";
     pub const EXCLUDE_FROM: &str = "exclude-from";
@@ -89,6 +90,7 @@ struct Options {
     separate_dirs: bool,
     one_file_system: bool,
     dereference: bool,
+    dereference_args: Vec<PathBuf>,
     inodes: bool,
     verbose: bool,
 }
@@ -113,7 +115,7 @@ struct Stat {
 
 impl Stat {
     fn new(path: PathBuf, options: &Options) -> Result<Self> {
-        let metadata = if options.dereference {
+        let metadata = if options.dereference || options.dereference_args.contains(&path) {
             fs::metadata(&path)?
         } else {
             fs::symlink_metadata(&path)?
@@ -505,17 +507,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         summarize,
     )?;
 
-    let options = Options {
-        all: matches.get_flag(options::ALL),
-        max_depth,
-        total: matches.get_flag(options::TOTAL),
-        separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
-        one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
-        dereference: matches.get_flag(options::DEREFERENCE),
-        inodes: matches.get_flag(options::INODES),
-        verbose: matches.get_flag(options::VERBOSE),
-    };
-
     let files = match matches.get_one::<String>(options::FILE) {
         Some(_) => matches
             .get_many::<String>(options::FILE)
@@ -523,6 +514,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map(|s| s.as_str())
             .collect(),
         None => vec!["."],
+    };
+
+    let options = Options {
+        all: matches.get_flag(options::ALL),
+        max_depth,
+        total: matches.get_flag(options::TOTAL),
+        separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
+        one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
+        dereference: matches.get_flag(options::DEREFERENCE),
+        dereference_args: if matches.get_flag(options::DEREFERENCE_ARGS) {
+            // Convert into a pathbuf as we will use it in a function using Pathbuf
+            // We don't care about the cost as it is rarely used
+            files.iter().map(PathBuf::from).collect()
+        } else {
+            vec![]
+        },
+        inodes: matches.get_flag(options::INODES),
+        verbose: matches.get_flag(options::VERBOSE),
     };
 
     if options.inodes
@@ -787,6 +796,13 @@ pub fn uu_app() -> Command {
                 .short('L')
                 .long(options::DEREFERENCE)
                 .help("dereference all symbolic links")
+                .action(ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new(options::DEREFERENCE_ARGS)
+                .short('D')
+                .long(options::DEREFERENCE_ARGS)
+                .help("dereference only symlinks that are listed on the command line")
                 .action(ArgAction::SetTrue)
         )
         // .arg(

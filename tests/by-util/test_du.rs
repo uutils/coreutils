@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty
+// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink
 #[cfg(not(windows))]
 use regex::Regex;
 use std::io::Write;
@@ -283,6 +283,30 @@ fn test_du_dereference() {
     }
 
     _du_dereference(result.stdout_str());
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_dereference_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("subdir");
+    let mut file1 = at.make_file("subdir/file-ignore1");
+    file1.write_all(b"azeaze").unwrap();
+    let mut file2 = at.make_file("subdir/file-ignore1");
+    file2.write_all(b"amaz?ng").unwrap();
+    at.symlink_dir("subdir", "sublink");
+
+    let result = ts.ucmd().arg("-D").arg("-s").arg("sublink").succeeds();
+    let stdout = result.stdout_str();
+
+    assert!(!stdout.starts_with("0"));
+    assert!(stdout.contains("sublink"));
+
+    // Without the option
+    let result = ts.ucmd().arg("-s").arg("sublink").succeeds();
+    result.stdout_contains("0\tsublink\n");
 }
 
 #[cfg(target_vendor = "apple")]
@@ -851,6 +875,7 @@ fn test_du_exclude_invalid_syntax() {
         .stderr_contains("du: Invalid exclude syntax");
 }
 
+#[cfg(not(windows))]
 #[test]
 fn test_du_symlink_fail() {
     let ts = TestScenario::new(util_name!());
@@ -861,6 +886,7 @@ fn test_du_symlink_fail() {
     ts.ucmd().arg("-L").arg("target.txt").fails().code_is(1);
 }
 
+#[cfg(not(windows))]
 #[test]
 fn test_du_symlink_multiple_fail() {
     let ts = TestScenario::new(util_name!());
