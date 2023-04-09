@@ -6,10 +6,8 @@
 // See https://github.com/time-rs/time/issues/293#issuecomment-946382614=
 // Defined in .cargo/config
 
-extern crate touch;
-use self::touch::filetime::{self, FileTime};
+use filetime::FileTime;
 
-extern crate time;
 use time::macros::format_description;
 
 use crate::common::util::{AtPath, TestScenario};

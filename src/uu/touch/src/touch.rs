@@ -7,11 +7,10 @@
 // that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult mktime YYYYMMDDHHMM YYMMDDHHMM DATETIME YYYYMMDDHHMMS subsecond
-pub extern crate filetime;
 
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, ArgGroup, Command};
-use filetime::*;
+use filetime::{set_symlink_file_times, FileTime};
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -23,6 +22,7 @@ use uucore::{format_usage, help_about, help_usage, show};
 
 const ABOUT: &str = help_about!("touch.md");
 const USAGE: &str = help_usage!("touch.md");
+
 pub mod options {
     // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
     pub static SOURCES: &str = "sources";
