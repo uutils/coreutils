@@ -4,12 +4,7 @@
 // file that was distributed with this source code.
 
 #[cfg(unix)]
-pub use self::unix::{
-    //stdin_is_bad_fd, stdin_is_pipe_or_fifo, supports_pid_checks, Pid, ProcessChecker,
-    supports_pid_checks,
-    Pid,
-    ProcessChecker,
-};
+pub use self::unix::{supports_pid_checks, Pid, ProcessChecker};
 
 #[cfg(windows)]
 pub use self::windows::{supports_pid_checks, Pid, ProcessChecker};

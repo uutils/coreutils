@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) kqueue Signum fundu
 
+//! Parse the arguments passed to `tail` into a [`Settings`] struct.
+
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
 use clap::{crate_version, value_parser};
@@ -41,6 +43,7 @@ pub mod options {
     pub const PRESUME_INPUT_PIPE: &str = "-presume-input-pipe"; // NOTE: three hyphens is correct
 }
 
+/// Represent a `u64` with sign. `0` is a special value and can be negative or positive.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Signum {
     Negative(u64),
@@ -49,8 +52,12 @@ pub enum Signum {
     MinusZero,
 }
 
+/// The `tail` operation mode. Can be either `Lines` or `Bytes`.
+///
+/// `Lines` for the `-n` option and `Bytes` for the `-c` option.
 #[derive(Debug, PartialEq, Eq)]
 pub enum FilterMode {
+    /// Mode for bytes.
     Bytes(Signum),
 
     /// Mode for lines delimited by delimiter as u8
@@ -116,29 +123,56 @@ impl Default for FilterMode {
     }
 }
 
+/// The `tail` follow mode given by the `--follow` flag.
+///
+/// Can be either `Descriptor` (`--follow=descriptor`), which is the default, or `Name`
+/// (`--follow=name`)
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FollowMode {
     Descriptor,
     Name,
 }
 
+/// The result returned from [`Settings::verify`].
 #[derive(Debug)]
 pub enum VerificationResult {
+    /// Returned if [`Settings::verify`] has not detected any misconfiguration of the command line
+    /// arguments
     Ok,
+
+    // Returned if one of the file arguments passed to `tail` is the stdin file descriptor (`-`) and
+    // `--follow=name` was given.
     CannotFollowStdinByName,
+
+    /// Returned if `tail` will not output anything because of the configuration passed to `tail`.
     NoOutput,
 }
 
+/// Store the configuration of `tail` parsed from the command line arguments (and defaults).
+///
+/// This struct is designed to store the initial values given from user provided command line
+/// arguments if present or sane defaults if not. The fields of `Settings` and `Settings` itself
+/// should be seen as constants. Please do not use `Settings` to store fields that need to be
+/// mutable after the initialization of `Settings`.
 #[derive(Debug)]
 pub struct Settings {
+    /// `--follow`, `-f` and as part of `-F`
     pub follow: Option<FollowMode>,
+    /// `--max-unchanged-stats`
     pub max_unchanged_stats: u32,
+    /// `--lines`, `-n` or `--bytes`, `-c`
     pub mode: FilterMode,
+    /// `--pid`
     pub pid: platform::Pid,
+    /// `--retry` and as part of `-F`
     pub retry: bool,
+    /// `--sleep-interval`, `-s`
     pub sleep_sec: Duration,
+    /// `--use-polling` (non standard: divergence to gnu's `tail` )
     pub use_polling: bool,
+    /// `--verbose`, `-v` and `--quiet`, `-q`
     pub verbose: bool,
+    /// `---presume-input-pipe`
     pub presume_input_pipe: bool,
     /// `FILE(s)` positional arguments
     pub inputs: Vec<Input>,
@@ -348,9 +382,13 @@ impl Settings {
         }
     }
 
-    /// Verify [`Settings`] and try to find unsolvable misconfigurations of tail originating from
-    /// user provided command line arguments. In contrast to [`Settings::check_warnings`] these
-    /// misconfigurations usually lead to the immediate exit or abortion of the running `tail`
+    /// Verify the fields of [`Settings`]
+    ///
+    /// Tries to find unsolvable misconfigurations of `tail` originating from
+    /// user provided command line arguments.
+    ///
+    /// In contrast to [`Settings::check_warnings`] these misconfigurations
+    /// usually lead to the immediate exit or abortion of the running `tail`
     /// process.
     pub fn verify(&self) -> VerificationResult {
         // Mimic GNU's tail for `tail -F`

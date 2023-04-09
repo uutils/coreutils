@@ -134,6 +134,7 @@ impl FileHandling {
         };
     }
 
+    // TODO: return io::Result and handle io::Errors
     /// Read new data from `path` and print it to stdout
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
         let mut chunks = BytesChunkBuffer::new(u64::MAX);
@@ -162,11 +163,11 @@ impl FileHandling {
     /// Decide if printing `path` needs a header based on when it was last printed
     pub fn needs_header(&self, path: &Path, verbose: bool) -> bool {
         if verbose {
-            if let Some(ref last) = self.last {
-                return !last.eq(&path);
+            return if let Some(ref last) = self.last {
+                !last.eq(&path)
             } else {
-                return true;
-            }
+                true
+            };
         }
         false
     }
@@ -175,6 +176,7 @@ impl FileHandling {
 /// Data structure to keep a handle on the BufReader, Metadata
 /// and the display_name (header_name) of files that are being followed.
 pub struct PathData {
+    // FIXME: store File instead of a Buffered Reader
     pub reader: Option<Box<dyn BufRead>>,
     pub metadata: Option<Metadata>,
     pub display_name: String,
