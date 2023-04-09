@@ -15,6 +15,7 @@ use crate::common::util::is_ci;
 use crate::common::util::TestScenario;
 use pretty_assertions::assert_eq;
 use rand::distributions::Alphanumeric;
+use regex::Regex;
 use rstest::rstest;
 use std::char::from_digit;
 use std::fs::File;
@@ -46,7 +47,6 @@ const FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
 #[allow(dead_code)]
 const FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
-#[cfg(not(windows))]
 const DEFAULT_SLEEP_INTERVAL_MILLIS: u64 = 1000;
 
 // The binary integer "10000000" is *not* a valid UTF-8 encoding
@@ -55,6 +55,24 @@ const DEFAULT_SLEEP_INTERVAL_MILLIS: u64 = 1000;
 const INVALID_UTF8: u8 = 0x80;
 #[cfg(windows)]
 const INVALID_UTF16: u16 = 0xD800;
+
+/// Copied this from test_tee. test_tee uses this on linux targets only.
+#[cfg(target_os = "linux")]
+fn make_broken_pipe() -> File {
+    use libc::c_int;
+    use std::os::unix::io::FromRawFd;
+
+    let mut fds: [c_int; 2] = [0, 0];
+    if unsafe { libc::pipe(&mut fds as *mut c_int) } != 0 {
+        panic!("Failed to create pipe");
+    }
+
+    // Drop the read end of the pipe
+    let _ = unsafe { File::from_raw_fd(fds[0]) };
+
+    // Make the write end of the pipe into a Rust File
+    unsafe { File::from_raw_fd(fds[1]) }
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -282,12 +300,7 @@ fn test_follow_redirect_stdin_name_retry() {
 }
 
 #[test]
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd")
-))] // FIXME: for currently not working platforms
+#[cfg(all(unix, not(any(target_os = "android"))))] // FIXME: fix this test for Android
 fn test_stdin_redirect_dir() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
@@ -309,39 +322,6 @@ fn test_stdin_redirect_dir() {
         .fails()
         .no_stdout()
         .stderr_is("tail: error reading 'standard input': Is a directory\n")
-        .code_is(1);
-}
-
-// On macOS path.is_dir() can be false for directories if it was a redirect,
-// e.g. `$ tail < DIR. The library feature to detect the
-// std::io::ErrorKind::IsADirectory isn't stable so we currently show the a wrong
-// error message.
-// FIXME: If `std::io::ErrorKind::IsADirectory` becomes stable or macos handles
-//  redirected directories like linux show the correct message like in
-//  `test_stdin_redirect_dir`
-#[test]
-#[cfg(target_vendor = "apple")]
-fn test_stdin_redirect_dir_when_target_os_is_macos() {
-    // $ mkdir dir
-    // $ tail < dir, $ tail - < dir
-    // tail: error reading 'standard input': Is a directory
-
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-    at.mkdir("dir");
-
-    ts.ucmd()
-        .set_stdin(File::open(at.plus("dir")).unwrap())
-        .fails()
-        .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n")
-        .code_is(1);
-    ts.ucmd()
-        .set_stdin(File::open(at.plus("dir")).unwrap())
-        .arg("-")
-        .fails()
-        .no_stdout()
-        .stderr_is("tail: cannot open 'standard input' for reading: No such file or directory\n")
         .code_is(1);
 }
 
@@ -381,25 +361,6 @@ fn test_follow_stdin_name_retry() {
             .code_is(1);
         args.pop();
     }
-}
-
-#[test]
-fn test_follow_bad_fd() {
-    // Provoke a "bad file descriptor" error by closing the fd
-    // inspired by: "gnu/tests/tail-2/follow-stdin.sh"
-
-    // `$ tail -f <&-` OR `$ tail -f - <&-`
-    // tail: cannot fstat 'standard input': Bad file descriptor
-    // tail: error reading 'standard input': Bad file descriptor
-    // tail: no files remaining
-    // tail: -: Bad file descriptor
-    //
-    // $ `tail <&-`
-    // tail: cannot fstat 'standard input': Bad file descriptor
-    // tail: -: Bad file descriptor
-
-    // WONT-FIX:
-    // see also: https://github.com/uutils/coreutils/issues/2873
 }
 
 #[test]
@@ -576,10 +537,19 @@ fn test_follow_multiple_untailable() {
     // tail: DIR2: cannot follow end of this type of file; giving up on this name
     // tail: no files remaining
 
+    // FIXME: DIR1 and DIR2 need to be in single quotes
     let expected_stdout = "==> DIR1 <==\n\n==> DIR2 <==\n";
+    #[cfg(not(windows))]
     let expected_stderr = "tail: error reading 'DIR1': Is a directory\n\
         tail: DIR1: cannot follow end of this type of file; giving up on this name\n\
         tail: error reading 'DIR2': Is a directory\n\
+        tail: DIR2: cannot follow end of this type of file; giving up on this name\n\
+        tail: no files remaining\n";
+    #[cfg(windows)]
+    let expected_stderr =
+        "tail: error reading 'DIR1': An operation is not supported on a directory.\n\
+        tail: DIR1: cannot follow end of this type of file; giving up on this name\n\
+        tail: error reading 'DIR2': An operation is not supported on a directory.\n\
         tail: DIR2: cannot follow end of this type of file; giving up on this name\n\
         tail: no files remaining\n";
 
@@ -903,10 +873,11 @@ fn test_multiple_input_quiet_flag_overrides_verbose_flag_for_suppressing_headers
 fn test_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("DIR");
-    ucmd.arg("DIR")
-        .run()
-        .stderr_is("tail: error reading 'DIR': Is a directory\n")
-        .code_is(1);
+    #[cfg(not(windows))]
+    let expected = "tail: error reading 'DIR': Is a directory\n";
+    #[cfg(windows)]
+    let expected = "tail: error reading 'DIR': An operation is not supported on a directory.\n";
+    ucmd.arg("DIR").run().stderr_is(expected).code_is(1);
 }
 
 #[test]
@@ -914,17 +885,24 @@ fn test_dir_follow() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkdir("DIR");
+
+    #[cfg(not(windows))]
+    let expected = "tail: error reading 'DIR': Is a directory\n\
+                    tail: DIR: cannot follow end of this type of file; giving up on this name\n\
+                    tail: no files remaining\n";
+    #[cfg(windows)]
+    let expected = "tail: error reading 'DIR': An operation is not supported on a directory.\n\
+                    tail: DIR: cannot follow end of this type of file; giving up on this name\n\
+                    tail: no files remaining\n";
+
+    // FIXME: DIR must be single quoted
     for mode in &["--follow=descriptor", "--follow=name"] {
         ts.ucmd()
             .arg(mode)
             .arg("DIR")
             .run()
             .no_stdout()
-            .stderr_is(
-                "tail: error reading 'DIR': Is a directory\n\
-                    tail: DIR: cannot follow end of this type of file; giving up on this name\n\
-                    tail: no files remaining\n",
-            )
+            .stderr_is(expected)
             .code_is(1);
     }
 }
@@ -934,17 +912,22 @@ fn test_dir_follow_retry() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkdir("DIR");
+    #[cfg(not(windows))]
+    let expected = "tail: warning: --retry only effective for the initial open\n\
+                tail: error reading 'DIR': Is a directory\n\
+                tail: DIR: cannot follow end of this type of file\n\
+                tail: no files remaining\n";
+    #[cfg(windows)]
+    let expected = "tail: warning: --retry only effective for the initial open\n\
+                tail: error reading 'DIR': An operation is not supported on a directory.\n\
+                tail: DIR: cannot follow end of this type of file\n\
+                tail: no files remaining\n";
     ts.ucmd()
         .arg("--follow=descriptor")
         .arg("--retry")
         .arg("DIR")
         .run()
-        .stderr_is(
-            "tail: warning: --retry only effective for the initial open\n\
-                tail: error reading 'DIR': Is a directory\n\
-                tail: DIR: cannot follow end of this type of file\n\
-                tail: no files remaining\n",
-        )
+        .stderr_is(expected)
         .code_is(1);
 }
 
@@ -1402,6 +1385,7 @@ fn test_retry7() {
     let at = &ts.fixtures;
     let untailable = "untailable";
 
+    // FIXME:  >>tail: untailable: cannot follow ...<< untailable must be quoted >>tail: 'untailable': cannot follow ...<<
     let expected_stderr = "tail: error reading 'untailable': Is a directory\n\
         tail: untailable: cannot follow end of this type of file\n\
         tail: 'untailable' has become accessible\n\
@@ -3436,8 +3420,14 @@ fn test_when_follow_retry_given_redirected_stdin_from_directory_then_correct_err
     let at = &ts.fixtures;
     at.mkdir("dir");
 
+    #[cfg(not(windows))]
     let expected = "tail: warning: --retry only effective for the initial open\n\
                         tail: error reading 'standard input': Is a directory\n\
+                        tail: 'standard input': cannot follow end of this type of file\n\
+                        tail: no files remaining\n";
+    #[cfg(windows)]
+    let expected = "tail: warning: --retry only effective for the initial open\n\
+                        tail: error reading 'standard input': An operation is not supported on a directory.\n\
                         tail: 'standard input': cannot follow end of this type of file\n\
                         tail: no files remaining\n";
     ts.ucmd()
@@ -3454,7 +3444,10 @@ fn test_when_argument_file_is_a_directory() {
     let at = &ts.fixtures;
     at.mkdir("dir");
 
+    #[cfg(not(windows))]
     let expected = "tail: error reading 'dir': Is a directory\n";
+    #[cfg(windows)]
+    let expected = "tail: error reading 'dir': An operation is not supported on a directory.\n";
     ts.ucmd()
         .arg("dir")
         .fails()
@@ -3521,7 +3514,6 @@ fn test_when_argument_file_is_a_symlink_to_directory_then_error() {
 // TODO: make this work on windows
 #[test]
 #[cfg(unix)]
-#[cfg(disabled_until_fixed)]
 fn test_when_argument_file_is_a_faulty_symlink_then_error() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3529,11 +3521,11 @@ fn test_when_argument_file_is_a_faulty_symlink_then_error() {
     at.symlink_file("self", "self");
 
     #[cfg(all(not(target_env = "musl"), not(target_os = "android")))]
-    let expected = "tail: cannot open 'self' for reading: Too many levels of symbolic links";
+    let expected = "tail: cannot open 'self' for reading: Too many levels of symbolic links\n";
     #[cfg(all(not(target_env = "musl"), target_os = "android"))]
-    let expected = "tail: cannot open 'self' for reading: Too many symbolic links encountered";
+    let expected = "tail: cannot open 'self' for reading: Too many symbolic links encountered\n";
     #[cfg(all(target_env = "musl", not(target_os = "android")))]
-    let expected = "tail: cannot open 'self' for reading: Symbolic link loop";
+    let expected = "tail: cannot open 'self' for reading: Symbolic link loop\n";
 
     ts.ucmd()
         .arg("self")
@@ -3543,7 +3535,7 @@ fn test_when_argument_file_is_a_faulty_symlink_then_error() {
 
     at.symlink_file("missing", "broken");
 
-    let expected = "tail: cannot open 'broken' for reading: No such file or directory";
+    let expected = "tail: cannot open 'broken' for reading: No such file or directory\n";
     ts.ucmd()
         .arg("broken")
         .fails()
@@ -3553,7 +3545,6 @@ fn test_when_argument_file_is_a_faulty_symlink_then_error() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(disabled_until_fixed)]
 fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     use std::os::unix::net;
 
@@ -3612,7 +3603,6 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
 }
 
 #[test]
-#[cfg(disabled_until_fixed)]
 fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
@@ -3714,7 +3704,6 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
 }
 
 #[test]
-#[cfg(disabled_until_fixed)]
 fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_file() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
@@ -3768,25 +3757,26 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
     // print the fifo twice. This matches the behavior, if only the pipe is present without fifo
     // (See test above). Note that for example a zsh shell prints the pipe data and has therefore
     // different output from the sh shell (or cmd shell on windows).
-
+    //
     // windows: tail returns with success although there is an error message present (on some
     // windows systems). This error message comes from `echo` (the line ending `\r\n` indicates that
-    // too) which cannot write to the pipe because tail finished before echo was able to write to
-    // the pipe. Seems that windows `cmd` (like posix shells) ignores pipes when a fifo is present.
-    // This is actually the wished behavior and the test therefore succeeds.
+    // too) which cannot write to the pipe.  This is actually the wished behavior and the test
+    // therefore succeeds in such cases.
+    //
+    // [`CmdResult::stdout_matches`] trims the stdout, so we ignore the final newlines in the regex.
     #[cfg(windows)]
-    let expected = "==> standard input <==\n\
+    let expected = "^==> standard input <==\n\
         fifo data\n\
         ==> data <==\n\
         file data\n\
-        ==> standard input <==\n\
-        (The process tried to write to a nonexistent pipe.\r\n)?";
+        ==> standard input <==(\n)?\
+        (The process tried to write to a nonexistent pipe.(\r\n)?)?$";
     #[cfg(unix)]
-    let expected = "==> standard input <==\n\
+    let expected = "^==> standard input <==\n\
         fifo data\n\
         ==> data <==\n\
         file data\n\
-        ==> standard input <==\n";
+        ==> standard input <==(\n)?$";
 
     #[cfg(windows)]
     let cmd = ["cmd", "/C"];
@@ -3800,8 +3790,9 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
             "echo pipe data | {} tail -c +0  - data - < fifo",
             scene.bin_path.display(),
         ))
+        .stderr_to_stdout()
         .run()
-        .stdout_only(expected)
+        .stdout_matches(&Regex::new(expected).unwrap())
         .success();
 
     let expected = "==> standard input <==\n\
@@ -3825,7 +3816,6 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
 // test system. However, this behavior shows up on the command line and, at the time of writing this
 // description, with this test on macos and windows.
 #[test]
-#[cfg(disable_until_fixed)]
 fn test_when_follow_retry_then_initial_print_of_file_is_written_to_stdout() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
@@ -4104,27 +4094,27 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
             .make_assertion_with_delay(delay)
             .with_current_output()
             .stdout_only(expected_stdout);
+    }
 
-        let expected_stdout = format!(
-            "==> standard input <==\n\
+    let expected_stdout = format!(
+        "==> standard input <==\n\
         {fifo_data}\n\
         ==> {file_name} <==\n\
         {file_data}"
-        );
-        let mut child = scene
-            .ucmd()
-            .args(&["--follow=descriptor", "--pid=0", "-", file_name])
-            .set_stdin(File::open(fixtures.plus(fifo_name)).unwrap())
-            .stderr_to_stdout()
-            .run_no_wait();
+    );
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=descriptor", "--pid=0", "-", file_name])
+        .set_stdin(File::open(fixtures.plus(fifo_name)).unwrap())
+        .stderr_to_stdout()
+        .run_no_wait();
 
-        child.make_assertion_with_delay(delay).is_alive();
-        child
-            .kill()
-            .make_assertion_with_delay(delay)
-            .with_current_output()
-            .stdout_only(expected_stdout);
-    }
+    child.make_assertion_with_delay(delay).is_alive();
+    child
+        .kill()
+        .make_assertion_with_delay(delay)
+        .with_current_output()
+        .stdout_only(expected_stdout);
 }
 
 /// The expected test outputs come from gnu's tail.
@@ -4365,11 +4355,19 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
 
     let dirname = "dir";
     fixtures.mkdir(dirname);
+    #[cfg(not(windows))]
     let expected_stderr = format!(
         "tail: error reading '{0}': Is a directory\n\
          tail: {0}: cannot follow end of this type of file\n",
         dirname
     );
+    #[cfg(windows)]
+    let expected_stderr = format!(
+        "tail: error reading '{0}': An operation is not supported on a directory.\n\
+         tail: {0}: cannot follow end of this type of file\n",
+        dirname
+    );
+
     let mut child = scene.ucmd().args(&["-F", "--retry", "dir"]).run_no_wait();
 
     child.make_assertion_with_delay(500).is_alive();
@@ -4396,28 +4394,8 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
 /// ==> /absolute/path/to/data <==
 /// <file datasame data
 /// >file data
-///
-/// Fails on windows with
-/// Diff < left / right > :
-//  ==> data <==
-//  file data
-//  ==> \\?\C:\Users\runneradmin\AppData\Local\Temp\.tmpi6lNnX\data <==
-// >file data
-// <
-//
-// Fails on freebsd with
-// Diff < left / right > :
-//  ==> data <==
-//  file data
-//  ==> /tmp/.tmpZPXPlS/data <==
-// >file data
-// <
 #[test]
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "freebsd")
-))]
+#[cfg(not(target_vendor = "apple"))]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same_size() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
@@ -4797,4 +4775,122 @@ fn test_obsolete_encoding_windows() {
         .no_stdout()
         .stderr_is("tail: bad argument encoding: '-�b'\n")
         .code_is(1);
+}
+
+#[rstest]
+#[case::when_not_follow(&["-c", "+0", "-"])]
+// The error output deviates from gnu's tail which is:
+// tail: cannot fstat 'standard input': Bad file descriptor
+// tail: error reading 'standard input': Bad file descriptor
+// tail: no files remaining
+// tail: -: Bad file descriptor
+#[case::when_follow(&["-c", "+0", "-f", "-"])]
+fn test_when_stdin_is_bad_file_descriptor(#[case] args: &[&str]) {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    // Opens the file in write only mode and leads to the bad file descriptor error when used as stdin
+    let file = File::create(at.plus_as_string("name")).unwrap();
+    #[cfg(not(windows))]
+    let expected = "tail: error reading 'standard input': Bad file descriptor\n";
+    #[cfg(windows)]
+    let expected = "tail: error reading 'standard input': Permission denied\n";
+    ts.ucmd()
+        .args(args)
+        .set_stdin(file)
+        .run()
+        .stderr_only(expected);
+}
+
+#[test]
+fn test_when_follow_two_files_and_stdin_is_bad_file_descriptor() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("good", "good content");
+    // Opens a file in write only mode leading to the bad file descriptor error when used as stdin
+    // which needs read permissions
+    let bad_file = File::create(at.plus_as_string("name")).unwrap();
+
+    // The error output deviates from gnu's tail in so far, that the Bad file descriptor error
+    // message is printed only once:
+    // tail: error reading 'standard input': Bad file descriptor
+    // instead of:
+    // tail: cannot fstat 'standard input': Bad file descriptor
+    // tail: error reading 'standard input': Bad file descriptor
+    #[cfg(not(windows))]
+    let expected_stdout = "==> standard input <==\n\
+        tail: error reading 'standard input': Bad file descriptor\n\
+        \n\
+        ==> good <==\n\
+        good content";
+    #[cfg(windows)]
+    let expected_stdout = "==> standard input <==\n\
+        tail: error reading 'standard input': Permission denied\n\
+        \n\
+        ==> good <==\n\
+        good content";
+
+    let mut child = ts
+        .ucmd()
+        .args(&["-c", "+0", "-f", "-", "good"])
+        .set_stdin(bad_file)
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    child
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .is_alive()
+        .with_current_output()
+        .stdout_only(expected_stdout);
+
+    child
+        .kill()
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .is_not_alive()
+        .with_current_output()
+        .no_output();
+}
+
+#[rstest]
+#[case::when_not_follow(&["-c", "+0", "-"])]
+#[case::when_follow(&["-c", "+0", "-f", "-"])]
+#[cfg(target_os = "linux")]
+#[cfg(disabled_until_fixed)]
+fn test_when_stdout_is_broken_pipe(#[case] args: &[&str]) {
+    new_ucmd!()
+        .args(args)
+        .set_stdout(make_broken_pipe())
+        .run()
+        .stderr_only("tail: write error: Broken pipe\n");
+}
+
+#[test]
+#[cfg(feature = "sleep")]
+#[cfg(unix)]
+/// tail with follow (-f) should be smart enough to terminate when the output is a pipe and the pipe
+/// breaks. Currently uu_tail is running forever even if it'll never produce output due to the
+/// broken pipe. gnu's tail in contrast does terminate after the 5 seconds sleep interval (without
+/// error message).
+#[cfg(disabled_until_fixed)]
+fn test_when_follow_and_pipe_breaks_then_terminate() {
+    use std::time::Duration;
+
+    use crate::common::util::{UCommand, TESTS_BINARY};
+
+    let mut child = UCommand::new()
+        .arg(format!(
+            "{TESTS_BINARY} tail -f /dev/null | {TESTS_BINARY} sleep 5"
+        ))
+        .timeout(Duration::from_secs(30))
+        .run_no_wait();
+
+    child
+        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+        .is_alive();
+
+    child
+        .delay(10000)
+        .make_assertion()
+        .is_not_alive()
+        .with_all_output()
+        .no_output();
 }
