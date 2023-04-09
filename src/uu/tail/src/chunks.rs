@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 //! Iterating over a file by chunks, either starting at the end of the file with [`ReverseChunks`]
-//! or at the end of piped stdin with [`LinesChunk`] or [`BytesChunk`].
+//! or else with [`LinesChunk`] or [`BytesChunk`].
 //!
 //! Use [`ReverseChunks::new`] to create a new iterator over chunks of bytes from the file.
 
@@ -12,8 +12,7 @@
 
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{BufRead, Read, Seek, SeekFrom, Write};
-use uucore::error::UResult;
+use std::io::{self, Read, Seek, SeekFrom, Write};
 
 /// When reading files in reverse in `bounded_tail`, this is the size of each
 /// block read at a time.
@@ -46,26 +45,28 @@ pub struct ReverseChunks<'a> {
 }
 
 impl<'a> ReverseChunks<'a> {
-    pub fn new(file: &'a mut File) -> ReverseChunks<'a> {
+    pub fn new(file: &'a mut File) -> io::Result<ReverseChunks<'a>> {
+        // TODO: why is this platform dependent ?
         let current = if cfg!(unix) {
-            file.stream_position().unwrap()
+            file.stream_position()?
         } else {
             0
         };
-        let size = file.seek(SeekFrom::End(0)).unwrap() - current;
+        let size = file.seek(SeekFrom::End(0))? - current;
+        // TODO: is the cast to usize safe ? on 32-bit systems ?
         let max_blocks_to_read = (size as f64 / BLOCK_SIZE as f64).ceil() as usize;
         let block_idx = 0;
-        ReverseChunks {
+        Ok(ReverseChunks {
             file,
             size,
             max_blocks_to_read,
             block_idx,
-        }
+        })
     }
 }
 
 impl<'a> Iterator for ReverseChunks<'a> {
-    type Item = Vec<u8>;
+    type Item = io::Result<Vec<u8>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // If there are no more chunks to read, terminate the iterator.
@@ -85,22 +86,24 @@ impl<'a> Iterator for ReverseChunks<'a> {
         // Seek backwards by the next chunk, read the full chunk into
         // `buf`, and then seek back to the start of the chunk again.
         let mut buf = vec![0; BLOCK_SIZE as usize];
-        let pos = self
-            .file
-            .seek(SeekFrom::Current(-(block_size as i64)))
-            .unwrap();
-        self.file
-            .read_exact(&mut buf[0..(block_size as usize)])
-            .unwrap();
-        let pos2 = self
-            .file
-            .seek(SeekFrom::Current(-(block_size as i64)))
-            .unwrap();
+        let pos = match self.file.seek(SeekFrom::Current(-(block_size as i64))) {
+            Ok(pos) => pos,
+            Err(error) => return Some(Err(error)),
+        };
+
+        if let Err(error) = self.file.read_exact(&mut buf[0..(block_size as usize)]) {
+            return Some(Err(error));
+        }
+
+        let pos2 = match self.file.seek(SeekFrom::Current(-(block_size as i64))) {
+            Ok(pos) => pos,
+            Err(error) => return Some(Err(error)),
+        };
         assert_eq!(pos, pos2);
 
         self.block_idx += 1;
 
-        Some(buf[0..(block_size as usize)].to_vec())
+        Some(Ok(buf[0..(block_size as usize)].to_vec()))
     }
 }
 
@@ -202,15 +205,27 @@ impl BytesChunk {
         &self.buffer[offset..self.bytes]
     }
 
+    /// Return true if the [`BytesChunk`] has bytes stored.
     pub fn has_data(&self) -> bool {
         self.bytes > 0
     }
 
-    /// Fills `self.buffer` with maximal [`BUFFER_SIZE`] number of bytes, draining the reader by
-    /// that number of bytes. If EOF is reached (so 0 bytes are read), then returns
-    /// [`UResult<None>`] or else the result with [`Some(bytes)`] where bytes is the number of bytes
-    /// read from the source.
-    pub fn fill(&mut self, filehandle: &mut impl BufRead) -> UResult<Option<usize>> {
+    /// Return true if the [`BytesChunk`] has no bytes stored.
+    pub fn is_empty(&self) -> bool {
+        !self.has_data()
+    }
+
+    /// Return the amount of bytes stored in this [`BytesChunk`].
+    pub fn len(&self) -> usize {
+        self.bytes
+    }
+
+    /// Fills `self.buffer` with maximal [`BUFFER_SIZE`] number of bytes,
+    /// draining the reader by that number of bytes. If EOF is reached (so 0
+    /// bytes are read), then returns [`io::Result<None>`] or else the result
+    /// with [`io::Result<Some(bytes))`] where bytes is the number of bytes read
+    /// from the source.
+    pub fn fill(&mut self, filehandle: &mut impl Read) -> io::Result<Option<usize>> {
         let num_bytes = filehandle.read(&mut self.buffer)?;
         self.bytes = num_bytes;
         if num_bytes == 0 {
@@ -285,18 +300,20 @@ impl BytesChunkBuffer {
     /// let mut chunks = BytesChunkBuffer::new(num_print);
     /// chunks.fill(&mut reader).unwrap();
     /// ```
-    pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
+    pub fn fill(&mut self, reader: &mut impl Read) -> io::Result<u64> {
+        if self.num_print == 0 {
+            return Ok(0);
+        }
+
         let mut chunk = Box::new(BytesChunk::new());
 
         // fill chunks with all bytes from reader and reuse already instantiated chunks if possible
         while (chunk.fill(reader)?).is_some() {
-            self.bytes += chunk.bytes as u64;
-            self.chunks.push_back(chunk);
+            self.push_back(chunk);
 
             let first = &self.chunks[0];
             if self.bytes - first.bytes as u64 > self.num_print {
-                chunk = self.chunks.pop_front().unwrap();
-                self.bytes -= chunk.bytes as u64;
+                chunk = self.pop_front().unwrap();
             } else {
                 chunk = Box::new(BytesChunk::new());
             }
@@ -304,30 +321,60 @@ impl BytesChunkBuffer {
 
         // quit early if there are no chunks for example in case the pipe was empty
         if self.chunks.is_empty() {
-            return Ok(());
+            return Ok(0);
         }
-
-        let chunk = self.chunks.pop_front().unwrap();
 
         // calculate the offset in the first chunk and put the calculated chunk as first element in
         // the self.chunks collection. The calculated offset must be in the range 0 to BUFFER_SIZE
         // and is therefore safely convertible to a usize without losses.
         let offset = self.bytes.saturating_sub(self.num_print) as usize;
-        self.chunks
-            .push_front(Box::new(BytesChunk::from_chunk(&chunk, offset)));
 
-        Ok(())
+        let chunk = self.pop_front().unwrap();
+        let chunk = Box::new(BytesChunk::from_chunk(&chunk, offset));
+        self.push_front(chunk);
+
+        Ok(self.bytes)
     }
 
-    pub fn print(&self, mut writer: impl Write) -> UResult<()> {
+    /// Print the whole [`BytesChunkBuffer`].
+    pub fn print(&self, writer: &mut impl Write) -> io::Result<()> {
         for chunk in &self.chunks {
             writer.write_all(chunk.get_buffer())?;
         }
         Ok(())
     }
 
+    /// Return true if the [`BytesChunkBuffer`] has bytes stored.
     pub fn has_data(&self) -> bool {
         !self.chunks.is_empty()
+    }
+
+    /// Return the amount of bytes this [`BytesChunkBuffer`] has stored.
+    pub fn get_bytes(&self) -> u64 {
+        self.bytes
+    }
+
+    /// Return and remove the first [`BytesChunk`] stored in this [`BytesChunkBuffer`].
+    fn pop_front(&mut self) -> Option<Box<BytesChunk>> {
+        let chunk = self.chunks.pop_front();
+        if let Some(chunk) = chunk {
+            self.bytes -= chunk.bytes as u64;
+            Some(chunk)
+        } else {
+            None
+        }
+    }
+
+    /// Add a [`BytesChunk`] at the start of this [`BytesChunkBuffer`].
+    fn push_front(&mut self, chunk: Box<BytesChunk>) {
+        self.bytes += chunk.bytes as u64;
+        self.chunks.push_front(chunk);
+    }
+
+    /// Add a [`BytesChunk`] at the end of this [`BytesChunkBuffer`].
+    fn push_back(&mut self, chunk: Box<BytesChunk>) {
+        self.bytes += chunk.bytes as u64;
+        self.chunks.push_back(chunk);
     }
 }
 
@@ -346,6 +393,7 @@ pub struct LinesChunk {
 }
 
 impl LinesChunk {
+    /// Create a new [`LinesChunk`] with an arbitrary `u8` as `delimiter`.
     pub fn new(delimiter: u8) -> Self {
         Self {
             chunk: BytesChunk::new(),
@@ -433,6 +481,16 @@ impl LinesChunk {
         self.chunk.has_data()
     }
 
+    /// Return true if the [`LinesChunk`] has no bytes stored.
+    pub fn is_empty(&self) -> bool {
+        !self.has_data()
+    }
+
+    /// Return the amount of bytes stored in this [`LinesChunk`].
+    pub fn len(&self) -> usize {
+        self.chunk.len()
+    }
+
     /// Returns this buffer safely. See [`BytesChunk::get_buffer`]
     ///
     /// returns: &[u8] with length `self.bytes`
@@ -458,7 +516,7 @@ impl LinesChunk {
     /// that number of bytes. This function works like the [`BytesChunk::fill`] function besides
     /// that this function also counts and stores the number of lines encountered while reading from
     /// the `filehandle`.
-    pub fn fill(&mut self, filehandle: &mut impl BufRead) -> UResult<Option<usize>> {
+    pub fn fill(&mut self, filehandle: &mut impl Read) -> io::Result<Option<usize>> {
         match self.chunk.fill(filehandle)? {
             None => {
                 self.lines = 0;
@@ -514,7 +572,7 @@ impl LinesChunk {
     ///
     /// * `writer`: must implement [`Write`]
     /// * `offset`: An offset in number of lines.
-    pub fn print_lines(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
+    pub fn print_lines(&self, writer: &mut impl Write, offset: usize) -> io::Result<usize> {
         self.print_bytes(writer, self.calculate_bytes_offset_from(offset))
     }
 
@@ -524,9 +582,10 @@ impl LinesChunk {
     ///
     /// * `writer`: must implement [`Write`]
     /// * `offset`: An offset in number of bytes.
-    pub fn print_bytes(&self, writer: &mut impl Write, offset: usize) -> UResult<()> {
-        writer.write_all(self.get_buffer_with(offset))?;
-        Ok(())
+    pub fn print_bytes(&self, writer: &mut impl Write, offset: usize) -> io::Result<usize> {
+        let buffer = self.get_buffer_with(offset);
+        writer.write_all(buffer)?;
+        Ok(buffer.len())
     }
 }
 
@@ -544,6 +603,8 @@ pub struct LinesChunkBuffer {
     num_print: u64,
     /// Stores the [`LinesChunk`]
     chunks: VecDeque<Box<LinesChunk>>,
+    /// The total amount of bytes stored in all chunks
+    bytes: u64,
 }
 
 impl LinesChunkBuffer {
@@ -554,35 +615,33 @@ impl LinesChunkBuffer {
             num_print,
             lines: 0,
             chunks: VecDeque::new(),
+            bytes: 0,
         }
     }
 
-    /// Fills this buffer with chunks and consumes the reader completely. This method ensures that
-    /// there are exactly as many chunks as needed to match `self.num_print` lines, so there are
-    /// in sum exactly `self.num_print` lines stored in all chunks. The method returns an iterator
-    /// over these chunks. If there are no chunks, for example because the piped stdin contained no
-    /// lines, or `num_print = 0` then `iterator.next` will return None.
-    pub fn fill(&mut self, reader: &mut impl BufRead) -> UResult<()> {
-        let mut chunk = Box::new(LinesChunk::new(self.delimiter));
+    /// Fills this buffer with chunks and consumes the reader completely.
+    ///
+    /// This method ensures that there are exactly as many chunks as needed to match
+    /// `self.num_print` lines, so there are in sum exactly `self.num_print` lines stored in all
+    /// chunks.
+    pub fn fill(&mut self, reader: &mut impl Read) -> io::Result<u64> {
+        if self.num_print == 0 {
+            return Ok(0);
+        }
 
+        let mut chunk = Box::new(LinesChunk::new(self.delimiter));
         while (chunk.fill(reader)?).is_some() {
-            self.lines += chunk.lines as u64;
-            self.chunks.push_back(chunk);
+            self.push_back(chunk);
 
             let first = &self.chunks[0];
             if self.lines - first.lines as u64 > self.num_print {
-                chunk = self.chunks.pop_front().unwrap();
-
-                self.lines -= chunk.lines as u64;
+                chunk = self.pop_front().unwrap();
             } else {
                 chunk = Box::new(LinesChunk::new(self.delimiter));
             }
         }
 
-        if self.chunks.is_empty() {
-            // chunks is empty when a file is empty so quitting early here
-            return Ok(());
-        } else {
+        if self.has_data() {
             let length = &self.chunks.len();
             let last = &mut self.chunks[length - 1];
             if !last.get_buffer().ends_with(&[self.delimiter]) {
@@ -593,41 +652,95 @@ impl LinesChunkBuffer {
 
         // skip unnecessary chunks and save the first chunk which may hold some lines we have to
         // print
-        let chunk = loop {
-            // it's safe to call unwrap here because there is at least one chunk and sorting out
-            // more chunks than exist shouldn't be possible.
-            let chunk = self.chunks.pop_front().unwrap();
+        while let Some(chunk) = self.pop_front() {
+            // this is false as long there are enough lines left in the other stored chunks.
+            if self.lines <= self.num_print {
+                // Calculate the number of lines to skip in the current chunk. The calculated value must be
+                // in the range 0 to BUFFER_SIZE and is therefore safely convertible to a usize without
+                // losses.
+                let skip_lines =
+                    (self.lines + chunk.lines as u64).saturating_sub(self.num_print) as usize;
 
-            // skip is true as long there are enough lines left in the other stored chunks.
-            let skip = self.lines - chunk.lines as u64 > self.num_print;
-            if skip {
-                self.lines -= chunk.lines as u64;
-            } else {
-                break chunk;
+                let chunk = Box::new(LinesChunk::from_chunk(&chunk, skip_lines));
+                self.push_front(chunk);
+                break;
             }
-        };
+        }
 
-        // Calculate the number of lines to skip in the current chunk. The calculated value must be
-        // in the range 0 to BUFFER_SIZE and is therefore safely convertible to a usize without
-        // losses.
-        let skip_lines = self.lines.saturating_sub(self.num_print) as usize;
-        let chunk = LinesChunk::from_chunk(&chunk, skip_lines);
-        self.chunks.push_front(Box::new(chunk));
+        Ok(self.bytes)
+    }
 
+    /// Writes the whole [`LinesChunkBuffer`] into a `writer`.
+    pub fn print(&self, writer: &mut impl Write) -> io::Result<()> {
+        for chunk in &self.chunks {
+            chunk.print_bytes(writer, 0)?;
+        }
         Ok(())
     }
 
-    pub fn print(&self, mut writer: impl Write) -> UResult<()> {
-        for chunk in &self.chunks {
-            chunk.print_bytes(&mut writer, 0)?;
+    /// Return the amount of lines this buffer has stored.
+    pub fn get_lines(&self) -> u64 {
+        self.lines
+    }
+
+    /// Return true if this buffer has stored any bytes.
+    pub fn has_data(&self) -> bool {
+        !self.chunks.is_empty()
+    }
+
+    /// Return and remove the first [`LinesChunk`] stored in this [`LinesChunkBuffer`].
+    fn pop_front(&mut self) -> Option<Box<LinesChunk>> {
+        let chunk = self.chunks.pop_front();
+        if let Some(chunk) = chunk {
+            self.bytes -= chunk.len() as u64;
+            self.lines -= chunk.lines as u64;
+            Some(chunk)
+        } else {
+            None
         }
-        Ok(())
+    }
+
+    /// Add a [`LinesChunk`] at the end of this [`LinesChunkBuffer`].
+    fn push_back(&mut self, chunk: Box<LinesChunk>) {
+        self.bytes += chunk.len() as u64;
+        self.lines += chunk.lines as u64;
+        self.chunks.push_back(chunk);
+    }
+
+    /// Add a [`LinesChunk`] at the start of this [`LinesChunkBuffer`].
+    fn push_front(&mut self, chunk: Box<LinesChunk>) {
+        self.bytes += chunk.len() as u64;
+        self.lines += chunk.lines as u64;
+        self.chunks.push_front(chunk);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::chunks::{BytesChunk, BUFFER_SIZE};
+    use super::*;
+    use std::io::{BufWriter, Cursor};
+
+    fn fill_lines_chunk(chunk: &mut LinesChunk, data: &str) -> usize {
+        let mut cursor = Cursor::new(data);
+        let result = chunk.fill(&mut cursor);
+        assert!(result.is_ok());
+        let option = result.unwrap();
+        option.unwrap_or(0)
+    }
+
+    fn fill_lines_chunk_buffer(buffer: &mut LinesChunkBuffer, data: &str) -> u64 {
+        let mut cursor = Cursor::new(data);
+        let result = buffer.fill(&mut cursor);
+        assert!(result.is_ok());
+        result.unwrap()
+    }
+
+    fn fill_bytes_chunk_buffer(buffer: &mut BytesChunkBuffer, data: &str) -> u64 {
+        let mut cursor = Cursor::new(data);
+        let result = buffer.fill(&mut cursor);
+        assert!(result.is_ok());
+        result.unwrap()
+    }
 
     #[test]
     fn test_bytes_chunk_from_when_offset_is_zero() {
@@ -700,5 +813,328 @@ mod tests {
         chunk.bytes = 1;
         let new_chunk = BytesChunk::from_chunk(&chunk, 1);
         assert_eq!(0, new_chunk.bytes);
+    }
+
+    #[test]
+    fn test_lines_chunk_fill_when_unix_line_endings() {
+        let mut chunk = LinesChunk::new(b'\n');
+
+        let bytes = fill_lines_chunk(&mut chunk, "");
+        assert_eq!(bytes, 0);
+        assert_eq!(chunk.get_lines(), 0);
+
+        let bytes = fill_lines_chunk(&mut chunk, "\n");
+        assert_eq!(bytes, 1);
+        assert_eq!(chunk.get_lines(), 1);
+
+        let bytes = fill_lines_chunk(&mut chunk, "a");
+        assert_eq!(bytes, 1);
+        assert_eq!(chunk.get_lines(), 0);
+
+        let bytes = fill_lines_chunk(&mut chunk, "aa");
+        assert_eq!(bytes, 2);
+        assert_eq!(chunk.get_lines(), 0);
+
+        let bytes = fill_lines_chunk(&mut chunk, "a".repeat(BUFFER_SIZE).as_str());
+        assert_eq!(bytes, BUFFER_SIZE);
+        assert_eq!(chunk.get_lines(), 0);
+
+        let bytes = fill_lines_chunk(&mut chunk, "a".repeat(BUFFER_SIZE + 1).as_str());
+        assert_eq!(bytes, BUFFER_SIZE);
+        assert_eq!(chunk.get_lines(), 0);
+
+        let bytes = fill_lines_chunk(&mut chunk, "a\n".repeat(BUFFER_SIZE / 2).as_str());
+        assert_eq!(bytes, BUFFER_SIZE);
+        assert_eq!(chunk.get_lines(), BUFFER_SIZE / 2);
+
+        let bytes = fill_lines_chunk(&mut chunk, "a\n".repeat(BUFFER_SIZE).as_str());
+        assert_eq!(bytes, BUFFER_SIZE);
+        assert_eq!(chunk.get_lines(), BUFFER_SIZE / 2);
+
+        let bytes = fill_lines_chunk(&mut chunk, "\n".repeat(BUFFER_SIZE).as_str());
+        assert_eq!(bytes, BUFFER_SIZE);
+        assert_eq!(chunk.get_lines(), BUFFER_SIZE);
+
+        let bytes = fill_lines_chunk(&mut chunk, "\n".repeat(BUFFER_SIZE + 1).as_str());
+        assert_eq!(bytes, BUFFER_SIZE);
+        assert_eq!(chunk.get_lines(), BUFFER_SIZE);
+    }
+
+    #[test]
+    fn test_lines_chunk_fill_when_windows_line_endings() {
+        let mut chunk = LinesChunk::new(b'\n');
+
+        let bytes = fill_lines_chunk(&mut chunk, "\r\n");
+        assert_eq!(bytes, 2);
+        assert_eq!(chunk.get_lines(), 1);
+
+        let bytes = fill_lines_chunk(&mut chunk, "a\r\n");
+        assert_eq!(bytes, 3);
+        assert_eq!(chunk.get_lines(), 1);
+
+        let bytes = fill_lines_chunk(&mut chunk, "a\r\na");
+        assert_eq!(bytes, 4);
+        assert_eq!(chunk.get_lines(), 1);
+
+        let bytes = fill_lines_chunk(&mut chunk, "a\r\na\r\n");
+        assert_eq!(bytes, 6);
+        assert_eq!(chunk.get_lines(), 2);
+
+        let bytes = fill_lines_chunk(&mut chunk, "\r\n".repeat(BUFFER_SIZE / 2).as_str());
+        assert_eq!(bytes, BUFFER_SIZE);
+        assert_eq!(chunk.get_lines(), BUFFER_SIZE / 2);
+
+        // tests the correct amount of lines when \r\n is split across different chunks
+        let mut data = "\r\n".repeat(BUFFER_SIZE / 2 - 1);
+        data.push('a');
+        data.push('\r');
+        data.push('\n');
+        let bytes = fill_lines_chunk(&mut chunk, data.as_str());
+        assert_eq!(bytes, BUFFER_SIZE);
+        assert_eq!(chunk.get_lines(), BUFFER_SIZE / 2 - 1);
+    }
+
+    #[test]
+    fn test_lines_chunk_when_print_lines_no_offset_then_correct_amount_of_bytes() {
+        let mut chunk = LinesChunk::new(b'\n');
+        let expected = fill_lines_chunk(&mut chunk, "");
+
+        let mut writer = BufWriter::new(vec![]);
+        let result = chunk.print_lines(&mut writer, 0);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        let expected = fill_lines_chunk(&mut chunk, "a");
+        let result = chunk.print_lines(&mut writer, 0);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        let expected = fill_lines_chunk(&mut chunk, "\n");
+        let result = chunk.print_lines(&mut writer, 0);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        let expected = fill_lines_chunk(&mut chunk, "a\n");
+        let result = chunk.print_lines(&mut writer, 0);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        let expected = fill_lines_chunk(&mut chunk, "\n".repeat(BUFFER_SIZE).as_str());
+        let result = chunk.print_lines(&mut writer, 0);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected);
+
+        fill_lines_chunk(&mut chunk, "a\n".repeat(BUFFER_SIZE / 2 + 1).as_str());
+        let result = chunk.print_lines(&mut writer, 0);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), BUFFER_SIZE);
+    }
+
+    #[test]
+    fn test_lines_chunk_when_print_lines_with_offset_then_correct_amount_of_bytes() {
+        let mut chunk = LinesChunk::new(b'\n');
+        fill_lines_chunk(&mut chunk, "");
+
+        let mut writer = BufWriter::new(vec![]);
+        let result = chunk.print_lines(&mut writer, 1);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+
+        fill_lines_chunk(&mut chunk, "a");
+        let result = chunk.print_lines(&mut writer, 1);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+
+        fill_lines_chunk(&mut chunk, "a");
+        let result = chunk.print_lines(&mut writer, 2);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+
+        fill_lines_chunk(&mut chunk, "a");
+        let result = chunk.print_lines(&mut writer, 100);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+
+        fill_lines_chunk(&mut chunk, "a\n");
+        let result = chunk.print_lines(&mut writer, 1);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+
+        fill_lines_chunk(&mut chunk, "a\n\n");
+        let result = chunk.print_lines(&mut writer, 1);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1);
+
+        fill_lines_chunk(&mut chunk, "a\na\n");
+        let result = chunk.print_lines(&mut writer, 1);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 2);
+
+        fill_lines_chunk(&mut chunk, "a\na\n");
+        let result = chunk.print_lines(&mut writer, 2);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+
+        fill_lines_chunk(&mut chunk, "a\naa\n");
+        let result = chunk.print_lines(&mut writer, 1);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 3);
+
+        fill_lines_chunk(&mut chunk, "a".repeat(BUFFER_SIZE).as_str());
+        let result = chunk.print_lines(&mut writer, 0);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), BUFFER_SIZE);
+
+        fill_lines_chunk(&mut chunk, "a".repeat(BUFFER_SIZE).as_str());
+        let result = chunk.print_lines(&mut writer, 1);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+
+        fill_lines_chunk(&mut chunk, "\n".repeat(BUFFER_SIZE).as_str());
+        let result = chunk.print_lines(&mut writer, 1);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), BUFFER_SIZE - 1);
+
+        fill_lines_chunk(&mut chunk, "\n".repeat(BUFFER_SIZE).as_str());
+        let result = chunk.print_lines(&mut writer, BUFFER_SIZE - 1);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1);
+
+        fill_lines_chunk(&mut chunk, "\n".repeat(BUFFER_SIZE).as_str());
+        let result = chunk.print_lines(&mut writer, BUFFER_SIZE);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[test]
+    fn test_lines_chunk_buffer_fill_when_num_print_is_equal_to_size() {
+        let size = 0;
+        let mut buffer = LinesChunkBuffer::new(b'\n', size as u64);
+        let bytes = fill_lines_chunk_buffer(&mut buffer, "");
+        assert_eq!(buffer.get_lines(), 0);
+        assert_eq!(bytes, size as u64);
+        assert!(!buffer.has_data());
+
+        let size = 1;
+        let mut buffer = LinesChunkBuffer::new(b'\n', size as u64);
+        let bytes = fill_lines_chunk_buffer(&mut buffer, "a");
+        assert_eq!(buffer.get_lines(), 1);
+        assert_eq!(bytes, size as u64);
+
+        let size = 1;
+        let mut buffer = LinesChunkBuffer::new(b'\n', size as u64);
+        let bytes = fill_lines_chunk_buffer(&mut buffer, "\n");
+        assert_eq!(buffer.get_lines(), 1);
+        assert_eq!(bytes, size as u64);
+
+        let size = BUFFER_SIZE + 1;
+        let mut buffer = LinesChunkBuffer::new(b'\n', size as u64);
+        let bytes = fill_lines_chunk_buffer(&mut buffer, "\n".repeat(size).as_str());
+        assert_eq!(buffer.get_lines(), size as u64);
+        assert_eq!(bytes, size as u64);
+
+        let size = BUFFER_SIZE + 1;
+        let mut data = "a".repeat(BUFFER_SIZE);
+        data.push('\n');
+        let mut buffer = LinesChunkBuffer::new(b'\n', size as u64);
+        let bytes = fill_lines_chunk_buffer(&mut buffer, data.as_str());
+        assert_eq!(buffer.get_lines(), 1);
+        assert_eq!(bytes, size as u64);
+
+        let size = BUFFER_SIZE + 1;
+        let mut data = "a".repeat(BUFFER_SIZE - 1);
+        data.push('\n');
+        data.push('\n');
+        let mut buffer = LinesChunkBuffer::new(b'\n', size as u64);
+        let bytes = fill_lines_chunk_buffer(&mut buffer, data.as_str());
+        assert_eq!(buffer.get_lines(), 2);
+        assert_eq!(bytes, size as u64);
+
+        let size = BUFFER_SIZE * 2;
+        let mut buffer = LinesChunkBuffer::new(b'\n', size as u64);
+        let bytes = fill_lines_chunk_buffer(&mut buffer, "a".repeat(size).as_str());
+        assert_eq!(buffer.get_lines(), 1);
+        assert_eq!(bytes, size as u64);
+    }
+
+    #[test]
+    fn test_lines_chunk_buffer_fill_when_num_print_is_not_equal_to_size() {
+        let size = 0;
+        let mut buffer = LinesChunkBuffer::new(b'\n', 1);
+        let bytes = fill_lines_chunk_buffer(&mut buffer, "");
+        assert_eq!(buffer.get_lines(), 0);
+        assert_eq!(bytes, size as u64);
+        assert!(!buffer.has_data());
+
+        let size = 1;
+        let mut buffer = LinesChunkBuffer::new(b'\n', 2);
+        let bytes = fill_lines_chunk_buffer(&mut buffer, "a");
+        assert_eq!(buffer.get_lines(), 1);
+        assert_eq!(bytes, size as u64);
+
+        let mut buffer = LinesChunkBuffer::new(b'\n', 0);
+        let bytes = fill_lines_chunk_buffer(&mut buffer, "a");
+        assert_eq!(buffer.get_lines(), 0);
+        assert_eq!(bytes, 0);
+        assert!(!buffer.has_data());
+    }
+
+    #[test]
+    fn test_bytes_chunk_buffer_fill_when_num_print_is_equal_to_size() {
+        let size = 0;
+        let mut buffer = BytesChunkBuffer::new(size as u64);
+        let bytes = fill_bytes_chunk_buffer(&mut buffer, "");
+        assert_eq!(buffer.get_bytes(), 0);
+        assert_eq!(bytes, size as u64);
+        assert!(!buffer.has_data());
+
+        let size = 1;
+        let mut buffer = BytesChunkBuffer::new(size as u64);
+        let bytes = fill_bytes_chunk_buffer(&mut buffer, "a");
+        assert_eq!(buffer.get_bytes(), 1);
+        assert_eq!(bytes, size as u64);
+        assert!(buffer.has_data());
+
+        let size = BUFFER_SIZE;
+        let mut buffer = BytesChunkBuffer::new(size as u64);
+        let bytes = fill_bytes_chunk_buffer(&mut buffer, "a".repeat(size).as_str());
+        assert_eq!(buffer.get_bytes(), size as u64);
+        assert_eq!(bytes, size as u64);
+        assert!(buffer.has_data());
+
+        let size = BUFFER_SIZE + 1;
+        let mut buffer = BytesChunkBuffer::new(size as u64);
+        let bytes = fill_bytes_chunk_buffer(&mut buffer, "a".repeat(size).as_str());
+        assert_eq!(buffer.get_bytes(), size as u64);
+        assert_eq!(bytes, size as u64);
+        assert!(buffer.has_data());
+
+        let size = BUFFER_SIZE * 2;
+        let mut buffer = BytesChunkBuffer::new(size as u64);
+        let bytes = fill_bytes_chunk_buffer(&mut buffer, "a".repeat(size).as_str());
+        assert_eq!(buffer.get_bytes(), size as u64);
+        assert_eq!(bytes, size as u64);
+        assert!(buffer.has_data());
+    }
+
+    #[test]
+    fn test_bytes_chunk_buffer_fill_when_num_print_is_not_equal_to_size() {
+        let mut buffer = BytesChunkBuffer::new(0);
+        let bytes = fill_bytes_chunk_buffer(&mut buffer, "a");
+        assert_eq!(buffer.get_bytes(), 0);
+        assert_eq!(bytes, 0);
+        assert!(!buffer.has_data());
+
+        let mut buffer = BytesChunkBuffer::new(1);
+        let bytes = fill_bytes_chunk_buffer(&mut buffer, "");
+        assert_eq!(buffer.get_bytes(), 0);
+        assert_eq!(bytes, 0);
+        assert!(!buffer.has_data());
+
+        let mut buffer = BytesChunkBuffer::new(2);
+        let bytes = fill_bytes_chunk_buffer(&mut buffer, "a");
+        assert_eq!(buffer.get_bytes(), 1);
+        assert_eq!(bytes, 1);
+        assert!(buffer.has_data());
     }
 }

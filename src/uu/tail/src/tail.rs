@@ -147,7 +147,7 @@ fn tail_file(
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                     && metadata.as_ref().unwrap().get_block_size() > 0
                 {
-                    bounded_tail(&mut file, settings);
+                    bounded_tail(&mut file, settings)?;
                     reader = BufReader::new(file);
                 } else {
                     reader = BufReader::new(file);
@@ -283,11 +283,7 @@ fn tail_stdin(
 /// let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
 /// assert_eq!(i, 2);
 /// ```
-fn forwards_thru_file<R>(
-    reader: &mut R,
-    num_delimiters: u64,
-    delimiter: u8,
-) -> std::io::Result<usize>
+fn forwards_thru_file<R>(reader: &mut R, num_delimiters: u64, delimiter: u8) -> io::Result<usize>
 where
     R: Read,
 {
@@ -316,12 +312,14 @@ where
 /// Iterate over bytes in the file, in reverse, until we find the
 /// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
 /// position just after that delimiter.
-fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
+fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) -> io::Result<()> {
     // This variable counts the number of delimiters found in the file
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
 
-    for (block_idx, slice) in ReverseChunks::new(file).enumerate() {
+    for (block_idx, slice) in ReverseChunks::new(file)?.enumerate() {
+        let slice = slice?;
+
         // Iterate over each byte in the slice in reverse order.
         let mut iter = slice.iter().enumerate().rev();
 
@@ -346,12 +344,14 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
                     // cursor in the file is at the *beginning* of the
                     // block, so seeking forward by `i + 1` bytes puts
                     // us right after the found delimiter.
-                    file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
-                    return;
+                    file.seek(SeekFrom::Current((i + 1) as i64))?;
+                    return Ok(());
                 }
             }
         }
     }
+
+    Ok(())
 }
 
 /// When tail'ing a file, we do not need to read the whole file from start to
@@ -359,54 +359,55 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, settings: &Settings) {
+fn bounded_tail(file: &mut File, settings: &Settings) -> io::Result<u64> {
     debug_assert!(!settings.presume_input_pipe);
 
     // Find the position in the file to start printing from.
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), delimiter) => {
-            backwards_thru_file(file, *count, *delimiter);
+            backwards_thru_file(file, *count, *delimiter)?;
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
-            let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
-            file.seek(SeekFrom::Start(i as u64)).unwrap();
+            let i = forwards_thru_file(file, *count - 1, *delimiter)?;
+            file.seek(SeekFrom::Start(i as u64))?;
         }
         FilterMode::Lines(Signum::MinusZero, _) => {
-            return;
+            return Ok(0);
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            let len = file.seek(SeekFrom::End(0)).unwrap();
-            file.seek(SeekFrom::End(-((*count).min(len) as i64)))
-                .unwrap();
+            let len = file.seek(SeekFrom::End(0))?;
+            file.seek(SeekFrom::End(-((*count).min(len) as i64)))?;
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
             // GNU `tail` seems to index bytes and lines starting at 1, not
             // at 0. It seems to treat `+0` and `+1` as the same thing.
-            file.seek(SeekFrom::Start(*count - 1)).unwrap();
+            file.seek(SeekFrom::Start(*count - 1))?;
         }
         FilterMode::Bytes(Signum::MinusZero) => {
-            return;
+            return Ok(0);
         }
         _ => {}
     }
 
     // Print the target section of the file.
-    let stdout = stdout();
-    let mut stdout = stdout.lock();
-    std::io::copy(file, &mut stdout).unwrap();
+    let mut stdout = stdout().lock();
+    let bytes = io::copy(file, &mut stdout)?;
+    stdout.flush()?;
+    Ok(bytes)
 }
 
-fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
+fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> io::Result<u64> {
     let stdout = stdout();
     let mut writer = BufWriter::new(stdout.lock());
-    match &settings.mode {
+    let result = match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
-            chunks.fill(reader)?;
+            let bytes = chunks.fill(reader)?;
             chunks.print(&mut writer)?;
+            Ok(bytes)
         }
         FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _) => {
-            io::copy(reader, &mut writer)?;
+            io::copy(reader, &mut writer)
         }
         FilterMode::Lines(Signum::Positive(count), sep) => {
             let mut num_skip = *count - 1;
@@ -420,50 +421,60 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
                 }
             }
             if chunk.has_data() {
-                chunk.print_lines(&mut writer, num_skip as usize)?;
-                io::copy(reader, &mut writer)?;
+                let bytes = chunk.print_lines(&mut writer, num_skip as usize)?;
+                io::copy(reader, &mut writer).map(|b| b + bytes as u64)
+            } else {
+                Ok(0)
             }
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
-            chunks.fill(reader)?;
+            let bytes = chunks.fill(reader)?;
             chunks.print(&mut writer)?;
+            Ok(bytes)
         }
-        FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
-            io::copy(reader, &mut writer)?;
-        }
+        FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => io::copy(reader, &mut writer),
         FilterMode::Bytes(Signum::Positive(count)) => {
             let mut num_skip = *count - 1;
             let mut chunk = chunks::BytesChunk::new();
-            loop {
+            let mut sum_bytes = 0u64;
+            let bytes = loop {
                 if let Some(bytes) = chunk.fill(reader)? {
                     let bytes: u64 = bytes as u64;
                     match bytes.cmp(&num_skip) {
                         Ordering::Less => num_skip -= bytes,
                         Ordering::Equal => {
-                            break;
+                            break None;
                         }
                         Ordering::Greater => {
-                            writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
-                            break;
+                            let buffer = chunk.get_buffer_with(num_skip as usize);
+                            writer.write_all(buffer)?;
+                            sum_bytes += buffer.len() as u64;
+                            break None;
                         }
                     }
                 } else {
-                    return Ok(());
+                    break Some(sum_bytes);
                 }
-            }
+            };
 
-            io::copy(reader, &mut writer)?;
+            if let Some(bytes) = bytes {
+                Ok(bytes)
+            } else {
+                io::copy(reader, &mut writer).map(|b| b + sum_bytes)
+            }
         }
-        _ => {}
-    }
-    Ok(())
+        _ => Ok(0),
+    };
+
+    writer.flush()?;
+    result
 }
 
 #[cfg(test)]
 mod tests {
 
-    use crate::forwards_thru_file;
+    use crate::*;
     use std::io::Cursor;
 
     #[test]
