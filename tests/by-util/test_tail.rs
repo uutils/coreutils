@@ -4358,14 +4358,7 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
         .stdout_only(expected_stdout);
 }
 
-// Fails with:
-// 'Assertion failed. Expected 'tail' to be running but exited with status=exit status: 1.
-// stdout:
-// stderr: tail: warning: --retry ignored; --retry is useful only when following
-// tail: error reading 'dir': Is a directory
-// '
 #[test]
-#[cfg(disabled_until_fixed)]
 fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
@@ -4377,8 +4370,16 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
          tail: {0}: cannot follow end of this type of file\n",
         dirname
     );
-
     let mut child = scene.ucmd().args(&["-F", "--retry", "dir"]).run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stderr_only(&expected_stderr);
+
+    let mut child = scene.ucmd().args(&["--retry", "-F", "dir"]).run_no_wait();
 
     child.make_assertion_with_delay(500).is_alive();
     child

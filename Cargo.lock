@@ -3179,6 +3179,7 @@ dependencies = [
  "libc",
  "memchr",
  "notify",
+ "rstest",
  "same-file",
  "uucore",
  "winapi-util",
