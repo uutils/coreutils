@@ -202,6 +202,9 @@ impl Settings {
             ..Default::default()
         };
 
+        settings.retry =
+            matches.get_flag(options::FOLLOW_RETRY) || matches.get_flag(options::RETRY);
+
         if let Some(source) = matches.get_one::<String>(options::SLEEP_INT) {
             // Advantage of `fundu` over `Duration::(try_)from_secs_f64(source.parse().unwrap())`:
             // * doesn't panic on errors like `Duration::from_secs_f64` would.
@@ -544,7 +547,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::FOLLOW_RETRY)
                 .short('F')
                 .help("Same as --follow=name --retry")
-                .overrides_with_all([options::RETRY, options::FOLLOW])
                 .action(ArgAction::SetTrue),
         )
         .arg(
