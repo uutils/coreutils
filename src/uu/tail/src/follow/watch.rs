@@ -157,13 +157,14 @@ impl Observer {
         Ok(())
     }
 
+    // FIXME: this doesn't work on windows
     pub fn add_stdin(
         &mut self,
         display_name: &str,
         reader: Option<Box<dyn BufRead>>,
         update_last: bool,
     ) -> UResult<()> {
-        if self.follow == Some(FollowMode::Descriptor) {
+        if self.follow_descriptor() {
             return self.add_path(
                 &PathBuf::from(text::DEV_STDIN),
                 display_name,
@@ -182,6 +183,19 @@ impl Observer {
         update_last: bool,
     ) -> UResult<()> {
         if self.retry && self.follow.is_some() {
+            return self.add_path(path, display_name, None, update_last);
+        }
+
+        Ok(())
+    }
+
+    pub fn add_untailable(
+        &mut self,
+        path: &Path,
+        display_name: &str,
+        update_last: bool,
+    ) -> UResult<()> {
+        if self.follow_name_retry() {
             return self.add_path(path, display_name, None, update_last);
         }
 
@@ -470,7 +484,20 @@ impl Observer {
     }
 }
 
+/*
+POSIX specification regarding tail -f
+If the input file is a regular file or if the file operand specifies a FIFO, do not
+terminate after the last line of the input file has been copied, but read and copy
+further bytes from the input file when they become available. If no file operand is
+specified and standard input is a pipe or FIFO, the -f option shall be ignored. If
+the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
+not the -f option shall be ignored.
+*/
 pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
+    if settings.follow.is_none() || settings.has_only_stdin() {
+        return Ok(());
+    }
+
     if observer.files.no_files_remaining(settings) && !observer.files.only_stdin_remaining() {
         return Err(USimpleError::new(1, text::NO_FILES_REMAINING.to_string()));
     }

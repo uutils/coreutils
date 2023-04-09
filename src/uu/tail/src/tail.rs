@@ -18,6 +18,7 @@
 
 pub mod args;
 pub mod chunks;
+mod error;
 mod follow;
 mod parse;
 mod paths;
@@ -27,16 +28,14 @@ pub mod text;
 pub use args::uu_app;
 use args::{parse_args, FilterMode, Settings, Signum};
 use chunks::ReverseChunks;
+use error::{new_io_directory_error, TailError, TailErrorHandler};
 use follow::Observer;
-use paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
-use same_file::Handle;
+use paths::{FileExtTail, HeaderPrinter, Input, MetadataExtTail, Opened};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{get_exit_code, set_exit_code, FromIo, UError, UResult, USimpleError};
-use uucore::{show, show_error};
+use uucore::error::{UResult, USimpleError};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -61,43 +60,86 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 fn uu_tail(settings: &Settings) -> UResult<()> {
-    let mut printer = HeaderPrinter::new(settings.verbose, true);
+    let mut header_printer = HeaderPrinter::new(settings.verbose, true);
     let mut observer = Observer::from(settings);
 
     observer.start(settings)?;
-    // Do an initial tail print of each path's content.
-    // Add `path` and `reader` to `files` map if `--follow` is selected.
-    for input in &settings.inputs.clone() {
-        match input.kind() {
-            InputKind::File(path) if cfg!(not(unix)) || path != &PathBuf::from(text::DEV_STDIN) => {
-                tail_file(settings, &mut printer, input, path, &mut observer, 0)?;
-            }
-            // File points to /dev/stdin here
-            InputKind::File(_) | InputKind::Stdin => {
-                tail_stdin(settings, &mut printer, input, &mut observer)?;
+
+    for input in &settings.inputs {
+        tail_input(input, settings, &mut header_printer, &mut observer)?;
+    }
+
+    follow::follow(observer, settings)
+}
+
+// Do an initial tail print of each path's content.
+// Add `path` and `reader` to `files` map if `--follow` is selected.
+fn tail_input(
+    input: &Input,
+    settings: &Settings,
+    header_printer: &mut HeaderPrinter,
+    observer: &mut Observer,
+) -> UResult<()> {
+    let result: Result<File, (Option<File>, TailError)> = match input.open() {
+        Ok(Opened::File(mut file)) => match tail_file(settings, header_printer, input, &mut file) {
+            Ok(_) => Ok(file),
+            Err(error) => Err((Some(file), error)),
+        },
+        // looks like windows doesn't handle file seeks properly when the file is a fifo so we
+        // use unbounded tail (in tail_stdin()) which does the right thing.
+        Ok(Opened::Fifo(mut file)) if !cfg!(windows) => {
+            match tail_file(settings, header_printer, input, &mut file) {
+                Ok(_) => Ok(file),
+                Err(error) => Err((Some(file), error)),
             }
         }
-    }
+        Ok(Opened::Fifo(file)) | Ok(Opened::Pipe(file)) => {
+            match tail_stdin(settings, header_printer, input) {
+                Ok(_) => Ok(file),
+                Err(error) => Err((Some(file), error)),
+            }
+        }
+        // Unlike unix systems, windows returns an error (Permission denied) when trying to open
+        // directories like regular files (i.e. with File::open). So we have to fix that to
+        // maintain compatible behavior with the unix version of uu_tail
+        Err(error) if cfg!(windows) => {
+            if let Some(meta) = input.path().and_then(|path| path.metadata().ok()) {
+                if meta.is_dir() {
+                    header_printer.print_input(input);
+                    Err((None, TailError::Read(new_io_directory_error())))
+                } else {
+                    Err((None, TailError::Open(error)))
+                }
+            } else {
+                Err((None, TailError::Open(error)))
+            }
+        }
+        // We do not print the header if we were unable to open the file to match gnu's tail
+        // behavior
+        Err(error) => Err((None, TailError::Open(error))),
+    };
 
-    if settings.follow.is_some() {
-        /*
-        POSIX specification regarding tail -f
-        If the input file is a regular file or if the file operand specifies a FIFO, do not
-        terminate after the last line of the input file has been copied, but read and copy
-        further bytes from the input file when they become available. If no file operand is
-        specified and standard input is a pipe or FIFO, the -f option shall be ignored. If
-        the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
-        not the -f option shall be ignored.
-        */
-        if !settings.has_only_stdin() {
-            follow::follow(observer, settings)?;
+    match result {
+        Ok(file) if input.is_stdin() => {
+            let reader = Box::new(BufReader::new(file));
+            observer.add_stdin(input.display_name.as_str(), Some(reader), true)?;
+        }
+        Ok(file) => {
+            let reader = Box::new(BufReader::new(file));
+            observer.add_path(
+                // we can safely unwrap here because path is None only on windows if input is
+                // stdin
+                input.path().unwrap().as_path(),
+                input.display_name.as_str(),
+                Some(reader),
+                true,
+            )?;
+        }
+        Err((file, error)) => {
+            let handler = TailErrorHandler::from(input.clone(), observer);
+            handler.handle(&error, file, observer)?;
         }
     }
-
-    if get_exit_code() > 0 && paths::stdin_is_bad_fd() {
-        show_error!("-: {}", text::BAD_FD);
-    }
-
     Ok(())
 }
 
@@ -105,139 +147,27 @@ fn tail_file(
     settings: &Settings,
     header_printer: &mut HeaderPrinter,
     input: &Input,
-    path: &Path,
-    observer: &mut Observer,
-    offset: u64,
-) -> UResult<()> {
-    if !path.exists() {
-        set_exit_code(1);
-        show_error!(
-            "cannot open '{}' for reading: {}",
-            input.display_name,
-            text::NO_SUCH_FILE
-        );
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    } else if path.is_dir() {
-        set_exit_code(1);
+    file: &mut File,
+) -> Result<u64, TailError> {
+    header_printer.print_input(input);
 
-        header_printer.print_input(input);
-        let err_msg = "Is a directory".to_string();
+    let meta = file.metadata().map_err(TailError::Stat)?;
 
-        show_error!("error reading '{}': {}", input.display_name, err_msg);
-        if settings.follow.is_some() {
-            let msg = if settings.retry {
-                ""
-            } else {
-                "; giving up on this name"
-            };
-            show_error!(
-                "{}: cannot follow end of this type of file{}",
-                input.display_name,
-                msg
-            );
-        }
-        if !(observer.follow_name_retry()) {
-            // skip directory if not retry
-            return Ok(());
-        }
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
-    } else if input.is_tailable() {
-        let metadata = path.metadata().ok();
-        match File::open(path) {
-            Ok(mut file) => {
-                header_printer.print_input(input);
-                let mut reader;
-                if !settings.presume_input_pipe
-                    && file.is_seekable(if input.is_stdin() { offset } else { 0 })
-                    && metadata.as_ref().unwrap().get_block_size() > 0
-                {
-                    bounded_tail(&mut file, settings)?;
-                    reader = BufReader::new(file);
-                } else {
-                    reader = BufReader::new(file);
-                    unbounded_tail(&mut reader, settings)?;
-                }
-                observer.add_path(
-                    path,
-                    input.display_name.as_str(),
-                    Some(Box::new(reader)),
-                    true,
-                )?;
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-                observer.add_bad_path(path, input.display_name.as_str(), false)?;
-                show!(e.map_err_context(|| {
-                    format!("cannot open '{}' for reading", input.display_name)
-                }));
-            }
-            Err(e) => {
-                observer.add_bad_path(path, input.display_name.as_str(), false)?;
-                return Err(e.map_err_context(|| {
-                    format!("cannot open '{}' for reading", input.display_name)
-                }));
-            }
-        }
+    if !settings.presume_input_pipe && file.is_seekable() && meta.get_block_size() > 0 {
+        bounded_tail(file, settings)
     } else {
-        observer.add_bad_path(path, input.display_name.as_str(), false)?;
+        let mut reader = BufReader::new(file);
+        unbounded_tail(&mut reader, settings)
     }
-
-    Ok(())
 }
 
 fn tail_stdin(
     settings: &Settings,
     header_printer: &mut HeaderPrinter,
     input: &Input,
-    observer: &mut Observer,
-) -> UResult<()> {
-    match input.resolve() {
-        // fifo
-        Some(path) => {
-            let mut stdin_offset = 0;
-            if cfg!(unix) {
-                // Save the current seek position/offset of a stdin redirected file.
-                // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
-                if let Ok(mut stdin_handle) = Handle::stdin() {
-                    if let Ok(offset) = stdin_handle.as_file_mut().stream_position() {
-                        stdin_offset = offset;
-                    }
-                }
-            }
-            tail_file(
-                settings,
-                header_printer,
-                input,
-                &path,
-                observer,
-                stdin_offset,
-            )?;
-        }
-        // pipe
-        None => {
-            header_printer.print_input(input);
-            if paths::stdin_is_bad_fd() {
-                set_exit_code(1);
-                show_error!(
-                    "cannot fstat {}: {}",
-                    text::STDIN_HEADER.quote(),
-                    text::BAD_FD
-                );
-                if settings.follow.is_some() {
-                    show_error!(
-                        "error reading {}: {}",
-                        text::STDIN_HEADER.quote(),
-                        text::BAD_FD
-                    );
-                }
-            } else {
-                let mut reader = BufReader::new(stdin());
-                unbounded_tail(&mut reader, settings)?;
-                observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
-            }
-        }
-    };
-
-    Ok(())
+) -> Result<u64, TailError> {
+    header_printer.print_input(input);
+    unbounded_tail(&mut BufReader::new(stdin()), settings)
 }
 
 /// Find the index after the given number of instances of a given byte.
@@ -358,34 +288,51 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) -> i
     Ok(())
 }
 
+/// A helper function to copy the whole content of the `reader` into the `writer`.
+///
+/// To differentiate between read and write errors this functions initially tries to read zero bytes
+/// from the reader. This distinction is necessary, since write errors lead to the abortion of the
+/// whole program and read errors do not. If the initial read fails a [`TailError::Read`] is
+/// returned. If [`std::io::copy`] fails it'll return a [`TailError::Write`].
+fn copy(reader: &mut impl Read, writer: &mut impl Write) -> Result<u64, TailError> {
+    let mut zero_buffer = vec![];
+    reader
+        .read(zero_buffer.as_mut_slice())
+        .map_err(TailError::Read)?;
+    io::copy(reader, writer).map_err(TailError::Write)
+}
+
 /// When tail'ing a file, we do not need to read the whole file from start to
 /// finish just to find the last n lines or bytes. Instead, we can seek to the
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, settings: &Settings) -> io::Result<u64> {
+fn bounded_tail(file: &mut File, settings: &Settings) -> Result<u64, TailError> {
     debug_assert!(!settings.presume_input_pipe);
 
     // Find the position in the file to start printing from.
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), delimiter) => {
-            backwards_thru_file(file, *count, *delimiter)?;
+            backwards_thru_file(file, *count, *delimiter).map_err(TailError::Read)?;
         }
         FilterMode::Lines(Signum::Positive(count), delimiter) if count > &1 => {
-            let i = forwards_thru_file(file, *count - 1, *delimiter)?;
-            file.seek(SeekFrom::Start(i as u64))?;
+            let i = forwards_thru_file(file, *count - 1, *delimiter).map_err(TailError::Read)?;
+            file.seek(SeekFrom::Start(i as u64))
+                .map_err(TailError::Read)?;
         }
         FilterMode::Lines(Signum::MinusZero, _) => {
             return Ok(0);
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            let len = file.seek(SeekFrom::End(0))?;
-            file.seek(SeekFrom::End(-((*count).min(len) as i64)))?;
+            let len = file.seek(SeekFrom::End(0)).map_err(TailError::Read)?;
+            file.seek(SeekFrom::End(-((*count).min(len) as i64)))
+                .map_err(TailError::Read)?;
         }
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
             // GNU `tail` seems to index bytes and lines starting at 1, not
             // at 0. It seems to treat `+0` and `+1` as the same thing.
-            file.seek(SeekFrom::Start(*count - 1))?;
+            file.seek(SeekFrom::Start(*count - 1))
+                .map_err(TailError::Read)?;
         }
         FilterMode::Bytes(Signum::MinusZero) => {
             return Ok(0);
@@ -396,26 +343,27 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> io::Result<u64> {
     // Print the target section of the file.
     let stdout = stdout();
     let mut writer = BufWriter::new(stdout.lock());
-    io::copy(file, &mut writer).and_then(|a| writer.flush().map(|_| a))
+    copy(file, &mut writer).and_then(|a| writer.flush().map(|_| a).map_err(TailError::Write))
 }
 
-fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> io::Result<u64> {
+fn unbounded_tail<T: Read>(
+    reader: &mut BufReader<T>,
+    settings: &Settings,
+) -> Result<u64, TailError> {
     let stdout = stdout();
     let mut writer = BufWriter::new(stdout.lock());
     let result = match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
-            let bytes = chunks.fill(reader)?;
-            chunks.print(&mut writer)?;
+            let bytes = chunks.fill(reader).map_err(TailError::Read)?;
+            chunks.print(&mut writer).map_err(TailError::Write)?;
             Ok(bytes)
         }
-        FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _) => {
-            io::copy(reader, &mut writer)
-        }
+        FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _) => copy(reader, &mut writer),
         FilterMode::Lines(Signum::Positive(count), sep) => {
             let mut num_skip = *count - 1;
             let mut chunk = chunks::LinesChunk::new(*sep);
-            while chunk.fill(reader)?.is_some() {
+            while chunk.fill(reader).map_err(TailError::Read)?.is_some() {
                 let lines = chunk.get_lines() as u64;
                 if lines < num_skip {
                     num_skip -= lines;
@@ -424,25 +372,27 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> io
                 }
             }
             if chunk.has_data() {
-                let bytes = chunk.print_lines(&mut writer, num_skip as usize)?;
-                io::copy(reader, &mut writer).map(|b| b + bytes as u64)
+                let bytes = chunk
+                    .print_lines(&mut writer, num_skip as usize)
+                    .map_err(TailError::Write)?;
+                copy(reader, &mut writer).map(|b| b + bytes as u64)
             } else {
                 Ok(0)
             }
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
-            let bytes = chunks.fill(reader)?;
-            chunks.print(&mut writer)?;
+            let bytes = chunks.fill(reader).map_err(TailError::Read)?;
+            chunks.print(&mut writer).map_err(TailError::Write)?;
             Ok(bytes)
         }
-        FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => io::copy(reader, &mut writer),
+        FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => copy(reader, &mut writer),
         FilterMode::Bytes(Signum::Positive(count)) => {
             let mut num_skip = *count - 1;
             let mut chunk = chunks::BytesChunk::new();
             let mut sum_bytes = 0u64;
             let bytes = loop {
-                if let Some(bytes) = chunk.fill(reader)? {
+                if let Some(bytes) = chunk.fill(reader).map_err(TailError::Read)? {
                     let bytes: u64 = bytes as u64;
                     match bytes.cmp(&num_skip) {
                         Ordering::Less => num_skip -= bytes,
@@ -451,7 +401,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> io
                         }
                         Ordering::Greater => {
                             let buffer = chunk.get_buffer_with(num_skip as usize);
-                            writer.write_all(buffer)?;
+                            writer.write_all(buffer).map_err(TailError::Write)?;
                             sum_bytes += buffer.len() as u64;
                             break None;
                         }
@@ -464,13 +414,13 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> io
             if let Some(bytes) = bytes {
                 Ok(bytes)
             } else {
-                io::copy(reader, &mut writer).map(|b| b + sum_bytes)
+                copy(reader, &mut writer).map(|b| b + sum_bytes)
             }
         }
         _ => Ok(0),
     };
 
-    writer.flush()?;
+    writer.flush().map_err(TailError::Write)?;
     result
 }
 

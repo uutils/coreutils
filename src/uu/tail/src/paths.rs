@@ -6,20 +6,31 @@
 // spell-checker:ignore tailable seekable stdlib (stdlib)
 
 use crate::text;
+use same_file::Handle;
 use std::ffi::OsStr;
 use std::fs::{File, Metadata};
-use std::io::{Seek, SeekFrom};
+use std::io::{self, Seek};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 
+pub enum Opened {
+    File(File),
+    Fifo(File),
+    Pipe(File),
+}
+
+/// The kind of input, either a `File` or `Stdin` defining an [`Input`]  .
 #[derive(Debug, Clone)]
 pub enum InputKind {
     File(PathBuf),
     Stdin,
 }
 
+/// Represent an input from the command line arguments.
+///
+/// Is composed of an [`InputKind`] and a display name.
 #[derive(Debug, Clone)]
 pub struct Input {
     kind: InputKind,
@@ -54,28 +65,34 @@ impl Input {
         }
     }
 
-    pub fn resolve(&self) -> Option<PathBuf> {
+    pub fn open(&self) -> io::Result<Opened> {
         match &self.kind {
-            InputKind::File(path) if path != &PathBuf::from(text::DEV_STDIN) => {
-                path.canonicalize().ok()
-            }
-            InputKind::File(_) | InputKind::Stdin => {
-                if cfg!(unix) {
-                    match PathBuf::from(text::DEV_STDIN).canonicalize().ok() {
-                        Some(path) if path != PathBuf::from(text::FD0) => Some(path),
-                        Some(_) | None => None,
-                    }
+            InputKind::File(path) => Ok(Opened::File(File::open(path)?)),
+            InputKind::Stdin => {
+                let mut handle = Handle::stdin()?;
+                let file = handle.as_file_mut();
+                if file.is_seekable() {
+                    Ok(Opened::Fifo(file.try_clone()?))
                 } else {
-                    None
+                    Ok(Opened::Pipe(file.try_clone()?))
                 }
             }
         }
     }
 
-    pub fn is_tailable(&self) -> bool {
+    #[cfg(unix)]
+    pub fn path(&self) -> Option<PathBuf> {
         match &self.kind {
-            InputKind::File(path) => path_is_tailable(path),
-            InputKind::Stdin => self.resolve().map_or(false, |path| path_is_tailable(&path)),
+            InputKind::File(path) => Some(path.to_owned()),
+            InputKind::Stdin => Some(PathBuf::from(text::DEV_STDIN)),
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn path(&self) -> Option<PathBuf> {
+        match &self.kind {
+            InputKind::File(path) => Some(path.to_owned()),
+            InputKind::Stdin => None,
         }
     }
 }
@@ -120,16 +137,13 @@ impl HeaderPrinter {
 }
 pub trait FileExtTail {
     #[allow(clippy::wrong_self_convention)]
-    fn is_seekable(&mut self, current_offset: u64) -> bool;
+    fn is_seekable(&mut self) -> bool;
 }
 
 impl FileExtTail for File {
     /// Test if File is seekable.
-    /// Set the current position offset to `current_offset`.
-    fn is_seekable(&mut self, current_offset: u64) -> bool {
+    fn is_seekable(&mut self) -> bool {
         self.stream_position().is_ok()
-            && self.seek(SeekFrom::End(0)).is_ok()
-            && self.seek(SeekFrom::Start(current_offset)).is_ok()
     }
 }
 
@@ -216,17 +230,4 @@ impl PathExtTail for Path {
 
 pub fn path_is_tailable(path: &Path) -> bool {
     path.is_file() || path.exists() && path.metadata().map_or(false, |meta| meta.is_tailable())
-}
-
-#[inline]
-pub fn stdin_is_bad_fd() -> bool {
-    // FIXME : Rust's stdlib is reopening fds as /dev/null
-    // see also: https://github.com/uutils/coreutils/issues/2873
-    // (gnu/tests/tail-2/follow-stdin.sh fails because of this)
-    //#[cfg(unix)]
-    {
-        //platform::stdin_is_bad_fd()
-    }
-    //#[cfg(not(unix))]
-    false
 }
