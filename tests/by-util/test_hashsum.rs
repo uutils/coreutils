@@ -126,6 +126,23 @@ fn test_check_sha1() {
 }
 
 #[test]
+fn test_check_b2sum_length_option() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+    at.write("testf.b2sum", "6a  testf\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=8")
+        .arg("-c")
+        .arg(at.subdir.join("testf.b2sum"))
+        .succeeds()
+        .stdout_only("testf: OK\n");
+}
+
+#[test]
 fn test_check_file_not_found_warning() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
