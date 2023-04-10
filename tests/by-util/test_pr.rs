@@ -1,5 +1,4 @@
 // spell-checker:ignore (ToDO) Sdivide
-extern crate time;
 
 use crate::common::util::{TestScenario, UCommand};
 use std::fs::metadata;

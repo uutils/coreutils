@@ -4,8 +4,6 @@ use crate::common::util::{is_ci, run_ucmd_as_root, CmdResult, TestScenario};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rust_users::get_effective_uid;
 
-extern crate chown;
-
 // Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
 // If we are running inside the CI and "needle" is in "stderr" skipping this test is
 // considered okay. If we are not inside the CI this calls assert!(result.success).
@@ -36,7 +34,7 @@ fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
 
 #[cfg(test)]
 mod test_passgrp {
-    use super::chown::entries::{gid2grp, grp2gid, uid2usr, usr2uid};
+    use chown::entries::{gid2grp, grp2gid, uid2usr, usr2uid};
 
     #[test]
     fn test_usr2uid() {

@@ -1,10 +1,8 @@
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
+use libc::{mode_t, umask};
+#[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
-#[cfg(not(windows))]
-extern crate libc;
-#[cfg(not(windows))]
-use self::libc::{mode_t, umask};
 
 static TEST_DIR1: &str = "mkdir_test1";
 static TEST_DIR2: &str = "mkdir_test2";

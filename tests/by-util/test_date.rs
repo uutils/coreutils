@@ -1,7 +1,5 @@
-extern crate regex;
-
-use self::regex::Regex;
 use crate::common::util::TestScenario;
+use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
 use rust_users::get_effective_uid;
 

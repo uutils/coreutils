@@ -1,17 +1,11 @@
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc
 
-#[cfg(not(windows))]
-extern crate libc;
-extern crate regex;
-#[cfg(not(windows))]
-extern crate tempfile;
-
-use self::regex::Regex;
 #[cfg(feature = "feat_selinux")]
 use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
+use regex::Regex;
 use std::collections::HashMap;
 #[cfg(all(unix, feature = "chmod"))]
 use std::os::unix::io::IntoRawFd;

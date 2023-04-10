@@ -7,8 +7,6 @@
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 
-extern crate tail;
-
 use crate::common::random::{AlphanumericNewline, RandomString};
 #[cfg(unix)]
 use crate::common::util::expected_result;
