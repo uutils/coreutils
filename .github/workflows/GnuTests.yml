@@ -203,7 +203,7 @@ jobs:
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
         # https://github.com/uutils/coreutils/issues/4294
         # https://github.com/uutils/coreutils/issues/4295
-        IGNORE_INTERMITTENT='.github/workflows/ignore-intermittent.txt'
+        IGNORE_INTERMITTENT='${path_UUTILS}/.github/workflows/ignore-intermittent.txt'
 
         mkdir -p ${{ steps.vars.outputs.path_reference }}
 
