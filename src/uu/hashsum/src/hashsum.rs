@@ -67,6 +67,15 @@ fn detect_algo(
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
         "b2sum" => match matches.get_one::<usize>("length") {
             Some(length_in_bits) => {
+                if *length_in_bits > 512 {
+                    crash!(1, "Invalid length (maximum digest length is 512 bits)")
+                }
+
+                // --length=0 falls back to default behaviour
+                if *length_in_bits == 0 {
+                    return ("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512);
+                }
+
                 // blake2 output size must be a multiple of 8 bits
                 if length_in_bits % 8 == 0 {
                     let length_in_bytes = length_in_bits / 8;
@@ -400,7 +409,6 @@ pub fn uu_app_length() -> Command {
 }
 
 fn uu_app_opt_length(command: Command) -> Command {
-    // Needed for variable-length output sums (e.g. SHAKE)
     command.arg(
         Arg::new("length")
             .short('l')
