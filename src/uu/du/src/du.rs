@@ -625,20 +625,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                 if matches.contains_id(options::TIME) {
                     let tm = {
-                        let secs = {
-                            match matches.get_one::<String>(options::TIME) {
-                                Some(s) => match s.as_str() {
-                                    "ctime" | "status" => stat.modified,
-                                    "access" | "atime" | "use" => stat.accessed,
-                                    "birth" | "creation" => stat
-                                        .created
-                                        .ok_or_else(|| DuError::InvalidTimeArg(s.into()))?,
-                                    // below should never happen as clap already restricts the values.
-                                    _ => unreachable!("Invalid field for --time"),
-                                },
-                                None => stat.modified,
-                            }
-                        };
+                        let secs = matches
+                            .get_one::<String>(options::TIME)
+                            .map(|s| get_time_secs(s, &stat))
+                            .transpose()?
+                            .unwrap_or(stat.modified);
                         DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
                     };
                     if !summarize || index == len - 1 {
@@ -674,6 +665,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     Ok(())
+}
+
+fn get_time_secs(s: &str, stat: &Stat) -> std::result::Result<u64, DuError> {
+    let secs = match s {
+        "ctime" | "status" => stat.modified,
+        "access" | "atime" | "use" => stat.accessed,
+        "birth" | "creation" => stat
+            .created
+            .ok_or_else(|| DuError::InvalidTimeArg(s.into()))?,
+        // below should never happen as clap already restricts the values.
+        _ => unreachable!("Invalid field for --time"),
+    };
+    Ok(secs)
 }
 
 fn parse_time_style(s: Option<&str>) -> UResult<&str> {
