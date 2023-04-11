@@ -426,6 +426,12 @@ struct PaddingCollection {
     block_size: usize,
 }
 
+/// Extracts the format to display the information based on the options provided.
+///
+/// # Returns
+///
+/// A tuple containing the Format variant and an Option containing a &'static str
+/// which corresponds to the option used to define the format.
 fn extract_format(options: &clap::ArgMatches) -> (Format, Option<&'static str>) {
     if let Some(format_) = options.get_one::<String>(options::FORMAT) {
         (
@@ -455,6 +461,11 @@ fn extract_format(options: &clap::ArgMatches) -> (Format, Option<&'static str>) 
     }
 }
 
+/// Extracts the type of files to display
+///
+/// # Returns
+///
+/// A Files variant representing the type of files to display.
 fn extract_files(options: &clap::ArgMatches) -> Files {
     if options.get_flag(options::files::ALL) {
         Files::All
@@ -465,6 +476,11 @@ fn extract_files(options: &clap::ArgMatches) -> Files {
     }
 }
 
+/// Extracts the sorting method to use based on the options provided.
+///
+/// # Returns
+///
+/// A Sort variant representing the sorting method to use.
 fn extract_sort(options: &clap::ArgMatches) -> Sort {
     if let Some(field) = options.get_one::<String>(options::SORT) {
         match field.as_str() {
@@ -492,6 +508,11 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
     }
 }
 
+/// Extracts the time to use based on the options provided.
+///
+/// # Returns
+///
+/// A Time variant representing the time to use.
 fn extract_time(options: &clap::ArgMatches) -> Time {
     if let Some(field) = options.get_one::<String>(options::TIME) {
         match field.as_str() {
@@ -510,6 +531,11 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
     }
 }
 
+/// Extracts the color option to use based on the options provided.
+///
+/// # Returns
+///
+/// A boolean representing whether or not to use color.
 fn extract_color(options: &clap::ArgMatches) -> bool {
     match options.get_one::<String>(options::COLOR) {
         None => options.contains_id(options::COLOR),
@@ -521,6 +547,16 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
     }
 }
 
+/// Extracts the quoting style to use based on the options provided.
+///
+/// # Arguments
+///
+/// * `options` - A reference to a clap::ArgMatches object containing command line arguments.
+/// * `show_control` - A boolean value representing whether or not to show control characters.
+///
+/// # Returns
+///
+/// A QuotingStyle variant representing the quoting style to use.
 fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> QuotingStyle {
     let opt_quoting_style = options
         .get_one::<String>(options::QUOTING_STYLE)
@@ -577,6 +613,11 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
     }
 }
 
+/// Extracts the indicator style to use based on the options provided.
+///
+/// # Returns
+///
+/// An IndicatorStyle variant representing the indicator style to use.
 fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
     if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
         match field.as_str() {
