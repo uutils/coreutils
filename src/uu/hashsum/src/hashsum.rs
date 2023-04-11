@@ -71,7 +71,7 @@ fn detect_algo(
                     crash!(1, "Invalid length (maximum digest length is 512 bits)")
                 }
 
-                // --length=0 falls back to default behaviour
+                // --length=0 falls back to default behavior
                 if *length_in_bits == 0 {
                     return ("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512);
                 }
@@ -88,7 +88,7 @@ fn detect_algo(
                     crash!(1, "Invalid length (expected a multiple of 8)")
                 }
             }
-            // by default, blake2 uses 64bytes (512 bits)
+            // by default, blake2 uses 64 bytes (512 bits)
             None => ("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512),
         },
         "b3sum" => ("BLAKE3", Box::new(Blake3::new()) as Box<dyn Digest>, 256),
