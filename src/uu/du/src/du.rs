@@ -400,6 +400,20 @@ fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
     format!("{}", ((size as f64) / (block_size as f64)).ceil())
 }
 
+fn get_convert_size_fn(matches: &ArgMatches) -> Box<dyn Fn(u64, u64, u64) -> String> {
+    if matches.get_flag(options::HUMAN_READABLE) || matches.get_flag(options::SI) {
+        Box::new(convert_size_human)
+    } else if matches.get_flag(options::BYTES) {
+        Box::new(convert_size_b)
+    } else if matches.get_flag(options::BLOCK_SIZE_1K) {
+        Box::new(convert_size_k)
+    } else if matches.get_flag(options::BLOCK_SIZE_1M) {
+        Box::new(convert_size_m)
+    } else {
+        Box::new(convert_size_other)
+    }
+}
+
 #[derive(Debug)]
 enum DuError {
     InvalidMaxDepthArg(String),
@@ -556,19 +570,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         1024
     };
-    let convert_size_fn = {
-        if matches.get_flag(options::HUMAN_READABLE) || matches.get_flag(options::SI) {
-            convert_size_human
-        } else if matches.get_flag(options::BYTES) {
-            convert_size_b
-        } else if matches.get_flag(options::BLOCK_SIZE_1K) {
-            convert_size_k
-        } else if matches.get_flag(options::BLOCK_SIZE_1M) {
-            convert_size_m
-        } else {
-            convert_size_other
-        }
-    };
+
+    let convert_size_fn = get_convert_size_fn(&matches);
+
     let convert_size = |size: u64| {
         if options.inodes {
             size.to_string()
