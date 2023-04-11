@@ -114,12 +114,13 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: PathBuf, options: &Options) -> Result<Self> {
-        let metadata = if options.dereference || options.dereference_args.contains(&path) {
-            fs::metadata(&path)?
-        } else {
-            fs::symlink_metadata(&path)?
-        };
+    fn new(path: &Path, options: &Options) -> Result<Self> {
+        let metadata =
+            if options.dereference || options.dereference_args.contains(&path.to_path_buf()) {
+                fs::metadata(path)?
+            } else {
+                fs::symlink_metadata(path)?
+            };
 
         #[cfg(not(windows))]
         let file_info = FileInfo {
@@ -128,7 +129,7 @@ impl Stat {
         };
         #[cfg(not(windows))]
         return Ok(Self {
-            path,
+            path: path.to_path_buf(),
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             blocks: metadata.blocks(),
@@ -140,12 +141,12 @@ impl Stat {
         });
 
         #[cfg(windows)]
-        let size_on_disk = get_size_on_disk(&path);
+        let size_on_disk = get_size_on_disk(path);
         #[cfg(windows)]
-        let file_info = get_file_info(&path);
+        let file_info = get_file_info(path);
         #[cfg(windows)]
         Ok(Self {
-            path,
+            path: path.to_path_buf(),
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             blocks: size_on_disk / 1024 * 2,
@@ -298,7 +299,7 @@ fn du(
         'file_loop: for f in read {
             match f {
                 Ok(entry) => {
-                    match Stat::new(entry.path(), options) {
+                    match Stat::new(&entry.path(), options) {
                         Ok(this_stat) => {
                             // We have an exclude list
                             for pattern in exclude {
@@ -511,9 +512,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Some(_) => matches
             .get_many::<String>(options::FILE)
             .unwrap()
-            .map(|s| s.as_str())
+            .map(PathBuf::from)
             .collect(),
-        None => vec!["."],
+        None => vec![PathBuf::from(".")],
     };
 
     let options = Options {
@@ -524,9 +525,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
         dereference: matches.get_flag(options::DEREFERENCE),
         dereference_args: if matches.get_flag(options::DEREFERENCE_ARGS) {
-            // Convert into a pathbuf as we will use it in a function using Pathbuf
-            // We don't care about the cost as it is rarely used
-            files.iter().map(PathBuf::from).collect()
+            // We don't care about the cost of cloning as it is rarely used
+            files.clone()
         } else {
             vec![]
         },
@@ -589,11 +589,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let excludes = build_exclude_patterns(&matches)?;
 
     let mut grand_total = 0;
-    'loop_file: for path_string in files {
+    'loop_file: for path in files {
         // Skip if we don't want to ignore anything
         if !&excludes.is_empty() {
+            let path_string = path.to_string_lossy();
             for pattern in &excludes {
-                if pattern.matches(path_string) {
+                if pattern.matches(&path_string) {
                     // if the directory is ignored, leave early
                     if options.verbose {
                         println!("{} ignored", path_string.quote());
@@ -603,9 +604,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        let path = PathBuf::from(&path_string);
         // Check existence of path provided in argument
-        if let Ok(stat) = Stat::new(path, &options) {
+        if let Ok(stat) = Stat::new(&path, &options) {
             // Kick off the computation of disk usage from the initial path
             let mut inodes: HashSet<FileInfo> = HashSet::new();
             if let Some(inode) = stat.inode {
@@ -661,7 +661,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             show_error!(
                 "{}: {}",
-                path_string.maybe_quote(),
+                path.to_string_lossy().maybe_quote(),
                 "No such file or directory"
             );
             set_exit_code(1);
