@@ -923,32 +923,38 @@ fn test_missing_xs_tmpdir_template() {
 #[test]
 fn test_both_tmpdir_flags_present() {
     let scene = TestScenario::new(util_name!());
-    scene
-        .ucmd()
+    let template = format!(".{MAIN_SEPARATOR}foobarXXXX");
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .env(TMPDIR, ".")
         .arg("-p")
-        .arg(".")
+        .arg("nonsense")
         .arg("--tmpdir")
         .arg("foobarXXXX")
-        .succeeds()
-        .no_stderr()
-        .stdout_contains("/tmp/foobar");
+        .succeeds();
+    let filename = result.no_stderr().stdout_str().trim_end();
+    assert_matches_template!(&template, filename);
+    assert!(at.file_exists(filename));
+
     scene
         .ucmd()
         .arg("-p")
         .arg(".")
-        .arg("--tmpdir=foobarXXXX")
+        .arg("--tmpdir=doesnotexist")
         .fails()
         .no_stdout()
         .stderr_contains("failed to create file via template");
-    scene
-        .ucmd()
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
         .arg("--tmpdir")
         .arg("foobarXXXX")
         .arg("-p")
         .arg(".")
-        .succeeds()
-        .no_stderr()
-        .stdout_contains("./foobar");
+        .succeeds();
+    let filename = result.no_stderr().stdout_str().trim_end();
+    assert_matches_template!(&template, filename);
+    assert!(at.file_exists(filename));
 }
 
 #[test]
