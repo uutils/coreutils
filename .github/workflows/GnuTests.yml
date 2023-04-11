@@ -201,6 +201,7 @@ jobs:
         REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
+        path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         # https://github.com/uutils/coreutils/issues/4294
         # https://github.com/uutils/coreutils/issues/4295
         IGNORE_INTERMITTENT='${path_UUTILS}/.github/workflows/ignore-intermittent.txt'
