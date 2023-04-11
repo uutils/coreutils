@@ -420,7 +420,7 @@ fn rename(
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
-                    return Err(io::Error::new(io::ErrorKind::Other, ""));
+                    return Ok(());
                 }
             }
             OverwriteMode::Force => {}
