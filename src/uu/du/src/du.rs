@@ -507,7 +507,6 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
 }
 
 #[uucore::main]
-#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
