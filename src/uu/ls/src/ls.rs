@@ -609,7 +609,6 @@ fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
 }
 
 impl Config {
-    #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.get_flag(options::CONTEXT);
         let (mut format, opt) = extract_format(options);
