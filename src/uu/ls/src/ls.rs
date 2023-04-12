@@ -426,36 +426,234 @@ struct PaddingCollection {
     block_size: usize,
 }
 
+/// Extracts the format to display the information based on the options provided.
+///
+/// # Returns
+///
+/// A tuple containing the Format variant and an Option containing a &'static str
+/// which corresponds to the option used to define the format.
+fn extract_format(options: &clap::ArgMatches) -> (Format, Option<&'static str>) {
+    if let Some(format_) = options.get_one::<String>(options::FORMAT) {
+        (
+            match format_.as_str() {
+                "long" | "verbose" => Format::Long,
+                "single-column" => Format::OneLine,
+                "columns" | "vertical" => Format::Columns,
+                "across" | "horizontal" => Format::Across,
+                "commas" => Format::Commas,
+                // below should never happen as clap already restricts the values.
+                _ => unreachable!("Invalid field for --format"),
+            },
+            Some(options::FORMAT),
+        )
+    } else if options.get_flag(options::format::LONG) {
+        (Format::Long, Some(options::format::LONG))
+    } else if options.get_flag(options::format::ACROSS) {
+        (Format::Across, Some(options::format::ACROSS))
+    } else if options.get_flag(options::format::COMMAS) {
+        (Format::Commas, Some(options::format::COMMAS))
+    } else if options.get_flag(options::format::COLUMNS) {
+        (Format::Columns, Some(options::format::COLUMNS))
+    } else if std::io::stdout().is_terminal() {
+        (Format::Columns, None)
+    } else {
+        (Format::OneLine, None)
+    }
+}
+
+/// Extracts the type of files to display
+///
+/// # Returns
+///
+/// A Files variant representing the type of files to display.
+fn extract_files(options: &clap::ArgMatches) -> Files {
+    if options.get_flag(options::files::ALL) {
+        Files::All
+    } else if options.get_flag(options::files::ALMOST_ALL) {
+        Files::AlmostAll
+    } else {
+        Files::Normal
+    }
+}
+
+/// Extracts the sorting method to use based on the options provided.
+///
+/// # Returns
+///
+/// A Sort variant representing the sorting method to use.
+fn extract_sort(options: &clap::ArgMatches) -> Sort {
+    if let Some(field) = options.get_one::<String>(options::SORT) {
+        match field.as_str() {
+            "none" => Sort::None,
+            "name" => Sort::Name,
+            "time" => Sort::Time,
+            "size" => Sort::Size,
+            "version" => Sort::Version,
+            "extension" => Sort::Extension,
+            // below should never happen as clap already restricts the values.
+            _ => unreachable!("Invalid field for --sort"),
+        }
+    } else if options.get_flag(options::sort::TIME) {
+        Sort::Time
+    } else if options.get_flag(options::sort::SIZE) {
+        Sort::Size
+    } else if options.get_flag(options::sort::NONE) {
+        Sort::None
+    } else if options.get_flag(options::sort::VERSION) {
+        Sort::Version
+    } else if options.get_flag(options::sort::EXTENSION) {
+        Sort::Extension
+    } else {
+        Sort::Name
+    }
+}
+
+/// Extracts the time to use based on the options provided.
+///
+/// # Returns
+///
+/// A Time variant representing the time to use.
+fn extract_time(options: &clap::ArgMatches) -> Time {
+    if let Some(field) = options.get_one::<String>(options::TIME) {
+        match field.as_str() {
+            "ctime" | "status" => Time::Change,
+            "access" | "atime" | "use" => Time::Access,
+            "birth" | "creation" => Time::Birth,
+            // below should never happen as clap already restricts the values.
+            _ => unreachable!("Invalid field for --time"),
+        }
+    } else if options.get_flag(options::time::ACCESS) {
+        Time::Access
+    } else if options.get_flag(options::time::CHANGE) {
+        Time::Change
+    } else {
+        Time::Modification
+    }
+}
+
+/// Extracts the color option to use based on the options provided.
+///
+/// # Returns
+///
+/// A boolean representing whether or not to use color.
+fn extract_color(options: &clap::ArgMatches) -> bool {
+    match options.get_one::<String>(options::COLOR) {
+        None => options.contains_id(options::COLOR),
+        Some(val) => match val.as_str() {
+            "" | "always" | "yes" | "force" => true,
+            "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
+            /* "never" | "no" | "none" | */ _ => false,
+        },
+    }
+}
+
+/// Extracts the quoting style to use based on the options provided.
+///
+/// # Arguments
+///
+/// * `options` - A reference to a clap::ArgMatches object containing command line arguments.
+/// * `show_control` - A boolean value representing whether or not to show control characters.
+///
+/// # Returns
+///
+/// A QuotingStyle variant representing the quoting style to use.
+fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> QuotingStyle {
+    let opt_quoting_style = options
+        .get_one::<String>(options::QUOTING_STYLE)
+        .map(|cmd_line_qs| cmd_line_qs.to_owned());
+
+    if let Some(style) = opt_quoting_style {
+        match style.as_str() {
+            "literal" => QuotingStyle::Literal { show_control },
+            "shell" => QuotingStyle::Shell {
+                escape: false,
+                always_quote: false,
+                show_control,
+            },
+            "shell-always" => QuotingStyle::Shell {
+                escape: false,
+                always_quote: true,
+                show_control,
+            },
+            "shell-escape" => QuotingStyle::Shell {
+                escape: true,
+                always_quote: false,
+                show_control,
+            },
+            "shell-escape-always" => QuotingStyle::Shell {
+                escape: true,
+                always_quote: true,
+                show_control,
+            },
+            "c" => QuotingStyle::C {
+                quotes: quoting_style::Quotes::Double,
+            },
+            "escape" => QuotingStyle::C {
+                quotes: quoting_style::Quotes::None,
+            },
+            _ => unreachable!("Should have been caught by Clap"),
+        }
+    } else if options.get_flag(options::quoting::LITERAL) {
+        QuotingStyle::Literal { show_control }
+    } else if options.get_flag(options::quoting::ESCAPE) {
+        QuotingStyle::C {
+            quotes: quoting_style::Quotes::None,
+        }
+    } else if options.get_flag(options::quoting::C) {
+        QuotingStyle::C {
+            quotes: quoting_style::Quotes::Double,
+        }
+    } else {
+        // TODO: use environment variable if available
+        QuotingStyle::Shell {
+            escape: true,
+            always_quote: false,
+            show_control,
+        }
+    }
+}
+
+/// Extracts the indicator style to use based on the options provided.
+///
+/// # Returns
+///
+/// An IndicatorStyle variant representing the indicator style to use.
+fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
+    if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
+        match field.as_str() {
+            "none" => IndicatorStyle::None,
+            "file-type" => IndicatorStyle::FileType,
+            "classify" => IndicatorStyle::Classify,
+            "slash" => IndicatorStyle::Slash,
+            &_ => IndicatorStyle::None,
+        }
+    } else if let Some(field) = options.get_one::<String>(options::indicator_style::CLASSIFY) {
+        match field.as_str() {
+            "never" | "no" | "none" => IndicatorStyle::None,
+            "always" | "yes" | "force" => IndicatorStyle::Classify,
+            "auto" | "tty" | "if-tty" => {
+                if std::io::stdout().is_terminal() {
+                    IndicatorStyle::Classify
+                } else {
+                    IndicatorStyle::None
+                }
+            }
+            &_ => IndicatorStyle::None,
+        }
+    } else if options.get_flag(options::indicator_style::SLASH) {
+        IndicatorStyle::Slash
+    } else if options.get_flag(options::indicator_style::FILE_TYPE) {
+        IndicatorStyle::FileType
+    } else {
+        IndicatorStyle::None
+    }
+}
+
 impl Config {
-    #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.get_flag(options::CONTEXT);
-        let (mut format, opt) = if let Some(format_) = options.get_one::<String>(options::FORMAT) {
-            (
-                match format_.as_str() {
-                    "long" | "verbose" => Format::Long,
-                    "single-column" => Format::OneLine,
-                    "columns" | "vertical" => Format::Columns,
-                    "across" | "horizontal" => Format::Across,
-                    "commas" => Format::Commas,
-                    // below should never happen as clap already restricts the values.
-                    _ => unreachable!("Invalid field for --format"),
-                },
-                Some(options::FORMAT),
-            )
-        } else if options.get_flag(options::format::LONG) {
-            (Format::Long, Some(options::format::LONG))
-        } else if options.get_flag(options::format::ACROSS) {
-            (Format::Across, Some(options::format::ACROSS))
-        } else if options.get_flag(options::format::COMMAS) {
-            (Format::Commas, Some(options::format::COMMAS))
-        } else if options.get_flag(options::format::COLUMNS) {
-            (Format::Columns, Some(options::format::COLUMNS))
-        } else if std::io::stdout().is_terminal() {
-            (Format::Columns, None)
-        } else {
-            (Format::OneLine, None)
-        };
+        let (mut format, opt) = extract_format(options);
+        let files = extract_files(options);
 
         // The -o, -n and -g options are tricky. They cannot override with each
         // other because it's possible to combine them. For example, the option
@@ -504,63 +702,11 @@ impl Config {
             }
         }
 
-        let files = if options.get_flag(options::files::ALL) {
-            Files::All
-        } else if options.get_flag(options::files::ALMOST_ALL) {
-            Files::AlmostAll
-        } else {
-            Files::Normal
-        };
+        let sort = extract_sort(options);
 
-        let sort = if let Some(field) = options.get_one::<String>(options::SORT) {
-            match field.as_str() {
-                "none" => Sort::None,
-                "name" => Sort::Name,
-                "time" => Sort::Time,
-                "size" => Sort::Size,
-                "version" => Sort::Version,
-                "extension" => Sort::Extension,
-                // below should never happen as clap already restricts the values.
-                _ => unreachable!("Invalid field for --sort"),
-            }
-        } else if options.get_flag(options::sort::TIME) {
-            Sort::Time
-        } else if options.get_flag(options::sort::SIZE) {
-            Sort::Size
-        } else if options.get_flag(options::sort::NONE) {
-            Sort::None
-        } else if options.get_flag(options::sort::VERSION) {
-            Sort::Version
-        } else if options.get_flag(options::sort::EXTENSION) {
-            Sort::Extension
-        } else {
-            Sort::Name
-        };
+        let time = extract_time(options);
 
-        let time = if let Some(field) = options.get_one::<String>(options::TIME) {
-            match field.as_str() {
-                "ctime" | "status" => Time::Change,
-                "access" | "atime" | "use" => Time::Access,
-                "birth" | "creation" => Time::Birth,
-                // below should never happen as clap already restricts the values.
-                _ => unreachable!("Invalid field for --time"),
-            }
-        } else if options.get_flag(options::time::ACCESS) {
-            Time::Access
-        } else if options.get_flag(options::time::CHANGE) {
-            Time::Change
-        } else {
-            Time::Modification
-        };
-
-        let mut needs_color = match options.get_one::<String>(options::COLOR) {
-            None => options.contains_id(options::COLOR),
-            Some(val) => match val.as_str() {
-                "" | "always" | "yes" | "force" => true,
-                "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
-                /* "never" | "no" | "none" | */ _ => false,
-            },
-        };
+        let mut needs_color = extract_color(options);
 
         let cmd_line_bs = options.get_one::<String>(options::size::BLOCK_SIZE);
         let opt_si = cmd_line_bs.is_some()
@@ -681,90 +827,8 @@ impl Config {
             !std::io::stdout().is_terminal()
         };
 
-        let opt_quoting_style = options
-            .get_one::<String>(options::QUOTING_STYLE)
-            .map(|cmd_line_qs| cmd_line_qs.to_owned());
-
-        let mut quoting_style = if let Some(style) = opt_quoting_style {
-            match style.as_str() {
-                "literal" => QuotingStyle::Literal { show_control },
-                "shell" => QuotingStyle::Shell {
-                    escape: false,
-                    always_quote: false,
-                    show_control,
-                },
-                "shell-always" => QuotingStyle::Shell {
-                    escape: false,
-                    always_quote: true,
-                    show_control,
-                },
-                "shell-escape" => QuotingStyle::Shell {
-                    escape: true,
-                    always_quote: false,
-                    show_control,
-                },
-                "shell-escape-always" => QuotingStyle::Shell {
-                    escape: true,
-                    always_quote: true,
-                    show_control,
-                },
-                "c" => QuotingStyle::C {
-                    quotes: quoting_style::Quotes::Double,
-                },
-                "escape" => QuotingStyle::C {
-                    quotes: quoting_style::Quotes::None,
-                },
-                _ => unreachable!("Should have been caught by Clap"),
-            }
-        } else if options.get_flag(options::quoting::LITERAL) {
-            QuotingStyle::Literal { show_control }
-        } else if options.get_flag(options::quoting::ESCAPE) {
-            QuotingStyle::C {
-                quotes: quoting_style::Quotes::None,
-            }
-        } else if options.get_flag(options::quoting::C) {
-            QuotingStyle::C {
-                quotes: quoting_style::Quotes::Double,
-            }
-        } else {
-            // TODO: use environment variable if available
-            QuotingStyle::Shell {
-                escape: true,
-                always_quote: false,
-                show_control,
-            }
-        };
-
-        let indicator_style = if let Some(field) =
-            options.get_one::<String>(options::INDICATOR_STYLE)
-        {
-            match field.as_str() {
-                "none" => IndicatorStyle::None,
-                "file-type" => IndicatorStyle::FileType,
-                "classify" => IndicatorStyle::Classify,
-                "slash" => IndicatorStyle::Slash,
-                &_ => IndicatorStyle::None,
-            }
-        } else if let Some(field) = options.get_one::<String>(options::indicator_style::CLASSIFY) {
-            match field.as_str() {
-                "never" | "no" | "none" => IndicatorStyle::None,
-                "always" | "yes" | "force" => IndicatorStyle::Classify,
-                "auto" | "tty" | "if-tty" => {
-                    if std::io::stdout().is_terminal() {
-                        IndicatorStyle::Classify
-                    } else {
-                        IndicatorStyle::None
-                    }
-                }
-                &_ => IndicatorStyle::None,
-            }
-        } else if options.get_flag(options::indicator_style::SLASH) {
-            IndicatorStyle::Slash
-        } else if options.get_flag(options::indicator_style::FILE_TYPE) {
-            IndicatorStyle::FileType
-        } else {
-            IndicatorStyle::None
-        };
+        let mut quoting_style = extract_quoting_style(options, show_control);
+        let indicator_style = extract_indicator_style(options);
         let time_style = parse_time_style(options)?;
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
