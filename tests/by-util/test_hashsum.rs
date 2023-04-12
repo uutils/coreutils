@@ -126,7 +126,24 @@ fn test_check_sha1() {
 }
 
 #[test]
-fn test_check_b2sum_length_option() {
+fn test_check_b2sum_length_option_0() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+    at.write("testf.b2sum", "9e2bf63e933e610efee4a8d6cd4a9387e80860edee97e27db3b37a828d226ab1eb92a9cdd8ca9ca67a753edaf8bd89a0558496f67a30af6f766943839acf0110  testf\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=0")
+        .arg("-c")
+        .arg(at.subdir.join("testf.b2sum"))
+        .succeeds()
+        .stdout_only("testf: OK\n");
+}
+
+#[test]
+fn test_check_b2sum_length_option_8() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -140,6 +157,36 @@ fn test_check_b2sum_length_option() {
         .arg(at.subdir.join("testf.b2sum"))
         .succeeds()
         .stdout_only("testf: OK\n");
+}
+
+#[test]
+fn test_invalid_b2sum_length_option_not_multiple_of_8() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=9")
+        .arg(at.subdir.join("testf"))
+        .fails()
+        .code_is(1);
+}
+
+#[test]
+fn test_invalid_b2sum_length_option_too_large() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=513")
+        .arg(at.subdir.join("testf"))
+        .fails()
+        .code_is(1);
 }
 
 #[test]
