@@ -89,10 +89,16 @@ struct Options {
     total: bool,
     separate_dirs: bool,
     one_file_system: bool,
-    dereference: bool,
-    dereference_args: Vec<PathBuf>,
+    dereference: Deref,
     inodes: bool,
     verbose: bool,
+}
+
+#[derive(PartialEq)]
+enum Deref {
+    All,
+    Args(Vec<PathBuf>),
+    None,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -115,12 +121,20 @@ struct Stat {
 
 impl Stat {
     fn new(path: &Path, options: &Options) -> Result<Self> {
-        let metadata =
-            if options.dereference || options.dereference_args.contains(&path.to_path_buf()) {
-                fs::metadata(path)?
-            } else {
-                fs::symlink_metadata(path)?
-            };
+        // Determine whether to dereference (follow) the symbolic link
+        let should_dereference = match &options.dereference {
+            Deref::All => true,
+            Deref::Args(paths) => paths.contains(&path.to_path_buf()),
+            Deref::None => false,
+        };
+
+        let metadata = if should_dereference {
+            // Get metadata, following symbolic links if necessary
+            fs::metadata(path)
+        } else {
+            // Get metadata without following symbolic links
+            fs::symlink_metadata(path)
+        }?;
 
         #[cfg(not(windows))]
         let file_info = FileInfo {
@@ -536,12 +550,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         total: matches.get_flag(options::TOTAL),
         separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
         one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
-        dereference: matches.get_flag(options::DEREFERENCE),
-        dereference_args: if matches.get_flag(options::DEREFERENCE_ARGS) {
+        dereference: if matches.get_flag(options::DEREFERENCE) {
+            Deref::All
+        } else if matches.get_flag(options::DEREFERENCE_ARGS) {
             // We don't care about the cost of cloning as it is rarely used
-            files.clone()
+            Deref::Args(files.clone())
         } else {
-            vec![]
+            Deref::None
         },
         inodes: matches.get_flag(options::INODES),
         verbose: matches.get_flag(options::VERBOSE),
