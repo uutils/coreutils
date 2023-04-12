@@ -66,14 +66,12 @@ fn detect_algo(
         "sha384sum" => ("SHA384", Box::new(Sha384::new()) as Box<dyn Digest>, 384),
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
         "b2sum" => match matches.get_one::<usize>("length") {
+            // by default, blake2 uses 64 bytes (512 bits)
+            // --length=0 falls back to default behavior
+            Some(0) | None => ("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512),
             Some(length_in_bits) => {
                 if *length_in_bits > 512 {
                     crash!(1, "Invalid length (maximum digest length is 512 bits)")
-                }
-
-                // --length=0 falls back to default behavior
-                if *length_in_bits == 0 {
-                    return ("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512);
                 }
 
                 // blake2 output size must be a multiple of 8 bits
@@ -88,8 +86,6 @@ fn detect_algo(
                     crash!(1, "Invalid length (expected a multiple of 8)")
                 }
             }
-            // by default, blake2 uses 64 bytes (512 bits)
-            None => ("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512),
         },
         "b3sum" => ("BLAKE3", Box::new(Blake3::new()) as Box<dyn Digest>, 256),
         "sha3sum" => match matches.get_one::<usize>("bits") {
