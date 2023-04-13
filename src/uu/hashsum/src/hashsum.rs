@@ -65,7 +65,28 @@ fn detect_algo(
         "sha256sum" => ("SHA256", Box::new(Sha256::new()) as Box<dyn Digest>, 256),
         "sha384sum" => ("SHA384", Box::new(Sha384::new()) as Box<dyn Digest>, 384),
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
-        "b2sum" => ("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512),
+        "b2sum" => match matches.get_one::<usize>("length") {
+            // by default, blake2 uses 64 bytes (512 bits)
+            // --length=0 falls back to default behavior
+            Some(0) | None => ("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512),
+            Some(length_in_bits) => {
+                if *length_in_bits > 512 {
+                    crash!(1, "Invalid length (maximum digest length is 512 bits)")
+                }
+
+                // blake2 output size must be a multiple of 8 bits
+                if length_in_bits % 8 == 0 {
+                    let length_in_bytes = length_in_bits / 8;
+                    (
+                        "BLAKE2",
+                        Box::new(Blake2b::with_output_bytes(length_in_bytes)),
+                        *length_in_bits,
+                    )
+                } else {
+                    crash!(1, "Invalid length (expected a multiple of 8)")
+                }
+            }
+        },
         "b3sum" => ("BLAKE3", Box::new(Blake3::new()) as Box<dyn Digest>, 256),
         "sha3sum" => match matches.get_one::<usize>("bits") {
             Some(224) => (
@@ -379,6 +400,21 @@ pub fn uu_app_common() -> Command {
         )
 }
 
+pub fn uu_app_length() -> Command {
+    uu_app_opt_length(uu_app_common())
+}
+
+fn uu_app_opt_length(command: Command) -> Command {
+    command.arg(
+        Arg::new("length")
+            .short('l')
+            .long("length")
+            .help("digest length in bits; must not exceed the max for the blake2 algorithm (512) and must be a multiple of 8")
+            .value_name("BITS")
+            .value_parser(parse_bit_num),
+    )
+}
+
 pub fn uu_app_b3sum() -> Command {
     uu_app_b3sum_opts(uu_app_common())
 }
@@ -454,7 +490,7 @@ fn uu_app(binary_name: &str) -> Command {
             uu_app_common()
         }
         // b2sum supports the md5sum options plus -l/--length.
-        "b2sum" => uu_app_common(), // TODO: Implement -l/--length
+        "b2sum" => uu_app_length(),
         // These have never been part of GNU Coreutils, but can function with the same
         // options as md5sum.
         "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum" => uu_app_common(),
