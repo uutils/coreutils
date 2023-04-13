@@ -817,14 +817,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
-                .help("dereference all symbolic links")
+                .help("follow all symbolic links")
                 .action(ArgAction::SetTrue)
         )
         .arg(
             Arg::new(options::DEREFERENCE_ARGS)
                 .short('D')
                 .long(options::DEREFERENCE_ARGS)
-                .help("dereference only symlinks that are listed on the command line")
+                .help("follow only symlinks that are listed on the command line")
                 .action(ArgAction::SetTrue)
         )
         // .arg(
