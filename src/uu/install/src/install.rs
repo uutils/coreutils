@@ -682,6 +682,151 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
     Ok(())
 }
 
+/// Perform backup before overwriting.
+///
+/// # Parameters
+///
+/// * `to` - The destination file path.
+/// * `b` - The behavior configuration.
+///
+/// # Returns
+///
+/// Returns an Option containing the backup path, or None if backup is not needed.
+///
+fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
+    if to.exists() {
+        if b.verbose {
+            println!("removed {}", to.quote());
+        }
+        let backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
+        if let Some(ref backup_path) = backup_path {
+            // TODO!!
+            if let Err(err) = fs::rename(to, backup_path) {
+                return Err(InstallError::BackupFailed(
+                    to.to_path_buf(),
+                    backup_path.to_path_buf(),
+                    err,
+                )
+                .into());
+            }
+        }
+        Ok(backup_path)
+    } else {
+        Ok(None)
+    }
+}
+
+/// Copy a file from one path to another.
+///
+/// # Parameters
+///
+/// * `from` - The source file path.
+/// * `to` - The destination file path.
+///
+/// # Returns
+///
+/// Returns an empty Result or an error in case of failure.
+///
+fn copy_file(from: &Path, to: &Path) -> UResult<()> {
+    if from.as_os_str() == "/dev/null" {
+        /* workaround a limitation of fs::copy
+         * https://github.com/rust-lang/rust/issues/79390
+         */
+        if let Err(err) = File::create(to) {
+            return Err(
+                InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
+            );
+        }
+    } else if let Err(err) = fs::copy(from, to) {
+        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
+    }
+    Ok(())
+}
+
+/// Strip a file using an external program.
+///
+/// # Parameters
+///
+/// * `to` - The destination file path.
+/// * `b` - The behavior configuration.
+///
+/// # Returns
+///
+/// Returns an empty Result or an error in case of failure.
+///
+fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
+    match process::Command::new(&b.strip_program).arg(to).output() {
+        Ok(o) => {
+            if !o.status.success() {
+                // Follow GNU's behavior: if strip fails, removes the target
+                let _ = fs::remove_file(to);
+                return Err(InstallError::StripProgramFailed(
+                    String::from_utf8(o.stderr).unwrap_or_default(),
+                )
+                .into());
+            }
+        }
+        Err(e) => {
+            // Follow GNU's behavior: if strip fails, removes the target
+            let _ = fs::remove_file(to);
+            return Err(InstallError::StripProgramFailed(e.to_string()).into());
+        }
+    }
+    Ok(())
+}
+
+/// Set ownership and permissions on the destination file.
+///
+/// # Parameters
+///
+/// * `to` - The destination file path.
+/// * `b` - The behavior configuration.
+///
+/// # Returns
+///
+/// Returns an empty Result or an error in case of failure.
+///
+fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
+    // Silent the warning as we want to the error message
+    #[allow(clippy::question_mark)]
+    if mode::chmod(to, b.mode()).is_err() {
+        return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
+    }
+
+    chown_optional_user_group(to, b)?;
+
+    Ok(())
+}
+
+/// Preserve timestamps on the destination file.
+///
+/// # Parameters
+///
+/// * `from` - The source file path.
+/// * `to` - The destination file path.
+///
+/// # Returns
+///
+/// Returns an empty Result or an error in case of failure.
+///
+fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
+    let meta = match fs::metadata(from) {
+        Ok(meta) => meta,
+        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
+    };
+
+    let modified_time = FileTime::from_last_modification_time(&meta);
+    let accessed_time = FileTime::from_last_access_time(&meta);
+
+    match set_file_times(to, accessed_time, modified_time) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            show_error!("{}", e);
+            Ok(())
+        }
+    }
+}
+
 /// Copy one file to a new location, changing metadata.
 ///
 /// Returns a Result type with the Err variant containing the error message.
@@ -695,90 +840,24 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
 ///
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
-#[allow(clippy::cognitive_complexity)]
 fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     if b.compare && !need_copy(from, to, b)? {
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
-    let mut backup_path = None;
+    let backup_path = perform_backup(to, b)?;
 
-    // Perform backup, if any, before overwriting 'to'
-    //
-    // The codes actually making use of the backup process don't seem to agree
-    // on how best to approach the issue. (mv and ln, for example)
-    if to.exists() {
-        if b.verbose {
-            println!("removed {}", to.quote());
-        }
-        backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
-        if let Some(ref backup_path) = backup_path {
-            // TODO!!
-            if let Err(err) = fs::rename(to, backup_path) {
-                return Err(InstallError::BackupFailed(
-                    to.to_path_buf(),
-                    backup_path.to_path_buf(),
-                    err,
-                )
-                .into());
-            }
-        }
+    copy_file(from, to)?;
+
+    #[cfg(not(windows))]
+    if b.strip {
+        strip_file(to, b)?;
     }
 
-    if from.as_os_str() == "/dev/null" {
-        /* workaround a limitation of fs::copy
-         * https://github.com/rust-lang/rust/issues/79390
-         */
-        if let Err(err) = File::create(to) {
-            return Err(
-                InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
-            );
-        }
-    } else if let Err(err) = fs::copy(from, to) {
-        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
-    }
-
-    if b.strip && cfg!(not(windows)) {
-        match process::Command::new(&b.strip_program).arg(to).output() {
-            Ok(o) => {
-                if !o.status.success() {
-                    // Follow GNU's behavior: if strip fails, removes the target
-                    let _ = fs::remove_file(to);
-                    return Err(InstallError::StripProgramFailed(
-                        String::from_utf8(o.stderr).unwrap_or_default(),
-                    )
-                    .into());
-                }
-            }
-            Err(e) => {
-                // Follow GNU's behavior: if strip fails, removes the target
-                let _ = fs::remove_file(to);
-                return Err(InstallError::StripProgramFailed(e.to_string()).into());
-            }
-        }
-    }
-
-    // Silent the warning as we want to the error message
-    #[allow(clippy::question_mark)]
-    if mode::chmod(to, b.mode()).is_err() {
-        return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
-    }
-
-    chown_optional_user_group(to, b)?;
+    set_ownership_and_permissions(to, b)?;
 
     if b.preserve_timestamps {
-        let meta = match fs::metadata(from) {
-            Ok(meta) => meta,
-            Err(e) => return Err(InstallError::MetadataFailed(e).into()),
-        };
-
-        let modified_time = FileTime::from_last_modification_time(&meta);
-        let accessed_time = FileTime::from_last_access_time(&meta);
-
-        match set_file_times(to, accessed_time, modified_time) {
-            Ok(_) => {}
-            Err(e) => show_error!("{}", e),
-        }
+        preserve_timestamps(from, to)?;
     }
 
     if b.verbose {
