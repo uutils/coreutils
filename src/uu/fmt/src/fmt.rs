@@ -11,7 +11,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::cmp;
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
-use std::io::{BufReader, BufWriter, Read};
+use std::io::{BufReader, BufWriter, Read, Stdout};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show_warning};
@@ -60,10 +60,16 @@ pub struct FmtOptions {
     goal: usize,
     tabwidth: usize,
 }
-
-#[uucore::main]
-#[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+/// Parse the command line arguments and return the list of files and formatting options.
+///
+/// # Arguments
+///
+/// * `args` - Command line arguments.
+///
+/// # Returns
+///
+/// A tuple containing a vector of file names and a `FmtOptions` struct.
+fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     let mut files: Vec<String> = matches
@@ -177,39 +183,68 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         files.push("-".to_owned());
     }
 
+    Ok((files, fmt_opts))
+}
+
+/// Process the content of a file and format it according to the provided options.
+///
+/// # Arguments
+///
+/// * `file_name` - The name of the file to process. A value of "-" represents the standard input.
+/// * `fmt_opts` - A reference to a `FmtOptions` struct containing the formatting options.
+/// * `ostream` - A mutable reference to a `BufWriter` wrapping the standard output.
+///
+/// # Returns
+///
+/// A `UResult<()>` indicating success or failure.
+fn process_file(
+    file_name: &str,
+    fmt_opts: &FmtOptions,
+    ostream: &mut BufWriter<Stdout>,
+) -> UResult<()> {
+    let mut fp = match file_name {
+        "-" => BufReader::new(Box::new(stdin()) as Box<dyn Read + 'static>),
+        _ => match File::open(file_name) {
+            Ok(f) => BufReader::new(Box::new(f) as Box<dyn Read + 'static>),
+            Err(e) => {
+                show_warning!("{}: {}", file_name.maybe_quote(), e);
+                return Ok(());
+            }
+        },
+    };
+
+    let p_stream = ParagraphStream::new(fmt_opts, &mut fp);
+    for para_result in p_stream {
+        match para_result {
+            Err(s) => {
+                ostream
+                    .write_all(s.as_bytes())
+                    .map_err_context(|| "failed to write output".to_string())?;
+                ostream
+                    .write_all(b"\n")
+                    .map_err_context(|| "failed to write output".to_string())?;
+            }
+            Ok(para) => break_lines(&para, fmt_opts, ostream)
+                .map_err_context(|| "failed to write output".to_string())?,
+        }
+    }
+
+    // flush the output after each file
+    ostream
+        .flush()
+        .map_err_context(|| "failed to write output".to_string())?;
+
+    Ok(())
+}
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let (files, fmt_opts) = parse_arguments(args)?;
+
     let mut ostream = BufWriter::new(stdout());
 
-    for i in files.iter().map(|x| &x[..]) {
-        let mut fp = match i {
-            "-" => BufReader::new(Box::new(stdin()) as Box<dyn Read + 'static>),
-            _ => match File::open(i) {
-                Ok(f) => BufReader::new(Box::new(f) as Box<dyn Read + 'static>),
-                Err(e) => {
-                    show_warning!("{}: {}", i.maybe_quote(), e);
-                    continue;
-                }
-            },
-        };
-        let p_stream = ParagraphStream::new(&fmt_opts, &mut fp);
-        for para_result in p_stream {
-            match para_result {
-                Err(s) => {
-                    ostream
-                        .write_all(s.as_bytes())
-                        .map_err_context(|| "failed to write output".to_string())?;
-                    ostream
-                        .write_all(b"\n")
-                        .map_err_context(|| "failed to write output".to_string())?;
-                }
-                Ok(para) => break_lines(&para, &fmt_opts, &mut ostream)
-                    .map_err_context(|| "failed to write output".to_string())?,
-            }
-        }
-
-        // flush the output after each file
-        ostream
-            .flush()
-            .map_err_context(|| "failed to write output".to_string())?;
+    for file_name in &files {
+        process_file(file_name, &fmt_opts, &mut ostream)?;
     }
 
     Ok(())
