@@ -1,5 +1,7 @@
 name: Android
 
+# spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader
+
 on: [push, pull_request]
 
 permissions:

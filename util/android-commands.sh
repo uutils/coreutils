@@ -1,5 +1,5 @@
 #!/bin/bash
-# spell-checker:ignore termux keyevent sdcard binutils unmatch adb's dumpsys logcat pkill
+# spell-checker:ignore termux keyevent sdcard binutils unmatch adb's dumpsys logcat pkill nextest
 
 # There are three shells: the host's, adb, and termux. Only adb lets us run
 # commands directly on the emulated device, only termux provides a GNU
@@ -73,9 +73,50 @@ snapshot () {
     apk="$1"
     echo "running snapshot"
     adb install -g "$apk"
+
+    echo "Prepare and install system packages"
     probe='/sdcard/pkg.probe'
-    command="'yes | pkg install rust binutils openssl -y; touch $probe'"
+    log='/sdcard/pkg.log'
+    command="'{ mkdir -vp ~/.cargo/bin; yes | pkg install rust binutils openssl -y; echo \$? > $probe; } &> $log'"
     run_termux_command "$command" "$probe"
+    return_code=$?
+
+    adb pull "$log" .
+    cat $(basename "$log")
+
+    if [[ $return_code -ne 0 ]]; then return $return_code; fi
+
+    echo "Installing cargo-nextest"
+    probe='/sdcard/nextest.probe'
+    log='/sdcard/nextest.log'
+    # We need to install nextest via cargo currently, since there is no pre-built binary for android x86
+    command="'cargo install cargo-nextest &> $log; touch $probe'"
+    run_termux_command "$command" "$probe"
+
+    adb pull "$log" .
+    cat $(basename "$log")
+
+    echo "Info about cargo and rust"
+    probe='/sdcard/info.probe'
+    log='/sdcard/info.log'
+    command="'{ \
+        set -x; \
+        echo \$HOME; \
+        PATH=\$HOME/.cargo/bin:\$PATH; \
+        export PATH; \
+        echo \$PATH; \
+        pwd; \
+        command -v rustc && rustc --version; \
+        ls -la ~/.cargo/bin; \
+        cargo --list; \
+        cargo nextest --version; \
+        set +x; \
+        } &> $log; touch $probe'"
+    run_termux_command "$command" "$probe"
+
+    adb pull "$log" .
+    cat $(basename "$log")
+
     echo "snapshot complete"
     adb shell input text "exit" && hit_enter && hit_enter
 }
@@ -120,8 +161,15 @@ build () {
 
 tests () {
     probe='/sdcard/tests.probe'
-    export RUST_BACKTRACE=1
-    command="'cd ~/coreutils && timeout --preserve-status --verbose -k 1m 60m cargo test --features feat_os_unix_android --no-fail-fast >/sdcard/tests.log 2>&1; echo \$? >$probe'"
+    command="'\
+        export PATH=\$HOME/.cargo/bin:\$PATH; \
+        export RUST_BACKTRACE=1; \
+        export CARGO_TERM_COLOR=always; \
+        cd ~/coreutils || { echo 1 > $probe; exit; }; \
+        timeout --preserve-status --verbose -k 1m 60m \
+            cargo nextest run --profile ci --hide-progress-bar --features feat_os_unix_android \
+            &>/sdcard/tests.log; \
+        echo \$? >$probe'"
     run_termux_command "$command" "$probe"
     return_code=$?
     adb pull /sdcard/tests.log .
