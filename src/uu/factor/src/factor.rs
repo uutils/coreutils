@@ -97,9 +97,14 @@ impl fmt::Display for Factors {
         let v = &mut (self.0).borrow_mut().0;
         v.sort_unstable();
 
+        let include_exponents = f.alternate();
         for (p, exp) in v.iter() {
-            for _ in 0..*exp {
-                write!(f, " {p}")?;
+            if include_exponents && *exp > 1 {
+                write!(f, " {p}^{exp}")?;
+            } else {
+                for _ in 0..*exp {
+                    write!(f, " {p}")?;
+                }
             }
         }
 
