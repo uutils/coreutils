@@ -32,29 +32,11 @@ mod options {
     pub static NUMBER: &str = "NUMBER";
 }
 
-mod exponent_options {
-
-    pub static mut PRINT_EXPONENTS: bool = false;
-
-    // Safety
-    //
-    // This function contains unsafe code that modifies the static mutable variable
-    // PRINT_EXPONENTS.
-    // This function is called ones inside uumain if the -h or --exponents flag
-    // is found.
-    // If print_exponents() is called and PRINT_EXPONENTS is true then the p^e
-    // output format will be used.
-    pub fn print_exponents() {
-        unsafe {
-            PRINT_EXPONENTS = true;
-        }
-    }
-}
-
 fn print_factors_str(
     num_str: &str,
     w: &mut io::BufWriter<impl io::Write>,
     factors_buffer: &mut String,
+    print_exponents: bool,
 ) -> Result<(), Box<dyn Error>> {
     num_str
         .trim()
@@ -62,7 +44,13 @@ fn print_factors_str(
         .map_err(|e| e.into())
         .and_then(|x| {
             factors_buffer.clear();
-            writeln!(factors_buffer, "{}:{}", x, factor(x))?;
+            // If print_exponents is true, use the alternate format specifier {:#} from fmt to print the factors
+            // of x in the form of p^e.
+            if print_exponents {
+                writeln!(factors_buffer, "{}:{:#}", x, factor(x))?;
+            } else {
+                writeln!(factors_buffer, "{}:{}", x, factor(x))?;
+            }
             w.write_all(factors_buffer.as_bytes())?;
             Ok(())
         })
@@ -72,9 +60,8 @@ fn print_factors_str(
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    if matches.get_flag(options::EXPONENTS) {
-        exponent_options::print_exponents();
-    };
+    // If matches find --exponents flag than variable print_exponents is true and p^e output format will be used.
+    let print_exponents = matches.get_flag(options::EXPONENTS);
 
     let stdout = stdout();
     // We use a smaller buffer here to pass a gnu test. 4KiB appears to be the default pipe size for bash.
@@ -83,7 +70,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(values) = matches.get_many::<String>(options::NUMBER) {
         for number in values {
-            if let Err(e) = print_factors_str(number, &mut w, &mut factors_buffer) {
+            if let Err(e) = print_factors_str(number, &mut w, &mut factors_buffer, print_exponents)
+            {
                 show_warning!("{}: {}", number.maybe_quote(), e);
             }
         }
@@ -92,7 +80,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let lines = stdin.lock().lines();
         for line in lines {
             for number in line.unwrap().split_whitespace() {
-                if let Err(e) = print_factors_str(number, &mut w, &mut factors_buffer) {
+                if let Err(e) =
+                    print_factors_str(number, &mut w, &mut factors_buffer, print_exponents)
+                {
                     show_warning!("{}: {}", number.maybe_quote(), e);
                 }
             }

@@ -1,7 +1,7 @@
 # factor
 
 ```
-factor [NUMBER]...
+factor [OPTION]... [NUMBER]...
 ```
 
 Print the prime factors of the given NUMBER(s).
