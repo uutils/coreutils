@@ -1422,7 +1422,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::dereference::DIR_ARGS)
                 .long(options::dereference::DIR_ARGS)
                 .help(
-                    "Do not dereference symlinks except when they link to directories and are \
+                    "Do not follow symlinks except when they link to directories and are \
                     given as command line arguments.",
                 )
                 .overrides_with_all([
@@ -1436,7 +1436,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::dereference::ARGS)
                 .short('H')
                 .long(options::dereference::ARGS)
-                .help("Do not dereference symlinks except when given as command line arguments.")
+                .help("Do not follow symlinks except when given as command line arguments.")
                 .overrides_with_all([
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
