@@ -205,7 +205,16 @@ struct Stater {
     default_dev_tokens: Vec<Token>,
 }
 
-#[allow(clippy::cognitive_complexity)]
+/// Prints a formatted output based on the provided output type, flags, width, and precision.
+///
+/// # Arguments
+///
+/// * `output` - A reference to the OutputType enum containing the value to be printed.
+/// * `flags` - A Flags struct containing formatting flags.
+/// * `width` - The width of the field for the printed output.
+/// * `precision` - An Option containing the precision value.
+///
+/// This function delegates the printing process to more specialized functions depending on the output type.
 fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<usize>) {
     // If the precision is given as just '.', the precision is taken to be zero.
     // A negative precision is taken as if the precision were omitted.
@@ -236,69 +245,164 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Option<u
     // A sign (+ or -) should always be placed before a number produced by a signed conversion.
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
-
-    let padding_char = if flags.zero && !flags.left && precision.is_none() {
-        Padding::Zero
-    } else {
-        Padding::Space
-    };
+    let padding_char = determine_padding_char(&flags, &precision);
 
     match output {
-        OutputType::Str(s) => {
-            let s = match precision {
-                Some(p) if p < s.len() => &s[..p],
-                _ => s,
-            };
-            pad_and_print(s, flags.left, width, Padding::Space);
-        }
-        OutputType::Integer(num) => {
-            let num = num.to_string();
-            let arg = if flags.group {
-                group_num(&num)
-            } else {
-                Cow::Borrowed(num.as_str())
-            };
-            let prefix = if flags.sign {
-                "+"
-            } else if flags.space {
-                " "
-            } else {
-                ""
-            };
-            let extended = format!(
-                "{prefix}{arg:0>precision$}",
-                precision = precision.unwrap_or(0)
-            );
-            pad_and_print(&extended, flags.left, width, padding_char);
-        }
-        OutputType::Unsigned(num) => {
-            let num = num.to_string();
-            let s = if flags.group {
-                group_num(&num)
-            } else {
-                Cow::Borrowed(num.as_str())
-            };
-            let s = format!("{s:0>precision$}", precision = precision.unwrap_or(0));
-            pad_and_print(&s, flags.left, width, padding_char);
-        }
+        OutputType::Str(s) => print_str(s, &flags, width, precision),
+        OutputType::Integer(num) => print_integer(*num, &flags, width, precision, padding_char),
+        OutputType::Unsigned(num) => print_unsigned(*num, &flags, width, precision, padding_char),
         OutputType::UnsignedOct(num) => {
-            let prefix = if flags.alter { "0" } else { "" };
-            let s = format!(
-                "{prefix}{num:0>precision$o}",
-                precision = precision.unwrap_or(0)
-            );
-            pad_and_print(&s, flags.left, width, padding_char);
+            print_unsigned_oct(*num, &flags, width, precision, padding_char);
         }
         OutputType::UnsignedHex(num) => {
-            let prefix = if flags.alter { "0x" } else { "" };
-            let s = format!(
-                "{prefix}{num:0>precision$x}",
-                precision = precision.unwrap_or(0)
-            );
-            pad_and_print(&s, flags.left, width, padding_char);
+            print_unsigned_hex(*num, &flags, width, precision, padding_char);
         }
         OutputType::Unknown => print!("?"),
     }
+}
+
+/// Determines the padding character based on the provided flags and precision.
+///
+/// # Arguments
+///
+/// * `flags` - A reference to the Flags struct containing formatting flags.
+/// * `precision` - An Option containing the precision value.
+///
+/// # Returns
+///
+/// * Padding - An instance of the Padding enum representing the padding character.
+fn determine_padding_char(flags: &Flags, precision: &Option<usize>) -> Padding {
+    if flags.zero && !flags.left && precision.is_none() {
+        Padding::Zero
+    } else {
+        Padding::Space
+    }
+}
+
+/// Prints a string value based on the provided flags, width, and precision.
+///
+/// # Arguments
+///
+/// * `s` - The string to be printed.
+/// * `flags` - A reference to the Flags struct containing formatting flags.
+/// * `width` - The width of the field for the printed string.
+/// * `precision` - An Option containing the precision value.
+fn print_str(s: &str, flags: &Flags, width: usize, precision: Option<usize>) {
+    let s = match precision {
+        Some(p) if p < s.len() => &s[..p],
+        _ => s,
+    };
+    pad_and_print(s, flags.left, width, Padding::Space);
+}
+
+/// Prints an integer value based on the provided flags, width, and precision.
+///
+/// # Arguments
+///
+/// * `num` - The integer value to be printed.
+/// * `flags` - A reference to the Flags struct containing formatting flags.
+/// * `width` - The width of the field for the printed integer.
+/// * `precision` - An Option containing the precision value.
+/// * `padding_char` - The padding character as determined by `determine_padding_char`.
+fn print_integer(
+    num: i64,
+    flags: &Flags,
+    width: usize,
+    precision: Option<usize>,
+    padding_char: Padding,
+) {
+    let num = num.to_string();
+    let arg = if flags.group {
+        group_num(&num)
+    } else {
+        Cow::Borrowed(num.as_str())
+    };
+    let prefix = if flags.sign {
+        "+"
+    } else if flags.space {
+        " "
+    } else {
+        ""
+    };
+    let extended = format!(
+        "{prefix}{arg:0>precision$}",
+        precision = precision.unwrap_or(0)
+    );
+    pad_and_print(&extended, flags.left, width, padding_char);
+}
+
+/// Prints an unsigned integer value based on the provided flags, width, and precision.
+///
+/// # Arguments
+///
+/// * `num` - The unsigned integer value to be printed.
+/// * `flags` - A reference to the Flags struct containing formatting flags.
+/// * `width` - The width of the field for the printed unsigned integer.
+/// * `precision` - An Option containing the precision value.
+/// * `padding_char` - The padding character as determined by `determine_padding_char`.
+fn print_unsigned(
+    num: u64,
+    flags: &Flags,
+    width: usize,
+    precision: Option<usize>,
+    padding_char: Padding,
+) {
+    let num = num.to_string();
+    let s = if flags.group {
+        group_num(&num)
+    } else {
+        Cow::Borrowed(num.as_str())
+    };
+    let s = format!("{s:0>precision$}", precision = precision.unwrap_or(0));
+    pad_and_print(&s, flags.left, width, padding_char);
+}
+
+/// Prints an unsigned octal integer value based on the provided flags, width, and precision.
+///
+/// # Arguments
+///
+/// * `num` - The unsigned octal integer value to be printed.
+/// * `flags` - A reference to the Flags struct containing formatting flags.
+/// * `width` - The width of the field for the printed unsigned octal integer.
+/// * `precision` - An Option containing the precision value.
+/// * `padding_char` - The padding character as determined by `determine_padding_char`.
+fn print_unsigned_oct(
+    num: u32,
+    flags: &Flags,
+    width: usize,
+    precision: Option<usize>,
+    padding_char: Padding,
+) {
+    let prefix = if flags.alter { "0" } else { "" };
+    let s = format!(
+        "{prefix}{num:0>precision$o}",
+        precision = precision.unwrap_or(0)
+    );
+    pad_and_print(&s, flags.left, width, padding_char);
+}
+
+/// Prints an unsigned hexadecimal integer value based on the provided flags, width, and precision.
+///
+/// # Arguments
+///
+/// * `num` - The unsigned hexadecimal integer value to be printed.
+/// * `flags` - A reference to the Flags struct containing formatting flags.
+/// * `width` - The width of the field for the printed unsigned hexadecimal integer.
+/// * `precision` - An Option containing the precision value.
+/// * `padding_char` - The padding character as determined by `determine_padding_char`.
+fn print_unsigned_hex(
+    num: u64,
+    flags: &Flags,
+    width: usize,
+    precision: Option<usize>,
+    padding_char: Padding,
+) {
+    let prefix = if flags.alter { "0x" } else { "" };
+    let s = format!(
+        "{prefix}{num:0>precision$x}",
+        precision = precision.unwrap_or(0)
+    );
+    pad_and_print(&s, flags.left, width, padding_char);
 }
 
 impl Stater {
