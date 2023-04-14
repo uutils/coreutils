@@ -14,12 +14,11 @@
 # success, some other number for errors (an empty file is basically the same as
 # 0). Note that the return codes are text, not raw bytes.
 
-
 this_repo="$(dirname $(dirname -- "$(readlink -- "${0}")"))"
 
-help () {
+help() {
     echo \
-"Usage: $0 COMMAND [ARG]
+        "Usage: $0 COMMAND [ARG]
 
 where COMMAND is one of:
   snapshot APK  install APK and dependencies on an emulator to prep a snapshot
@@ -43,7 +42,7 @@ hit_enter() {
 
 launch_termux() {
     echo "launching termux"
-    if ! adb shell 'am start -n com.termux/.HomeActivity' ; then
+    if ! adb shell 'am start -n com.termux/.HomeActivity'; then
         echo "failed to launch termux"
         exit 1
     fi
@@ -58,18 +57,21 @@ launch_termux() {
 }
 
 run_termux_command() {
-    command="$1"  # text of the escaped command, including creating the probe!
-    probe="$2"  # unique file that indicates the command is complete
+    command="$1" # text of the escaped command, including creating the probe!
+    probe="$2"   # unique file that indicates the command is complete
     launch_termux
     adb shell input text "$command" && hit_enter
-    while ! adb shell "ls $probe" 2>/dev/null; do echo "waiting for $probe"; sleep 30; done
+    while ! adb shell "ls $probe" 2>/dev/null; do
+        echo "waiting for $probe"
+        sleep 30
+    done
     return_code=$(adb shell "cat $probe")
     adb shell "rm $probe"
     echo "return code: $return_code"
     return $return_code
 }
 
-snapshot () {
+snapshot() {
     apk="$1"
     echo "running snapshot"
     adb install -g "$apk"
@@ -121,7 +123,7 @@ snapshot () {
     adb shell input text "exit" && hit_enter && hit_enter
 }
 
-sync () {
+sync() {
     repo="$1"
     echo "running sync $1"
     # android doesn't allow symlinks on shared dirs, and adb can't selectively push files
@@ -148,7 +150,7 @@ sync () {
     run_termux_command "$command" "$probe"
 }
 
-build () {
+build() {
     probe='/sdcard/build.probe'
     command="'cd ~/coreutils && cargo build --features feat_os_unix_android 2>/sdcard/build.log; echo \$? >$probe'"
     echo "running build"
@@ -159,7 +161,7 @@ build () {
     return $return_code
 }
 
-tests () {
+tests() {
     probe='/sdcard/tests.probe'
     command="'\
         export PATH=\$HOME/.cargo/bin:\$PATH; \
@@ -182,16 +184,34 @@ exit_code=0
 
 if [ $# -eq 1 ]; then
     case "$1" in
-        sync)     sync "$this_repo"; exit_code=$?;;
-        build)    build; exit_code=$?;;
-        tests)    tests; exit_code=$?;;
-        *)        help;;
+    sync)
+        sync "$this_repo"
+        exit_code=$?
+        ;;
+    build)
+        build
+        exit_code=$?
+        ;;
+    tests)
+        tests
+        exit_code=$?
+        ;;
+    *) help ;;
     esac
 elif [ $# -eq 2 ]; then
     case "$1" in
-        snapshot) snapshot "$2"; exit_code=$?;;
-        sync)     sync "$2"; exit_code=$?;;
-        *)        help; exit 1;;
+    snapshot)
+        snapshot "$2"
+        exit_code=$?
+        ;;
+    sync)
+        sync "$2"
+        exit_code=$?
+        ;;
+    *)
+        help
+        exit 1
+        ;;
     esac
 else
     help
