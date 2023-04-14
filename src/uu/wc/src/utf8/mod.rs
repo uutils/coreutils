@@ -91,35 +91,3 @@ impl Incomplete {
         }
     }
 }
-#[cfg(test)]
-mod test {
-    use std::collections::VecDeque;
-    use std::io;
-
-    struct Chunks<'a>(VecDeque<&'a [u8]>);
-
-    impl<'a> io::Read for Chunks<'a> {
-        fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
-            unimplemented!()
-        }
-    }
-
-    impl<'a> io::BufRead for Chunks<'a> {
-        fn fill_buf(&mut self) -> io::Result<&[u8]> {
-            Ok(*self.0.front().unwrap())
-        }
-
-        fn consume(&mut self, bytes: usize) {
-            {
-                let front = self.0.front_mut().unwrap();
-                *front = &front[bytes..];
-                if !front.is_empty() {
-                    return;
-                }
-            }
-            if self.0.len() > 1 {
-                self.0.pop_front();
-            }
-        }
-    }
-}
