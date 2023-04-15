@@ -692,7 +692,7 @@ where
             } else if options.zero {
                 print!("{} {}{}\0", sum, binary_marker, filename.display());
             } else {
-                println!("{} {}{:?}", sum, binary_marker, filename.display());
+                println!("{} {}{}", sum, binary_marker, filename.display());
             }
         }
     }
