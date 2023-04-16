@@ -28,13 +28,30 @@ use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetS
 
 // Options
 const DATE: &str = "date";
+const D: &str = "d";
+const DA: &str = "da";
+const DAT: &str = "dat";
 const HOURS: &str = "hours";
+const H: &str = "h";
+const HO: &str = "ho";
+const HOU: &str = "hou";
 const MINUTES: &str = "minutes";
+const M: &str = "m";
+const MI: &str = "mi";
+const MIN: &str = "min";
+const MINU: &str = "minu";
+const MINUT: &str = "minut";
 const SECONDS: &str = "seconds";
+const S: &str = "s";
+const SE: &str = "se";
+const SEC: &str = "sec";
+const SECO: &str = "seco";
+const SECON: &str = "secon";
 const HOUR: &str = "hour";
 const MINUTE: &str = "minute";
 const SECOND: &str = "second";
 const NS: &str = "ns";
+const N: &str = "n";
 
 const ABOUT: &str = help_about!("date.md");
 const USAGE: &str = help_usage!("date.md");
@@ -109,11 +126,11 @@ enum Iso8601Format {
 impl<'a> From<&'a str> for Iso8601Format {
     fn from(s: &str) -> Self {
         match s {
-            HOURS | HOUR => Self::Hours,
-            MINUTES | MINUTE => Self::Minutes,
-            SECONDS | SECOND => Self::Seconds,
-            NS => Self::Ns,
-            DATE => Self::Date,
+            HOURS | HOUR | HOU | HO | H => Self::Hours,
+            MINUTES | MINUTE | MINUT | MINU | MIN | MI | M => Self::Minutes,
+            SECONDS | SECOND | SECON | SECO | SEC | SE | S => Self::Seconds,
+            NS | N => Self::Ns,
+            DATE | DAT | DA | D => Self::Date,
             // Note: This is caught by clap via `possible_values`
             _ => unreachable!(),
         }
@@ -298,7 +315,7 @@ pub fn uu_app() -> Command {
                 .short('I')
                 .long(OPT_ISO_8601)
                 .value_name("FMT")
-                .value_parser([DATE, HOUR, HOURS, MINUTE, MINUTES, SECOND, SECONDS, NS])
+                .value_parser([D, DA, DAT, DATE, H, HO, HOU, HOUR, HOURS, M, MI, MIN, MINU, MINUT, MINUTE, MINUTES, S, SE, SEC, SECO, SECON, SECOND, SECONDS, N, NS])
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
                 .help(ISO_8601_HELP_STRING),
