@@ -14,7 +14,7 @@
 # success, some other number for errors (an empty file is basically the same as
 # 0). Note that the return codes are text, not raw bytes.
 
-this_repo="$(dirname $(dirname -- "$(readlink -- "${0}")"))"
+this_repo="$(dirname "$(dirname -- "$(readlink -- "${0}")")")"
 
 help() {
     echo \
@@ -68,7 +68,7 @@ run_termux_command() {
     return_code=$(adb shell "cat $probe")
     adb shell "rm $probe"
     echo "return code: $return_code"
-    return $return_code
+    return "$return_code"
 }
 
 snapshot() {
@@ -84,7 +84,7 @@ snapshot() {
     return_code=$?
 
     adb pull "$log" .
-    cat $(basename "$log")
+    cat "$(basename "$log")"
 
     if [[ $return_code -ne 0 ]]; then return $return_code; fi
 
@@ -96,7 +96,7 @@ snapshot() {
     run_termux_command "$command" "$probe"
 
     adb pull "$log" .
-    cat $(basename "$log")
+    cat "$(basename "$log")"
 
     echo "Info about cargo and rust"
     probe='/sdcard/info.probe'
@@ -117,7 +117,7 @@ snapshot() {
     run_termux_command "$command" "$probe"
 
     adb pull "$log" .
-    cat $(basename "$log")
+    cat "$(basename "$log")"
 
     echo "snapshot complete"
     adb shell input text "exit" && hit_enter && hit_enter
@@ -129,21 +129,21 @@ sync() {
     # android doesn't allow symlinks on shared dirs, and adb can't selectively push files
     symlinks=$(find "$repo" -type l)
     # dash doesn't support process substitution :(
-    echo $symlinks | sort >symlinks
+    echo "$symlinks" | sort >symlinks
     git -C "$repo" diff --name-status | cut -f 2 >modified
     modified_links=$(join symlinks modified)
-    if [ ! -z "$modified_links" ]; then
+    if [ -n "$modified_links" ]; then
         echo "You have modified symlinks. Either stash or commit them, then try again: $modified_links"
         exit 1
     fi
-    if ! git ls-files --error-unmatch $symlinks >/dev/null; then
+    if ! git ls-files --error-unmatch "$symlinks" >/dev/null; then
         echo "You have untracked symlinks. Either remove or commit them, then try again."
         exit 1
     fi
-    rm $symlinks
+    rm "$symlinks"
     # adb's shell user only has access to shared dirs...
     adb push "$repo" /sdcard/coreutils
-    git -C "$repo" checkout $symlinks
+    git -C "$repo" checkout "$symlinks"
     # ...but shared dirs can't build, so move it home as termux
     probe='/sdcard/mv.probe'
     command="'cp -r /sdcard/coreutils ~/; touch $probe'"
@@ -184,34 +184,34 @@ exit_code=0
 
 if [ $# -eq 1 ]; then
     case "$1" in
-    sync)
-        sync "$this_repo"
-        exit_code=$?
-        ;;
-    build)
-        build
-        exit_code=$?
-        ;;
-    tests)
-        tests
-        exit_code=$?
-        ;;
-    *) help ;;
+        sync)
+            sync "$this_repo"
+            exit_code=$?
+            ;;
+        build)
+            build
+            exit_code=$?
+            ;;
+        tests)
+            tests
+            exit_code=$?
+            ;;
+        *) help ;;
     esac
 elif [ $# -eq 2 ]; then
     case "$1" in
-    snapshot)
-        snapshot "$2"
-        exit_code=$?
-        ;;
-    sync)
-        sync "$2"
-        exit_code=$?
-        ;;
-    *)
-        help
-        exit 1
-        ;;
+        snapshot)
+            snapshot "$2"
+            exit_code=$?
+            ;;
+        sync)
+            sync "$2"
+            exit_code=$?
+            ;;
+        *)
+            help
+            exit 1
+            ;;
     esac
 else
     help
