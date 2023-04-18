@@ -60,6 +60,29 @@ pub struct FmtOptions {
     goal: usize,
     tabwidth: usize,
 }
+
+impl Default for FmtOptions {
+    fn default() -> Self {
+        Self {
+            crown: false,
+            tagged: false,
+            mail: false,
+            uniform: false,
+            quick: false,
+            split_only: false,
+            use_prefix: false,
+            prefix: String::new(),
+            xprefix: false,
+            use_anti_prefix: false,
+            anti_prefix: String::new(),
+            xanti_prefix: false,
+            width: 79,
+            goal: 74,
+            tabwidth: 8,
+        }
+    }
+}
+
 /// Parse the command line arguments and return the list of files and formatting options.
 ///
 /// # Arguments
@@ -70,6 +93,7 @@ pub struct FmtOptions {
 ///
 /// A tuple containing a vector of file names and a `FmtOptions` struct.
 #[allow(clippy::cognitive_complexity)]
+#[allow(clippy::field_reassign_with_default)]
 fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)> {
     let matches = uu_app().try_get_matches_from(args)?;
 
@@ -78,23 +102,7 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let mut fmt_opts = FmtOptions {
-        crown: false,
-        tagged: false,
-        mail: false,
-        uniform: false,
-        quick: false,
-        split_only: false,
-        use_prefix: false,
-        prefix: String::new(),
-        xprefix: false,
-        use_anti_prefix: false,
-        anti_prefix: String::new(),
-        xanti_prefix: false,
-        width: 79,
-        goal: 74,
-        tabwidth: 8,
-    };
+    let mut fmt_opts = FmtOptions::default();
 
     fmt_opts.tagged = matches.get_flag(OPT_TAGGED_PARAGRAPH);
     if matches.get_flag(OPT_CROWN_MARGIN) {
