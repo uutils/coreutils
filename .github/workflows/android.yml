@@ -1,6 +1,6 @@
 name: Android
 
-# spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader
+# spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader dtolnay juliangruber
 
 on: [push, pull_request]
 
@@ -25,13 +25,8 @@ jobs:
         arch: [x86] # , arm64-v8a
     env:
       TERMUX: v0.118.0
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Restore AVD cache
       uses: actions/cache/restore@v3
       id: avd-cache
