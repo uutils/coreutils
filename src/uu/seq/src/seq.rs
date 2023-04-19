@@ -58,10 +58,13 @@ type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let numbers = matches
-        .get_many::<String>(ARG_NUMBERS)
-        .unwrap()
-        .collect::<Vec<_>>();
+    let numbers_option = matches.get_many::<String>(ARG_NUMBERS);
+
+    if numbers_option.is_none() {
+        return Err(SeqError::NoArguments.into());
+    }
+
+    let numbers = numbers_option.unwrap().collect::<Vec<_>>();
 
     let options = SeqOptions {
         separator: matches

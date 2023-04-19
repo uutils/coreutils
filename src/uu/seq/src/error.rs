@@ -25,6 +25,9 @@ pub enum SeqError {
     /// The parameter is the increment argument as a [`String`] as read
     /// from the command line.
     ZeroIncrement(String),
+
+    /// No arguments were passed to this function, 1 or more is required
+    NoArguments,
 }
 
 impl SeqError {
@@ -33,6 +36,7 @@ impl SeqError {
         match self {
             Self::ParseError(s, _) => s,
             Self::ZeroIncrement(s) => s,
+            Self::NoArguments => "",
         }
     }
 
@@ -40,11 +44,12 @@ impl SeqError {
     fn argtype(&self) -> &str {
         match self {
             Self::ParseError(_, e) => match e {
-                ParseNumberError::Float => "floating point argument",
-                ParseNumberError::Nan => "'not-a-number' argument",
-                ParseNumberError::Hex => "hexadecimal argument",
+                ParseNumberError::Float => "invalid floating point argument: ",
+                ParseNumberError::Nan => "invalid 'not-a-number' argument: ",
+                ParseNumberError::Hex => "invalid hexadecimal argument: ",
             },
-            Self::ZeroIncrement(_) => "Zero increment value",
+            Self::ZeroIncrement(_) => "invalid Zero increment value: ",
+            Self::NoArguments => "missing operand",
         }
     }
 }
@@ -63,6 +68,15 @@ impl Error for SeqError {}
 
 impl Display for SeqError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid {}: {}", self.argtype(), self.arg().quote())
+        write!(
+            f,
+            "{}{}",
+            self.argtype(),
+            if self.arg() != "" {
+                self.arg().quote().to_string()
+            } else {
+                "".to_string()
+            }
+        )
     }
 }
