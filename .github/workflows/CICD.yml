@@ -48,6 +48,11 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain
+      run: |
+        rustup toolchain install nightly --no-self-update --profile minimal
+        rustup default nightly
+    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -67,10 +72,6 @@ jobs:
         outputs CARGO_FEATURES_OPTION
     ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
     ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
-    - name: Install `rust` toolchain
-      run: |
-        rustup toolchain install nightly --no-self-update --profile minimal
-        rustup default nightly
     - name: Install `cargo-udeps`
       run: cargo install cargo-udeps
       env:
@@ -97,6 +98,12 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain
+      run: |
+        ## Install `rust` toolchain
+        rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -114,11 +121,6 @@ jobs:
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-        rustup default stable
     - name: "`cargo fmt` testing"
       shell: bash
       run: |
@@ -137,13 +139,13 @@ jobs:
       RUN_FOR: 60
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Install `rust` toolchain
       run: |
         rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
     - name: Install `cargo-fuzz`
       run: cargo install cargo-fuzz
+    - uses: Swatinem/rust-cache@v2
     - name: Run fuzz_date for XX seconds
       shell: bash
       run: |
@@ -184,6 +186,11 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain
+      run: |
+        ## Install `rust` toolchain
+        rustup toolchain install stable --no-self-update -c clippy --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -216,11 +223,6 @@ jobs:
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for show-utils.sh
         esac
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update -c clippy --profile minimal
-        rustup default stable
     - name: "`cargo clippy` lint testing"
       shell: bash
       run: |
@@ -295,6 +297,11 @@ jobs:
 #          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain
+      run: |
+        ## Install `rust` toolchain
+        rustup toolchain install stable --no-self-update -c clippy --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -320,11 +327,6 @@ jobs:
         echo UTILITY_LIST=${UTILITY_LIST}
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update -c clippy --profile minimal
-        rustup default stable
     - name: "`cargo doc` with warnings"
       shell: bash
       run: |
@@ -349,6 +351,11 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
+      run: |
+        ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
+        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
+        rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -363,11 +370,6 @@ jobs:
         unset CARGO_FEATURES_OPTION
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
-    - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
-      run: |
-        ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
-        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
-        rustup default ${{ env.RUST_MIN_SRV }}
     - name: Confirm MinSRV compatible 'Cargo.lock'
       shell: bash
       run: |
@@ -422,6 +424,7 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: "`cargo update` testing"
       shell: bash
       run: |
@@ -443,14 +446,14 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: "`make build`"
       shell: bash
       run: |
@@ -489,14 +492,14 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Test
       run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
@@ -519,14 +522,14 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
         rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Test
       run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
@@ -546,6 +549,11 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain
+      run: |
+        ## Install `rust` toolchain
+        rustup toolchain install stable --no-self-update --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -555,11 +563,6 @@ jobs:
         ## Install dependencies
         sudo apt-get update
         sudo apt-get install jq
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update --profile minimal
-        rustup default stable
     - name: "`make install`"
       shell: bash
       run: |
@@ -632,7 +635,14 @@ jobs:
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: rust toolchain ~ install
+      run: |
+        ## rust toolchain ~ install
+        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
+        rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
+      with:
+        key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
     - name: Initialize workflow variables
@@ -757,11 +767,6 @@ jobs:
             echo "foo" > /home/runner/.plan
             ;;
         esac
-    - name: rust toolchain ~ install
-      run: |
-        ## rust toolchain ~ install
-        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
-        rustup default ${{ env.RUST_MIN_SRV }}
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
@@ -967,14 +972,14 @@ jobs:
         TEST_SUMMARY_FILE="toybox-result.json"
         outputs TEST_SUMMARY_FILE
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
     - name: rust toolchain ~ install
       run: |
         ## rust toolchain ~ install
         rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Build coreutils as multiple binaries
       shell: bash
       run: |
@@ -1045,11 +1050,16 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: unix }
-          - { os: macos-latest   , features: macos }
-          - { os: windows-latest , features: windows }
+          - { os: ubuntu-latest  , features: unix, toolchain: nightly }
+          - { os: macos-latest   , features: macos, toolchain: nightly }
+          - { os: windows-latest , features: windows, toolchain: nightly-x86_64-pc-windows-gnu }
     steps:
     - uses: actions/checkout@v3
+    - name: rust toolchain ~ install
+      run: |
+        ## rust toolchain ~ install
+        rustup toolchain install ${{ matrix.job.toolchain }} --no-self-update --profile minimal
+        rustup default ${{ matrix.job.toolchain }}
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -1101,11 +1111,6 @@ jobs:
             echo "foo" > /home/runner/.plan
             ;;
         esac
-    - name: rust toolchain ~ install
-      run: |
-        ## rust toolchain ~ install
-        rustup toolchain install ${{ steps.vars.outputs.TOOLCHAIN }} --no-self-update --profile minimal
-        rustup default ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
