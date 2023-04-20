@@ -1,5 +1,7 @@
 name: Android
 
+# spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader
+
 on: [push, pull_request]
 
 permissions:
@@ -30,15 +32,15 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
-    - name: AVD cache
-      uses: actions/cache@v3
+    - name: Restore AVD cache
+      uses: actions/cache/restore@v3
       id: avd-cache
       with:
         path: |
           ~/.android/avd/*
           ~/.android/avd/*/snapshots/*
           ~/.android/adb*
-        key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
+        key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}+nextest
     - name: Create and cache emulator image
       if: steps.avd-cache.outputs.cache-hit != 'true'
       uses: reactivecircus/android-emulator-runner@v2
@@ -51,11 +53,21 @@ jobs:
         force-avd-creation: true
         emulator-options: -no-snapshot-load -noaudio -no-boot-anim -camera-back none
         script: |
+          set -e
           wget https://github.com/termux/termux-app/releases/download/${{ env.TERMUX }}/termux-app_${{ env.TERMUX }}+github-debug_${{ matrix.arch }}.apk
           util/android-commands.sh snapshot termux-app_${{ env.TERMUX }}+github-debug_${{ matrix.arch }}.apk
           adb -s emulator-5554 emu avd snapshot save ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
           echo "Emulator image created."
           pkill -9 qemu-system-x86_64
+    - name: Save AVD cache
+      if: steps.avd-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v3
+      with:
+        path: |
+          ~/.android/avd/*
+          ~/.android/avd/*/snapshots/*
+          ~/.android/adb*
+        key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}+nextest
     - name: Build and Test
       uses: reactivecircus/android-emulator-runner@v2
       with:

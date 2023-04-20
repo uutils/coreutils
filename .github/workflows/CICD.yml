@@ -1,8 +1,8 @@
 name: CICD
 
-# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl
-# spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic
-# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain
+# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl taiki
+# spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
+# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers
 # spell-checker:ignore (people) Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt utmpdump xargs
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
@@ -357,6 +357,7 @@ jobs:
         rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
+    - uses: taiki-e/install-action@nextest
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
     - name: Initialize workflow variables
@@ -404,10 +405,11 @@ jobs:
         RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
         RUSTUP_TOOLCHAIN=stable cargo tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
-      run: cargo test -v ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
+      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
         RUSTFLAGS: "-Awarnings"
         RUST_BACKTRACE: "1"
+        CARGO_TERM_COLOR: always
 
   deps:
     name: Dependencies
@@ -451,6 +453,7 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
+    - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -458,12 +461,12 @@ jobs:
       shell: bash
       run: |
         make build
-    - name: "`make test`"
+    - name: "`make nextest`"
       shell: bash
-      run: |
-        make test
+      run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
+        CARGO_TERM_COLOR: "always"
     - name: "`make install`"
       shell: bash
       run: |
@@ -497,13 +500,15 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
+    - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
     - name: Test
-      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
         RUST_BACKTRACE: "1"
+        CARGO_TERM_COLOR: "always"
 
   build_rust_nightly:
     name: Build/nightly
@@ -527,13 +532,15 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
+    - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
     - name: Test
-      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
         RUST_BACKTRACE: "1"
+        CARGO_TERM_COLOR: "always"
 
   compute_size:
     name: Binary sizes
@@ -1060,6 +1067,7 @@ jobs:
         ## rust toolchain ~ install
         rustup toolchain install ${{ matrix.job.toolchain }} --no-self-update --profile minimal
         rustup default ${{ matrix.job.toolchain }}
+    - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -1122,7 +1130,7 @@ jobs:
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Test uucore
-      run: cargo test --no-fail-fast -p uucore
+      run: cargo nextest run --profile ci --hide-progress-bar -p uucore
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
@@ -1131,7 +1139,7 @@ jobs:
         RUST_BACKTRACE: "1"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test
-      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast
+      run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
@@ -1140,7 +1148,7 @@ jobs:
         RUST_BACKTRACE: "1"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test individual utilities
-      run: cargo test --no-fail-fast ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+      run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
