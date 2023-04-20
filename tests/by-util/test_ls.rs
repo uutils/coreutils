@@ -1239,7 +1239,7 @@ fn test_ls_long_total_size() {
             ("long_si", "total 8.2k"),
         ]
         .iter()
-        .cloned()
+        .copied()
         .collect()
     } else {
         [
@@ -1248,7 +1248,7 @@ fn test_ls_long_total_size() {
             ("long_si", "total 2"),
         ]
         .iter()
-        .cloned()
+        .copied()
         .collect()
     };
 

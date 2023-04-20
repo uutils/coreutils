@@ -118,9 +118,10 @@ mod linux_only {
         use std::os::unix::io::FromRawFd;
 
         let mut fds: [c_int; 2] = [0, 0];
-        if unsafe { libc::pipe(&mut fds as *mut c_int) } != 0 {
-            panic!("Failed to create pipe");
-        }
+        assert!(
+            !(unsafe { libc::pipe(&mut fds as *mut c_int) } != 0),
+            "Failed to create pipe"
+        );
 
         // Drop the read end of the pipe
         let _ = unsafe { File::from_raw_fd(fds[0]) };

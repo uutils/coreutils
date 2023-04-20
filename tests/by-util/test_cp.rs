@@ -1392,15 +1392,14 @@ fn test_cp_target_file_dev_null() {
 fn test_cp_one_file_system() {
     use crate::common::util::AtPath;
     use walkdir::WalkDir;
-
     let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
     // Test must be run as root (or with `sudo -E`)
     if scene.cmd("whoami").run().stdout_str() != "root\n" {
         return;
     }
 
-    let at = scene.fixtures.clone();
     let at_src = AtPath::new(&at.plus(TEST_MOUNT_COPY_FROM_FOLDER));
     let at_dst = AtPath::new(&at.plus(TEST_COPY_TO_FOLDER_NEW));
 
