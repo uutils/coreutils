@@ -8,7 +8,7 @@
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
 use clap::crate_version;
-use clap::{parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use fundu::DurationParser;
 use is_terminal::IsTerminal;
 use same_file::Handle;
@@ -182,19 +182,44 @@ impl Settings {
     }
 
     pub fn from(matches: &clap::ArgMatches) -> UResult<Self> {
-        let mut settings: Self = Self {
-            follow: if matches.get_flag(options::FOLLOW_RETRY) {
-                Some(FollowMode::Name)
-            } else if matches.value_source(options::FOLLOW) != Some(ValueSource::CommandLine) {
-                None
-            } else if matches.get_one::<String>(options::FOLLOW)
-                == Some(String::from("name")).as_ref()
+        // We're parsing --follow, -F and --retry under the following conditions:
+        // * -F sets --retry and --follow=name
+        // * plain --follow or short -f is the same like specifying --follow=descriptor
+        // * All these options and flags can occur multiple times as command line arguments
+        let follow_retry = matches.get_flag(options::FOLLOW_RETRY);
+        // We don't need to check for occurrences of --retry if -F was specified which already sets
+        // retry
+        let retry = follow_retry || matches.get_flag(options::RETRY);
+        let follow = match (
+            follow_retry,
+            matches
+                .get_one::<String>(options::FOLLOW)
+                .map(|s| s.as_str()),
+        ) {
+            // -F and --follow if -F is specified after --follow. We don't need to care about the
+            // value of --follow.
+            (true, Some(_))
+                // It's ok to use `index_of` instead of `indices_of` since -F and  --follow
+                // overwrite themselves (not only the value but also the index).
+                if matches.index_of(options::FOLLOW_RETRY) > matches.index_of(options::FOLLOW) =>
             {
                 Some(FollowMode::Name)
-            } else {
-                Some(FollowMode::Descriptor)
-            },
-            retry: matches.get_flag(options::RETRY) || matches.get_flag(options::FOLLOW_RETRY),
+            }
+            // * -F and --follow=name if --follow=name is specified after -F
+            // * No occurrences of -F but --follow=name
+            // * -F and no occurrences of --follow
+            (_, Some("name")) | (true, None) => Some(FollowMode::Name),
+            // * -F and --follow=descriptor (or plain --follow, -f) if --follow=descriptor is
+            // specified after -F
+            // * No occurrences of -F but --follow=descriptor, --follow, -f
+            (_, Some(_)) => Some(FollowMode::Descriptor),
+            // The default for no occurrences of -F or --follow
+            (false, None) => None,
+        };
+
+        let mut settings: Self = Self {
+            follow,
+            retry,
             use_polling: matches.get_flag(options::USE_POLLING),
             mode: FilterMode::from(matches)?,
             verbose: matches.get_flag(options::verbosity::VERBOSE),
@@ -469,7 +494,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FOLLOW)
                 .short('f')
                 .long(options::FOLLOW)
-                .default_value("descriptor")
+                .default_missing_value("descriptor")
                 .num_args(0..=1)
                 .require_equals(true)
                 .value_parser(["descriptor", "name"])
@@ -544,13 +569,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::RETRY)
                 .long(options::RETRY)
                 .help("Keep trying to open a file if it is inaccessible")
+                .overrides_with(options::RETRY)
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::FOLLOW_RETRY)
                 .short('F')
                 .help("Same as --follow=name --retry")
-                .overrides_with_all([options::RETRY, options::FOLLOW])
+                .overrides_with(options::FOLLOW_RETRY)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -570,6 +596,8 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use crate::parse::ObsoleteArgs;
 
     use super::*;
@@ -615,5 +643,40 @@ mod tests {
 
         let result = Settings::from_obsolete_args(&args, Some(&"file".into()));
         assert_eq!(result.follow, Some(FollowMode::Name));
+    }
+
+    #[rstest]
+    #[case::default(vec![], None, false)]
+    #[case::retry(vec!["--retry"], None, true)]
+    #[case::multiple_retry(vec!["--retry", "--retry"], None, true)]
+    #[case::follow_long(vec!["--follow"], Some(FollowMode::Descriptor), false)]
+    #[case::follow_short(vec!["-f"], Some(FollowMode::Descriptor), false)]
+    #[case::follow_long_with_retry(vec!["--follow", "--retry"], Some(FollowMode::Descriptor), true)]
+    #[case::follow_short_with_retry(vec!["-f", "--retry"], Some(FollowMode::Descriptor), true)]
+    #[case::follow_overwrites_previous_selection_1(vec!["--follow=name", "--follow=descriptor"], Some(FollowMode::Descriptor), false)]
+    #[case::follow_overwrites_previous_selection_2(vec!["--follow=descriptor", "--follow=name"], Some(FollowMode::Name), false)]
+    #[case::big_f(vec!["-F"], Some(FollowMode::Name), true)]
+    #[case::multiple_big_f(vec!["-F", "-F"], Some(FollowMode::Name), true)]
+    #[case::big_f_with_retry_then_does_not_change(vec!["-F", "--retry"], Some(FollowMode::Name), true)]
+    #[case::big_f_with_follow_descriptor_then_change(vec!["-F", "--follow=descriptor"], Some(FollowMode::Descriptor), true)]
+    #[case::multiple_big_f_with_follow_descriptor_then_no_change(vec!["-F", "--follow=descriptor", "-F"], Some(FollowMode::Name), true)]
+    #[case::big_f_with_follow_short_then_change(vec!["-F", "-f"], Some(FollowMode::Descriptor), true)]
+    #[case::follow_descriptor_with_big_f_then_change(vec!["--follow=descriptor", "-F"], Some(FollowMode::Name), true)]
+    #[case::follow_short_with_big_f_then_change(vec!["-f", "-F"], Some(FollowMode::Name), true)]
+    #[case::big_f_with_follow_name_then_not_change(vec!["-F", "--follow=name"], Some(FollowMode::Name), true)]
+    #[case::follow_name_with_big_f_then_not_change(vec!["--follow=name", "-F"], Some(FollowMode::Name), true)]
+    #[case::big_f_with_multiple_long_follow(vec!["--follow=name", "-F", "--follow=descriptor"], Some(FollowMode::Descriptor), true)]
+    #[case::big_f_with_multiple_long_follow_name(vec!["--follow=name", "-F", "--follow=name"], Some(FollowMode::Name), true)]
+    #[case::big_f_with_multiple_short_follow(vec!["-f", "-F", "-f"], Some(FollowMode::Descriptor), true)]
+    #[case::multiple_big_f_with_multiple_short_follow(vec!["-f", "-F", "-f", "-F"], Some(FollowMode::Name), true)]
+    fn test_parse_settings_follow_mode_and_retry(
+        #[case] args: Vec<&str>,
+        #[case] expected_follow_mode: Option<FollowMode>,
+        #[case] expected_retry: bool,
+    ) {
+        let settings =
+            Settings::from(&uu_app().no_binary_name(true).get_matches_from(args)).unwrap();
+        assert_eq!(settings.follow, expected_follow_mode);
+        assert_eq!(settings.retry, expected_retry);
     }
 }
