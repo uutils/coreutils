@@ -18,3 +18,4 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1.0"
 quote = "1.0"
+help_parser = { path="../help_parser", version="0.0.18" }
