@@ -21,7 +21,7 @@ path="src/lib/lib.rs"
 clap = { workspace=true }
 uucore_procs = { workspace=true }
 dns-lookup = { version="1.0.8", optional=true }
-dunce = "1.0.3"
+dunce = "1.0.4"
 wild = "2.1"
 glob = "0.3.1"
 # * optional
