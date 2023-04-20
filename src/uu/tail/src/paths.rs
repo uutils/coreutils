@@ -27,20 +27,21 @@ pub struct Input {
 }
 
 impl Input {
-    pub fn from<T: AsRef<OsStr>>(string: &T) -> Self {
-        let kind = if string.as_ref() == Path::new(text::DASH) {
+    pub fn from<T: AsRef<OsStr>>(string: T) -> Self {
+        let string = string.as_ref();
+        let kind = if string == OsStr::new(text::DASH) {
             InputKind::Stdin
         } else {
-            InputKind::File(PathBuf::from(string.as_ref()))
+            InputKind::File(PathBuf::from(string))
         };
 
         let display_name = match kind {
-            InputKind::File(_) => string.as_ref().to_string_lossy().to_string(),
+            InputKind::File(_) => string.to_string_lossy().to_string(),
             InputKind::Stdin => {
                 if cfg!(unix) {
                     text::STDIN_HEADER.to_string()
                 } else {
-                    string.as_ref().to_string_lossy().to_string()
+                    string.to_string_lossy().to_string()
                 }
             }
         };
