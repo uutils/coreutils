@@ -10,7 +10,10 @@ use std::ffi::OsStr;
 use std::fs::{File, Metadata};
 use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::unix::{
+    fs::{FileTypeExt, MetadataExt},
+    prelude::OsStrExt,
+};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 
@@ -18,6 +21,30 @@ use uucore::error::UResult;
 pub enum InputKind {
     File(PathBuf),
     Stdin,
+}
+
+#[cfg(unix)]
+impl From<&OsStr> for InputKind {
+    fn from(value: &OsStr) -> Self {
+        const DASH: [u8; 1] = [b'-'];
+
+        if value.as_bytes() == DASH {
+            Self::Stdin
+        } else {
+            Self::File(PathBuf::from(value))
+        }
+    }
+}
+
+#[cfg(not(unix))]
+impl From<&OsStr> for InputKind {
+    fn from(value: &OsStr) -> Self {
+        if value == OsStr::new(text::DASH) {
+            Self::Stdin
+        } else {
+            Self::File(PathBuf::from(value))
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -29,21 +56,11 @@ pub struct Input {
 impl Input {
     pub fn from<T: AsRef<OsStr>>(string: T) -> Self {
         let string = string.as_ref();
-        let kind = if string == OsStr::new(text::DASH) {
-            InputKind::Stdin
-        } else {
-            InputKind::File(PathBuf::from(string))
-        };
 
+        let kind = string.into();
         let display_name = match kind {
             InputKind::File(_) => string.to_string_lossy().to_string(),
-            InputKind::Stdin => {
-                if cfg!(unix) {
-                    text::STDIN_HEADER.to_string()
-                } else {
-                    string.to_string_lossy().to_string()
-                }
-            }
+            InputKind::Stdin => text::STDIN_HEADER.to_string(),
         };
 
         Self { kind, display_name }
