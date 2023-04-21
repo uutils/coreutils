@@ -276,7 +276,7 @@ impl ChownExecutor {
                 // the `--from` args.
                 if self.dest_gid.is_none() {
                     let uid = meta.uid();
-                    show_error!(
+                    println!(
                         "ownership of {} retained as {}",
                         path.quote(),
                         entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
@@ -284,7 +284,7 @@ impl ChownExecutor {
                 } else {
                     let uid = meta.uid();
                     let gid = meta.gid();
-                    show_error!(
+                    println!(
                         "ownership of {} retained as {}:{}",
                         path.quote(),
                         entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
