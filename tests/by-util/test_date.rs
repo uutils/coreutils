@@ -1,3 +1,5 @@
+// spell-checker:ignore seco, secon, minu, minut
+
 use crate::common::util::TestScenario;
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -29,7 +31,49 @@ fn test_date_rfc_3339() {
     for param in ["--rfc-3339", "--rfc-3"] {
         scene
             .ucmd()
+            .arg(format!("{param}=n"))
+            .succeeds()
+            .stdout_matches(&re);
+        
+        scene
+            .ucmd()
             .arg(format!("{param}=ns"))
+            .succeeds()
+            .stdout_matches(&re);
+
+        scene
+            .ucmd()
+            .arg(format!("{param}=s"))
+            .succeeds()
+            .stdout_matches(&re);
+
+        scene
+            .ucmd()
+            .arg(format!("{param}=se"))
+            .succeeds()
+            .stdout_matches(&re);
+
+        scene
+            .ucmd()
+            .arg(format!("{param}=sec"))
+            .succeeds()
+            .stdout_matches(&re);
+
+        scene
+            .ucmd()
+            .arg(format!("{param}=seco"))
+            .succeeds()
+            .stdout_matches(&re);
+
+        scene
+            .ucmd()
+            .arg(format!("{param}=secon"))
+            .succeeds()
+            .stdout_matches(&re);
+
+        scene
+            .ucmd()
+            .arg(format!("{param}=second"))
             .succeeds()
             .stdout_matches(&re);
 
@@ -79,6 +123,26 @@ fn test_date_rfc_8601_second() {
     let re = Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}\n$").unwrap();
     for param in ["--iso-8601", "--i"] {
         new_ucmd!()
+            .arg(format!("{param}=s"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=se"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=sec"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=seco"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=secon"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
             .arg(format!("{param}=second"))
             .succeeds()
             .stdout_matches(&re);
@@ -93,6 +157,26 @@ fn test_date_rfc_8601_second() {
 fn test_date_rfc_8601_minute() {
     let re = Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}[+-]\d{2}:\d{2}\n$").unwrap();
     for param in ["--iso-8601", "--i"] {
+        new_ucmd!()
+            .arg(format!("{param}=m"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=mi"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=min"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=minu"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=minut"))
+            .succeeds()
+            .stdout_matches(&re);
         new_ucmd!()
             .arg(format!("{param}=minute"))
             .succeeds()
@@ -109,6 +193,18 @@ fn test_date_rfc_8601_hour() {
     let re = Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{2}[+-]\d{2}:\d{2}\n$").unwrap();
     for param in ["--iso-8601", "--i"] {
         new_ucmd!()
+            .arg(format!("{param}=h"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=ho"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=hou"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
             .arg(format!("{param}=hour"))
             .succeeds()
             .stdout_matches(&re);
@@ -123,6 +219,18 @@ fn test_date_rfc_8601_hour() {
 fn test_date_rfc_8601_date() {
     let re = Regex::new(r"^\d{4}-\d{2}-\d{2}\n$").unwrap();
     for param in ["--iso-8601", "--i"] {
+        new_ucmd!()
+            .arg(format!("{param}=d"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=da"))
+            .succeeds()
+            .stdout_matches(&re);
+        new_ucmd!()
+            .arg(format!("{param}=dat"))
+            .succeeds()
+            .stdout_matches(&re);
         new_ucmd!()
             .arg(format!("{param}=date"))
             .succeeds()
