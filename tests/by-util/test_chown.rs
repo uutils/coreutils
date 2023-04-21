@@ -742,3 +742,29 @@ fn test_chown_file_notexisting() {
     // TODO: uncomment once message changed from "cannot dereference" to "cannot access"
     // result.stderr_contains("cannot access 'not_existing': No such file or directory");
 }
+
+#[test]
+fn test_chown_from_message() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let file = "f";
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--from=42")
+        .arg("43")
+        .arg(file)
+        .succeeds()
+        .stderr_only(format!(
+            "chown: ownership of '{file}' retained as {user_name}\n"
+        ));
+}
