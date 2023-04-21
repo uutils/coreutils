@@ -341,6 +341,27 @@ impl ChownExecutor {
             };
 
             if !self.matched(meta.uid(), meta.gid()) {
+                if self.verbosity.level == VerbosityLevel::Verbose {
+                    // Display a message when the current user/group doesn't match those specified in
+                    // the `--from` args.
+                    if self.dest_gid.is_none() {
+                        let uid = meta.uid();
+                        println!(
+                            "ownership of {} retained as {}",
+                            path.quote(),
+                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                        );
+                    } else {
+                        let uid = meta.uid();
+                        let gid = meta.gid();
+                        println!(
+                            "ownership of {} retained as {}:{}",
+                            path.quote(),
+                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                        );
+                    }
+                }
                 continue;
             }
 
