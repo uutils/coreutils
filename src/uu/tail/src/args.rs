@@ -24,22 +24,22 @@ const USAGE: &str = help_usage!("tail.md");
 
 pub mod options {
     pub mod verbosity {
-        pub static QUIET: &str = "quiet";
-        pub static VERBOSE: &str = "verbose";
+        pub const QUIET: &str = "quiet";
+        pub const VERBOSE: &str = "verbose";
     }
-    pub static BYTES: &str = "bytes";
-    pub static FOLLOW: &str = "follow";
-    pub static LINES: &str = "lines";
-    pub static PID: &str = "pid";
-    pub static SLEEP_INT: &str = "sleep-interval";
-    pub static ZERO_TERM: &str = "zero-terminated";
-    pub static DISABLE_INOTIFY_TERM: &str = "-disable-inotify"; // NOTE: three hyphens is correct
-    pub static USE_POLLING: &str = "use-polling";
-    pub static RETRY: &str = "retry";
-    pub static FOLLOW_RETRY: &str = "F";
-    pub static MAX_UNCHANGED_STATS: &str = "max-unchanged-stats";
-    pub static ARG_FILES: &str = "files";
-    pub static PRESUME_INPUT_PIPE: &str = "-presume-input-pipe"; // NOTE: three hyphens is correct
+    pub const BYTES: &str = "bytes";
+    pub const FOLLOW: &str = "follow";
+    pub const LINES: &str = "lines";
+    pub const PID: &str = "pid";
+    pub const SLEEP_INT: &str = "sleep-interval";
+    pub const ZERO_TERM: &str = "zero-terminated";
+    pub const DISABLE_INOTIFY_TERM: &str = "-disable-inotify"; // NOTE: three hyphens is correct
+    pub const USE_POLLING: &str = "use-polling";
+    pub const RETRY: &str = "retry";
+    pub const FOLLOW_RETRY: &str = "F";
+    pub const MAX_UNCHANGED_STATS: &str = "max-unchanged-stats";
+    pub const ARG_FILES: &str = "files";
+    pub const PRESUME_INPUT_PIPE: &str = "-presume-input-pipe"; // NOTE: three hyphens is correct
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -470,12 +470,11 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
 
 pub fn uu_app() -> Command {
     #[cfg(target_os = "linux")]
-    pub static POLLING_HELP: &str = "Disable 'inotify' support and use polling instead";
+    const POLLING_HELP: &str = "Disable 'inotify' support and use polling instead";
     #[cfg(all(unix, not(target_os = "linux")))]
-    pub static POLLING_HELP: &str = "Disable 'kqueue' support and use polling instead";
+    const POLLING_HELP: &str = "Disable 'kqueue' support and use polling instead";
     #[cfg(target_os = "windows")]
-    pub static POLLING_HELP: &str =
-        "Disable 'ReadDirectoryChanges' support and use polling instead";
+    const POLLING_HELP: &str = "Disable 'ReadDirectoryChanges' support and use polling instead";
 
     Command::new(uucore::util_name())
         .version(crate_version!())
