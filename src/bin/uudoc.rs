@@ -178,7 +178,7 @@ impl<'a, 'b> MDWriter<'a, 'b> {
 
     fn usage(&mut self) -> io::Result<()> {
         if let Some(markdown) = &self.markdown {
-            let usage = help_parser::parse_usage(&markdown);
+            let usage = help_parser::parse_usage(markdown);
             let usage = usage.replace("{}", self.name);
 
             writeln!(self.w, "\n```")?;
@@ -191,7 +191,7 @@ impl<'a, 'b> MDWriter<'a, 'b> {
 
     fn about(&mut self) -> io::Result<()> {
         if let Some(markdown) = &self.markdown {
-            writeln!(self.w, "{}", help_parser::parse_about(&markdown))
+            writeln!(self.w, "{}", help_parser::parse_about(markdown))
         } else {
             Ok(())
         }
@@ -199,7 +199,7 @@ impl<'a, 'b> MDWriter<'a, 'b> {
 
     fn after_help(&mut self) -> io::Result<()> {
         if let Some(markdown) = &self.markdown {
-            if let Some(after_help) = help_parser::parse_section("after help", &markdown) {
+            if let Some(after_help) = help_parser::parse_section("after help", markdown) {
                 return writeln!(self.w, "\n\n{after_help}");
             }
         }
@@ -254,10 +254,10 @@ impl<'a, 'b> MDWriter<'a, 'b> {
             write!(self.w, "<dt>")?;
             let mut first = true;
             for l in arg.get_long_and_visible_aliases().unwrap_or_default() {
-                if !first {
-                    write!(self.w, ", ")?;
-                } else {
+                if first {
                     first = false;
+                } else {
+                    write!(self.w, ", ")?;
                 }
                 write!(self.w, "<code>")?;
                 write!(self.w, "--{}", l)?;
@@ -275,10 +275,10 @@ impl<'a, 'b> MDWriter<'a, 'b> {
                 write!(self.w, "</code>")?;
             }
             for s in arg.get_short_and_visible_aliases().unwrap_or_default() {
-                if !first {
-                    write!(self.w, ", ")?;
-                } else {
+                if first {
                     first = false;
+                } else {
+                    write!(self.w, ", ")?;
                 }
                 write!(self.w, "<code>")?;
                 write!(self.w, "-{}", s)?;
