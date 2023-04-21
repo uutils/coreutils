@@ -305,13 +305,21 @@ pub fn uu_app() -> Command {
         )
 }
 
+// Function to get metadata of the provided path
+// If `follow` is true, the function will try to follow symlinks
+// If `follow` is false or the symlink is broken, the function will return metadata of the symlink itself
 fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
-    let metadata = if follow {
-        fs::symlink_metadata(path)
-    } else {
-        fs::metadata(path)
-    }
-    .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?;
+    // Try to get metadata using fs::metadata
+    // If the path is a symlink and `follow` is true, fs::metadata will follow the symlink
+    let metadata = match fs::metadata(path) {
+        // If successful, use the metadata
+        Ok(metadata) => metadata,
+        // If there's a NotFound error and `follow` is false, try to get metadata of the symlink itself
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && !follow => fs::symlink_metadata(path)
+            .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?,
+        // If it's any other error, return the error
+        Err(e) => return Err(e.into()),
+    };
 
     Ok((
         FileTime::from_last_access_time(&metadata),

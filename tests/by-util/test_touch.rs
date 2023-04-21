@@ -816,3 +816,12 @@ fn test_touch_trailing_slash_no_create() {
     at.relative_symlink_dir("dir2", "link2");
     ucmd.args(&["-c", "link2/"]).succeeds();
 }
+
+#[test]
+fn test_touch_no_dereference_ref_dangling() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.relative_symlink_file("nowhere", "dangling");
+
+    ucmd.args(&["-h", "-r", "dangling", "file"]).succeeds();
+}
