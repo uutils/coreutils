@@ -260,14 +260,26 @@ impl ChownExecutor {
                 }
             }
         } else {
-            // The same message appears in wrap_chown at line 156. But wrap_chown is not called in this branch
             if self.verbosity.level == VerbosityLevel::Verbose {
-                let uid = meta.uid();
-                show_error!(
-                    "ownership of {} retained as {}",
-                    path.quote(),
-                    entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                );
+                // Display a message when the current user/group doesn't match those specified in
+                // the `--from` args.
+                if self.dest_gid.is_none() {
+                    let uid = meta.uid();
+                    show_error!(
+                        "ownership of {} retained as {}",
+                        path.quote(),
+                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                    );
+                } else {
+                    let uid = meta.uid();
+                    let gid = meta.gid();
+                    show_error!(
+                        "ownership of {} retained as {}:{}",
+                        path.quote(),
+                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                    );
+                }
             }
             0
         };
