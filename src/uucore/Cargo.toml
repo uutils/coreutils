@@ -36,6 +36,8 @@ libc = { version="0.2.142", optional=true }
 once_cell = { workspace=true }
 os_display = "0.1.3"
 
+regex = { workspace=true }
+
 digest = { workspace=true }
 hex = { workspace=true }
 memchr = { workspace=true }

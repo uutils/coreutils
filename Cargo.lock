@@ -3381,6 +3381,7 @@ dependencies = [
  "nix",
  "once_cell",
  "os_display",
+ "regex",
  "sha1",
  "sha2",
  "sha3",

@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use regex::Regex;
 #[cfg(feature = "time")]
 use time::Duration;
 
@@ -35,13 +36,6 @@ use time::Duration;
 /// [unit] can be one of the following: "fortnight", "week", "day", "hour",
 /// "minute", "min", "second", "sec" and their plural forms.
 ///
-/// # Unsupported formats
-///
-/// The function currently does not support the following formats:
-///
-/// * "year" and "month"
-/// * Times without spaces like "-1hour"
-///
 /// # Returns
 ///
 /// * `Some(Duration)` - If the input string can be parsed as a relative time
@@ -53,46 +47,45 @@ use time::Duration;
 /// relative time.
 #[cfg(feature = "time")]
 pub fn from_str(s: &str) -> Option<Duration> {
-    // Relative time, like "-1 hour" or "+3 days".
-    //
-    // TODO Add support for "year" and "month".
-    // TODO Add support for times without spaces like "-1hour".
-    let tokens: Vec<&str> = s.split_whitespace().collect();
-    match &tokens[..] {
-        [num_str, "year" | "years"] => num_str
-            .parse::<i64>()
-            .ok()
-            .map(Duration::days)
-            .map(|d| d * 365),
-        ["year" | "years"] => Some(Duration::days(365)),
-        [num_str, "month" | "months"] => num_str
-            .parse::<i64>()
-            .ok()
-            .map(Duration::days)
-            .map(|d| d * 30),
-        ["month" | "months"] => Some(Duration::days(30)),
-        [num_str, "fortnight" | "fortnights"] => {
-            num_str.parse::<i64>().ok().map(|n| Duration::weeks(2 * n))
-        }
-        ["fortnight" | "fortnights"] => Some(Duration::weeks(2)),
-        [num_str, "week" | "weeks"] => num_str.parse::<i64>().ok().map(Duration::weeks),
-        ["week" | "weeks"] => Some(Duration::weeks(1)),
-        [num_str, "day" | "days"] => num_str.parse::<i64>().ok().map(Duration::days),
-        ["day" | "days"] => Some(Duration::days(1)),
-        [num_str, "hour" | "hours"] => num_str.parse::<i64>().ok().map(Duration::hours),
-        ["hour" | "hours"] => Some(Duration::hours(1)),
-        [num_str, "minute" | "minutes" | "min" | "mins"] => {
-            num_str.parse::<i64>().ok().map(Duration::minutes)
-        }
-        ["minute" | "minutes" | "min" | "mins"] => Some(Duration::minutes(1)),
-        [num_str, "second" | "seconds" | "sec" | "secs"] => {
-            num_str.parse::<i64>().ok().map(Duration::seconds)
-        }
-        ["second" | "seconds" | "sec" | "secs"] => Some(Duration::seconds(1)),
-        ["now" | "today"] => Some(Duration::ZERO),
-        ["yesterday"] => Some(Duration::days(-1)),
-        ["tomorrow"] => Some(Duration::days(1)),
-        _ => None,
+    let time_pattern: Regex = Regex::new(
+            r"(?x)
+            (?P<value>[-+]?\d*)\s*
+            (?P<unit>years?|months?|fortnights?|weeks?|days?|hours?|h|minutes?|mins?|m|seconds?|secs?|s|yesterday|tomorrow|now|today)"
+        )
+        .unwrap();
+
+    let mut total_duration = Duration::ZERO;
+    for capture in time_pattern.captures_iter(s) {
+        let value_str = capture.name("value").unwrap().as_str();
+        let value = if value_str.is_empty() {
+            1
+        } else {
+            value_str.parse::<i64>().unwrap_or(1)
+        };
+        let unit = capture.name("unit").unwrap().as_str();
+
+        let duration = match unit {
+            "years" | "year" => Duration::days(value * 365),
+            "months" | "month" => Duration::days(value * 30),
+            "fortnights" | "fortnight" => Duration::weeks(value * 2),
+            "weeks" | "week" => Duration::weeks(value),
+            "days" | "day" => Duration::days(value),
+            "hours" | "hour" | "h" => Duration::hours(value),
+            "minutes" | "minute" | "mins" | "min" | "m" => Duration::minutes(value),
+            "seconds" | "second" | "secs" | "sec" | "s" => Duration::seconds(value),
+            "yesterday" => Duration::days(-1),
+            "tomorrow" => Duration::days(1),
+            "now" | "today" => Duration::ZERO,
+            _ => return None,
+        };
+
+        total_duration = total_duration.checked_add(duration)?;
+    }
+
+    if total_duration == Duration::ZERO && !time_pattern.is_match(s) {
+        None
+    } else {
+        Some(total_duration)
     }
 }
 
@@ -128,12 +121,14 @@ mod tests {
     fn test_weeks() {
         assert_eq!(from_str("1 week"), Some(Duration::seconds(604800)));
         assert_eq!(from_str("-2 weeks"), Some(Duration::seconds(-1209600)));
+        //        assert_eq!(from_str("2 weeks ago"), Some(Duration::seconds(-1209600)));
         assert_eq!(from_str("week"), Some(Duration::seconds(604800)));
     }
 
     #[test]
     fn test_days() {
         assert_eq!(from_str("1 day"), Some(Duration::seconds(86400)));
+        //        assert_eq!(from_str("2 days ago"), Some(Duration::seconds(-172800)));
         assert_eq!(from_str("-2 days"), Some(Duration::seconds(-172800)));
         assert_eq!(from_str("day"), Some(Duration::seconds(86400)));
     }
@@ -165,6 +160,17 @@ mod tests {
         assert_eq!(from_str("today"), Some(Duration::seconds(0)));
         assert_eq!(from_str("yesterday"), Some(Duration::seconds(-86400)));
         assert_eq!(from_str("tomorrow"), Some(Duration::seconds(86400)));
+    }
+
+    #[test]
+    fn test_no_spaces() {
+        assert_eq!(from_str("-1hour"), Some(Duration::hours(-1)));
+        assert_eq!(from_str("+3days"), Some(Duration::days(3)));
+        assert_eq!(from_str("2weeks"), Some(Duration::weeks(2)));
+        assert_eq!(from_str("+4months"), Some(Duration::days(4 * 30)));
+        assert_eq!(from_str("-2years"), Some(Duration::days(-2 * 365)));
+        assert_eq!(from_str("15minutes"), Some(Duration::minutes(15)));
+        assert_eq!(from_str("-30seconds"), Some(Duration::seconds(-30)));
     }
 
     #[test]
