@@ -4,7 +4,7 @@ name: GnuTests
 # spell-checker:ignore (jargon) submodules
 # spell-checker:ignore (libs/utils) autopoint chksum gperf lcov libexpect pyinotify shopt texinfo valgrind libattr libcap taiki-e
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
-# spell-checker:ignore (people) Dawid Dziurla * dawidd
+# spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
@@ -58,12 +58,10 @@ jobs:
       uses: actions/checkout@v3
       with:
         path: '${{ steps.vars.outputs.path_UUTILS }}'
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
-        rustup toolchain install stable -c rustfmt --profile minimal
-        rustup default stable
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        components: rustfmt
     - uses: Swatinem/rust-cache@v2
     - name: Checkout code (GNU coreutils)
       uses: actions/checkout@v3
@@ -317,12 +315,10 @@ jobs:
         path: 'gnu'
         ref: 'v9.3'
         submodules: recursive
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
-        rustup toolchain install nightly -c rustfmt --profile minimal
-        rustup default nightly
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: nightly
+        components: rustfmt
     - uses: taiki-e/install-action@grcov
     - uses: Swatinem/rust-cache@v2
     - name: Install dependencies
