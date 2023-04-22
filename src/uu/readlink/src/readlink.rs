@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
-use uucore::{format_usage, show_error, help_about, help_usage};
+use uucore::{format_usage, help_about, help_usage, show_error};
 
 const ABOUT: &str = help_about!("readlink.md");
 const USAGE: &str = help_usage!("readlink.md");
