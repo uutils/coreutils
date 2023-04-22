@@ -209,14 +209,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        if matches.get_flag(options::NO_DEREF) {
-            set_symlink_file_times(path, atime, mtime)
-        } else {
+        // sets the file access and modification times for a file or a symbolic link.
+        // The filename, access time (atime), and modification time (mtime) are provided as inputs.
+
+        // If the filename is not "-", indicating a special case for touch -h -,
+        // the code checks if the NO_DEREF flag is set, which means the user wants to
+        // set the times for a symbolic link itself, rather than the file it points to.
+        if filename == "-" {
             filetime::set_file_times(path, atime, mtime)
+        } else {
+            let should_set_symlink_times = matches.get_flag(options::NO_DEREF);
+            if should_set_symlink_times {
+                set_symlink_file_times(path, atime, mtime)
+            } else {
+                filetime::set_file_times(path, atime, mtime)
+            }
         }
         .map_err_context(|| format!("setting times of {}", path.quote()))?;
     }
-
     Ok(())
 }
 

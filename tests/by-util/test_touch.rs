@@ -833,3 +833,10 @@ fn test_touch_no_dereference_dangling() {
 
     ucmd.args(&["-h", "dangling"]).succeeds();
 }
+
+#[test]
+fn test_touch_dash() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    ucmd.args(&["-h", "-"]).succeeds().no_stderr().no_stdout();
+}
