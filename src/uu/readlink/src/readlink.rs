@@ -14,10 +14,10 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, show_error, help_about, help_usage};
 
-const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("readlink.md");
+const USAGE: &str = help_usage!("readlink.md");
 const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
