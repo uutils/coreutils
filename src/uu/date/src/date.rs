@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes, minu, minut, seco, secon
+// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes, minu, minut, seco, secon, recognise
 
 use chrono::format::{Item, StrftimeItems};
 use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
@@ -27,31 +27,11 @@ use uucore::{format_usage, help_about, help_usage, show};
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
 // Options
-const DATE: &str = "date";
-const D: &str = "d";
-const DA: &str = "da";
-const DAT: &str = "dat";
-const HOURS: &str = "hours";
-const H: &str = "h";
-const HO: &str = "ho";
-const HOU: &str = "hou";
-const MINUTES: &str = "minutes";
-const M: &str = "m";
-const MI: &str = "mi";
-const MIN: &str = "min";
-const MINU: &str = "minu";
-const MINUT: &str = "minut";
-const SECONDS: &str = "seconds";
-const S: &str = "s";
-const SE: &str = "se";
-const SEC: &str = "sec";
-const SECO: &str = "seco";
-const SECON: &str = "secon";
-const HOUR: &str = "hour";
-const MINUTE: &str = "minute";
-const SECOND: &str = "second";
-const NS: &str = "ns";
-const N: &str = "n";
+const DATE: [&str; 4] = ["d", "da", "dat", "date"];
+const HOURS: [&str; 5] = ["h", "ho", "hou", "hour", "hours"];
+const MINUTES: [&str; 7] = ["m", "mi", "min", "minu", "minut", "minute", "minutes"];
+const SECONDS: [&str; 7] = ["s", "se", "sec", "seco", "secon", "second", "seconds"];
+const NS: [&str; 2] = ["n", "ns"];
 
 const ABOUT: &str = help_about!("date.md");
 const USAGE: &str = help_usage!("date.md");
@@ -99,6 +79,11 @@ struct Settings {
     set_to: Option<DateTime<FixedOffset>>,
 }
 
+/// Function to recognise option selected
+fn is_match(s: &str, categories: &[&str]) -> bool {
+    categories.contains(&s)
+}
+
 /// Various ways of displaying the date
 enum Format {
     Iso8601(Iso8601Format),
@@ -126,11 +111,11 @@ enum Iso8601Format {
 impl<'a> From<&'a str> for Iso8601Format {
     fn from(s: &str) -> Self {
         match s {
-            HOURS | HOUR | HOU | HO | H => Self::Hours,
-            MINUTES | MINUTE | MINUT | MINU | MIN | MI | M => Self::Minutes,
-            SECONDS | SECOND | SECON | SECO | SEC | SE | S => Self::Seconds,
-            NS | N => Self::Ns,
-            DATE | DAT | DA | D => Self::Date,
+            _ if is_match(s, &HOURS) => Self::Hours,
+            _ if is_match(s, &MINUTES) => Self::Minutes,
+            _ if is_match(s, &SECONDS) => Self::Seconds,
+            _ if is_match(s, &NS) => Self::Ns,
+            _ if is_match(s, &DATE) => Self::Date,
             // Note: This is caught by clap via `possible_values`
             _ => unreachable!(),
         }
@@ -146,9 +131,9 @@ enum Rfc3339Format {
 impl<'a> From<&'a str> for Rfc3339Format {
     fn from(s: &str) -> Self {
         match s {
-            DATE => Self::Date,
-            SECONDS | SECOND => Self::Seconds,
-            NS => Self::Ns,
+            _ if is_match(s, &DATE) => Self::Date,
+            _ if is_match(s, &SECONDS) => Self::Seconds,
+            _ if is_match(s, &NS) => Self::Ns,
             // Should be caught by clap
             _ => panic!("Invalid format: {s}"),
         }
@@ -170,7 +155,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Format::Custom(form)
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
-        .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
+        .map(|mut iter| iter.next().unwrap_or(&DATE[3].to_string()).as_str().into())
     {
         Format::Iso8601(fmt)
     } else if matches.get_flag(OPT_RFC_EMAIL) {
@@ -315,7 +300,6 @@ pub fn uu_app() -> Command {
                 .short('I')
                 .long(OPT_ISO_8601)
                 .value_name("FMT")
-                .value_parser([D, DA, DAT, DATE, H, HO, HOU, HOUR, HOURS, M, MI, MIN, MINU, MINUT, MINUTE, MINUTES, S, SE, SEC, SECO, SECON, SECOND, SECONDS, N, NS])
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
                 .help(ISO_8601_HELP_STRING),
@@ -331,7 +315,6 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RFC_3339)
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
-                .value_parser([DATE, SECOND, SECONDS, NS])
                 .help(RFC_3339_HELP_STRING),
         )
         .arg(
