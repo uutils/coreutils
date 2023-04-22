@@ -59,6 +59,12 @@ pub fn from_str(s: &str) -> Option<Duration> {
     // TODO Add support for times without spaces like "-1hour".
     let tokens: Vec<&str> = s.split_whitespace().collect();
     match &tokens[..] {
+        [num_str, "year" | "years"] => num_str
+            .parse::<i64>()
+            .ok()
+            .map(Duration::days)
+            .map(|d| d * 365),
+        ["year" | "years"] => Some(Duration::days(365)),
         [num_str, "fortnight" | "fortnights"] => {
             num_str.parse::<i64>().ok().map(|n| Duration::weeks(2 * n))
         }
