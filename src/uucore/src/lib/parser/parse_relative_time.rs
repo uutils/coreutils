@@ -65,6 +65,12 @@ pub fn from_str(s: &str) -> Option<Duration> {
             .map(Duration::days)
             .map(|d| d * 365),
         ["year" | "years"] => Some(Duration::days(365)),
+        [num_str, "month" | "months"] => num_str
+            .parse::<i64>()
+            .ok()
+            .map(Duration::days)
+            .map(|d| d * 30),
+        ["month" | "months"] => Some(Duration::days(30)),
         [num_str, "fortnight" | "fortnights"] => {
             num_str.parse::<i64>().ok().map(|n| Duration::weeks(2 * n))
         }
