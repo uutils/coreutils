@@ -23,7 +23,9 @@ static ABOUT: &str = help_about!("chown.md");
 
 const USAGE: &str = help_usage!("chown.md");
 
-fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)> {
+fn parse_gid_uid_and_filter(
+    matches: &ArgMatches,
+) -> UResult<(Option<u32>, Option<u32>, String, IfFrom)> {
     let filter = if let Some(spec) = matches.get_one::<String>(options::FROM) {
         match parse_spec(spec, ':')? {
             (Some(uid), None) => IfFrom::User(uid),
@@ -37,17 +39,29 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<(Option<u32>, Optio
 
     let dest_uid: Option<u32>;
     let dest_gid: Option<u32>;
+    let raw_owner: String;
     if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
         let meta = fs::metadata(file)
             .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?;
-        dest_gid = Some(meta.gid());
-        dest_uid = Some(meta.uid());
+        let gid = meta.gid();
+        let uid = meta.uid();
+        dest_gid = Some(gid);
+        dest_uid = Some(uid);
+        raw_owner = format!(
+            "{}:{}",
+            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
+        );
     } else {
-        let (u, g) = parse_spec(matches.get_one::<String>(options::ARG_OWNER).unwrap(), ':')?;
+        raw_owner = matches
+            .get_one::<String>(options::ARG_OWNER)
+            .unwrap()
+            .into();
+        let (u, g) = parse_spec(&raw_owner, ':')?;
         dest_uid = u;
         dest_gid = g;
     }
-    Ok((dest_gid, dest_uid, filter))
+    Ok((dest_gid, dest_uid, raw_owner, filter))
 }
 
 #[uucore::main]

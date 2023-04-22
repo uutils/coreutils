@@ -730,15 +730,16 @@ fn test_chown_file_notexisting() {
     let user_name = String::from(result.stdout_str().trim());
     assert!(!user_name.is_empty());
 
-    let _result = scene
+    let result = scene
         .ucmd()
-        .arg(user_name)
+        .arg(&user_name)
         .arg("--verbose")
         .arg("not_existing")
         .fails();
 
-    // TODO: uncomment once "failed to change ownership of '{}' to {}" added to stdout
-    // result.stderr_contains("retained as");
+    result.stdout_contains(format!(
+        "failed to change ownership of 'not_existing' to {user_name}"
+    ));
     // TODO: uncomment once message changed from "cannot dereference" to "cannot access"
     // result.stderr_contains("cannot access 'not_existing': No such file or directory");
 }

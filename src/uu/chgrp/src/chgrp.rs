@@ -21,16 +21,22 @@ use std::os::unix::fs::MetadataExt;
 static ABOUT: &str = help_about!("chgrp.md");
 const USAGE: &str = help_usage!("chgrp.md");
 
-fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)> {
+fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, String, IfFrom)> {
+    let mut raw_group: String = String::new();
     let dest_gid = if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
         fs::metadata(file)
-            .map(|meta| Some(meta.gid()))
+            .map(|meta| {
+                let gid = meta.gid();
+                raw_group = entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string());
+                Some(gid)
+            })
             .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?
     } else {
         let group = matches
             .get_one::<String>(options::ARG_GROUP)
             .map(|s| s.as_str())
             .unwrap_or_default();
+        raw_group = group.to_string();
         if group.is_empty() {
             None
         } else {
@@ -45,7 +51,7 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>,
             }
         }
     };
-    Ok((dest_gid, None, IfFrom::All))
+    Ok((dest_gid, None, raw_group, IfFrom::All))
 }
 
 #[uucore::main]
