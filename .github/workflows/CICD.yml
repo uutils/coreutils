@@ -396,7 +396,6 @@ jobs:
       env:
         RUSTFLAGS: "-Awarnings"
         RUST_BACKTRACE: "1"
-        CARGO_TERM_COLOR: always
 
   deps:
     name: Dependencies
@@ -445,7 +444,6 @@ jobs:
       run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
-        CARGO_TERM_COLOR: "always"
     - name: "`make install`"
       shell: bash
       run: |
@@ -483,7 +481,6 @@ jobs:
       run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
         RUST_BACKTRACE: "1"
-        CARGO_TERM_COLOR: "always"
 
   build_rust_nightly:
     name: Build/nightly
@@ -511,7 +508,6 @@ jobs:
       run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
         RUST_BACKTRACE: "1"
-        CARGO_TERM_COLOR: "always"
 
   compute_size:
     name: Binary sizes
@@ -1138,7 +1134,6 @@ jobs:
     - name: Test uucore
       run: cargo nextest run --profile ci --hide-progress-bar -p uucore
       env:
-        CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
         RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
@@ -1147,7 +1142,6 @@ jobs:
     - name: Test
       run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
-        CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
         RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
@@ -1156,7 +1150,6 @@ jobs:
     - name: Test individual utilities
       run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
-        CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
         RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
