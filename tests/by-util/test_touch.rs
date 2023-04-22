@@ -825,3 +825,11 @@ fn test_touch_no_dereference_ref_dangling() {
 
     ucmd.args(&["-h", "-r", "dangling", "file"]).succeeds();
 }
+
+#[test]
+fn test_touch_no_dereference_dangling() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("nowhere", "dangling");
+
+    ucmd.args(&["-h", "dangling"]).succeeds();
+}

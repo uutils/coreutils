@@ -139,15 +139,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let path = pathbuf.as_path();
 
-        if let Err(e) = path.metadata() {
+        // Check the metadata of the path
+        let metadata_result = if matches.get_flag(options::NO_DEREF) {
+            path.symlink_metadata()
+        } else {
+            path.metadata()
+        };
+
+        if let Err(e) = metadata_result {
+            // If the error is not a NotFound error, return the error with context
             if e.kind() != std::io::ErrorKind::NotFound {
                 return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
             }
 
+            // If the NO_CREATE flag is set, skip this iteration
             if matches.get_flag(options::NO_CREATE) {
                 continue;
             }
 
+            // If the NO_DEREF flag is set, show an error and skip this iteration
             if matches.get_flag(options::NO_DEREF) {
                 show!(USimpleError::new(
                     1,
@@ -159,6 +169,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 continue;
             }
 
+            // Create the file, and handle errors by showing the error and skipping this iteration
             if let Err(e) = File::create(path) {
                 show!(e.map_err_context(|| format!("cannot touch {}", path.quote())));
                 continue;
