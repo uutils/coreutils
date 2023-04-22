@@ -52,6 +52,9 @@ jobs:
       run: |
         rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
+    ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
+    ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
+    - uses: taiki-e/install-action@cargo-udeps
     - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
@@ -70,12 +73,6 @@ jobs:
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
-    ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
-    ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
-    - name: Install `cargo-udeps`
-      run: cargo install cargo-udeps
-      env:
-        RUSTUP_TOOLCHAIN: stable
     - name: Detect unused dependencies
       shell: bash
       run: |
@@ -356,8 +353,8 @@ jobs:
         ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
         rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
-    - uses: Swatinem/rust-cache@v2
     - uses: taiki-e/install-action@nextest
+    - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
     - name: Initialize workflow variables
@@ -765,7 +762,6 @@ jobs:
         outputs CARGO_CMD
         # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
         if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
-          cargo install --version 0.2.1 cross
           printf "[build.env]\npassthrough = [\"CI\", \"RUST_BACKTRACE\"]\n" > Cross.toml
         fi
         # * test only library and/or binaries for arm-type targets
@@ -779,6 +775,10 @@ jobs:
           *-pc-windows-msvc) STRIP="" ;;
         esac;
         outputs STRIP
+    - uses: taiki-e/install-action@v2
+      if: steps.vars.outputs.CARGO_CMD == 'cross'
+      with:
+        tool: cross@v0.2.1
     - name: Create all needed build/work directories
       shell: bash
       run: |
@@ -1106,6 +1106,7 @@ jobs:
         rustup toolchain install ${{ matrix.job.toolchain }} --no-self-update --profile minimal
         rustup default ${{ matrix.job.toolchain }}
     - uses: taiki-e/install-action@nextest
+    - uses: taiki-e/install-action@grcov
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -1194,9 +1195,6 @@ jobs:
         RUSTDOCFLAGS: "-Cpanic=abort"
         RUST_BACKTRACE: "1"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
-    - name: "`grcov` ~ install"
-      id: build_grcov
-      run: cargo install grcov
     - name: Generate coverage data (via `grcov`)
       id: coverage
       shell: bash

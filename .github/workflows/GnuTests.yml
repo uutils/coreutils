@@ -2,7 +2,7 @@ name: GnuTests
 
 # spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem
 # spell-checker:ignore (jargon) submodules
-# spell-checker:ignore (libs/utils) autopoint chksum gperf lcov libexpect pyinotify shopt texinfo valgrind libattr libcap
+# spell-checker:ignore (libs/utils) autopoint chksum gperf lcov libexpect pyinotify shopt texinfo valgrind libattr libcap taiki-e
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
@@ -323,6 +323,7 @@ jobs:
         rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
         rustup toolchain install nightly -c rustfmt --profile minimal
         rustup default nightly
+    - uses: taiki-e/install-action@grcov
     - uses: Swatinem/rust-cache@v2
     - name: Install dependencies
       run: |
@@ -353,8 +354,6 @@ jobs:
         UU_MAKE_PROFILE=debug bash util/build-gnu.sh
     - name: Run GNU tests
       run: bash uutils/util/run-gnu-test.sh
-    - name: "`grcov` ~ install"
-      run: cargo install grcov
     - name: Generate coverage data (via `grcov`)
       id: coverage
       run: |
