@@ -95,3 +95,81 @@ pub fn from_str(s: &str) -> Option<Duration> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::from_str;
+    #[cfg(feature = "time")]
+    use time::Duration;
+
+    #[test]
+    fn test_years() {
+        assert_eq!(from_str("1 year"), Some(Duration::seconds(31536000)));
+        assert_eq!(from_str("-2 years"), Some(Duration::seconds(-63072000)));
+        assert_eq!(from_str("year"), Some(Duration::seconds(31536000)));
+    }
+
+    #[test]
+    fn test_months() {
+        assert_eq!(from_str("1 month"), Some(Duration::seconds(2592000)));
+        assert_eq!(from_str("2 months"), Some(Duration::seconds(5184000)));
+        assert_eq!(from_str("month"), Some(Duration::seconds(2592000)));
+    }
+
+    #[test]
+    fn test_fortnights() {
+        assert_eq!(from_str("1 fortnight"), Some(Duration::seconds(1209600)));
+        assert_eq!(from_str("3 fortnights"), Some(Duration::seconds(3628800)));
+        assert_eq!(from_str("fortnight"), Some(Duration::seconds(1209600)));
+    }
+
+    #[test]
+    fn test_weeks() {
+        assert_eq!(from_str("1 week"), Some(Duration::seconds(604800)));
+        assert_eq!(from_str("-2 weeks"), Some(Duration::seconds(-1209600)));
+        assert_eq!(from_str("week"), Some(Duration::seconds(604800)));
+    }
+
+    #[test]
+    fn test_days() {
+        assert_eq!(from_str("1 day"), Some(Duration::seconds(86400)));
+        assert_eq!(from_str("-2 days"), Some(Duration::seconds(-172800)));
+        assert_eq!(from_str("day"), Some(Duration::seconds(86400)));
+    }
+
+    #[test]
+    fn test_hours() {
+        assert_eq!(from_str("1 hour"), Some(Duration::seconds(3600)));
+        assert_eq!(from_str("-2 hours"), Some(Duration::seconds(-7200)));
+        assert_eq!(from_str("hour"), Some(Duration::seconds(3600)));
+    }
+
+    #[test]
+    fn test_minutes() {
+        assert_eq!(from_str("1 minute"), Some(Duration::seconds(60)));
+        assert_eq!(from_str("2 minutes"), Some(Duration::seconds(120)));
+        assert_eq!(from_str("min"), Some(Duration::seconds(60)));
+    }
+
+    #[test]
+    fn test_seconds() {
+        assert_eq!(from_str("1 second"), Some(Duration::seconds(1)));
+        assert_eq!(from_str("2 seconds"), Some(Duration::seconds(2)));
+        assert_eq!(from_str("sec"), Some(Duration::seconds(1)));
+    }
+
+    #[test]
+    fn test_relative_days() {
+        assert_eq!(from_str("now"), Some(Duration::seconds(0)));
+        assert_eq!(from_str("today"), Some(Duration::seconds(0)));
+        assert_eq!(from_str("yesterday"), Some(Duration::seconds(-86400)));
+        assert_eq!(from_str("tomorrow"), Some(Duration::seconds(86400)));
+    }
+
+    #[test]
+    fn test_invalid_input() {
+        assert_eq!(from_str("invalid"), None);
+        assert_eq!(from_str("1 invalid"), None);
+    }
+}
