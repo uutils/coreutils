@@ -735,11 +735,10 @@ fn test_chown_file_notexisting() {
         .arg(&user_name)
         .arg("--verbose")
         .arg("not_existing")
-        .fails();
-
-    result.stdout_contains(format!(
-        "failed to change ownership of 'not_existing' to {user_name}"
-    ));
+        .fails()
+        .stdout_contains(format!(
+            "failed to change ownership of 'not_existing' to {user_name}"
+        ));
     // TODO: uncomment once message changed from "cannot dereference" to "cannot access"
     // result.stderr_contains("cannot access 'not_existing': No such file or directory");
 }
