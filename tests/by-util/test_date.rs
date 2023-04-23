@@ -1,7 +1,5 @@
-extern crate regex;
-
-use self::regex::Regex;
 use crate::common::util::TestScenario;
+use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
 use rust_users::get_effective_uid;
 
@@ -302,6 +300,14 @@ fn test_date_for_no_permission_file() {
     assert_eq!(
         result.stderr_str().trim(),
         format!("date: {FILE}: Permission denied")
+}
+
+fn test_date_for_dir_as_file() {
+    let result = new_ucmd!().arg("--file").arg("/").fails();
+    result.no_stdout();
+    assert_eq!(
+        result.stderr_str().trim(),
+        "date: expected file, got directory '/'",
     );
 }
 

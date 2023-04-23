@@ -1,7 +1,7 @@
 #!/bin/bash
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
-# UU_MAKE_PROFILE == 'debug' | 'release' ## build profile for *uutils* build; may be supplied by caller, defaults to 'debug'
+# UU_MAKE_PROFILE == 'debug' | 'release' ## build profile for *uutils* build; may be supplied by caller, defaults to 'release'
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR vdir rcexp xpart
 
@@ -224,3 +224,5 @@ sed -i -e "s/\$prog: multiple field specifications/error: The argument '--field 
 # GNU doesn't support width > INT_MAX
 # disable these test cases
 sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/misc/printf-cov.pl
+
+sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du: option requires an argument/error: a value is required for '--threshold <SIZE>' but none was supplied/" -e "/Try 'du --help' for more information./d" tests/du/threshold.sh

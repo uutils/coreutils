@@ -1,8 +1,5 @@
-extern crate filetime;
-extern crate time;
-
-use self::filetime::FileTime;
 use crate::common::util::TestScenario;
+use filetime::FileTime;
 
 #[test]
 fn test_invalid_arg() {
@@ -165,7 +162,7 @@ fn test_mv_interactive() {
         .arg(file_a)
         .arg(file_b)
         .pipe_in("n")
-        .succeeds()
+        .fails()
         .no_stdout();
 
     assert!(at.file_exists(file_a));
@@ -618,7 +615,7 @@ fn test_mv_update_option() {
 
     at.touch(file_a);
     at.touch(file_b);
-    let ts = time::OffsetDateTime::now_local().unwrap();
+    let ts = time::OffsetDateTime::now_utc();
     let now = FileTime::from_unix_time(ts.unix_timestamp(), ts.nanosecond());
     let later = FileTime::from_unix_time(ts.unix_timestamp() + 3600, ts.nanosecond());
     filetime::set_file_times(at.plus_as_string(file_a), now, now).unwrap();

@@ -38,10 +38,25 @@ pub trait Digest {
     }
 }
 
-pub struct Blake2b(blake2b_simd::State);
+/// first element of the tuple is the blake2b state
+/// second is the number of output bits
+pub struct Blake2b(blake2b_simd::State, usize);
+
+impl Blake2b {
+    /// Return a new Blake2b instance with a custom output bytes length
+    pub fn with_output_bytes(output_bytes: usize) -> Self {
+        let mut params = blake2b_simd::Params::new();
+        params.hash_length(output_bytes);
+
+        let state = params.to_state();
+        Self(state, output_bytes * 8)
+    }
+}
+
 impl Digest for Blake2b {
     fn new() -> Self {
-        Self(blake2b_simd::State::new())
+        // by default, Blake2b output is 512 bits long (= 64B)
+        Self::with_output_bytes(64)
     }
 
     fn hash_update(&mut self, input: &[u8]) {
@@ -54,11 +69,11 @@ impl Digest for Blake2b {
     }
 
     fn reset(&mut self) {
-        *self = Self::new();
+        *self = Self::with_output_bytes(self.output_bytes());
     }
 
     fn output_bits(&self) -> usize {
-        512
+        self.1
     }
 }
 

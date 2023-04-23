@@ -507,7 +507,7 @@ mod tests {
         ProgUpdate {
             read_stat: Default::default(),
             write_stat: Default::default(),
-            duration: duration,
+            duration,
             complete: false,
         }
     }

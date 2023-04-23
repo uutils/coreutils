@@ -1,8 +1,6 @@
 #!/bin/sh
 # `run-gnu-test.bash [TEST]`
 # run GNU test (or all tests if TEST is missing/null)
-#
-# UU_MAKE_PROFILE == 'debug' | 'release' ## build profile used for *uutils* build; may be supplied by caller, defaults to 'release'
 
 # spell-checker:ignore (env/vars) GNULIB SRCDIR SUBDIRS ; (utils) shellcheck
 

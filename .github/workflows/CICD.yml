@@ -1,8 +1,8 @@
 name: CICD
 
-# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl
-# spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic
-# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain
+# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl taiki
+# spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
+# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers
 # spell-checker:ignore (people) Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt utmpdump xargs
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
@@ -48,6 +48,11 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain
+      run: |
+        rustup toolchain install nightly --no-self-update --profile minimal
+        rustup default nightly
+    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -67,10 +72,6 @@ jobs:
         outputs CARGO_FEATURES_OPTION
     ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
     ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
-    - name: Install `rust` toolchain
-      run: |
-        rustup toolchain install nightly --no-self-update --profile minimal
-        rustup default nightly
     - name: Install `cargo-udeps`
       run: cargo install cargo-udeps
       env:
@@ -97,6 +98,12 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain
+      run: |
+        ## Install `rust` toolchain
+        rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -114,11 +121,6 @@ jobs:
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-        rustup default stable
     - name: "`cargo fmt` testing"
       shell: bash
       run: |
@@ -137,16 +139,14 @@ jobs:
       RUN_FOR: 60
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
     - name: Install `rust` toolchain
       run: |
         rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
     - name: Install `cargo-fuzz`
       run: cargo install cargo-fuzz
+    - uses: Swatinem/rust-cache@v2
     - name: Run fuzz_date for XX seconds
-      # TODO: fix https://github.com/uutils/coreutils/issues/4494
-      continue-on-error: true
       shell: bash
       run: |
         ## Run it
@@ -186,6 +186,11 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain
+      run: |
+        ## Install `rust` toolchain
+        rustup toolchain install stable --no-self-update -c clippy --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -204,7 +209,7 @@ jobs:
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='--all-features' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
@@ -218,11 +223,6 @@ jobs:
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for show-utils.sh
         esac
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update -c clippy --profile minimal
-        rustup default stable
     - name: "`cargo clippy` lint testing"
       shell: bash
       run: |
@@ -231,7 +231,7 @@ jobs:
         fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
         fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -- -W clippy::manual_string_new -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
+        S=$(cargo clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -- -W clippy::manual_string_new -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   style_spellcheck:
@@ -297,6 +297,11 @@ jobs:
 #          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain
+      run: |
+        ## Install `rust` toolchain
+        rustup toolchain install stable --no-self-update -c clippy --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -315,18 +320,13 @@ jobs:
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='--all-features' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
         echo UTILITY_LIST=${UTILITY_LIST}
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update -c clippy --profile minimal
-        rustup default stable
     - name: "`cargo doc` with warnings"
       shell: bash
       run: |
@@ -351,7 +351,13 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
+      run: |
+        ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
+        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
+        rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
+    - uses: taiki-e/install-action@nextest
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
     - name: Initialize workflow variables
@@ -365,11 +371,6 @@ jobs:
         unset CARGO_FEATURES_OPTION
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
-    - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
-      run: |
-        ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
-        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
-        rustup default ${{ env.RUST_MIN_SRV }}
     - name: Confirm MinSRV compatible 'Cargo.lock'
       shell: bash
       run: |
@@ -404,10 +405,11 @@ jobs:
         RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
         RUSTUP_TOOLCHAIN=stable cargo tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
-      run: cargo test -v ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
+      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
-        RUSTFLAGS: "-Awarnings --cfg unsound_local_offset"
+        RUSTFLAGS: "-Awarnings"
         RUST_BACKTRACE: "1"
+        CARGO_TERM_COLOR: always
 
   deps:
     name: Dependencies
@@ -424,6 +426,7 @@ jobs:
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: "`cargo update` testing"
       shell: bash
       run: |
@@ -445,24 +448,25 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
+    - uses: taiki-e/install-action@nextest
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: "`make build`"
       shell: bash
       run: |
         make build
-    - name: "`make test`"
+    - name: "`make nextest`"
       shell: bash
-      run: |
-        make test
+      run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
+        CARGO_TERM_COLOR: "always"
     - name: "`make install`"
       shell: bash
       run: |
@@ -491,18 +495,20 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
         rustup toolchain install stable --no-self-update --profile minimal
         rustup default stable
+    - uses: taiki-e/install-action@nextest
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Test
-      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
         RUST_BACKTRACE: "1"
+        CARGO_TERM_COLOR: "always"
 
   build_rust_nightly:
     name: Build/nightly
@@ -521,18 +527,20 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Install `rust` toolchain
       run: |
         ## Install `rust` toolchain
         rustup toolchain install nightly --no-self-update --profile minimal
         rustup default nightly
+    - uses: taiki-e/install-action@nextest
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Test
-      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
         RUST_BACKTRACE: "1"
+        CARGO_TERM_COLOR: "always"
 
   compute_size:
     name: Binary sizes
@@ -548,6 +556,11 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
+    - name: Install `rust` toolchain
+      run: |
+        ## Install `rust` toolchain
+        rustup toolchain install stable --no-self-update --profile minimal
+        rustup default stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -557,11 +570,6 @@ jobs:
         ## Install dependencies
         sudo apt-get update
         sudo apt-get install jq
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update --profile minimal
-        rustup default stable
     - name: "`make install`"
       shell: bash
       run: |
@@ -574,15 +582,32 @@ jobs:
       shell: bash
       run: |
         ## Compute uutil release sizes
-        SIZE=$(du -s target/size-release/usr/local/bin/|awk '{print $1}')
-        SIZE_MULTI=$(du -s target/size-multi-release/usr/local/bin/|awk '{print $1}')
+        DATE=$(date --rfc-email)
+        find target/size-release/usr/local/bin -type f -printf '%f\0' | sort -z |
+          while IFS= read -r -d '' name; do
+            size=$(du -s target/size-release/usr/local/bin/$name | awk '{print $1}')
+            echo "\"$name\""
+            echo "$size"
+          done | \
+            jq -n \
+                --arg date "$DATE" \
+                --arg sha "$GITHUB_SHA" \
+                'reduce inputs as $name ({}; . + { ($name): input }) | { ($date): {sha: $sha, sizes: map_values(.)} }' > individual-size-result.json
+        SIZE=$(cat individual-size-result.json | jq '[.[] | .sizes | .[]] | reduce .[] as $num (0; . + $num)')
+        SIZE_MULTI=$(du -s target/size-multi-release/usr/local/bin/coreutils | awk '{print $1}')
         jq -n \
-              --arg date "$(date --rfc-email)" \
+              --arg date "$DATE" \
               --arg sha "$GITHUB_SHA" \
               --arg size "$SIZE" \
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
-    - uses: actions/upload-artifact@v3
+    - name: Upload the individual size result
+      uses: actions/upload-artifact@v3
+      with:
+        name: individual-size-result
+        path: individual-size-result.json
+    - name: Upload the size result
+      uses: actions/upload-artifact@v3
       with:
         name: size-result
         path: size-result.json
@@ -606,26 +631,25 @@ jobs:
           # { os , target , cargo-options , features , use-cross , toolchain }
           - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf, features: feat_os_unix_gnueabihf, use-cross: use-cross, }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf , use-cross: use-cross }
-          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
           # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
-          # - { os: ubuntu-18.04   , target: i586-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross } ## note: older windows platform; not required, dev-FYI only
-          # - { os: ubuntu-18.04   , target: i586-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross } ## note: older windows platform; not required, dev-FYI only
           - { os: ubuntu-latest   , target: i686-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross }
           - { os: ubuntu-latest   , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-latest   , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
           - { os: ubuntu-latest   , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
-          # Commented until https://github.com/uutils/coreutils/issues/3210 is fixed
-          #- { os: ubuntu-18.04   , target: i686-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross }
-          #- { os: ubuntu-18.04   , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
-          #- { os: ubuntu-18.04   , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
-          #- { os: ubuntu-18.04   , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows } ## note: requires rust >= 1.43.0 to link correctly
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
+    - name: rust toolchain ~ install
+      run: |
+        ## rust toolchain ~ install
+        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
+        rustup default ${{ env.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
+      with:
+        key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
     - name: Initialize workflow variables
@@ -750,11 +774,6 @@ jobs:
             echo "foo" > /home/runner/.plan
             ;;
         esac
-    - name: rust toolchain ~ install
-      run: |
-        ## rust toolchain ~ install
-        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
-        rustup default ${{ env.RUST_MIN_SRV }}
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
@@ -960,14 +979,14 @@ jobs:
         TEST_SUMMARY_FILE="toybox-result.json"
         outputs TEST_SUMMARY_FILE
     - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
     - name: rust toolchain ~ install
       run: |
         ## rust toolchain ~ install
         rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
         rustup default ${{ env.RUST_MIN_SRV }}
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      uses: mozilla-actions/sccache-action@v0.0.3
     - name: Build coreutils as multiple binaries
       shell: bash
       run: |
@@ -1027,146 +1046,6 @@ jobs:
         name: toybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
 
-  test_android:
-    name: Test Android builds
-    needs: [ min_version, deps ]
-    runs-on: macos-latest
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        api-level: [28]
-        target: [default]
-        arch: [x86] # , arm64-v8a
-    env:
-      TERMUX: v0.118.0
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-    - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: AVD cache
-      uses: actions/cache@v3
-      id: avd-cache
-      with:
-        path: |
-          ~/.android/avd/*
-          ~/.android/avd/*/snapshots/*
-          ~/.android/adb*
-        key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
-    - name: Create and cache emulator image
-      if: steps.avd-cache.outputs.cache-hit != 'true'
-      uses: reactivecircus/android-emulator-runner@v2
-      with:
-        api-level: ${{ matrix.api-level }}
-        target: ${{ matrix.target }}
-        arch: ${{ matrix.arch }}
-        ram-size: 2048M
-        disk-size: 5120M
-        force-avd-creation: true
-        emulator-options: -no-snapshot-load -noaudio -no-boot-anim -camera-back none
-        script: |
-          wget https://github.com/termux/termux-app/releases/download/${{ env.TERMUX }}/termux-app_${{ env.TERMUX }}+github-debug_${{ matrix.arch }}.apk
-          util/android-commands.sh snapshot termux-app_${{ env.TERMUX }}+github-debug_${{ matrix.arch }}.apk
-          adb -s emulator-5554 emu avd snapshot save ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
-          echo "Emulator image created."
-          pkill -9 qemu-system-x86_64
-    - name: Build and Test on Android
-      uses: reactivecircus/android-emulator-runner@v2
-      with:
-        api-level: ${{ matrix.api-level }}
-        target: ${{ matrix.target }}
-        arch: ${{ matrix.arch }}
-        ram-size: 2048M
-        disk-size: 5120M
-        force-avd-creation: false
-        emulator-options: -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -snapshot ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
-        script: |
-          util/android-commands.sh sync
-          util/android-commands.sh build
-          util/android-commands.sh tests
-
-  test_freebsd:
-    name: Tests/FreeBSD test suite
-    needs: [ min_version, deps ]
-    runs-on: ${{ matrix.job.os }}
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: macos-12 , features: unix } ## GHA MacOS-11.0 VM won't have VirtualBox; refs: <https://github.com/actions/virtual-environments/issues/4060> , <https://github.com/actions/virtual-environments/pull/4010>
-    env:
-      mem: 4096
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-    - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Prepare, build and test
-      ## spell-checker:ignore (ToDO) sshfs usesh vmactions
-      uses: vmactions/freebsd-vm@v0.3.0
-      with:
-        usesh: true
-        # sync: sshfs
-        prepare: pkg install -y curl gmake sudo
-        run: |
-          ## Prepare, build, and test
-          # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
-          # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
-          set -e
-          #
-          # We need a file-descriptor file system to test test_ls::test_ls_io_errors
-          mount -t fdescfs fdesc /dev/fd
-          #
-          TEST_USER=tester
-          REPO_NAME=${GITHUB_WORKSPACE##*/}
-          WORKSPACE_PARENT="/Users/runner/work/${REPO_NAME}"
-          WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
-          #
-          pw adduser -n ${TEST_USER} -d /root/ -g wheel -c "Coreutils user to build" -w random
-          # chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
-          chown -R ${TEST_USER}:wheel /root/ "/Users/runner/work/${REPO_NAME}"/
-          whoami
-          #
-          # Further work needs to be done in a sudo as we are changing users
-          sudo -i -u ${TEST_USER} sh << EOF
-          set -e
-          whoami
-          curl https://sh.rustup.rs -sSf --output rustup.sh
-          sh rustup.sh -y --profile=minimal
-          . $HOME/.cargo/env
-          ## Info
-          # environment
-          echo "## environment"
-          echo "CI='${CI}'"
-          echo "REPO_NAME='${REPO_NAME}'"
-          echo "TEST_USER='${TEST_USER}'"
-          echo "WORKSPACE_PARENT='${WORKSPACE_PARENT}'"
-          echo "WORKSPACE='${WORKSPACE}'"
-          env | sort
-          # tooling info
-          echo "## tooling info"
-          cargo -V
-          rustc -V
-          #
-          # To ensure that files are cleaned up, we don't want to exit on error
-          set +e
-          cd "${WORKSPACE}"
-          unset FAULT
-          cargo build || FAULT=1
-          export RUST_BACKTRACE=1
-          if (test -z "\$FAULT"); then cargo test --features '${{ matrix.job.features }}' || FAULT=1 ; fi
-          if (test -z "\$FAULT"); then cargo test --all-features -p uucore || FAULT=1 ; fi
-          # Clean to avoid to rsync back the files
-          cargo clean
-          if (test -n "\$FAULT"); then exit 1 ; fi
-          EOF
-
   coverage:
     name: Code Coverage
     runs-on: ${{ matrix.job.os }}
@@ -1178,11 +1057,17 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: unix }
-          - { os: macos-latest   , features: macos }
-          - { os: windows-latest , features: windows }
+          - { os: ubuntu-latest  , features: unix, toolchain: nightly }
+          - { os: macos-latest   , features: macos, toolchain: nightly }
+          - { os: windows-latest , features: windows, toolchain: nightly-x86_64-pc-windows-gnu }
     steps:
     - uses: actions/checkout@v3
+    - name: rust toolchain ~ install
+      run: |
+        ## rust toolchain ~ install
+        rustup toolchain install ${{ matrix.job.toolchain }} --no-self-update --profile minimal
+        rustup default ${{ matrix.job.toolchain }}
+    - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -1234,11 +1119,6 @@ jobs:
             echo "foo" > /home/runner/.plan
             ;;
         esac
-    - name: rust toolchain ~ install
-      run: |
-        ## rust toolchain ~ install
-        rustup toolchain install ${{ steps.vars.outputs.TOOLCHAIN }} --no-self-update --profile minimal
-        rustup default ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
@@ -1250,7 +1130,7 @@ jobs:
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Test uucore
-      run: cargo test --no-fail-fast -p uucore
+      run: cargo nextest run --profile ci --hide-progress-bar -p uucore
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
@@ -1259,7 +1139,7 @@ jobs:
         RUST_BACKTRACE: "1"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test
-      run: cargo test ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast
+      run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
@@ -1268,7 +1148,7 @@ jobs:
         RUST_BACKTRACE: "1"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test individual utilities
-      run: cargo test --no-fail-fast ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+      run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
         CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""

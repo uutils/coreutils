@@ -1,0 +1,6 @@
+[profile.ci]
+retries = 2
+status-level = "all"
+final-status-level = "skip"
+failure-output = "immediate-final"
+fail-fast = false

@@ -200,8 +200,6 @@ impl Display for BackupError {
 pub mod arguments {
     use clap::ArgAction;
 
-    extern crate clap;
-
     pub static OPT_BACKUP: &str = "backupopt_backup";
     pub static OPT_BACKUP_NO_ARG: &str = "backupopt_b";
     pub static OPT_SUFFIX: &str = "backupopt_suffix";

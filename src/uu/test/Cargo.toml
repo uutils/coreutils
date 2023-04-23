@@ -1,6 +1,6 @@
 [package]
 name = "uu_test"
-version = "0.0.17"
+version = "0.0.18"
 authors = ["uutils developers"]
 license = "MIT"
 description = "test ~ (uutils) evaluate comparison and file type expressions"

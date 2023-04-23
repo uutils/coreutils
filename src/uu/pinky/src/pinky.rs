@@ -20,10 +20,10 @@ use std::os::unix::fs::MetadataExt;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::PathBuf;
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Lightweight finger";
-const USAGE: &str = "{} [OPTION]... [USER]...";
+const ABOUT: &str = help_about!("pinky.md");
+const USAGE: &str = help_usage!("pinky.md");
 
 mod options {
     pub const LONG_FORMAT: &str = "long_format";
@@ -218,10 +218,10 @@ impl Capitalize for str {
     fn capitalize(&self) -> String {
         self.char_indices()
             .fold(String::with_capacity(self.len()), |mut acc, x| {
-                if x.0 != 0 {
-                    acc.push(x.1);
-                } else {
+                if x.0 == 0 {
                     acc.push(x.1.to_ascii_uppercase());
+                } else {
+                    acc.push(x.1);
                 }
                 acc
             })
@@ -281,10 +281,10 @@ impl Pinky {
         match pts_path.metadata() {
             #[allow(clippy::unnecessary_cast)]
             Ok(meta) => {
-                mesg = if meta.mode() & S_IWGRP as u32 != 0 {
-                    ' '
-                } else {
+                mesg = if meta.mode() & S_IWGRP as u32 == 0 {
                     '*'
+                } else {
+                    ' '
                 };
                 last_change = meta.atime();
             }
@@ -312,10 +312,10 @@ impl Pinky {
         print!(" {}{:<8.*}", mesg, utmpx::UT_LINESIZE, ut.tty_device());
 
         if self.include_idle {
-            if last_change != 0 {
-                print!(" {:<6}", idle_string(last_change));
-            } else {
+            if last_change == 0 {
                 print!(" {:<6}", "?????");
+            } else {
+                print!(" {:<6}", idle_string(last_change));
             }
         }
 

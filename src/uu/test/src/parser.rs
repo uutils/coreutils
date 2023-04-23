@@ -7,11 +7,12 @@
 
 // spell-checker:ignore (grammar) BOOLOP STRLEN FILETEST FILEOP INTOP STRINGOP ; (vars) LParen StrlenOp
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::iter::Peekable;
 
+use super::error::{ParseError, ParseResult};
+
 use uucore::display::Quotable;
-use uucore::show_error;
 
 /// Represents one of the binary comparison operators for strings, integers, or files
 #[derive(Debug, PartialEq, Eq)]
@@ -90,6 +91,27 @@ impl Symbol {
     }
 }
 
+/// Implement Display trait for Symbol to make it easier to print useful errors.
+/// We will try to match the format in which the symbol appears in the input.
+impl std::fmt::Display for Symbol {
+    /// Format a Symbol for printing
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match &self {
+            Self::LParen => OsStr::new("("),
+            Self::Bang => OsStr::new("!"),
+            Self::BoolOp(s)
+            | Self::Literal(s)
+            | Self::Op(Operator::String(s))
+            | Self::Op(Operator::Int(s))
+            | Self::Op(Operator::File(s))
+            | Self::UnaryOp(UnaryOperator::StrlenOp(s))
+            | Self::UnaryOp(UnaryOperator::FiletestOp(s)) => OsStr::new(s),
+            Self::None => OsStr::new("None"),
+        };
+        write!(f, "{}", s.quote())
+    }
+}
+
 /// Recursive descent parser for test, which converts a list of OsStrings
 /// (typically command line arguments) into a stack of Symbols in postfix
 /// order.
@@ -133,16 +155,10 @@ impl Parser {
     }
 
     /// Consume the next token & verify that it matches the provided value.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the next token does not match the provided value.
-    ///
-    /// TODO: remove panics and convert Parser to return error messages.
-    fn expect(&mut self, value: &str) {
+    fn expect(&mut self, value: &str) -> ParseResult<()> {
         match self.next_token() {
-            Symbol::Literal(s) if s == value => (),
-            _ => panic!("expected ‘{value}’"),
+            Symbol::Literal(s) if s == value => Ok(()),
+            _ => Err(ParseError::Expected(value.quote().to_string())),
         }
     }
 
@@ -162,25 +178,27 @@ impl Parser {
     /// Parse an expression.
     ///
     ///   EXPR → TERM | EXPR BOOLOP EXPR
-    fn expr(&mut self) {
+    fn expr(&mut self) -> ParseResult<()> {
         if !self.peek_is_boolop() {
-            self.term();
+            self.term()?;
         }
-        self.maybe_boolop();
+        self.maybe_boolop()?;
+        Ok(())
     }
 
     /// Parse a term token and possible subsequent symbols: "(", "!", UOP,
     /// literal, or None.
-    fn term(&mut self) {
+    fn term(&mut self) -> ParseResult<()> {
         let symbol = self.next_token();
 
         match symbol {
-            Symbol::LParen => self.lparen(),
-            Symbol::Bang => self.bang(),
+            Symbol::LParen => self.lparen()?,
+            Symbol::Bang => self.bang()?,
             Symbol::UnaryOp(_) => self.uop(symbol),
             Symbol::None => self.stack.push(symbol),
-            literal => self.literal(literal),
+            literal => self.literal(literal)?,
         }
+        Ok(())
     }
 
     /// Parse a (possibly) parenthesized expression.
@@ -192,7 +210,7 @@ impl Parser {
     /// * when followed by a binary operator that is not _itself_ interpreted
     ///   as a literal
     ///
-    fn lparen(&mut self) {
+    fn lparen(&mut self) -> ParseResult<()> {
         // Look ahead up to 3 tokens to determine if the lparen is being used
         // as a grouping operator or should be treated as a literal string
         let peek3: Vec<Symbol> = self
@@ -204,13 +222,13 @@ impl Parser {
 
         match peek3.as_slice() {
             // case 1: lparen is a literal when followed by nothing
-            [] => self.literal(Symbol::LParen.into_literal()),
+            [] => {
+                self.literal(Symbol::LParen.into_literal())?;
+                Ok(())
+            }
 
             // case 2: error if end of stream is `( <any_token>`
-            [symbol] => {
-                show_error!("missing argument after ‘{:?}’", symbol);
-                std::process::exit(2);
-            }
+            [symbol] => Err(ParseError::MissingArgument(format!("{symbol}"))),
 
             // case 3: `( uop <any_token> )` → parenthesized unary operation;
             //         this case ensures we don’t get confused by `( -f ) )`
@@ -218,43 +236,49 @@ impl Parser {
             [Symbol::UnaryOp(_), _, Symbol::Literal(s)] if s == ")" => {
                 let symbol = self.next_token();
                 self.uop(symbol);
-                self.expect(")");
+                self.expect(")")?;
+                Ok(())
             }
 
             // case 4: binary comparison of literal lparen, e.g. `( != )`
             [Symbol::Op(_), Symbol::Literal(s)] | [Symbol::Op(_), Symbol::Literal(s), _]
                 if s == ")" =>
             {
-                self.literal(Symbol::LParen.into_literal());
+                self.literal(Symbol::LParen.into_literal())?;
+                Ok(())
             }
 
             // case 5: after handling the prior cases, any single token inside
             //         parentheses is a literal, e.g. `( -f )`
             [_, Symbol::Literal(s)] | [_, Symbol::Literal(s), _] if s == ")" => {
                 let symbol = self.next_token();
-                self.literal(symbol);
-                self.expect(")");
+                self.literal(symbol)?;
+                self.expect(")")?;
+                Ok(())
             }
 
             // case 6: two binary ops in a row, treat the first op as a literal
             [Symbol::Op(_), Symbol::Op(_), _] => {
                 let symbol = self.next_token();
-                self.literal(symbol);
-                self.expect(")");
+                self.literal(symbol)?;
+                self.expect(")")?;
+                Ok(())
             }
 
             // case 7: if earlier cases didn’t match, `( op <any_token>…`
             //         indicates binary comparison of literal lparen with
             //         anything _except_ ")" (case 4)
             [Symbol::Op(_), _] | [Symbol::Op(_), _, _] => {
-                self.literal(Symbol::LParen.into_literal());
+                self.literal(Symbol::LParen.into_literal())?;
+                Ok(())
             }
 
             // Otherwise, lparen indicates the start of a parenthesized
             // expression
             _ => {
-                self.expr();
-                self.expect(")");
+                self.expr()?;
+                self.expect(")")?;
+                Ok(())
             }
         }
     }
@@ -276,7 +300,7 @@ impl Parser {
     /// * `! str BOOLOP str`: negate the entire Boolean expression
     /// * `! str BOOLOP EXPR BOOLOP EXPR`: negate the value of the first `str` term
     ///
-    fn bang(&mut self) {
+    fn bang(&mut self) -> ParseResult<()> {
         match self.peek() {
             Symbol::Op(_) | Symbol::BoolOp(_) => {
                 // we need to peek ahead one more token to disambiguate the first
@@ -289,14 +313,14 @@ impl Parser {
                     Symbol::Op(_) | Symbol::None => {
                         // op is literal
                         let op = self.next_token().into_literal();
-                        self.literal(op);
+                        self.literal(op)?;
                         self.stack.push(Symbol::Bang);
                     }
                     // case 2: `<! as literal> OP str [BOOLOP EXPR]`.
                     _ => {
                         // bang is literal; parsing continues with op
-                        self.literal(Symbol::Bang.into_literal());
-                        self.maybe_boolop();
+                        self.literal(Symbol::Bang.into_literal())?;
+                        self.maybe_boolop()?;
                     }
                 }
             }
@@ -317,32 +341,34 @@ impl Parser {
                 match peek4.as_slice() {
                     // we peeked ahead 4 but there were only 3 tokens left
                     [Symbol::Literal(_), Symbol::BoolOp(_), Symbol::Literal(_)] => {
-                        self.expr();
+                        self.expr()?;
                         self.stack.push(Symbol::Bang);
                     }
                     _ => {
-                        self.term();
+                        self.term()?;
                         self.stack.push(Symbol::Bang);
                     }
                 }
             }
         }
+        Ok(())
     }
 
     /// Peek at the next token and parse it as a BOOLOP or string literal,
     /// as appropriate.
-    fn maybe_boolop(&mut self) {
+    fn maybe_boolop(&mut self) -> ParseResult<()> {
         if self.peek_is_boolop() {
             let symbol = self.next_token();
 
             // BoolOp by itself interpreted as Literal
             if let Symbol::None = self.peek() {
-                self.literal(symbol.into_literal());
+                self.literal(symbol.into_literal())?;
             } else {
-                self.boolop(symbol);
-                self.maybe_boolop();
+                self.boolop(symbol)?;
+                self.maybe_boolop()?;
             }
         }
+        Ok(())
     }
 
     /// Parse a Boolean expression.
@@ -350,13 +376,14 @@ impl Parser {
     /// Logical and (-a) has higher precedence than or (-o), so in an
     /// expression like `foo -o '' -a ''`, the and subexpression is evaluated
     /// first.
-    fn boolop(&mut self, op: Symbol) {
+    fn boolop(&mut self, op: Symbol) -> ParseResult<()> {
         if op == Symbol::BoolOp(OsString::from("-a")) {
-            self.term();
+            self.term()?;
         } else {
-            self.expr();
+            self.expr()?;
         }
         self.stack.push(op);
+        Ok(())
     }
 
     /// Parse a (possible) unary argument test (string length or file
@@ -375,7 +402,7 @@ impl Parser {
 
     /// Parse a string literal, optionally followed by a comparison operator
     /// and a second string literal.
-    fn literal(&mut self, token: Symbol) {
+    fn literal(&mut self, token: Symbol) -> ParseResult<()> {
         self.stack.push(token.into_literal());
 
         // EXPR → str OP str
@@ -383,21 +410,24 @@ impl Parser {
             let op = self.next_token();
 
             match self.next_token() {
-                Symbol::None => panic!("missing argument after {op:?}"),
+                Symbol::None => {
+                    return Err(ParseError::MissingArgument(format!("{op}")));
+                }
                 token => self.stack.push(token.into_literal()),
             }
 
             self.stack.push(op);
         }
+        Ok(())
     }
 
     /// Parser entry point: parse the token stream `self.tokens`, storing the
     /// resulting `Symbol` stack in `self.stack`.
-    fn parse(&mut self) -> Result<(), String> {
-        self.expr();
+    fn parse(&mut self) -> ParseResult<()> {
+        self.expr()?;
 
         match self.tokens.next() {
-            Some(token) => Err(format!("extra argument {}", token.quote())),
+            Some(token) => Err(ParseError::ExtraArgument(token.quote().to_string())),
             None => Ok(()),
         }
     }
@@ -405,7 +435,7 @@ impl Parser {
 
 /// Parse the token stream `args`, returning a `Symbol` stack representing the
 /// operations to perform in postfix order.
-pub fn parse(args: Vec<OsString>) -> Result<Vec<Symbol>, String> {
+pub fn parse(args: Vec<OsString>) -> ParseResult<Vec<Symbol>> {
     let mut p = Parser::new(args);
     p.parse()?;
     Ok(p.stack)

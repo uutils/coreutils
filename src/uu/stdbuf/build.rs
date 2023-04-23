@@ -37,15 +37,20 @@ fn main() {
     // var for the profile can only be "debug" or "release", not a custom
     // profile name, so we have to use the name of the directory within target
     // as the profile name.
+    //
+    // Adapted from https://stackoverflow.com/questions/73595435/how-to-get-profile-from-cargo-toml-in-build-rs-or-at-runtime
+    let profile_name = out_dir
+        .split(std::path::MAIN_SEPARATOR)
+        .nth_back(3)
+        .unwrap();
+
     let mut name = target_dir.file_name().unwrap().to_string_lossy();
-    let mut profile_name = name.clone();
     while name != "target" && !name.starts_with("cargo-install") {
         target_dir = target_dir.parent().unwrap();
-        profile_name = name.clone();
         name = target_dir.file_name().unwrap().to_string_lossy();
     }
     let mut dir = target_dir.to_path_buf();
-    dir.push(profile_name.as_ref());
+    dir.push(profile_name);
     dir.push("deps");
     let mut path = None;
 

@@ -1,11 +1,5 @@
-#[cfg(not(windows))]
-extern crate libc;
-extern crate regex;
-#[cfg(not(windows))]
-extern crate tempfile;
-
-use self::regex::Regex;
 use crate::common::util::TestScenario;
+use regex::Regex;
 
 /*
  * As vdir use the same functions than ls, we don't have to retest them here.

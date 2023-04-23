@@ -4,15 +4,13 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-extern crate unindent;
-
-use self::unindent::unindent;
 use crate::common::util::TestScenario;
 use std::env;
 use std::fs::remove_file;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use unindent::unindent;
 
 // octal dump of 'abcdefghijklmnopqrstuvwxyz\n'     // spell-checker:disable-line
 static ALPHA_OUT: &str = "

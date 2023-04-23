@@ -263,10 +263,10 @@ impl ChownExecutor {
             0
         };
 
-        if !self.recursive {
-            ret
-        } else {
+        if self.recursive {
             ret | self.dive_into(&root)
+        } else {
+            ret
         }
     }
 

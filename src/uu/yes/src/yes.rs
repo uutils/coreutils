@@ -7,13 +7,13 @@
 
 /* last synced with: yes (GNU coreutils) 8.13 */
 
-use std::borrow::Cow;
-use std::io::{self, Result, Write};
-
 use clap::{Arg, ArgAction, Command};
+use std::borrow::Cow;
+use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError};
+#[cfg(unix)]
+use uucore::signals::enable_pipe_errors;
 use uucore::{format_usage, help_about, help_usage};
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
 
@@ -69,25 +69,10 @@ fn prepare_buffer<'a>(input: &'a str, buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u8
     }
 }
 
-#[cfg(unix)]
-fn enable_pipe_errors() -> Result<()> {
-    let ret = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
-    if ret == libc::SIG_ERR {
-        return Err(io::Error::new(io::ErrorKind::Other, ""));
-    }
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn enable_pipe_errors() -> Result<()> {
-    // Do nothing.
-    Ok(())
-}
-
 pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-
+    #[cfg(unix)]
     enable_pipe_errors()?;
 
     #[cfg(any(target_os = "linux", target_os = "android"))]

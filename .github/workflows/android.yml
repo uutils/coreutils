@@ -1,0 +1,100 @@
+name: Android
+
+# spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader dtolnay juliangruber
+
+on: [push, pull_request]
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test_android:
+    name: Test builds
+    runs-on: macos-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [28]
+        target: [default]
+        arch: [x86] # , arm64-v8a
+    env:
+      TERMUX: v0.118.0
+    steps:
+    - uses: actions/checkout@v3
+    - name: Restore AVD cache
+      uses: actions/cache/restore@v3
+      id: avd-cache
+      with:
+        path: |
+          ~/.android/avd/*
+          ~/.android/avd/*/snapshots/*
+          ~/.android/adb*
+          ~/__rustc_hash__
+        key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}+nextest+rustc-hash
+    - name: Create and cache emulator image
+      if: steps.avd-cache.outputs.cache-hit != 'true'
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: ${{ matrix.api-level }}
+        target: ${{ matrix.target }}
+        arch: ${{ matrix.arch }}
+        ram-size: 2048M
+        disk-size: 7GB
+        force-avd-creation: true
+        emulator-options: -no-snapshot-load -noaudio -no-boot-anim -camera-back none
+        script: |
+          util/android-commands.sh init "${{ matrix.arch }}" "${{ matrix.api-level }}" "${{ env.TERMUX }}"
+    - name: Save AVD cache
+      if: steps.avd-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v3
+      with:
+        path: |
+          ~/.android/avd/*
+          ~/.android/avd/*/snapshots/*
+          ~/.android/adb*
+          ~/__rustc_hash__
+        key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}+nextest+rustc-hash
+    - uses: juliangruber/read-file-action@v1
+      id: read_rustc_hash
+      with:
+        # ~ expansion didn't work
+        path: /Users/runner/__rustc_hash__
+        trim: true
+    - name: Restore rust cache
+      id: rust-cache
+      uses: actions/cache/restore@v3
+      with:
+        path: ~/__rust_cache__
+        # The version vX at the end of the key is just a development version to avoid conflicts in
+        # the github cache during the development of this workflow
+        key: ${{ matrix.arch }}_${{ matrix.target}}_${{ steps.read_rustc_hash.outputs.content }}_${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}_v3
+    - name: Build and Test
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: ${{ matrix.api-level }}
+        target: ${{ matrix.target }}
+        arch: ${{ matrix.arch }}
+        ram-size: 2048M
+        disk-size: 7GB
+        force-avd-creation: false
+        emulator-options: -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -snapshot ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
+        # This is not a usual script. Every line is executed in a separate shell with `sh -c`. If
+        # one of the lines returns with error the whole script is failed (like running a script with
+        # set -e) and in consequences the other lines (shells) are not executed.
+        script: |
+          util/android-commands.sh sync_host
+          util/android-commands.sh build
+          util/android-commands.sh tests
+          if [[ "${{ steps.rust-cache.outputs.cache-hit }}" != 'true' ]]; then util/android-commands.sh sync_image; fi; exit 0
+    - name: Save rust cache
+      if: steps.rust-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v3
+      with:
+        path: ~/__rust_cache__
+        key: ${{ matrix.arch }}_${{ matrix.target}}_${{ steps.read_rustc_hash.outputs.content }}_${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}_v3
