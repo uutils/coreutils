@@ -9,7 +9,7 @@
 
 use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
-use uucore::perms::{chown_base, options, IfFrom};
+use uucore::perms::{chown_base, options, GidUidOwnerFilter, IfFrom};
 use uucore::{format_usage, help_about, help_usage};
 
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -23,9 +23,7 @@ static ABOUT: &str = help_about!("chown.md");
 
 const USAGE: &str = help_usage!("chown.md");
 
-fn parse_gid_uid_and_filter(
-    matches: &ArgMatches,
-) -> UResult<(Option<u32>, Option<u32>, String, IfFrom)> {
+fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     let filter = if let Some(spec) = matches.get_one::<String>(options::FROM) {
         match parse_spec(spec, ':')? {
             (Some(uid), None) => IfFrom::User(uid),
@@ -61,7 +59,12 @@ fn parse_gid_uid_and_filter(
         dest_uid = u;
         dest_gid = g;
     }
-    Ok((dest_gid, dest_uid, raw_owner, filter))
+    Ok(GidUidOwnerFilter {
+        dest_gid,
+        dest_uid,
+        raw_owner,
+        filter,
+    })
 }
 
 #[uucore::main]

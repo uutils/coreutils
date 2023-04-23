@@ -422,7 +422,13 @@ pub mod options {
     pub const ARG_FILES: &str = "FILE";
 }
 
-type GidUidFilterParser = fn(&ArgMatches) -> UResult<(Option<u32>, Option<u32>, String, IfFrom)>;
+pub struct GidUidOwnerFilter {
+    pub dest_gid: Option<u32>,
+    pub dest_uid: Option<u32>,
+    pub raw_owner: String,
+    pub filter: IfFrom,
+}
+type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
 
 /// Base implementation for `chgrp` and `chown`.
 ///
@@ -435,7 +441,7 @@ pub fn chown_base(
     mut command: Command,
     args: impl crate::Args,
     add_arg_if_not_reference: &'static str,
-    parse_gid_uid_and_filter: GidUidFilterParser,
+    parse_gid_uid_and_filter: GidUidFilterOwnerParser,
     groups_only: bool,
 ) -> UResult<()> {
     let args: Vec<_> = args.collect();
@@ -518,7 +524,12 @@ pub fn chown_base(
     } else {
         VerbosityLevel::Normal
     };
-    let (dest_gid, dest_uid, raw_owner, filter) = parse_gid_uid_and_filter(&matches)?;
+    let GidUidOwnerFilter {
+        dest_gid,
+        dest_uid,
+        raw_owner,
+        filter,
+    } = parse_gid_uid_and_filter(&matches)?;
 
     let executor = ChownExecutor {
         traverse_symlinks,

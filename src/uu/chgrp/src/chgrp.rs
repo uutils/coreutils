@@ -10,7 +10,7 @@
 use uucore::display::Quotable;
 pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::perms::{chown_base, options, IfFrom};
+use uucore::perms::{chown_base, options, GidUidOwnerFilter, IfFrom};
 use uucore::{format_usage, help_about, help_usage};
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
@@ -21,7 +21,7 @@ use std::os::unix::fs::MetadataExt;
 static ABOUT: &str = help_about!("chgrp.md");
 const USAGE: &str = help_usage!("chgrp.md");
 
-fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, String, IfFrom)> {
+fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     let mut raw_group: String = String::new();
     let dest_gid = if let Some(file) = matches.get_one::<String>(options::REFERENCE) {
         fs::metadata(file)
@@ -51,7 +51,12 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>,
             }
         }
     };
-    Ok((dest_gid, None, raw_group, IfFrom::All))
+    Ok(GidUidOwnerFilter {
+        dest_gid,
+        dest_uid: None,
+        raw_owner: raw_group,
+        filter: IfFrom::All,
+    })
 }
 
 #[uucore::main]
