@@ -50,7 +50,8 @@ pub fn from_str(s: &str) -> Option<Duration> {
     let time_pattern: Regex = Regex::new(
             r"(?x)
             (?P<value>[-+]?\d*)\s*
-            (?P<unit>years?|months?|fortnights?|weeks?|days?|hours?|h|minutes?|mins?|m|seconds?|secs?|s|yesterday|tomorrow|now|today)"
+            (?P<unit>years?|months?|fortnights?|weeks?|days?|hours?|h|minutes?|mins?|m|seconds?|secs?|s|yesterday|tomorrow|now|today)
+            (\s*(?P<ago>ago))?"
         )
         .unwrap();
 
@@ -63,6 +64,7 @@ pub fn from_str(s: &str) -> Option<Duration> {
             value_str.parse::<i64>().unwrap_or(1)
         };
         let unit = capture.name("unit").unwrap().as_str();
+        let is_ago = capture.name("ago").is_some();
 
         let duration = match unit {
             "years" | "year" => Duration::days(value * 365),
@@ -79,7 +81,7 @@ pub fn from_str(s: &str) -> Option<Duration> {
             _ => return None,
         };
 
-        total_duration = total_duration.checked_add(duration)?;
+        total_duration = total_duration.checked_add(if is_ago { -duration } else { duration })?;
     }
 
     if total_duration == Duration::ZERO && !time_pattern.is_match(s) {
@@ -100,6 +102,7 @@ mod tests {
     fn test_years() {
         assert_eq!(from_str("1 year"), Some(Duration::seconds(31536000)));
         assert_eq!(from_str("-2 years"), Some(Duration::seconds(-63072000)));
+        assert_eq!(from_str("2 years ago"), Some(Duration::seconds(-63072000)));
         assert_eq!(from_str("year"), Some(Duration::seconds(31536000)));
     }
 
@@ -121,14 +124,14 @@ mod tests {
     fn test_weeks() {
         assert_eq!(from_str("1 week"), Some(Duration::seconds(604800)));
         assert_eq!(from_str("-2 weeks"), Some(Duration::seconds(-1209600)));
-        //        assert_eq!(from_str("2 weeks ago"), Some(Duration::seconds(-1209600)));
+        assert_eq!(from_str("2 weeks ago"), Some(Duration::seconds(-1209600)));
         assert_eq!(from_str("week"), Some(Duration::seconds(604800)));
     }
 
     #[test]
     fn test_days() {
         assert_eq!(from_str("1 day"), Some(Duration::seconds(86400)));
-        //        assert_eq!(from_str("2 days ago"), Some(Duration::seconds(-172800)));
+        assert_eq!(from_str("2 days ago"), Some(Duration::seconds(-172800)));
         assert_eq!(from_str("-2 days"), Some(Duration::seconds(-172800)));
         assert_eq!(from_str("day"), Some(Duration::seconds(86400)));
     }
@@ -136,6 +139,7 @@ mod tests {
     #[test]
     fn test_hours() {
         assert_eq!(from_str("1 hour"), Some(Duration::seconds(3600)));
+        assert_eq!(from_str("1 hour ago"), Some(Duration::seconds(-3600)));
         assert_eq!(from_str("-2 hours"), Some(Duration::seconds(-7200)));
         assert_eq!(from_str("hour"), Some(Duration::seconds(3600)));
     }
@@ -171,6 +175,7 @@ mod tests {
         assert_eq!(from_str("-2years"), Some(Duration::days(-2 * 365)));
         assert_eq!(from_str("15minutes"), Some(Duration::minutes(15)));
         assert_eq!(from_str("-30seconds"), Some(Duration::seconds(-30)));
+        assert_eq!(from_str("30seconds ago"), Some(Duration::seconds(-30)));
     }
 
     #[test]
