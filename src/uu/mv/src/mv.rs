@@ -24,7 +24,7 @@ use std::os::windows;
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::{format_usage, help_about, help_usage, prompt_yes, show};
 
 use fs_extra::dir::{
@@ -378,21 +378,23 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
             }
         }
 
-        let rename_result = rename(sourcepath, &targetpath, b, multi_progress.as_ref())
-            .map_err_context(|| {
-                format!(
-                    "cannot move {} to {}",
-                    sourcepath.quote(),
-                    targetpath.quote()
-                )
-            });
-
-        if let Err(e) = rename_result {
-            match multi_progress {
-                Some(ref pb) => pb.suspend(|| show!(e)),
-                None => show!(e),
-            };
-        };
+        match rename(sourcepath, &targetpath, b, multi_progress.as_ref()) {
+            Err(e) if e.to_string() == "" => set_exit_code(1),
+            Err(e) => {
+                let e = e.map_err_context(|| {
+                    format!(
+                        "cannot move {} to {}",
+                        sourcepath.quote(),
+                        targetpath.quote()
+                    )
+                });
+                match multi_progress {
+                    Some(ref pb) => pb.suspend(|| show!(e)),
+                    None => show!(e),
+                };
+            }
+            Ok(()) => (),
+        }
 
         if let Some(ref pb) = count_progress {
             pb.inc(1);

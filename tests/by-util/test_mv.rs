@@ -182,6 +182,26 @@ fn test_mv_interactive() {
 }
 
 #[test]
+fn test_mv_interactive_with_dir_as_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "test_mv_interactive_file";
+    let target_dir = "target";
+
+    at.mkdir(target_dir);
+    at.touch(file);
+    at.touch(format!("{target_dir}/{file}"));
+
+    ucmd.arg(file)
+        .arg(target_dir)
+        .arg("-i")
+        .pipe_in("n")
+        .fails()
+        .stderr_does_not_contain("cannot move")
+        .no_stdout();
+}
+
+#[test]
 fn test_mv_arg_update_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
