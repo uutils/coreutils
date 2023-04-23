@@ -300,6 +300,7 @@ fn test_date_for_no_permission_file() {
     assert_eq!(
         result.stderr_str().trim(),
         format!("date: {FILE}: Permission denied")
+    );
 }
 
 fn test_date_for_dir_as_file() {
