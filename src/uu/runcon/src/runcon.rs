@@ -5,7 +5,7 @@ use uucore::error::{UResult, UUsageError};
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
-use uucore::{format_usage, help_about, help_usage, help_section};
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
