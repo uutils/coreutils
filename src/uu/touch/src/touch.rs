@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult mktime YYYYMMDDHHMM YYMMDDHHMM DATETIME YYYYMMDDHHMMS subsecond
+// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult mktime YYYYMMDDHHMM YYMMDDHHMM DATETIME YYYYMMDDHHMMS subsecond humantime
 
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, ArgGroup, Command};
@@ -83,7 +83,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     ) {
         (Some(reference), Some(date)) => {
             let (atime, mtime) = stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?;
-            if let Some(offset) = parse_relative_time(date) {
+            if let Ok(offset) = humantime_to_duration::from_str(date) {
                 let mut seconds = offset.whole_seconds();
                 let mut nanos = offset.subsec_nanoseconds();
                 if nanos < 0 {
@@ -428,46 +428,13 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         }
     }
 
-    if let Some(duration) = parse_relative_time(s) {
+    if let Ok(duration) = humantime_to_duration::from_str(s) {
         let now_local = time::OffsetDateTime::now_local().unwrap();
         let diff = now_local.checked_add(duration).unwrap();
         return Ok(local_dt_to_filetime(diff));
     }
 
     Err(USimpleError::new(1, format!("Unable to parse date: {s}")))
-}
-
-fn parse_relative_time(s: &str) -> Option<Duration> {
-    // Relative time, like "-1 hour" or "+3 days".
-    //
-    // TODO Add support for "year" and "month".
-    // TODO Add support for times without spaces like "-1hour".
-    let tokens: Vec<&str> = s.split_whitespace().collect();
-    match &tokens[..] {
-        [num_str, "fortnight" | "fortnights"] => num_str
-            .parse::<i64>()
-            .ok()
-            .map(|n| time::Duration::weeks(2 * n)),
-        ["fortnight" | "fortnights"] => Some(time::Duration::weeks(2)),
-        [num_str, "week" | "weeks"] => num_str.parse::<i64>().ok().map(time::Duration::weeks),
-        ["week" | "weeks"] => Some(time::Duration::weeks(1)),
-        [num_str, "day" | "days"] => num_str.parse::<i64>().ok().map(time::Duration::days),
-        ["day" | "days"] => Some(time::Duration::days(1)),
-        [num_str, "hour" | "hours"] => num_str.parse::<i64>().ok().map(time::Duration::hours),
-        ["hour" | "hours"] => Some(time::Duration::hours(1)),
-        [num_str, "minute" | "minutes" | "min" | "mins"] => {
-            num_str.parse::<i64>().ok().map(time::Duration::minutes)
-        }
-        ["minute" | "minutes" | "min" | "mins"] => Some(time::Duration::minutes(1)),
-        [num_str, "second" | "seconds" | "sec" | "secs"] => {
-            num_str.parse::<i64>().ok().map(time::Duration::seconds)
-        }
-        ["second" | "seconds" | "sec" | "secs"] => Some(time::Duration::seconds(1)),
-        ["now" | "today"] => Some(time::Duration::ZERO),
-        ["yesterday"] => Some(time::Duration::days(-1)),
-        ["tomorrow"] => Some(time::Duration::days(1)),
-        _ => None,
-    }
 }
 
 fn parse_timestamp(s: &str) -> UResult<FileTime> {
