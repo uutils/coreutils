@@ -5,7 +5,7 @@ use uucore::error::{UResult, UUsageError};
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
@@ -18,18 +18,9 @@ mod errors;
 use errors::error_exit_status;
 use errors::{Error, Result, RunconError};
 
-const ABOUT: &str = "Run command with specified security context.";
-const USAGE: &str = "\
-    {} [CONTEXT COMMAND [ARG...]]
-    {} [-c] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] COMMAND [ARG...]";
-const DESCRIPTION: &str = "Run COMMAND with completely-specified CONTEXT, or with current or \
-                      transitioned security context modified by one or more of \
-                      LEVEL, ROLE, TYPE, and USER.\n\n\
-                      If none of --compute, --type, --user, --role or --range is specified, \
-                      then the first argument is used as the complete context.\n\n\
-                      Note that only carefully-chosen contexts are likely to successfully run.\n\n\
-                      With neither CONTEXT nor COMMAND are specified, \
-                      then this prints the current security context.";
+const ABOUT: &str = help_about!("runcon.md");
+const USAGE: &str = help_usage!("runcon.md");
+const DESCRIPTION: &str = help_section!("after help", "runcon.md");
 
 pub mod options {
     pub const COMPUTE: &str = "compute";
