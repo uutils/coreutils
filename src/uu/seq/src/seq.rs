@@ -12,9 +12,9 @@ use num_traits::Zero;
 
 use uucore::error::FromIo;
 use uucore::error::UResult;
-use uucore::format_usage;
 use uucore::memo::printf;
 use uucore::show;
+use uucore::{format_usage, help_about, help_usage};
 
 mod error;
 mod extendedbigdecimal;
@@ -27,11 +27,9 @@ use crate::extendedbigint::ExtendedBigInt;
 use crate::number::Number;
 use crate::number::PreciseNumber;
 
-static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
-const USAGE: &str = "\
-    {} [OPTION]... LAST
-    {} [OPTION]... FIRST LAST
-    {} [OPTION]... FIRST INCREMENT LAST";
+const ABOUT: &str = help_about!("seq.md");
+const USAGE: &str = help_usage!("seq.md");
+
 static OPT_SEPARATOR: &str = "separator";
 static OPT_TERMINATOR: &str = "terminator";
 static OPT_WIDTHS: &str = "widths";
