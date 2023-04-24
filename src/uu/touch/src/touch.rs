@@ -139,7 +139,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let path = pathbuf.as_path();
 
-        // Check the metadata of the path
         let metadata_result = if matches.get_flag(options::NO_DEREF) {
             path.symlink_metadata()
         } else {
@@ -147,17 +146,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         };
 
         if let Err(e) = metadata_result {
-            // If the error is not a NotFound error, return the error with context
             if e.kind() != std::io::ErrorKind::NotFound {
                 return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
             }
 
-            // If the NO_CREATE flag is set, skip this iteration
             if matches.get_flag(options::NO_CREATE) {
                 continue;
             }
 
-            // If the NO_DEREF flag is set, show an error and skip this iteration
             if matches.get_flag(options::NO_DEREF) {
                 show!(USimpleError::new(
                     1,
@@ -169,7 +165,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 continue;
             }
 
-            // Create the file, and handle errors by showing the error and skipping this iteration
             if let Err(e) = File::create(path) {
                 show!(e.map_err_context(|| format!("cannot touch {}", path.quote())));
                 continue;
@@ -217,13 +212,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // set the times for a symbolic link itself, rather than the file it points to.
         if filename == "-" {
             filetime::set_file_times(path, atime, mtime)
+        } else if matches.get_flag(options::NO_DEREF) {
+            set_symlink_file_times(path, atime, mtime)
         } else {
-            let should_set_symlink_times = matches.get_flag(options::NO_DEREF);
-            if should_set_symlink_times {
-                set_symlink_file_times(path, atime, mtime)
-            } else {
-                filetime::set_file_times(path, atime, mtime)
-            }
+            filetime::set_file_times(path, atime, mtime)
         }
         .map_err_context(|| format!("setting times of {}", path.quote()))?;
     }
@@ -326,19 +318,14 @@ pub fn uu_app() -> Command {
         )
 }
 
-// Function to get metadata of the provided path
-// If `follow` is true, the function will try to follow symlinks
-// If `follow` is false or the symlink is broken, the function will return metadata of the symlink itself
+// Get metadata of the provided path
+// If `follow` is `true`, the function will try to follow symlinks
+// If `follow` is `false` or the symlink is broken, the function will return metadata of the symlink itself
 fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
-    // Try to get metadata using fs::metadata
-    // If the path is a symlink and `follow` is true, fs::metadata will follow the symlink
     let metadata = match fs::metadata(path) {
-        // If successful, use the metadata
         Ok(metadata) => metadata,
-        // If there's a NotFound error and `follow` is false, try to get metadata of the symlink itself
         Err(e) if e.kind() == std::io::ErrorKind::NotFound && !follow => fs::symlink_metadata(path)
             .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?,
-        // If it's any other error, return the error
         Err(e) => return Err(e.into()),
     };
 
