@@ -30,12 +30,12 @@ use crate::number::PreciseNumber;
 const ABOUT: &str = help_about!("seq.md");
 const USAGE: &str = help_usage!("seq.md");
 
-static OPT_SEPARATOR: &str = "separator";
-static OPT_TERMINATOR: &str = "terminator";
-static OPT_WIDTHS: &str = "widths";
-static OPT_FORMAT: &str = "format";
+const OPT_SEPARATOR: &str = "separator";
+const OPT_TERMINATOR: &str = "terminator";
+const OPT_WIDTHS: &str = "widths";
+const OPT_FORMAT: &str = "format";
 
-static ARG_NUMBERS: &str = "numbers";
+const ARG_NUMBERS: &str = "numbers";
 
 #[derive(Clone)]
 struct SeqOptions<'a> {
