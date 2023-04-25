@@ -23,9 +23,9 @@ use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_usage, help_section};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::uio_error;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
