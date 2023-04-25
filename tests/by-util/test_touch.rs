@@ -608,7 +608,15 @@ fn test_touch_set_date_relative_smoke() {
     // > (equivalent to ‘day’), the string ‘yesterday’ is worth one day
     // > in the past (equivalent to ‘day ago’).
     //
-    let times = ["yesterday", "tomorrow", "now"];
+    let times = [
+        "yesterday",
+        "tomorrow",
+        "now",
+        "2 seconds",
+        "2 years 1 week",
+        "2 days ago",
+        "2 months and 1 second",
+    ];
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
@@ -617,6 +625,11 @@ fn test_touch_set_date_relative_smoke() {
             .no_stderr()
             .no_stdout();
     }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["-d", "a", "f"])
+        .fails()
+        .stderr_contains("touch: Unable to parse date");
 }
 
 #[test]

@@ -1,3 +1,4 @@
+# spell-checker:ignore humantime
 [package]
 name = "uu_touch"
 version = "0.0.18"
@@ -17,6 +18,7 @@ path = "src/touch.rs"
 [dependencies]
 filetime = { workspace=true }
 clap = { workspace=true }
+humantime_to_duration = { workspace=true }
 time = { workspace=true, features = ["parsing", "formatting", "local-offset", "macros"] }
 uucore = { workspace=true, features=["libc"] }
 
