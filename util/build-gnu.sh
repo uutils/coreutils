@@ -67,7 +67,7 @@ if test -f gnu-built; then
     echo "'rm -f $(pwd)/gnu-built' to force the build"
     echo "Note: the customization of the tests will still happen"
 else
-    ./bootstrap
+    ./bootstrap --skip-po
     ./configure --quiet --disable-gcc-warnings
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver

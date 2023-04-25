@@ -139,7 +139,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let path = pathbuf.as_path();
 
-        if let Err(e) = path.metadata() {
+        let metadata_result = if matches.get_flag(options::NO_DEREF) {
+            path.symlink_metadata()
+        } else {
+            path.metadata()
+        };
+
+        if let Err(e) = metadata_result {
             if e.kind() != std::io::ErrorKind::NotFound {
                 return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
             }
@@ -198,14 +204,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        if matches.get_flag(options::NO_DEREF) {
+        // sets the file access and modification times for a file or a symbolic link.
+        // The filename, access time (atime), and modification time (mtime) are provided as inputs.
+
+        // If the filename is not "-", indicating a special case for touch -h -,
+        // the code checks if the NO_DEREF flag is set, which means the user wants to
+        // set the times for a symbolic link itself, rather than the file it points to.
+        if filename == "-" {
+            filetime::set_file_times(path, atime, mtime)
+        } else if matches.get_flag(options::NO_DEREF) {
             set_symlink_file_times(path, atime, mtime)
         } else {
             filetime::set_file_times(path, atime, mtime)
         }
         .map_err_context(|| format!("setting times of {}", path.quote()))?;
     }
-
     Ok(())
 }
 
@@ -305,13 +318,16 @@ pub fn uu_app() -> Command {
         )
 }
 
+// Get metadata of the provided path
+// If `follow` is `true`, the function will try to follow symlinks
+// If `follow` is `false` or the symlink is broken, the function will return metadata of the symlink itself
 fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
-    let metadata = if follow {
-        fs::symlink_metadata(path)
-    } else {
-        fs::metadata(path)
-    }
-    .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?;
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && !follow => fs::symlink_metadata(path)
+            .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?,
+        Err(e) => return Err(e.into()),
+    };
 
     Ok((
         FileTime::from_last_access_time(&metadata),
