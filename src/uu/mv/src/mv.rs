@@ -419,7 +419,12 @@ fn rename(
         }
 
         match b.overwrite {
-            OverwriteMode::NoClobber => return Ok(()),
+            OverwriteMode::NoClobber => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("not replacing {}", to.quote()),
+                ));
+            }
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
                     return Err(io::Error::new(io::ErrorKind::Other, ""));

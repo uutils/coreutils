@@ -232,8 +232,9 @@ fn test_mv_no_clobber() {
     ucmd.arg("-n")
         .arg(file_a)
         .arg(file_b)
-        .succeeds()
-        .no_stderr();
+        .fails()
+        .code_is(1)
+        .stderr_only(format!("mv: not replacing '{file_b}'\n"));
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
