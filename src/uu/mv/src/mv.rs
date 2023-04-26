@@ -320,7 +320,10 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
 
 fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
-        return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
+        match b.target_dir {
+            Some(_) => return Err(MvError::NotADirectory(target_dir.quote().to_string()).into()),
+            None => return Err(MvError::TargetNotADirectory(target_dir.quote().to_string()).into()),
+        }
     }
 
     let canonized_target_dir = target_dir
