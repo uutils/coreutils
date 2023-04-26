@@ -745,7 +745,9 @@ fn test_mv_backup_dir() {
         .arg(dir_a)
         .arg(dir_b)
         .succeeds()
-        .stdout_only(format!("'{dir_a}' -> '{dir_b}' (backup: '{dir_b}~')\n"));
+        .stdout_only(format!(
+            "renamed '{dir_a}' -> '{dir_b}' (backup: '{dir_b}~')\n"
+        ));
 
     assert!(!at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
@@ -817,7 +819,7 @@ fn test_mv_verbose() {
         .arg(file_a)
         .arg(file_b)
         .succeeds()
-        .stdout_only(format!("'{file_a}' -> '{file_b}'\n"));
+        .stdout_only(format!("renamed '{file_a}' -> '{file_b}'\n"));
 
     at.touch(file_a);
     scene
@@ -826,7 +828,9 @@ fn test_mv_verbose() {
         .arg(file_a)
         .arg(file_b)
         .succeeds()
-        .stdout_only(format!("'{file_a}' -> '{file_b}' (backup: '{file_b}~')\n"));
+        .stdout_only(format!(
+            "renamed '{file_a}' -> '{file_b}' (backup: '{file_b}~')\n"
+        ));
 }
 
 #[test]

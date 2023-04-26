@@ -455,12 +455,12 @@ fn rename(
     if b.verbose {
         let message = match backup_path {
             Some(path) => format!(
-                "{} -> {} (backup: {})",
+                "renamed {} -> {} (backup: {})",
                 from.quote(),
                 to.quote(),
                 path.quote()
             ),
-            None => format!("{} -> {}", from.quote(), to.quote()),
+            None => format!("renamed {} -> {}", from.quote(), to.quote()),
         };
 
         match multi_progress {
