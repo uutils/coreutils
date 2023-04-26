@@ -1,7 +1,7 @@
 # stdbuf
 
 ```
-stdbuf [OPTION]... [COMMAND]...
+stdbuf [OPTION]... COMMAND
 ```
 
 Run COMMAND, with modified buffering operations for its standard streams.
