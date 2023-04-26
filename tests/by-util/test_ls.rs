@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc
 
-#[cfg(feature = "feat_selinux")]
+#[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
 #[cfg(all(unix, feature = "chmod"))]
@@ -1776,9 +1776,15 @@ fn test_ls_order_time() {
         at.open("test-4").metadata().unwrap().accessed().unwrap();
 
         // It seems to be dependent on the platform whether the access time is actually set
-        #[cfg(all(unix, not(target_os = "android")))]
-        result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
-        #[cfg(any(windows, target_os = "android"))]
+        #[cfg(unix)]
+        {
+            let expected = unwrap_or_return!(expected_result(&scene, &["-t", arg]));
+            at.open("test-3").metadata().unwrap().accessed().unwrap();
+            at.open("test-4").metadata().unwrap().accessed().unwrap();
+
+            result.stdout_only(expected.stdout_str());
+        }
+        #[cfg(windows)]
         result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
     }
 
