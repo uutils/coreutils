@@ -63,6 +63,8 @@ for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs); do
 done
 
 if test -f gnu-built; then
+    # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
+    sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
     echo "GNU build already found. Skip"
     echo "'rm -f $(pwd)/gnu-built' to force the build"
     echo "Note: the customization of the tests will still happen"
