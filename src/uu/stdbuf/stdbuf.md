@@ -13,7 +13,7 @@ Mandatory arguments to long options are mandatory for short options too.
 If `MODE` is 'L' the corresponding stream will be line buffered.
 This option is invalid with standard input.
 
-If MODE is '0' the corresponding stream will be unbuffered.
+If `MODE` is '0' the corresponding stream will be unbuffered.
 
 Otherwise, MODE is a number which may be followed by one of the following:
 
