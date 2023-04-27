@@ -43,15 +43,15 @@ FORMAT controls the output.  Interpreted sequences are:
 | %V       | ISO week number, with Monday as first day of week (01..53)           | 12                     |
 | %w       | day of week (0..6); 0 is Sunday                                      | 4                      |
 | %W       | week number of year, with Monday as first day of week (00..53)       | 11                     |
-| %x       | locale's date representation (e.g., 12/31/99)                        | 03/03/2005             |
-| %X       | locale's time representation (e.g., 23:13:48)                        | 23:30:30               |
+| %x       | locale's date representation                                         | 03/03/2005             |
+| %X       | locale's time representation                                         | 23:30:30               |
 | %y       | last two digits of year (00..99)                                     | 05                     |
 | %Y       | year                                                                 | 2005                   |
-| %z       | +hhmm numeric time zone (e.g., -0400)                                | -0400                  |
-| %:z      | +hh:mm numeric time zone (e.g., -04:00)                              | -04:00                 |
-| %::z     | +hh:mm:ss numeric time zone (e.g., -04:00:00)                        | -04:00:00              |
-| %:::z    | numeric time zone with : to necessary precision (e.g., -04, +05:30)  | -04                    |
-| %Z       | alphabetic time zone abbreviation (e.g., EDT)                        | EDT                    |
+| %z       | +hhmm numeric time zone                                              | -0400                  |
+| %:z      | +hh:mm numeric time zone                                             | -04:00                 |
+| %::z     | +hh:mm:ss numeric time zone                                          | -04:00:00              |
+| %:::z    | numeric time zone with : to necessary precision                      | -04, +05:30            |
+| %Z       | alphabetic time zone abbreviation                                    | EDT                    |
 
 By default, date pads numeric fields with zeroes.
 The following optional flags may follow '%':
