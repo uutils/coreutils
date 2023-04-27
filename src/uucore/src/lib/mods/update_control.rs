@@ -2,8 +2,6 @@ use clap::ArgMatches;
 
 pub static UPDATE_CONTROL_VALUES: &[&str] = &["all", "none", "old", ""];
 
-pub const UPDATE_CONTROL_LONG_HELP: &str = "VERY LONG HELP";
-
 #[derive(Clone, Eq, PartialEq)]
 pub enum UpdateMode {
     ReplaceAll,
@@ -20,10 +18,10 @@ pub mod arguments {
     pub fn update() -> clap::Arg {
         clap::Arg::new(OPT_UPDATE)
             .long("update")
-            .help("some help")
+            .help("move only when the SOURCE file is newer than the destination file or when the destination file is missing")
             .value_parser(["", "none", "all", "older"])
             .num_args(0..=1)
-            .default_missing_value("all")
+            .default_missing_value("older")
             .require_equals(true)
             .overrides_with("update")
             .action(clap::ArgAction::Set)
@@ -32,7 +30,7 @@ pub mod arguments {
     pub fn update_no_args() -> clap::Arg {
         clap::Arg::new(OPT_UPDATE_NO_ARG)
             .short('u')
-            .help("like ")
+            .help("like --update but does not accept an argument")
             .action(ArgAction::SetTrue)
     }
 }
