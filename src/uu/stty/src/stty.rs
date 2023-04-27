@@ -18,7 +18,7 @@ use std::ops::ControlFlow;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_usage, help_about};
+use uucore::{format_usage, help_about, help_usage};
 
 #[cfg(not(any(
     target_os = "freebsd",
