@@ -10,7 +10,7 @@ Mandatory arguments to long options are mandatory for short options too.
 
 ## After Help
 
-If MODE is 'L' the corresponding stream will be line buffered.
+If `MODE` is 'L' the corresponding stream will be line buffered.
 This option is invalid with standard input.
 
 If MODE is '0' the corresponding stream will be unbuffered.
