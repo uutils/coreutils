@@ -4,7 +4,7 @@
 stdbuf [OPTION]... COMMAND
 ```
 
-Run COMMAND, with modified buffering operations for its standard streams.
+Run `COMMAND`, with modified buffering operations for its standard streams.
 
 Mandatory arguments to long options are mandatory for short options too.
 
