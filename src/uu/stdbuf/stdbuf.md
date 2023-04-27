@@ -15,7 +15,7 @@ This option is invalid with standard input.
 
 If `MODE` is '0' the corresponding stream will be unbuffered.
 
-Otherwise, MODE is a number which may be followed by one of the following:
+Otherwise, `MODE` is a number which may be followed by one of the following:
 
 KB 1000, K 1024, MB 1000*1000, M 1024*1024, and so on for G, T, P, E, Z, Y.
 In this case the corresponding stream will be fully buffered with the buffer size set to MODE bytes.
