@@ -1276,7 +1276,7 @@ fn test_ls_long_formats() {
     // Zero or one "." for indicating a file with security context
 
     // Regex for three names, so all of author, group and owner
-    let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z_A-Z]+ ){3}0").unwrap();
+    let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
 
     #[cfg(unix)]
     let re_three_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){3}0").unwrap();
@@ -1285,13 +1285,13 @@ fn test_ls_long_formats() {
     // - group and owner
     // - author and owner
     // - author and group
-    let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z_A-Z]+ ){2}0").unwrap();
+    let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
 
     #[cfg(unix)]
     let re_two_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){2}0").unwrap();
 
     // Regex for one name: author, group or owner
-    let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z_A-Z]+ 0").unwrap();
+    let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z.A-Z]+ 0").unwrap();
 
     #[cfg(unix)]
     let re_one_num = Regex::new(r"[xrw-]{9}\.? \d \d+ 0").unwrap();
@@ -1640,88 +1640,103 @@ fn test_ls_styles() {
     at.touch("test");
 
     let re_full = Regex::new(
-        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test\n",
+        r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test\n",
     )
     .unwrap();
     let re_long =
-        Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
-    let re_iso = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+    let re_iso =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
     let re_locale =
-        Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n").unwrap();
-    let re_custom_format = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}__\d{2} test\n").unwrap();
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n")
+            .unwrap();
+    let re_custom_format =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test\n").unwrap();
 
     //full-iso
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=full-iso")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_full);
     //long-iso
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=long-iso")
-        .succeeds();
-    assert!(re_long.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_long);
     //iso
-    let result = scene.ucmd().arg("-l").arg("--time-style=iso").succeeds();
-    assert!(re_iso.is_match(result.stdout_str()));
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .succeeds()
+        .stdout_matches(&re_iso);
     //locale
-    let result = scene.ucmd().arg("-l").arg("--time-style=locale").succeeds();
-    assert!(re_locale.is_match(result.stdout_str()));
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=locale")
+        .succeeds()
+        .stdout_matches(&re_locale);
 
     //+FORMAT
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=+%Y__%M")
-        .succeeds();
-    assert!(re_custom_format.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_custom_format);
 
     // Also fails due to not having full clap support for time_styles
     scene.ucmd().arg("-l").arg("-time-style=invalid").fails();
 
     //Overwrite options tests
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=long-iso")
         .arg("--time-style=iso")
-        .succeeds();
-    assert!(re_iso.is_match(result.stdout_str()));
-    let result = scene
+        .succeeds()
+        .stdout_matches(&re_iso);
+    scene
         .ucmd()
         .arg("--time-style=iso")
         .arg("--full-time")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
-    let result = scene
+        .succeeds()
+        .stdout_matches(&re_full);
+    scene
         .ucmd()
         .arg("--full-time")
         .arg("--time-style=iso")
-        .succeeds();
-    assert!(re_iso.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_iso);
 
-    let result = scene
+    scene
         .ucmd()
         .arg("--full-time")
         .arg("--time-style=iso")
         .arg("--full-time")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_full);
 
-    let result = scene
+    scene
         .ucmd()
         .arg("--full-time")
         .arg("-x")
         .arg("-l")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_full);
 
     at.touch("test2");
-    let result = scene.ucmd().arg("--full-time").arg("-x").succeeds();
-    assert_eq!(result.stdout_str(), "test  test2\n");
+    scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("-x")
+        .succeeds()
+        .stdout_is("test  test2\n");
 }
 
 #[test]
