@@ -40,6 +40,7 @@ use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
     canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
+use uucore::update_control::{self, UpdateMode};
 use uucore::{crash, format_usage, help_about, help_usage, prompt_yes, show_error, show_warning};
 
 use crate::copydir::copy_directory;
@@ -224,7 +225,7 @@ pub struct Options {
     recursive: bool,
     backup_suffix: String,
     target_dir: Option<PathBuf>,
-    update: bool,
+    update: UpdateMode,
     verbose: bool,
     progress_bar: bool,
 }
@@ -264,7 +265,6 @@ mod options {
     pub const STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
     pub const SYMBOLIC_LINK: &str = "symbolic-link";
     pub const TARGET_DIRECTORY: &str = "target-directory";
-    pub const UPDATE: &str = "update";
     pub const VERBOSE: &str = "verbose";
 }
 
@@ -296,6 +296,8 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .arg(update_control::arguments::update())
+        .arg(update_control::arguments::update_no_args())
         .arg(
             Arg::new(options::TARGET_DIRECTORY)
                 .short('t')
@@ -393,16 +395,6 @@ pub fn uu_app() -> Command {
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         .arg(backup_control::arguments::suffix())
-        .arg(
-            Arg::new(options::UPDATE)
-                .short('u')
-                .long(options::UPDATE)
-                .help(
-                    "copy only when the SOURCE file is newer than the destination file \
-                    or when the destination file is missing",
-                )
-                .action(ArgAction::SetTrue),
-        )
         .arg(
             Arg::new(options::REFLINK)
                 .long(options::REFLINK)
@@ -641,7 +633,11 @@ impl CopyMode {
             Self::Link
         } else if matches.get_flag(options::SYMBOLIC_LINK) {
             Self::SymLink
-        } else if matches.get_flag(options::UPDATE) {
+        } else if matches
+            .get_one::<String>(update_control::arguments::OPT_UPDATE)
+            .is_some()
+            || matches.get_flag(update_control::arguments::OPT_UPDATE_NO_ARG)
+        {
             Self::Update
         } else if matches.get_flag(options::ATTRIBUTES_ONLY) {
             Self::AttrOnly
@@ -749,6 +745,7 @@ impl Options {
             Err(e) => return Err(Error::Backup(format!("{e}"))),
             Ok(mode) => mode,
         };
+        let update_mode = update_control::determine_update_mode(matches);
 
         let backup_suffix = backup_control::determine_backup_suffix(matches);
 
@@ -826,7 +823,7 @@ impl Options {
                 || matches.get_flag(options::DEREFERENCE),
             one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
             parents: matches.get_flag(options::PARENTS),
-            update: matches.get_flag(options::UPDATE),
+            update: update_mode,
             verbose: matches.get_flag(options::VERBOSE),
             strip_trailing_slashes: matches.get_flag(options::STRIP_TRAILING_SLASHES),
             reflink_mode: {
@@ -1473,7 +1470,9 @@ fn copy_file(
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    if options.update && options.overwrite == OverwriteMode::Interactive(ClobberMode::Standard) {
+    if (options.update == UpdateMode::ReplaceIfOlder || options.update == UpdateMode::ReplaceNone)
+        && options.overwrite == OverwriteMode::Interactive(ClobberMode::Standard)
+    {
         // `cp -i --update old new` when `new` exists doesn't copy anything
         // and exit with 0
         return Ok(());
