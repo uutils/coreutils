@@ -6,12 +6,11 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult mktime YYYYMMDDHHMM YYMMDDHHMM DATETIME YYYYMMDDHHMMS subsecond
-pub extern crate filetime;
+// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult mktime YYYYMMDDHHMM YYMMDDHHMM DATETIME YYYYMMDDHHMMS subsecond humantime
 
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, ArgGroup, Command};
-use filetime::*;
+use filetime::{set_symlink_file_times, FileTime};
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -19,10 +18,11 @@ use time::macros::{format_description, offset, time};
 use time::Duration;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 
-static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
-const USAGE: &str = "{} [OPTION]... [USER]";
+const ABOUT: &str = help_about!("touch.md");
+const USAGE: &str = help_usage!("touch.md");
+
 pub mod options {
     // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
     pub static SOURCES: &str = "sources";
@@ -77,19 +77,57 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ),
         )
     })?;
-    let (mut atime, mut mtime) =
-        if let Some(reference) = matches.get_one::<OsString>(options::sources::REFERENCE) {
-            stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?
-        } else {
-            let timestamp = if let Some(date) = matches.get_one::<String>(options::sources::DATE) {
-                parse_date(date)?
-            } else if let Some(current) = matches.get_one::<String>(options::sources::CURRENT) {
-                parse_timestamp(current)?
+    let (mut atime, mut mtime) = match (
+        matches.get_one::<OsString>(options::sources::REFERENCE),
+        matches.get_one::<String>(options::sources::DATE),
+    ) {
+        (Some(reference), Some(date)) => {
+            let (atime, mtime) = stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?;
+            if let Ok(offset) = humantime_to_duration::from_str(date) {
+                let mut seconds = offset.whole_seconds();
+                let mut nanos = offset.subsec_nanoseconds();
+                if nanos < 0 {
+                    nanos += 1_000_000_000;
+                    seconds -= 1;
+                }
+
+                let ref_atime_secs = atime.unix_seconds();
+                let ref_atime_nanos = atime.nanoseconds();
+                let atime = FileTime::from_unix_time(
+                    ref_atime_secs + seconds,
+                    ref_atime_nanos + nanos as u32,
+                );
+
+                let ref_mtime_secs = mtime.unix_seconds();
+                let ref_mtime_nanos = mtime.nanoseconds();
+                let mtime = FileTime::from_unix_time(
+                    ref_mtime_secs + seconds,
+                    ref_mtime_nanos + nanos as u32,
+                );
+
+                (atime, mtime)
             } else {
-                local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap())
-            };
+                let timestamp = parse_date(date)?;
+                (timestamp, timestamp)
+            }
+        }
+        (Some(reference), None) => {
+            stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?
+        }
+        (None, Some(date)) => {
+            let timestamp = parse_date(date)?;
             (timestamp, timestamp)
-        };
+        }
+        (None, None) => {
+            let timestamp =
+                if let Some(current) = matches.get_one::<String>(options::sources::CURRENT) {
+                    parse_timestamp(current)?
+                } else {
+                    local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap())
+                };
+            (timestamp, timestamp)
+        }
+    };
 
     for filename in files {
         // FIXME: find a way to avoid having to clone the path
@@ -101,7 +139,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let path = pathbuf.as_path();
 
-        if let Err(e) = path.metadata() {
+        let metadata_result = if matches.get_flag(options::NO_DEREF) {
+            path.symlink_metadata()
+        } else {
+            path.metadata()
+        };
+
+        if let Err(e) = metadata_result {
             if e.kind() != std::io::ErrorKind::NotFound {
                 return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
             }
@@ -160,14 +204,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        if matches.get_flag(options::NO_DEREF) {
+        // sets the file access and modification times for a file or a symbolic link.
+        // The filename, access time (atime), and modification time (mtime) are provided as inputs.
+
+        // If the filename is not "-", indicating a special case for touch -h -,
+        // the code checks if the NO_DEREF flag is set, which means the user wants to
+        // set the times for a symbolic link itself, rather than the file it points to.
+        if filename == "-" {
+            filetime::set_file_times(path, atime, mtime)
+        } else if matches.get_flag(options::NO_DEREF) {
             set_symlink_file_times(path, atime, mtime)
         } else {
             filetime::set_file_times(path, atime, mtime)
         }
         .map_err_context(|| format!("setting times of {}", path.quote()))?;
     }
-
     Ok(())
 }
 
@@ -202,7 +253,8 @@ pub fn uu_app() -> Command {
                 .long(options::sources::DATE)
                 .allow_hyphen_values(true)
                 .help("parse argument and use it instead of current time")
-                .value_name("STRING"),
+                .value_name("STRING")
+                .conflicts_with(options::sources::CURRENT),
         )
         .arg(
             Arg::new(options::MODIFICATION)
@@ -234,7 +286,8 @@ pub fn uu_app() -> Command {
                 .help("use this file's times instead of the current time")
                 .value_name("FILE")
                 .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .conflicts_with(options::sources::CURRENT),
         )
         .arg(
             Arg::new(options::TIME)
@@ -254,20 +307,27 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath),
         )
-        .group(ArgGroup::new(options::SOURCES).args([
-            options::sources::CURRENT,
-            options::sources::DATE,
-            options::sources::REFERENCE,
-        ]))
+        .group(
+            ArgGroup::new(options::SOURCES)
+                .args([
+                    options::sources::CURRENT,
+                    options::sources::DATE,
+                    options::sources::REFERENCE,
+                ])
+                .multiple(true),
+        )
 }
 
+// Get metadata of the provided path
+// If `follow` is `true`, the function will try to follow symlinks
+// If `follow` is `false` or the symlink is broken, the function will return metadata of the symlink itself
 fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
-    let metadata = if follow {
-        fs::symlink_metadata(path)
-    } else {
-        fs::metadata(path)
-    }
-    .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?;
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && !follow => fs::symlink_metadata(path)
+            .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?,
+        Err(e) => return Err(e.into()),
+    };
 
     Ok((
         FileTime::from_last_access_time(&metadata),
@@ -384,55 +444,7 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         }
     }
 
-    // Relative day, like "today", "tomorrow", or "yesterday".
-    match s {
-        "now" | "today" => {
-            let now_local = time::OffsetDateTime::now_local().unwrap();
-            return Ok(local_dt_to_filetime(now_local));
-        }
-        "tomorrow" => {
-            let duration = time::Duration::days(1);
-            let now_local = time::OffsetDateTime::now_local().unwrap();
-            let diff = now_local.checked_add(duration).unwrap();
-            return Ok(local_dt_to_filetime(diff));
-        }
-        "yesterday" => {
-            let duration = time::Duration::days(1);
-            let now_local = time::OffsetDateTime::now_local().unwrap();
-            let diff = now_local.checked_sub(duration).unwrap();
-            return Ok(local_dt_to_filetime(diff));
-        }
-        _ => {}
-    }
-
-    // Relative time, like "-1 hour" or "+3 days".
-    //
-    // TODO Add support for "year" and "month".
-    // TODO Add support for times without spaces like "-1hour".
-    let tokens: Vec<&str> = s.split_whitespace().collect();
-    let maybe_duration = match &tokens[..] {
-        [num_str, "fortnight" | "fortnights"] => num_str
-            .parse::<i64>()
-            .ok()
-            .map(|n| time::Duration::weeks(2 * n)),
-        ["fortnight" | "fortnights"] => Some(time::Duration::weeks(2)),
-        [num_str, "week" | "weeks"] => num_str.parse::<i64>().ok().map(time::Duration::weeks),
-        ["week" | "weeks"] => Some(time::Duration::weeks(1)),
-        [num_str, "day" | "days"] => num_str.parse::<i64>().ok().map(time::Duration::days),
-        ["day" | "days"] => Some(time::Duration::days(1)),
-        [num_str, "hour" | "hours"] => num_str.parse::<i64>().ok().map(time::Duration::hours),
-        ["hour" | "hours"] => Some(time::Duration::hours(1)),
-        [num_str, "minute" | "minutes" | "min" | "mins"] => {
-            num_str.parse::<i64>().ok().map(time::Duration::minutes)
-        }
-        ["minute" | "minutes" | "min" | "mins"] => Some(time::Duration::minutes(1)),
-        [num_str, "second" | "seconds" | "sec" | "secs"] => {
-            num_str.parse::<i64>().ok().map(time::Duration::seconds)
-        }
-        ["second" | "seconds" | "sec" | "secs"] => Some(time::Duration::seconds(1)),
-        _ => None,
-    };
-    if let Some(duration) = maybe_duration {
+    if let Ok(duration) = humantime_to_duration::from_str(s) {
         let now_local = time::OffsetDateTime::now_local().unwrap();
         let diff = now_local.checked_add(duration).unwrap();
         return Ok(local_dt_to_filetime(diff));
@@ -589,8 +601,7 @@ mod tests {
         // We can trigger an error by not setting stdout to anything (will
         // fail with code 1)
         assert!(super::pathbuf_from_stdout()
-            .err()
-            .expect("pathbuf_from_stdout should have failed")
+            .expect_err("pathbuf_from_stdout should have failed")
             .to_string()
             .contains("GetFinalPathNameByHandleW failed with code 1"));
     }

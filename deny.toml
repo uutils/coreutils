@@ -69,6 +69,8 @@ skip = [
     { name = "linux-raw-sys", version = "0.1.4" },
     # is-terminal
     { name = "windows-sys", version = "0.45.0" },
+    # cpp_macros
+    { name = "aho-corasick", version = "0.7.19" },
 ]
 # spell-checker: enable
 

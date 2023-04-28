@@ -580,11 +580,11 @@ impl<'a> Iterator for WordSplit<'a> {
         // points to whitespace character OR end of string
         let mut word_nchars = 0;
         self.position = match self.string[word_start..].find(|x: char| {
-            if !x.is_whitespace() {
+            if x.is_whitespace() {
+                true
+            } else {
                 word_nchars += char_width(x);
                 false
-            } else {
-                true
             }
         }) {
             None => self.length,

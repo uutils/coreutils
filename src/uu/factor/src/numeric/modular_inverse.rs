@@ -46,7 +46,6 @@ pub(crate) fn modular_inverse<T: Int>(a: T) -> T {
 #[cfg(test)]
 mod tests {
     use super::{super::traits::Int, *};
-    use crate::parametrized_check;
     use quickcheck::quickcheck;
 
     fn small_values<T: Int>() {
@@ -59,7 +58,16 @@ mod tests {
 
         assert!(test_values.all(|x| x.wrapping_mul(&modular_inverse(x)) == one));
     }
-    parametrized_check!(small_values);
+
+    #[test]
+    fn small_values_u32() {
+        small_values::<u32>();
+    }
+
+    #[test]
+    fn small_values_u64() {
+        small_values::<u64>();
+    }
 
     quickcheck! {
         fn random_values_u32(n: u32) -> bool {

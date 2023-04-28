@@ -1,6 +1,6 @@
 [package]
 name = "uu_shred"
-version = "0.0.17"
+version = "0.0.18"
 authors = ["uutils developers"]
 license = "MIT"
 description = "shred ~ (uutils) hide former FILE contents with repeated overwrites"
@@ -18,6 +18,7 @@ path = "src/shred.rs"
 clap = { workspace=true }
 rand = { workspace=true }
 uucore = { workspace=true }
+libc = { workspace=true }
 
 [[bin]]
 name = "shred"

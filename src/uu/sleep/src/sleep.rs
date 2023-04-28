@@ -14,6 +14,7 @@ use uucore::{
 };
 
 use clap::{crate_version, Arg, ArgAction, Command};
+use fundu::{self, DurationParser, ParseError};
 
 static ABOUT: &str = help_about!("sleep.md");
 const USAGE: &str = help_usage!("sleep.md");
@@ -61,14 +62,34 @@ pub fn uu_app() -> Command {
 
 fn sleep(args: &[&str]) -> UResult<()> {
     let mut arg_error = false;
+
+    use fundu::TimeUnit::*;
+    let parser = DurationParser::with_time_units(&[Second, Minute, Hour, Day]);
+
     let sleep_dur = args
         .iter()
-        .filter_map(|input| {
-            uucore::parse_time::from_str(input.trim()).ok().or_else(|| {
+        .filter_map(|input| match parser.parse(input.trim()) {
+            Ok(duration) => Some(duration),
+            Err(error) => {
                 arg_error = true;
-                show_error!("invalid time interval '{input}'");
+
+                let reason = match error {
+                    ParseError::Empty if input.is_empty() => "Input was empty".to_string(),
+                    ParseError::Empty => "Found only whitespace in input".to_string(),
+                    ParseError::Syntax(pos, description)
+                    | ParseError::TimeUnit(pos, description) => {
+                        format!("{description} at position {}", pos.saturating_add(1))
+                    }
+                    ParseError::NegativeExponentOverflow | ParseError::PositiveExponentOverflow => {
+                        "Exponent was out of bounds".to_string()
+                    }
+                    ParseError::NegativeNumber => "Number was negative".to_string(),
+                    error => error.to_string(),
+                };
+                show_error!("invalid time interval '{input}': {reason}");
+
                 None
-            })
+            }
         })
         .fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
 

@@ -3,14 +3,9 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-extern crate uucore;
-
-use crate::common::util::*;
-
-use self::uucore::entries::{Locate, Passwd};
-
-extern crate pinky;
-pub use self::pinky::*;
+use crate::common::util::{expected_result, TestScenario};
+use pinky::Capitalize;
+use uucore::entries::{Locate, Passwd};
 
 #[test]
 fn test_invalid_arg() {

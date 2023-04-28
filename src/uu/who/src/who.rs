@@ -18,7 +18,7 @@ use std::ffi::CStr;
 use std::fmt::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 mod options {
     pub const ALL: &str = "all";
@@ -38,8 +38,8 @@ mod options {
     pub const FILE: &str = "FILE"; // if length=1: FILE, if length=2: ARG1 ARG2
 }
 
-static ABOUT: &str = "Print information about users who are currently logged in.";
-const USAGE: &str = "{} [OPTION]... [ FILE | ARG1 ARG2 ]";
+const ABOUT: &str = help_about!("who.md");
+const USAGE: &str = help_usage!("who.md");
 
 #[cfg(target_os = "linux")]
 static RUNLEVEL_HELP: &str = "print current runlevel";
@@ -316,13 +316,13 @@ fn time_string(ut: &Utmpx) -> String {
 fn current_tty() -> String {
     unsafe {
         let res = ttyname(STDIN_FILENO);
-        if !res.is_null() {
+        if res.is_null() {
+            String::new()
+        } else {
             CStr::from_ptr(res as *const _)
                 .to_string_lossy()
                 .trim_start_matches("/dev/")
                 .to_owned()
-        } else {
-            String::new()
         }
     }
 }
@@ -402,7 +402,7 @@ impl Who {
             &time_string(ut),
             "",
             "",
-            if !last.is_control() { &comment } else { "" },
+            if last.is_control() { "" } else { &comment },
             "",
         );
     }
@@ -482,7 +482,7 @@ impl Who {
                 let iwgrp = S_IWGRP;
                 #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
                 let iwgrp = S_IWGRP as u32;
-                mesg = if meta.mode() & iwgrp != 0 { '+' } else { '-' };
+                mesg = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
                 last_change = meta.atime();
             }
             _ => {
@@ -491,10 +491,10 @@ impl Who {
             }
         }
 
-        let idle = if last_change != 0 {
-            idle_string(last_change, 0)
-        } else {
+        let idle = if last_change == 0 {
             "  ?".into()
+        } else {
+            idle_string(last_change, 0)
         };
 
         let s = if self.do_lookup {

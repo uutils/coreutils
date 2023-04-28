@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::{is_ci, TestScenario};
 use std::env;
 
 #[test]

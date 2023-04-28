@@ -7,6 +7,8 @@ description = "Benchmarks for the uu_factor integer factorization tool"
 homepage = "https://github.com/uutils/coreutils"
 edition = "2021"
 
+[workspace]
+
 [dependencies]
 uu_factor = { path = "../../../src/uu/factor" }
 
@@ -14,7 +16,7 @@ uu_factor = { path = "../../../src/uu/factor" }
 array-init = "2.0.0"
 criterion = "0.3"
 rand = "0.8"
-rand_chacha = "0.2.2"
+rand_chacha = "0.3.1"
 
 [[bench]]
 name = "gcd"

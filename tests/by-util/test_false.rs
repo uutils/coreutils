@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 use std::fs::OpenOptions;
 

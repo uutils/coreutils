@@ -1,6 +1,6 @@
 [package]
 name = "uu_factor"
-version = "0.0.17"
+version = "0.0.18"
 authors = ["uutils developers"]
 license = "MIT"
 description = "factor ~ (uutils) display the prime factors of each NUMBER"
@@ -23,7 +23,6 @@ smallvec = { workspace=true }
 uucore = { workspace=true }
 
 [dev-dependencies]
-paste = "1.0.6"
 quickcheck = "1.0.3"
 
 [[bin]]

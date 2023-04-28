@@ -23,19 +23,34 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let mut target_dir = Path::new(&out_dir);
 
-    // Depending on how this is util is built, the directory structure. This seems to work for now.
-    // Here are three cases to test when changing this:
+    // Depending on how this is util is built, the directory structure changes.
+    // This seems to work for now. Here are three cases to test when changing
+    // this:
+    //
     // - cargo run
     // - cross run
     // - cargo install --git
     // - cargo publish --dry-run
+    //
+    // The goal is to find the directory in which we are installing, but that
+    // depends on the build method, which is annoying. Additionally the env
+    // var for the profile can only be "debug" or "release", not a custom
+    // profile name, so we have to use the name of the directory within target
+    // as the profile name.
+    //
+    // Adapted from https://stackoverflow.com/questions/73595435/how-to-get-profile-from-cargo-toml-in-build-rs-or-at-runtime
+    let profile_name = out_dir
+        .split(std::path::MAIN_SEPARATOR)
+        .nth_back(3)
+        .unwrap();
+
     let mut name = target_dir.file_name().unwrap().to_string_lossy();
     while name != "target" && !name.starts_with("cargo-install") {
         target_dir = target_dir.parent().unwrap();
         name = target_dir.file_name().unwrap().to_string_lossy();
     }
     let mut dir = target_dir.to_path_buf();
-    dir.push(env::var("PROFILE").unwrap());
+    dir.push(profile_name);
     dir.push("deps");
     let mut path = None;
 

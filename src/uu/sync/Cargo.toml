@@ -1,6 +1,6 @@
 [package]
 name = "uu_sync"
-version = "0.0.17"
+version = "0.0.18"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sync ~ (uutils) synchronize cache writes to storage"

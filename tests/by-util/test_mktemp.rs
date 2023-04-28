@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) gpghome
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 use uucore::display::Quotable;
 
@@ -23,6 +23,7 @@ static TEST_TEMPLATE7: &str = "XXXtemplate"; // spell-checker:disable-line
 static TEST_TEMPLATE8: &str = "tempXXXl/ate";
 #[cfg(windows)]
 static TEST_TEMPLATE8: &str = "tempXXXl\\ate";
+static TEST_TEMPLATE9: &str = "a.XXXX";
 
 #[cfg(not(windows))]
 const TMPDIR: &str = "TMPDIR";
@@ -426,7 +427,6 @@ fn test_mktemp_tmpdir_one_arg() {
 
     let result = scene
         .ucmd()
-        .keep_env()
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
         .succeeds();
@@ -440,7 +440,6 @@ fn test_mktemp_directory_tmpdir() {
 
     let result = scene
         .ucmd()
-        .keep_env()
         .arg("--directory")
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
@@ -568,6 +567,34 @@ fn test_template_path_separator() {
         .stderr_only(format!(
             "mktemp: invalid template, {}, contains directory separator\n",
             r"a\bXXX".quote()
+        ));
+}
+
+/// Test that a prefix with a point is valid.
+#[test]
+fn test_prefix_template_separator() {
+    new_ucmd!()
+        .args(&["-p", ".", "-t", TEST_TEMPLATE9])
+        .succeeds();
+}
+
+#[test]
+fn test_prefix_template_with_path_separator() {
+    #[cfg(not(windows))]
+    new_ucmd!()
+        .args(&["-t", "a/XXX"])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, {}, contains directory separator\n",
+            "a/XXX".quote()
+        ));
+    #[cfg(windows)]
+    new_ucmd!()
+        .args(&["-t", r"a\XXX"])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, {}, contains directory separator\n",
+            r"a\XXX".quote()
         ));
 }
 
@@ -704,16 +731,18 @@ fn test_tmpdir_env_var() {
     assert_suffix_matches_template!("tmp.XXXXXXXXXX", filename);
     assert!(at.file_exists(filename));
 
-    // FIXME This is not working because --tmpdir is configured to
-    // require a value.
-    //
-    // // `TMPDIR=. mktemp --tmpdir`
-    // let (at, mut ucmd) = at_and_ucmd!();
-    // let result = ucmd.env(TMPDIR, ".").arg("--tmpdir").succeeds();
-    // let filename = result.no_stderr().stdout_str().trim_end();
-    // let template = format!(".{}tmp.XXXXXXXXXX", MAIN_SEPARATOR);
-    // assert_matches_template!(&template, filename);
-    // assert!(at.file_exists(filename));
+    // `TMPDIR=. mktemp --tmpdir`
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.env(TMPDIR, ".").arg("--tmpdir").succeeds();
+    let filename = result.no_stderr().stdout_str().trim_end();
+    #[cfg(not(windows))]
+    {
+        let template = format!(".{MAIN_SEPARATOR}tmp.XXXXXXXXXX");
+        assert_matches_template!(&template, filename);
+    }
+    #[cfg(windows)]
+    assert_suffix_matches_template!("tmp.XXXXXXXXXX", filename);
+    assert!(at.file_exists(filename));
 
     // `TMPDIR=. mktemp --tmpdir XXX`
     let (at, mut ucmd) = at_and_ucmd!();

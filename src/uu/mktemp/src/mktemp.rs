@@ -11,7 +11,7 @@
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 use std::env;
 use std::error::Error;
@@ -28,8 +28,8 @@ use std::os::unix::prelude::PermissionsExt;
 use rand::Rng;
 use tempfile::Builder;
 
-static ABOUT: &str = "Create a temporary file or directory.";
-const USAGE: &str = "{} [OPTION]... [TEMPLATE]";
+const ABOUT: &str = help_about!("mktemp.md");
+const USAGE: &str = help_usage!("mktemp.md");
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
@@ -281,7 +281,7 @@ impl Params {
             .join(prefix_from_template)
             .display()
             .to_string();
-        if options.treat_as_template && prefix.contains(MAIN_SEPARATOR) {
+        if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::PrefixContainsDirSeparator(options.template));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {

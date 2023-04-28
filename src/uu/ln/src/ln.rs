@@ -199,7 +199,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::LOGICAL)
                 .short('L')
                 .long(options::LOGICAL)
-                .help("dereference TARGETs that are symbolic links")
+                .help("follow TARGETs that are symbolic links")
                 .overrides_with(options::PHYSICAL)
                 .action(ArgAction::SetTrue),
         )
@@ -391,8 +391,8 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
-                if !prompt_yes!("overwrite {}?", dst.quote()) {
-                    return Ok(());
+                if !prompt_yes!("replace {}?", dst.quote()) {
+                    return Err(LnError::SomeLinksFailed.into());
                 }
 
                 if fs::remove_file(dst).is_ok() {};

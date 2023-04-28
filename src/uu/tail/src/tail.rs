@@ -125,10 +125,10 @@ fn tail_file(
 
         show_error!("error reading '{}': {}", input.display_name, err_msg);
         if settings.follow.is_some() {
-            let msg = if !settings.retry {
-                "; giving up on this name"
-            } else {
+            let msg = if settings.retry {
                 ""
+            } else {
+                "; giving up on this name"
             };
             show_error!(
                 "{}: cannot follow end of this type of file{}",
@@ -215,11 +215,7 @@ fn tail_stdin(
         // pipe
         None => {
             header_printer.print_input(input);
-            if !paths::stdin_is_bad_fd() {
-                let mut reader = BufReader::new(stdin());
-                unbounded_tail(&mut reader, settings)?;
-                observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
-            } else {
+            if paths::stdin_is_bad_fd() {
                 set_exit_code(1);
                 show_error!(
                     "cannot fstat {}: {}",
@@ -233,6 +229,10 @@ fn tail_stdin(
                         text::BAD_FD
                     );
                 }
+            } else {
+                let mut reader = BufReader::new(stdin());
+                unbounded_tail(&mut reader, settings)?;
+                observer.add_stdin(input.display_name.as_str(), Some(Box::new(reader)), true)?;
             }
         }
     };

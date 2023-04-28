@@ -11,10 +11,12 @@ use clap::{crate_version, Command};
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
+use uucore::{format_usage, help_about, help_usage};
 
 mod platform;
 
-static ABOUT: &str = "Print the current username.";
+const ABOUT: &str = help_about!("whoami.md");
+const USAGE: &str = help_usage!("whoami.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -28,5 +30,6 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
 }

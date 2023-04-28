@@ -10,6 +10,7 @@
 use pretty_assertions::assert_eq;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::prlimit;
+#[cfg(feature = "sleep")]
 use rstest::rstest;
 #[cfg(unix)]
 use std::borrow::Cow;
@@ -47,6 +48,10 @@ static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical
 static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
 
 pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
+pub const PATH: &str = env!("PATH");
+
+/// Default environment variables to run the commands with
+const DEFAULT_ENV: [(&str, &str); 2] = [("LC_ALL", "C"), ("TZ", "UTC")];
 
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
@@ -693,6 +698,16 @@ impl CmdResult {
     }
 
     #[track_caller]
+    pub fn stderr_matches(&self, regex: &regex::Regex) -> &Self {
+        assert!(
+            regex.is_match(self.stderr_str()),
+            "Stderr does not match regex:\n{}",
+            self.stderr_str()
+        );
+        self
+    }
+
+    #[track_caller]
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &Self {
         assert!(
             !regex.is_match(self.stdout_str()),
@@ -1160,14 +1175,12 @@ impl TestScenario {
 /// * [`UCommand::from_test_scenario`]: Run `coreutils UTIL_NAME` instead of the shell in the
 ///   temporary directory of the [`TestScenario`]
 /// * [`UCommand::current_dir`]: Sets the working directory
-/// * [`UCommand::keep_env`]: Keep environment variables instead of clearing them
 /// * ...
 #[derive(Debug, Default)]
 pub struct UCommand {
     args: VecDeque<OsString>,
     env_vars: Vec<(OsString, OsString)>,
     current_dir: Option<PathBuf>,
-    env_clear: bool,
     bin_path: Option<PathBuf>,
     util_name: Option<String>,
     has_run: bool,
@@ -1193,7 +1206,6 @@ impl UCommand {
     /// temporary directory for safety purposes.
     pub fn new() -> Self {
         Self {
-            env_clear: true,
             ..Default::default()
         }
     }
@@ -1240,12 +1252,6 @@ impl UCommand {
     /// temporary directory.
     fn temp_dir(&mut self, temp_dir: Rc<TempDir>) -> &mut Self {
         self.tmpd = Some(temp_dir);
-        self
-    }
-
-    /// Keep the environment variables instead of clearing them before running the command.
-    pub fn keep_env(&mut self) -> &mut Self {
-        self.env_clear = false;
         self
     }
 
@@ -1330,6 +1336,18 @@ impl UCommand {
         self
     }
 
+    pub fn envs<I, K, V>(&mut self, iter: I) -> &mut Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        for (k, v) in iter {
+            self.env(k, v);
+        }
+        self
+    }
+
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn limit(
         &mut self,
@@ -1366,7 +1384,6 @@ impl UCommand {
     /// which this command will be run and `current_dir` will be set to this `temp_dir`.
     /// * `current_dir`: The temporary directory given by `temp_dir`.
     /// * `timeout`: `30 seconds`
-    /// * `env_clear`: `true`. (Almost) all environment variables will be cleared.
     /// * `stdin`: `Stdio::null()`
     /// * `ignore_stdin_write_error`: `false`
     /// * `stdout`, `stderr`: If not specified the output will be captured with [`CapturedOutput`]
@@ -1425,26 +1442,26 @@ impl UCommand {
             self.tmpd = Some(Rc::new(temp_dir));
         }
 
-        if self.env_clear {
-            command.env_clear();
-            if cfg!(windows) {
-                // spell-checker:ignore (dll) rsaenh
-                // %SYSTEMROOT% is required on Windows to initialize crypto provider
-                // ... and crypto provider is required for std::rand
-                // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
-                // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
-                if let Some(systemroot) = env::var_os("SYSTEMROOT") {
-                    command.env("SYSTEMROOT", systemroot);
-                }
-            } else {
-                // if someone is setting LD_PRELOAD, there's probably a good reason for it
-                if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
-                    command.env("LD_PRELOAD", ld_preload);
-                }
+        command.env_clear();
+        if cfg!(windows) {
+            // spell-checker:ignore (dll) rsaenh
+            // %SYSTEMROOT% is required on Windows to initialize crypto provider
+            // ... and crypto provider is required for std::rand
+            // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
+            // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
+            if let Some(systemroot) = env::var_os("SYSTEMROOT") {
+                command.env("SYSTEMROOT", systemroot);
+            }
+        } else {
+            // if someone is setting LD_PRELOAD, there's probably a good reason for it
+            if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
+                command.env("LD_PRELOAD", ld_preload);
             }
         }
 
-        command.envs(self.env_vars.iter().cloned());
+        command
+            .envs(DEFAULT_ENV)
+            .envs(self.env_vars.iter().cloned());
 
         if self.timeout.is_none() {
             self.timeout = Some(Duration::from_secs(30));
@@ -2445,8 +2462,8 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
 
     let result = ts
         .cmd(util_name.as_ref())
-        .keep_env()
-        .env("LC_ALL", "C")
+        .env("PATH", PATH)
+        .envs(DEFAULT_ENV)
         .args(args)
         .run();
 
@@ -2505,11 +2522,13 @@ pub fn run_ucmd_as_root(
     ts: &TestScenario,
     args: &[&str],
 ) -> std::result::Result<CmdResult, String> {
-    if !is_ci() {
+    if is_ci() {
+        Err(format!("{UUTILS_INFO}: {}", "cannot run inside CI"))
+    } else {
         // check if we can run 'sudo'
         log_info("run", "sudo -E --non-interactive whoami");
         match Command::new("sudo")
-            .env("LC_ALL", "C")
+            .envs(DEFAULT_ENV)
             .args(["-E", "--non-interactive", "whoami"])
             .output()
         {
@@ -2518,8 +2537,8 @@ pub fn run_ucmd_as_root(
                 // run ucmd as root:
                 Ok(ts
                     .cmd("sudo")
-                    .keep_env()
-                    .env("LC_ALL", "C")
+                    .env("PATH", PATH)
+                    .envs(DEFAULT_ENV)
                     .arg("-E")
                     .arg("--non-interactive")
                     .arg(&ts.bin_path)
@@ -2535,8 +2554,6 @@ pub fn run_ucmd_as_root(
             Ok(_output) => Err("\"sudo whoami\" didn't return \"root\"".to_string()),
             Err(e) => Err(format!("{UUTILS_WARNING}: {e}")),
         }
-    } else {
-        Err(format!("{UUTILS_INFO}: {}", "cannot run inside CI"))
     }
 }
 
@@ -2812,7 +2829,7 @@ mod tests {
     #[should_panic]
     fn test_cmd_result_stdout_check_when_false_then_panics() {
         let result = TestScenario::new("echo").ucmd().arg("Hello world").run();
-        result.stdout_check(|s| s.is_empty());
+        result.stdout_check(<[u8]>::is_empty);
     }
 
     #[cfg(feature = "echo")]
@@ -2990,7 +3007,9 @@ mod tests {
     #[cfg(unix)]
     #[cfg(feature = "whoami")]
     fn test_run_ucmd_as_root() {
-        if !is_ci() {
+        if is_ci() {
+            println!("TEST SKIPPED (cannot run inside CI)");
+        } else {
             // Skip test if we can't guarantee non-interactive `sudo`, or if we're not "root"
             if let Ok(output) = Command::new("sudo")
                 .env("LC_ALL", "C")
@@ -3009,8 +3028,6 @@ mod tests {
             } else {
                 println!("TEST SKIPPED (cannot run sudo)");
             }
-        } else {
-            println!("TEST SKIPPED (cannot run inside CI)");
         }
     }
 
@@ -3055,9 +3072,10 @@ mod tests {
         // check `child.is_alive()` and `child.delay()` is working
         let mut trials = 10;
         while child.is_alive() {
-            if trials <= 0 {
-                panic!("Assertion failed: child process is still alive.")
-            }
+            assert!(
+                trials > 0,
+                "Assertion failed: child process is still alive."
+            );
 
             child.delay(500);
             trials -= 1;

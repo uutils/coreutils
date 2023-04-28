@@ -1,6 +1,7 @@
+# spell-checker:ignore humantime
 [package]
 name = "uu_date"
-version = "0.0.17"
+version = "0.0.18"
 authors = ["uutils developers"]
 license = "MIT"
 description = "date ~ (uutils) display or set the current time"
@@ -16,8 +17,11 @@ path = "src/date.rs"
 
 [dependencies]
 chrono = { workspace=true }
+#/ TODO: check if we can avoid chrono+time
+time = { workspace=true }
 clap = { workspace=true }
 uucore = { workspace=true }
+humantime_to_duration = { workspace=true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace=true }

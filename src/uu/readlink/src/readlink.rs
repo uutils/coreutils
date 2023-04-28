@@ -14,10 +14,10 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, help_about, help_usage, show_error};
 
-const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("readlink.md");
+const USAGE: &str = help_usage!("readlink.md");
 const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
@@ -99,7 +99,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .override_help(format_usage(USAGE))
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_CANONICALIZE)

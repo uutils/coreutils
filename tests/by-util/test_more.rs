@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use is_terminal::IsTerminal;
 
 #[test]

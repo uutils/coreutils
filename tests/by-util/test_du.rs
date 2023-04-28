@@ -3,13 +3,14 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty
+// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink
 #[cfg(not(windows))]
 use regex::Regex;
-#[cfg(not(windows))]
 use std::io::Write;
 
-use crate::common::util::*;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::common::util::expected_result;
+use crate::common::util::TestScenario;
 
 const SUB_DIR: &str = "subdir/deeper";
 const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";
@@ -82,10 +83,10 @@ fn _du_basics_subdir(s: &str) {
 ))]
 fn _du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "8\tsubdir/deeper\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "0\tsubdir/deeper\n");
+    } else {
+        assert_eq!(s, "8\tsubdir/deeper\n");
     }
 }
 
@@ -120,7 +121,7 @@ fn test_du_invalid_size() {
 fn test_du_basics_bad_name() {
     new_ucmd!()
         .arg("bad_name")
-        .succeeds() // TODO: replace with ".fails()" once `du` is fixed
+        .fails()
         .stderr_only("du: bad_name: No such file or directory\n");
 }
 
@@ -164,10 +165,10 @@ fn _du_soft_link(s: &str) {
 ))]
 fn _du_soft_link(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "16\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "16\tsubdir/links\n");
     }
 }
 
@@ -212,10 +213,10 @@ fn _du_hard_link(s: &str) {
 ))]
 fn _du_hard_link(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "16\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "16\tsubdir/links\n");
     }
 }
 
@@ -255,10 +256,10 @@ fn _du_d_flag(s: &str) {
 ))]
 fn _du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "28\t./subdir\n36\t.\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "8\t./subdir\n8\t.\n");
+    } else {
+        assert_eq!(s, "28\t./subdir\n36\t.\n");
     }
 }
 
@@ -284,6 +285,30 @@ fn test_du_dereference() {
     _du_dereference(result.stdout_str());
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_du_dereference_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("subdir");
+    let mut file1 = at.make_file("subdir/file-ignore1");
+    file1.write_all(b"azeaze").unwrap();
+    let mut file2 = at.make_file("subdir/file-ignore1");
+    file2.write_all(b"amaz?ng").unwrap();
+    at.symlink_dir("subdir", "sublink");
+
+    let result = ts.ucmd().arg("-D").arg("-s").arg("sublink").succeeds();
+    let stdout = result.stdout_str();
+
+    assert!(!stdout.starts_with('0'));
+    assert!(stdout.contains("sublink"));
+
+    // Without the option
+    let result = ts.ucmd().arg("-s").arg("sublink").succeeds();
+    result.stdout_contains("0\tsublink\n");
+}
+
 #[cfg(target_vendor = "apple")]
 fn _du_dereference(s: &str) {
     assert_eq!(s, "4\tsubdir/links/deeper_dir\n16\tsubdir/links\n");
@@ -303,10 +328,10 @@ fn _du_dereference(s: &str) {
 ))]
 fn _du_dereference(s: &str) {
     // MS-WSL linux has altered expected output
-    if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "8\tsubdir/links/deeper_dir\n24\tsubdir/links\n");
-    } else {
+    if uucore::os::is_wsl_1() {
         assert_eq!(s, "0\tsubdir/links/deeper_dir\n8\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "8\tsubdir/links/deeper_dir\n24\tsubdir/links\n");
     }
 }
 
@@ -542,6 +567,15 @@ fn test_du_threshold() {
         .succeeds()
         .stdout_does_not_contain("links")
         .stdout_contains("deeper_dir");
+}
+
+#[test]
+fn test_du_invalid_threshold() {
+    let ts = TestScenario::new(util_name!());
+
+    let threshold = "-0";
+
+    ts.ucmd().arg(format!("--threshold={threshold}")).fails();
 }
 
 #[test]
@@ -839,4 +873,30 @@ fn test_du_exclude_invalid_syntax() {
         .arg("azerty")
         .fails()
         .stderr_contains("du: Invalid exclude syntax");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_symlink_fail() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.symlink_file("non-existing.txt", "target.txt");
+
+    ts.ucmd().arg("-L").arg("target.txt").fails().code_is(1);
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_symlink_multiple_fail() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.symlink_file("non-existing.txt", "target.txt");
+    let mut file1 = at.make_file("file1");
+    file1.write_all(b"azeaze").unwrap();
+
+    let result = ts.ucmd().arg("-L").arg("target.txt").arg("file1").fails();
+    assert_eq!(result.code(), 1);
+    result.stdout_contains("4\tfile1\n");
 }

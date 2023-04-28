@@ -1,8 +1,5 @@
-extern crate filetime;
-extern crate time;
-
-use self::filetime::*;
-use crate::common::util::*;
+use crate::common::util::TestScenario;
+use filetime::FileTime;
 
 #[test]
 fn test_invalid_arg() {
@@ -165,7 +162,7 @@ fn test_mv_interactive() {
         .arg(file_a)
         .arg(file_b)
         .pipe_in("n")
-        .succeeds()
+        .fails()
         .no_stdout();
 
     assert!(at.file_exists(file_a));
@@ -182,6 +179,26 @@ fn test_mv_interactive() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
+}
+
+#[test]
+fn test_mv_interactive_with_dir_as_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "test_mv_interactive_file";
+    let target_dir = "target";
+
+    at.mkdir(target_dir);
+    at.touch(file);
+    at.touch(format!("{target_dir}/{file}"));
+
+    ucmd.arg(file)
+        .arg(target_dir)
+        .arg("-i")
+        .pipe_in("n")
+        .fails()
+        .stderr_does_not_contain("cannot move")
+        .no_stdout();
 }
 
 #[test]
@@ -215,8 +232,9 @@ fn test_mv_no_clobber() {
     ucmd.arg("-n")
         .arg(file_a)
         .arg(file_b)
-        .succeeds()
-        .no_stderr();
+        .fails()
+        .code_is(1)
+        .stderr_only(format!("mv: not replacing '{file_b}'\n"));
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -618,7 +636,7 @@ fn test_mv_update_option() {
 
     at.touch(file_a);
     at.touch(file_b);
-    let ts = time::OffsetDateTime::now_local().unwrap();
+    let ts = time::OffsetDateTime::now_utc();
     let now = FileTime::from_unix_time(ts.unix_timestamp(), ts.nanosecond());
     let later = FileTime::from_unix_time(ts.unix_timestamp() + 3600, ts.nanosecond());
     filetime::set_file_times(at.plus_as_string(file_a), now, now).unwrap();
@@ -728,7 +746,9 @@ fn test_mv_backup_dir() {
         .arg(dir_a)
         .arg(dir_b)
         .succeeds()
-        .stdout_only(format!("'{dir_a}' -> '{dir_b}' (backup: '{dir_b}~')\n"));
+        .stdout_only(format!(
+            "renamed '{dir_a}' -> '{dir_b}' (backup: '{dir_b}~')\n"
+        ));
 
     assert!(!at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
@@ -800,7 +820,7 @@ fn test_mv_verbose() {
         .arg(file_a)
         .arg(file_b)
         .succeeds()
-        .stdout_only(format!("'{file_a}' -> '{file_b}'\n"));
+        .stdout_only(format!("renamed '{file_a}' -> '{file_b}'\n"));
 
     at.touch(file_a);
     scene
@@ -809,7 +829,9 @@ fn test_mv_verbose() {
         .arg(file_a)
         .arg(file_b)
         .succeeds()
-        .stdout_only(format!("'{file_a}' -> '{file_b}' (backup: '{file_b}~')\n"));
+        .stdout_only(format!(
+            "renamed '{file_a}' -> '{file_b}' (backup: '{file_b}~')\n"
+        ));
 }
 
 #[test]

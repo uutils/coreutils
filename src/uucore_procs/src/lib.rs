@@ -1,13 +1,10 @@
 // Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
 // spell-checker:ignore backticks
 
-extern crate proc_macro;
 use std::{fs::File, io::Read, path::PathBuf};
 
 use proc_macro::{Literal, TokenStream, TokenTree};
 use quote::quote;
-
-const MARKDOWN_CODE_FENCES: &str = "```";
 
 //## rust proc-macro background info
 //* ref: <https://dev.to/naufraghi/procedural-macro-in-rust-101-k3f> @@ <http://archive.is/Vbr5e>
@@ -61,7 +58,7 @@ fn render_markdown(s: &str) -> String {
 pub fn help_about(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
-    let text: String = parse_about(&read_help(&filename));
+    let text: String = help_parser::parse_about(&read_help(&filename));
     TokenTree::Literal(Literal::string(&text)).into()
 }
 
@@ -75,7 +72,7 @@ pub fn help_about(input: TokenStream) -> TokenStream {
 pub fn help_usage(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
-    let text: String = parse_usage(&read_help(&filename));
+    let text: String = help_parser::parse_usage(&read_help(&filename));
     TokenTree::Literal(Literal::string(&text)).into()
 }
 
@@ -108,9 +105,15 @@ pub fn help_section(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let section = get_argument(&input, 0, "section");
     let filename = get_argument(&input, 1, "filename");
-    let text = parse_help_section(&section, &read_help(&filename));
-    let rendered = render_markdown(&text);
-    TokenTree::Literal(Literal::string(&rendered)).into()
+
+    if let Some(text) = help_parser::parse_section(&section, &read_help(&filename)) {
+        let rendered = render_markdown(&text);
+        TokenTree::Literal(Literal::string(&rendered)).into()
+    } else {
+        panic!(
+            "The section '{section}' could not be found in the help file. Maybe it is spelled wrong?"
+        )
+    }
 }
 
 /// Get an argument from the input vector of `TokenTree`.
@@ -148,187 +151,4 @@ fn read_help(filename: &str) -> String {
         .unwrap();
 
     content
-}
-
-/// Get a single section from content
-///
-/// The section must be a second level section (i.e. start with `##`).
-fn parse_help_section(section: &str, content: &str) -> String {
-    fn is_section_header(line: &str, section: &str) -> bool {
-        line.strip_prefix("##")
-            .map_or(false, |l| l.trim().to_lowercase() == section)
-    }
-
-    let section = &section.to_lowercase();
-
-    // We cannot distinguish between an empty or non-existing section below,
-    // so we do a quick test to check whether the section exists to provide
-    // a nice error message.
-    if content.lines().all(|l| !is_section_header(l, section)) {
-        panic!(
-            "The section '{section}' could not be found in the help file. Maybe it is spelled wrong?"
-        )
-    }
-
-    content
-        .lines()
-        .skip_while(|&l| !is_section_header(l, section))
-        .skip(1)
-        .take_while(|l| !l.starts_with("##"))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string()
-}
-
-/// Parses the first markdown code block into a usage string
-///
-/// The code fences are removed and the name of the util is replaced
-/// with `{}` so that it can be replaced with the appropriate name
-/// at runtime.
-fn parse_usage(content: &str) -> String {
-    content
-        .lines()
-        .skip_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
-        .skip(1)
-        .take_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
-        .map(|l| {
-            // Replace the util name (assumed to be the first word) with "{}"
-            // to be replaced with the runtime value later.
-            if let Some((_util, args)) = l.split_once(' ') {
-                format!("{{}} {args}\n")
-            } else {
-                "{}\n".to_string()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("")
-        .trim()
-        .to_string()
-}
-
-/// Parses the text between the first markdown code block and the next header, if any,
-/// into an about string.
-fn parse_about(content: &str) -> String {
-    content
-        .lines()
-        .skip_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
-        .skip(1)
-        .skip_while(|l| !l.starts_with(MARKDOWN_CODE_FENCES))
-        .skip(1)
-        .take_while(|l| !l.starts_with('#'))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{parse_about, parse_help_section, parse_usage};
-
-    #[test]
-    fn section_parsing() {
-        let input = "\
-            # ls\n\
-            ## some section\n\
-            This is some section\n\
-            \n\
-            ## ANOTHER SECTION
-            This is the other section\n\
-            with multiple lines\n";
-
-        assert_eq!(
-            parse_help_section("some section", input),
-            "This is some section"
-        );
-        assert_eq!(
-            parse_help_section("SOME SECTION", input),
-            "This is some section"
-        );
-        assert_eq!(
-            parse_help_section("another section", input),
-            "This is the other section\nwith multiple lines"
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn section_parsing_panic() {
-        let input = "\
-            # ls\n\
-            ## some section\n\
-            This is some section\n\
-            \n\
-            ## ANOTHER SECTION
-            This is the other section\n\
-            with multiple lines\n";
-        parse_help_section("non-existent section", input);
-    }
-
-    #[test]
-    fn usage_parsing() {
-        let input = "\
-            # ls\n\
-            ```\n\
-            ls -l\n\
-            ```\n\
-            ## some section\n\
-            This is some section\n\
-            \n\
-            ## ANOTHER SECTION
-            This is the other section\n\
-            with multiple lines\n";
-
-        assert_eq!(parse_usage(input), "{} -l");
-    }
-
-    #[test]
-    fn multi_line_usage_parsing() {
-        let input = "\
-            # ls\n\
-            ```\n\
-            ls -a\n\
-            ls -b\n\
-            ls -c\n\
-            ```\n\
-            ## some section\n\
-            This is some section\n";
-
-        assert_eq!(parse_usage(input), "{} -a\n{} -b\n{} -c");
-    }
-
-    #[test]
-    fn about_parsing() {
-        let input = "\
-            # ls\n\
-            ```\n\
-            ls -l\n\
-            ```\n\
-            \n\
-            This is the about section\n\
-            \n\
-            ## some section\n\
-            This is some section\n";
-
-        assert_eq!(parse_about(input), "This is the about section");
-    }
-
-    #[test]
-    fn multi_line_about_parsing() {
-        let input = "\
-            # ls\n\
-            ```\n\
-            ls -l\n\
-            ```\n\
-            \n\
-            about a\n\
-            \n\
-            about b\n\
-            \n\
-            ## some section\n\
-            This is some section\n";
-
-        assert_eq!(parse_about(input), "about a\n\nabout b");
-    }
 }

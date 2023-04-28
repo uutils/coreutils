@@ -9,6 +9,7 @@
 
 mod count_fast;
 mod countable;
+mod utf8;
 mod word_count;
 use clap::builder::ValueParser;
 use count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast};
@@ -42,6 +43,7 @@ struct Settings {
     show_max_line_length: bool,
     files0_from_stdin_mode: bool,
     title_quoting_style: QuotingStyle,
+    total_when: TotalWhen,
 }
 
 impl Settings {
@@ -65,6 +67,7 @@ impl Settings {
             show_max_line_length: matches.get_flag(options::MAX_LINE_LENGTH),
             files0_from_stdin_mode,
             title_quoting_style,
+            total_when: matches.get_one::<String>(options::TOTAL).unwrap().into(),
         };
 
         if settings.show_bytes
@@ -84,6 +87,7 @@ impl Settings {
             show_max_line_length: false,
             files0_from_stdin_mode,
             title_quoting_style: settings.title_quoting_style,
+            total_when: settings.total_when,
         }
     }
 
@@ -107,6 +111,7 @@ pub mod options {
     pub static FILES0_FROM: &str = "files0-from";
     pub static LINES: &str = "lines";
     pub static MAX_LINE_LENGTH: &str = "max-line-length";
+    pub static TOTAL: &str = "total";
     pub static WORDS: &str = "words";
 }
 
@@ -156,6 +161,37 @@ impl Input {
         match self {
             Self::Path(path) => escape_name(&path.clone().into_os_string(), quoting_style),
             Self::Stdin(_) => escape_name(OsStr::new("standard input"), quoting_style),
+        }
+    }
+}
+
+/// When to show the "total" line
+#[derive(PartialEq)]
+enum TotalWhen {
+    Auto,
+    Always,
+    Only,
+    Never,
+}
+
+impl From<&String> for TotalWhen {
+    fn from(s: &String) -> Self {
+        match s.as_ref() {
+            "auto" => Self::Auto,
+            "always" => Self::Always,
+            "only" => Self::Only,
+            "never" => Self::Never,
+            _ => unreachable!("Should have been caught by clap"),
+        }
+    }
+}
+
+impl TotalWhen {
+    fn is_total_row_visible(&self, num_inputs: usize) -> bool {
+        match self {
+            Self::Auto => num_inputs > 1,
+            Self::Always | Self::Only => true,
+            Self::Never => false,
         }
     }
 }
@@ -245,6 +281,15 @@ pub fn uu_app() -> Command {
                 .long(options::MAX_LINE_LENGTH)
                 .help("print the length of the longest line")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::TOTAL)
+                .long(options::TOTAL)
+                .value_parser(["auto", "always", "only", "never"])
+                .default_value("auto")
+                .hide_default_value(true)
+                .value_name("WHEN")
+                .help("when to print a line with total counts"),
         )
         .arg(
             Arg::new(options::WORDS)
@@ -561,11 +606,19 @@ fn compute_number_width(inputs: &[Input], settings: &Settings) -> usize {
 }
 
 fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
-    let number_width = compute_number_width(inputs, settings);
-
     let mut total_word_count = WordCount::default();
 
-    let num_inputs = inputs.len();
+    let (number_width, are_stats_visible, total_row_title) =
+        if settings.total_when == TotalWhen::Only {
+            (1, false, None)
+        } else {
+            let number_width = compute_number_width(inputs, settings);
+            let title = Some(String::from("total"));
+
+            (number_width, true, title)
+        };
+
+    let is_total_row_visible = settings.total_when.is_total_row_visible(inputs.len());
 
     for input in inputs {
         let word_count = match word_count_from_input(input, settings) {
@@ -595,20 +648,23 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
         };
         total_word_count += word_count;
         let result = word_count.with_title(input.to_title(&settings.title_quoting_style));
-        if let Err(err) = print_stats(settings, &result, number_width) {
-            show!(USimpleError::new(
-                1,
-                format!(
-                    "failed to print result for {}: {}",
-                    &result.title.unwrap_or_else(|| String::from("<stdin>")),
-                    err,
-                ),
-            ));
+
+        if are_stats_visible {
+            if let Err(err) = print_stats(settings, &result, number_width) {
+                show!(USimpleError::new(
+                    1,
+                    format!(
+                        "failed to print result for {}: {}",
+                        &result.title.unwrap_or_else(|| String::from("<stdin>")),
+                        err,
+                    ),
+                ));
+            }
         }
     }
 
-    if num_inputs > 1 {
-        let total_result = total_word_count.with_title(Some(String::from("total")));
+    if is_total_row_visible {
+        let total_result = total_word_count.with_title(total_row_title);
         if let Err(err) = print_stats(settings, &total_result, number_width) {
             show!(USimpleError::new(
                 1,

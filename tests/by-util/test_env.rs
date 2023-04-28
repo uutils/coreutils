@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 use std::env;
 use std::path::Path;
 use tempfile::tempdir;
@@ -153,11 +153,9 @@ fn test_null_delimiter() {
 
 #[test]
 fn test_unset_variable() {
-    // This test depends on the HOME variable being pre-defined by the
-    // default shell
     let out = TestScenario::new(util_name!())
         .ucmd()
-        .keep_env()
+        .env("HOME", "FOO")
         .arg("-u")
         .arg("HOME")
         .succeeds()

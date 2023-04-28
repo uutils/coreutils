@@ -259,13 +259,13 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
 pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
     match style {
         QuotingStyle::Literal { show_control } => {
-            if !show_control {
+            if *show_control {
+                name.to_string_lossy().into_owned()
+            } else {
                 name.to_string_lossy()
                     .chars()
                     .flat_map(|c| EscapedChar::new_literal(c).hide_control())
                     .collect()
-            } else {
-                name.to_string_lossy().into_owned()
             }
         }
         QuotingStyle::C { quotes } => {

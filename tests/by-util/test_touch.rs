@@ -6,13 +6,11 @@
 // See https://github.com/time-rs/time/issues/293#issuecomment-946382614=
 // Defined in .cargo/config
 
-extern crate touch;
-use self::touch::filetime::{self, FileTime};
+use filetime::FileTime;
 
-extern crate time;
-use time::macros::{datetime, format_description};
+use time::macros::format_description;
 
-use crate::common::util::*;
+use crate::common::util::{AtPath, TestScenario};
 use std::fs::remove_file;
 use std::path::PathBuf;
 
@@ -49,12 +47,7 @@ fn str_to_filetime(format: &str, s: &str) -> FileTime {
         _ => panic!("unexpected dt format"),
     };
     let tm = time::PrimitiveDateTime::parse(s, &format_description).unwrap();
-    let d = match time::OffsetDateTime::now_local() {
-        Ok(now) => now,
-        Err(e) => {
-            panic!("Error {e} retrieving the OffsetDateTime::now_local");
-        }
-    };
+    let d = time::OffsetDateTime::now_utc();
     let offset_dt = tm.assume_offset(d.offset());
     FileTime::from_unix_time(offset_dt.unix_timestamp(), tm.nanosecond())
 }
@@ -108,10 +101,7 @@ fn test_touch_set_mdhm_time() {
 
     let start_of_year = str_to_filetime(
         "%Y%m%d%H%M",
-        &format!(
-            "{}01010000",
-            time::OffsetDateTime::now_local().unwrap().year()
-        ),
+        &format!("{}01010000", time::OffsetDateTime::now_utc().year()),
     );
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
@@ -259,14 +249,39 @@ fn test_touch_set_both_date_and_reference() {
     let ref_file = "test_touch_reference";
     let file = "test_touch_set_both_date_and_reference";
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501011234");
 
     at.touch(ref_file);
     set_file_times(&at, ref_file, start_of_year, start_of_year);
     assert!(at.file_exists(ref_file));
 
     ucmd.args(&["-d", "Thu Jan 01 12:34:00 2015", "-r", ref_file, file])
-        .fails();
+        .succeeds()
+        .no_stderr();
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, start_of_year);
+    assert_eq!(mtime, start_of_year);
+}
+
+#[test]
+fn test_touch_set_both_offset_date_and_reference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ref_file = "test_touch_reference";
+    let file = "test_touch_set_both_date_and_reference";
+
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501011234");
+    let five_days_later = str_to_filetime("%Y%m%d%H%M", "201501061234");
+
+    at.touch(ref_file);
+    set_file_times(&at, ref_file, start_of_year, start_of_year);
+    assert!(at.file_exists(ref_file));
+
+    ucmd.args(&["-d", "+5 days", "-r", ref_file, file])
+        .succeeds()
+        .no_stderr();
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, five_days_later);
+    assert_eq!(mtime, five_days_later);
 }
 
 #[test]
@@ -425,7 +440,7 @@ fn test_touch_set_date3() {
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(1623786360, 0);
+    let expected = FileTime::from_unix_time(1_623_786_360, 0);
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime, expected);
@@ -464,9 +479,9 @@ fn test_touch_set_date5() {
     // Slightly different result on Windows for nano seconds
     // TODO: investigate
     #[cfg(windows)]
-    let expected = FileTime::from_unix_time(67413, 23456700);
+    let expected = FileTime::from_unix_time(67413, 23_456_700);
     #[cfg(not(windows))]
-    let expected = FileTime::from_unix_time(67413, 23456789);
+    let expected = FileTime::from_unix_time(67413, 23_456_789);
 
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
@@ -485,7 +500,7 @@ fn test_touch_set_date6() {
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(946684800, 0);
+    let expected = FileTime::from_unix_time(946_684_800, 0);
 
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
@@ -504,7 +519,7 @@ fn test_touch_set_date7() {
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(1074254400, 0);
+    let expected = FileTime::from_unix_time(1_074_254_400, 0);
 
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
@@ -593,7 +608,15 @@ fn test_touch_set_date_relative_smoke() {
     // > (equivalent to ‘day’), the string ‘yesterday’ is worth one day
     // > in the past (equivalent to ‘day ago’).
     //
-    let times = ["yesterday", "tomorrow", "now"];
+    let times = [
+        "yesterday",
+        "tomorrow",
+        "now",
+        "2 seconds",
+        "2 years 1 week",
+        "2 days ago",
+        "2 months and 1 second",
+    ];
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
@@ -602,6 +625,11 @@ fn test_touch_set_date_relative_smoke() {
             .no_stderr()
             .no_stdout();
     }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["-d", "a", "f"])
+        .fails()
+        .stderr_contains("touch: Unable to parse date");
 }
 
 #[test]
@@ -630,61 +658,21 @@ fn test_touch_mtime_dst_succeeds() {
     assert_eq!(target_time, mtime);
 }
 
-// // is_dst_switch_hour returns true if timespec ts is just before the switch
-// // to Daylight Saving Time.
-// // For example, in EST (UTC-5), Timespec { sec: 1583647200, nsec: 0 }
-// // for March 8 2020 01:00:00 AM
-// // is just before the switch because on that day clock jumps by 1 hour,
-// // so 1 minute after 01:59:00 is 03:00:00.
-// fn is_dst_switch_hour(ts: time::Timespec) -> bool {
-//     let ts_after = ts + time::Duration::hours(1);
-//     let tm = time::at(ts);
-//     let tm_after = time::at(ts_after);
-//     tm_after.tm_hour == tm.tm_hour + 2
-// }
-
-// get_dst_switch_hour returns date string for which touch -m -t fails.
-// For example, in EST (UTC-5), that will be "202003080200" so
-// touch -m -t 202003080200 file
-// fails (that date/time does not exist).
-// In other locales it will be a different date/time, and in some locales
-// it doesn't exist at all, in which case this function will return None.
-fn get_dst_switch_hour() -> Option<String> {
-    //let now = time::OffsetDateTime::now_local().unwrap();
-    let now = match time::OffsetDateTime::now_local() {
-        Ok(now) => now,
-        Err(e) => {
-            panic!("Error {e} retrieving the OffsetDateTime::now_local");
-        }
-    };
-
-    // Start from January 1, 2020, 00:00.
-    let tm = datetime!(2020-01-01 00:00 UTC);
-    tm.to_offset(now.offset());
-
-    // let mut ts = tm.to_timespec();
-    // // Loop through all hours in year 2020 until we find the hour just
-    // // before the switch to DST.
-    // for _i in 0..(366 * 24) {
-    //     // if is_dst_switch_hour(ts) {
-    //     //     let mut tm = time::at(ts);
-    //     //     tm.tm_hour += 1;
-    //     //     let s = time::strftime("%Y%m%d%H%M", &tm).unwrap();
-    //     //     return Some(s);
-    //     // }
-    //     ts = ts + time::Duration::hours(1);
-    // }
-    None
-}
-
 #[test]
+#[ignore = "not implemented"]
 fn test_touch_mtime_dst_fails() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_mtime_dst_fails";
 
-    if let Some(s) = get_dst_switch_hour() {
-        ucmd.args(&["-m", "-t", &s, file]).fails();
-    }
+    // Some timezones use daylight savings time, this leads to problems if the
+    // specified time is within the jump forward. In EST (UTC-5), there is a
+    // jump from 1:59AM to 3:00AM on, March 8 2020, so any thing in-between is
+    // invalid.
+    // See https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
+    // for information on the TZ variable, which where the string is copied from.
+    ucmd.env("TZ", "EST+5EDT,M3.2.0/2,M11.1.0/2")
+        .args(&["-m", "-t", "202003080200", file])
+        .fails();
 }
 
 #[test]
@@ -840,4 +828,28 @@ fn test_touch_trailing_slash_no_create() {
     at.mkdir("dir2");
     at.relative_symlink_dir("dir2", "link2");
     ucmd.args(&["-c", "link2/"]).succeeds();
+}
+
+#[test]
+fn test_touch_no_dereference_ref_dangling() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.relative_symlink_file("nowhere", "dangling");
+
+    ucmd.args(&["-h", "-r", "dangling", "file"]).succeeds();
+}
+
+#[test]
+fn test_touch_no_dereference_dangling() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("nowhere", "dangling");
+
+    ucmd.args(&["-h", "dangling"]).succeeds();
+}
+
+#[test]
+fn test_touch_dash() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    ucmd.args(&["-h", "-"]).succeeds().no_stderr().no_stdout();
 }

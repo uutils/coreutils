@@ -1,6 +1,6 @@
 use std::process::Stdio;
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {

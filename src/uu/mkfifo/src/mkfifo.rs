@@ -10,10 +10,10 @@ use libc::mkfifo;
 use std::ffi::CString;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 
-static USAGE: &str = "{} [OPTION]... NAME...";
-static ABOUT: &str = "Create a FIFO with the given name.";
+static USAGE: &str = help_usage!("mkfifo.md");
+static ABOUT: &str = help_about!("mkfifo.md");
 
 mod options {
     pub static MODE: &str = "mode";

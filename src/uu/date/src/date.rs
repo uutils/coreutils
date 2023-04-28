@@ -6,10 +6,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
+// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes humantime
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
@@ -18,11 +18,12 @@ use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use time::Duration;
 use uucore::display::Quotable;
-#[cfg(not(any(target_os = "macos", target_os = "redox")))]
+#[cfg(not(any(target_os = "redox")))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show_error};
+use uucore::{format_usage, help_about, help_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
@@ -96,6 +97,7 @@ enum DateSource {
     Now,
     Custom(String),
     File(PathBuf),
+    Human(Duration),
 }
 
 enum Iso8601Format {
@@ -114,8 +116,8 @@ impl<'a> From<&'a str> for Iso8601Format {
             SECONDS | SECOND => Self::Seconds,
             NS => Self::Ns,
             DATE => Self::Date,
-            // Should be caught by clap
-            _ => panic!("Invalid format: {s}"),
+            // Note: This is caught by clap via `possible_values`
+            _ => unreachable!(),
         }
     }
 }
@@ -168,7 +170,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        DateSource::Custom(date.into())
+        if let Ok(duration) = humantime_to_duration::from_str(date.as_str()) {
+            DateSource::Human(duration)
+        } else {
+            DateSource::Custom(date.into())
+        }
     } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
         DateSource::File(file.into())
     } else {
@@ -203,9 +209,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         return set_system_datetime(date);
     } else {
-        // Declare a file here because it needs to outlive the `dates` iterator.
-        let file: File;
-
         // Get the current time, either in the local time zone or UTC.
         let now: DateTime<FixedOffset> = if settings.utc {
             let now = Utc::now();
@@ -222,10 +225,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let iter = std::iter::once(date);
                 Box::new(iter)
             }
+            DateSource::Human(ref input) => {
+                // Get the current DateTime<FixedOffset> and convert the input time::Duration to chrono::Duration
+                // for things like "1 year ago"
+                let current_time = DateTime::<FixedOffset>::from(Local::now());
+                let input_chrono = ChronoDuration::seconds(input.as_seconds_f32() as i64)
+                    + ChronoDuration::nanoseconds(input.subsec_nanoseconds() as i64);
+                let iter = std::iter::once(Ok(current_time + input_chrono));
+                Box::new(iter)
+            }
             DateSource::File(ref path) => {
-                file = File::open(path).unwrap();
+                if path.is_dir() {
+                    return Err(USimpleError::new(
+                        2,
+                        format!("expected file, got directory {}", path.quote()),
+                    ));
+                }
+                let file = File::open(path)
+                    .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
                 let lines = BufReader::new(file).lines();
-                let iter = lines.filter_map(Result::ok).map(parse_date);
+                let iter = lines.map_while(Result::ok).map(parse_date);
                 Box::new(iter)
             }
             DateSource::Now => {
@@ -257,7 +276,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         .replace("%f", "%N");
                     println!("{formatted}");
                 }
-                Err((input, _err)) => show_error!("invalid date {}", input.quote()),
+                Err((input, _err)) => show!(USimpleError::new(
+                    1,
+                    format!("invalid date {}", input.quote())
+                )),
             }
         }
     }
@@ -291,6 +313,9 @@ pub fn uu_app() -> Command {
                 .short('I')
                 .long(OPT_ISO_8601)
                 .value_name("FMT")
+                .value_parser([DATE, HOUR, HOURS, MINUTE, MINUTES, SECOND, SECONDS, NS])
+                .num_args(0..=1)
+                .default_missing_value(OPT_DATE)
                 .help(ISO_8601_HELP_STRING),
         )
         .arg(
@@ -304,6 +329,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RFC_3339)
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
+                .value_parser([DATE, SECOND, SECONDS, NS])
                 .help(RFC_3339_HELP_STRING),
         )
         .arg(
@@ -403,10 +429,10 @@ fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
 
     let result = unsafe { clock_settime(CLOCK_REALTIME, &timespec) };
 
-    if result != 0 {
-        Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
-    } else {
+    if result == 0 {
         Ok(())
+    } else {
+        Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
     }
 }
 

@@ -7,10 +7,12 @@
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 
-extern crate tail;
-
-use crate::common::random::*;
-use crate::common::util::*;
+use crate::common::random::{AlphanumericNewline, RandomString};
+#[cfg(unix)]
+use crate::common::util::expected_result;
+#[cfg(not(windows))]
+use crate::common::util::is_ci;
+use crate::common::util::TestScenario;
 use pretty_assertions::assert_eq;
 use rand::distributions::Alphanumeric;
 use rstest::rstest;
@@ -4356,14 +4358,7 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
         .stdout_only(expected_stdout);
 }
 
-// Fails with:
-// 'Assertion failed. Expected 'tail' to be running but exited with status=exit status: 1.
-// stdout:
-// stderr: tail: warning: --retry ignored; --retry is useful only when following
-// tail: error reading 'dir': Is a directory
-// '
 #[test]
-#[cfg(disabled_until_fixed)]
 fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
@@ -4375,8 +4370,16 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
          tail: {0}: cannot follow end of this type of file\n",
         dirname
     );
-
     let mut child = scene.ucmd().args(&["-F", "--retry", "dir"]).run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stderr_only(&expected_stderr);
+
+    let mut child = scene.ucmd().args(&["--retry", "-F", "dir"]).run_no_wait();
 
     child.make_assertion_with_delay(500).is_alive();
     child
@@ -4459,7 +4462,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same
 }
 
 #[rstest]
-#[case::exponent_exceed_float_max("1.0e2048")]
+#[case::exponent_exceed_float_max("1.0e100000")]
 #[case::underscore_delimiter("1_000")]
 #[case::only_point(".")]
 #[case::space_in_primes("' '")]
