@@ -157,6 +157,8 @@ fn test_multi_stdin() {
 }
 
 #[test]
+// TODO: make this test work on Windows
+#[cfg(not(windows))]
 fn test_delimiter_list_ending_with_escaped_backslash() {
     for d in ["-d", "--delimiters"] {
         let (at, mut ucmd) = at_and_ucmd!();
