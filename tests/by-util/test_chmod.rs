@@ -4,9 +4,7 @@ use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Mutex;
 
-extern crate chmod;
-extern crate libc;
-use self::libc::umask;
+use libc::umask;
 
 static TEST_FILE: &str = "file";
 static REFERENCE_FILE: &str = "reference";

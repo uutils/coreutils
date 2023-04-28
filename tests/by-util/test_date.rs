@@ -1,7 +1,5 @@
-extern crate regex;
-
-use self::regex::Regex;
 use crate::common::util::TestScenario;
+use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
 use rust_users::get_effective_uid;
 
@@ -284,6 +282,16 @@ fn test_date_for_invalid_file() {
 }
 
 #[test]
+fn test_date_for_dir_as_file() {
+    let result = new_ucmd!().arg("--file").arg("/").fails();
+    result.no_stdout();
+    assert_eq!(
+        result.stderr_str().trim(),
+        "date: expected file, got directory '/'",
+    );
+}
+
+#[test]
 fn test_date_for_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_date_for_file";
@@ -331,6 +339,29 @@ fn test_unsupported_format() {
     let result = new_ucmd!().arg("+%#z").fails();
     result.no_stdout();
     assert!(result.stderr_str().starts_with("date: do not use '%#z'"));
+}
+
+#[test]
+fn test_date_string_human() {
+    let date_formats = vec![
+        "1 year ago",
+        "1 year",
+        "2 months ago",
+        "15 days ago",
+        "1 week ago",
+        "5 hours ago",
+        "30 minutes ago",
+        "10 seconds",
+    ];
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}\n$").unwrap();
+    for date_format in date_formats {
+        new_ucmd!()
+            .arg("-d")
+            .arg(date_format)
+            .arg("+%Y-%m-%d %S:%M")
+            .succeeds()
+            .stdout_matches(&re);
+    }
 }
 
 #[test]

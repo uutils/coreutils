@@ -12,15 +12,11 @@ use std::path::Path;
 use std::str::FromStr;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
-const ABOUT: &str = "Report or omit repeated lines.";
-const USAGE: &str = "{} [OPTION]... [INPUT [OUTPUT]]...";
-const LONG_USAGE: &str = "\
-    Filter adjacent matching lines from INPUT (or standard input),\n\
-    writing to OUTPUT (or standard output).\n\n\
-    Note: 'uniq' does not detect repeated lines unless they are adjacent.\n\
-    You may want to sort the input first, or use 'sort -u' without 'uniq'.";
+const ABOUT: &str = help_about!("uniq.md");
+const USAGE: &str = help_usage!("uniq.md");
+const AFTER_HELP: &str = help_section!("after help", "uniq.md");
 
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
@@ -247,7 +243,7 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Optio
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
+    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
         .get_many::<String>(ARG_FILES)

@@ -261,11 +261,11 @@ fn process_error(
             Err(f)
         }
         Some(OutputErrorMode::ExitNoPipe) => {
-            if f.kind() != ErrorKind::BrokenPipe {
+            if f.kind() == ErrorKind::BrokenPipe {
+                Ok(())
+            } else {
                 show_error!("{}: {}", writer.name.maybe_quote(), f);
                 Err(f)
-            } else {
-                Ok(())
             }
         }
     }

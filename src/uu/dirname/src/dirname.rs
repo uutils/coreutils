@@ -38,7 +38,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|s| s.to_owned())
         .collect();
 
-    if !dirnames.is_empty() {
+    if dirnames.is_empty() {
+        return Err(UUsageError::new(1, "missing operand"));
+    } else {
         for path in &dirnames {
             let p = Path::new(path);
             match p.parent() {
@@ -59,8 +61,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             print!("{separator}");
         }
-    } else {
-        return Err(UUsageError::new(1, "missing operand"));
     }
 
     Ok(())

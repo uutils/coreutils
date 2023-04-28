@@ -199,7 +199,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::LOGICAL)
                 .short('L')
                 .long(options::LOGICAL)
-                .help("dereference TARGETs that are symbolic links")
+                .help("follow TARGETs that are symbolic links")
                 .overrides_with(options::PHYSICAL)
                 .action(ArgAction::SetTrue),
         )

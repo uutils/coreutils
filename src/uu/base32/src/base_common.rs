@@ -160,18 +160,7 @@ pub fn handle_input<R: Read>(
         data = data.line_wrap(wrap);
     }
 
-    if !decode {
-        match data.encode() {
-            Ok(s) => {
-                wrap_print(&data, &s);
-                Ok(())
-            }
-            Err(_) => Err(USimpleError::new(
-                1,
-                "error: invalid input (length must be multiple of 4 characters)",
-            )),
-        }
-    } else {
+    if decode {
         match data.decode() {
             Ok(s) => {
                 // Silent the warning as we want to the error message
@@ -183,6 +172,17 @@ pub fn handle_input<R: Read>(
                 Ok(())
             }
             Err(_) => Err(USimpleError::new(1, "error: invalid input")),
+        }
+    } else {
+        match data.encode() {
+            Ok(s) => {
+                wrap_print(&data, &s);
+                Ok(())
+            }
+            Err(_) => Err(USimpleError::new(
+                1,
+                "error: invalid input (length must be multiple of 4 characters)",
+            )),
         }
     }
 }

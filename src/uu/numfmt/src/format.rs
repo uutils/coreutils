@@ -55,7 +55,7 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
                 .unwrap_or(field.len()),
         );
 
-        self.s = if !rest.is_empty() { Some(rest) } else { None };
+        self.s = if rest.is_empty() { None } else { Some(rest) };
 
         Some((prefix, field))
     }

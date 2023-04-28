@@ -25,7 +25,7 @@ Valid format sequences for files (without `--file-system`):
 - `%i`: inode number
 - `%m`: mount point
 - `%n`: file name
-- `%N`: quoted file name with dereference if symbolic link
+- `%N`: quoted file name with dereference (follow) if symbolic link
 - `%o`: optimal I/O transfer size hint
 - `%s`: total size, in bytes
 - `%t`: major device type in hex, for character/block device special files

@@ -1,8 +1,7 @@
 // spell-checker:ignore overridable
 use crate::common::util::TestScenario;
 
-extern crate dircolors;
-use self::dircolors::{guess_syntax, OutputFmt, StrUtils};
+use dircolors::{guess_syntax, OutputFmt, StrUtils};
 
 #[test]
 fn test_invalid_arg() {
@@ -220,4 +219,14 @@ fn test_helper(file_name: &str, term: &str) {
         .arg(format!("{file_name}.txt"))
         .run()
         .stdout_is_fixture(format!("{file_name}.sh.expected"));
+}
+
+#[test]
+fn test_dircolors_for_dir_as_file() {
+    let result = new_ucmd!().args(&["-c", "/"]).fails();
+    result.no_stdout();
+    assert_eq!(
+        result.stderr_str().trim(),
+        "dircolors: expected file, got directory '/'",
+    );
 }

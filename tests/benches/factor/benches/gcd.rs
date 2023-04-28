@@ -6,7 +6,7 @@ fn gcd(c: &mut Criterion) {
         // Deterministic RNG; use an explicitly-named RNG to guarantee stability
         use rand::{RngCore, SeedableRng};
         use rand_chacha::ChaCha8Rng;
-        const SEED: u64 = 0xa_b4d_1dea_dead_cafe;
+        const SEED: u64 = 0xab4d_1dea_dead_cafe;
         let mut rng = ChaCha8Rng::seed_from_u64(SEED);
 
         std::iter::repeat_with(move || (rng.next_u64(), rng.next_u64()))
@@ -22,7 +22,7 @@ fn gcd(c: &mut Criterion) {
             },
         );
     }
-    group.finish()
+    group.finish();
 }
 
 criterion_group!(benches, gcd);

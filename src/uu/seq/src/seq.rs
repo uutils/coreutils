@@ -2,7 +2,6 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// TODO: Support -f flag
 // spell-checker:ignore (ToDO) istr chiter argptr ilen extendedbigdecimal extendedbigint numberparse
 use std::io::{stdout, ErrorKind, Write};
 use std::process::exit;
@@ -12,9 +11,9 @@ use num_traits::Zero;
 
 use uucore::error::FromIo;
 use uucore::error::UResult;
-use uucore::format_usage;
 use uucore::memo::printf;
 use uucore::show;
+use uucore::{format_usage, help_about, help_usage};
 
 mod error;
 mod extendedbigdecimal;
@@ -27,17 +26,15 @@ use crate::extendedbigint::ExtendedBigInt;
 use crate::number::Number;
 use crate::number::PreciseNumber;
 
-static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
-const USAGE: &str = "\
-    {} [OPTION]... LAST
-    {} [OPTION]... FIRST LAST
-    {} [OPTION]... FIRST INCREMENT LAST";
-static OPT_SEPARATOR: &str = "separator";
-static OPT_TERMINATOR: &str = "terminator";
-static OPT_WIDTHS: &str = "widths";
-static OPT_FORMAT: &str = "format";
+const ABOUT: &str = help_about!("seq.md");
+const USAGE: &str = help_usage!("seq.md");
 
-static ARG_NUMBERS: &str = "numbers";
+const OPT_SEPARATOR: &str = "separator";
+const OPT_TERMINATOR: &str = "terminator";
+const OPT_WIDTHS: &str = "widths";
+const OPT_FORMAT: &str = "format";
+
+const ARG_NUMBERS: &str = "numbers";
 
 #[derive(Clone)]
 struct SeqOptions<'a> {
