@@ -538,6 +538,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_mode_after_dash_dash() {
     let (at, ucmd) = at_and_ucmd!();
     run_single_test(

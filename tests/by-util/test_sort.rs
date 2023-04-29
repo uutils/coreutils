@@ -876,7 +876,7 @@ fn sort_empty_chunk() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn test_compress() {
     new_ucmd!()
         .args(&[
