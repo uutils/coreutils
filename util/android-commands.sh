@@ -119,6 +119,7 @@ run_termux_command() {
     local retries=${retries:-3}
     local sleep_interval=${sleep_interval:-5}
     try_fix=3
+    echo "run_termux_command with timeout=$timeout / retries=$retries / sleep_interval=$sleep_interval"
     while ! adb shell "ls $probe" 2>/dev/null; do
         echo -n "Waiting for $probe: "
 
