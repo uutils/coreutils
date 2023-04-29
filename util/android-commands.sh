@@ -328,10 +328,7 @@ tests() {
 export RUST_BACKTRACE=1; \
 export CARGO_TERM_COLOR=always; \
 export CARGO_INCREMENTAL=0; \
-cd ~/coreutils; \
-timeout --preserve-status --verbose -k 1m 60m \
-    cargo test --features feat_os_unix_android; \
-#    cargo nextest run --profile ci --hide-progress-bar --features feat_os_unix_android; \
+cd ~/coreutils && cargo test --features feat_os_unix_android; \
 echo \$? >$probe'"
     run_termux_command "$command" "$probe" || return
 
