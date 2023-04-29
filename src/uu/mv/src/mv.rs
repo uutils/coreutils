@@ -106,14 +106,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
+    let target_dir = matches
+        .get_one::<OsString>(OPT_TARGET_DIRECTORY)
+        .map(OsString::from);
+
+    if let Some(ref maybe_dir) = target_dir {
+        if !Path::new(&maybe_dir).is_dir() {
+            return Err(MvError::TargetNotADirectory(maybe_dir.quote().to_string()).into());
+        }
+    }
+
     let behavior = Behavior {
         overwrite: overwrite_mode,
         backup: backup_mode,
         suffix: backup_suffix,
         update: matches.get_flag(OPT_UPDATE),
-        target_dir: matches
-            .get_one::<OsString>(OPT_TARGET_DIRECTORY)
-            .map(OsString::from),
+        target_dir,
         no_target_dir: matches.get_flag(OPT_NO_TARGET_DIRECTORY),
         verbose: matches.get_flag(OPT_VERBOSE),
         strip_slashes: matches.get_flag(OPT_STRIP_TRAILING_SLASHES),
@@ -320,12 +328,7 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
 
 fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
-        match b.target_dir {
-            Some(_) => {
-                return Err(MvError::TargetNotADirectory(target_dir.quote().to_string()).into())
-            }
-            None => return Err(MvError::NotADirectory(target_dir.quote().to_string()).into()),
-        }
+        return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
 
     let canonized_target_dir = target_dir
