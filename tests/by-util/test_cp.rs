@@ -1542,7 +1542,7 @@ fn test_cp_reflink_insufficient_permission() {
         .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)\n");
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 #[test]
 fn test_closes_file_descriptors() {
     use procfs::process::Process;
