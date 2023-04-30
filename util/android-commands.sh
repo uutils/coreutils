@@ -4,7 +4,7 @@
 # There are three shells: the host's, adb, and termux. Only adb lets us run
 # commands directly on the emulated device, only termux provides a GNU
 # environment on the emulated device (to e.g. run cargo). So we use adb to
-# launch termux, then to send keystrokes to it while it's running.
+# launch termux, then to send keystrokes to it while it's ruMbdfhnRrVnning.
 # This means that the commands sent to termux are first parsed as arguments in
 # this shell, then as arguments in the adb shell, before finally being used as
 # text inputs to the app. Hence, the "'wrapping'" on those commands.
@@ -210,7 +210,7 @@ snapshot() {
     # We need to install nextest via cargo currently, since there is no pre-built binary for android x86
     command="'\
 export CARGO_TERM_COLOR=always; \
-#cargo install cargo-nextest; \
+# build fails for now (https://github.com/nextest-rs/nextest/issues/862): cargo install cargo-nextest; \
 echo \$? > $probe'"
     run_termux_command "$command" "$probe"
     return_code=$?
