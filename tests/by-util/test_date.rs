@@ -338,7 +338,7 @@ fn test_invalid_format_string() {
 fn test_unsupported_format() {
     let result = new_ucmd!().arg("+%#z").fails();
     result.no_stdout();
-    assert!(result.stderr_str().starts_with("date: do not use '%#z'"));
+    assert!(result.stderr_str().starts_with("date: invalid format %#z"));
 }
 
 #[test]
