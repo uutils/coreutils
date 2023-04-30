@@ -4,7 +4,7 @@
 # There are three shells: the host's, adb, and termux. Only adb lets us run
 # commands directly on the emulated device, only termux provides a GNU
 # environment on the emulated device (to e.g. run cargo). So we use adb to
-# launch termux, then to send keystrokes to it while it's ruMbdfhnRrVnning.
+# launch termux, then to send keystrokes to it while it's running.
 # This means that the commands sent to termux are first parsed as arguments in
 # this shell, then as arguments in the adb shell, before finally being used as
 # text inputs to the app. Hence, the "'wrapping'" on those commands.
