@@ -22,12 +22,12 @@ use uucore::process::ChildExt;
 use uucore::signals::enable_pipe_errors;
 
 use uucore::{
-    format_usage, show_error,
+    format_usage, help_about, help_usage, show_error,
     signals::{signal_by_name_or_value, signal_name_by_value},
 };
 
-static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
-const USAGE: &str = "{} [OPTION] DURATION COMMAND...";
+const ABOUT: &str = help_about!("timeout.md");
+const USAGE: &str = help_usage!("timeout.md");
 
 pub mod options {
     pub static FOREGROUND: &str = "foreground";
