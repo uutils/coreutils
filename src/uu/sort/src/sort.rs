@@ -45,26 +45,15 @@ use std::str::Utf8Error;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::parse_size::{ParseSizeError, Parser};
 use uucore::version_cmp::version_cmp;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 use crate::tmp_dir::TmpDirWrapper;
 
-const ABOUT: &str = "\
-    Display sorted concatenation of all FILE(s). \
-    With no FILE, or when FILE is -, read standard input.";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
-
-const LONG_HELP_KEYS: &str = "The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS].
-
-Fields by default are separated by the first whitespace after a non-whitespace character. Use -t to specify a custom separator.
-In the default case, whitespace is appended at the beginning of each field. Custom separators however are not included in fields.
-
-FIELD and CHAR both start at 1 (i.e. they are 1-indexed). If there is no end specified after a comma, the end will be the end of the line.
-If CHAR is set 0, it means the end of the field. CHAR defaults to 1 for the start position and to 0 for the end position.
-
-Valid options are: MbdfhnRrV. They override the global options for this key.";
+const ABOUT: &str = help_about!("sort.md");
+const USAGE: &str = help_usage!("sort.md");
+const AFTER_HELP: &str = help_section!("after help", "sort.md");
 
 mod options {
     pub mod modes {
@@ -1292,7 +1281,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP_KEYS)
+        .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .disable_help_flag(true)
