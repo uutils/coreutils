@@ -188,9 +188,9 @@ impl<'a> Inputs<'a> {
             },
         };
 
-        // The index of each yielded item must be tracked for error reporting.
-        let mut with_idx = base.enumerate();
-        let files0_from_path = settings.files0_from.as_ref().map(|i| i.as_borrowed());
+        // The 1-based index of each yielded item must be tracked for error reporting.
+        let mut with_idx = base.enumerate().map(|(i, v)| (i + 1, v));
+        let files0_from_path = settings.files0_from.as_ref().map(|p| p.as_borrowed());
 
         let iter = iter::from_fn(move || {
             let (idx, next) = with_idx.next()?;
@@ -303,23 +303,9 @@ fn is_stdin_small_file() -> bool {
     matches!(f.metadata(), Ok(meta) if meta.is_file() && meta.len() <= (10 << 20))
 }
 
-#[cfg(windows)]
-fn is_stdin_small_file() -> bool {
-    use std::os::windows::io::{AsRawHandle, FromRawHandle};
-    // Safety: we'll rely on Rust to give us a valid RawHandle for stdin with which we can attempt
-    // to open a File, but only for the sake of fetching .metadata().  ManuallyDrop will ensure we
-    // don't do anything else to the FD if anything unexpected happens.
-    let f = std::mem::ManuallyDrop::new(unsafe {
-        let h = io::stdin().as_raw_handle();
-        if h.is_null() {
-            return false;
-        }
-        File::from_raw_handle(h)
-    });
-    matches!(f.metadata(), Ok(meta) if meta.is_file() && meta.len() <= (10 << 20))
-}
-
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(unix))]
+// Windows presents a piped stdin as a "normal file" with a length equal to however many bytes
+// have been buffered at the time it's checked. To be safe, we must never assume it's a file.
 fn is_stdin_small_file() -> bool {
     false
 }
