@@ -257,6 +257,7 @@ fn test_cp_arg_interactive() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_cp_arg_interactive_update() {
     // -u -i won't show the prompt to validate the override or not
     // Therefore, the error code will be 0
@@ -1542,7 +1543,7 @@ fn test_cp_reflink_insufficient_permission() {
         .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)\n");
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 #[test]
 fn test_closes_file_descriptors() {
     use procfs::process::Process;
