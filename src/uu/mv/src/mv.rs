@@ -26,7 +26,7 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::update_control::{self, UpdateMode};
-use uucore::{format_usage, help_about, help_usage, prompt_yes, show};
+use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
 use fs_extra::dir::{
     get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
@@ -56,6 +56,7 @@ pub enum OverwriteMode {
 
 const ABOUT: &str = help_about!("mv.md");
 const USAGE: &str = help_usage!("mv.md");
+const AFTER_HELP: &str = help_section!("after help", "mv.md");
 
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";
@@ -67,23 +68,9 @@ static OPT_VERBOSE: &str = "verbose";
 static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
 
-static MV_UPDATE_LONG_HELP: &str =
-    "Do not move a non-directory that has an existing destination with the same or newer modification timestamp;
-instead, silently skip the file without failing. If the move is across file system boundaries, the comparison is
-to the source timestamp truncated to the resolutions of the destination file system and of the system calls used
-to update timestamps; this avoids duplicate work if several ‘mv -u’ commands are executed with the same source
-and destination. This option is ignored if the -n or --no-clobber option is also specified. which gives more control
-over which existing files in the destination are replaced, and its value can be one of the following:
-
-all    This is the default operation when an --update option is not specified, and results in all existing files in the destination being replaced.
-none   This is similar to the --no-clobber option, in that no files in the destination are replaced, but also skipping a file does not induce a failure.
-older  This is the default operation when --update is specified, and results in files being replaced if they’re older than the corresponding source file.";
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut app = uu_app()
-        .after_help(backup_control::BACKUP_CONTROL_LONG_HELP)
-        .after_help(MV_UPDATE_LONG_HELP);
+    let mut app = uu_app().after_help(backup_control::BACKUP_CONTROL_LONG_HELP);
     let matches = app.try_get_matches_from_mut(args)?;
 
     if !matches.contains_id(OPT_TARGET_DIRECTORY)
@@ -143,11 +130,8 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
+        .after_help(AFTER_HELP)
         .infer_long_args(true)
-        .arg(backup_control::arguments::backup())
-        .arg(backup_control::arguments::backup_no_args())
-        .arg(update_control::arguments::update())
-        .arg(update_control::arguments::update_no_args())
         .arg(
             Arg::new(OPT_FORCE)
                 .short('f')
@@ -175,7 +159,11 @@ pub fn uu_app() -> Command {
                 .help("remove any trailing slashes from each SOURCE argument")
                 .action(ArgAction::SetTrue),
         )
+        .arg(backup_control::arguments::backup())
+        .arg(backup_control::arguments::backup_no_args())
         .arg(backup_control::arguments::suffix())
+        .arg(update_control::arguments::update())
+        .arg(update_control::arguments::update_no_args())
         .arg(
             Arg::new(OPT_TARGET_DIRECTORY)
                 .short('t')
