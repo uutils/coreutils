@@ -1,11 +1,57 @@
+//! Implement GNU-style update functionality.
+//!
+//! - pre-defined [`clap`-Arguments][1] for inclusion in utilities that
+//!   implement updates
+//! - determination of the [update mode][2]
+//!
+//! Update-functionality is implemented by the following utilities:
+//!
+//! - `cp`
+//! - `mv`
+//!
+//!
+//! [1]: arguments
+//! [2]: `determine_update_mode()`
+//!
+//!
+//! # Usage example
+//!
+//! ```
+//! #[macro_use]
+//! extern crate uucore;
+//!
+//! use clap::{Command, Arg, ArgMatches};
+//! use uucore::update_control::{self, UpdateMode};
+//!
+//! fn main() {
+//!     let matches = Command::new("command")
+//!         .arg(update_control::arguments::update())
+//!         .arg(update_control::arguments::update_no_args())
+//!         .get_matches_from(vec![
+//!             "commmand", "--update=older"
+//!         ]);
+//!
+//!     let update_mode = update_control::determine_update_mode(&matches);
+//!
+//!     // handle cases
+//!     if update_mode == UpdateMode::ReplaceIfOlder {
+//!         // do
+//!     } else {
+//!         unreachable!()
+//!     }
+//! }
+//! ```
 use clap::ArgMatches;
 
-pub static UPDATE_CONTROL_VALUES: &[&str] = &["all", "none", "old", ""];
-
-#[derive(Clone, Eq, PartialEq)]
+// Available update mode
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateMode {
+    // --update=`all`, ``
     ReplaceAll,
+    // --update=`none`
     ReplaceNone,
+    // --update=`older`
+    // -u
     ReplaceIfOlder,
 }
 
@@ -15,6 +61,7 @@ pub mod arguments {
     pub static OPT_UPDATE: &str = "update";
     pub static OPT_UPDATE_NO_ARG: &str = "u";
 
+    // `--update` argument, defaults to `older` if no values after provided
     pub fn update() -> clap::Arg {
         clap::Arg::new(OPT_UPDATE)
             .long("update")
@@ -27,6 +74,7 @@ pub mod arguments {
             .action(clap::ArgAction::Set)
     }
 
+    // `-u` argument
     pub fn update_no_args() -> clap::Arg {
         clap::Arg::new(OPT_UPDATE_NO_ARG)
             .short('u')
@@ -35,6 +83,37 @@ pub mod arguments {
     }
 }
 
+/// Determine the "mode" for the update operation to perform, if any.
+///
+/// Parses the backup options and converts them to an instance of
+/// `UpdateMode` for further processing.
+///
+/// Takes [`clap::ArgMatches`] as argument which **must** contain the options
+/// from [`arguments::update()`] or [`arguments::update_no_args()`]. Otherwise
+/// the `ReplaceAll` mode is returned unconditionally.
+///
+/// # Examples
+///
+/// Here's how one would integrate the update mode determination into an
+/// application.
+///
+/// ```
+/// #[macro_use]
+/// extern crate uucore;
+/// use uucore::update_control::{self, UpdateMode};
+/// use clap::{Command, Arg, ArgMatches};
+///
+/// fn main() {
+///     let matches = Command::new("command")
+///         .arg(update_control::arguments::update())
+///         .arg(update_control::arguments::update_no_args())
+///         .get_matches_from(vec![
+///             "command", "--update=all"
+///         ]);
+///
+///     let update_mode = update_control::determine_update_mode(&matches);
+///     assert_eq!(update_mode, UpdateMode::ReplaceAll)
+/// }
 pub fn determine_update_mode(matches: &ArgMatches) -> UpdateMode {
     if matches.contains_id(arguments::OPT_UPDATE) {
         if let Some(mode) = matches.get_one::<String>(arguments::OPT_UPDATE) {
@@ -48,8 +127,10 @@ pub fn determine_update_mode(matches: &ArgMatches) -> UpdateMode {
             unreachable!("other args restricted by clap")
         }
     } else if matches.get_flag(arguments::OPT_UPDATE_NO_ARG) {
+        // short form of this option is equivalent to using --update=older
         UpdateMode::ReplaceIfOlder
     } else {
+        // no option was present
         UpdateMode::ReplaceAll
     }
 }
