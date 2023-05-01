@@ -1,5 +1,7 @@
 use crate::common::util::TestScenario;
 use filetime::FileTime;
+use std::thread::sleep;
+use std::time::Duration;
 
 #[test]
 fn test_invalid_arg() {
@@ -656,6 +658,168 @@ fn test_mv_update_option() {
 
     assert!(at.file_exists(file_a));
     assert!(!at.file_exists(file_b));
+}
+
+#[test]
+fn test_mv_arg_update_none() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file1 = "test_mv_arg_update_none_file1";
+    let file2 = "test_mv_arg_update_none_file2";
+
+    at.touch(file1);
+    at.touch(file2);
+
+    let file1_content = "file1 content\n";
+    let file2_content = "file2 content\n";
+
+    at.append(file1, file1_content);
+    at.append(file2, file2_content);
+
+    ucmd.arg(file1)
+        .arg(file2)
+        .arg("--update=none")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(file2), file2_content)
+}
+
+#[test]
+fn test_mv_arg_update_all() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file1 = "test_mv_arg_update_none_file1";
+    let file2 = "test_mv_arg_update_none_file2";
+
+    at.touch(file1);
+    at.touch(file2);
+
+    let file1_content = "file1 content\n";
+    let file2_content = "file2 content\n";
+
+    at.append(file1, file1_content);
+    at.append(file2, file2_content);
+
+    ucmd.arg(file1)
+        .arg(file2)
+        .arg("--update=all")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(file2), file1_content)
+}
+
+#[test]
+fn test_mv_arg_update_older_dest_not_older() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_mv_arg_update_none_file1";
+    let new = "test_mv_arg_update_none_file2";
+    let old_content = "file1 content\n";
+    let new_content = "file2 content\n";
+
+    at.touch(old);
+    at.append(old, old_content);
+
+    sleep(Duration::from_secs(1));
+
+    at.touch(new);
+    at.append(new, new_content);
+
+    ucmd.arg(old)
+        .arg(new)
+        .arg("--update=older")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(new), new_content)
+}
+
+#[test]
+fn test_mv_arg_update_older_dest_older() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_mv_arg_update_none_file1";
+    let new = "test_mv_arg_update_none_file2";
+    let old_content = "file1 content\n";
+    let new_content = "file2 content\n";
+
+    at.touch(old);
+    at.append(old, old_content);
+
+    sleep(Duration::from_secs(1));
+
+    at.touch(new);
+    at.append(new, new_content);
+
+    ucmd.arg(new)
+        .arg(old)
+        .arg("--update=all")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(old), new_content)
+}
+
+#[test]
+fn test_mv_arg_update_short_overwrite() {
+    // same as --update=older
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_mv_arg_update_none_file1";
+    let new = "test_mv_arg_update_none_file2";
+    let old_content = "file1 content\n";
+    let new_content = "file2 content\n";
+
+    at.touch(old);
+    at.append(old, old_content);
+
+    sleep(Duration::from_secs(1));
+
+    at.touch(new);
+    at.append(new, new_content);
+
+    ucmd.arg(new)
+        .arg(old)
+        .arg("-u")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(old), new_content)
+}
+
+#[test]
+fn test_mv_arg_update_short_no_overwrite() {
+    // same as --update=older
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_mv_arg_update_none_file1";
+    let new = "test_mv_arg_update_none_file2";
+    let old_content = "file1 content\n";
+    let new_content = "file2 content\n";
+
+    at.touch(old);
+    at.append(old, old_content);
+
+    sleep(Duration::from_secs(1));
+
+    at.touch(new);
+    at.append(new, new_content);
+
+    ucmd.arg(old)
+        .arg(new)
+        .arg("-u")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(new), new_content)
 }
 
 #[test]
