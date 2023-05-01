@@ -41,7 +41,9 @@ use uucore::fs::{
     canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
 use uucore::update_control::{self, UpdateMode};
-use uucore::{crash, format_usage, help_about, help_usage, prompt_yes, show_error, show_warning};
+use uucore::{
+    crash, format_usage, help_about, help_section, help_usage, prompt_yes, show_error, show_warning,
+};
 
 use crate::copydir::copy_directory;
 
@@ -232,6 +234,7 @@ pub struct Options {
 
 const ABOUT: &str = help_about!("cp.md");
 const USAGE: &str = help_usage!("cp.md");
+const AFTER_HELP: &str = help_section!("after help", "cp.md");
 
 static EXIT_ERR: i32 = 1;
 
@@ -310,9 +313,8 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
+        .after_help(AFTER_HELP)
         .infer_long_args(true)
-        .arg(update_control::arguments::update())
-        .arg(update_control::arguments::update_no_args())
         .arg(
             Arg::new(options::TARGET_DIRECTORY)
                 .short('t')
@@ -410,6 +412,8 @@ pub fn uu_app() -> Command {
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         .arg(backup_control::arguments::suffix())
+        .arg(update_control::arguments::update())
+        .arg(update_control::arguments::update_no_args())
         .arg(
             Arg::new(options::REFLINK)
                 .long(options::REFLINK)
