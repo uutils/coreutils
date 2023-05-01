@@ -96,6 +96,8 @@ for details about the options it supports.";
 const ABOUT: &str = "Check file types and compare values.";
 
 pub fn uu_app() -> Command {
+    // Disable printing of -h and -v as valid alternatives for --help and --version,
+    // since we don't recognize -h and -v as help/version flags.
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
@@ -112,15 +114,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     if binary_name.ends_with('[') {
         // If invoked as [ we should recognize --help and --version (but not -h or -v)
         if args.len() == 1 && (args[0] == "--help" || args[0] == "--version") {
-            // Let clap pretty-print help and version
-            Command::new(binary_name)
-                .version(crate_version!())
-                .about(ABOUT)
-                .override_usage(format_usage(USAGE))
-                .after_help(AFTER_HELP)
-                // Disable printing of -h and -v as valid alternatives for --help and --version,
-                // since we don't recognize -h and -v as help/version flags.
-                .get_matches_from(std::iter::once(program).chain(args.into_iter()));
+            uu_app().get_matches_from(std::iter::once(program).chain(args.into_iter()));
             return Ok(());
         }
         // If invoked via name '[', matching ']' must be in the last arg
