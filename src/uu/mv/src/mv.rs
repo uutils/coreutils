@@ -108,14 +108,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
+    let target_dir = matches
+        .get_one::<OsString>(OPT_TARGET_DIRECTORY)
+        .map(OsString::from);
+
+    if let Some(ref maybe_dir) = target_dir {
+        if !Path::new(&maybe_dir).is_dir() {
+            return Err(MvError::TargetNotADirectory(maybe_dir.quote().to_string()).into());
+        }
+    }
+
     let behavior = Behavior {
         overwrite: overwrite_mode,
         backup: backup_mode,
         suffix: backup_suffix,
         update: update_mode,
-        target_dir: matches
-            .get_one::<OsString>(OPT_TARGET_DIRECTORY)
-            .map(OsString::from),
+        target_dir,
         no_target_dir: matches.get_flag(OPT_NO_TARGET_DIRECTORY),
         verbose: matches.get_flag(OPT_VERBOSE),
         strip_slashes: matches.get_flag(OPT_STRIP_TRAILING_SLASHES),
@@ -426,7 +434,12 @@ fn rename(
         }
 
         match b.overwrite {
-            OverwriteMode::NoClobber => return Ok(()),
+            OverwriteMode::NoClobber => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("not replacing {}", to.quote()),
+                ));
+            }
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
                     return Err(io::Error::new(io::ErrorKind::Other, ""));
@@ -458,12 +471,12 @@ fn rename(
     if b.verbose {
         let message = match backup_path {
             Some(path) => format!(
-                "{} -> {} (backup: {})",
+                "renamed {} -> {} (backup: {})",
                 from.quote(),
                 to.quote(),
                 path.quote()
             ),
-            None => format!("{} -> {}", from.quote(), to.quote()),
+            None => format!("renamed {} -> {}", from.quote(), to.quote()),
         };
 
         match multi_progress {

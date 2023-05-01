@@ -58,6 +58,63 @@ fn test_mv_move_file_into_dir() {
 }
 
 #[test]
+fn test_mv_move_file_into_dir_with_target_arg() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_mv_move_file_into_dir_with_target_arg_dir";
+    let file = "test_mv_move_file_into_dir_with_target_arg_file";
+
+    at.mkdir(dir);
+    at.touch(file);
+
+    ucmd.arg("--target")
+        .arg(dir)
+        .arg(file)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(format!("{dir}/{file}")))
+}
+
+#[test]
+fn test_mv_move_file_into_file_with_target_arg() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file1 = "test_mv_move_file_into_file_with_target_arg_file1";
+    let file2 = "test_mv_move_file_into_file_with_target_arg_file2";
+
+    at.touch(file1);
+    at.touch(file2);
+
+    ucmd.arg("--target")
+        .arg(file1)
+        .arg(file2)
+        .fails()
+        .stderr_is(format!("mv: target directory '{file1}': Not a directory\n"));
+
+    assert!(at.file_exists(file1))
+}
+
+#[test]
+fn test_mv_move_multiple_files_into_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file1 = "test_mv_move_multiple_files_into_file1";
+    let file2 = "test_mv_move_multiple_files_into_file2";
+    let file3 = "test_mv_move_multiple_files_into_file3";
+
+    at.touch(file1);
+    at.touch(file2);
+    at.touch(file3);
+
+    ucmd.arg(file1)
+        .arg(file2)
+        .arg(file3)
+        .fails()
+        .stderr_is(format!("mv: target '{file3}': Not a directory\n"));
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+}
+
+#[test]
 fn test_mv_move_file_between_dirs() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir1 = "test_mv_move_file_between_dirs_dir1";
@@ -234,8 +291,9 @@ fn test_mv_no_clobber() {
     ucmd.arg("-n")
         .arg(file_a)
         .arg(file_b)
-        .succeeds()
-        .no_stderr();
+        .fails()
+        .code_is(1)
+        .stderr_only(format!("mv: not replacing '{file_b}'\n"));
 
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
@@ -909,7 +967,9 @@ fn test_mv_backup_dir() {
         .arg(dir_a)
         .arg(dir_b)
         .succeeds()
-        .stdout_only(format!("'{dir_a}' -> '{dir_b}' (backup: '{dir_b}~')\n"));
+        .stdout_only(format!(
+            "renamed '{dir_a}' -> '{dir_b}' (backup: '{dir_b}~')\n"
+        ));
 
     assert!(!at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
@@ -981,7 +1041,7 @@ fn test_mv_verbose() {
         .arg(file_a)
         .arg(file_b)
         .succeeds()
-        .stdout_only(format!("'{file_a}' -> '{file_b}'\n"));
+        .stdout_only(format!("renamed '{file_a}' -> '{file_b}'\n"));
 
     at.touch(file_a);
     scene
@@ -990,7 +1050,9 @@ fn test_mv_verbose() {
         .arg(file_a)
         .arg(file_b)
         .succeeds()
-        .stdout_only(format!("'{file_a}' -> '{file_b}' (backup: '{file_b}~')\n"));
+        .stdout_only(format!(
+            "renamed '{file_a}' -> '{file_b}' (backup: '{file_b}~')\n"
+        ));
 }
 
 #[test]

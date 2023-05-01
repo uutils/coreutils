@@ -12,7 +12,7 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("paste.md");
@@ -129,6 +129,16 @@ fn paste(
         files.push(file);
     }
 
+    if delimiters.ends_with('\\') && !delimiters.ends_with("\\\\") {
+        return Err(USimpleError::new(
+            1,
+            format!(
+                "delimiter list ends with an unescaped backslash: {}",
+                delimiters
+            ),
+        ));
+    }
+
     let delimiters: Vec<char> = unescape(delimiters).chars().collect();
     let mut delim_count = 0;
     let mut delim_length = 1;
@@ -222,10 +232,8 @@ fn paste(
 }
 
 // Unescape all special characters
-// TODO: this will need work to conform to GNU implementation
 fn unescape(s: &str) -> String {
     s.replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\\\\", "\\")
-        .replace('\\', "")
 }

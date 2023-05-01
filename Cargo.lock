@@ -2538,7 +2538,9 @@ version = "0.0.18"
 dependencies = [
  "chrono",
  "clap",
+ "humantime_to_duration",
  "libc",
+ "time",
  "uucore",
  "windows-sys 0.45.0",
 ]
