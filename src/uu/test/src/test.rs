@@ -24,8 +24,8 @@ use uucore::{format_usage, help_about, help_section};
 
 const ABOUT: &str = help_about!("test.md");
 
-// The help_usage method replaces util name (assumed to be the first word) with {}.
-// And, The format_usage method replaces {} with execution_phase ( e.g. test or [ ).
+// The help_usage method replaces util name (the first word) with {}.
+// And, The format_usage method replaces {} with execution_phrase ( e.g. test or [ ).
 // However, This test command has two util names.
 // So, we use test or [ instead of {} so that the usage string is correct.
 const USAGE: &str = "\
