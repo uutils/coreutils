@@ -245,6 +245,133 @@ fn test_cp_arg_update_interactive_error() {
 }
 
 #[test]
+fn test_cp_arg_update_none() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--update=none")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n")
+}
+
+#[test]
+fn test_cp_arg_update_all() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--update=all")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(
+        at.read(TEST_HOW_ARE_YOU_SOURCE),
+        at.read(TEST_HELLO_WORLD_SOURCE)
+    )
+}
+
+#[test]
+fn test_cp_arg_update_older_dest_not_older_than_src() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_oldler_file1";
+    let new = "test_cp_arg_update_oldler_file2";
+
+    at.touch(old);
+    sleep(Duration::from_secs(1));
+    at.touch(new);
+
+    at.append(old, "old content\n");
+    at.append(new, "new content\n");
+
+    ucmd.arg(old)
+        .arg(new)
+        .arg("--update=older")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(new), "new content\n")
+}
+
+#[test]
+fn test_cp_arg_update_older_dest_older_than_src() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_oldler_file1";
+    let new = "test_cp_arg_update_oldler_file2";
+
+    at.touch(old);
+    at.append(old, "old content\n");
+    sleep(Duration::from_secs(1));
+    at.touch(new);
+    at.append(new, "new content\n");
+
+    ucmd.arg(new)
+        .arg(old)
+        .arg("--update=older")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(old), "new content\n")
+}
+
+#[test]
+fn test_cp_arg_update_short_fail() {
+    // same as --update=older
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_oldler_file1";
+    let new = "test_cp_arg_update_oldler_file2";
+
+    at.touch(old);
+    sleep(Duration::from_secs(1));
+    at.touch(new);
+
+    at.append(old, "old content\n");
+    at.append(new, "new content\n");
+
+    ucmd.arg(old)
+        .arg(new)
+        .arg("-u")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(new), "new content\n")
+}
+
+#[test]
+fn test_cp_arg_update_short_succeed() {
+    // same as --update=older
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_oldler_file1";
+    let new = "test_cp_arg_update_oldler_file2";
+
+    at.touch(old);
+    at.touch(new);
+
+    at.append(old, "old content\n");
+    at.append(new, "new content\n");
+
+    ucmd.arg(new)
+        .arg(old)
+        .arg("-u")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(new), "new content\n")
+}
+
+#[test]
 fn test_cp_arg_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");

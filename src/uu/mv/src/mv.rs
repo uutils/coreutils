@@ -427,6 +427,16 @@ fn rename(
             return Ok(());
         }
 
+        if b.update == UpdateMode::ReplaceNone {
+            return Ok(());
+        }
+
+        if (b.update == UpdateMode::ReplaceIfOlder)
+            && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
+        {
+            return Ok(());
+        }
+
         match b.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
@@ -440,12 +450,6 @@ fn rename(
         backup_path = backup_control::get_backup_path(b.backup, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
             rename_with_fallback(to, backup_path, multi_progress)?;
-        }
-
-        if (b.update == UpdateMode::ReplaceIfOlder)
-            && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
-        {
-            return Ok(());
         }
     }
 
