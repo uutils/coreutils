@@ -279,8 +279,8 @@ fn test_cp_arg_update_all() {
 fn test_cp_arg_update_older_dest_not_older_than_src() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let old = "test_cp_arg_update_oldler_file1";
-    let new = "test_cp_arg_update_oldler_file2";
+    let old = "test_cp_arg_update_older_file1";
+    let new = "test_cp_arg_update_older_file2";
 
     at.touch(old);
     sleep(Duration::from_secs(1));
@@ -303,8 +303,8 @@ fn test_cp_arg_update_older_dest_not_older_than_src() {
 fn test_cp_arg_update_older_dest_older_than_src() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let old = "test_cp_arg_update_oldler_file1";
-    let new = "test_cp_arg_update_oldler_file2";
+    let old = "test_cp_arg_update_older_file1";
+    let new = "test_cp_arg_update_older_file2";
 
     at.touch(old);
     at.append(old, "old content\n");
@@ -327,8 +327,8 @@ fn test_cp_arg_update_short_fail() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let old = "test_cp_arg_update_oldler_file1";
-    let new = "test_cp_arg_update_oldler_file2";
+    let old = "test_cp_arg_update_older_file1";
+    let new = "test_cp_arg_update_older_file2";
 
     at.touch(old);
     sleep(Duration::from_secs(1));
@@ -352,8 +352,8 @@ fn test_cp_arg_update_short_succeed() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let old = "test_cp_arg_update_oldler_file1";
-    let new = "test_cp_arg_update_oldler_file2";
+    let old = "test_cp_arg_update_older_file1";
+    let new = "test_cp_arg_update_older_file2";
 
     at.touch(old);
     at.touch(new);
