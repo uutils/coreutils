@@ -724,15 +724,11 @@ fn test_mv_arg_update_none() {
 
     let file1 = "test_mv_arg_update_none_file1";
     let file2 = "test_mv_arg_update_none_file2";
-
-    at.touch(file1);
-    at.touch(file2);
-
     let file1_content = "file1 content\n";
     let file2_content = "file2 content\n";
 
-    at.append(file1, file1_content);
-    at.append(file2, file2_content);
+    at.write(file1, file1_content);
+    at.write(file2, file2_content);
 
     ucmd.arg(file1)
         .arg(file2)
@@ -750,15 +746,11 @@ fn test_mv_arg_update_all() {
 
     let file1 = "test_mv_arg_update_none_file1";
     let file2 = "test_mv_arg_update_none_file2";
-
-    at.touch(file1);
-    at.touch(file2);
-
     let file1_content = "file1 content\n";
     let file2_content = "file2 content\n";
 
-    at.append(file1, file1_content);
-    at.append(file2, file2_content);
+    at.write(file1, file1_content);
+    at.write(file2, file2_content);
 
     ucmd.arg(file1)
         .arg(file2)
@@ -779,13 +771,11 @@ fn test_mv_arg_update_older_dest_not_older() {
     let old_content = "file1 content\n";
     let new_content = "file2 content\n";
 
-    at.touch(old);
-    at.append(old, old_content);
+    at.write(old, old_content);
 
     sleep(Duration::from_secs(1));
 
-    at.touch(new);
-    at.append(new, new_content);
+    at.write(new, new_content);
 
     ucmd.arg(old)
         .arg(new)
@@ -806,13 +796,11 @@ fn test_mv_arg_update_older_dest_older() {
     let old_content = "file1 content\n";
     let new_content = "file2 content\n";
 
-    at.touch(old);
-    at.append(old, old_content);
+    at.write(old, old_content);
 
     sleep(Duration::from_secs(1));
 
-    at.touch(new);
-    at.append(new, new_content);
+    at.write(new, new_content);
 
     ucmd.arg(new)
         .arg(old)
@@ -834,13 +822,11 @@ fn test_mv_arg_update_short_overwrite() {
     let old_content = "file1 content\n";
     let new_content = "file2 content\n";
 
-    at.touch(old);
-    at.append(old, old_content);
+    at.write(old, old_content);
 
     sleep(Duration::from_secs(1));
 
-    at.touch(new);
-    at.append(new, new_content);
+    at.write(new, new_content);
 
     ucmd.arg(new)
         .arg(old)
@@ -862,13 +848,11 @@ fn test_mv_arg_update_short_no_overwrite() {
     let old_content = "file1 content\n";
     let new_content = "file2 content\n";
 
-    at.touch(old);
-    at.append(old, old_content);
+    at.write(old, old_content);
 
     sleep(Duration::from_secs(1));
 
-    at.touch(new);
-    at.append(new, new_content);
+    at.write(new, new_content);
 
     ucmd.arg(old)
         .arg(new)
