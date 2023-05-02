@@ -62,7 +62,7 @@ FILE1 -ot FILE2   `FILE1` is older than `FILE2`
 -w FILE     `FILE` exists and write permission is granted
 -x FILE     `FILE` exists and execute (or search) permission is granted
 
-Except for -h and -L, all FILE-related tests dereference symbolic links.
+Except for `-h` and `-L`, all FILE-related tests dereference (follow) symbolic links.
 Beware that parentheses need to be escaped (e.g., by backslashes) for shells.
 `INTEGER` may also be -l `STRING`, which evaluates to the length of `STRING`.
 
