@@ -37,6 +37,7 @@ It is one of:
 * INTEGER1 -lt INTEGER2   `INTEGER1` is less than `INTEGER2`
 * INTEGER1 -ne INTEGER2   `INTEGER1` is not equal to `INTEGER2`
 
+File operations:
 * FILE1 -ef FILE2   `FILE1` and `FILE2` have the same device and inode numbers
 * FILE1 -nt FILE2   `FILE1` is newer (modification date) than `FILE2`
 * FILE1 -ot FILE2   `FILE1` is older than `FILE2`
