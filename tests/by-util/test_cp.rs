@@ -323,7 +323,7 @@ fn test_cp_arg_update_older_dest_older_than_src() {
 }
 
 #[test]
-fn test_cp_arg_update_short_fail() {
+fn test_cp_arg_update_short_no_overwrite() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -349,7 +349,7 @@ fn test_cp_arg_update_short_fail() {
 }
 
 #[test]
-fn test_cp_arg_update_short_succeed() {
+fn test_cp_arg_update_short_overwrite() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -371,7 +371,7 @@ fn test_cp_arg_update_short_succeed() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(new), "new content\n")
+    assert_eq!(at.read(old), "new content\n")
 }
 
 #[test]
