@@ -24,11 +24,11 @@ It is one of:
 * EXPRESSION1 -a EXPRESSION2   both `EXPRESSION1` and `EXPRESSION2` are true
 * EXPRESSION1 -o EXPRESSION2   either `EXPRESSION1` or `EXPRESSION2` is true
 
--n STRING            the length of `STRING` is nonzero
-STRING               equivalent to -n `STRING`
--z STRING            the length of `STRING` is zero
-STRING1 = STRING2    the strings are equal
-STRING1 != STRING2   the strings are not equal
+* -n STRING            the length of `STRING` is nonzero
+* STRING               equivalent to -n `STRING`
+* -z STRING            the length of `STRING` is zero
+* STRING1 = STRING2    the strings are equal
+* STRING1 != STRING2   the strings are not equal
 
 INTEGER1 -eq INTEGER2   `INTEGER1` is equal to `INTEGER2`
 INTEGER1 -ge INTEGER2   `INTEGER1` is greater than or equal to `INTEGER2`
