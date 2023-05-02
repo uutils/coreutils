@@ -1,3 +1,10 @@
+// This file is part of the uutils coreutils package.
+//
+// (c) John Shin <shinhs0506@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
 //! Implement GNU-style update functionality.
 //!
 //! - pre-defined [`clap`-Arguments][1] for inclusion in utilities that
@@ -28,7 +35,7 @@
 //!         .arg(update_control::arguments::update())
 //!         .arg(update_control::arguments::update_no_args())
 //!         .get_matches_from(vec![
-//!             "command", "--update=older"
+//!             "commmand", "--update=older"
 //!         ]);
 //!
 //!     let update_mode = update_control::determine_update_mode(&matches);
