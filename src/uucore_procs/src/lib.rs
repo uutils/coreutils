@@ -48,6 +48,9 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
 /// - Printing tables in a nice format
 fn render_markdown(s: &str) -> String {
     s.replace('`', "")
+        .replace("* ", "") // replace unordered list markers
+        .replace("- ", "") // replace unordered list markers
+        .replace("+ ", "") // replace unordered list markers
 }
 
 /// Get the about text from the help file.
