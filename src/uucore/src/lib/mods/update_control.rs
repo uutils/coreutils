@@ -73,7 +73,7 @@ pub mod arguments {
         clap::Arg::new(OPT_UPDATE)
             .long("update")
             .help("move only when the SOURCE file is newer than the destination file or when the destination file is missing")
-            .value_parser(["", "none", "all", "older"])
+            .value_parser(["none", "all", "older"])
             .num_args(0..=1)
             .default_missing_value("older")
             .require_equals(true)
@@ -125,7 +125,7 @@ pub fn determine_update_mode(matches: &ArgMatches) -> UpdateMode {
     if matches.contains_id(arguments::OPT_UPDATE) {
         if let Some(mode) = matches.get_one::<String>(arguments::OPT_UPDATE) {
             match mode.as_str() {
-                "all" | "" => UpdateMode::ReplaceAll,
+                "all" => UpdateMode::ReplaceAll,
                 "none" => UpdateMode::ReplaceNone,
                 "older" => UpdateMode::ReplaceIfOlder,
                 _ => unreachable!("other args restricted by clap"),
