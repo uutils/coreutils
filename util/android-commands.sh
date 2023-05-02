@@ -116,9 +116,10 @@ run_termux_command() {
     sleep 5
 
     local timeout=${timeout:-3600}
-    local retries=${retries:-3}
-    local sleep_interval=${sleep_interval:-5}
+    local retries=${retries:-10}
+    local sleep_interval=${sleep_interval:-10}
     try_fix=3
+    echo "run_termux_command with timeout=$timeout / retries=$retries / sleep_interval=$sleep_interval"
     while ! adb shell "ls $probe" 2>/dev/null; do
         echo -n "Waiting for $probe: "
 
@@ -209,7 +210,7 @@ snapshot() {
     # We need to install nextest via cargo currently, since there is no pre-built binary for android x86
     command="'\
 export CARGO_TERM_COLOR=always; \
-cargo install cargo-nextest; \
+# build fails for now (https://github.com/nextest-rs/nextest/issues/862): cargo install cargo-nextest; \
 echo \$? > $probe'"
     run_termux_command "$command" "$probe"
     return_code=$?
@@ -224,7 +225,7 @@ pwd; \
 command -v rustc && rustc -Vv; \
 ls -la ~/.cargo/bin; \
 cargo --list; \
-cargo nextest --version; \
+#cargo nextest --version; \
 touch $probe'"
     run_termux_command "$command" "$probe"
 
@@ -328,9 +329,7 @@ tests() {
 export RUST_BACKTRACE=1; \
 export CARGO_TERM_COLOR=always; \
 export CARGO_INCREMENTAL=0; \
-cd ~/coreutils; \
-timeout --preserve-status --verbose -k 1m 60m \
-    cargo nextest run --profile ci --hide-progress-bar --features feat_os_unix_android; \
+cd ~/coreutils && cargo test --features feat_os_unix_android; \
 echo \$? >$probe'"
     run_termux_command "$command" "$probe" || return
 

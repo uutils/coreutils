@@ -1498,6 +1498,7 @@ fn copy_file(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
+            && std::env::var_os("POSIXLY_CORRECT").is_none()
         {
             return Err(Error::Error(format!(
                 "not writing through dangling symlink '{}'",
