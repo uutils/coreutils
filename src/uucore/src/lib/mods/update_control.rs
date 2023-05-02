@@ -122,16 +122,12 @@ pub mod arguments {
 ///     assert_eq!(update_mode, UpdateMode::ReplaceAll)
 /// }
 pub fn determine_update_mode(matches: &ArgMatches) -> UpdateMode {
-    if matches.contains_id(arguments::OPT_UPDATE) {
-        if let Some(mode) = matches.get_one::<String>(arguments::OPT_UPDATE) {
-            match mode.as_str() {
-                "all" => UpdateMode::ReplaceAll,
-                "none" => UpdateMode::ReplaceNone,
-                "older" => UpdateMode::ReplaceIfOlder,
-                _ => unreachable!("other args restricted by clap"),
-            }
-        } else {
-            unreachable!("other args restricted by clap")
+    if let Some(mode) = matches.get_one::<String>(arguments::OPT_UPDATE) {
+        match mode.as_str() {
+            "all" => UpdateMode::ReplaceAll,
+            "none" => UpdateMode::ReplaceNone,
+            "older" => UpdateMode::ReplaceIfOlder,
+            _ => unreachable!("other args restricted by clap"),
         }
     } else if matches.get_flag(arguments::OPT_UPDATE_NO_ARG) {
         // short form of this option is equivalent to using --update=older
