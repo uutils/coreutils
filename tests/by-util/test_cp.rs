@@ -1904,6 +1904,17 @@ fn test_copy_through_dangling_symlink() {
 }
 
 #[test]
+fn test_copy_through_dangling_symlink_posixly_correct() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.symlink_file("nonexistent", "target");
+    ucmd.arg("file")
+        .arg("target")
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds();
+}
+
+#[test]
 fn test_copy_through_dangling_symlink_no_dereference() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("no-such-file", "dangle");
