@@ -19,10 +19,10 @@ Otherwise, `EXPRESSION` is true or false and sets exit status.
 
 It is one of:
 
-( EXPRESSION )               `EXPRESSION` is true
-! EXPRESSION                 `EXPRESSION` is false
-EXPRESSION1 -a EXPRESSION2   both `EXPRESSION1` and `EXPRESSION2` are true
-EXPRESSION1 -o EXPRESSION2   either `EXPRESSION1` or `EXPRESSION2` is true
+* ( EXPRESSION )               `EXPRESSION` is true
+* ! EXPRESSION                 `EXPRESSION` is false
+* EXPRESSION1 -a EXPRESSION2   both `EXPRESSION1` and `EXPRESSION2` are true
+* EXPRESSION1 -o EXPRESSION2   either `EXPRESSION1` or `EXPRESSION2` is true
 
 -n STRING            the length of `STRING` is nonzero
 STRING               equivalent to -n `STRING`
