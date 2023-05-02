@@ -70,7 +70,7 @@ fn test_mv_move_file_into_dir_with_target_arg() {
         .succeeds()
         .no_stderr();
 
-    assert!(at.file_exists(format!("{dir}/{file}")))
+    assert!(at.file_exists(format!("{dir}/{file}")));
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn test_mv_move_file_into_file_with_target_arg() {
         .fails()
         .stderr_is(format!("mv: target directory '{file1}': Not a directory\n"));
 
-    assert!(at.file_exists(file1))
+    assert!(at.file_exists(file1));
 }
 
 #[test]
