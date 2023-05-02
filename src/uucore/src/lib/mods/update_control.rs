@@ -28,7 +28,7 @@
 //!         .arg(update_control::arguments::update())
 //!         .arg(update_control::arguments::update_no_args())
 //!         .get_matches_from(vec![
-//!             "commmand", "--update=older"
+//!             "command", "--update=older"
 //!         ]);
 //!
 //!     let update_mode = update_control::determine_update_mode(&matches);
