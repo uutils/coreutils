@@ -68,7 +68,7 @@ pub mod arguments {
     pub static OPT_UPDATE: &str = "update";
     pub static OPT_UPDATE_NO_ARG: &str = "u";
 
-    // `--update` argument, defaults to `older` if no values after provided
+    // `--update` argument, defaults to `older` if no values are provided
     pub fn update() -> clap::Arg {
         clap::Arg::new(OPT_UPDATE)
             .long("update")
