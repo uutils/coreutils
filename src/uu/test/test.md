@@ -31,6 +31,7 @@ String operations:
 * STRING1 = STRING2    the strings are equal
 * STRING1 != STRING2   the strings are not equal
 
+Integer comparisons:
 * INTEGER1 -eq INTEGER2   `INTEGER1` is equal to `INTEGER2`
 * INTEGER1 -ge INTEGER2   `INTEGER1` is greater than or equal to `INTEGER2`
 * INTEGER1 -gt INTEGER2   `INTEGER1` is greater than `INTEGER2`
