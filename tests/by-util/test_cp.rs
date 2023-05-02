@@ -279,15 +279,13 @@ fn test_cp_arg_update_all() {
 fn test_cp_arg_update_older_dest_not_older_than_src() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let old = "test_cp_arg_update_older_file1";
-    let new = "test_cp_arg_update_older_file2";
+    let old = "test_cp_arg_update_dest_not_older_file1";
+    let new = "test_cp_arg_update_dest_not_older_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
 
-    at.touch(old);
-    sleep(Duration::from_secs(1));
-    at.touch(new);
-
-    at.append(old, "old content\n");
-    at.append(new, "new content\n");
+    at.write(old, old_content);
+    at.write(new, new_content);
 
     ucmd.arg(old)
         .arg(new)
@@ -303,14 +301,16 @@ fn test_cp_arg_update_older_dest_not_older_than_src() {
 fn test_cp_arg_update_older_dest_older_than_src() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let old = "test_cp_arg_update_older_file1";
-    let new = "test_cp_arg_update_older_file2";
+    let old = "test_cp_arg_update_dest_older_file1";
+    let new = "test_cp_arg_update_dest_older_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
 
-    at.touch(old);
-    at.append(old, "old content\n");
+    at.write(old, old_content);
+
     sleep(Duration::from_secs(1));
-    at.touch(new);
-    at.append(new, "new content\n");
+
+    at.write(new, new_content);
 
     ucmd.arg(new)
         .arg(old)
@@ -327,15 +327,16 @@ fn test_cp_arg_update_short_fail() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let old = "test_cp_arg_update_older_file1";
-    let new = "test_cp_arg_update_older_file2";
+    let old = "test_cp_arg_update_short_no_overwrite_file1";
+    let new = "test_cp_arg_update_short_no_overwrite_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
 
-    at.touch(old);
+    at.write(old, old_content);
+
     sleep(Duration::from_secs(1));
-    at.touch(new);
 
-    at.append(old, "old content\n");
-    at.append(new, "new content\n");
+    at.write(new, new_content);
 
     ucmd.arg(old)
         .arg(new)
@@ -352,14 +353,16 @@ fn test_cp_arg_update_short_succeed() {
     // same as --update=older
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let old = "test_cp_arg_update_older_file1";
-    let new = "test_cp_arg_update_older_file2";
+    let old = "test_cp_arg_update_short_overwrite_file1";
+    let new = "test_cp_arg_update_short_overwrite_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
 
-    at.touch(old);
-    at.touch(new);
+    at.write(old, old_content);
 
-    at.append(old, "old content\n");
-    at.append(new, "new content\n");
+    sleep(Duration::from_secs(1));
+
+    at.write(new, new_content);
 
     ucmd.arg(new)
         .arg(old)
