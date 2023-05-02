@@ -38,7 +38,8 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
-    canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
+    canonicalize, is_symlink_loop, paths_refer_to_same_file, FileInformation, MissingHandling,
+    ResolveMode,
 };
 use uucore::{crash, format_usage, help_about, help_usage, prompt_yes, show_error, show_warning};
 
@@ -1388,11 +1389,10 @@ fn handle_existing_dest(
             backup_dest(dest, &backup_path)?;
         }
     }
-
     match options.overwrite {
         // FIXME: print that the file was removed if --verbose is enabled
         OverwriteMode::Clobber(ClobberMode::Force) => {
-            if fs::metadata(dest)?.permissions().readonly() {
+            if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
                 fs::remove_file(dest)?;
             }
         }
@@ -1498,6 +1498,7 @@ fn copy_file(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
+            && !is_symlink_loop(dest)
             && std::env::var_os("POSIXLY_CORRECT").is_none()
         {
             return Err(Error::Error(format!(
