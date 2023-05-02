@@ -24,6 +24,7 @@ It is one of:
 * EXPRESSION1 -a EXPRESSION2   both `EXPRESSION1` and `EXPRESSION2` are true
 * EXPRESSION1 -o EXPRESSION2   either `EXPRESSION1` or `EXPRESSION2` is true
 
+String operations:
 * -n STRING            the length of `STRING` is nonzero
 * STRING               equivalent to -n `STRING`
 * -z STRING            the length of `STRING` is zero
