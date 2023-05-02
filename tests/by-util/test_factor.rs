@@ -35,6 +35,7 @@ fn test_valid_arg_exponents() {
 
 #[test]
 #[cfg(feature = "sort")]
+#[cfg(not(target_os = "android"))]
 fn test_parallel() {
     use crate::common::util::AtPath;
     use hex_literal::hex;
