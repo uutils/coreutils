@@ -25,7 +25,8 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_usage, prompt_yes, show};
+use uucore::update_control::{self, UpdateMode};
+use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
 use fs_extra::dir::{
     get_size as dir_get_size, move_dir, move_dir_with_progress, CopyOptions as DirCopyOptions,
@@ -38,7 +39,7 @@ pub struct Behavior {
     overwrite: OverwriteMode,
     backup: BackupMode,
     suffix: String,
-    update: bool,
+    update: UpdateMode,
     target_dir: Option<OsString>,
     no_target_dir: bool,
     verbose: bool,
@@ -55,6 +56,7 @@ pub enum OverwriteMode {
 
 const ABOUT: &str = help_about!("mv.md");
 const USAGE: &str = help_usage!("mv.md");
+const AFTER_HELP: &str = help_section!("after help", "mv.md");
 
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";
@@ -62,7 +64,6 @@ static OPT_NO_CLOBBER: &str = "no-clobber";
 static OPT_STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
 static OPT_TARGET_DIRECTORY: &str = "target-directory";
 static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
-static OPT_UPDATE: &str = "update";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
@@ -96,6 +97,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let overwrite_mode = determine_overwrite_mode(&matches);
     let backup_mode = backup_control::determine_backup_mode(&matches)?;
+    let update_mode = update_control::determine_update_mode(&matches);
 
     if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
         return Err(UUsageError::new(
@@ -120,7 +122,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         overwrite: overwrite_mode,
         backup: backup_mode,
         suffix: backup_suffix,
-        update: matches.get_flag(OPT_UPDATE),
+        update: update_mode,
         target_dir,
         no_target_dir: matches.get_flag(OPT_NO_TARGET_DIRECTORY),
         verbose: matches.get_flag(OPT_VERBOSE),
@@ -136,9 +138,8 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
+        .after_help(AFTER_HELP)
         .infer_long_args(true)
-        .arg(backup_control::arguments::backup())
-        .arg(backup_control::arguments::backup_no_args())
         .arg(
             Arg::new(OPT_FORCE)
                 .short('f')
@@ -166,7 +167,11 @@ pub fn uu_app() -> Command {
                 .help("remove any trailing slashes from each SOURCE argument")
                 .action(ArgAction::SetTrue),
         )
+        .arg(backup_control::arguments::backup())
+        .arg(backup_control::arguments::backup_no_args())
         .arg(backup_control::arguments::suffix())
+        .arg(update_control::arguments::update())
+        .arg(update_control::arguments::update_no_args())
         .arg(
             Arg::new(OPT_TARGET_DIRECTORY)
                 .short('t')
@@ -182,16 +187,6 @@ pub fn uu_app() -> Command {
                 .short('T')
                 .long(OPT_NO_TARGET_DIRECTORY)
                 .help("treat DEST as a normal file")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_UPDATE)
-                .short('u')
-                .long(OPT_UPDATE)
-                .help(
-                    "move only when the SOURCE file is newer than the destination file \
-                       or when the destination file is missing",
-                )
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -420,9 +415,21 @@ fn rename(
     let mut backup_path = None;
 
     if to.exists() {
-        if b.update && b.overwrite == OverwriteMode::Interactive {
+        if (b.update == UpdateMode::ReplaceIfOlder || b.update == UpdateMode::ReplaceNone)
+            && b.overwrite == OverwriteMode::Interactive
+        {
             // `mv -i --update old new` when `new` exists doesn't move anything
             // and exit with 0
+            return Ok(());
+        }
+
+        if b.update == UpdateMode::ReplaceNone {
+            return Ok(());
+        }
+
+        if (b.update == UpdateMode::ReplaceIfOlder)
+            && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
+        {
             return Ok(());
         }
 
@@ -444,10 +451,6 @@ fn rename(
         backup_path = backup_control::get_backup_path(b.backup, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
             rename_with_fallback(to, backup_path, multi_progress)?;
-        }
-
-        if b.update && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()? {
-            return Ok(());
         }
     }
 
