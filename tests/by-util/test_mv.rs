@@ -788,13 +788,13 @@ fn test_mv_arg_update_older_dest_not_older() {
 }
 
 #[test]
-fn test_cp_arg_update_none_then_all() {
+fn test_mv_arg_update_none_then_all() {
     // take last if multiple update args are supplied,
     // update=all wins in this case
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let old = "test_cp_arg_update_none_then_all_file1";
-    let new = "test_cp_arg_update_none_then_all_file2";
+    let old = "test_mv_arg_update_none_then_all_file1";
+    let new = "test_mv_arg_update_none_then_all_file2";
     let old_content = "old content\n";
     let new_content = "new content\n";
 
@@ -816,13 +816,13 @@ fn test_cp_arg_update_none_then_all() {
 }
 
 #[test]
-fn test_cp_arg_update_all_then_none() {
+fn test_mv_arg_update_all_then_none() {
     // take last if multiple update args are supplied,
     // update=none wins in this case
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let old = "test_cp_arg_update_all_then_none_file1";
-    let new = "test_cp_arg_update_all_then_none_file2";
+    let old = "test_mv_arg_update_all_then_none_file1";
+    let new = "test_mv_arg_update_all_then_none_file2";
     let old_content = "old content\n";
     let new_content = "new content\n";
 
