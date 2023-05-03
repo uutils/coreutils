@@ -261,6 +261,27 @@ fn test_mv_interactive_with_dir_as_target() {
 }
 
 #[test]
+fn test_mv_interactive_dir_to_file_not_affirmative() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let dir = "test_mv_interactive_dir_to_file_not_affirmative_dir";
+    let file = "test_mv_interactive_dir_to_file_not_affirmative_file";
+
+    at.mkdir(dir);
+    at.touch(file);
+
+    ucmd.arg(dir)
+        .arg(file)
+        .arg("-i")
+        .pipe_in("n")
+        .fails()
+        .no_stderr()
+        .no_stdout();
+
+    assert!(at.dir_exists(dir));
+}
+
+#[test]
 fn test_mv_arg_update_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
