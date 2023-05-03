@@ -33,9 +33,12 @@ use std::os::unix::fs::FileTypeExt;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
-use std::sync::mpsc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering::Relaxed},
+    mpsc, Arc,
+};
 use std::thread;
-use std::time;
+use std::time::{Duration, Instant};
 
 use clap::{crate_version, Arg, Command};
 use gcd::Gcd;
@@ -65,14 +68,6 @@ struct Settings {
     status: Option<StatusLevel>,
 }
 
-use std::thread::sleep;
-use std::time::Duration;
-
-use std::sync::{
-    atomic::{AtomicBool, Ordering::Relaxed},
-    Arc,
-};
-
 #[derive(Debug, Clone)]
 pub struct Alarm {
     interval: Duration,
@@ -84,9 +79,9 @@ impl Alarm {
         let trigger = Arc::new(AtomicBool::default());
 
         let weak_trigger = Arc::downgrade(&trigger);
-        std::thread::spawn(move || {
+        thread::spawn(move || {
             while let Some(trigger) = weak_trigger.upgrade() {
-                sleep(interval);
+                thread::sleep(interval);
                 trigger.store(true, Relaxed);
             }
         });
@@ -646,7 +641,7 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
     // of its report includes the throughput in bytes per second,
     // which requires knowing how long the process has been
     // running.
-    let start = time::Instant::now();
+    let start = Instant::now();
 
     // A good buffer size for reading.
     //
@@ -718,7 +713,7 @@ fn finalize<T>(
     output: &mut Output,
     rstat: ReadStat,
     wstat: WriteStat,
-    start: time::Instant,
+    start: Instant,
     prog_tx: &mpsc::Sender<ProgUpdate>,
     output_thread: thread::JoinHandle<T>,
 ) -> std::io::Result<()> {
