@@ -5,20 +5,20 @@
 
 // spell-checker:ignore (ToDO) kqueue
 
-pub static DASH: &str = "-";
-pub static DEV_STDIN: &str = "/dev/stdin";
-pub static STDIN_HEADER: &str = "standard input";
-pub static NO_FILES_REMAINING: &str = "no files remaining";
-pub static NO_SUCH_FILE: &str = "No such file or directory";
-pub static BECOME_INACCESSIBLE: &str = "has become inaccessible";
-pub static BAD_FD: &str = "Bad file descriptor";
+pub const DASH: &str = "-";
+pub const DEV_STDIN: &str = "/dev/stdin";
+pub const STDIN_HEADER: &str = "standard input";
+pub const NO_FILES_REMAINING: &str = "no files remaining";
+pub const NO_SUCH_FILE: &str = "No such file or directory";
+pub const BECOME_INACCESSIBLE: &str = "has become inaccessible";
+pub const BAD_FD: &str = "Bad file descriptor";
 #[cfg(target_os = "linux")]
-pub static BACKEND: &str = "inotify";
+pub const BACKEND: &str = "inotify";
 #[cfg(all(unix, not(target_os = "linux")))]
-pub static BACKEND: &str = "kqueue";
+pub const BACKEND: &str = "kqueue";
 #[cfg(target_os = "windows")]
-pub static BACKEND: &str = "ReadDirectoryChanges";
-pub static FD0: &str = "/dev/fd/0";
-pub static IS_A_DIRECTORY: &str = "Is a directory";
-pub static DEV_TTY: &str = "/dev/tty";
-pub static DEV_PTMX: &str = "/dev/ptmx";
+pub const BACKEND: &str = "ReadDirectoryChanges";
+pub const FD0: &str = "/dev/fd/0";
+pub const IS_A_DIRECTORY: &str = "Is a directory";
+pub const DEV_TTY: &str = "/dev/tty";
+pub const DEV_PTMX: &str = "/dev/ptmx";
