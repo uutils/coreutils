@@ -68,6 +68,15 @@ struct Settings {
     status: Option<StatusLevel>,
 }
 
+/// A timer which triggers on a given interval
+///
+/// After being constructed with [`Alarm::with_interval`], [`Alarm::is_triggered`]
+/// will return true once per the given [`Duration`].
+///
+/// Can be cloned, but the trigger status is shared across all instances so only
+/// the first caller each interval will yield true.
+///
+/// When all instances are dropped the background thread will exit on the next interval.
 #[derive(Debug, Clone)]
 pub struct Alarm {
     interval: Duration,
@@ -671,6 +680,11 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
     // Create a common buffer with a capacity of the block size.
     // This is the max size needed.
     let mut buf = vec![BUF_INIT_BYTE; bsize];
+
+    // Spawn a timer thread to provide a scheduled signal indicating when we
+    // should send an update of our progress to the reporting thread.
+    //
+    // This avoids the need to query the OS monotonic clock for every block.
     let alarm = Alarm::with_interval(Duration::from_secs(1));
 
     // The main read/write loop.
