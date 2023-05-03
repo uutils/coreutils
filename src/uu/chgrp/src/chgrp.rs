@@ -18,7 +18,7 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-static ABOUT: &str = help_about!("chgrp.md");
+const ABOUT: &str = help_about!("chgrp.md");
 const USAGE: &str = help_usage!("chgrp.md");
 
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)> {
