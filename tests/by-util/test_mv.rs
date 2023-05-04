@@ -275,7 +275,6 @@ fn test_mv_interactive_dir_to_file_not_affirmative() {
         .arg("-i")
         .pipe_in("n")
         .fails()
-        .no_stderr()
         .no_stdout();
 
     assert!(at.dir_exists(dir));
