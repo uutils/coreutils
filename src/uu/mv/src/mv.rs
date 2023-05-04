@@ -292,7 +292,7 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
                     OverwriteMode::NoClobber => return Ok(()),
                     OverwriteMode::Interactive => {
                         if !prompt_yes!("overwrite {}? ", target.quote()) {
-                            return Ok(());
+                            return Err(io::Error::new(io::ErrorKind::Other, "").into());
                         }
                     }
                     OverwriteMode::Force => {}
