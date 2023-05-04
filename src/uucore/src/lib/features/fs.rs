@@ -584,10 +584,45 @@ pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2)
     components.iter().collect()
 }
 
+/// Checks if there is a symlink loop in the given path.
+///
+/// A symlink loop is a chain of symlinks where the last symlink points back to one of the previous symlinks in the chain.
+///
+/// # Arguments
+///
+/// * `path` - A reference to a `Path` representing the starting path to check for symlink loops.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if a symlink loop is detected, `false` otherwise.
+pub fn is_symlink_loop(path: &Path) -> bool {
+    let mut visited_symlinks = HashSet::new();
+    let mut current_path = path.to_path_buf();
+
+    while let (Ok(metadata), Ok(link)) = (
+        current_path.symlink_metadata(),
+        fs::read_link(&current_path),
+    ) {
+        if !metadata.file_type().is_symlink() {
+            return false;
+        }
+        if !visited_symlinks.insert(current_path.clone()) {
+            return true;
+        }
+        current_path = link;
+    }
+
+    false
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix;
+    #[cfg(unix)]
+    use tempfile::tempdir;
 
     struct NormalizePathTestCase<'a> {
         path: &'a str,
@@ -694,5 +729,42 @@ mod tests {
             "c---r-xr-T",
             display_permissions_unix(S_IFCHR | S_ISVTX as mode_t | 0o054, true)
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_symlink_loop_no_loop() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("file.txt");
+        let symlink_path = temp_dir.path().join("symlink");
+
+        fs::write(&file_path, "test content").unwrap();
+        unix::fs::symlink(&file_path, &symlink_path).unwrap();
+
+        assert!(!is_symlink_loop(&symlink_path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_symlink_loop_direct_loop() {
+        let temp_dir = tempdir().unwrap();
+        let symlink_path = temp_dir.path().join("loop");
+
+        unix::fs::symlink(&symlink_path, &symlink_path).unwrap();
+
+        assert!(is_symlink_loop(&symlink_path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_is_symlink_loop_indirect_loop() {
+        let temp_dir = tempdir().unwrap();
+        let symlink1_path = temp_dir.path().join("symlink1");
+        let symlink2_path = temp_dir.path().join("symlink2");
+
+        unix::fs::symlink(&symlink1_path, &symlink2_path).unwrap();
+        unix::fs::symlink(&symlink2_path, &symlink1_path).unwrap();
+
+        assert!(is_symlink_loop(&symlink1_path));
     }
 }

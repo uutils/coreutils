@@ -2495,6 +2495,20 @@ fn test_remove_destination_symbolic_link_loop() {
     assert!(at.file_exists("loop"));
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_cp_symbolic_link_loop() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("loop", "loop");
+    at.plus("loop");
+    at.touch("f");
+    ucmd.args(&["-f", "f", "loop"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists("loop"));
+}
+
 /// Test that copying a directory to itself is disallowed.
 #[test]
 fn test_copy_directory_to_itself_disallowed() {

@@ -3407,6 +3407,7 @@ dependencies = [
  "sha2",
  "sha3",
  "sm3",
+ "tempfile",
  "thiserror",
  "time",
  "uucore_procs",
