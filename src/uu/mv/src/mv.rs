@@ -25,6 +25,7 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
+use uucore::fs::are_hardlinks_to_same_file;
 use uucore::update_control::{self, UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
@@ -268,7 +269,7 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
             }
 
             // GNU semantics are: if the source and target are the same, no move occurs and we print an error
-            if source.eq(target) {
+            if source.eq(target) || are_hardlinks_to_same_file(source, target) {
                 // Done to match GNU semantics for the dot file
                 if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
                     return Err(MvError::SameFile(
