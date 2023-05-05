@@ -299,7 +299,10 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .after_help(format!(
+            "{AFTER_HELP}\n\n{}",
+            backup_control::BACKUP_CONTROL_LONG_HELP
+        ))
         .infer_long_args(true)
         .arg(
             Arg::new(options::TARGET_DIRECTORY)
@@ -561,13 +564,11 @@ pub fn uu_app() -> Command {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(backup_control::BACKUP_CONTROL_LONG_HELP)
-        .try_get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args);
 
     // The error is parsed here because we do not want version or help being printed to stderr.
     if let Err(e) = matches {
-        let mut app = uu_app().after_help(backup_control::BACKUP_CONTROL_LONG_HELP);
+        let mut app = uu_app();
 
         match e.kind() {
             clap::error::ErrorKind::DisplayHelp => {
