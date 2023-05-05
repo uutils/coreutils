@@ -191,7 +191,12 @@ impl Options {
                     (tmpdir, template.to_string())
                 }
                 Some(template) => {
-                    let tmpdir = matches.get_one::<String>(OPT_TMPDIR).map(String::from);
+                    let tmpdir = if matches.get_flag(OPT_T) {
+                        // mktemp -t foo.xxx should export in TMPDIR
+                        Some(env::temp_dir().display().to_string())
+                    } else {
+                        matches.get_one::<String>(OPT_TMPDIR).map(String::from)
+                    };
                     (tmpdir, template.to_string())
                 }
             }
