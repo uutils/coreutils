@@ -145,6 +145,7 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(OPT_FORCE)
                 .help("do not prompt before overwriting")
+                .overrides_with_all([OPT_INTERACTIVE, OPT_NO_CLOBBER])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -152,6 +153,7 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(OPT_INTERACTIVE)
                 .help("prompt before override")
+                .overrides_with_all([OPT_FORCE, OPT_NO_CLOBBER])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -159,6 +161,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(OPT_NO_CLOBBER)
                 .help("do not overwrite an existing file")
+                .overrides_with_all([OPT_FORCE, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(

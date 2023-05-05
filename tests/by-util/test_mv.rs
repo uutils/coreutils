@@ -281,6 +281,41 @@ fn test_mv_interactive_dir_to_file_not_affirmative() {
 }
 
 #[test]
+fn test_mv_interactive_no_clobber_force_last_arg_wins() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "a.txt";
+    let file_b = "b.txt";
+
+    at.touch(file_a);
+    at.touch(file_b);
+
+    scene
+        .ucmd()
+        .args(&[file_a, file_b, "-f", "-i", "-n"])
+        .fails()
+        .stderr_is(format!("mv: not replacing '{file_b}'\n"));
+
+    scene
+        .ucmd()
+        .args(&[file_a, file_b, "-n", "-f", "-i"])
+        .fails()
+        .stderr_is(format!("mv: overwrite '{file_b}'? "));
+
+    at.write(file_a, "aa");
+
+    scene
+        .ucmd()
+        .args(&[file_a, file_b, "-i", "-n", "-f"])
+        .succeeds()
+        .no_output();
+
+    assert!(!at.file_exists(file_a));
+    assert_eq!("aa", at.read(file_b));
+}
+
+#[test]
 fn test_mv_arg_update_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
 
