@@ -232,93 +232,88 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     }
 }
 
-fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
-    let paths: Vec<PathBuf> = {
-        let paths = files.iter().map(Path::new);
+fn parse_paths(files: &[OsString], b: &Behavior) -> Vec<PathBuf> {
+    let paths = files.iter().map(Path::new);
 
-        // Strip slashes from path, if strip opt present
-        if b.strip_slashes {
-            paths
-                .map(|p| p.components().as_path().to_owned())
-                .collect::<Vec<PathBuf>>()
+    if b.strip_slashes {
+        paths
+            .map(|p| p.components().as_path().to_owned())
+            .collect::<Vec<PathBuf>>()
+    } else {
+        paths.map(|p| p.to_owned()).collect::<Vec<PathBuf>>()
+    }
+}
+
+fn handle_two_paths(source: &Path, target: &Path, b: &Behavior) -> UResult<()> {
+    if source.symlink_metadata().is_err() {
+        return Err(MvError::NoSuchFile(source.quote().to_string()).into());
+    }
+
+    if source.eq(target) || is_hardlink(source, target) {
+        if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
+            return Err(
+                MvError::SameFile(source.quote().to_string(), target.quote().to_string()).into(),
+            );
         } else {
-            paths.map(|p| p.to_owned()).collect::<Vec<PathBuf>>()
+            return Err(MvError::SelfSubdirectory(source.display().to_string()).into());
         }
-    };
+    }
+
+    if target.is_dir() {
+        if b.no_target_dir {
+            if source.is_dir() {
+                rename(source, target, b, None).map_err_context(|| {
+                    format!("cannot move {} to {}", source.quote(), target.quote())
+                })
+            } else {
+                Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
+            }
+        } else {
+            move_files_into_dir(&[source.to_path_buf()], target, b)
+        }
+    } else if target.exists() && source.is_dir() {
+        match b.overwrite {
+            OverwriteMode::NoClobber => return Ok(()),
+            OverwriteMode::Interactive => {
+                if !prompt_yes!("overwrite {}? ", target.quote()) {
+                    return Err(io::Error::new(io::ErrorKind::Other, "").into());
+                }
+            }
+            OverwriteMode::Force => {}
+        };
+        Err(MvError::NonDirectoryToDirectory(
+            source.quote().to_string(),
+            target.quote().to_string(),
+        )
+        .into())
+    } else {
+        rename(source, target, b, None).map_err(|e| USimpleError::new(1, format!("{e}")))
+    }
+}
+
+fn handle_multiple_paths(paths: &[PathBuf], b: &Behavior) -> UResult<()> {
+    if b.no_target_dir {
+        return Err(UUsageError::new(
+            1,
+            format!("mv: extra operand {}", paths[2].quote()),
+        ));
+    }
+    let target_dir = paths.last().unwrap();
+    let sources = &paths[..paths.len() - 1];
+
+    move_files_into_dir(sources, target_dir, b)
+}
+
+fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
+    let paths = parse_paths(files, b);
 
     if let Some(ref name) = b.target_dir {
         return move_files_into_dir(&paths, &PathBuf::from(name), b);
     }
+
     match paths.len() {
-        /* case 0/1 are not possible thanks to clap */
-        2 => {
-            let source = &paths[0];
-            let target = &paths[1];
-            // Here we use the `symlink_metadata()` method instead of `exists()`,
-            // since it handles dangling symlinks correctly. The method gives an
-            // `Ok()` results unless the source does not exist, or the user
-            // lacks permission to access metadata.
-            if source.symlink_metadata().is_err() {
-                return Err(MvError::NoSuchFile(source.quote().to_string()).into());
-            }
-
-            // GNU semantics are: if the source and target are the same, no move occurs and we print an error
-            if source.eq(target) || is_hardlink(source, target) {
-                // Done to match GNU semantics for the dot file
-                if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
-                    return Err(MvError::SameFile(
-                        source.quote().to_string(),
-                        target.quote().to_string(),
-                    )
-                    .into());
-                } else {
-                    return Err(MvError::SelfSubdirectory(source.display().to_string()).into());
-                }
-            }
-
-            if target.is_dir() {
-                if b.no_target_dir {
-                    if source.is_dir() {
-                        rename(source, target, b, None).map_err_context(|| {
-                            format!("cannot move {} to {}", source.quote(), target.quote())
-                        })
-                    } else {
-                        Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
-                    }
-                } else {
-                    move_files_into_dir(&[source.clone()], target, b)
-                }
-            } else if target.exists() && source.is_dir() {
-                match b.overwrite {
-                    OverwriteMode::NoClobber => return Ok(()),
-                    OverwriteMode::Interactive => {
-                        if !prompt_yes!("overwrite {}? ", target.quote()) {
-                            return Err(io::Error::new(io::ErrorKind::Other, "").into());
-                        }
-                    }
-                    OverwriteMode::Force => {}
-                };
-                Err(MvError::NonDirectoryToDirectory(
-                    source.quote().to_string(),
-                    target.quote().to_string(),
-                )
-                .into())
-            } else {
-                rename(source, target, b, None).map_err(|e| USimpleError::new(1, format!("{e}")))
-            }
-        }
-        _ => {
-            if b.no_target_dir {
-                return Err(UUsageError::new(
-                    1,
-                    format!("mv: extra operand {}", files[2].quote()),
-                ));
-            }
-            let target_dir = paths.last().unwrap();
-            let sources = &paths[..paths.len() - 1];
-
-            move_files_into_dir(sources, target_dir, b)
-        }
+        2 => handle_two_paths(&paths[0], &paths[1], b),
+        _ => handle_multiple_paths(&paths, b),
     }
 }
 
@@ -605,5 +600,83 @@ fn is_empty_dir(path: &Path) -> bool {
     match fs::read_dir(path) {
         Ok(contents) => contents.peekable().peek().is_none(),
         Err(_e) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::fs::{self, File};
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    fn create_test_behavior() -> Behavior {
+        Behavior {
+            // ... (initialize the Behavior struct with appropriate values for testing)
+        }
+    }
+
+    #[test]
+    fn test_parse_paths() {
+        let b = create_test_behavior();
+
+        let input = vec![
+            OsString::from("file1"),
+            OsString::from("file2"),
+            OsString::from("dir1"),
+        ];
+
+        let expected = vec![
+            PathBuf::from("file1"),
+            PathBuf::from("file2"),
+            PathBuf::from("dir1"),
+        ];
+
+        let result = parse_paths(&input, &b);
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_handle_two_paths() {
+        let b = create_test_behavior();
+        let temp_dir = tempdir().unwrap();
+
+        let source = temp_dir.path().join("file1");
+        let target = temp_dir.path().join("file2");
+
+        File::create(&source).unwrap();
+
+        let result = handle_two_paths(&source, &target, &b);
+        assert!(result.is_ok());
+
+        // Check if the source file has been moved to the target path
+        assert!(!source.exists());
+        assert!(target.exists());
+    }
+
+    #[test]
+    fn test_handle_multiple_paths() {
+        let b = create_test_behavior();
+        let temp_dir = tempdir().unwrap();
+
+        let source1 = temp_dir.path().join("file1");
+        let source2 = temp_dir.path().join("file2");
+        let target_dir = temp_dir.path().join("dir");
+
+        fs::create_dir(&target_dir).unwrap();
+        File::create(&source1).unwrap();
+        File::create(&source2).unwrap();
+
+        let paths = vec![source1.clone(), source2.clone(), target_dir.clone()];
+        let result = handle_multiple_paths(&paths, &b);
+        assert!(result.is_ok());
+
+        // Check if the source files have been moved to the target directory
+        assert!(!source1.exists());
+        assert!(!source2.exists());
+        assert!(target_dir.join("file1").exists());
+        assert!(target_dir.join("file2").exists());
     }
 }
