@@ -40,6 +40,7 @@ impl Intf {
     // is_zero: true if number is zero, false otherwise
     // len_digits: length of digits used to create the int
     //   important, for example, if we run into a non-valid character
+    #[allow(clippy::cognitive_complexity)]
     fn analyze(str_in: &str, signed_out: bool, initial_prefix: &InitialPrefix) -> IntAnalysis {
         // the maximum number of digits we could conceivably
         // have before the decimal point without exceeding the

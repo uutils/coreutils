@@ -284,6 +284,7 @@ enum ParseState {
 use std::collections::HashMap;
 use uucore::{format_usage, parse_glob};
 
+#[allow(clippy::cognitive_complexity)]
 fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,

@@ -450,6 +450,7 @@ fn word_count_from_reader<T: WordCountable>(
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn word_count_from_reader_specialized<
     T: WordCountable,
     const SHOW_CHARS: bool,

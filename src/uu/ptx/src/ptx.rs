@@ -107,6 +107,7 @@ struct WordFilter {
 }
 
 impl WordFilter {
+    #[allow(clippy::cognitive_complexity)]
     fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<Self> {
         let (o, oset): (bool, HashSet<String>) = if matches.contains_id(options::ONLY_FILE) {
             let words =
