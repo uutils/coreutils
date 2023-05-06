@@ -210,7 +210,7 @@ snapshot() {
     # We need to install nextest via cargo currently, since there is no pre-built binary for android x86
     command="'\
 export CARGO_TERM_COLOR=always; \
-# build fails for now (https://github.com/nextest-rs/nextest/issues/862): cargo install cargo-nextest; \
+cargo install cargo-nextest; \
 echo \$? > $probe'"
     run_termux_command "$command" "$probe"
     return_code=$?
@@ -225,7 +225,7 @@ pwd; \
 command -v rustc && rustc -Vv; \
 ls -la ~/.cargo/bin; \
 cargo --list; \
-#cargo nextest --version; \
+cargo nextest --version; \
 touch $probe'"
     run_termux_command "$command" "$probe"
 
@@ -329,7 +329,9 @@ tests() {
 export RUST_BACKTRACE=1; \
 export CARGO_TERM_COLOR=always; \
 export CARGO_INCREMENTAL=0; \
-cd ~/coreutils && cargo test --features feat_os_unix_android; \
+cd ~/coreutils; \
+timeout --preserve-status --verbose -k 1m 60m \
+cargo nextest run --profile ci --hide-progress-bar --features feat_os_unix_android; \
 echo \$? >$probe'"
     run_termux_command "$command" "$probe" || return
 
