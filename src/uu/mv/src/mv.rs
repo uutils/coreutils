@@ -250,12 +250,16 @@ fn handle_two_paths(source: &Path, target: &Path, b: &Behavior) -> UResult<()> {
     }
 
     if source.eq(target) || is_hardlink(source, target) {
-        if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
-            return Err(
-                MvError::SameFile(source.quote().to_string(), target.quote().to_string()).into(),
-            );
-        } else {
-            return Err(MvError::SelfSubdirectory(source.display().to_string()).into());
+        if b.backup != BackupMode::SimpleBackup {
+            if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
+                return Err(MvError::SameFile(
+                    source.quote().to_string(),
+                    target.quote().to_string(),
+                )
+                .into());
+            } else {
+                return Err(MvError::SelfSubdirectory(source.display().to_string()).into());
+            }
         }
     }
 

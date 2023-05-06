@@ -383,6 +383,23 @@ fn test_mv_same_hardlink() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_mv_same_hardlink_backup_simple() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_same_file_a";
+    let file_b = "test_mv_same_file_b";
+    at.touch(file_a);
+
+    at.hard_link(file_a, file_b);
+
+    at.touch(file_a);
+    ucmd.arg(file_a)
+        .arg(file_b)
+        .arg("--backup=simple")
+        .succeeds();
+}
+
+#[test]
 fn test_mv_same_file_not_dot_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_mv_errors_dir";
