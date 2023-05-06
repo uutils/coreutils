@@ -9,6 +9,8 @@ Move `SOURCE` to `DEST`, or multiple `SOURCE`(s) to `DIRECTORY`.
 
 ## After Help
 
+When specifying more than one of -i, -f, -n, only the final one will take effect.
+
 Do not move a non-directory that has an existing destination with the same or newer modification timestamp;
 instead, silently skip the file without failing. If the move is across file system boundaries, the comparison is
 to the source timestamp truncated to the resolutions of the destination file system and of the system calls used

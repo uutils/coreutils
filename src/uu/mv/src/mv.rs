@@ -70,7 +70,7 @@ static ARG_FILES: &str = "files";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut app = uu_app().after_help(backup_control::BACKUP_CONTROL_LONG_HELP);
+    let mut app = uu_app();
     let matches = app.try_get_matches_from_mut(args)?;
 
     if !matches.contains_id(OPT_TARGET_DIRECTORY)
@@ -138,13 +138,17 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
+        .after_help(format!(
+            "{AFTER_HELP}\n\n{}",
+            backup_control::BACKUP_CONTROL_LONG_HELP
+        ))
         .infer_long_args(true)
         .arg(
             Arg::new(OPT_FORCE)
                 .short('f')
                 .long(OPT_FORCE)
                 .help("do not prompt before overwriting")
+                .overrides_with_all([OPT_INTERACTIVE, OPT_NO_CLOBBER])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -152,6 +156,7 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(OPT_INTERACTIVE)
                 .help("prompt before override")
+                .overrides_with_all([OPT_FORCE, OPT_NO_CLOBBER])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -159,6 +164,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(OPT_NO_CLOBBER)
                 .help("do not overwrite an existing file")
+                .overrides_with_all([OPT_FORCE, OPT_INTERACTIVE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
