@@ -255,7 +255,9 @@ fn handle_two_paths(source: &Path, target: &Path, b: &Behavior) -> UResult<()> {
         return Err(MvError::NoSuchFile(source.quote().to_string()).into());
     }
 
-    if source.eq(target) || are_hardlinks_to_same_file(source, target) {
+    if (source.eq(target) || are_hardlinks_to_same_file(source, target))
+        && b.backup != BackupMode::SimpleBackup
+    {
         if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
             return Err(
                 MvError::SameFile(source.quote().to_string(), target.quote().to_string()).into(),
