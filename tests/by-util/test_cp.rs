@@ -255,7 +255,7 @@ fn test_cp_arg_update_none() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n")
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
 #[test]
@@ -272,7 +272,7 @@ fn test_cp_arg_update_all() {
     assert_eq!(
         at.read(TEST_HOW_ARE_YOU_SOURCE),
         at.read(TEST_HELLO_WORLD_SOURCE)
-    )
+    );
 }
 
 #[test]
@@ -294,7 +294,7 @@ fn test_cp_arg_update_older_dest_not_older_than_src() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(new), "new content\n")
+    assert_eq!(at.read(new), "new content\n");
 }
 
 #[test]
@@ -319,7 +319,7 @@ fn test_cp_arg_update_older_dest_older_than_src() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(old), "new content\n")
+    assert_eq!(at.read(old), "new content\n");
 }
 
 #[test]
@@ -345,7 +345,7 @@ fn test_cp_arg_update_short_no_overwrite() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(new), "new content\n")
+    assert_eq!(at.read(new), "new content\n");
 }
 
 #[test]
@@ -371,7 +371,7 @@ fn test_cp_arg_update_short_overwrite() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(old), "new content\n")
+    assert_eq!(at.read(old), "new content\n");
 }
 
 #[test]
@@ -399,7 +399,7 @@ fn test_cp_arg_update_none_then_all() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(new), "old content\n")
+    assert_eq!(at.read(new), "old content\n");
 }
 
 #[test]
@@ -427,7 +427,7 @@ fn test_cp_arg_update_all_then_none() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(new), "new content\n")
+    assert_eq!(at.read(new), "new content\n");
 }
 
 #[test]

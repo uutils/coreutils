@@ -867,7 +867,7 @@ fn test_mv_arg_update_none_then_all() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(new), "old content\n")
+    assert_eq!(at.read(new), "old content\n");
 }
 
 #[test]
@@ -895,7 +895,7 @@ fn test_mv_arg_update_all_then_none() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(new), "new content\n")
+    assert_eq!(at.read(new), "new content\n");
 }
 
 #[test]
@@ -920,7 +920,7 @@ fn test_mv_arg_update_older_dest_older() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(old), new_content)
+    assert_eq!(at.read(old), new_content);
 }
 
 #[test]
@@ -946,7 +946,7 @@ fn test_mv_arg_update_short_overwrite() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(old), new_content)
+    assert_eq!(at.read(old), new_content);
 }
 
 #[test]
@@ -972,7 +972,7 @@ fn test_mv_arg_update_short_no_overwrite() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(new), new_content)
+    assert_eq!(at.read(new), new_content);
 }
 
 #[test]
