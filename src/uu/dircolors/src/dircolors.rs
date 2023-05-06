@@ -136,7 +136,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     } else if files[0].eq("-") {
         let fin = BufReader::new(std::io::stdin());
-        result = parse(fin.lines().filter_map(Result::ok), &out_format, files[0]);
+        result = parse(fin.lines().map_while(Result::ok), &out_format, files[0]);
     } else {
         let path = Path::new(files[0]);
         if path.is_dir() {
@@ -284,6 +284,7 @@ enum ParseState {
 use std::collections::HashMap;
 use uucore::{format_usage, parse_glob};
 
+#[allow(clippy::cognitive_complexity)]
 fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,

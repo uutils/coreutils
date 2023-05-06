@@ -327,6 +327,7 @@ fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());

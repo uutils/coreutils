@@ -274,6 +274,7 @@ fn remove(files: &[String], options: &Options) -> bool {
     had_err
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
 
@@ -422,6 +423,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
     false
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
     // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {

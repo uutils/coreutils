@@ -69,6 +69,7 @@ pub struct FmtOptions {
 /// # Returns
 ///
 /// A tuple containing a vector of file names and a `FmtOptions` struct.
+#[allow(clippy::cognitive_complexity)]
 fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)> {
     let matches = uu_app().try_get_matches_from(args)?;
 
