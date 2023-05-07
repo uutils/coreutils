@@ -25,7 +25,7 @@ use std::cmp;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
@@ -171,6 +171,8 @@ impl Source {
     /// the [`std::fs::File`] parameter. You can use this instead of
     /// `Source::Stdin` to allow reading from stdin without consuming
     /// the entire contents of stdin when this process terminates.
+    ///
+    /// See also [`Dest::stdout_as_file`].
     #[cfg(unix)]
     fn stdin_as_file() -> Self {
         let fd = io::stdin().as_raw_fd();
@@ -472,7 +474,12 @@ enum Density {
 /// Data destinations.
 enum Dest {
     /// Output to stdout.
-    Stdout(Stdout),
+    #[cfg(not(unix))]
+    Stdout(std::io::Stdout),
+
+    /// Output to stdout, opened from its file descriptor.
+    #[cfg(unix)]
+    StdoutFile(File),
 
     /// Output to a file.
     ///
@@ -490,9 +497,31 @@ enum Dest {
 }
 
 impl Dest {
+    /// Create a destination to stdout using its raw file descriptor.
+    ///
+    /// This returns an instance of the `Dest::StdoutFile` variant,
+    /// using the raw file descriptor of [`std::io::Stdout`] to create
+    /// the [`std::fs::File`] parameter. You can use this instead of
+    /// `Dest::Stdout` to allow writing to stdout without dropping the
+    /// entire contents of stdout when this process terminates.
+    ///
+    /// See also [`Source::stdin_as_file`].
+    #[cfg(unix)]
+    fn stdout_as_file() -> Self {
+        let fd = io::stdout().as_raw_fd();
+        let f = unsafe { File::from_raw_fd(fd) };
+        Self::StdoutFile(f)
+    }
+
     fn fsync(&mut self) -> io::Result<()> {
         match self {
+            #[cfg(not(unix))]
             Self::Stdout(stdout) => stdout.flush(),
+            #[cfg(unix)]
+            Self::StdoutFile(f) => {
+                f.flush()?;
+                f.sync_all()
+            }
             Self::File(f, _) => {
                 f.flush()?;
                 f.sync_all()
@@ -509,7 +538,13 @@ impl Dest {
 
     fn fdatasync(&mut self) -> io::Result<()> {
         match self {
+            #[cfg(not(unix))]
             Self::Stdout(stdout) => stdout.flush(),
+            #[cfg(unix)]
+            Self::StdoutFile(f) => {
+                f.flush()?;
+                f.sync_data()
+            }
             Self::File(f, _) => {
                 f.flush()?;
                 f.sync_data()
@@ -526,7 +561,10 @@ impl Dest {
 
     fn seek(&mut self, n: u64) -> io::Result<u64> {
         match self {
+            #[cfg(not(unix))]
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
+            #[cfg(unix)]
+            Self::StdoutFile(f) => io::copy(&mut io::repeat(0).take(n), f),
             Self::File(f, _) => f.seek(io::SeekFrom::Start(n)),
             #[cfg(unix)]
             Self::Fifo(f) => {
@@ -594,7 +632,10 @@ impl Write for Dest {
                 Ok(buf.len())
             }
             Self::File(f, _) => f.write(buf),
+            #[cfg(not(unix))]
             Self::Stdout(stdout) => stdout.write(buf),
+            #[cfg(unix)]
+            Self::StdoutFile(f) => f.write(buf),
             #[cfg(unix)]
             Self::Fifo(f) => f.write(buf),
             #[cfg(unix)]
@@ -604,7 +645,10 @@ impl Write for Dest {
 
     fn flush(&mut self) -> io::Result<()> {
         match self {
+            #[cfg(not(unix))]
             Self::Stdout(stdout) => stdout.flush(),
+            #[cfg(unix)]
+            Self::StdoutFile(f) => f.flush(),
             Self::File(f, _) => f.flush(),
             #[cfg(unix)]
             Self::Fifo(f) => f.flush(),
@@ -631,7 +675,10 @@ struct Output<'a> {
 impl<'a> Output<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
+        #[cfg(not(unix))]
         let mut dst = Dest::Stdout(io::stdout());
+        #[cfg(unix)]
+        let mut dst = Dest::stdout_as_file();
         dst.seek(settings.seek)
             .map_err_context(|| "write error".to_string())?;
         Ok(Self { dst, settings })

@@ -1566,3 +1566,17 @@ fn test_nocache_file() {
         .succeeds()
         .stderr_only("2048+0 records in\n2048+0 records out\n");
 }
+
+/// Test for writing part of stdout from each of two child processes.
+#[cfg(all(not(windows), feature = "printf"))]
+#[test]
+fn test_multiple_processes_writing_stdout() {
+    let printf = format!("{TESTS_BINARY} printf 'abcde\n'");
+    let dd_skip = format!("{TESTS_BINARY} dd bs=1 skip=1 count=1");
+    let dd = format!("{TESTS_BINARY} dd bs=1 skip=1");
+    UCommand::new()
+        .arg(format!("{printf} | ( {dd_skip}; {dd} ) 2> /dev/null"))
+        .succeeds()
+        .stdout_only("bde\n");
+}
+
