@@ -1541,11 +1541,15 @@ fn test_multiple_processes_reading_stdin() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_nocache_stdin_error() {
+    #[cfg(not(target_env = "musl"))]
+    let detail = "Illegal seek";
+    #[cfg(target_env = "musl")]
+    let detail = "Invalid seek";
     new_ucmd!()
         .args(&["iflag=nocache", "count=0", "status=noxfer"])
         .fails()
         .code_is(1)
-        .stderr_only("dd: failed to discard cache for: 'standard input': Illegal seek\n0+0 records in\n0+0 records out\n");
+        .stderr_only(format!("dd: failed to discard cache for: 'standard input': {detail}\n0+0 records in\n0+0 records out\n"));
 }
 
 /// Test for discarding system file cache.

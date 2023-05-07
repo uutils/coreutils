@@ -793,6 +793,7 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
         // TODO Better error handling for overflowing `len`.
         if i.settings.iflags.nocache {
             let offset = 0;
+            #[allow(clippy::useless_conversion)]
             let len = i.src.len()?.try_into().unwrap();
             i.discard_cache(offset, len);
         }
@@ -801,6 +802,7 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
         // TODO Better error handling for overflowing `len`.
         if i.settings.oflags.nocache {
             let offset = 0;
+            #[allow(clippy::useless_conversion)]
             let len = o.dst.len()?.try_into().unwrap();
             o.discard_cache(offset, len);
         }
