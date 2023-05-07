@@ -3393,3 +3393,42 @@ fn test_tabsize_formatting() {
         .succeeds()
         .stdout_is("aaaaaaaa bbbb\ncccc     dddddddd");
 }
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "android",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "illumos",
+    target_os = "solaris"
+))]
+#[test]
+fn test_device_number() {
+    use std::fs::{metadata, read_dir};
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    use uucore::libc::{dev_t, major, minor};
+
+    let dev_dir = read_dir("/dev").unwrap();
+    // let's use the first device for test
+    let blk_dev = dev_dir
+        .map(|res_entry| res_entry.unwrap())
+        .find(|entry| entry.file_type().unwrap().is_block_device())
+        .expect("Expect a block device");
+    let blk_dev_path = blk_dev.path();
+    let blk_dev_meta = metadata(blk_dev_path.as_path()).unwrap();
+    let blk_dev_number = blk_dev_meta.rdev() as dev_t;
+    let (major, minor) = unsafe { (major(blk_dev_number), minor(blk_dev_number)) };
+    let major_minor_str = format!("{}, {}", major, minor);
+
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg(blk_dev_path.to_str().expect("should be UTF-8 encoded"))
+        .succeeds()
+        .stdout_contains(major_minor_str);
+}
