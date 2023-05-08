@@ -617,14 +617,47 @@ pub fn is_symlink_loop(path: &Path) -> bool {
     false
 }
 
+#[cfg(not(unix))]
+// Hard link comparison is not supported on non-Unix platforms
+pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
+    false
+}
+
+/// Checks if two paths are hard links to the same file.
+///
+/// # Arguments
+///
+/// * `source` - A reference to a `Path` representing the source path.
+/// * `target` - A reference to a `Path` representing the target path.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
+#[cfg(unix)]
+pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
+    let source_metadata = match fs::metadata(source) {
+        Ok(metadata) => metadata,
+        Err(_) => return false,
+    };
+
+    let target_metadata = match fs::metadata(target) {
+        Ok(metadata) => metadata,
+        Err(_) => return false,
+    };
+
+    source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     #[cfg(unix)]
+    use std::io::Write;
+    #[cfg(unix)]
     use std::os::unix;
     #[cfg(unix)]
-    use tempfile::tempdir;
+    use tempfile::{tempdir, NamedTempFile};
 
     struct NormalizePathTestCase<'a> {
         path: &'a str,
@@ -768,5 +801,45 @@ mod tests {
         unix::fs::symlink(&symlink2_path, &symlink1_path).unwrap();
 
         assert!(is_symlink_loop(&symlink1_path));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_are_hardlinks_to_same_file_same_file() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "Test content").unwrap();
+
+        let path1 = temp_file.path();
+        let path2 = temp_file.path();
+
+        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), true);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_are_hardlinks_to_same_file_different_files() {
+        let mut temp_file1 = NamedTempFile::new().unwrap();
+        writeln!(temp_file1, "Test content 1").unwrap();
+
+        let mut temp_file2 = NamedTempFile::new().unwrap();
+        writeln!(temp_file2, "Test content 2").unwrap();
+
+        let path1 = temp_file1.path();
+        let path2 = temp_file2.path();
+
+        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), false);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_are_hardlinks_to_same_file_hard_link() {
+        let mut temp_file = NamedTempFile::new().unwrap();
+        writeln!(temp_file, "Test content").unwrap();
+        let path1 = temp_file.path();
+
+        let path2 = temp_file.path().with_extension("hardlink");
+        fs::hard_link(&path1, &path2).unwrap();
+
+        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), true);
     }
 }
