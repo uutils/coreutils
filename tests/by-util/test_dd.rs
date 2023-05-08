@@ -1,7 +1,7 @@
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg
 
 use crate::common::util::TestScenario;
-#[cfg(not(windows))]
+#[cfg(all(not(windows), feature = "printf"))]
 use crate::common::util::{UCommand, TESTS_BINARY};
 
 use regex::Regex;
