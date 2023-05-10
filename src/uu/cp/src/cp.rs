@@ -1704,6 +1704,11 @@ fn copy_file(
     }
 
     copy_attributes(source, dest, &options.attributes)?;
+    if options.parents && should_preserve_attribute(options) {
+        for (x, y) in aligned_ancestors(source, dest) {
+            copy_attributes(x, y, &options.attributes)?;
+        }
+    }
 
     if let Some(progress_bar) = progress_bar {
         progress_bar.inc(fs::metadata(source)?.len());
@@ -1726,12 +1731,6 @@ fn copy_helper(
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
         fs::create_dir_all(parent)?;
-
-        if should_preserve_attribute(options) {
-            for (x, y) in aligned_ancestors(source, dest) {
-                copy_attributes(x, y, &options.attributes)?;
-            }
-        }
     }
 
     if source.as_os_str() == "/dev/null" {

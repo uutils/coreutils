@@ -1086,13 +1086,16 @@ fn test_cp_parents_with_permissions_copy_file() {
     at.mkdir_all("p1/p2");
     at.touch(file);
 
-    let pdir1_mode = 0o0777;
-    let pdir2_mode = 0o0711;
+    let p1_mode = 0o0777;
+    let p2_mode = 0o0711;
     let file_mode = 0o0702;
 
-    at.set_mode("p1", pdir1_mode);
-    at.set_mode("p1/p2", pdir2_mode);
-    at.set_mode(file, file_mode);
+    #[cfg(unix)]
+    {
+        at.set_mode("p1", p1_mode);
+        at.set_mode("p1/p2", p2_mode);
+        at.set_mode(file, file_mode);
+    }
 
     ucmd.arg("-p")
         .arg("--parents")
@@ -1100,13 +1103,16 @@ fn test_cp_parents_with_permissions_copy_file() {
         .arg(dir)
         .succeeds();
 
-    let pdir1_metadata = at.metadata("p1");
-    let pdir2_metadata = at.metadata("p1/p2");
-    let file_metadata = at.metadata(file);
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        let p1_metadata = at.metadata("p1");
+        let p2_metadata = at.metadata("p1/p2");
+        let file_metadata = at.metadata(file);
 
-    assert_metadata_eq!(pdir1_metadata, at.metadata("dir/p1"));
-    assert_metadata_eq!(pdir2_metadata, at.metadata("dir/p1/p2"));
-    assert_metadata_eq!(file_metadata, at.metadata("dir/p1/p2/file"));
+        assert_metadata_eq!(p1_metadata, at.metadata("dir/p1"));
+        assert_metadata_eq!(p2_metadata, at.metadata("dir/p1/p2"));
+        assert_metadata_eq!(file_metadata, at.metadata("dir/p1/p2/file"));
+    }
 }
 
 #[test]
