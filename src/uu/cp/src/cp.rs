@@ -1759,9 +1759,19 @@ fn copy_helper(
     Ok(())
 }
 
+#[cfg(not(windows))]
 fn should_preserve_attribute(options: &Options) -> bool {
     matches!(options.attributes.mode, Preserve::Yes { .. })
+        || matches!(options.attributes.timestamps, Preserve::Yes { .. })
+        || matches!(options.attributes.links, Preserve::Yes { .. })
+        || matches!(options.attributes.context, Preserve::Yes { .. })
+        || matches!(options.attributes.xattr, Preserve::Yes { .. })
         || matches!(options.attributes.ownership, Preserve::Yes { .. })
+}
+
+#[cfg(windows)]
+fn should_preserve_attribute(options: &Options) -> bool {
+    matches!(options.attributes.mode, Preserve::Yes { .. })
         || matches!(options.attributes.timestamps, Preserve::Yes { .. })
         || matches!(options.attributes.links, Preserve::Yes { .. })
         || matches!(options.attributes.context, Preserve::Yes { .. })
