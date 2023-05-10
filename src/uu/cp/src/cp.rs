@@ -1726,6 +1726,12 @@ fn copy_helper(
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
         fs::create_dir_all(parent)?;
+
+        if should_preserve_attribute(options) {
+            for (x, y) in aligned_ancestors(source, dest) {
+                copy_attributes(x, y, &options.attributes)?;
+            }
+        }
     }
 
     if source.as_os_str() == "/dev/null" {
@@ -1751,6 +1757,15 @@ fn copy_helper(
     }
 
     Ok(())
+}
+
+fn should_preserve_attribute(options: &Options) -> bool {
+    matches!(options.attributes.mode, Preserve::Yes { .. })
+        || matches!(options.attributes.ownership, Preserve::Yes { .. })
+        || matches!(options.attributes.timestamps, Preserve::Yes { .. })
+        || matches!(options.attributes.links, Preserve::Yes { .. })
+        || matches!(options.attributes.context, Preserve::Yes { .. })
+        || matches!(options.attributes.xattr, Preserve::Yes { .. })
 }
 
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
