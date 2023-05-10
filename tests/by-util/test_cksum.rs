@@ -33,7 +33,7 @@ fn test_stdin() {
 }
 
 #[test]
-fn test_empty() {
+fn test_empty_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("a");
@@ -62,25 +62,26 @@ fn test_arg_overrides_stdin() {
 }
 
 #[test]
-fn test_invalid_file() {
-    let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+fn test_nonexisting_file() {
+    let file_name = "asdf";
 
-    let folder_name = "asdf";
-
-    // First check when file doesn't exist
-    ts.ucmd()
-        .arg(folder_name)
+    new_ucmd!()
+        .arg(file_name)
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: asdf: No such file or directory");
+        .stderr_contains(format!("cksum: {file_name}: No such file or directory"));
+}
 
-    // Then check when the file is of an invalid type
+#[test]
+fn test_folder() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let folder_name = "a_folder";
     at.mkdir(folder_name);
-    ts.ucmd()
-        .arg(folder_name)
+
+    ucmd.arg(folder_name)
         .succeeds()
-        .stdout_only("4294967295 0 asdf\n");
+        .stdout_only(format!("4294967295 0 {folder_name}\n"));
 }
 
 // Make sure crc is correct for files larger than 32 bytes
