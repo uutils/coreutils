@@ -289,6 +289,7 @@ fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
 
 // this takes `my_stat` to avoid having to stat files multiple times.
 // XXX: this should use the impl Trait return type when it is stabilized
+#[allow(clippy::cognitive_complexity)]
 fn du(
     mut my_stat: Stat,
     options: &Options,
@@ -521,6 +522,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
 }
 
 #[uucore::main]
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 

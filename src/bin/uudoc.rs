@@ -216,6 +216,10 @@ impl<'a, 'b> MDWriter<'a, 'b> {
             } else if let Some(f) = get_zip_content(zip, &format!("pages/linux/{}.md", self.name)) {
                 f
             } else {
+                println!(
+                    "Warning: Could not find tldr examples for page '{}'",
+                    self.name
+                );
                 return Ok(());
             };
 

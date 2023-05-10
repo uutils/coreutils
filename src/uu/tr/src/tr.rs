@@ -13,17 +13,15 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use nom::AsBytes;
 use operation::{translate_input, Sequence, SqueezeOperation, TranslateOperation};
 use std::io::{stdin, stdout, BufReader, BufWriter};
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_section, help_usage, show};
 
 use crate::operation::DeleteOperation;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 
-const ABOUT: &str = "Translate or delete characters";
-const USAGE: &str = "{} [OPTION]... SET1 [SET2]";
-const LONG_USAGE: &str = "\
-    Translate, squeeze, and/or delete characters from standard input, \
-    writing to standard output.";
+const ABOUT: &str = help_about!("tr.md");
+const AFTER_HELP: &str = help_section!("after help", "tr.md");
+const USAGE: &str = help_usage!("tr.md");
 
 mod options {
     pub const COMPLEMENT: &str = "complement";
@@ -37,7 +35,7 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
+    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
     let delete_flag = matches.get_flag(options::DELETE);
     let complement_flag = matches.get_flag(options::COMPLEMENT);

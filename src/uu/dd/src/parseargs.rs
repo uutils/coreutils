@@ -293,8 +293,9 @@ impl Parser {
         }
     }
 
+    #[allow(clippy::cognitive_complexity)]
     fn parse_input_flags(&mut self, val: &str) -> Result<(), ParseError> {
-        let mut i = &mut self.iflag;
+        let i = &mut self.iflag;
         for f in val.split(',') {
             match f {
                 // Common flags
@@ -324,8 +325,9 @@ impl Parser {
         Ok(())
     }
 
+    #[allow(clippy::cognitive_complexity)]
     fn parse_output_flags(&mut self, val: &str) -> Result<(), ParseError> {
-        let mut o = &mut self.oflag;
+        let o = &mut self.oflag;
         for f in val.split(',') {
             match f {
                 // Common flags
@@ -355,7 +357,7 @@ impl Parser {
     }
 
     fn parse_conv_flags(&mut self, val: &str) -> Result<(), ParseError> {
-        let mut c = &mut self.conv;
+        let c = &mut self.conv;
         for f in val.split(',') {
             match f {
                 // Conversion

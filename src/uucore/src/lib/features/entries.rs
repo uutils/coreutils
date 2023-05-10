@@ -321,7 +321,8 @@ macro_rules! f {
                 } else {
                     // SAFETY: We're holding PW_LOCK.
                     unsafe {
-                        let data = $fnam(CString::new(k).unwrap().as_ptr());
+                        let cstring = CString::new(k).unwrap();
+                        let data = $fnam(cstring.as_ptr());
                         if !data.is_null() {
                             Ok($st::from_raw(ptr::read(data as *const _)))
                         } else {

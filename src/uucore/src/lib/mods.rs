@@ -6,6 +6,7 @@ pub mod error;
 pub mod os;
 pub mod panic;
 pub mod ranges;
+pub mod update_control;
 pub mod version_cmp;
 // dir and vdir also need access to the quoting_style module
 pub mod quoting_style;

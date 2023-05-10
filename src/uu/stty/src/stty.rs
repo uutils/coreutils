@@ -18,7 +18,7 @@ use std::ops::ControlFlow;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 #[cfg(not(any(
     target_os = "freebsd",
@@ -31,11 +31,8 @@ use uucore::format_usage;
 use flags::BAUD_RATES;
 use flags::{CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
-const USAGE: &str = "\
-    {} [-F DEVICE | --file=DEVICE] [SETTING]...
-    {} [-F DEVICE | --file=DEVICE] [-a|--all]
-    {} [-F DEVICE | --file=DEVICE] [-g|--save]";
-const SUMMARY: &str = "Print or change terminal characteristics.";
+const USAGE: &str = help_usage!("stty.md");
+const SUMMARY: &str = help_about!("stty.md");
 
 #[derive(Clone, Copy, Debug)]
 pub struct Flag<T> {

@@ -38,9 +38,13 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
-    canonicalize, paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
+    canonicalize, is_symlink_loop, paths_refer_to_same_file, FileInformation, MissingHandling,
+    ResolveMode,
 };
-use uucore::{crash, format_usage, help_about, help_usage, prompt_yes, show_error, show_warning};
+use uucore::update_control::{self, UpdateMode};
+use uucore::{
+    crash, format_usage, help_about, help_section, help_usage, prompt_yes, show_error, show_warning,
+};
 
 use crate::copydir::copy_directory;
 
@@ -224,13 +228,14 @@ pub struct Options {
     recursive: bool,
     backup_suffix: String,
     target_dir: Option<PathBuf>,
-    update: bool,
+    update: UpdateMode,
     verbose: bool,
     progress_bar: bool,
 }
 
 const ABOUT: &str = help_about!("cp.md");
 const USAGE: &str = help_usage!("cp.md");
+const AFTER_HELP: &str = help_section!("after help", "cp.md");
 
 static EXIT_ERR: i32 = 1;
 
@@ -264,7 +269,6 @@ mod options {
     pub const STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
     pub const SYMBOLIC_LINK: &str = "symbolic-link";
     pub const TARGET_DIRECTORY: &str = "target-directory";
-    pub const UPDATE: &str = "update";
     pub const VERBOSE: &str = "verbose";
 }
 
@@ -295,6 +299,10 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
+        .after_help(format!(
+            "{AFTER_HELP}\n\n{}",
+            backup_control::BACKUP_CONTROL_LONG_HELP
+        ))
         .infer_long_args(true)
         .arg(
             Arg::new(options::TARGET_DIRECTORY)
@@ -393,16 +401,8 @@ pub fn uu_app() -> Command {
         .arg(backup_control::arguments::backup())
         .arg(backup_control::arguments::backup_no_args())
         .arg(backup_control::arguments::suffix())
-        .arg(
-            Arg::new(options::UPDATE)
-                .short('u')
-                .long(options::UPDATE)
-                .help(
-                    "copy only when the SOURCE file is newer than the destination file \
-                    or when the destination file is missing",
-                )
-                .action(ArgAction::SetTrue),
-        )
+        .arg(update_control::arguments::update())
+        .arg(update_control::arguments::update_no_args())
         .arg(
             Arg::new(options::REFLINK)
                 .long(options::REFLINK)
@@ -564,13 +564,11 @@ pub fn uu_app() -> Command {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(backup_control::BACKUP_CONTROL_LONG_HELP)
-        .try_get_matches_from(args);
+    let matches = uu_app().try_get_matches_from(args);
 
     // The error is parsed here because we do not want version or help being printed to stderr.
     if let Err(e) = matches {
-        let mut app = uu_app().after_help(backup_control::BACKUP_CONTROL_LONG_HELP);
+        let mut app = uu_app();
 
         match e.kind() {
             clap::error::ErrorKind::DisplayHelp => {
@@ -641,7 +639,11 @@ impl CopyMode {
             Self::Link
         } else if matches.get_flag(options::SYMBOLIC_LINK) {
             Self::SymLink
-        } else if matches.get_flag(options::UPDATE) {
+        } else if matches
+            .get_one::<String>(update_control::arguments::OPT_UPDATE)
+            .is_some()
+            || matches.get_flag(update_control::arguments::OPT_UPDATE_NO_ARG)
+        {
             Self::Update
         } else if matches.get_flag(options::ATTRIBUTES_ONLY) {
             Self::AttrOnly
@@ -725,6 +727,7 @@ impl Attributes {
 }
 
 impl Options {
+    #[allow(clippy::cognitive_complexity)]
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
@@ -749,6 +752,7 @@ impl Options {
             Err(e) => return Err(Error::Backup(format!("{e}"))),
             Ok(mode) => mode,
         };
+        let update_mode = update_control::determine_update_mode(matches);
 
         let backup_suffix = backup_control::determine_backup_suffix(matches);
 
@@ -826,7 +830,7 @@ impl Options {
                 || matches.get_flag(options::DEREFERENCE),
             one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
             parents: matches.get_flag(options::PARENTS),
-            update: matches.get_flag(options::UPDATE),
+            update: update_mode,
             verbose: matches.get_flag(options::VERBOSE),
             strip_trailing_slashes: matches.get_flag(options::STRIP_TRAILING_SLASHES),
             reflink_mode: {
@@ -1388,11 +1392,10 @@ fn handle_existing_dest(
             backup_dest(dest, &backup_path)?;
         }
     }
-
     match options.overwrite {
         // FIXME: print that the file was removed if --verbose is enabled
         OverwriteMode::Clobber(ClobberMode::Force) => {
-            if fs::metadata(dest)?.permissions().readonly() {
+            if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
                 fs::remove_file(dest)?;
             }
         }
@@ -1465,6 +1468,7 @@ fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a
 ///
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
+#[allow(clippy::cognitive_complexity)]
 fn copy_file(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
@@ -1473,7 +1477,9 @@ fn copy_file(
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    if options.update && options.overwrite == OverwriteMode::Interactive(ClobberMode::Standard) {
+    if (options.update == UpdateMode::ReplaceIfOlder || options.update == UpdateMode::ReplaceNone)
+        && options.overwrite == OverwriteMode::Interactive(ClobberMode::Standard)
+    {
         // `cp -i --update old new` when `new` exists doesn't copy anything
         // and exit with 0
         return Ok(());
@@ -1498,6 +1504,8 @@ fn copy_file(
                 options.overwrite,
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             )
+            && !is_symlink_loop(dest)
+            && std::env::var_os("POSIXLY_CORRECT").is_none()
         {
             return Err(Error::Error(format!(
                 "not writing through dangling symlink '{}'",
@@ -1629,22 +1637,38 @@ fn copy_file(
         }
         CopyMode::Update => {
             if dest.exists() {
-                let dest_metadata = fs::symlink_metadata(dest)?;
+                match options.update {
+                    update_control::UpdateMode::ReplaceAll => {
+                        copy_helper(
+                            source,
+                            dest,
+                            options,
+                            context,
+                            source_is_symlink,
+                            source_is_fifo,
+                            symlinked_files,
+                        )?;
+                    }
+                    update_control::UpdateMode::ReplaceNone => return Ok(()),
+                    update_control::UpdateMode::ReplaceIfOlder => {
+                        let dest_metadata = fs::symlink_metadata(dest)?;
 
-                let src_time = source_metadata.modified()?;
-                let dest_time = dest_metadata.modified()?;
-                if src_time <= dest_time {
-                    return Ok(());
-                } else {
-                    copy_helper(
-                        source,
-                        dest,
-                        options,
-                        context,
-                        source_is_symlink,
-                        source_is_fifo,
-                        symlinked_files,
-                    )?;
+                        let src_time = source_metadata.modified()?;
+                        let dest_time = dest_metadata.modified()?;
+                        if src_time <= dest_time {
+                            return Ok(());
+                        } else {
+                            copy_helper(
+                                source,
+                                dest,
+                                options,
+                                context,
+                                source_is_symlink,
+                                source_is_fifo,
+                                symlinked_files,
+                            )?;
+                        }
+                    }
                 }
             } else {
                 copy_helper(

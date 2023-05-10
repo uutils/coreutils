@@ -116,9 +116,10 @@ run_termux_command() {
     sleep 5
 
     local timeout=${timeout:-3600}
-    local retries=${retries:-3}
-    local sleep_interval=${sleep_interval:-5}
+    local retries=${retries:-10}
+    local sleep_interval=${sleep_interval:-10}
     try_fix=3
+    echo "run_termux_command with timeout=$timeout / retries=$retries / sleep_interval=$sleep_interval"
     while ! adb shell "ls $probe" 2>/dev/null; do
         echo -n "Waiting for $probe: "
 
@@ -330,7 +331,7 @@ export CARGO_TERM_COLOR=always; \
 export CARGO_INCREMENTAL=0; \
 cd ~/coreutils; \
 timeout --preserve-status --verbose -k 1m 60m \
-    cargo nextest run --profile ci --hide-progress-bar --features feat_os_unix_android; \
+cargo nextest run --profile ci --hide-progress-bar --features feat_os_unix_android; \
 echo \$? >$probe'"
     run_termux_command "$command" "$probe" || return
 

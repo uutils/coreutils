@@ -14,10 +14,10 @@ use is_terminal::IsTerminal;
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
 use uucore::error::{set_exit_code, UResult};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
-const USAGE: &str = "{} [OPTION]...";
+const ABOUT: &str = help_about!("tty.md");
+const USAGE: &str = help_usage!("tty.md");
 
 mod options {
     pub const SILENT: &str = "silent";

@@ -331,7 +331,7 @@ jobs:
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v9
+    - uses: DavidAnson/markdownlint-cli2-action@v10
       with:
         command: fix
         globs: |
@@ -601,6 +601,44 @@ jobs:
               --arg size "$SIZE" \
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
+    - name: Download the previous individual size result
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: CICD.yml
+        name: individual-size-result
+        repo: uutils/coreutils
+        path: dl
+    - name: Download the previous size result
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: CICD.yml
+        name: size-result
+        repo: uutils/coreutils
+        path: dl
+    - name: Check uutil release sizes
+      shell: bash
+      run: |
+        check() {
+          # Warn if the size increases by more than 5%
+          threshold='1.05'
+          ratio=$(jq -n "$2 / $3")
+          echo "$1: size=$2, previous_size=$3, ratio=$ratio, threshold=$threshold"
+          if [[ "$(jq -n "$ratio > $threshold")" == 'true' ]]; then
+            echo "::warning file=$4::Size of $1 increases by more than 5%"
+          fi
+        }
+        ## Check individual size result
+        while read -r name previous_size; do
+          size=$(cat individual-size-result.json | jq -r ".[] | .sizes | .\"$name\"")
+          check "\`$name\` binary" "$size" "$previous_size" 'individual-size-result.json'
+        done < <(cat dl/individual-size-result.json | jq -r '.[] | .sizes | to_entries[] | "\(.key) \(.value)"')
+        ## Check size result
+        size=$(cat size-result.json | jq -r '.[] | .size')
+        previous_size=$(cat dl/size-result.json | jq -r '.[] | .size')
+        check 'multiple binaries' "$size" "$previous_size" 'size-result.json'
+        multisize=$(cat size-result.json | jq -r '.[] | .multisize')
+        previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
+        check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
     - name: Upload the individual size result
       uses: actions/upload-artifact@v3
       with:

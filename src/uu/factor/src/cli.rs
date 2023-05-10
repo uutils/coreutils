@@ -52,6 +52,7 @@ fn print_factors_str(
                 writeln!(factors_buffer, "{}:{}", x, factor(x))?;
             }
             w.write_all(factors_buffer.as_bytes())?;
+            w.flush()?;
             Ok(())
         })
 }

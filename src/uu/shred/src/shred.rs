@@ -361,6 +361,7 @@ fn pass_name(pass_type: &PassType) -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::cognitive_complexity)]
 fn wipe_file(
     path_str: &str,
     n_passes: usize,

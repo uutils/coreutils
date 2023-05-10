@@ -1,11 +1,14 @@
+// spell-checker:ignore libc's
 use crate::common::util::TestScenario;
 
 #[test]
 #[cfg(not(target_os = "android"))]
 fn test_get_current_niceness() {
-    // NOTE: this assumes the test suite is being run with a default niceness
-    // of 0, which may not necessarily be true
-    new_ucmd!().run().stdout_is("0\n");
+    // Test that the nice command with no arguments returns the default nice
+    // value, which we determine by querying libc's `nice` in our own process.
+    new_ucmd!()
+        .run()
+        .stdout_is(format!("{}\n", unsafe { libc::nice(0) }));
 }
 
 #[test]

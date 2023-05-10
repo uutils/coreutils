@@ -36,15 +36,15 @@ use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
 ))]
 use tail::text;
 
-static FOOBAR_TXT: &str = "foobar.txt";
-static FOOBAR_2_TXT: &str = "foobar2.txt";
-static FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
+const FOOBAR_TXT: &str = "foobar.txt";
+const FOOBAR_2_TXT: &str = "foobar2.txt";
+const FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
 #[allow(dead_code)]
-static FOLLOW_NAME_TXT: &str = "follow_name.txt";
+const FOLLOW_NAME_TXT: &str = "follow_name.txt";
 #[allow(dead_code)]
-static FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
+const FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
 #[allow(dead_code)]
-static FOLLOW_NAME_EXP: &str = "follow_name.expected";
+const FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
 #[cfg(not(windows))]
 const DEFAULT_SLEEP_INTERVAL_MILLIS: u64 = 1000;

@@ -608,7 +608,15 @@ fn test_touch_set_date_relative_smoke() {
     // > (equivalent to ‘day’), the string ‘yesterday’ is worth one day
     // > in the past (equivalent to ‘day ago’).
     //
-    let times = ["yesterday", "tomorrow", "now"];
+    let times = [
+        "yesterday",
+        "tomorrow",
+        "now",
+        "2 seconds",
+        "2 years 1 week",
+        "2 days ago",
+        "2 months and 1 second",
+    ];
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
@@ -617,6 +625,11 @@ fn test_touch_set_date_relative_smoke() {
             .no_stderr()
             .no_stdout();
     }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["-d", "a", "f"])
+        .fails()
+        .stderr_contains("touch: Unable to parse date");
 }
 
 #[test]
@@ -815,4 +828,28 @@ fn test_touch_trailing_slash_no_create() {
     at.mkdir("dir2");
     at.relative_symlink_dir("dir2", "link2");
     ucmd.args(&["-c", "link2/"]).succeeds();
+}
+
+#[test]
+fn test_touch_no_dereference_ref_dangling() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.relative_symlink_file("nowhere", "dangling");
+
+    ucmd.args(&["-h", "-r", "dangling", "file"]).succeeds();
+}
+
+#[test]
+fn test_touch_no_dereference_dangling() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("nowhere", "dangling");
+
+    ucmd.args(&["-h", "dangling"]).succeeds();
+}
+
+#[test]
+fn test_touch_dash() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    ucmd.args(&["-h", "-"]).succeeds().no_stderr().no_stdout();
 }
