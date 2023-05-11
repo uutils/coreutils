@@ -119,7 +119,7 @@ mod linux_only {
 
         let mut fds: [c_int; 2] = [0, 0];
         assert!(
-            !(unsafe { libc::pipe(&mut fds as *mut c_int) } != 0),
+            (unsafe { libc::pipe(&mut fds as *mut c_int) } == 0),
             "Failed to create pipe"
         );
 
