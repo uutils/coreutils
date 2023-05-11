@@ -1076,6 +1076,46 @@ fn test_cp_parents_dest_not_directory() {
 }
 
 #[test]
+fn test_cp_parents_with_permissions_copy_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let dir = "dir";
+    let file = "p1/p2/file";
+
+    at.mkdir(dir);
+    at.mkdir_all("p1/p2");
+    at.touch(file);
+
+    let p1_mode = 0o0777;
+    let p2_mode = 0o0711;
+    let file_mode = 0o0702;
+
+    #[cfg(unix)]
+    {
+        at.set_mode("p1", p1_mode);
+        at.set_mode("p1/p2", p2_mode);
+        at.set_mode(file, file_mode);
+    }
+
+    ucmd.arg("-p")
+        .arg("--parents")
+        .arg(file)
+        .arg(dir)
+        .succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        let p1_metadata = at.metadata("p1");
+        let p2_metadata = at.metadata("p1/p2");
+        let file_metadata = at.metadata(file);
+
+        assert_metadata_eq!(p1_metadata, at.metadata("dir/p1"));
+        assert_metadata_eq!(p2_metadata, at.metadata("dir/p1/p2"));
+        assert_metadata_eq!(file_metadata, at.metadata("dir/p1/p2/file"));
+    }
+}
+
+#[test]
 #[cfg(unix)]
 fn test_cp_writable_special_file_permissions() {
     new_ucmd!().arg("/dev/null").arg("/dev/zero").succeeds();
