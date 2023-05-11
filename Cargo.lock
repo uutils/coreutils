@@ -1156,9 +1156,9 @@ dependencies = [
 
 [[package]]
 name = "humantime_to_duration"
-version = "0.1.3"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46276b15cd421d8262968eb5c3a075ae4a40bd787762ca0ddfead00fd5f6fbce"
+checksum = "bcf364c7a07c8beae52fdab733304ceceeb9213f4137d938a17bae365a0136f9"
 dependencies = [
  "regex",
  "time",
