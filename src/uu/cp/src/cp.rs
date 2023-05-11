@@ -1758,23 +1758,25 @@ fn copy_helper(
     Ok(())
 }
 
-#[cfg(not(windows))]
 fn should_preserve_attribute(options: &Options) -> bool {
-    matches!(options.attributes.mode, Preserve::Yes { .. })
-        || matches!(options.attributes.timestamps, Preserve::Yes { .. })
-        || matches!(options.attributes.links, Preserve::Yes { .. })
-        || matches!(options.attributes.context, Preserve::Yes { .. })
-        || matches!(options.attributes.xattr, Preserve::Yes { .. })
-        || matches!(options.attributes.ownership, Preserve::Yes { .. })
-}
+    let checks = [
+        &options.attributes.mode,
+        &options.attributes.timestamps,
+        &options.attributes.links,
+        &options.attributes.context,
+        &options.attributes.xattr,
+    ];
 
-#[cfg(windows)]
-fn should_preserve_attribute(options: &Options) -> bool {
-    matches!(options.attributes.mode, Preserve::Yes { .. })
-        || matches!(options.attributes.timestamps, Preserve::Yes { .. })
-        || matches!(options.attributes.links, Preserve::Yes { .. })
-        || matches!(options.attributes.context, Preserve::Yes { .. })
-        || matches!(options.attributes.xattr, Preserve::Yes { .. })
+    #[cfg(unix)]
+    let checks = [
+        checks.as_slice(),
+        [&options.attributes.ownership].as_slice(),
+    ]
+    .concat();
+
+    checks
+        .iter()
+        .any(|attr| matches!(attr, Preserve::Yes { .. }))
 }
 
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
