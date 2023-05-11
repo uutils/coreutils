@@ -1,6 +1,10 @@
-// spell-checker:ignore (words) asdf
+// spell-checker:ignore (words) asdf algo algos
 
 use crate::common::util::TestScenario;
+
+const ALGOS: [&str; 11] = [
+    "sysv", "bsd", "crc", "md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "sm3",
+];
 
 #[test]
 fn test_invalid_arg() {
@@ -12,7 +16,7 @@ fn test_single_file() {
     new_ucmd!()
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_is_fixture("single_file.expected");
+        .stdout_is_fixture("crc_single_file.expected");
 }
 
 #[test]
@@ -21,7 +25,7 @@ fn test_multiple_files() {
         .arg("lorem_ipsum.txt")
         .arg("alice_in_wonderland.txt")
         .succeeds()
-        .stdout_is_fixture("multiple_files.expected");
+        .stdout_is_fixture("crc_multiple_files.expected");
 }
 
 #[test]
@@ -29,7 +33,7 @@ fn test_stdin() {
     new_ucmd!()
         .pipe_in_fixture("lorem_ipsum.txt")
         .succeeds()
-        .stdout_is_fixture("stdin.expected");
+        .stdout_is_fixture("crc_stdin.expected");
 }
 
 #[test]
@@ -117,77 +121,41 @@ fn test_stdin_larger_than_128_bytes() {
 }
 
 #[test]
-fn test_sha1_single_file() {
-    new_ucmd!()
-        .arg("-a=sha1")
-        .arg("lorem_ipsum.txt")
-        .succeeds()
-        .stdout_is("ab1dd0bae1d8883a3d18a66de6afbd28252cfbef 772 lorem_ipsum.txt\n");
+fn test_algorithm_single_file() {
+    for algo in ALGOS {
+        for option in ["-a", "--algorithm"] {
+            new_ucmd!()
+                .arg(format!("{option}={algo}"))
+                .arg("lorem_ipsum.txt")
+                .succeeds()
+                .stdout_is_fixture(format!("{algo}_single_file.expected"));
+        }
+    }
 }
 
 #[test]
-fn test_sm3_single_file() {
-    new_ucmd!()
-        .arg("-a=sm3")
-        .arg("lorem_ipsum.txt")
-        .succeeds()
-        .stdout_is(
-        "6d296b805d060bfed22808df308dbb9b4317794dd4ed6740a10770a782699bc2 772 lorem_ipsum.txt\n",
-    );
+fn test_algorithm_multiple_files() {
+    for algo in ALGOS {
+        for option in ["-a", "--algorithm"] {
+            new_ucmd!()
+                .arg(format!("{option}={algo}"))
+                .arg("lorem_ipsum.txt")
+                .arg("alice_in_wonderland.txt")
+                .succeeds()
+                .stdout_is_fixture(format!("{algo}_multiple_files.expected"));
+        }
+    }
 }
 
 #[test]
-fn test_bsd_single_file() {
-    new_ucmd!()
-        .arg("-a=bsd")
-        .arg("lorem_ipsum.txt")
-        .succeeds()
-        .stdout_only_fixture("bsd_single_file.expected");
-}
-
-#[test]
-fn test_bsd_multiple_files() {
-    new_ucmd!()
-        .arg("-a=bsd")
-        .arg("lorem_ipsum.txt")
-        .arg("alice_in_wonderland.txt")
-        .succeeds()
-        .stdout_only_fixture("bsd_multiple_files.expected");
-}
-
-#[test]
-fn test_bsd_stdin() {
-    new_ucmd!()
-        .arg("-a=bsd")
-        .pipe_in_fixture("lorem_ipsum.txt")
-        .succeeds()
-        .stdout_only_fixture("bsd_stdin.expected");
-}
-
-#[test]
-fn test_sysv_single_file() {
-    new_ucmd!()
-        .arg("-a=sysv")
-        .arg("lorem_ipsum.txt")
-        .succeeds()
-        .stdout_only_fixture("sysv_single_file.expected");
-}
-
-#[test]
-fn test_sysv_multiple_files() {
-    new_ucmd!()
-        .arg("-a=sysv")
-        .arg("lorem_ipsum.txt")
-        .arg("alice_in_wonderland.txt")
-        .succeeds()
-        .stdout_only_fixture("sysv_multiple_files.expected");
-}
-
-#[test]
-fn test_sysv_stdin() {
-    new_ucmd!()
-        .arg("-a=sysv")
-        .pipe_in_fixture("lorem_ipsum.txt")
-        .succeeds()
-        .stdout_only_fixture("sysv_stdin.expected");
+fn test_algorithm_stdin() {
+    for algo in ALGOS {
+        for option in ["-a", "--algorithm"] {
+            new_ucmd!()
+                .arg(format!("{option}={algo}"))
+                .pipe_in_fixture("lorem_ipsum.txt")
+                .succeeds()
+                .stdout_is_fixture(format!("{algo}_stdin.expected"));
+        }
+    }
 }
