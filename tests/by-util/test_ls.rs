@@ -3416,7 +3416,10 @@ fn test_device_number() {
     // let's use the first device for test
     let blk_dev = dev_dir
         .map(|res_entry| res_entry.unwrap())
-        .find(|entry| entry.file_type().unwrap().is_block_device() || entry.file_type().unwrap().is_char_device())
+        .find(|entry| {
+            entry.file_type().unwrap().is_block_device()
+                || entry.file_type().unwrap().is_char_device()
+        })
         .expect("Expect a block/char device");
     let blk_dev_path = blk_dev.path();
     let blk_dev_meta = metadata(blk_dev_path.as_path()).unwrap();
