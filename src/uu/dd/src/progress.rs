@@ -79,9 +79,9 @@ impl ProgUpdate {
     /// ```rust,ignore
     /// use std::io::Cursor;
     /// use std::time::Duration;
-    /// use crate::progress::{ProgUpdate, ReadState, WriteStat};
+    /// use crate::progress::{ProgUpdate, ReadStat, WriteStat};
     ///
-    /// let read_stat = ReadStat::new(1, 2, 3);
+    /// let read_stat = ReadStat::new(1, 2, 3, 999);
     /// let write_stat = WriteStat::new(4, 5, 6);
     /// let duration = Duration::new(789, 0);
     /// let prog_update = ProgUpdate {
@@ -121,7 +121,7 @@ impl ProgUpdate {
     /// ```rust,ignore
     /// use std::io::Cursor;
     /// use std::time::Duration;
-    /// use crate::progress::{ProgUpdate, ReadState, WriteStat};
+    /// use crate::progress::ProgUpdate;
     ///
     /// let prog_update = ProgUpdate {
     ///     read_stat: Default::default(),
@@ -191,7 +191,7 @@ impl ProgUpdate {
     /// ```rust,ignore
     /// use std::io::Cursor;
     /// use std::time::Duration;
-    /// use crate::progress::{ProgUpdate, ReadState, WriteStat};
+    /// use crate::progress::ProgUpdate;
     ///
     /// let prog_update = ProgUpdate {
     ///     read_stat: Default::default(),
@@ -276,16 +276,20 @@ pub(crate) struct ReadStat {
     ///
     /// A truncated record can only occur in `conv=block` mode.
     pub(crate) records_truncated: u32,
+
+    /// The total number of bytes read.
+    pub(crate) bytes_total: u64,
 }
 
 impl ReadStat {
     /// Create a new instance.
     #[allow(dead_code)]
-    fn new(complete: u64, partial: u64, truncated: u32) -> Self {
+    fn new(complete: u64, partial: u64, truncated: u32, bytes_total: u64) -> Self {
         Self {
             reads_complete: complete,
             reads_partial: partial,
             records_truncated: truncated,
+            bytes_total,
         }
     }
 
@@ -315,6 +319,7 @@ impl std::ops::AddAssign for ReadStat {
             reads_complete: self.reads_complete + other.reads_complete,
             reads_partial: self.reads_partial + other.reads_partial,
             records_truncated: self.records_truncated + other.records_truncated,
+            bytes_total: self.bytes_total + other.bytes_total,
         }
     }
 }
@@ -514,7 +519,7 @@ mod tests {
 
     #[test]
     fn test_read_stat_report() {
-        let read_stat = ReadStat::new(1, 2, 3);
+        let read_stat = ReadStat::new(1, 2, 3, 4);
         let mut cursor = Cursor::new(vec![]);
         read_stat.report(&mut cursor).unwrap();
         assert_eq!(cursor.get_ref(), b"1+2 records in\n");
@@ -530,7 +535,7 @@ mod tests {
 
     #[test]
     fn test_prog_update_write_io_lines() {
-        let read_stat = ReadStat::new(1, 2, 3);
+        let read_stat = ReadStat::new(1, 2, 3, 4);
         let write_stat = WriteStat::new(4, 5, 6);
         let duration = Duration::new(789, 0);
         let complete = false;
