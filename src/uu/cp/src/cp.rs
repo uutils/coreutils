@@ -1151,14 +1151,20 @@ fn copy_source(
     } else {
         // Copy as file
         let dest = construct_dest_path(source_path, target, target_type, options)?;
-        copy_file(
+        let res = copy_file(
             progress_bar,
             source_path,
             dest.as_path(),
             options,
             symlinked_files,
             true,
-        )
+        );
+        if options.parents {
+            for (x, y) in aligned_ancestors(source, dest.as_path()) {
+                copy_attributes(x, y, &options.attributes)?;
+            }
+        }
+        res
     }
 }
 
@@ -1704,11 +1710,6 @@ fn copy_file(
     }
 
     copy_attributes(source, dest, &options.attributes)?;
-    if options.parents && should_preserve_attribute(options) {
-        for (x, y) in aligned_ancestors(source, dest) {
-            copy_attributes(x, y, &options.attributes)?;
-        }
-    }
 
     if let Some(progress_bar) = progress_bar {
         progress_bar.inc(fs::metadata(source)?.len());
@@ -1756,27 +1757,6 @@ fn copy_helper(
     }
 
     Ok(())
-}
-
-fn should_preserve_attribute(options: &Options) -> bool {
-    let checks = [
-        &options.attributes.mode,
-        &options.attributes.timestamps,
-        &options.attributes.links,
-        &options.attributes.context,
-        &options.attributes.xattr,
-    ];
-
-    #[cfg(unix)]
-    let checks = [
-        checks.as_slice(),
-        [&options.attributes.ownership].as_slice(),
-    ]
-    .concat();
-
-    checks
-        .iter()
-        .any(|attr| matches!(attr, Preserve::Yes { .. }))
 }
 
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
