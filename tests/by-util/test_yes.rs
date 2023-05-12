@@ -6,12 +6,12 @@ use std::os::unix::process::ExitStatusExt;
 use crate::common::util::TestScenario;
 
 #[cfg(unix)]
-fn check_termination(result: &ExitStatus) {
+fn check_termination(result: ExitStatus) {
     assert_eq!(result.signal(), Some(libc::SIGPIPE));
 }
 
 #[cfg(not(unix))]
-fn check_termination(result: &ExitStatus) {
+fn check_termination(result: ExitStatus) {
     assert!(result.success(), "yes did not exit successfully");
 }
 
@@ -23,7 +23,7 @@ fn run(args: &[&str], expected: &[u8]) {
     child.close_stdout();
 
     #[allow(deprecated)]
-    check_termination(&child.wait_with_output().unwrap().status);
+    check_termination(child.wait_with_output().unwrap().status);
     assert_eq!(buf.as_slice(), expected);
 }
 
