@@ -3379,6 +3379,7 @@ name = "uu_yes"
 version = "0.0.18"
 dependencies = [
  "clap",
+ "itertools",
  "nix",
  "uucore",
 ]
