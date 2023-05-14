@@ -404,8 +404,18 @@ pub(crate) fn copy_directory(
             Err(e) => show_error!("{}", e),
         }
     }
+
     // Copy the attributes from the root directory to the target directory.
-    copy_attributes(root, target, &options.attributes)?;
+    if options.parents {
+        let dest = target.join(root.file_name().unwrap());
+        copy_attributes(root, dest.as_path(), &options.attributes)?;
+        for (x, y) in aligned_ancestors(root, dest.as_path()) {
+            copy_attributes(x, y, &options.attributes)?;
+        }
+    } else {
+        copy_attributes(root, target, &options.attributes)?;
+    }
+
     Ok(())
 }
 
