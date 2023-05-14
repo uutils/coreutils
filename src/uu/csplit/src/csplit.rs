@@ -356,6 +356,7 @@ impl<'a> SplitWriter<'a> {
     /// - if no line matched, an [`CsplitError::MatchNotFound`].
     /// - if there are not enough lines to accommodate the offset, an
     /// [`CsplitError::LineOutOfRange`].
+    #[allow(clippy::cognitive_complexity)]
     fn do_to_match<I>(
         &mut self,
         pattern_as_str: &str,

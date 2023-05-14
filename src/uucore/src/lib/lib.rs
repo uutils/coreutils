@@ -26,6 +26,7 @@ pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::quoting_style;
 pub use crate::mods::ranges;
+pub use crate::mods::update_control;
 pub use crate::mods::version_cmp;
 
 // * string parsing modules

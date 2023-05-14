@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc
 
-#[cfg(feature = "feat_selinux")]
+#[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
 #[cfg(all(unix, feature = "chmod"))]
@@ -1239,7 +1239,7 @@ fn test_ls_long_total_size() {
             ("long_si", "total 8.2k"),
         ]
         .iter()
-        .cloned()
+        .copied()
         .collect()
     } else {
         [
@@ -1248,7 +1248,7 @@ fn test_ls_long_total_size() {
             ("long_si", "total 2"),
         ]
         .iter()
-        .cloned()
+        .copied()
         .collect()
     };
 
@@ -1276,7 +1276,7 @@ fn test_ls_long_formats() {
     // Zero or one "." for indicating a file with security context
 
     // Regex for three names, so all of author, group and owner
-    let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z_A-Z]+ ){3}0").unwrap();
+    let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
 
     #[cfg(unix)]
     let re_three_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){3}0").unwrap();
@@ -1285,13 +1285,13 @@ fn test_ls_long_formats() {
     // - group and owner
     // - author and owner
     // - author and group
-    let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z_A-Z]+ ){2}0").unwrap();
+    let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
 
     #[cfg(unix)]
     let re_two_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){2}0").unwrap();
 
     // Regex for one name: author, group or owner
-    let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z_A-Z]+ 0").unwrap();
+    let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z.A-Z]+ 0").unwrap();
 
     #[cfg(unix)]
     let re_one_num = Regex::new(r"[xrw-]{9}\.? \d \d+ 0").unwrap();
@@ -1640,88 +1640,103 @@ fn test_ls_styles() {
     at.touch("test");
 
     let re_full = Regex::new(
-        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test\n",
+        r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test\n",
     )
     .unwrap();
     let re_long =
-        Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
-    let re_iso = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+    let re_iso =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
     let re_locale =
-        Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n").unwrap();
-    let re_custom_format = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}__\d{2} test\n").unwrap();
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n")
+            .unwrap();
+    let re_custom_format =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test\n").unwrap();
 
     //full-iso
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=full-iso")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_full);
     //long-iso
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=long-iso")
-        .succeeds();
-    assert!(re_long.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_long);
     //iso
-    let result = scene.ucmd().arg("-l").arg("--time-style=iso").succeeds();
-    assert!(re_iso.is_match(result.stdout_str()));
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .succeeds()
+        .stdout_matches(&re_iso);
     //locale
-    let result = scene.ucmd().arg("-l").arg("--time-style=locale").succeeds();
-    assert!(re_locale.is_match(result.stdout_str()));
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=locale")
+        .succeeds()
+        .stdout_matches(&re_locale);
 
     //+FORMAT
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=+%Y__%M")
-        .succeeds();
-    assert!(re_custom_format.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_custom_format);
 
     // Also fails due to not having full clap support for time_styles
     scene.ucmd().arg("-l").arg("-time-style=invalid").fails();
 
     //Overwrite options tests
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=long-iso")
         .arg("--time-style=iso")
-        .succeeds();
-    assert!(re_iso.is_match(result.stdout_str()));
-    let result = scene
+        .succeeds()
+        .stdout_matches(&re_iso);
+    scene
         .ucmd()
         .arg("--time-style=iso")
         .arg("--full-time")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
-    let result = scene
+        .succeeds()
+        .stdout_matches(&re_full);
+    scene
         .ucmd()
         .arg("--full-time")
         .arg("--time-style=iso")
-        .succeeds();
-    assert!(re_iso.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_iso);
 
-    let result = scene
+    scene
         .ucmd()
         .arg("--full-time")
         .arg("--time-style=iso")
         .arg("--full-time")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_full);
 
-    let result = scene
+    scene
         .ucmd()
         .arg("--full-time")
         .arg("-x")
         .arg("-l")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_full);
 
     at.touch("test2");
-    let result = scene.ucmd().arg("--full-time").arg("-x").succeeds();
-    assert_eq!(result.stdout_str(), "test  test2\n");
+    scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("-x")
+        .succeeds()
+        .stdout_is("test  test2\n");
 }
 
 #[test]
@@ -1776,9 +1791,15 @@ fn test_ls_order_time() {
         at.open("test-4").metadata().unwrap().accessed().unwrap();
 
         // It seems to be dependent on the platform whether the access time is actually set
-        #[cfg(all(unix, not(target_os = "android")))]
-        result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
-        #[cfg(any(windows, target_os = "android"))]
+        #[cfg(unix)]
+        {
+            let expected = unwrap_or_return!(expected_result(&scene, &["-t", arg]));
+            at.open("test-3").metadata().unwrap().accessed().unwrap();
+            at.open("test-4").metadata().unwrap().accessed().unwrap();
+
+            result.stdout_only(expected.stdout_str());
+        }
+        #[cfg(windows)]
         result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
     }
 
@@ -3371,4 +3392,45 @@ fn test_tabsize_formatting() {
     ucmd.args(&["-T", "0"])
         .succeeds()
         .stdout_is("aaaaaaaa bbbb\ncccc     dddddddd");
+}
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "illumos",
+    target_os = "solaris"
+))]
+#[test]
+fn test_device_number() {
+    use std::fs::{metadata, read_dir};
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    use uucore::libc::{dev_t, major, minor};
+
+    let dev_dir = read_dir("/dev").unwrap();
+    // let's use the first device for test
+    let blk_dev = dev_dir
+        .map(|res_entry| res_entry.unwrap())
+        .find(|entry| {
+            entry.file_type().unwrap().is_block_device()
+                || entry.file_type().unwrap().is_char_device()
+        })
+        .expect("Expect a block/char device");
+    let blk_dev_path = blk_dev.path();
+    let blk_dev_meta = metadata(blk_dev_path.as_path()).unwrap();
+    let blk_dev_number = blk_dev_meta.rdev() as dev_t;
+    let (major, minor) = unsafe { (major(blk_dev_number), minor(blk_dev_number)) };
+    let major_minor_str = format!("{}, {}", major, minor);
+
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg(blk_dev_path.to_str().expect("should be UTF-8 encoded"))
+        .succeeds()
+        .stdout_contains(major_minor_str);
 }

@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) PREFIXaa PREFIXab nbbbb ncccc
+// spell-checker:ignore nbbbb ncccc
 
 mod filenames;
 mod number;
@@ -23,9 +23,9 @@ use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::uio_error;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
@@ -47,11 +47,9 @@ static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
-const USAGE: &str = "{} [OPTION]... [INPUT [PREFIX]]";
-const AFTER_HELP: &str = "\
-    Output fixed-size pieces of INPUT to PREFIXaa, PREFIXab, ...; default \
-    size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is \
-    -, read standard input.";
+const ABOUT: &str = help_about!("split.md");
+const USAGE: &str = help_usage!("split.md");
+const AFTER_HELP: &str = help_section!("after help", "split.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -66,7 +64,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about("Create output files containing consecutive or interleaved sections of input")
+        .about(ABOUT)
         .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)

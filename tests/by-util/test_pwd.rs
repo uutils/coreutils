@@ -27,7 +27,7 @@ fn test_deleted_dir() {
     use std::process::Command;
 
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = ts.fixtures;
     let output = Command::new("sh")
         .arg("-c")
         .arg(format!(

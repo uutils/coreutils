@@ -159,8 +159,14 @@ where
                 div_ceil(sz, options.output_bits),
                 filename.display()
             ),
-            (_, true) => println!("{sum} {sz}"),
-            (_, false) => println!("{sum} {sz} {}", filename.display()),
+            (ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
+            (ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
+            (ALGORITHM_OPTIONS_BLAKE2B, _) => println!("BLAKE2b ({}) = {sum}", filename.display()),
+            _ => println!(
+                "{} ({}) = {sum}",
+                options.algo_name.to_ascii_uppercase(),
+                filename.display()
+            ),
         }
     }
 

@@ -456,6 +456,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
 
 /// Outputs file contents to stdout in a line-by-line fashion,
 /// propagating any errors that might occur.
+#[allow(clippy::cognitive_complexity)]
 fn write_lines<R: FdReadable>(
     handle: &mut InputHandle<R>,
     options: &OutputOptions,

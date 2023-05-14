@@ -13,6 +13,7 @@ pub enum ParseError {
 }
 /// Parses obsolete syntax
 /// head -NUM\[kmzv\] // spell-checker:disable-line
+#[allow(clippy::cognitive_complexity)]
 pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>, ParseError>> {
     let mut chars = src.char_indices();
     if let Some((_, '-')) = chars.next() {

@@ -1,6 +1,6 @@
 name: FreeBSD
 
-# spell-checker:ignore sshfs usesh vmactions
+# spell-checker:ignore sshfs usesh vmactions taiki Swatinem esac fdescfs fdesc
 
 env:
   # * style job configuration
@@ -156,6 +156,9 @@ jobs:
           curl https://sh.rustup.rs -sSf --output rustup.sh
           sh rustup.sh -y --profile=minimal
           . $HOME/.cargo/env
+          # Install nextest
+          mkdir -p ~/.cargo/bin
+          curl -LsSf https://get.nexte.st/latest/freebsd | tar zxf - -C ~/.cargo/bin
           ## Info
           # environment
           echo "## environment"
@@ -168,6 +171,7 @@ jobs:
           # tooling info
           echo "## tooling info"
           cargo -V
+          cargo nextest --version
           rustc -V
           #
           # To ensure that files are cleaned up, we don't want to exit on error
@@ -175,9 +179,11 @@ jobs:
           cd "${WORKSPACE}"
           unset FAULT
           cargo build || FAULT=1
+          export PATH=~/.cargo/bin:${PATH}
           export RUST_BACKTRACE=1
-          if (test -z "\$FAULT"); then cargo test --features '${{ matrix.job.features }}' || FAULT=1 ; fi
-          if (test -z "\$FAULT"); then cargo test --all-features -p uucore || FAULT=1 ; fi
+          export CARGO_TERM_COLOR=always
+          if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --features '${{ matrix.job.features }}' || FAULT=1 ; fi
+          if (test -z "\$FAULT"); then cargo nextest run --hide-progress-bar --profile ci --all-features -p uucore || FAULT=1 ; fi
           # Clean to avoid to rsync back the files
           cargo clean
           if (test -n "\$FAULT"); then exit 1 ; fi

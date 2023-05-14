@@ -40,6 +40,7 @@ fn has_enough_digits(
 }
 
 impl FloatAnalysis {
+    #[allow(clippy::cognitive_complexity)]
     pub fn analyze(
         str_in: &str,
         initial_prefix: &InitialPrefix,
@@ -219,6 +220,7 @@ fn round_terminal_digit(
     (before_dec, after_dec, false)
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn get_primitive_dec(
     initial_prefix: &InitialPrefix,
     str_in: &str,

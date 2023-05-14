@@ -373,6 +373,7 @@ enum CharType {
     Other,
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn expand(options: &Options) -> std::io::Result<()> {
     use self::CharType::*;
 

@@ -1,8 +1,8 @@
 name: GnuTests
 
-# spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests
+# spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem
 # spell-checker:ignore (jargon) submodules
-# spell-checker:ignore (libs/utils) autopoint chksum gperf lcov libexpect pyinotify shopt texinfo valgrind
+# spell-checker:ignore (libs/utils) autopoint chksum gperf lcov libexpect pyinotify shopt texinfo valgrind libattr libcap
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
@@ -42,7 +42,7 @@ jobs:
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
         repo_default_branch="${{ github.event.repository.default_branch }}"
-        repo_GNU_ref="v9.2"
+        repo_GNU_ref="v9.3"
         repo_reference_branch="${{ github.event.repository.default_branch }}"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
@@ -58,6 +58,13 @@ jobs:
       uses: actions/checkout@v3
       with:
         path: '${{ steps.vars.outputs.path_UUTILS }}'
+    - name: Install `rust` toolchain
+      run: |
+        ## Install `rust` toolchain
+        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
+        rustup toolchain install stable -c rustfmt --profile minimal
+        rustup default stable
+    - uses: Swatinem/rust-cache@v2
     - name: Checkout code (GNU coreutils)
       uses: actions/checkout@v3
       with:
@@ -75,12 +82,6 @@ jobs:
         # workflow_conclusion: success ## (default); * but, if commit with failed GnuTests is merged into the default branch, future commits will all show regression errors in GnuTests CI until o/w fixed
         workflow_conclusion: completed ## continually recalibrates to last commit of default branch with a successful GnuTests (ie, "self-heals" from GnuTest regressions, but needs more supervision for/of regressions)
         path: "${{ steps.vars.outputs.path_reference }}"
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
-        rustup toolchain install stable -c rustfmt --profile minimal
-        rustup default stable
     - name: Install dependencies
       shell: bash
       run: |
@@ -314,7 +315,7 @@ jobs:
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
-        ref: 'v9.2'
+        ref: 'v9.3'
         submodules: recursive
     - name: Install `rust` toolchain
       run: |
@@ -322,6 +323,7 @@ jobs:
         rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
         rustup toolchain install nightly -c rustfmt --profile minimal
         rustup default nightly
+    - uses: Swatinem/rust-cache@v2
     - name: Install dependencies
       run: |
         ## Install dependencies

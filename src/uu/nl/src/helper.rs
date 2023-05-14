@@ -25,6 +25,7 @@ fn parse_style(chars: &[char]) -> Result<crate::NumberingStyle, String> {
 
 // parse_options loads the options into the settings, returning an array of
 // error messages.
+#[allow(clippy::cognitive_complexity)]
 pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) -> Vec<String> {
     // This vector holds error messages encountered.
     let mut errs: Vec<String> = vec![];

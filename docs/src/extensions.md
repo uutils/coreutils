@@ -5,6 +5,21 @@ features that are not supported by GNU coreutils. We take care not to introduce
 features that are incompatible with the GNU coreutils. Below is a list of uutils
 extensions.
 
+## General
+
+GNU coreutils provides two ways to define short options taking an argument:
+
+```
+$ ls -w 80
+$ ls -w80
+```
+
+We support a third way:
+
+```
+$ ls -w=80
+```
+
 ## `env`
 
 `env` has an additional `-f`/`--file` flag that can parse `.env` files and set
@@ -43,3 +58,10 @@ therefore welcomed.
 
 `cut` can separate fields by whitespace (Space and Tab) with `-w` flag. This
 feature is adopted from [FreeBSD](https://www.freebsd.org/cgi/man.cgi?cut).
+
+## `fmt`
+
+`fmt` has additional flags for prefixes: `-P/--skip-prefix`, `-x/--exact-prefix`, and
+`-X/--exact-skip-prefix`. With `-m/--preserve-headers`, an attempt is made to detect and preserve
+mail headers in the input. `-q/--quick` breaks lines more quickly. And `-T/--tab-width` defines the
+number of spaces representing a tab when determining the line length.
