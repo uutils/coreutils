@@ -7,6 +7,10 @@ use crate::common::util::TestScenario;
 use nix::unistd::{close, dup};
 use regex::Regex;
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
+use std::ffi::OsStr;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(all(unix, feature = "chmod"))]
 use std::os::unix::io::IntoRawFd;
 use std::path::Path;
@@ -3433,4 +3437,14 @@ fn test_device_number() {
         .arg(blk_dev_path.to_str().expect("should be UTF-8 encoded"))
         .succeeds()
         .stdout_contains(major_minor_str);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_invalid_utf8() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = OsStr::from_bytes(b"-\xE0-foo");
+    at.touch(filename);
+    ucmd.succeeds();
 }

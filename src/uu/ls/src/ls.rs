@@ -1997,7 +1997,15 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         require_literal_separator: false,
         case_sensitive: true,
     };
-    let file_name = entry.file_name().into_string().unwrap();
+    let file_name = entry.file_name();
+    // If the decoding fails, still show an incorrect rendering
+    let file_name = match file_name.to_str() {
+        Some(s) => s.to_string(),
+        None => {
+            let file_name_bytes = file_name.to_string_lossy();
+            file_name_bytes.into_owned()
+        }
+    };
     !config
         .ignore_patterns
         .iter()
