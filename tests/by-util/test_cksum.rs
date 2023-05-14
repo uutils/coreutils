@@ -159,3 +159,68 @@ fn test_algorithm_stdin() {
         }
     }
 }
+
+#[test]
+fn test_untagged_single_file() {
+    new_ucmd!()
+        .arg("--untagged")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("untagged/crc_single_file.expected");
+}
+
+#[test]
+fn test_untagged_multiple_files() {
+    new_ucmd!()
+        .arg("--untagged")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .stdout_is_fixture("untagged/crc_multiple_files.expected");
+}
+
+#[test]
+fn test_untagged_stdin() {
+    new_ucmd!()
+        .arg("--untagged")
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("untagged/crc_stdin.expected");
+}
+
+#[test]
+fn test_untagged_algorithm_single_file() {
+    for algo in ALGOS {
+        new_ucmd!()
+            .arg("--untagged")
+            .arg(format!("--algorithm={algo}"))
+            .arg("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("untagged/{algo}_single_file.expected"));
+    }
+}
+
+#[test]
+fn test_untagged_algorithm_multiple_files() {
+    for algo in ALGOS {
+        new_ucmd!()
+            .arg("--untagged")
+            .arg(format!("--algorithm={algo}"))
+            .arg("lorem_ipsum.txt")
+            .arg("alice_in_wonderland.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("untagged/{algo}_multiple_files.expected"));
+    }
+}
+
+#[test]
+fn test_untagged_algorithm_stdin() {
+    for algo in ALGOS {
+        new_ucmd!()
+            .arg("--untagged")
+            .arg(format!("--algorithm={algo}"))
+            .pipe_in_fixture("lorem_ipsum.txt")
+            .succeeds()
+            .stdout_is_fixture(format!("untagged/{algo}_stdin.expected"));
+    }
+}
