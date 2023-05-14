@@ -19,10 +19,11 @@ use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Synchronize cached writes to persistent storage";
-const USAGE: &str = "{} [OPTION]... FILE...";
+const ABOUT: &str = help_about!("sync.md");
+const USAGE: &str = help_usage!("sync.md");
+
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";
     pub static DATA: &str = "data";

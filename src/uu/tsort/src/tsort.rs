@@ -12,12 +12,10 @@ use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Topological sort the strings in FILE.
-Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline).
-If FILE is not passed in, stdin is used instead.";
-static USAGE: &str = "{} [OPTIONS] FILE";
+const ABOUT: &str = help_about!("tsort.md");
+const USAGE: &str = help_usage!("tsort.md");
 
 mod options {
     pub const FILE: &str = "file";

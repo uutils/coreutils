@@ -55,7 +55,7 @@ fn unimplemented_flags_should_error() {
     let mut succeeded = Vec::new();
 
     // The following flags are not implemented
-    for flag in ["cio", "nocache", "nolinks", "text", "binary"] {
+    for flag in ["cio", "nolinks", "text", "binary"] {
         let args = vec![format!("iflag={flag}")];
 
         if Parser::new()

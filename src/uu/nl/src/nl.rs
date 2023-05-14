@@ -236,6 +236,7 @@ pub fn uu_app() -> Command {
 }
 
 // nl implements the main functionality for an individual buffer.
+#[allow(clippy::cognitive_complexity)]
 fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     let regexp: regex::Regex = regex::Regex::new(r".?").unwrap();
     let mut line_no = settings.starting_line_number;

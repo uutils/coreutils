@@ -538,6 +538,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_mode_after_dash_dash() {
     let (at, ucmd) = at_and_ucmd!();
     run_single_test(
@@ -649,6 +650,7 @@ fn test_gnu_invalid_mode() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_gnu_options() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

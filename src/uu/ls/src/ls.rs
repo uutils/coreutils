@@ -41,7 +41,13 @@ use unicode_width::UnicodeWidthStr;
     target_os = "linux",
     target_os = "macos",
     target_os = "android",
-    target_os = "ios"
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 use uucore::libc::{dev_t, major, minor};
 #[cfg(unix)]
@@ -650,6 +656,7 @@ fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
 }
 
 impl Config {
+    #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.get_flag(options::CONTEXT);
         let (mut format, opt) = extract_format(options);
@@ -1997,6 +2004,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         .any(|p| p.matches_with(&file_name, options))
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn enter_directory(
     path_data: &PathData,
     read_dir: ReadDir,
@@ -2187,6 +2195,7 @@ fn display_additional_leading_info(
     Ok(result)
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) -> UResult<()> {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
@@ -2376,6 +2385,7 @@ fn display_grid(
 /// ```
 /// that decide the maximum possible character count of each field.
 #[allow(clippy::write_literal)]
+#[allow(clippy::cognitive_complexity)]
 fn display_item_long(
     item: &PathData,
     padding: &PaddingCollection,
@@ -2712,7 +2722,13 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
         target_os = "linux",
         target_os = "macos",
         target_os = "android",
-        target_os = "ios"
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "illumos",
+        target_os = "solaris"
     ))]
     {
         let ft = metadata.file_type();
@@ -2806,6 +2822,7 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
 #[allow(unused_variables)]
+#[allow(clippy::cognitive_complexity)]
 fn display_file_name(
     path: &PathData,
     config: &Config,

@@ -173,6 +173,7 @@ impl SubParser {
             prefix_char,
         ))
     }
+    #[allow(clippy::cognitive_complexity)]
     fn sub_vals_retrieved(&mut self, it: &mut PutBackN<Chars>) -> UResult<bool> {
         if !Self::successfully_eat_prefix(it, &mut self.text_so_far)? {
             return Ok(false);
@@ -342,6 +343,7 @@ impl SubParser {
 }
 
 impl Sub {
+    #[allow(clippy::cognitive_complexity)]
     pub(crate) fn write<W>(&self, writer: &mut W, pf_args_it: &mut Peekable<Iter<String>>)
     where
         W: Write,

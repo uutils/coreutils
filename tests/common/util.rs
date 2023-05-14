@@ -2016,7 +2016,7 @@ impl UChild {
 
     /// Read, consume and return the output as [`String`] from [`Child`]'s stdout.
     ///
-    /// See also [`UChild::stdout_bytes] for side effects.
+    /// See also [`UChild::stdout_bytes`] for side effects.
     pub fn stdout(&mut self) -> String {
         String::from_utf8(self.stdout_bytes()).unwrap()
     }

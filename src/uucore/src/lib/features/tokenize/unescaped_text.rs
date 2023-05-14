@@ -197,6 +197,7 @@ impl UnescapedText {
     // and return a wrapper around a Vec<u8> of unescaped bytes
     // break on encounter of sub symbol ('%[^%]') unless called
     // through %b subst.
+    #[allow(clippy::cognitive_complexity)]
     pub fn from_it_core<W>(
         writer: &mut W,
         it: &mut PutBackN<Chars>,

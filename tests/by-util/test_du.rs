@@ -301,7 +301,7 @@ fn test_du_dereference_args() {
     let result = ts.ucmd().arg("-D").arg("-s").arg("sublink").succeeds();
     let stdout = result.stdout_str();
 
-    assert!(!stdout.starts_with("0"));
+    assert!(!stdout.starts_with('0'));
     assert!(stdout.contains("sublink"));
 
     // Without the option

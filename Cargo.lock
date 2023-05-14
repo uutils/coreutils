@@ -35,6 +35,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aho-corasick"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67fc08ce920c31afb70f013dcce1bfc3a3195de6a228474e45e1f145b36f8d04"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "aliasable"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -388,6 +397,7 @@ dependencies = [
  "conv",
  "filetime",
  "glob",
+ "help_parser",
  "hex-literal",
  "is-terminal",
  "libc",
@@ -568,7 +578,7 @@ version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fdaa01904c12a8989dbfa110b41ef27efc432ac9934f691b9732f01cb64dc01"
 dependencies = [
- "aho-corasick",
+ "aho-corasick 0.7.19",
  "byteorder",
  "cpp_common",
  "lazy_static",
@@ -812,9 +822,9 @@ dependencies = [
 
 [[package]]
 name = "dunce"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bd4b30a6560bbd9b4620f4de34c3f14f60848e58a9b7216801afcb4c7b31c3c"
+checksum = "56ce8c6da7551ec6c462cbaf3bfbc75131ebbfa1c944aeaa9dab51ca1c5f0c3b"
 
 [[package]]
 name = "either"
@@ -952,9 +962,9 @@ dependencies = [
 
 [[package]]
 name = "fundu"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd020eeb034c9fc682e8fe6b9a28e1c0eda92eeb347c38776c09a0b227cdf9e5"
+checksum = "2a37cfff04a32112c22c5497b20b0b09100fca406e76afd47b2ba5ab33d7a851"
 
 [[package]]
 name = "futures"
@@ -1103,6 +1113,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "help_parser"
+version = "0.0.18"
+
+[[package]]
 name = "hermit-abi"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1138,6 +1152,16 @@ dependencies = [
  "libc",
  "match_cfg",
  "winapi",
+]
+
+[[package]]
+name = "humantime_to_duration"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "714764645f21cc70c4c151d7798dd158409641f37ad820bed65224aae403cbed"
+dependencies = [
+ "regex",
+ "time",
 ]
 
 [[package]]
@@ -1253,9 +1277,9 @@ dependencies = [
 
 [[package]]
 name = "keccak"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3afef3b6eff9ce9d8ff9b3601125eec7f0c8cbac7abd14f355d053fa56c98768"
+checksum = "8f6d5ed8676d904364de097082f4e7d240b571b67989ced0240f08b7f966f940"
 dependencies = [
  "cpufeatures",
 ]
@@ -1294,9 +1318,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.141"
+version = "0.2.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3304a64d199bb964be99741b7a14d26972741915b3649639149b2479bb46f4b5"
+checksum = "2b00cc1c228a6782d0f076e7b232802e0c5689d41bb5df366f2a6b6621cfdfe1"
 
 [[package]]
 name = "libloading"
@@ -1380,9 +1404,9 @@ checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 
 [[package]]
 name = "memmap2"
-version = "0.5.8"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b182332558b18d807c4ce1ca8ca983b34c3ee32765e47b3f0f69b90355cc1dc"
+checksum = "7f9ff02d2efdc645fca1ee55f45545b996e7da776b5b60c4e170334457551693"
 dependencies = [
  "libc",
 ]
@@ -1875,11 +1899,11 @@ checksum = "f1bfbf25d7eb88ddcbb1ec3d755d0634da8f7657b2cb8b74089121409ab8228f"
 
 [[package]]
 name = "regex"
-version = "1.7.3"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b1f693b24f6ac912f4893ef08244d70b6067480d2f1a46e950c9691e6749d1d"
+checksum = "af83e617f331cc6ae2da5443c602dfa5af81e517212d9d611a5b3ba1777b5370"
 dependencies = [
- "aho-corasick",
+ "aho-corasick 1.0.1",
  "memchr",
  "regex-syntax",
 ]
@@ -1892,9 +1916,9 @@ checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
 
 [[package]]
 name = "regex-syntax"
-version = "0.6.29"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f162c6dd7b008981e4d40210aca20b4bd0f9b60ca9271061b07f78537722f2e1"
+checksum = "a5996294f19bd3aae0453a862ad728f60e6600695733dd5df01da90c54363a3c"
 
 [[package]]
 name = "rlimit"
@@ -2073,9 +2097,9 @@ dependencies = [
 
 [[package]]
 name = "sha3"
-version = "0.10.7"
+version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54c2bb1a323307527314a36bfb73f24febb08ce2b8a554bf4ffd6f51ad15198c"
+checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
 dependencies = [
  "digest",
  "keccak",
@@ -2514,7 +2538,9 @@ version = "0.0.18"
 dependencies = [
  "chrono",
  "clap",
+ "humantime_to_duration",
  "libc",
+ "time",
  "uucore",
  "windows-sys 0.45.0",
 ]
@@ -2526,6 +2552,7 @@ dependencies = [
  "clap",
  "gcd",
  "libc",
+ "nix",
  "signal-hook",
  "uucore",
 ]
@@ -3166,6 +3193,7 @@ dependencies = [
  "libc",
  "memchr",
  "notify",
+ "rstest",
  "same-file",
  "uucore",
  "winapi-util",
@@ -3207,6 +3235,7 @@ version = "0.0.18"
 dependencies = [
  "clap",
  "filetime",
+ "humantime_to_duration",
  "time",
  "uucore",
  "windows-sys 0.45.0",
@@ -3379,6 +3408,7 @@ dependencies = [
  "sha2",
  "sha3",
  "sm3",
+ "tempfile",
  "thiserror",
  "time",
  "uucore_procs",
@@ -3393,6 +3423,7 @@ dependencies = [
 name = "uucore_procs"
 version = "0.0.18"
 dependencies = [
+ "help_parser",
  "proc-macro2",
  "quote",
 ]
@@ -3635,9 +3666,9 @@ checksum = "2a599daf1b507819c1121f0bf87fa37eb19daac6aff3aefefd4e6e2e0f2020fc"
 
 [[package]]
 name = "zip"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0445d0fbc924bb93539b4316c11afb121ea39296f99a3c4c9edad09e3658cdef"
+checksum = "7e92305c174683d78035cbf1b70e18db6329cc0f1b9cae0a52ca90bf5bfe7125"
 dependencies = [
  "byteorder",
  "crc32fast",

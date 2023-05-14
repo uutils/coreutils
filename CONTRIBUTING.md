@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore reimplementing toybox RUNTEST -->
+<!-- spell-checker:ignore reimplementing toybox RUNTEST CARGOFLAGS nextest -->
 
 # Contributing to coreutils
 
@@ -137,6 +137,14 @@ If you also want to test the core utilities:
 cargo test  -p uucore -p coreutils
 ```
 
+Running the complete test suite might take a while. We use [nextest](https://nexte.st/index.html) in
+the CI and you might want to try it out locally. It can speed up the execution time of the whole
+test run significantly if the cpu has multiple cores.
+
+```shell
+cargo nextest run --features unix --no-fail-fast
+```
+
 To debug:
 
 ```shell
@@ -171,6 +179,15 @@ To include tests for unimplemented behavior:
 make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 ```
 
+To run tests with `nextest` just use the nextest target. Note you'll need to
+[install](https://nexte.st/book/installation.html) `nextest` first. The `nextest` target accepts the
+same arguments like the default `test` target, so it's possible to pass arguments to `nextest run`
+via `CARGOFLAGS`:
+
+```shell
+make CARGOFLAGS='--no-fail-fast' UTILS='UTILITY_1 UTILITY_2' nextest
+```
+
 ### Run Busybox Tests
 
 This testing functionality is only available on *nix operating systems and
@@ -200,6 +217,8 @@ To run uutils against the GNU test suite locally, run the following commands:
 
 ```shell
 bash util/build-gnu.sh
+# Build uutils without release optimizations
+UU_MAKE_PROFILE=debug bash util/build-gnu.sh
 bash util/run-gnu-test.sh
 # To run a single test:
 bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
@@ -326,7 +345,6 @@ if changes are not reflected in the report then run `cargo clean` and run the ab
 If you are using stable version of Rust that doesn't enable code coverage instrumentation by default
 then add `-Z-Zinstrument-coverage` flag to `RUSTFLAGS` env variable specified above.
 
-
 ## Other implementations
 
 The Coreutils have different implementations, with different levels of completions:
@@ -339,9 +357,8 @@ The Coreutils have different implementations, with different levels of completio
 * [SerenityOS](https://github.com/SerenityOS/serenity/tree/master/Userland/Utilities)
 * [Initial Unix](https://github.com/dspinellis/unix-history-repo)
 
-However, when reimplementing the tools/options in Rust, don't read their source codes 
+However, when reimplementing the tools/options in Rust, don't read their source codes
 when they are using reciprocal licenses (ex: GNU GPL, GNU LGPL, etc).
-
 
 ## Licensing
 
