@@ -2001,10 +2001,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     // If the decoding fails, still show an incorrect rendering
     let file_name = match file_name.to_str() {
         Some(s) => s.to_string(),
-        None => {
-            let file_name_bytes = file_name.to_string_lossy();
-            file_name_bytes.into_owned()
-        }
+        None => file_name.to_string_lossy().into_owned(),
     };
     !config
         .ignore_patterns
