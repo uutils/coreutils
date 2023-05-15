@@ -635,7 +635,7 @@ where
             .map_err(|_| HashsumError::InvalidRegex)?;
 
             fn handle_captures(
-                caps: Captures,
+                caps: &Captures,
                 bytes_marker: &str,
                 bsd_reversed: &mut Option<bool>,
                 gnu_re: &mut Regex,
@@ -650,7 +650,7 @@ where
                     .to_string();
 
                     *bsd_reversed = Some(is_bsd_reversed);
-                    *gnu_re = gnu_re_template(&bytes_marker, &format_marker)?;
+                    *gnu_re = gnu_re_template(bytes_marker, &format_marker)?;
                 }
 
                 Ok((
@@ -672,7 +672,7 @@ where
                 };
                 let (ck_filename, sum, binary_check) = match gnu_re.captures(&line) {
                     Some(caps) => {
-                        handle_captures(caps, &bytes_marker, &mut bsd_reversed, &mut gnu_re)?
+                        handle_captures(&caps, &bytes_marker, &mut bsd_reversed, &mut gnu_re)?
                     }
                     None => match bsd_re.captures(&line) {
                         Some(caps) => (
