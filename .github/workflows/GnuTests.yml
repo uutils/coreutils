@@ -65,6 +65,8 @@ jobs:
         rustup toolchain install stable -c rustfmt --profile minimal
         rustup default stable
     - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "./${{ steps.vars.outputs.path_UUTILS }} -> target"
     - name: Checkout code (GNU coreutils)
       uses: actions/checkout@v3
       with:
@@ -324,6 +326,8 @@ jobs:
         rustup toolchain install nightly -c rustfmt --profile minimal
         rustup default nightly
     - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "./uutils -> target"
     - name: Install dependencies
       run: |
         ## Install dependencies
