@@ -16,7 +16,7 @@ use is_terminal::IsTerminal;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
-use std::collections::HashSet;
+use regex::RegexSet;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -35,8 +35,10 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
+use std::{collections::HashSet, env};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
+use uu_dircolors::DIRCOLORS;
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -537,19 +539,45 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
     }
 }
 
+/// Parse the dircolors terminal list into a RegexSet and check against
+/// current terminal if applicable
+///
+/// # Returns
+///
+/// Boolean
+fn check_env_variables_against_dircolors(dircolors: &str) -> bool {
+    let ls_colors = env::var("LS_COLORS").unwrap_or("".to_string()).is_empty();
+    let colorterm = env::var("COLORTERM").unwrap_or("".to_string()).is_empty();
+    if ls_colors && colorterm {
+        let term = env::var("TERM").unwrap_or("".to_string());
+        let terminals = dircolors
+            .lines()
+            .filter(|x| x.starts_with("TERM "))
+            .map(|x| x.replace("TERM ", ""))
+            .map(|x| x.replace('*', ".*"))
+            .collect::<Vec<String>>();
+        let dircolors_set = RegexSet::new(terminals).unwrap();
+        dircolors_set.matches(term.as_str()).matched_any()
+    } else {
+        true
+    }
+}
+
 /// Extracts the color option to use based on the options provided.
 ///
 /// # Returns
 ///
 /// A boolean representing whether or not to use color.
 fn extract_color(options: &clap::ArgMatches) -> bool {
-    match options.get_one::<String>(options::COLOR) {
-        None => options.contains_id(options::COLOR),
-        Some(val) => match val.as_str() {
-            "" | "always" | "yes" | "force" => true,
-            "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
-            /* "never" | "no" | "none" | */ _ => false,
-        },
+    let dircolors_allowed = check_env_variables_against_dircolors(DIRCOLORS);
+    match options
+        .get_one::<String>(options::COLOR)
+        .unwrap_or(&"".to_string())
+        .as_str()
+    {
+        "" | "always" | "yes" | "force" => dircolors_allowed,
+        "auto" | "tty" | "if-tty" => dircolors_allowed && std::io::stdout().is_terminal(),
+        /* "never" | "no" | "none" | */ _ => false,
     }
 }
 
@@ -3133,4 +3161,67 @@ fn calculate_padding_collection(
     }
 
     padding_collections
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_check_env_variables_against_dircolors_invalid_terminal_01() {
+        env::set_var("TERM", "dummy");
+        env::set_var("COLORTERM", "");
+        env::set_var("LS_COLORS", "");
+        assert!(!check_env_variables_against_dircolors(DIRCOLORS));
+    }
+    #[test]
+    fn test_check_env_variables_against_dircolors_invalid_terminal_02() {
+        env::set_var("TERM", "dummy");
+        env::remove_var("COLORTERM");
+        env::remove_var("LS_COLORS");
+        assert!(!check_env_variables_against_dircolors(DIRCOLORS));
+    }
+    #[test]
+    fn test_check_env_variables_against_dircolors_valid_terminal_01() {
+        env::set_var("TERM", "xterm");
+        env::set_var("COLORTERM", "");
+        env::set_var("LS_COLORS", "");
+        assert!(check_env_variables_against_dircolors(DIRCOLORS));
+    }
+    #[test]
+    fn test_check_env_variables_against_dircolors_valid_terminal_02() {
+        env::set_var("TERM", "xterm");
+        env::remove_var("COLORTERM");
+        env::remove_var("LS_COLORS");
+        assert!(check_env_variables_against_dircolors(DIRCOLORS));
+    }
+    #[test]
+    fn test_check_env_variables_against_dircolors_ls_color_set_01() {
+        env::set_var("TERM", "dummy");
+        env::set_var("COLORTERM", "");
+        env::set_var("LS_COLORS", "rs=0:di=01;34:ln=01;36");
+        assert!(check_env_variables_against_dircolors(DIRCOLORS));
+    }
+    #[test]
+    fn test_check_env_variables_against_dircolors_ls_color_set_02() {
+        env::set_var("TERM", "dummy");
+        env::remove_var("COLORTERM");
+        env::set_var("LS_COLORS", "rs=0:di=01;34:ln=01;36");
+        assert!(check_env_variables_against_dircolors(DIRCOLORS));
+    }
+    #[test]
+    fn test_check_env_variables_against_dircolors_colorterm_set_01() {
+        env::set_var("TERM", "dummy");
+        env::set_var("COLORTERM", "something");
+        env::set_var("LS_COLORS", "");
+        assert!(check_env_variables_against_dircolors(DIRCOLORS));
+    }
+    #[test]
+    fn test_check_env_variables_against_dircolors_colorterm_set_02() {
+        env::set_var("TERM", "dummy");
+        env::set_var("COLORTERM", "something");
+        env::remove_var("LS_COLORS");
+        assert!(check_env_variables_against_dircolors(DIRCOLORS));
+    }
 }

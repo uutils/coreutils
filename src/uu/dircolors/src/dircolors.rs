@@ -34,6 +34,9 @@ const AFTER_HELP: &str = help_section!("after help", "dircolors.md");
 mod colors;
 use self::colors::INTERNAL_DB;
 
+// exposed for uu_ls
+pub const DIRCOLORS: &str = INTERNAL_DB;
+
 #[derive(PartialEq, Eq, Debug)]
 pub enum OutputFmt {
     Shell,
@@ -100,7 +103,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             ));
         }
-        println!("{INTERNAL_DB}");
+        println!("{DIRCOLORS}");
         return Ok(());
     }
 
@@ -128,7 +131,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let result;
     if files.is_empty() {
-        result = parse(INTERNAL_DB.lines(), &out_format, "");
+        result = parse(DIRCOLORS.lines(), &out_format, "");
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
