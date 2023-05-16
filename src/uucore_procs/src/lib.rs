@@ -18,15 +18,15 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
         pub fn uumain(args: impl uucore::Args) -> i32 {
             #stream
             let result = uumain(args);
+            // eprintln!("result={:?}", result);
             match result {
                 Ok(()) => uucore::error::get_exit_code(),
                 Err(e) => {
+                    // FixME: [2022-04; terts] (HACK!) for color output, `clap` error text is directly displayed on stdout/stderr when "formatted"
+                    // !  ... (see `impl Display for ClapErrorWrapper` in `uucore/src/error.rs`)
                     let s = format!("{}", e);
                     if s != "" {
                         uucore::show_error!("{}", s);
-                    }
-                    if e.usage() {
-                        eprintln!("Try '{} --help' for more information.", uucore::execution_phrase());
                     }
                     e.code()
                 }

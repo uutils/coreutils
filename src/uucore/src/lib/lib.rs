@@ -78,6 +78,9 @@ pub use crate::features::utmpx;
 #[cfg(all(windows, feature = "wide"))]
 pub use crate::features::wide;
 
+//## clap
+use clap::{crate_version};
+
 //## core functions
 
 use std::ffi::OsString;
@@ -109,6 +112,26 @@ pub fn format_usage(s: &str) -> String {
     let s = s.replace('\n', &format!("\n{}", " ".repeat(7)));
     s.replace("{}", crate::execution_phrase())
 }
+
+pub fn after_help_text() -> String {
+    format!("* From [uutils/coreutils v{}](https://github.com/uutils/coreutils)\n* Copyright (C) * uutils developers (MIT license)\n", crate_version!())
+}
+
+// pub fn clap_defaults() -> clap::App<'static, 'static> {
+//     clap::App::new(crate_name!())
+//         .version(crate_version!())
+//         .about(crate_description!())
+//         .after_help(after_help_text().as_str())
+// }
+pub fn clap_defaults(about: &str, usage: &str) -> clap::Command {
+    clap::Command::new(util_name())
+        .version(crate_version!())
+        .about(about.to_string())
+        .override_usage(format_usage(&usage))
+        .after_help(after_help_text())
+}
+
+
 
 pub fn get_utility_is_second_arg() -> bool {
     crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)

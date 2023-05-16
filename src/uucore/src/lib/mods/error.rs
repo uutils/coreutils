@@ -740,7 +740,13 @@ impl UError for ClapErrorWrapper {
 
 impl Error for ClapErrorWrapper {}
 
-// This is abuse of the Display trait
+// impl Display for ClapErrorWrapper {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+//         self.error.fmt(f).unwrap();
+//         Ok(())
+//     }
+// }
+// FixME: [2022-04; terts] (HACK!) this is abuse of the Display trait to enable `clap` to display color
 impl Display for ClapErrorWrapper {
     fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.error.print().unwrap();

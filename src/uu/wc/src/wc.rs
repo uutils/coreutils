@@ -44,6 +44,7 @@ struct Settings {
     files0_from_stdin_mode: bool,
     title_quoting_style: QuotingStyle,
     total_when: TotalWhen,
+    total_only: bool,
 }
 
 impl Settings {
@@ -55,7 +56,7 @@ impl Settings {
         };
 
         let files0_from_stdin_mode = match matches.get_one::<String>(options::FILES0_FROM) {
-            Some(files_0_from) => files_0_from == STDIN_REPR,
+            Some(files_0_from) => files_0_from == STDIN_FILENAME,
             None => false,
         };
 
@@ -68,6 +69,7 @@ impl Settings {
             files0_from_stdin_mode,
             title_quoting_style,
             total_when: matches.get_one::<String>(options::TOTAL).unwrap().into(),
+            total_only: matches.get_flag(options::TOTAL_ONLY),
         };
 
         if settings.show_bytes
@@ -88,6 +90,7 @@ impl Settings {
             files0_from_stdin_mode,
             title_quoting_style: settings.title_quoting_style,
             total_when: settings.total_when,
+            total_only: settings.total_only,
         }
     }
 
@@ -112,11 +115,11 @@ pub mod options {
     pub static LINES: &str = "lines";
     pub static MAX_LINE_LENGTH: &str = "max-line-length";
     pub static TOTAL: &str = "total";
+    pub static TOTAL_ONLY: &str = "total-only";
     pub static WORDS: &str = "words";
 }
-
-static ARG_FILES: &str = "files";
-static STDIN_REPR: &str = "-";
+static ARG_FILES: &str = "FILE";
+static STDIN_FILENAME: &str = "-";
 
 enum StdinKind {
     /// Stdin specified on command-line with "-".
@@ -137,7 +140,7 @@ enum Input {
 
 impl From<&OsStr> for Input {
     fn from(input: &OsStr) -> Self {
-        if input == STDIN_REPR {
+        if input == STDIN_FILENAME {
             Self::Stdin(StdinKind::Explicit)
         } else {
             Self::Path(input.into())
@@ -151,7 +154,7 @@ impl Input {
         match self {
             Self::Path(path) => Some(escape_name(&path.clone().into_os_string(), quoting_style)),
             Self::Stdin(StdinKind::Explicit) => {
-                Some(escape_name(OsStr::new(STDIN_REPR), quoting_style))
+                Some(escape_name(OsStr::new(STDIN_FILENAME), quoting_style))
             }
             Self::Stdin(StdinKind::Implicit) => None,
         }
@@ -170,7 +173,6 @@ impl Input {
 enum TotalWhen {
     Auto,
     Always,
-    Only,
     Never,
 }
 
@@ -179,7 +181,6 @@ impl From<&String> for TotalWhen {
         match s.as_ref() {
             "auto" => Self::Auto,
             "always" => Self::Always,
-            "only" => Self::Only,
             "never" => Self::Never,
             _ => unreachable!("Should have been caught by clap"),
         }
@@ -190,7 +191,7 @@ impl TotalWhen {
     fn is_total_row_visible(&self, num_inputs: usize) -> bool {
         match self {
             Self::Auto => num_inputs > 1,
-            Self::Always | Self::Only => true,
+            Self::Always => true,
             Self::Never => false,
         }
     }
@@ -238,23 +239,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
+    let app = uucore::clap_defaults(ABOUT, USAGE);
+    app
+        // .version(crate_version!())
+        // .about(ABOUT)
+        // .override_usage(format_usage(USAGE))
+        // .after_help(uucore::after_help_text())
         .infer_long_args(true)
         .arg(
             Arg::new(options::BYTES)
                 .short('c')
                 .long(options::BYTES)
-                .help("print the byte counts")
+                .help("Display the byte counts")
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CHAR)
                 .short('m')
                 .long(options::CHAR)
-                .help("print the character counts")
+                .help("Display the character counts")
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -262,7 +265,7 @@ pub fn uu_app() -> Command {
                 .long(options::FILES0_FROM)
                 .value_name("F")
                 .help(
-                    "read input from the files specified by
+                    "Read input from the files specified by
     NUL-terminated names in file F;
     If F is - then read names from standard input",
                 )
@@ -272,34 +275,43 @@ pub fn uu_app() -> Command {
             Arg::new(options::LINES)
                 .short('l')
                 .long(options::LINES)
-                .help("print the newline counts")
+                .help("Display the newline counts")
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::MAX_LINE_LENGTH)
                 .short('L')
                 .long(options::MAX_LINE_LENGTH)
-                .help("print the length of the longest line")
+                .help("Display the length of the longest line")
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TOTAL)
                 .long(options::TOTAL)
-                .value_parser(["auto", "always", "only", "never"])
+                .value_parser(["auto", "always", "never"])
                 .default_value("auto")
+                .default_missing_value("always")
+                .num_args(0..=1)
                 .hide_default_value(true)
                 .value_name("WHEN")
-                .help("when to print a line with total counts"),
+                .help("WHEN to display a line with total counts"),
+        )
+        .arg(
+            Arg::new(options::TOTAL_ONLY)
+                .long(options::TOTAL_ONLY)
+                .help("Display *only* the total counts")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::WORDS)
                 .short('w')
                 .long(options::WORDS)
-                .help("print the word counts")
+                .help("Display the word counts")
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(ARG_FILES)
+                .help("FILE(s) to process")
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
@@ -327,7 +339,7 @@ fn inputs(matches: &ArgMatches) -> UResult<Vec<Input>> {
 
 fn create_paths_from_files0(files_0_from: &str) -> UResult<Vec<Input>> {
     let mut paths = String::new();
-    let read_from_stdin = files_0_from == STDIN_REPR;
+    let read_from_stdin = files_0_from == STDIN_FILENAME;
 
     if read_from_stdin {
         io::stdin().lock().read_to_string(&mut paths)?;
@@ -337,9 +349,13 @@ fn create_paths_from_files0(files_0_from: &str) -> UResult<Vec<Input>> {
 
     let paths: Vec<&str> = paths.split_terminator('\0').collect();
 
-    if read_from_stdin && paths.contains(&STDIN_REPR) {
+    if read_from_stdin && paths.contains(&STDIN_FILENAME) {
         return Err(WcError::StdinReprNotAllowed(
-            "when reading file names from stdin, no file name of '-' allowed".into(),
+            format!(
+                "when reading file names from stdin, '{}' is not allowed as a file name",
+                STDIN_FILENAME
+            )
+            .into(),
         )
         .into());
     }
@@ -610,7 +626,7 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
     let mut total_word_count = WordCount::default();
 
     let (number_width, are_stats_visible, total_row_title) =
-        if settings.total_when == TotalWhen::Only {
+        if settings.total_only {
             (1, false, None)
         } else {
             let number_width = compute_number_width(inputs, settings);
@@ -619,7 +635,7 @@ fn wc(inputs: &[Input], settings: &Settings) -> UResult<()> {
             (number_width, true, title)
         };
 
-    let is_total_row_visible = settings.total_when.is_total_row_visible(inputs.len());
+    let is_total_row_visible = settings.total_when.is_total_row_visible(inputs.len()) || settings.total_only;
 
     for input in inputs {
         let word_count = match word_count_from_input(input, settings) {
