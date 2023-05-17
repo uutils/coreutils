@@ -11,6 +11,15 @@ fn test_more_no_arg() {
 }
 
 #[test]
+fn test_valid_arg() {
+    new_ucmd!().arg("-c").succeeds().code_is(0);
+    new_ucmd!().arg("--print-over").succeeds().code_is(0);
+
+    new_ucmd!().arg("-p").succeeds().code_is(0);
+    new_ucmd!().arg("--clean-print").succeeds().code_is(0);
+}
+
+#[test]
 fn test_more_dir_arg() {
     // Run the test only if there's a valid terminal, else do nothing
     // Maybe we could capture the error, i.e. "Device not found" in that case

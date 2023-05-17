@@ -14,13 +14,14 @@ use std::{
     time::Duration,
 };
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use crossterm::event::KeyEventKind;
 use crossterm::{
+    cursor::MoveTo,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue,
     style::Attribute,
-    terminal,
+    terminal::{self, Clear, ClearType},
 };
 
 use is_terminal::IsTerminal;
@@ -51,12 +52,34 @@ pub mod options {
 
 const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
 
+struct Options {
+    silent: bool,
+    clean_print: bool,
+    print_over: bool,
+}
+
+impl Options {
+    fn from(matches: &ArgMatches) -> Self {
+        Self {
+            silent: matches.get_flag(options::SILENT),
+            clean_print: matches.get_flag(options::CLEAN_PRINT),
+            print_over: matches.get_flag(options::PRINT_OVER),
+        }
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let args = args.collect_lossy();
+    let matches = match uu_app().try_get_matches_from(&args) {
+        Ok(m) => m,
+        Err(e) => return Err(e.into()),
+    };
+
+    let options = Options::from(&matches);
 
     let mut buff = String::new();
-    let silent = matches.get_flag(options::SILENT);
+
     if let Some(files) = matches.get_many::<String>(options::FILES) {
         let mut stdout = setup_term();
         let length = files.len();
@@ -83,14 +106,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             let mut reader = BufReader::new(File::open(file).unwrap());
             reader.read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, next_file.copied(), silent)?;
+            more(&buff, &mut stdout, next_file.copied(), &options)?;
             buff.clear();
         }
         reset_term(&mut stdout);
     } else if !std::io::stdin().is_terminal() {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
-        more(&buff, &mut stdout, None, silent)?;
+        more(&buff, &mut stdout, None, &options)?;
         reset_term(&mut stdout);
     } else {
         return Err(UUsageError::new(1, "bad usage"));
@@ -105,10 +128,24 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .infer_long_args(true)
         .arg(
+            Arg::new(options::PRINT_OVER)
+                .short('c')
+                .long(options::PRINT_OVER)
+                .help("Do not scroll, display text and clean line ends")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(options::SILENT)
                 .short('d')
                 .long(options::SILENT)
                 .help("Display help instead of ringing bell")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::CLEAN_PRINT)
+                .short('p')
+                .long(options::CLEAN_PRINT)
+                .help("Do not scroll, clean screen and display text")
                 .action(ArgAction::SetTrue),
         )
         // The commented arguments below are unimplemented:
@@ -124,18 +161,6 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::NO_PAUSE)
                 .help("Suppress pause after form feed"),
-        )
-        .arg(
-            Arg::new(options::PRINT_OVER)
-                .short('c')
-                .long(options::PRINT_OVER)
-                .help("Do not scroll, display text and clean line ends"),
-        )
-        .arg(
-            Arg::new(options::CLEAN_PRINT)
-                .short('p')
-                .long(options::CLEAN_PRINT)
-                .help("Do not scroll, clean screen and display text"),
         )
         .arg(
             Arg::new(options::SQUEEZE)
@@ -209,7 +234,7 @@ fn setup_term() -> usize {
 fn reset_term(stdout: &mut std::io::Stdout) {
     terminal::disable_raw_mode().unwrap();
     // Clear the prompt
-    queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+    queue!(stdout, terminal::Clear(ClearType::CurrentLine)).unwrap();
     // Move cursor to the beginning without printing new line
     print!("\r");
     stdout.flush().unwrap();
@@ -219,11 +244,16 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) -> UResult<()> {
+fn more(
+    buff: &str,
+    stdout: &mut Stdout,
+    next_file: Option<&str>,
+    options: &Options,
+) -> UResult<()> {
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
 
-    let mut pager = Pager::new(rows, lines, next_file, silent);
+    let mut pager = Pager::new(rows, lines, next_file, options);
     pager.draw(stdout, None);
     if pager.should_close() {
         return Ok(());
@@ -303,6 +333,11 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                 _ => continue,
             }
 
+            if options.clean_print {
+                execute!(std::io::stdout(), Clear(ClearType::Purge), MoveTo(0, 0)).unwrap();
+            } else if options.print_over {
+                execute!(std::io::stdout(), Clear(ClearType::All), MoveTo(0, 0)).unwrap();
+            }
             pager.draw(stdout, wrong_key);
         }
     }
@@ -320,7 +355,7 @@ struct Pager<'a> {
 }
 
 impl<'a> Pager<'a> {
-    fn new(rows: u16, lines: Vec<String>, next_file: Option<&'a str>, silent: bool) -> Self {
+    fn new(rows: u16, lines: Vec<String>, next_file: Option<&'a str>, options: &Options) -> Self {
         let line_count = lines.len();
         Self {
             upper_mark: 0,
@@ -328,7 +363,7 @@ impl<'a> Pager<'a> {
             lines,
             next_file,
             line_count,
-            silent,
+            silent: options.silent,
         }
     }
 
