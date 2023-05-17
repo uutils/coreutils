@@ -41,7 +41,13 @@ use unicode_width::UnicodeWidthStr;
     target_os = "linux",
     target_os = "macos",
     target_os = "android",
-    target_os = "ios"
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "illumos",
+    target_os = "solaris"
 ))]
 use uucore::libc::{dev_t, major, minor};
 #[cfg(unix)]
@@ -1991,7 +1997,12 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         require_literal_separator: false,
         case_sensitive: true,
     };
-    let file_name = entry.file_name().into_string().unwrap();
+    let file_name = entry.file_name();
+    // If the decoding fails, still show an incorrect rendering
+    let file_name = match file_name.to_str() {
+        Some(s) => s.to_string(),
+        None => file_name.to_string_lossy().into_owned(),
+    };
     !config
         .ignore_patterns
         .iter()
@@ -2716,7 +2727,13 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
         target_os = "linux",
         target_os = "macos",
         target_os = "android",
-        target_os = "ios"
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "illumos",
+        target_os = "solaris"
     ))]
     {
         let ft = metadata.file_type();

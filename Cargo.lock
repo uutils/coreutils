@@ -1156,9 +1156,9 @@ dependencies = [
 
 [[package]]
 name = "humantime_to_duration"
-version = "0.1.3"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46276b15cd421d8262968eb5c3a075ae4a40bd787762ca0ddfead00fd5f6fbce"
+checksum = "714764645f21cc70c4c151d7798dd158409641f37ad820bed65224aae403cbed"
 dependencies = [
  "regex",
  "time",
@@ -1318,9 +1318,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.143"
+version = "0.2.144"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edc207893e85c5d6be840e969b496b53d94cec8be2d501b214f50daa97fa8024"
+checksum = "2b00cc1c228a6782d0f076e7b232802e0c5689d41bb5df366f2a6b6621cfdfe1"
 
 [[package]]
 name = "libloading"
@@ -1404,9 +1404,9 @@ checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 
 [[package]]
 name = "memmap2"
-version = "0.5.8"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b182332558b18d807c4ce1ca8ca983b34c3ee32765e47b3f0f69b90355cc1dc"
+checksum = "7f9ff02d2efdc645fca1ee55f45545b996e7da776b5b60c4e170334457551693"
 dependencies = [
  "libc",
 ]
@@ -2158,9 +2158,9 @@ dependencies = [
 
 [[package]]
 name = "sm3"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f943a7c5e3089f2bd046221d1e9f4fa59396bf0fe966360983649683086215da"
+checksum = "ebb9a3b702d0a7e33bc4d85a14456633d2b165c2ad839c5fd9a8417c1ab15860"
 dependencies = [
  "digest",
 ]
@@ -2552,6 +2552,7 @@ dependencies = [
  "clap",
  "gcd",
  "libc",
+ "nix",
  "signal-hook",
  "uucore",
 ]
@@ -3378,6 +3379,7 @@ name = "uu_yes"
 version = "0.0.18"
 dependencies = [
  "clap",
+ "itertools",
  "nix",
  "uucore",
 ]
@@ -3665,9 +3667,9 @@ checksum = "2a599daf1b507819c1121f0bf87fa37eb19daac6aff3aefefd4e6e2e0f2020fc"
 
 [[package]]
 name = "zip"
-version = "0.6.5"
+version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e92305c174683d78035cbf1b70e18db6329cc0f1b9cae0a52ca90bf5bfe7125"
+checksum = "760394e246e4c28189f19d488c058bf16f564016aefac5d32bb1f3b51d5e9261"
 dependencies = [
  "byteorder",
  "crc32fast",

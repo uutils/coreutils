@@ -5,6 +5,21 @@ features that are not supported by GNU coreutils. We take care not to introduce
 features that are incompatible with the GNU coreutils. Below is a list of uutils
 extensions.
 
+## General
+
+GNU coreutils provides two ways to define short options taking an argument:
+
+```
+$ ls -w 80
+$ ls -w80
+```
+
+We support a third way:
+
+```
+$ ls -w=80
+```
+
 ## `env`
 
 `env` has an additional `-f`/`--file` flag that can parse `.env` files and set

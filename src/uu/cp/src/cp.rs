@@ -1151,14 +1151,20 @@ fn copy_source(
     } else {
         // Copy as file
         let dest = construct_dest_path(source_path, target, target_type, options)?;
-        copy_file(
+        let res = copy_file(
             progress_bar,
             source_path,
             dest.as_path(),
             options,
             symlinked_files,
             true,
-        )
+        );
+        if options.parents {
+            for (x, y) in aligned_ancestors(source, dest.as_path()) {
+                copy_attributes(x, y, &options.attributes)?;
+            }
+        }
+        res
     }
 }
 

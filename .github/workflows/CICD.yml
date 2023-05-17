@@ -3,7 +3,7 @@ name: CICD
 # spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl taiki
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers
-# spell-checker:ignore (people) Peltoche rivy
+# spell-checker:ignore (people) Peltoche rivy dtolnay
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt utmpdump xargs
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
 
@@ -48,10 +48,10 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - name: Install `rust` toolchain
-      run: |
-        rustup toolchain install nightly --no-self-update --profile minimal
-        rustup default nightly
+    - uses: dtolnay/rust-toolchain@nightly
+    ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
+    ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
+    - uses: taiki-e/install-action@cargo-udeps
     - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
@@ -70,12 +70,6 @@ jobs:
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
-    ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
-    ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
-    - name: Install `cargo-udeps`
-      run: cargo install cargo-udeps
-      env:
-        RUSTUP_TOOLCHAIN: stable
     - name: Detect unused dependencies
       shell: bash
       run: |
@@ -98,11 +92,10 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update -c rustfmt --profile minimal
-        rustup default stable
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        components: rustfmt
     - uses: Swatinem/rust-cache@v2
     - name: Initialize workflow variables
       id: vars
@@ -139,10 +132,7 @@ jobs:
       RUN_FOR: 60
     steps:
     - uses: actions/checkout@v3
-    - name: Install `rust` toolchain
-      run: |
-        rustup toolchain install nightly --no-self-update --profile minimal
-        rustup default nightly
+    - uses: dtolnay/rust-toolchain@nightly
     - name: Install `cargo-fuzz`
       run: cargo install cargo-fuzz
     - uses: Swatinem/rust-cache@v2
@@ -186,11 +176,10 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update -c clippy --profile minimal
-        rustup default stable
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -297,11 +286,10 @@ jobs:
 #          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update -c clippy --profile minimal
-        rustup default stable
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        components: clippy
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -351,13 +339,12 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
-      run: |
-        ## Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
-        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
-        rustup default ${{ env.RUST_MIN_SRV }}
-    - uses: Swatinem/rust-cache@v2
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ env.RUST_MIN_SRV }}
+        components: rustfmt
     - uses: taiki-e/install-action@nextest
+    - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
     - name: Initialize workflow variables
@@ -409,7 +396,6 @@ jobs:
       env:
         RUSTFLAGS: "-Awarnings"
         RUST_BACKTRACE: "1"
-        CARGO_TERM_COLOR: always
 
   deps:
     name: Dependencies
@@ -421,11 +407,7 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update --profile minimal
-        rustup default stable
+    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo update` testing"
       shell: bash
@@ -448,11 +430,7 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update --profile minimal
-        rustup default stable
+    - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
@@ -466,7 +444,6 @@ jobs:
       run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
-        CARGO_TERM_COLOR: "always"
     - name: "`make install`"
       shell: bash
       run: |
@@ -495,11 +472,7 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update --profile minimal
-        rustup default stable
+    - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
@@ -508,7 +481,6 @@ jobs:
       run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
         RUST_BACKTRACE: "1"
-        CARGO_TERM_COLOR: "always"
 
   build_rust_nightly:
     name: Build/nightly
@@ -527,11 +499,7 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install nightly --no-self-update --profile minimal
-        rustup default nightly
+    - uses: dtolnay/rust-toolchain@nightly
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
@@ -540,7 +508,6 @@ jobs:
       run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
         RUST_BACKTRACE: "1"
-        CARGO_TERM_COLOR: "always"
 
   compute_size:
     name: Binary sizes
@@ -556,11 +523,7 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v3
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rustup toolchain install stable --no-self-update --profile minimal
-        rustup default stable
+    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -680,11 +643,10 @@ jobs:
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v3
-    - name: rust toolchain ~ install
-      run: |
-        ## rust toolchain ~ install
-        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} -t ${{ matrix.job.target }} --profile minimal
-        rustup default ${{ env.RUST_MIN_SRV }}
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ env.RUST_MIN_SRV }}
+        targets: ${{ matrix.job.target }}
     - uses: Swatinem/rust-cache@v2
       with:
         key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
@@ -765,8 +727,7 @@ jobs:
         outputs CARGO_CMD
         # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
         if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
-          cargo install --version 0.2.1 cross
-          printf "[build.env]\npassthrough = [\"CI\", \"RUST_BACKTRACE\"]\n" > Cross.toml
+          printf "[build.env]\npassthrough = [\"CI\", \"RUST_BACKTRACE\", \"CARGO_TERM_COLOR\"]\n" > Cross.toml
         fi
         # * test only library and/or binaries for arm-type targets
         unset CARGO_TEST_OPTIONS ; case '${{ matrix.job.target }}' in aarch64-* | arm-*) CARGO_TEST_OPTIONS="--bins" ;; esac;
@@ -779,6 +740,10 @@ jobs:
           *-pc-windows-msvc) STRIP="" ;;
         esac;
         outputs STRIP
+    - uses: taiki-e/install-action@v2
+      if: steps.vars.outputs.CARGO_CMD == 'cross'
+      with:
+        tool: cross@0.2.1
     - name: Create all needed build/work directories
       shell: bash
       run: |
@@ -1017,11 +982,10 @@ jobs:
         TEST_SUMMARY_FILE="toybox-result.json"
         outputs TEST_SUMMARY_FILE
     - uses: actions/checkout@v3
-    - name: rust toolchain ~ install
-      run: |
-        ## rust toolchain ~ install
-        rustup toolchain install --no-self-update ${{ env.RUST_MIN_SRV }} --profile minimal
-        rustup default ${{ env.RUST_MIN_SRV }}
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ env.RUST_MIN_SRV }}
+        components: rustfmt
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -1100,12 +1064,12 @@ jobs:
           - { os: windows-latest , features: windows, toolchain: nightly-x86_64-pc-windows-gnu }
     steps:
     - uses: actions/checkout@v3
-    - name: rust toolchain ~ install
-      run: |
-        ## rust toolchain ~ install
-        rustup toolchain install ${{ matrix.job.toolchain }} --no-self-update --profile minimal
-        rustup default ${{ matrix.job.toolchain }}
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.job.toolchain }}
+        components: rustfmt
     - uses: taiki-e/install-action@nextest
+    - uses: taiki-e/install-action@grcov
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
@@ -1170,7 +1134,6 @@ jobs:
     - name: Test uucore
       run: cargo nextest run --profile ci --hide-progress-bar -p uucore
       env:
-        CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
         RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
@@ -1179,7 +1142,6 @@ jobs:
     - name: Test
       run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
-        CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
         RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
@@ -1188,15 +1150,11 @@ jobs:
     - name: Test individual utilities
       run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
-        CARGO_INCREMENTAL: "0"
         RUSTC_WRAPPER: ""
         RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
         RUST_BACKTRACE: "1"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
-    - name: "`grcov` ~ install"
-      id: build_grcov
-      run: cargo install grcov
     - name: Generate coverage data (via `grcov`)
       id: coverage
       shell: bash

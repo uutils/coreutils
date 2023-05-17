@@ -7,6 +7,10 @@ use crate::common::util::TestScenario;
 use nix::unistd::{close, dup};
 use regex::Regex;
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
+use std::ffi::OsStr;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(all(unix, feature = "chmod"))]
 use std::os::unix::io::IntoRawFd;
 use std::path::Path;
@@ -1239,7 +1243,7 @@ fn test_ls_long_total_size() {
             ("long_si", "total 8.2k"),
         ]
         .iter()
-        .cloned()
+        .copied()
         .collect()
     } else {
         [
@@ -1248,7 +1252,7 @@ fn test_ls_long_total_size() {
             ("long_si", "total 2"),
         ]
         .iter()
-        .cloned()
+        .copied()
         .collect()
     };
 
@@ -3392,4 +3396,55 @@ fn test_tabsize_formatting() {
     ucmd.args(&["-T", "0"])
         .succeeds()
         .stdout_is("aaaaaaaa bbbb\ncccc     dddddddd");
+}
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "illumos",
+    target_os = "solaris"
+))]
+#[test]
+fn test_device_number() {
+    use std::fs::{metadata, read_dir};
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    use uucore::libc::{dev_t, major, minor};
+
+    let dev_dir = read_dir("/dev").unwrap();
+    // let's use the first device for test
+    let blk_dev = dev_dir
+        .map(|res_entry| res_entry.unwrap())
+        .find(|entry| {
+            entry.file_type().unwrap().is_block_device()
+                || entry.file_type().unwrap().is_char_device()
+        })
+        .expect("Expect a block/char device");
+    let blk_dev_path = blk_dev.path();
+    let blk_dev_meta = metadata(blk_dev_path.as_path()).unwrap();
+    let blk_dev_number = blk_dev_meta.rdev() as dev_t;
+    let (major, minor) = unsafe { (major(blk_dev_number), minor(blk_dev_number)) };
+    let major_minor_str = format!("{}, {}", major, minor);
+
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg(blk_dev_path.to_str().expect("should be UTF-8 encoded"))
+        .succeeds()
+        .stdout_contains(major_minor_str);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_invalid_utf8() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = OsStr::from_bytes(b"-\xE0-foo");
+    at.touch(filename);
+    ucmd.succeeds();
 }
