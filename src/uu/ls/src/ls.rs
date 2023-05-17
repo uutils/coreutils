@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired
+// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired colorterm
 
 use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
@@ -546,10 +546,10 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
 ///
 /// Boolean
 fn check_env_variables_against_dircolors(dircolors: &str) -> bool {
-    let ls_colors = env::var("LS_COLORS").unwrap_or("".to_string()).is_empty();
-    let colorterm = env::var("COLORTERM").unwrap_or("".to_string()).is_empty();
+    let ls_colors = env::var("LS_COLORS").unwrap_or(String::new()).is_empty();
+    let colorterm = env::var("COLORTERM").unwrap_or(String::new()).is_empty();
     if ls_colors && colorterm {
-        let term = env::var("TERM").unwrap_or("".to_string());
+        let term = env::var("TERM").unwrap_or(String::new());
         let terminals = dircolors
             .lines()
             .filter(|x| x.starts_with("TERM "))
@@ -572,7 +572,7 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
     let dircolors_allowed = check_env_variables_against_dircolors(DIRCOLORS);
     match options
         .get_one::<String>(options::COLOR)
-        .unwrap_or(&"".to_string())
+        .unwrap_or(&String::new())
         .as_str()
     {
         "" | "always" | "yes" | "force" => dircolors_allowed,
