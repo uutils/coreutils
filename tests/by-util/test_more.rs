@@ -12,11 +12,14 @@ fn test_more_no_arg() {
 
 #[test]
 fn test_valid_arg() {
-    new_ucmd!().arg("-c").succeeds().code_is(0);
-    new_ucmd!().arg("--print-over").succeeds().code_is(0);
+    if std::io::stdout().is_terminal() {
+        new_ucmd!().arg("-c").succeeds().code_is(0);
+        new_ucmd!().arg("--print-over").succeeds().code_is(0);
 
-    new_ucmd!().arg("-p").succeeds().code_is(0);
-    new_ucmd!().arg("--clean-print").succeeds().code_is(0);
+        new_ucmd!().arg("-p").succeeds().code_is(0);
+        new_ucmd!().arg("--clean-print").succeeds().code_is(0);
+    } else {
+    }
 }
 
 #[test]
