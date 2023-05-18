@@ -258,6 +258,11 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                     ..
                 })
                 | Event::Key(KeyEvent {
+                    code: KeyCode::PageDown,
+                    modifiers: KeyModifiers::NONE,
+                    ..
+                })
+                | Event::Key(KeyEvent {
                     code: KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
                     ..
@@ -270,6 +275,11 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
+                    modifiers: KeyModifiers::NONE,
+                    ..
+                })
+                | Event::Key(KeyEvent {
+                    code: KeyCode::PageUp,
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
