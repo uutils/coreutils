@@ -23,7 +23,6 @@ static TEST_TEMPLATE7: &str = "XXXtemplate"; // spell-checker:disable-line
 static TEST_TEMPLATE8: &str = "tempXXXl/ate";
 #[cfg(windows)]
 static TEST_TEMPLATE8: &str = "tempXXXl\\ate";
-static TEST_TEMPLATE9: &str = "a.XXXX";
 
 #[cfg(not(windows))]
 const TMPDIR: &str = "TMPDIR";
@@ -573,9 +572,7 @@ fn test_template_path_separator() {
 /// Test that a prefix with a point is valid.
 #[test]
 fn test_prefix_template_separator() {
-    new_ucmd!()
-        .args(&["-p", ".", "-t", TEST_TEMPLATE9])
-        .succeeds();
+    new_ucmd!().args(&["-p", ".", "-t", "a.XXXX"]).succeeds();
 }
 
 #[test]
@@ -854,8 +851,7 @@ fn test_nonexistent_dir_prefix() {
 
 #[test]
 fn test_default_missing_value() {
-    let scene = TestScenario::new(util_name!());
-    scene.ucmd().arg("-d").arg("--tmpdir").succeeds();
+    new_ucmd!().arg("-d").arg("--tmpdir").succeeds();
 }
 
 #[test]
