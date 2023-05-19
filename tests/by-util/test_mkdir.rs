@@ -71,6 +71,72 @@ fn test_mkdir_dup_dir_parent() {
     scene.ucmd().arg("-p").arg(TEST_DIR6).succeeds();
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_mkdir_parent_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let default_umask: mode_t = 0o022;
+    let original_umask = unsafe { umask(default_umask) };
+
+    ucmd.arg("-p").arg("a/b").succeeds().no_stderr().no_stdout();
+
+    assert!(at.dir_exists("a"));
+    // parents created by -p have permissions set to "=rwx,u+wx"
+    assert_eq!(
+        at.metadata("a").permissions().mode(),
+        ((!default_umask & 0o777) | 0o300) + 0o40000
+    );
+    assert!(at.dir_exists("a/b"));
+    // sub directory's permission is determined only by the umask
+    assert_eq!(
+        at.metadata("a/b").permissions().mode(),
+        (!default_umask & 0o777) + 0o40000
+    );
+
+    unsafe {
+        umask(original_umask);
+    }
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_mkdir_parent_mode_check_existing_parent() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let default_umask: mode_t = 0o022;
+    let original_umask = unsafe { umask(default_umask) };
+
+    at.mkdir("a");
+
+    ucmd.arg("-p")
+        .arg("a/b/c")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert!(at.dir_exists("a"));
+    // parent dirs that already exist do not get their permissions modified
+    assert_eq!(
+        at.metadata("a").permissions().mode(),
+        (!default_umask & 0o777) + 0o40000
+    );
+    assert!(at.dir_exists("a/b"));
+    assert_eq!(
+        at.metadata("a/b").permissions().mode(),
+        ((!default_umask & 0o777) | 0o300) + 0o40000
+    );
+    assert!(at.dir_exists("a/b/c"));
+    assert_eq!(
+        at.metadata("a/b/c").permissions().mode(),
+        (!default_umask & 0o777) + 0o40000
+    );
+
+    unsafe {
+        umask(original_umask);
+    }
+}
+
 #[test]
 fn test_mkdir_dup_file() {
     let scene = TestScenario::new(util_name!());
@@ -98,7 +164,7 @@ fn test_symbolic_alteration() {
 
     ucmd.arg("-m").arg("-w").arg(TEST_DIR1).succeeds();
     let perms = at.metadata(TEST_DIR1).permissions().mode();
-    assert_eq!(perms, 0o40555);
+    assert_eq!(perms, 0o40577);
 }
 
 #[test]
