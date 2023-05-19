@@ -179,6 +179,7 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
     Ok(())
 }
 
+// `is_parent` argument is not used on windows
 #[allow(unused_variables)]
 fn create_dir(path: &Path, recursive: bool, verbose: bool, is_parent: bool) -> UResult<()> {
     if path.exists() && !recursive {
