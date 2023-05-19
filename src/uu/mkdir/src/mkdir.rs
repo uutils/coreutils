@@ -20,7 +20,7 @@ use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_if_err};
 
-static DEFAULT_PERM: u32 = 0o755;
+static DEFAULT_PERM: u32 = 0o777;
 
 const ABOUT: &str = help_about!("mkdir.md");
 const USAGE: &str = help_usage!("mkdir.md");
@@ -41,7 +41,7 @@ fn get_mode(_matches: &ArgMatches, _mode_had_minus_prefix: bool) -> Result<u32, 
 #[cfg(not(windows))]
 fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, String> {
     let digits: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    // Translate a ~str in octal form to u16, default to 755
+    // Translate a ~str in octal form to u16, default to 777
     // Not tested on Windows
     let mut new_mode = DEFAULT_PERM;
     match matches.get_one::<String>(options::MODE) {
@@ -158,7 +158,7 @@ fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) ->
 }
 
 fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
-    create_dir(path, recursive, verbose)?;
+    create_dir(path, recursive, verbose, false)?;
     chmod(path, mode)
 }
 
@@ -179,7 +179,7 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
     Ok(())
 }
 
-fn create_dir(path: &Path, recursive: bool, verbose: bool) -> UResult<()> {
+fn create_dir(path: &Path, recursive: bool, verbose: bool, is_parent: bool) -> UResult<()> {
     if path.exists() && !recursive {
         return Err(USimpleError::new(
             1,
@@ -192,7 +192,7 @@ fn create_dir(path: &Path, recursive: bool, verbose: bool) -> UResult<()> {
 
     if recursive {
         match path.parent() {
-            Some(p) => create_dir(p, recursive, verbose)?,
+            Some(p) => create_dir(p, recursive, verbose, true)?,
             None => {
                 USimpleError::new(1, "failed to create whole tree");
             }
@@ -206,6 +206,11 @@ fn create_dir(path: &Path, recursive: bool, verbose: bool) -> UResult<()> {
                     uucore::util_name(),
                     path.quote()
                 );
+            }
+            if is_parent {
+                // directories created by -p have permission bits set to '=rwx,u+wx',
+                // which is umask modified by 'u+wx'
+                chmod(path, (!mode::get_umask() & 0o0777) | 0o0300)?;
             }
             Ok(())
         }
