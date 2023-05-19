@@ -84,13 +84,13 @@ fn test_mkdir_parent_mode() {
     assert!(at.dir_exists("a"));
     // parents created by -p have permissions set to "=rwx,u+wx"
     assert_eq!(
-        at.metadata("a").permissions().mode(),
+        at.metadata("a").permissions().mode() as mode_t,
         ((!default_umask & 0o777) | 0o300) + 0o40000
     );
     assert!(at.dir_exists("a/b"));
     // sub directory's permission is determined only by the umask
     assert_eq!(
-        at.metadata("a/b").permissions().mode(),
+        at.metadata("a/b").permissions().mode() as mode_t,
         (!default_umask & 0o777) + 0o40000
     );
 
@@ -118,17 +118,17 @@ fn test_mkdir_parent_mode_check_existing_parent() {
     assert!(at.dir_exists("a"));
     // parent dirs that already exist do not get their permissions modified
     assert_eq!(
-        at.metadata("a").permissions().mode(),
+        at.metadata("a").permissions().mode() as mode_t,
         (!default_umask & 0o777) + 0o40000
     );
     assert!(at.dir_exists("a/b"));
     assert_eq!(
-        at.metadata("a/b").permissions().mode(),
+        at.metadata("a/b").permissions().mode() as mode_t,
         ((!default_umask & 0o777) | 0o300) + 0o40000
     );
     assert!(at.dir_exists("a/b/c"));
     assert_eq!(
-        at.metadata("a/b/c").permissions().mode(),
+        at.metadata("a/b/c").permissions().mode() as mode_t,
         (!default_umask & 0o777) + 0o40000
     );
 

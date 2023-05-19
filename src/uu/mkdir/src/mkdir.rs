@@ -179,6 +179,7 @@ fn chmod(_path: &Path, _mode: u32) -> UResult<()> {
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn create_dir(path: &Path, recursive: bool, verbose: bool, is_parent: bool) -> UResult<()> {
     if path.exists() && !recursive {
         return Err(USimpleError::new(
@@ -207,6 +208,7 @@ fn create_dir(path: &Path, recursive: bool, verbose: bool, is_parent: bool) -> U
                     path.quote()
                 );
             }
+            #[cfg(not(windows))]
             if is_parent {
                 // directories created by -p have permission bits set to '=rwx,u+wx',
                 // which is umask modified by 'u+wx'
