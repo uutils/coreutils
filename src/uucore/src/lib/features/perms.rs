@@ -271,27 +271,11 @@ impl ChownExecutor {
                 }
             }
         } else {
-            if self.verbosity.level == VerbosityLevel::Verbose {
-                // Display a message when the current user/group doesn't match those specified in
-                // the `--from` args.
-                if self.dest_gid.is_none() {
-                    let uid = meta.uid();
-                    println!(
-                        "ownership of {} retained as {}",
-                        path.quote(),
-                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                    );
-                } else {
-                    let uid = meta.uid();
-                    let gid = meta.gid();
-                    println!(
-                        "ownership of {} retained as {}:{}",
-                        path.quote(),
-                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                    );
-                }
-            }
+            self.print_verbose_ownership_retained_as(
+                path,
+                meta.uid(),
+                self.dest_gid.map(|_| meta.gid()),
+            );
             0
         };
 
@@ -353,27 +337,11 @@ impl ChownExecutor {
             };
 
             if !self.matched(meta.uid(), meta.gid()) {
-                if self.verbosity.level == VerbosityLevel::Verbose {
-                    // Display a message when the current user/group doesn't match those specified in
-                    // the `--from` args.
-                    if self.dest_gid.is_none() {
-                        let uid = meta.uid();
-                        println!(
-                            "ownership of {} retained as {}",
-                            path.quote(),
-                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                        );
-                    } else {
-                        let uid = meta.uid();
-                        let gid = meta.gid();
-                        println!(
-                            "ownership of {} retained as {}:{}",
-                            path.quote(),
-                            entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
-                            entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
-                        );
-                    }
-                }
+                self.print_verbose_ownership_retained_as(
+                    path,
+                    meta.uid(),
+                    self.dest_gid.map(|_| meta.gid()),
+                );
                 continue;
             }
 
@@ -433,6 +401,28 @@ impl ChownExecutor {
             IfFrom::User(u) => u == uid,
             IfFrom::Group(g) => g == gid,
             IfFrom::UserGroup(u, g) => u == uid && g == gid,
+        }
+    }
+
+    fn print_verbose_ownership_retained_as(&self, path: &Path, uid: u32, gid: Option<u32>) {
+        if self.verbosity.level == VerbosityLevel::Verbose {
+            match gid {
+                Some(gid) => {
+                    println!(
+                        "ownership of {} retained as {}:{}",
+                        path.quote(),
+                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                    );
+                }
+                None => {
+                    println!(
+                        "ownership of {} retained as {}",
+                        path.quote(),
+                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                    );
+                }
+            }
         }
     }
 }
