@@ -333,9 +333,14 @@ fn more(
                 _ => continue,
             }
 
-            if options.clean_print {
-                execute!(std::io::stdout(), Clear(ClearType::Purge), MoveTo(0, 0)).unwrap();
-            } else if options.print_over {
+            if options.print_over {
+                execute!(
+                    std::io::stdout(),
+                    MoveTo(0, 0),
+                    Clear(ClearType::FromCursorDown)
+                )
+                .unwrap();
+            } else if options.clean_print {
                 execute!(std::io::stdout(), Clear(ClearType::All), MoveTo(0, 0)).unwrap();
             }
             pager.draw(stdout, wrong_key);
