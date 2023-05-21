@@ -730,7 +730,7 @@ fn test_chown_file_notexisting() {
     let user_name = String::from(result.stdout_str().trim());
     assert!(!user_name.is_empty());
 
-    let result = scene
+    scene
         .ucmd()
         .arg(&user_name)
         .arg("--verbose")
