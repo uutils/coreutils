@@ -29,7 +29,7 @@ itertools = { version="0.10.5", optional=true }
 thiserror = { workspace=true, optional=true }
 time = { workspace=true, optional=true, features = ["formatting", "local-offset", "macros"] }
 # * "problem" dependencies (pinned)
-data-encoding = { version="2.3", optional=true }
+data-encoding = { version="2.4", optional=true }
 data-encoding-macro = { version="0.1.12", optional=true }
 z85 = { version="3.0.5", optional=true }
 libc = { version="0.2.144", optional=true }
