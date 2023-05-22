@@ -884,3 +884,20 @@ fn test_default_issue_4821_t_tmpdir_p() {
     println!("stdout = {stdout}");
     assert!(stdout.contains(&pathname));
 }
+
+#[test]
+fn test_t_ensure_tmpdir_has_higher_priority_than_p() {
+    let scene = TestScenario::new(util_name!());
+    let pathname = scene.fixtures.as_string();
+    let result = scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg("-p")
+        .arg("should_not_attempt_to_write_in_this_nonexisting_dir")
+        .arg("foo.XXXX")
+        .succeeds();
+    let stdout = result.stdout_str();
+    println!("stdout = {stdout}");
+    assert!(stdout.contains(&pathname));
+}
