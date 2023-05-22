@@ -42,6 +42,11 @@ static OPT_T: &str = "t";
 
 static ARG_TEMPLATE: &str = "template";
 
+#[cfg(not(windows))]
+const TMPDIR_ENV_VAR: &str = "TMPDIR";
+#[cfg(windows)]
+const TMPDIR_ENV_VAR: &str = "TMP";
+
 #[derive(Debug)]
 enum MkTempError {
     PersistError(PathBuf),
@@ -191,7 +196,9 @@ impl Options {
                     (tmpdir, template.to_string())
                 }
                 Some(template) => {
-                    let tmpdir = if matches.contains_id(OPT_TMPDIR) {
+                    let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok() && matches.get_flag(OPT_T) {
+                        env::var(TMPDIR_ENV_VAR).ok()
+                    } else if matches.contains_id(OPT_TMPDIR) {
                         matches.get_one::<String>(OPT_TMPDIR).map(String::from)
                     } else if matches.get_flag(OPT_T) {
                         // mktemp -t foo.xxx should export in TMPDIR
