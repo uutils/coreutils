@@ -76,7 +76,7 @@ fn test_mkdir_dup_dir_parent() {
 fn test_mkdir_parent_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let default_umask: mode_t = 0o022;
+    let default_umask: mode_t = 0o160;
     let original_umask = unsafe { umask(default_umask) };
 
     ucmd.arg("-p").arg("a/b").succeeds().no_stderr().no_stdout();
@@ -104,10 +104,10 @@ fn test_mkdir_parent_mode() {
 fn test_mkdir_parent_mode_check_existing_parent() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let default_umask: mode_t = 0o022;
-    let original_umask = unsafe { umask(default_umask) };
-
     at.mkdir("a");
+
+    let default_umask: mode_t = 0o160;
+    let original_umask = unsafe { umask(default_umask) };
 
     ucmd.arg("-p")
         .arg("a/b/c")
@@ -119,7 +119,7 @@ fn test_mkdir_parent_mode_check_existing_parent() {
     // parent dirs that already exist do not get their permissions modified
     assert_eq!(
         at.metadata("a").permissions().mode() as mode_t,
-        (!default_umask & 0o777) + 0o40000
+        (!original_umask & 0o777) + 0o40000
     );
     assert!(at.dir_exists("a/b"));
     assert_eq!(
