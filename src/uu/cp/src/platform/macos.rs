@@ -11,7 +11,7 @@ use std::path::Path;
 
 use quick_error::ResultExt;
 
-use crate::{CopyResult, ReflinkMode, SparseMode};
+use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
 
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
@@ -24,10 +24,15 @@ pub(crate) fn copy_on_write(
     sparse_mode: SparseMode,
     context: &str,
     source_is_fifo: bool,
-) -> CopyResult<()> {
+) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
         return Err("--sparse is only supported on linux".to_string().into());
     }
+    let mut copy_debug = CopyDebug {
+        offload: OffloadReflinkDebug::Unknown,
+        reflink: OffloadReflinkDebug::Unsupported,
+        sparse_detection: SparseDebug::Unsupported,
+    };
 
     // Extract paths in a form suitable to be passed to a syscall.
     // The unwrap() is safe because they come from the command-line and so contain non nul
@@ -72,6 +77,7 @@ pub(crate) fn copy_on_write(
                 return Err(format!("failed to clone {source:?} from {dest:?}: {error}").into())
             }
             _ => {
+                copy_debug.reflink = OffloadReflinkDebug::Yes;
                 if source_is_fifo {
                     let mut src_file = File::open(source)?;
                     let mut dst_file = File::create(dest)?;
@@ -83,5 +89,5 @@ pub(crate) fn copy_on_write(
         };
     }
 
-    Ok(())
+    Ok(copy_debug)
 }
