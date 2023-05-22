@@ -6,7 +6,6 @@ fn test_more_no_arg() {
     // Reading from stdin is now supported, so this must succeed
     if std::io::stdout().is_terminal() {
         new_ucmd!().succeeds();
-    } else {
     }
 }
 
@@ -18,7 +17,6 @@ fn test_valid_arg() {
 
         new_ucmd!().arg("-p").succeeds();
         new_ucmd!().arg("--clean-print").succeeds();
-    } else {
     }
 }
 
@@ -32,6 +30,5 @@ fn test_more_dir_arg() {
             .arg(".")
             .fails()
             .usage_error("'.' is a directory.");
-    } else {
     }
 }
