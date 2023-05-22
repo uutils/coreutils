@@ -846,6 +846,8 @@ fn test_ls_zero() {
 
     scene
         .ucmd()
+        // ls requires either, TERM, LS_COLORS or COLORTERM env variable to be set
+        .env("TERM", "xterm")
         .args(&["--zero", "--color=always"])
         .succeeds()
         .stdout_only("\x1b[1;34m0-test-zero\x1b[0m\x002-test-zero\x003-test-zero\x00");
@@ -903,6 +905,8 @@ fn test_ls_zero() {
 
         scene
             .ucmd()
+            // ls requires either, TERM, LS_COLORS or COLORTERM env variable to be set
+            .env("TERM", "xterm")
             .args(&["--zero", "--color=always"])
             .succeeds()
             .stdout_only(
@@ -1921,7 +1925,7 @@ fn test_ls_color() {
     assert!(!result.stdout_str().contains(z_with_colors));
 
     // Color is enabled by default, when either, TERM, LS_COLORS or COLORTERM env variable is set
-    let result = scene
+    scene
         .ucmd()
         .env("TERM", "xterm")
         .succeeds()
