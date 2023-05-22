@@ -341,7 +341,7 @@ sha3 = "0.10.8"
 blake2b_simd = "1.0.1"
 blake3 = "1.3.3"
 sm3 = "0.4.2"
-digest = "0.10.6"
+digest = "0.10.7"
 
 uucore = { version=">=0.0.18", package="uucore", path="src/uucore" }
 uucore_procs = { version=">=0.0.18", package="uucore_procs", path="src/uucore_procs" }
