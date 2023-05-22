@@ -104,7 +104,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if length > 1 {
                 buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
             }
-            let mut reader = BufReader::new(File::open(file).unwrap());
+            let opened_file = match File::open(file) {
+                Err(why) => {
+                    return Err(UUsageError::new(
+                        1,
+                        format!("cannot open {}: {}", file.quote(), why.kind()),
+                    ))
+                }
+                Ok(opened_file) => opened_file,
+            };
+            let mut reader = BufReader::new(opened_file);
             reader.read_to_string(&mut buff).unwrap();
             more(&buff, &mut stdout, next_file.copied(), &options)?;
             buff.clear();
