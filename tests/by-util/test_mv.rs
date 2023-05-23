@@ -825,7 +825,7 @@ fn test_mv_arg_update_none() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(file2), file2_content)
+    assert_eq!(at.read(file2), file2_content);
 }
 
 #[test]
@@ -847,7 +847,7 @@ fn test_mv_arg_update_all() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(file2), file1_content)
+    assert_eq!(at.read(file2), file1_content);
 }
 
 #[test]
@@ -872,7 +872,7 @@ fn test_mv_arg_update_older_dest_not_older() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(new), new_content)
+    assert_eq!(at.read(new), new_content);
 }
 
 #[test]
