@@ -169,6 +169,9 @@ pub fn uu_app() -> Command {
                     prompts always",
                 )
                 .value_name("WHEN")
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value("always")
                 .overrides_with_all([OPT_PROMPT, OPT_PROMPT_MORE]),
         )
         .arg(
