@@ -1,8 +1,12 @@
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use libc::{mode_t, umask};
+use once_cell::sync::Lazy;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
+use std::sync::Mutex;
+
+static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 static TEST_DIR1: &str = "mkdir_test1";
 static TEST_DIR2: &str = "mkdir_test2";
@@ -20,16 +24,19 @@ static TEST_DIR12: &str = "mkdir_test12";
 
 #[test]
 fn test_invalid_arg() {
+    let _guard = TEST_MUTEX.lock();
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
 }
 
 #[test]
 fn test_mkdir_mkdir() {
+    let _guard = TEST_MUTEX.lock();
     new_ucmd!().arg(TEST_DIR1).succeeds();
 }
 
 #[test]
 fn test_mkdir_verbose() {
+    let _guard = TEST_MUTEX.lock();
     let expected = "mkdir: created directory 'mkdir_test1'\n";
     new_ucmd!()
         .arg(TEST_DIR1)
@@ -40,6 +47,7 @@ fn test_mkdir_verbose() {
 
 #[test]
 fn test_mkdir_dup_dir() {
+    let _guard = TEST_MUTEX.lock();
     let scene = TestScenario::new(util_name!());
     scene.ucmd().arg(TEST_DIR2).succeeds();
     scene.ucmd().arg(TEST_DIR2).fails();
@@ -47,11 +55,13 @@ fn test_mkdir_dup_dir() {
 
 #[test]
 fn test_mkdir_mode() {
+    let _guard = TEST_MUTEX.lock();
     new_ucmd!().arg("-m").arg("755").arg(TEST_DIR3).succeeds();
 }
 
 #[test]
 fn test_mkdir_parent() {
+    let _guard = TEST_MUTEX.lock();
     let scene = TestScenario::new(util_name!());
     scene.ucmd().arg("-p").arg(TEST_DIR4).succeeds();
     scene.ucmd().arg("-p").arg(TEST_DIR4).succeeds();
@@ -61,11 +71,13 @@ fn test_mkdir_parent() {
 
 #[test]
 fn test_mkdir_no_parent() {
+    let _guard = TEST_MUTEX.lock();
     new_ucmd!().arg(TEST_DIR5).fails();
 }
 
 #[test]
 fn test_mkdir_dup_dir_parent() {
+    let _guard = TEST_MUTEX.lock();
     let scene = TestScenario::new(util_name!());
     scene.ucmd().arg(TEST_DIR6).succeeds();
     scene.ucmd().arg("-p").arg(TEST_DIR6).succeeds();
@@ -74,6 +86,7 @@ fn test_mkdir_dup_dir_parent() {
 #[cfg(not(windows))]
 #[test]
 fn test_mkdir_parent_mode() {
+    let _guard = TEST_MUTEX.lock();
     let (at, mut ucmd) = at_and_ucmd!();
 
     let default_umask: mode_t = 0o160;
@@ -102,6 +115,7 @@ fn test_mkdir_parent_mode() {
 #[cfg(not(windows))]
 #[test]
 fn test_mkdir_parent_mode_check_existing_parent() {
+    let _guard = TEST_MUTEX.lock();
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("a");
@@ -139,6 +153,7 @@ fn test_mkdir_parent_mode_check_existing_parent() {
 
 #[test]
 fn test_mkdir_dup_file() {
+    let _guard = TEST_MUTEX.lock();
     let scene = TestScenario::new(util_name!());
     scene.fixtures.touch(TEST_FILE7);
     scene.ucmd().arg(TEST_FILE7).fails();
@@ -150,6 +165,7 @@ fn test_mkdir_dup_file() {
 #[test]
 #[cfg(not(windows))]
 fn test_symbolic_mode() {
+    let _guard = TEST_MUTEX.lock();
     let (at, mut ucmd) = at_and_ucmd!();
 
     ucmd.arg("-m").arg("a=rwx").arg(TEST_DIR1).succeeds();
@@ -160,6 +176,7 @@ fn test_symbolic_mode() {
 #[test]
 #[cfg(not(windows))]
 fn test_symbolic_alteration() {
+    let _guard = TEST_MUTEX.lock();
     let (at, mut ucmd) = at_and_ucmd!();
 
     let default_umask = 0o022;
@@ -175,6 +192,7 @@ fn test_symbolic_alteration() {
 #[test]
 #[cfg(not(windows))]
 fn test_multi_symbolic() {
+    let _guard = TEST_MUTEX.lock();
     let (at, mut ucmd) = at_and_ucmd!();
 
     ucmd.arg("-m")
@@ -187,6 +205,7 @@ fn test_multi_symbolic() {
 
 #[test]
 fn test_recursive_reporting() {
+    let _guard = TEST_MUTEX.lock();
     new_ucmd!()
         .arg("-p")
         .arg("-v")
@@ -208,6 +227,7 @@ fn test_recursive_reporting() {
 
 #[test]
 fn test_mkdir_trailing_dot() {
+    let _guard = TEST_MUTEX.lock();
     let scene2 = TestScenario::new("ls");
     new_ucmd!()
         .arg("-p")
@@ -236,6 +256,7 @@ fn test_mkdir_trailing_dot() {
 #[cfg(not(windows))]
 fn test_umask_compliance() {
     fn test_single_case(umask_set: mode_t) {
+        let _guard = TEST_MUTEX.lock();
         let (at, mut ucmd) = at_and_ucmd!();
 
         let original_umask = unsafe { umask(umask_set) };
