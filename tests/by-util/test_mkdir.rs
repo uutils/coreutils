@@ -162,9 +162,14 @@ fn test_symbolic_mode() {
 fn test_symbolic_alteration() {
     let (at, mut ucmd) = at_and_ucmd!();
 
+    let default_umask = 0o022;
+    let original_umask = unsafe { umask(default_umask) };
+
     ucmd.arg("-m").arg("-w").arg(TEST_DIR1).succeeds();
     let perms = at.metadata(TEST_DIR1).permissions().mode();
     assert_eq!(perms, 0o40577);
+
+    unsafe { umask(original_umask) };
 }
 
 #[test]
