@@ -2,9 +2,9 @@ name: GnuTests
 
 # spell-checker:ignore (abbrev/names) CodeCov gnulib GnuTests Swatinem
 # spell-checker:ignore (jargon) submodules
-# spell-checker:ignore (libs/utils) autopoint chksum gperf lcov libexpect pyinotify shopt texinfo valgrind libattr libcap
+# spell-checker:ignore (libs/utils) autopoint chksum gperf lcov libexpect pyinotify shopt texinfo valgrind libattr libcap taiki-e
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
-# spell-checker:ignore (people) Dawid Dziurla * dawidd
+# spell-checker:ignore (people) Dawid Dziurla * dawidd dtolnay
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
@@ -42,7 +42,7 @@ jobs:
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
         repo_default_branch="${{ github.event.repository.default_branch }}"
-        repo_GNU_ref="v9.2"
+        repo_GNU_ref="v9.3"
         repo_reference_branch="${{ github.event.repository.default_branch }}"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
@@ -58,13 +58,13 @@ jobs:
       uses: actions/checkout@v3
       with:
         path: '${{ steps.vars.outputs.path_UUTILS }}'
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
-        rustup toolchain install stable -c rustfmt --profile minimal
-        rustup default stable
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        components: rustfmt
     - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "./${{ steps.vars.outputs.path_UUTILS }} -> target"
     - name: Checkout code (GNU coreutils)
       uses: actions/checkout@v3
       with:
@@ -315,15 +315,16 @@ jobs:
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
-        ref: 'v9.2'
+        ref: 'v9.3'
         submodules: recursive
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
-        rustup toolchain install nightly -c rustfmt --profile minimal
-        rustup default nightly
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: nightly
+        components: rustfmt
+    - uses: taiki-e/install-action@grcov
     - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: "./uutils -> target"
     - name: Install dependencies
       run: |
         ## Install dependencies
@@ -344,7 +345,6 @@ jobs:
         locale -a
     - name: Build binaries
       env:
-        CARGO_INCREMENTAL: "0"
         RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
         RUSTDOCFLAGS: "-Cpanic=abort"
       run: |
@@ -353,8 +353,6 @@ jobs:
         UU_MAKE_PROFILE=debug bash util/build-gnu.sh
     - name: Run GNU tests
       run: bash uutils/util/run-gnu-test.sh
-    - name: "`grcov` ~ install"
-      run: cargo install grcov
     - name: Generate coverage data (via `grcov`)
       id: coverage
       run: |

@@ -1,7 +1,7 @@
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg
 
 use crate::common::util::TestScenario;
-#[cfg(not(windows))]
+#[cfg(all(not(windows), feature = "printf"))]
 use crate::common::util::{UCommand, TESTS_BINARY};
 
 use regex::Regex;
@@ -1535,4 +1535,30 @@ fn test_multiple_processes_reading_stdin() {
         .arg(format!("{printf} | ( {dd_skip} && {dd} ) 2> /dev/null"))
         .succeeds()
         .stdout_only("def\n");
+}
+
+/// Test that discarding system file cache fails for stdin.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nocache_stdin_error() {
+    #[cfg(not(target_env = "musl"))]
+    let detail = "Illegal seek";
+    #[cfg(target_env = "musl")]
+    let detail = "Invalid seek";
+    new_ucmd!()
+        .args(&["iflag=nocache", "count=0", "status=noxfer"])
+        .fails()
+        .code_is(1)
+        .stderr_only(format!("dd: failed to discard cache for: 'standard input': {detail}\n0+0 records in\n0+0 records out\n"));
+}
+
+/// Test for discarding system file cache.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nocache_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("f", b"a".repeat(1 << 20).as_slice());
+    ucmd.args(&["if=f", "of=/dev/null", "iflag=nocache", "status=noxfer"])
+        .succeeds()
+        .stderr_only("2048+0 records in\n2048+0 records out\n");
 }

@@ -28,9 +28,9 @@ impl<'a> fmt::Display for BufReadDecoderError<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             BufReadDecoderError::InvalidByteSequence(bytes) => {
-                write!(f, "invalid byte sequence: {:02x?}", bytes)
+                write!(f, "invalid byte sequence: {bytes:02x?}")
             }
-            BufReadDecoderError::Io(ref err) => write!(f, "underlying bytestream error: {}", err),
+            BufReadDecoderError::Io(ref err) => write!(f, "underlying bytestream error: {err}"),
         }
     }
 }
@@ -60,6 +60,7 @@ impl<B: BufRead> BufReadDecoder<B> {
     /// This is similar to `Iterator::next`,
     /// except that decoded chunks borrow the decoder (~iterator)
     /// so they need to be handled or copied before the next chunk can start decoding.
+    #[allow(clippy::cognitive_complexity)]
     pub fn next_strict(&mut self) -> Option<Result<&str, BufReadDecoderError>> {
         enum BytesSource {
             BufRead(usize),

@@ -18,7 +18,7 @@ path = "src/mv.rs"
 clap = { workspace=true }
 fs_extra = { workspace=true }
 indicatif = { workspace=true }
-uucore = { workspace=true }
+uucore = { workspace=true, features=["fs"] }
 
 [[bin]]
 name = "mv"

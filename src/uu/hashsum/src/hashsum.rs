@@ -224,6 +224,7 @@ fn detect_algo(
 /// # Panics
 ///
 /// Panics if multiple hash algorithms are specified or if a required flag is missing.
+#[allow(clippy::cognitive_complexity)]
 fn create_algorithm_from_flags(matches: &ArgMatches) -> (&'static str, Box<dyn Digest>, usize) {
     let mut alg: Option<Box<dyn Digest>> = None;
     let mut name: &'static str = "";

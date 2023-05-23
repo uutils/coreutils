@@ -191,7 +191,14 @@ impl Options {
                     (tmpdir, template.to_string())
                 }
                 Some(template) => {
-                    let tmpdir = matches.get_one::<String>(OPT_TMPDIR).map(String::from);
+                    let tmpdir = if matches.contains_id(OPT_TMPDIR) {
+                        matches.get_one::<String>(OPT_TMPDIR).map(String::from)
+                    } else if matches.get_flag(OPT_T) {
+                        // mktemp -t foo.xxx should export in TMPDIR
+                        Some(env::temp_dir().display().to_string())
+                    } else {
+                        matches.get_one::<String>(OPT_TMPDIR).map(String::from)
+                    };
                     (tmpdir, template.to_string())
                 }
             }
@@ -281,7 +288,7 @@ impl Params {
             .join(prefix_from_template)
             .display()
             .to_string();
-        if options.treat_as_template && prefix.contains(MAIN_SEPARATOR) {
+        if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::PrefixContainsDirSeparator(options.template));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {

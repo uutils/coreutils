@@ -7,47 +7,39 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_fmt() {
-    let result = new_ucmd!().arg("one-word-per-line.txt").run();
-    //.stdout_is_fixture("call_graph.expected");
-    assert_eq!(
-        result.stdout_str().trim(),
-        "this is a file with one word per line"
-    );
+    new_ucmd!()
+        .arg("one-word-per-line.txt")
+        .succeeds()
+        .stdout_is("this is a file with one word per line\n");
 }
 
 #[test]
-fn test_fmt_q() {
-    let result = new_ucmd!().arg("-q").arg("one-word-per-line.txt").run();
-    //.stdout_is_fixture("call_graph.expected");
-    assert_eq!(
-        result.stdout_str().trim(),
-        "this is a file with one word per line"
-    );
+fn test_fmt_quick() {
+    for param in ["-q", "--quick"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param])
+            .succeeds()
+            .stdout_is("this is a file with one word per line\n");
+    }
 }
 
 #[test]
-fn test_fmt_w_too_big() {
-    let result = new_ucmd!()
-        .arg("-w")
-        .arg("2501")
-        .arg("one-word-per-line.txt")
-        .run();
-    //.stdout_is_fixture("call_graph.expected");
-    assert_eq!(
-        result.stderr_str().trim(),
-        "fmt: invalid width: '2501': Numerical result out of range"
-    );
+fn test_fmt_width() {
+    for param in ["-w", "--width"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "10"])
+            .succeeds()
+            .stdout_is("this is\na file\nwith one\nword per\nline\n");
+    }
 }
+
 #[test]
-fn test_fmt_w() {
-    let result = new_ucmd!()
-        .arg("-w")
-        .arg("10")
-        .arg("one-word-per-line.txt")
-        .run();
-    //.stdout_is_fixture("call_graph.expected");
-    assert_eq!(
-        result.stdout_str().trim(),
-        "this is\na file\nwith one\nword per\nline"
-    );
+fn test_fmt_width_too_big() {
+    for param in ["-w", "--width"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "2501"])
+            .fails()
+            .code_is(1)
+            .stderr_is("fmt: invalid width: '2501': Numerical result out of range\n");
+    }
 }

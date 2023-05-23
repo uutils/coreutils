@@ -282,6 +282,27 @@ fn test_date_for_invalid_file() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_date_for_no_permission_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    const FILE: &str = "file-no-perm-1";
+
+    use std::os::unix::fs::PermissionsExt;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(at.plus(FILE))
+        .unwrap();
+    file.set_permissions(std::fs::Permissions::from_mode(0o222))
+        .unwrap();
+    let result = ucmd.arg("--file").arg(FILE).fails();
+    result.no_stdout();
+    assert_eq!(
+        result.stderr_str().trim(),
+        format!("date: {FILE}: Permission denied")
+    );
+}
+
 fn test_date_for_dir_as_file() {
     let result = new_ucmd!().arg("--file").arg("/").fails();
     result.no_stdout();
@@ -332,6 +353,29 @@ fn test_invalid_format_string() {
     let result = new_ucmd!().arg("+%!").fails();
     result.no_stdout();
     assert!(result.stderr_str().starts_with("date: invalid format "));
+}
+
+#[test]
+fn test_date_string_human() {
+    let date_formats = vec![
+        "1 year ago",
+        "1 year",
+        "2 months ago",
+        "15 days ago",
+        "1 week ago",
+        "5 hours ago",
+        "30 minutes ago",
+        "10 seconds",
+    ];
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}\n$").unwrap();
+    for date_format in date_formats {
+        new_ucmd!()
+            .arg("-d")
+            .arg(date_format)
+            .arg("+%Y-%m-%d %S:%M")
+            .succeeds()
+            .stdout_matches(&re);
+    }
 }
 
 #[test]

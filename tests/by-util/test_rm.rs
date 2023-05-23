@@ -54,6 +54,8 @@ fn test_rm_interactive() {
 
     at.touch(file_a);
     at.touch(file_b);
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
 
     scene
         .ucmd()
@@ -84,6 +86,11 @@ fn test_rm_force() {
     let file_a = "test_rm_force_a";
     let file_b = "test_rm_force_b";
 
+    at.touch(file_a);
+    at.touch(file_b);
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+
     ucmd.arg("-f")
         .arg(file_a)
         .arg(file_b)
@@ -99,6 +106,11 @@ fn test_rm_force_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_rm_force_a";
     let file_b = "test_rm_force_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
 
     ucmd.arg("-f")
         .arg("-f")
@@ -577,4 +589,25 @@ fn test_fifo_removal() {
         .arg("some_fifo")
         .timeout(Duration::from_secs(2))
         .succeeds();
+}
+
+#[test]
+#[cfg(any(unix, target_os = "wasi"))]
+#[cfg(not(target_os = "macos"))]
+fn test_non_utf8() {
+    use std::ffi::OsStr;
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
+    #[cfg(target_os = "wasi")]
+    use std::os::wasi::ffi::OsStrExt;
+
+    let file = OsStr::from_bytes(b"not\xffutf8"); // spell-checker:disable-line
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch(file);
+    assert!(at.file_exists(file));
+
+    ucmd.arg(file).succeeds();
+    assert!(!at.file_exists(file));
 }

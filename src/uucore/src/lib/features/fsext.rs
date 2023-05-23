@@ -409,7 +409,7 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         let reader = BufReader::new(f);
         Ok(reader
             .lines()
-            .filter_map(|line| line.ok())
+            .map_while(Result::ok)
             .filter_map(|line| {
                 let raw_data = line.split_whitespace().collect::<Vec<&str>>();
                 MountInfo::new(file_name, &raw_data)

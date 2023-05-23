@@ -13,11 +13,10 @@ use std::io::{stdin, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 
-static USAGE: &str = "{} [OPTION]... [FILE]...";
-static ABOUT: &str = "Checksum and count the blocks in a file.\n\n\
-                      With no FILE, or when FILE is -, read standard input.";
+const USAGE: &str = help_usage!("sum.md");
+const ABOUT: &str = help_about!("sum.md");
 
 // This can be replaced with usize::div_ceil once it is stabilized.
 // This implementation approach is optimized for when `b` is a constant,

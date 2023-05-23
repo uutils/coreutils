@@ -175,6 +175,7 @@ pub fn uu_app() -> Command {
         .arg(Arg::new("vars").action(ArgAction::Append))
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn run_env(args: impl uucore::Args) -> UResult<()> {
     let app = uu_app();
     let matches = app.try_get_matches_from(args).with_exit_code(125)?;

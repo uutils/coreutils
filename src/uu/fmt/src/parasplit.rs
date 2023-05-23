@@ -275,6 +275,7 @@ impl<'a> ParagraphStream<'a> {
 impl<'a> Iterator for ParagraphStream<'a> {
     type Item = Result<Paragraph, String>;
 
+    #[allow(clippy::cognitive_complexity)]
     fn next(&mut self) -> Option<Result<Paragraph, String>> {
         // return a NoFormatLine in an Err; it should immediately be output
         let noformat = match self.lines.peek() {

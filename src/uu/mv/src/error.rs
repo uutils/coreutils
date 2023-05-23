@@ -15,6 +15,7 @@ pub enum MvError {
     DirectoryToNonDirectory(String),
     NonDirectoryToDirectory(String, String),
     NotADirectory(String),
+    TargetNotADirectory(String),
 }
 
 impl Error for MvError {}
@@ -34,7 +35,8 @@ impl Display for MvError {
             Self::NonDirectoryToDirectory(s, t) => {
                 write!(f, "cannot overwrite non-directory {t} with directory {s}")
             }
-            Self::NotADirectory(t) => write!(f, "target {t} is not a directory"),
+            Self::NotADirectory(t) => write!(f, "target {t}: Not a directory"),
+            Self::TargetNotADirectory(t) => write!(f, "target directory {t}: Not a directory"),
         }
     }
 }
