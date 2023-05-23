@@ -115,11 +115,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             verbose: matches.get_flag(OPT_VERBOSE),
         };
         if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
-            let msg = if options.recursive {
-                "Remove all arguments recursively?"
-            } else {
-                "Remove all arguments?"
-            };
+            let msg: String = format!(
+                "remove {} {}{}",
+                files.len(),
+                if files.len() > 1 {
+                    "arguments"
+                } else {
+                    "argument"
+                },
+                if options.recursive {
+                    " recursively?"
+                } else {
+                    "?"
+                }
+            );
             if !prompt_yes!("{}", msg) {
                 return Ok(());
             }
@@ -169,6 +178,9 @@ pub fn uu_app() -> Command {
                     prompts always",
                 )
                 .value_name("WHEN")
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value("always")
                 .overrides_with_all([OPT_PROMPT, OPT_PROMPT_MORE]),
         )
         .arg(
