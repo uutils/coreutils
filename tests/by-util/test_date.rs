@@ -303,6 +303,7 @@ fn test_date_for_no_permission_file() {
     );
 }
 
+#[test]
 fn test_date_for_dir_as_file() {
     let result = new_ucmd!().arg("--file").arg("/").fails();
     result.no_stdout();
