@@ -362,6 +362,26 @@ fn test_rm_interactive_never() {
 }
 
 #[test]
+fn test_rm_interactive_missing_value() {
+    // `--interactive` is equivalent to `--interactive=always` or `-i`
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file1 = "test_rm_interactive_missing_value_file1";
+    let file2 = "test_rm_interactive_missing_value_file2";
+
+    at.touch(file1);
+    at.touch(file2);
+
+    ucmd.arg("--interactive")
+        .arg(file1)
+        .arg(file2)
+        .pipe_in("y\ny")
+        .succeeds();
+
+    assert!(!at.file_exists(file1));
+    assert!(!at.file_exists(file2));
+}
+#[test]
 fn test_rm_descend_directory() {
     // This test descends into each directory and deletes the files and folders inside of them
     // This test will have the rm process asks 6 question and us answering Y to them will delete all the files and folders
