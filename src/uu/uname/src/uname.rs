@@ -13,7 +13,7 @@
 use clap::{crate_version, Arg, ArgAction, Command};
 use platform_info::*;
 use uucore::{
-    error::{FromIo, UResult},
+    error::{UResult, USimpleError},
     format_usage, help_about, help_usage,
 };
 
@@ -36,8 +36,8 @@ pub mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let uname =
-        PlatformInfo::new().map_err_context(|| "failed to create PlatformInfo".to_string())?;
+    let uname = PlatformInfo::new().map_err(|_e| USimpleError::new(1, "cannot get system name"))?;
+
     let mut output = String::new();
 
     let all = matches.get_flag(options::ALL);
@@ -61,33 +61,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         || hardware_platform);
 
     if kernel_name || all || none {
-        output.push_str(&uname.sysname());
+        output.push_str(&uname.sysname().to_string_lossy());
         output.push(' ');
     }
 
     if nodename || all {
-        // maint: [2023-01-14; rivy] remove `.trim_end_matches('\0')` when platform-info nodename-NUL bug is fixed (see GH:uutils/platform-info/issues/32)
-        output.push_str(uname.nodename().trim_end_matches('\0'));
+        output.push_str(&uname.nodename().to_string_lossy());
         output.push(' ');
     }
 
     if kernel_release || all {
-        output.push_str(&uname.release());
+        output.push_str(&uname.release().to_string_lossy());
         output.push(' ');
     }
 
     if kernel_version || all {
-        output.push_str(&uname.version());
+        output.push_str(&uname.version().to_string_lossy());
         output.push(' ');
     }
 
     if machine || all {
-        output.push_str(&uname.machine());
+        output.push_str(&uname.machine().to_string_lossy());
         output.push(' ');
     }
 
     if os || all {
-        output.push_str(&uname.osname());
+        output.push_str(&uname.osname().to_string_lossy());
         output.push(' ');
     }
 
