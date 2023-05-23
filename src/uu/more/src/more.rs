@@ -106,7 +106,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             let opened_file = match File::open(file) {
                 Err(why) => {
-                    return Err(UUsageError::new(
+                    return Err(USimpleError::new(
                         1,
                         format!("cannot open {}: {}", file.quote(), why.kind()),
                     ))
