@@ -6,6 +6,10 @@ use once_cell::sync::Lazy;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Mutex;
 
+// tests in `test_mkdir.rs` cannot run in parallel since some tests alter the umask. This may cause
+// other tests to run under a wrong set of permissions
+//
+// when writing a test case, acquire this mutex before proceeding with the main logic of the test
 static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 static TEST_DIR1: &str = "mkdir_test1";
