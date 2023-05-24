@@ -742,3 +742,263 @@ fn test_chown_file_notexisting() {
     // TODO: uncomment once message changed from "cannot dereference" to "cannot access"
     // result.stderr_contains("cannot access 'not_existing': No such file or directory");
 }
+
+#[test]
+fn test_chown_no_change_to_user_from_user() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let file = "f";
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--from=42")
+        .arg("43")
+        .arg(file)
+        .succeeds()
+        .stdout_only(format!("ownership of '{file}' retained as {user_name}\n"));
+}
+
+#[test]
+fn test_chown_no_change_to_user_from_group() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let file = "f";
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--from=:42")
+        .arg("43")
+        .arg(file)
+        .succeeds()
+        .stdout_only(format!("ownership of '{file}' retained as {user_name}\n"));
+}
+
+#[test]
+fn test_chown_no_change_to_user_from_user_group() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let file = "f";
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--from=42:42")
+        .arg("43")
+        .arg(file)
+        .succeeds()
+        .stdout_only(format!("ownership of '{file}' retained as {user_name}\n"));
+}
+
+#[test]
+fn test_chown_no_change_to_group_from_user() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let result = scene.cmd("id").arg("-ng").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
+
+    let file = "f";
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--from=42")
+        .arg(":43")
+        .arg(file)
+        .succeeds()
+        .stdout_only(format!("ownership of '{file}' retained as {group_name}\n"));
+}
+
+#[test]
+fn test_chown_no_change_to_group_from_group() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+    let result = scene.cmd("id").arg("-ng").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
+
+    let file = "f";
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--from=:42")
+        .arg(":43")
+        .arg(file)
+        .succeeds()
+        .stdout_only(format!("ownership of '{file}' retained as {group_name}\n"));
+}
+
+#[test]
+fn test_chown_no_change_to_group_from_user_group() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+    let result = scene.cmd("id").arg("-ng").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
+
+    let file = "f";
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--from=42:42")
+        .arg(":43")
+        .arg(file)
+        .succeeds()
+        .stdout_only(format!("ownership of '{file}' retained as {group_name}\n"));
+}
+
+#[test]
+fn test_chown_no_change_to_user_group_from_user() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let result = scene.cmd("id").arg("-ng").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
+
+    let file = "f";
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--from=42")
+        .arg("43:43")
+        .arg(file)
+        .succeeds()
+        .stdout_only(format!(
+            "ownership of '{file}' retained as {user_name}:{group_name}\n"
+        ));
+}
+
+#[test]
+fn test_chown_no_change_to_user_group_from_group() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+    let result = scene.cmd("id").arg("-ng").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
+
+    let file = "f";
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--from=:42")
+        .arg("43:43")
+        .arg(file)
+        .succeeds()
+        .stdout_only(format!(
+            "ownership of '{file}' retained as {user_name}:{group_name}\n"
+        ));
+}
+
+#[test]
+fn test_chown_no_change_to_user_group_from_user_group() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+    let result = scene.cmd("id").arg("-ng").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
+
+    let file = "f";
+    at.touch(file);
+    scene
+        .ucmd()
+        .arg("-v")
+        .arg("--from=42:42")
+        .arg("43:43")
+        .arg(file)
+        .succeeds()
+        .stdout_only(format!(
+            "ownership of '{file}' retained as {user_name}:{group_name}\n"
+        ));
+}
