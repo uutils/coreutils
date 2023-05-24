@@ -843,9 +843,7 @@ fn test_chown_no_change_to_group_from_user() {
         .arg(":43")
         .arg(file)
         .succeeds()
-        .stdout_only(format!(
-            "ownership of '{file}' retained as {user_name}:{group_name}\n"
-        ));
+        .stdout_only(format!("ownership of '{file}' retained as {group_name}\n"));
 }
 
 #[test]
@@ -875,9 +873,7 @@ fn test_chown_no_change_to_group_from_group() {
         .arg(":43")
         .arg(file)
         .succeeds()
-        .stdout_only(format!(
-            "ownership of '{file}' retained as {user_name}:{group_name}\n"
-        ));
+        .stdout_only(format!("ownership of '{file}' retained as {group_name}\n"));
 }
 
 #[test]
@@ -907,9 +903,7 @@ fn test_chown_no_change_to_group_from_user_group() {
         .arg(":43")
         .arg(file)
         .succeeds()
-        .stdout_only(format!(
-            "ownership of '{file}' retained as {user_name}:{group_name}\n"
-        ));
+        .stdout_only(format!("ownership of '{file}' retained as {group_name}\n"));
 }
 
 #[test]
