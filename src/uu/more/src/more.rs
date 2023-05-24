@@ -106,10 +106,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             let opened_file = match File::open(file) {
                 Err(why) => {
+                    terminal::disable_raw_mode().unwrap();
                     return Err(USimpleError::new(
                         1,
                         format!("cannot open {}: {}", file.quote(), why.kind()),
-                    ))
+                    ));
                 }
                 Ok(opened_file) => opened_file,
             };
