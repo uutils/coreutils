@@ -1,6 +1,10 @@
 use crate::common::util::TestScenario;
 use is_terminal::IsTerminal;
+
+//Both following includes are only needed inside the test_more_invalid_file_perms()
+#[cfg(target_family = "unix")]
 use std::fs::{set_permissions, Permissions};
+#[cfg(target_family = "unix")]
 use std::os::unix::fs::PermissionsExt;
 
 #[test]
@@ -36,12 +40,13 @@ fn test_more_dir_arg() {
 }
 
 #[test]
+#[cfg(target_family = "unix")]
 fn test_more_invalid_file_perms() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let permissions = Permissions::from_mode(0o244);
-    at.make_file("invalid-perms.txt").metadata().unwrap();
-    set_permissions(at.plus("invalid-perms.txt"), permissions).unwrap();
-    ucmd.arg("invalid-perms.txt").fails();
-    //.code_is(1)
-    //.stderr_is("more: cannot open 'invalid-perms.txt': permission denied");
+    if std::io::stdout().is_terminal() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let permissions = Permissions::from_mode(0o244);
+        at.make_file("invalid-perms.txt").metadata().unwrap();
+        set_permissions(at.plus("invalid-perms.txt"), permissions).unwrap();
+        ucmd.arg("invalid-perms.txt").fails();
+    }
 }
