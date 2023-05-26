@@ -62,7 +62,7 @@ skip = [
     # is-terminal
     { name = "hermit-abi", version = "0.3.1" },
     # is-terminal
-    { name = "rustix", version = "0.36.8" },
+    { name = "rustix", version = "0.36.14" },
     # is-terminal (via rustix)
     { name = "io-lifetimes", version = "1.0.5" },
     # is-terminal
