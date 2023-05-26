@@ -50,3 +50,9 @@ fn test_normal_compare_env() {
         println!("test skipped:");
     }
 }
+
+#[test]
+#[cfg(windows)]
+fn test_normal_windows() {
+    new_ucmd!().succeeds().no_stderr();
+}
