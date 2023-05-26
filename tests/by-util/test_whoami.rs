@@ -52,7 +52,6 @@ fn test_normal_compare_env() {
 }
 
 #[test]
-#[cfg(windows)]
-fn test_normal_windows() {
+fn test_succeeds_on_all_platforms() {
     new_ucmd!().succeeds().no_stderr();
 }
