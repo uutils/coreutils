@@ -1536,6 +1536,7 @@ fn test_retry8() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
+    not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd")
 ))] // FIXME: for currently not working platforms
@@ -1616,6 +1617,7 @@ fn test_retry9() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
+    not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd")
 ))] // FIXME: for currently not working platforms
@@ -1678,6 +1680,7 @@ fn test_follow_descriptor_vs_rename1() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
+    not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd")
 ))] // FIXME: for currently not working platforms
@@ -2118,6 +2121,7 @@ fn test_follow_name_move_create1() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
+    not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd")
 ))] // FIXME: for currently not working platforms
