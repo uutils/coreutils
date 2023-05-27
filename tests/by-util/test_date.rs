@@ -357,6 +357,13 @@ fn test_invalid_format_string() {
 }
 
 #[test]
+fn test_unsupported_format() {
+    let result = new_ucmd!().arg("+%#z").fails();
+    result.no_stdout();
+    assert!(result.stderr_str().starts_with("date: invalid format %#z"));
+}
+
+#[test]
 fn test_date_string_human() {
     let date_formats = vec![
         "1 year ago",
