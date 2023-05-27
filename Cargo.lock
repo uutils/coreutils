@@ -3213,7 +3213,7 @@ version = "0.0.18"
 dependencies = [
  "clap",
  "libc",
- "redox_syscall 0.2.16",
+ "redox_syscall 0.3.5",
  "uucore",
 ]
 
