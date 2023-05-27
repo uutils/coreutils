@@ -56,14 +56,16 @@ struct Options {
     silent: bool,
     clean_print: bool,
     print_over: bool,
+    squeeze: bool,
 }
 
 impl Options {
     fn from(matches: &ArgMatches) -> Self {
         Self {
-            silent: matches.get_flag(options::SILENT),
             clean_print: matches.get_flag(options::CLEAN_PRINT),
             print_over: matches.get_flag(options::PRINT_OVER),
+            silent: matches.get_flag(options::SILENT),
+            squeeze: matches.get_flag(options::SQUEEZE),
         }
     }
 }
@@ -158,6 +160,13 @@ pub fn uu_app() -> Command {
                 .help("Do not scroll, clean screen and display text")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(options::SQUEEZE)
+                .short('s')
+                .long(options::SQUEEZE)
+                .help("Squeeze multiple blank lines into one")
+                .action(ArgAction::SetTrue),
+        )
         // The commented arguments below are unimplemented:
         /*
         .arg(
@@ -171,12 +180,6 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::NO_PAUSE)
                 .help("Suppress pause after form feed"),
-        )
-        .arg(
-            Arg::new(options::SQUEEZE)
-                .short('s')
-                .long(options::SQUEEZE)
-                .help("Squeeze multiple blank lines into one"),
         )
         .arg(
             Arg::new(options::PLAIN)
@@ -377,6 +380,8 @@ struct Pager<'a> {
     next_file: Option<&'a str>,
     line_count: usize,
     silent: bool,
+    squeeze: bool,
+    line_squeezed: usize,
 }
 
 impl<'a> Pager<'a> {
@@ -389,6 +394,8 @@ impl<'a> Pager<'a> {
             next_file,
             line_count,
             silent: options.silent,
+            squeeze: options.squeeze,
+            line_squeezed: 0,
         }
     }
 
@@ -414,7 +421,21 @@ impl<'a> Pager<'a> {
     }
 
     fn page_up(&mut self) {
-        self.upper_mark = self.upper_mark.saturating_sub(self.content_rows.into());
+        let content_row_usize: usize = self.content_rows.into();
+        self.upper_mark = self
+            .upper_mark
+            .saturating_sub(content_row_usize.saturating_add(self.line_squeezed));
+
+        if self.squeeze {
+            let iter = self.lines.iter().take(self.upper_mark).rev();
+            for line in iter {
+                if line.is_empty() {
+                    self.upper_mark = self.upper_mark.saturating_sub(1);
+                } else {
+                    break;
+                }
+            }
+        }
     }
 
     fn next_line(&mut self) {
@@ -430,7 +451,7 @@ impl<'a> Pager<'a> {
         self.content_rows = row.saturating_sub(1);
     }
 
-    fn draw(&self, stdout: &mut std::io::Stdout, wrong_key: Option<char>) {
+    fn draw(&mut self, stdout: &mut std::io::Stdout, wrong_key: Option<char>) {
         let lower_mark = self
             .line_count
             .min(self.upper_mark.saturating_add(self.content_rows.into()));
@@ -439,13 +460,44 @@ impl<'a> Pager<'a> {
         stdout.flush().unwrap();
     }
 
-    fn draw_lines(&self, stdout: &mut std::io::Stdout) {
+    fn draw_lines(&mut self, stdout: &mut std::io::Stdout) {
         execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
-        let displayed_lines = self
-            .lines
-            .iter()
-            .skip(self.upper_mark)
-            .take(self.content_rows.into());
+
+        self.line_squeezed = 0;
+        let mut previous_line_blank = false;
+        let mut displayed_lines = Vec::new();
+        let mut iter = self.lines.iter().skip(self.upper_mark);
+
+        while displayed_lines.len() < self.content_rows as usize {
+            match iter.next() {
+                Some(line) => {
+                    if self.squeeze {
+                        match (line.is_empty(), previous_line_blank) {
+                            (true, false) => {
+                                previous_line_blank = true;
+                                displayed_lines.push(line);
+                            }
+                            (false, true) => {
+                                previous_line_blank = false;
+                                displayed_lines.push(line);
+                            }
+                            (false, false) => displayed_lines.push(line),
+                            (true, true) => {
+                                self.line_squeezed += 1;
+                                self.upper_mark += 1;
+                            }
+                        }
+                    } else {
+                        displayed_lines.push(line);
+                    }
+                }
+                // if none the end of the file is reached
+                None => {
+                    self.upper_mark = self.line_count;
+                    break;
+                }
+            }
+        }
 
         for line in displayed_lines {
             stdout.write_all(format!("\r{line}\n").as_bytes()).unwrap();
