@@ -17,6 +17,9 @@ fn test_valid_arg() {
 
         new_ucmd!().arg("-p").succeeds();
         new_ucmd!().arg("--clean-print").succeeds();
+
+        new_ucmd!().arg("-s").succeeds();
+        new_ucmd!().arg("--squeeze").succeeds();
     }
 }
 
