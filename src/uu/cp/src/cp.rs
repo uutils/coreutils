@@ -278,14 +278,22 @@ static PRESERVABLE_ATTRIBUTES: &[&str] = &[
     "ownership",
     "timestamps",
     "context",
+    "link",
     "links",
     "xattr",
     "all",
 ];
 
 #[cfg(not(unix))]
-static PRESERVABLE_ATTRIBUTES: &[&str] =
-    &["mode", "timestamps", "context", "links", "xattr", "all"];
+static PRESERVABLE_ATTRIBUTES: &[&str] = &[
+    "mode",
+    "timestamps",
+    "context",
+    "link",
+    "links",
+    "xattr",
+    "all",
+];
 
 pub fn uu_app() -> Command {
     const MODE_ARGS: &[&str] = &[
@@ -713,7 +721,7 @@ impl Attributes {
             "ownership" => self.ownership = preserve_yes_required,
             "timestamps" => self.timestamps = preserve_yes_required,
             "context" => self.context = preserve_yes_required,
-            "links" => self.links = preserve_yes_required,
+            "link" | "links" => self.links = preserve_yes_required,
             "xattr" => self.xattr = preserve_yes_required,
             _ => {
                 return Err(Error::InvalidArgument(format!(
