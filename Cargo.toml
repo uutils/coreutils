@@ -299,7 +299,7 @@ notify = { version = "=6.0.0", features=["macos_kqueue"]}
 num-bigint = "0.4.3"
 num-traits = "0.2.15"
 number_prefix = "0.4"
-once_cell = "1.17.1"
+once_cell = "1.17.2"
 onig = { version = "~6.4", default-features = false }
 ouroboros = "0.15.6"
 phf = "0.11.1"
