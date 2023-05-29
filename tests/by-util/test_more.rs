@@ -20,6 +20,20 @@ fn test_valid_arg() {
 
         new_ucmd!().arg("-s").succeeds();
         new_ucmd!().arg("--squeeze").succeeds();
+
+        new_ucmd!().arg("-n").arg("10").succeeds();
+        new_ucmd!().arg("--lines").arg("0").succeeds();
+        new_ucmd!().arg("--number").arg("0").succeeds();
+    }
+}
+
+#[test]
+fn test_invalid_arg() {
+    if std::io::stdout().is_terminal() {
+        new_ucmd!().arg("--invalid").fails();
+
+        new_ucmd!().arg("--lines").arg("-10").fails();
+        new_ucmd!().arg("--number").arg("-10").fails();
     }
 }
 
