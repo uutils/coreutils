@@ -268,7 +268,7 @@ binary-heap-plus = "0.5.0"
 bstr = "1.5"
 bytecount = "0.6.3"
 byteorder = "1.4.3"
-chrono = { version="^0.4.24", default-features=false, features=["std", "alloc", "clock"]}
+chrono = { version="^0.4.25", default-features=false, features=["std", "alloc", "clock"]}
 clap = { version = "4.2", features = ["wrap_help", "cargo"] }
 clap_complete = "4.3"
 clap_mangen = "0.2"
