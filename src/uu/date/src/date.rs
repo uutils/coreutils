@@ -23,6 +23,7 @@ use uucore::display::Quotable;
 #[cfg(not(any(target_os = "redox")))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
+use uucore::parse_datetime::parse_datetime;
 use uucore::{format_usage, help_about, help_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
@@ -398,8 +399,7 @@ fn make_format_string(settings: &Settings) -> &str {
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
 ) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
-    // TODO: The GNU date command can parse a wide variety of inputs.
-    s.as_ref().parse().map_err(|e| (s.as_ref().into(), e))
+    parse_datetime(s.as_ref())
 }
 
 #[cfg(not(any(unix, windows)))]

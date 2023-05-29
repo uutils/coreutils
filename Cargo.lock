@@ -3395,6 +3395,7 @@ version = "0.0.18"
 dependencies = [
  "blake2b_simd",
  "blake3",
+ "chrono",
  "clap",
  "data-encoding",
  "data-encoding-macro",

@@ -395,3 +395,26 @@ fn test_invalid_date_string() {
         .no_stdout()
         .stderr_contains("invalid date");
 }
+
+#[test]
+fn test_date_parse_iso8601() {
+    let dates = vec![
+        "2023-03-27 08:30:00",
+        "2023-04-01 12:00:00",
+        "2023-04-15 18:30:00",
+    ];
+    for date in dates {
+        new_ucmd!().arg("-d").arg(date).succeeds();
+    }
+}
+
+#[test]
+fn test_date_parse_epoch() {
+    let date = "@2147483647";
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg(date)
+        .succeeds()
+        .stdout_is("Tue Jan 19 03:14:07 2038\n");
+}

@@ -19,6 +19,7 @@ path="src/lib/lib.rs"
 
 [dependencies]
 clap = { workspace=true }
+chrono = { workspace=true }
 uucore_procs = { workspace=true }
 dns-lookup = { version="1.0.8", optional=true }
 dunce = "1.0.4"
