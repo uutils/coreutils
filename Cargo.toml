@@ -319,7 +319,7 @@ signal-hook = "0.3.15"
 smallvec = { version = "1.10", features = ["union"] }
 tempfile = "3.5.0"
 term_grid = "0.1.5"
-terminal_size = "0.2.5"
+terminal_size = "0.2.6"
 textwrap = { version="0.16.0", features=["terminal_size"] }
 thiserror = "1.0"
 time = { version="0.3" }
