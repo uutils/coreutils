@@ -80,7 +80,7 @@ impl FilterMode {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("invalid number of bytes: {e}"),
+                        format!("invalid number of bytes: '{e}'"),
                     ))
                 }
             }
@@ -415,16 +415,17 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
                 starting_with = true;
             }
         }
-    } else {
-        return Err(ParseSizeError::ParseFailure(src.to_string()));
     }
 
-    parse_size(size_string).map(|n| match (n, starting_with) {
-        (0, true) => Signum::PlusZero,
-        (0, false) => Signum::MinusZero,
-        (n, true) => Signum::Positive(n),
-        (n, false) => Signum::Negative(n),
-    })
+    match parse_size(size_string) {
+        Ok(n) => match (n, starting_with) {
+            (0, true) => Ok(Signum::PlusZero),
+            (0, false) => Ok(Signum::MinusZero),
+            (n, true) => Ok(Signum::Positive(n)),
+            (n, false) => Ok(Signum::Negative(n)),
+        },
+        Err(_) => Err(ParseSizeError::ParseFailure(size_string.to_string())),
+    }
 }
 
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
