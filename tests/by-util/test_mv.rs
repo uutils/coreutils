@@ -1244,6 +1244,29 @@ fn test_mv_info_self() {
 }
 
 #[test]
+fn test_mv_arg_interactive_skipped() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    ucmd.args(&["-vi", "a", "b"])
+        .pipe_in("N\n")
+        .ignore_stdin_write_error()
+        .fails()
+        .stderr_is("mv: overwrite 'b'? ")
+        .stdout_is("skipped 'b'\n");
+}
+
+#[test]
+fn test_mv_arg_interactive_skipped_vin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    ucmd.args(&["-vin", "a", "b"])
+        .fails()
+        .stdout_is("skipped 'b'\n");
+}
+
+#[test]
 fn test_mv_into_self_data() {
     let scene = TestScenario::new(util_name!());
 
