@@ -80,30 +80,15 @@ impl<'parser> Parser<'parser> {
         // Split the size argument into numeric and unit parts
         // For example, if the argument is "123K", the numeric part is "123", and
         // the unit is "K"
-        let (numeric_string, unit) = match number_system {
-            NumberSystem::Hexadecimal => {
-                let numeric_string: String = size
-                    .chars()
-                    .take(2)
-                    .chain(size.chars().skip(2).take_while(|c| c.is_ascii_hexdigit()))
-                    .collect();
-                let unit: String = size.chars().skip(numeric_string.len()).collect();
-
-                (numeric_string, unit)
-            }
-            _ => {
-                let mut unit: String = size
-                    .chars()
-                    .rev()
-                    .take_while(|c| c.is_alphabetic())
-                    .collect();
-                unit = unit.chars().rev().collect();
-                let numeric_string = size.chars().take(size.len() - unit.len()).collect();
-
-                (numeric_string, unit)
-            }
+        let numeric_string: String = match number_system {
+            NumberSystem::Hexadecimal => size
+                .chars()
+                .take(2)
+                .chain(size.chars().skip(2).take_while(|c| c.is_ascii_hexdigit()))
+                .collect(),
+            _ => size.chars().take_while(|c| c.is_ascii_digit()).collect(),
         };
-        let mut unit: &str = unit.as_str();
+        let mut unit: &str = &size[numeric_string.len()..];
 
         if let Some(default_unit) = self.default_unit {
             // Check if `unit` is empty then assigns `default_unit` to `unit`
