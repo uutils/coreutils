@@ -156,25 +156,16 @@ impl<'parser> Parser<'parser> {
                 if numeric_string.is_empty() {
                     1
                 } else {
-                    match numeric_string.parse() {
-                        Ok(n) => n,
-                        Err(_) => return Err(ParseSizeError::parse_failure(size)),
-                    }
+                    self.parse_number(&numeric_string, 10, size)?
                 }
             }
             NumberSystem::Octal => {
                 let trimmed_string = numeric_string.trim_start_matches('0');
-                match u64::from_str_radix(trimmed_string, 8) {
-                    Ok(res) => res,
-                    Err(_) => return Err(ParseSizeError::parse_failure(size)),
-                }
+                self.parse_number(trimmed_string, 8, size)?
             }
             NumberSystem::Hexadecimal => {
                 let trimmed_string = numeric_string.trim_start_matches("0x");
-                match u64::from_str_radix(trimmed_string, 16) {
-                    Ok(res) => res,
-                    Err(_) => return Err(ParseSizeError::parse_failure(size)),
-                }
+                self.parse_number(trimmed_string, 16, size)?
             }
         };
 
@@ -203,6 +194,16 @@ impl<'parser> Parser<'parser> {
         }
 
         NumberSystem::Decimal
+    }
+
+    fn parse_number(
+        &self,
+        numeric_string: &str,
+        radix: u32,
+        original_size: &str,
+    ) -> Result<u64, ParseSizeError> {
+        u64::from_str_radix(numeric_string, radix)
+            .map_err(|_| ParseSizeError::ParseFailure(original_size.to_string()))
     }
 }
 
