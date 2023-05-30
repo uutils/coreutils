@@ -440,13 +440,19 @@ fn rename(
 
         match b.overwrite {
             OverwriteMode::NoClobber => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("not replacing {}", to.quote()),
-                ));
+                let err_msg = if b.verbose {
+                    println!("skipped {}", to.quote());
+                    String::new()
+                } else {
+                    format!("not replacing {}", to.quote())
+                };
+                return Err(io::Error::new(io::ErrorKind::Other, err_msg));
             }
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
+                    if b.verbose {
+                        println!("skipped {}", to.quote());
+                    }
                     return Err(io::Error::new(io::ErrorKind::Other, ""));
                 }
             }

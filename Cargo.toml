@@ -269,7 +269,7 @@ bstr = "1.5"
 bytecount = "0.6.3"
 byteorder = "1.4.3"
 chrono = { version="^0.4.25", default-features=false, features=["std", "alloc", "clock"]}
-clap = { version = "4.2", features = ["wrap_help", "cargo"] }
+clap = { version = "4.3", features = ["wrap_help", "cargo"] }
 clap_complete = "4.3"
 clap_mangen = "0.2"
 compare = "0.1.0"
@@ -288,7 +288,7 @@ glob = "0.3.1"
 half = "2.2"
 humantime_to_duration = "0.2.1"
 indicatif = "0.17"
-is-terminal = "0.4.6"
+is-terminal = "0.4.7"
 itertools = "0.10.5"
 libc = "0.2.144"
 lscolors = { version = "0.14.0", default-features=false, features = ["nu-ansi-term"] }
@@ -319,7 +319,7 @@ signal-hook = "0.3.15"
 smallvec = { version = "1.10", features = ["union"] }
 tempfile = "3.5.0"
 term_grid = "0.1.5"
-terminal_size = "0.2.5"
+terminal_size = "0.2.6"
 textwrap = { version="0.16.0", features=["terminal_size"] }
 thiserror = "1.0"
 time = { version="0.3" }
@@ -328,7 +328,7 @@ unicode-width = "0.1.10"
 utf-8 = "0.7.6"
 walkdir = "2.3"
 winapi-util = "0.1.5"
-windows-sys = { version="0.45.0", default-features=false }
+windows-sys = { version="0.48.0", default-features=false }
 xattr = "1.0.0"
 zip = { version = "0.6.6", default_features=false, features=["deflate"] }
 
