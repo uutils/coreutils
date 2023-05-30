@@ -344,7 +344,7 @@ fn more(
                     ..
                 }) => {
                     pager.page_up();
-                    paging_add_back_message(options, stdout);
+                    paging_add_back_message(options, stdout)?;
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Char('j'),
@@ -556,11 +556,12 @@ impl<'a> Pager<'a> {
     }
 }
 
-fn paging_add_back_message(options: &Options, stdout: &mut std::io::Stdout) {
+fn paging_add_back_message(options: &Options, stdout: &mut std::io::Stdout) -> UResult<()> {
     if options.lines.is_some() {
-        execute!(stdout, MoveUp(1)).unwrap();
-        stdout.write_all("\n\r...back 1 page\n".as_bytes()).unwrap();
+        execute!(stdout, MoveUp(1))?;
+        stdout.write_all("\n\r...back 1 page\n".as_bytes())?;
     }
+    Ok(())
 }
 
 // Break the lines on the cols of the terminal
