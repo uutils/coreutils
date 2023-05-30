@@ -178,7 +178,7 @@ impl<'parser> Parser<'parser> {
                 }
             }
             NumberSystem::Octal => {
-                let trimmed_string = numeric_string.trim_start_matches("0");
+                let trimmed_string = numeric_string.trim_start_matches('0');
                 match u64::from_str_radix(trimmed_string, 8) {
                     Ok(res) => res,
                     Err(_) => return Err(ParseSizeError::parse_failure(size)),
@@ -212,7 +212,7 @@ impl<'parser> Parser<'parser> {
             .take_while(|c| c.is_ascii_digit())
             .collect::<String>()
             .len();
-        if size.starts_with("0") && num_digits > 1 {
+        if size.starts_with('0') && num_digits > 1 {
             return NumberSystem::Octal;
         }
 
