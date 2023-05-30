@@ -288,7 +288,7 @@ glob = "0.3.1"
 half = "2.2"
 humantime_to_duration = "0.2.1"
 indicatif = "0.17"
-is-terminal = "0.4.6"
+is-terminal = "0.4.7"
 itertools = "0.10.5"
 libc = "0.2.144"
 lscolors = { version = "0.14.0", default-features=false, features = ["nu-ansi-term"] }
