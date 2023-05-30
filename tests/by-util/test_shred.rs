@@ -51,3 +51,14 @@ fn test_shred_force() {
     // file_a was deleted.
     assert!(!at.file_exists(file));
 }
+
+#[test]
+fn test_hex() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "test_hex";
+
+    at.touch(file);
+
+    ucmd.arg("--size=0x10").arg(file).succeeds();
+}
