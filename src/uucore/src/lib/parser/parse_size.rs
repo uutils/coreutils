@@ -197,7 +197,8 @@ impl<'parser> Parser<'parser> {
             .take_while(|c| c.is_ascii_digit())
             .collect::<String>()
             .len();
-        if size.starts_with('0') && num_digits > 1 {
+        let all_zeros = size.chars().all(|c| c == '0');
+        if size.starts_with('0') && num_digits > 1 && !all_zeros {
             return NumberSystem::Octal;
         }
 
