@@ -320,16 +320,16 @@ pub fn uu_app() -> Command {
 }
 
 fn get_size(size_str_opt: Option<String>) -> Option<u64> {
-    match size_str_opt {
-        Some(size) => match parse_size(size.as_str()) {
-            Ok(res) => Some(res),
-            Err(_) => {
+    size_str_opt
+        .as_ref()
+        .and_then(|size| parse_size(size.as_str()).ok())
+        .or_else(|| {
+            if let Some(size) = size_str_opt {
                 show_error!("invalid file size: {}", size.quote());
-                std::process::exit(1)
+                std::process::exit(1);
             }
-        },
-        None => None,
-    }
+            None
+        })
 }
 
 fn pass_name(pass_type: &PassType) -> String {
