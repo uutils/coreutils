@@ -19,6 +19,7 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::parse_size::parse_size;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_if_err};
 
 const ABOUT: &str = help_about!("shred.md");
@@ -318,38 +319,17 @@ pub fn uu_app() -> Command {
         )
 }
 
-// TODO: Add support for all postfixes here up to and including EiB
-//       http://www.gnu.org/software/coreutils/manual/coreutils.html#Block-size
 fn get_size(size_str_opt: Option<String>) -> Option<u64> {
-    size_str_opt.as_ref()?;
-
-    let mut size_str = size_str_opt.as_ref().unwrap().clone();
-    // Immutably look at last character of size string
-    let unit = match size_str.chars().last().unwrap() {
-        'K' => {
-            size_str.pop();
-            1024u64
-        }
-        'M' => {
-            size_str.pop();
-            (1024 * 1024) as u64
-        }
-        'G' => {
-            size_str.pop();
-            (1024 * 1024 * 1024) as u64
-        }
-        _ => 1u64,
-    };
-
-    let coefficient = match size_str.parse::<u64>() {
-        Ok(u) => u,
-        Err(_) => {
-            show_error!("{}: Invalid file size", size_str_opt.unwrap().maybe_quote());
-            std::process::exit(1);
-        }
-    };
-
-    Some(coefficient * unit)
+    match size_str_opt {
+        Some(size) => match parse_size(size.as_str()) {
+            Ok(res) => Some(res),
+            Err(_) => {
+                show_error!("invalid file size: {}", size.quote());
+                std::process::exit(1)
+            }
+        },
+        None => None,
+    }
 }
 
 fn pass_name(pass_type: &PassType) -> String {
