@@ -1102,23 +1102,21 @@ fn preserve_hardlinks(
 }
 
 /// When handling errors, we don't always want to show them to the user. This function handles that.
-/// If the error is printed, returns true, false otherwise.
-fn show_error_if_needed(error: &Error) -> bool {
+fn show_error_if_needed(error: &Error) {
     match error {
         // When using --no-clobber, we don't want to show
         // an error message
-        Error::NotAllFilesCopied => (),
+        Error::NotAllFilesCopied => {
+            // Need to return an error code
+        }
         Error::Skipped => {
             // touch a b && echo "n"|cp -i a b && echo $?
             // should return an error from GNU 9.2
-            return true;
         }
         _ => {
             show_error!("{}", error);
-            return true;
         }
     }
-    false
 }
 
 /// Copy all `sources` to `target`.  Returns an
@@ -1175,9 +1173,8 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                     options,
                     &mut symlinked_files,
                 ) {
-                    if show_error_if_needed(&error) {
-                        non_fatal_errors = true;
-                    }
+                    show_error_if_needed(&error);
+                    non_fatal_errors = true;
                 }
             }
             seen_sources.insert(source);
