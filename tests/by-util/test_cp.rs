@@ -2909,3 +2909,260 @@ fn test_cp_archive_on_directory_ending_dot() {
     ucmd.args(&["-a", "dir1/.", "dir2"]).succeeds();
     assert!(at.file_exists("dir2/file"));
 }
+
+#[test]
+fn test_cp_debug_default() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts.ucmd().arg("--debug").arg("a").arg("b").succeeds();
+
+    let stdout_str = result.stdout_str();
+    #[cfg(target_os = "macos")]
+    if !stdout_str
+        .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
+    {
+        println!("Failure: stdout was \n{stdout_str}");
+        assert!(false);
+    }
+    #[cfg(target_os = "linux")]
+    if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no") {
+        println!("Failure: stdout was \n{stdout_str}");
+        assert!(false);
+    }
+
+    #[cfg(windows)]
+    if !stdout_str
+        .contains("copy offload: unsupported, reflink: unsupported, sparse detection: unsupported")
+    {
+        println!("Failure: stdout was \n{stdout_str}");
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_cp_debug_multiple_default() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "dir";
+    at.touch("a");
+    at.touch("b");
+    at.mkdir(dir);
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("a")
+        .arg("b")
+        .arg(dir)
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+
+    #[cfg(target_os = "macos")]
+    {
+        if !stdout_str
+            .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
+        {
+            println!("Failure: stdout was \n{stdout_str}");
+            assert!(false);
+        }
+
+        // two files, two occurrences
+        assert_eq!(
+            result
+                .stdout_str()
+                .matches(
+                    "copy offload: unknown, reflink: unsupported, sparse detection: unsupported"
+                )
+                .count(),
+            2
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no")
+        {
+            println!("Failure: stdout was \n{stdout_str}");
+            assert!(false);
+        }
+
+        // two files, two occurrences
+        assert_eq!(
+            result
+                .stdout_str()
+                .matches("copy offload: unknown, reflink: unsupported, sparse detection: no")
+                .count(),
+            2
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if !stdout_str.contains(
+            "copy offload: unsupported, reflink: unsupported, sparse detection: unsupported",
+        ) {
+            println!("Failure: stdout was \n{stdout_str}");
+            assert!(false);
+        }
+
+        // two files, two occurrences
+        assert_eq!(
+            result
+                .stdout_str()
+                .matches("copy offload: unsupported, reflink: unsupported, sparse detection: unsupported")
+                .count(),
+            2
+        );
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_sparse_reflink() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=always")
+        .arg("--reflink=never")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: zeros") {
+        println!("Failure: stdout was \n{stdout_str}");
+        assert!(false);
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_sparse_always() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=always")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: unsupported, sparse detection: zeros")
+    {
+        println!("Failure: stdout was \n{stdout_str}");
+        assert!(false);
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_sparse_never() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=never")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no") {
+        println!("Failure: stdout was \n{stdout_str}");
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_cp_debug_sparse_auto() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=auto")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+    let stdout_str = result.stdout_str();
+
+    #[cfg(target_os = "macos")]
+    if !stdout_str
+        .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
+    {
+        println!("Failure: stdout was \n{stdout_str}");
+        assert!(false);
+    }
+
+    #[cfg(target_os = "linux")]
+    if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no") {
+        println!("Failure: stdout was \n{stdout_str}");
+        assert!(false);
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+fn test_cp_debug_reflink_auto() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=auto")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let stdout_str = result.stdout_str();
+        if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no")
+        {
+            println!("Failure: stdout was \n{stdout_str}");
+            assert!(false);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let stdout_str = result.stdout_str();
+        if !stdout_str
+            .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
+        {
+            println!("Failure: stdout was \n{stdout_str}");
+            assert!(false);
+        }
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_sparse_always_reflink_auto() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=always")
+        .arg("--reflink=auto")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: unsupported, sparse detection: zeros")
+    {
+        println!("Failure: stdout was \n{stdout_str}");
+        assert!(false);
+    }
+}

@@ -229,8 +229,77 @@ pub struct Options {
     backup_suffix: String,
     target_dir: Option<PathBuf>,
     update: UpdateMode,
+    debug: bool,
     verbose: bool,
     progress_bar: bool,
+}
+
+/// Enum representing various debug states of the offload and reflink actions.
+#[derive(Debug)]
+#[allow(dead_code)] // All of them are used on Linux
+enum OffloadReflinkDebug {
+    Unknown,
+    No,
+    Yes,
+    Avoided,
+    Unsupported,
+}
+
+/// Enum representing various debug states of the sparse detection.
+#[derive(Debug)]
+#[allow(dead_code)] // silent for now until we use them
+enum SparseDebug {
+    Unknown,
+    No,
+    Zeros,
+    SeekHole,
+    SeekHoleZeros,
+    Unsupported,
+}
+
+/// Struct that contains the debug state for each action in a file copy operation.
+#[derive(Debug)]
+struct CopyDebug {
+    offload: OffloadReflinkDebug,
+    reflink: OffloadReflinkDebug,
+    sparse_detection: SparseDebug,
+}
+
+impl OffloadReflinkDebug {
+    fn to_string(&self) -> &'static str {
+        match self {
+            Self::No => "no",
+            Self::Yes => "yes",
+            Self::Avoided => "avoided",
+            Self::Unsupported => "unsupported",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl SparseDebug {
+    fn to_string(&self) -> &'static str {
+        match self {
+            Self::No => "no",
+            Self::Zeros => "zeros",
+            Self::SeekHole => "SEEK_HOLE",
+            Self::SeekHoleZeros => "SEEK_HOLE + zeros",
+            Self::Unsupported => "unsupported",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// This function prints the debug information of a file copy operation if
+/// no hard link or symbolic link is required, and data copy is required.
+/// It prints the debug information of the offload, reflink, and sparse detection actions.
+fn show_debug(copy_debug: &CopyDebug) {
+    println!(
+        "copy offload: {}, reflink: {}, sparse detection: {}",
+        copy_debug.offload.to_string(),
+        copy_debug.reflink.to_string(),
+        copy_debug.sparse_detection.to_string(),
+    );
 }
 
 const ABOUT: &str = help_about!("cp.md");
@@ -269,6 +338,7 @@ mod options {
     pub const STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
     pub const SYMBOLIC_LINK: &str = "symbolic-link";
     pub const TARGET_DIRECTORY: &str = "target-directory";
+    pub const DEBUG: &str = "debug";
     pub const VERBOSE: &str = "verbose";
 }
 
@@ -367,6 +437,12 @@ pub fn uu_app() -> Command {
             Arg::new(options::STRIP_TRAILING_SLASHES)
                 .long(options::STRIP_TRAILING_SLASHES)
                 .help("remove any trailing slashes from each SOURCE argument")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .help("explain how a file is copied. Implies -v")
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -839,7 +915,8 @@ impl Options {
             one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
             parents: matches.get_flag(options::PARENTS),
             update: update_mode,
-            verbose: matches.get_flag(options::VERBOSE),
+            debug: matches.get_flag(options::DEBUG),
+            verbose: matches.get_flag(options::VERBOSE) || matches.get_flag(options::DEBUG),
             strip_trailing_slashes: matches.get_flag(options::STRIP_TRAILING_SLASHES),
             reflink_mode: {
                 if let Some(reflink) = matches.get_one::<String>(options::REFLINK) {
@@ -1753,7 +1830,7 @@ fn copy_helper(
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else {
-        copy_on_write(
+        let copy_debug = copy_on_write(
             source,
             dest,
             options.reflink_mode,
@@ -1762,6 +1839,10 @@ fn copy_helper(
             #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
             source_is_fifo,
         )?;
+
+        if !options.attributes_only && options.debug {
+            show_debug(&copy_debug);
+        }
     }
 
     Ok(())
