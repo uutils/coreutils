@@ -35,7 +35,7 @@ TOTAL_ORDER=$(echo -e $PARTIAL_ORDER | tsort | tac)
 TOTAL_ORDER=${TOTAL_ORDER#ROOT}
 
 set -e
-for dir in src/uucore_procs/ src/uucore/ src/uu/stdbuf/src/libstdbuf/; do
+for dir in src/uuhelp_parser/ src/uucore_procs/ src/uucore/ src/uu/stdbuf/src/libstdbuf/; do
     (
         cd "$dir"
         #shellcheck disable=SC2086
