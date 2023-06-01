@@ -42,7 +42,7 @@ pub(crate) struct Filesystem {
 /// This function returns the element of `mounts` on which `path` is
 /// mounted. If there are no matches, this function returns
 /// [`None`]. If there are two or more matches, then the single
-/// [`MountInfo`] with the longest mount directory is returned.
+/// [`MountInfo`] with the device name corresponding to the entered path.
 ///
 /// If `canonicalize` is `true`, then the `path` is canonicalized
 /// before checking whether it matches any mount directories.
@@ -68,9 +68,19 @@ where
         path.as_ref().to_path_buf()
     };
 
+    // Find the potential mount point that matches entered path
     let maybe_mount_point = mounts
         .iter()
-        .find(|mi| mi.dev_name.eq(&path.to_string_lossy()));
+        // Create pair MountInfo, canonicalized device name
+        // TODO Abstract from accessing real filesystem to
+        // make code more testable
+        .map(|m| (m, std::fs::canonicalize(&m.dev_name)))
+        // Ignore non existing paths
+        .filter(|m| m.1.is_ok())
+        .map(|m| (m.0, m.1.ok().unwrap()))
+        // Try to find canonicalized device name corresponding to entered path
+        .find(|m| m.1.eq(&path))
+        .map(|m| m.0);
 
     maybe_mount_point.or_else(|| {
         mounts
