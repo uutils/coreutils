@@ -222,9 +222,9 @@ mod tests {
         #[test]
         fn test_dev_name_match() {
             let mut mount_info = mount_info("/foo");
-            mount_info.dev_name = "/dev/sda2".to_string();
+            mount_info.dev_name = "/dev".to_string();
             let mounts = [mount_info];
-            let actual = mount_info_from_path(&mounts, "/dev/sda2", false).unwrap();
+            let actual = mount_info_from_path(&mounts, "/dev", false).unwrap();
             assert!(mount_info_eq(actual, &mounts[0]));
         }
     }
