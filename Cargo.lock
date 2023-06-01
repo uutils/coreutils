@@ -403,7 +403,6 @@ dependencies = [
  "conv",
  "filetime",
  "glob",
- "help_parser",
  "hex-literal",
  "is-terminal",
  "libc",
@@ -529,6 +528,7 @@ dependencies = [
  "uu_whoami",
  "uu_yes",
  "uucore",
+ "uuhelp_parser",
  "walkdir",
  "zip",
 ]
@@ -1106,10 +1106,6 @@ checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
  "ahash",
 ]
-
-[[package]]
-name = "help_parser"
-version = "0.0.18"
 
 [[package]]
 name = "hermit-abi"
@@ -3430,10 +3426,14 @@ dependencies = [
 name = "uucore_procs"
 version = "0.0.19"
 dependencies = [
- "help_parser",
  "proc-macro2",
  "quote",
+ "uuhelp_parser",
 ]
+
+[[package]]
+name = "uuhelp_parser"
+version = "0.0.18"
 
 [[package]]
 name = "uuid"

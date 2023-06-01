@@ -1,5 +1,5 @@
 [package]
-name = "help_parser"
+name = "uuhelp_parser"
 version = "0.0.18"
 edition = "2021"
 license = "MIT"
