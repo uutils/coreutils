@@ -3433,7 +3433,7 @@ dependencies = [
 
 [[package]]
 name = "uuhelp_parser"
-version = "0.0.18"
+version = "0.0.19"
 
 [[package]]
 name = "uuid"

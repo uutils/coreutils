@@ -358,7 +358,7 @@ selinux = { workspace=true, optional = true }
 textwrap = { workspace=true }
 zip = { workspace=true, optional = true }
 
-uuhelp_parser = { path="src/uuhelp_parser", optional = true }
+uuhelp_parser = { optional=true, version=">=0.0.19", path="src/uuhelp_parser"}
 
 # * uutils
 uu_test  = { optional=true, version="0.0.19", package="uu_test", path="src/uu/test" }
