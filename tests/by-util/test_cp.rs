@@ -2922,21 +2922,18 @@ fn test_cp_debug_default() {
     if !stdout_str
         .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
     {
-        println!("Failure: stdout was \n{stdout_str}");
-        assert!(false);
+        panic!("Failure: stdout was \n{stdout_str}");
     }
     #[cfg(target_os = "linux")]
     if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no") {
-        println!("Failure: stdout was \n{stdout_str}");
-        assert!(false);
+        panic!("Failure: stdout was \n{stdout_str}");
     }
 
     #[cfg(windows)]
     if !stdout_str
         .contains("copy offload: unsupported, reflink: unsupported, sparse detection: unsupported")
     {
-        println!("Failure: stdout was \n{stdout_str}");
-        assert!(false);
+        panic!("Failure: stdout was \n{stdout_str}");
     }
 }
 
@@ -2963,8 +2960,7 @@ fn test_cp_debug_multiple_default() {
         if !stdout_str
             .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
         {
-            println!("Failure: stdout was \n{stdout_str}");
-            assert!(false);
+            panic!("Failure: stdout was \n{stdout_str}");
         }
 
         // two files, two occurrences
@@ -2983,8 +2979,7 @@ fn test_cp_debug_multiple_default() {
     {
         if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no")
         {
-            println!("Failure: stdout was \n{stdout_str}");
-            assert!(false);
+            panic!("Failure: stdout was \n{stdout_str}");
         }
 
         // two files, two occurrences
@@ -3002,8 +2997,7 @@ fn test_cp_debug_multiple_default() {
         if !stdout_str.contains(
             "copy offload: unsupported, reflink: unsupported, sparse detection: unsupported",
         ) {
-            println!("Failure: stdout was \n{stdout_str}");
-            assert!(false);
+            panic!("Failure: stdout was \n{stdout_str}");
         }
 
         // two files, two occurrences
@@ -3034,8 +3028,7 @@ fn test_cp_debug_sparse_reflink() {
 
     let stdout_str = result.stdout_str();
     if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: zeros") {
-        println!("Failure: stdout was \n{stdout_str}");
-        assert!(false);
+        panic!("Failure: stdout was \n{stdout_str}");
     }
 }
 
@@ -3055,8 +3048,7 @@ fn test_cp_debug_sparse_always() {
     let stdout_str = result.stdout_str();
     if !stdout_str.contains("copy offload: avoided, reflink: unsupported, sparse detection: zeros")
     {
-        println!("Failure: stdout was \n{stdout_str}");
-        assert!(false);
+        panic!("Failure: stdout was \n{stdout_str}");
     }
 }
 
@@ -3075,8 +3067,7 @@ fn test_cp_debug_sparse_never() {
         .succeeds();
     let stdout_str = result.stdout_str();
     if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no") {
-        println!("Failure: stdout was \n{stdout_str}");
-        assert!(false);
+        panic!("Failure: stdout was \n{stdout_str}");
     }
 }
 
@@ -3098,14 +3089,12 @@ fn test_cp_debug_sparse_auto() {
     if !stdout_str
         .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
     {
-        println!("Failure: stdout was \n{stdout_str}");
-        assert!(false);
+        panic!("Failure: stdout was \n{stdout_str}");
     }
 
     #[cfg(target_os = "linux")]
     if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no") {
-        println!("Failure: stdout was \n{stdout_str}");
-        assert!(false);
+        panic!("Failure: stdout was \n{stdout_str}");
     }
 }
 
@@ -3128,8 +3117,7 @@ fn test_cp_debug_reflink_auto() {
         let stdout_str = result.stdout_str();
         if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no")
         {
-            println!("Failure: stdout was \n{stdout_str}");
-            assert!(false);
+            panic!("Failure: stdout was \n{stdout_str}");
         }
     }
 
@@ -3139,8 +3127,7 @@ fn test_cp_debug_reflink_auto() {
         if !stdout_str
             .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
         {
-            println!("Failure: stdout was \n{stdout_str}");
-            assert!(false);
+            panic!("Failure: stdout was \n{stdout_str}");
         }
     }
 }
@@ -3162,7 +3149,6 @@ fn test_cp_debug_sparse_always_reflink_auto() {
     let stdout_str = result.stdout_str();
     if !stdout_str.contains("copy offload: avoided, reflink: unsupported, sparse detection: zeros")
     {
-        println!("Failure: stdout was \n{stdout_str}");
-        assert!(false);
+        panic!("Failure: stdout was \n{stdout_str}");
     }
 }
