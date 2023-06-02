@@ -221,10 +221,13 @@ mod tests {
 
         #[test]
         fn test_dev_name_match() {
+            let tmp = tempfile::TempDir::new().expect("Failed to create temp dir");
+            let dev_name = tmp.path().to_string_lossy().to_string();
+
             let mut mount_info = mount_info("/foo");
-            mount_info.dev_name = "/dev".to_string();
+            mount_info.dev_name = dev_name.clone();
             let mounts = [mount_info];
-            let actual = mount_info_from_path(&mounts, "/dev", false).unwrap();
+            let actual = mount_info_from_path(&mounts, dev_name, false).unwrap();
             assert!(mount_info_eq(actual, &mounts[0]));
         }
     }
