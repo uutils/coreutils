@@ -116,7 +116,7 @@ fn test_symlinked_default_posix_p() {
         .env("POSIXLY_CORRECT", "1")
         .arg("-P")
         .succeeds()
-        .stdout_is(env.symdir + "\n");
+        .stdout_is(env.subdir + "\n");
 }
 
 #[cfg(not(windows))]
