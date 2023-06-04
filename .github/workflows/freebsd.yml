@@ -34,8 +34,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
-      with:
-        version: "v0.5.0"
     - name: Prepare, build and test
       uses: vmactions/freebsd-vm@v0.3.0
       with:
@@ -126,8 +124,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
-      with:
-        version: "v0.5.0"
     - name: Prepare, build and test
       uses: vmactions/freebsd-vm@v0.3.0
       with:
