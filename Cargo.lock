@@ -2941,11 +2941,11 @@ dependencies = [
 name = "uu_pr"
 version = "0.0.19"
 dependencies = [
+ "chrono",
  "clap",
  "itertools",
  "quick-error",
  "regex",
- "time",
  "uucore",
 ]
 
