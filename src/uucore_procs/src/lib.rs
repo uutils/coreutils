@@ -1,5 +1,5 @@
 // Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
-// spell-checker:ignore backticks
+// spell-checker:ignore backticks uuhelp
 
 use std::{fs::File, io::Read, path::PathBuf};
 

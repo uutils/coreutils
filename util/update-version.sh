@@ -1,4 +1,6 @@
 #!/bin/sh
+# spell-checker:ignore uuhelp
+
 # This is a stupid helper. I will mass replace all versions (including other crates)
 # So, it should be triple-checked
 

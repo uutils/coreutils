@@ -1,3 +1,4 @@
+# spell-checker:ignore uuhelp
 [package]
 name = "uucore_procs"
 version = "0.0.19"

@@ -1,4 +1,5 @@
 #!/bin/sh
+# spell-checker:ignore uuhelp
 ARG=""
 if test "$1" != "--do-it"; then
     ARG="--dry-run --allow-dirty"

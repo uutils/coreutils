@@ -1,3 +1,4 @@
+# spell-checker:ignore uuhelp
 [package]
 name = "uuhelp_parser"
 version = "0.0.19"

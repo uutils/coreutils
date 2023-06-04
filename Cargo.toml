@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) libselinux gethostid procfs bigdecimal kqueue fundu mangen humantime
+# spell-checker:ignore (libs) libselinux gethostid procfs bigdecimal kqueue fundu mangen humantime uuhelp
 
 [package]
 name = "coreutils"
