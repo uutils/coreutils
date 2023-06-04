@@ -499,7 +499,6 @@ rlimit = "0.9.1"
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace=true, features=["process", "signal", "user"] }
-rust-users = { version="0.11", package="users" }
 rand_pcg = "0.3"
 
 [build-dependencies]

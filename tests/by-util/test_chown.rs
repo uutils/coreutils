@@ -2,7 +2,7 @@
 
 use crate::common::util::{is_ci, run_ucmd_as_root, CmdResult, TestScenario};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rust_users::get_effective_uid;
+use uucore::process::geteuid;
 
 // Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
 // If we are running inside the CI and "needle" is in "stderr" skipping this test is
@@ -701,7 +701,7 @@ fn test_root_preserve() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_big_p() {
-    if get_effective_uid() != 0 {
+    if geteuid() != 0 {
         new_ucmd!()
             .arg("-RP")
             .arg("bin")

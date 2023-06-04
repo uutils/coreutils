@@ -424,7 +424,6 @@ dependencies = [
  "textwrap",
  "time",
  "unindent",
- "users",
  "uu_arch",
  "uu_base32",
  "uu_base64",
@@ -2368,16 +2367,6 @@ name = "unindent"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aa30f5ea51ff7edfc797c6d3f9ec8cbd8cfedef5371766b7181d33977f4814f"
-
-[[package]]
-name = "users"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24cc0f6d6f267b73e5a2cadf007ba8f9bc39c6a6f9666f8cf25ea809a153b032"
-dependencies = [
- "libc",
- "log",
-]
 
 [[package]]
 name = "utf8parse"
