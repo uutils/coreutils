@@ -515,6 +515,7 @@ pub fn uu_app() -> Command {
                     PRESERVABLE_ATTRIBUTES,
                 ))
                 .num_args(0..)
+                .require_equals(true)
                 .value_name("ATTR_LIST")
                 .overrides_with_all([
                     options::ARCHIVE,
