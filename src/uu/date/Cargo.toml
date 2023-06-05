@@ -17,8 +17,6 @@ path = "src/date.rs"
 
 [dependencies]
 chrono = { workspace=true }
-#/ TODO: check if we can avoid chrono+time
-time = { workspace=true }
 clap = { workspace=true }
 uucore = { workspace=true }
 humantime_to_duration = { workspace=true }
