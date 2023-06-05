@@ -222,6 +222,12 @@ mod tests {
         #[test]
         fn test_dev_name_match() {
             let tmp = tempfile::TempDir::new().expect("Failed to create temp dir");
+            #[cfg(windows)]
+            let dev_name = std::fs::canonicalize(tmp.path)
+                .expect("Failed to canonicalize tmp path")
+                .to_string_lossy()
+                .to_string();
+            #[cfg(not(windows))]
             let dev_name = tmp.path().to_string_lossy().to_string();
 
             let mut mount_info = mount_info("/foo");
