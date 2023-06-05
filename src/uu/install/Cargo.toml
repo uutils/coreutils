@@ -24,9 +24,6 @@ file_diff = { workspace=true }
 libc = { workspace=true }
 uucore = { workspace=true, features=["fs", "mode", "perms", "entries"] }
 
-[dev-dependencies]
-time = { workspace=true }
-
 [[bin]]
 name = "install"
 path = "src/main.rs"
