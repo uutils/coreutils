@@ -50,10 +50,11 @@ pub mod options {
     pub const FILES: &str = "files";
 }
 
-const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
+const MULTI_FILE_TOP_PROMPT: &str = "\r::::::::::::::\n\r{}\n\r::::::::::::::\n";
 
 struct Options {
     clean_print: bool,
+    from_line: usize,
     lines: Option<u16>,
     print_over: bool,
     silent: bool,
@@ -72,8 +73,13 @@ impl Options {
             (None, Some(number)) if number > 0 => Some(number + 1),
             (_, _) => None,
         };
+        let from_line = match matches.get_one::<usize>(options::FROM_LINE).copied() {
+            Some(number) if number > 1 => number - 1,
+            _ => 0,
+        };
         Self {
             clean_print: matches.get_flag(options::CLEAN_PRINT),
+            from_line,
             lines,
             print_over: matches.get_flag(options::PRINT_OVER),
             silent: matches.get_flag(options::SILENT),
@@ -90,7 +96,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(e) => return Err(e.into()),
     };
 
-    let options = Options::from(&matches);
+    let mut options = Options::from(&matches);
 
     let mut buff = String::new();
 
@@ -115,9 +121,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     format!("cannot open {}: No such file or directory", file.quote()),
                 ));
             }
-            if length > 1 {
-                buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
-            }
             let opened_file = match File::open(file) {
                 Err(why) => {
                     terminal::disable_raw_mode().unwrap();
@@ -130,14 +133,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             };
             let mut reader = BufReader::new(opened_file);
             reader.read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, next_file.copied(), &options)?;
+            more(
+                &buff,
+                &mut stdout,
+                length > 1,
+                file.to_str(),
+                next_file.copied(),
+                &mut options,
+            )?;
             buff.clear();
         }
         reset_term(&mut stdout);
     } else if !std::io::stdin().is_terminal() {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
-        more(&buff, &mut stdout, None, &options)?;
+        more(&buff, &mut stdout, false, None, None, &mut options)?;
         reset_term(&mut stdout);
     } else {
         return Err(UUsageError::new(1, "bad usage"));
@@ -180,6 +190,22 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new(options::PLAIN)
+                .short('u')
+                .long(options::PLAIN)
+                .action(ArgAction::SetTrue)
+                .hide(true),
+        )
+        .arg(
+            Arg::new(options::FROM_LINE)
+                .short('F')
+                .long(options::FROM_LINE)
+                .num_args(1)
+                .value_name("number")
+                .value_parser(value_parser!(usize))
+                .help("Display file beginning from line number"),
+        )
+        .arg(
             Arg::new(options::LINES)
                 .short('n')
                 .long(options::LINES)
@@ -191,7 +217,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::NUMBER)
                 .long(options::NUMBER)
-                .required(false)
                 .num_args(1)
                 .value_parser(value_parser!(u16).range(0..))
                 .help("Same as --lines"),
@@ -209,21 +234,6 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::NO_PAUSE)
                 .help("Suppress pause after form feed"),
-        )
-        .arg(
-            Arg::new(options::PLAIN)
-                .short('u')
-                .long(options::PLAIN)
-                .help("Suppress underlining and bold"),
-        )
-        .arg(
-            Arg::new(options::FROM_LINE)
-                .short('F')
-                .allow_hyphen_values(true)
-                .required(false)
-                .takes_value(true)
-                .value_name("number")
-                .help("Display file beginning from line number"),
         )
         .arg(
             Arg::new(options::PATTERN)
@@ -273,8 +283,10 @@ fn reset_term(_: &mut usize) {}
 fn more(
     buff: &str,
     stdout: &mut Stdout,
+    multiple_file: bool,
+    file: Option<&str>,
     next_file: Option<&str>,
-    options: &Options,
+    options: &mut Options,
 ) -> UResult<()> {
     let (cols, mut rows) = terminal::size().unwrap();
     if let Some(number) = options.lines {
@@ -284,7 +296,22 @@ fn more(
     let lines = break_buff(buff, usize::from(cols));
 
     let mut pager = Pager::new(rows, lines, next_file, options);
+
+    if multiple_file {
+        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+        stdout.write_all(
+            MULTI_FILE_TOP_PROMPT
+                .replace("{}", file.unwrap_or_default())
+                .as_bytes(),
+        )?;
+        pager.content_rows -= 3;
+    }
     pager.draw(stdout, None);
+    if multiple_file {
+        options.from_line = 0;
+        pager.content_rows += 3;
+    }
+
     if pager.should_close() {
         return Ok(());
     }
@@ -406,7 +433,7 @@ impl<'a> Pager<'a> {
     fn new(rows: u16, lines: Vec<String>, next_file: Option<&'a str>, options: &Options) -> Self {
         let line_count = lines.len();
         Self {
-            upper_mark: 0,
+            upper_mark: options.from_line,
             content_rows: rows.saturating_sub(1),
             lines,
             next_file,
@@ -535,7 +562,6 @@ impl<'a> Pager<'a> {
         };
 
         let status = format!("--More--({status_inner})");
-
         let banner = match (self.silent, wrong_key) {
             (true, Some(key)) => format!(
                 "{status} [Unknown key: '{key}'. Press 'h' for instructions. (unimplemented)]"

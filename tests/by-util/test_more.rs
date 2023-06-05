@@ -21,9 +21,15 @@ fn test_valid_arg() {
         new_ucmd!().arg("-s").succeeds();
         new_ucmd!().arg("--squeeze").succeeds();
 
+        new_ucmd!().arg("-u").succeeds();
+        new_ucmd!().arg("--plain").succeeds();
+
         new_ucmd!().arg("-n").arg("10").succeeds();
         new_ucmd!().arg("--lines").arg("0").succeeds();
         new_ucmd!().arg("--number").arg("0").succeeds();
+
+        new_ucmd!().arg("-F").arg("10").succeeds();
+        new_ucmd!().arg("--from-line").arg("0").succeeds();
     }
 }
 
@@ -34,6 +40,8 @@ fn test_invalid_arg() {
 
         new_ucmd!().arg("--lines").arg("-10").fails();
         new_ucmd!().arg("--number").arg("-10").fails();
+
+        new_ucmd!().arg("--from-line").arg("-10").fails();
     }
 }
 
