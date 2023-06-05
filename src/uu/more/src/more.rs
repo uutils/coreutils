@@ -14,10 +14,10 @@ use std::{
     time::Duration,
 };
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{crate_version, value_parser, Arg, ArgAction, ArgMatches, Command};
 use crossterm::event::KeyEventKind;
 use crossterm::{
-    cursor::MoveTo,
+    cursor::{MoveTo, MoveUp},
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue,
     style::Attribute,
@@ -53,16 +53,28 @@ pub mod options {
 const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
 
 struct Options {
-    silent: bool,
     clean_print: bool,
+    lines: Option<u16>,
     print_over: bool,
+    silent: bool,
     squeeze: bool,
 }
 
 impl Options {
     fn from(matches: &ArgMatches) -> Self {
+        let lines = match (
+            matches.get_one::<u16>(options::LINES).copied(),
+            matches.get_one::<u16>(options::NUMBER).copied(),
+        ) {
+            // We add 1 to the number of lines to display because the last line
+            // is used for the banner
+            (Some(number), _) if number > 0 => Some(number + 1),
+            (None, Some(number)) if number > 0 => Some(number + 1),
+            (_, _) => None,
+        };
         Self {
             clean_print: matches.get_flag(options::CLEAN_PRINT),
+            lines,
             print_over: matches.get_flag(options::PRINT_OVER),
             silent: matches.get_flag(options::SILENT),
             squeeze: matches.get_flag(options::SQUEEZE),
@@ -167,6 +179,23 @@ pub fn uu_app() -> Command {
                 .help("Squeeze multiple blank lines into one")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(options::LINES)
+                .short('n')
+                .long(options::LINES)
+                .value_name("number")
+                .num_args(1)
+                .value_parser(value_parser!(u16).range(0..))
+                .help("The number of lines per screen full"),
+        )
+        .arg(
+            Arg::new(options::NUMBER)
+                .long(options::NUMBER)
+                .required(false)
+                .num_args(1)
+                .value_parser(value_parser!(u16).range(0..))
+                .help("Same as --lines"),
+        )
         // The commented arguments below are unimplemented:
         /*
         .arg(
@@ -186,22 +215,6 @@ pub fn uu_app() -> Command {
                 .short('u')
                 .long(options::PLAIN)
                 .help("Suppress underlining and bold"),
-        )
-        .arg(
-            Arg::new(options::LINES)
-                .short('n')
-                .long(options::LINES)
-                .value_name("number")
-                .takes_value(true)
-                .help("The number of lines per screen full"),
-        )
-        .arg(
-            Arg::new(options::NUMBER)
-                .allow_hyphen_values(true)
-                .long(options::NUMBER)
-                .required(false)
-                .takes_value(true)
-                .help("Same as --lines"),
         )
         .arg(
             Arg::new(options::FROM_LINE)
@@ -263,7 +276,11 @@ fn more(
     next_file: Option<&str>,
     options: &Options,
 ) -> UResult<()> {
-    let (cols, rows) = terminal::size().unwrap();
+    let (cols, mut rows) = terminal::size().unwrap();
+    if let Some(number) = options.lines {
+        rows = number;
+    }
+
     let lines = break_buff(buff, usize::from(cols));
 
     let mut pager = Pager::new(rows, lines, next_file, options);
@@ -327,6 +344,7 @@ fn more(
                     ..
                 }) => {
                     pager.page_up();
+                    paging_add_back_message(options, stdout)?;
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Char('j'),
@@ -347,7 +365,7 @@ fn more(
                     pager.prev_line();
                 }
                 Event::Resize(col, row) => {
-                    pager.page_resize(col, row);
+                    pager.page_resize(col, row, options.lines);
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Char(k),
@@ -447,8 +465,10 @@ impl<'a> Pager<'a> {
     }
 
     // TODO: Deal with column size changes.
-    fn page_resize(&mut self, _: u16, row: u16) {
-        self.content_rows = row.saturating_sub(1);
+    fn page_resize(&mut self, _: u16, row: u16, option_line: Option<u16>) {
+        if option_line.is_none() {
+            self.content_rows = row.saturating_sub(1);
+        };
     }
 
     fn draw(&mut self, stdout: &mut std::io::Stdout, wrong_key: Option<char>) {
@@ -534,6 +554,14 @@ impl<'a> Pager<'a> {
         )
         .unwrap();
     }
+}
+
+fn paging_add_back_message(options: &Options, stdout: &mut std::io::Stdout) -> UResult<()> {
+    if options.lines.is_some() {
+        execute!(stdout, MoveUp(1))?;
+        stdout.write_all("\n\r...back 1 page\n".as_bytes())?;
+    }
+    Ok(())
 }
 
 // Break the lines on the cols of the terminal

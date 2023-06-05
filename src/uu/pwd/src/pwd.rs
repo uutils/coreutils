@@ -115,7 +115,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // if POSIXLY_CORRECT is set, we want to a logical resolution.
     // This produces a different output when doing mkdir -p a/b && ln -s a/b c && cd c && pwd
     // We should get c in this case instead of a/b at the end of the path
-    let cwd = if matches.get_flag(OPT_LOGICAL) || env::var("POSIXLY_CORRECT").is_ok() {
+    let cwd = if matches.get_flag(OPT_PHYSICAL) {
+        physical_path()
+    } else if matches.get_flag(OPT_LOGICAL) || env::var("POSIXLY_CORRECT").is_ok() {
         logical_path()
     } else {
         physical_path()
