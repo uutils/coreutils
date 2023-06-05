@@ -14,13 +14,14 @@ use std::{
     time::Duration,
 };
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{crate_version, value_parser, Arg, ArgAction, ArgMatches, Command};
 use crossterm::event::KeyEventKind;
 use crossterm::{
+    cursor::{MoveTo, MoveUp},
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue,
     style::Attribute,
-    terminal,
+    terminal::{self, Clear, ClearType},
 };
 
 use is_terminal::IsTerminal;
@@ -51,12 +52,48 @@ pub mod options {
 
 const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
 
+struct Options {
+    clean_print: bool,
+    lines: Option<u16>,
+    print_over: bool,
+    silent: bool,
+    squeeze: bool,
+}
+
+impl Options {
+    fn from(matches: &ArgMatches) -> Self {
+        let lines = match (
+            matches.get_one::<u16>(options::LINES).copied(),
+            matches.get_one::<u16>(options::NUMBER).copied(),
+        ) {
+            // We add 1 to the number of lines to display because the last line
+            // is used for the banner
+            (Some(number), _) if number > 0 => Some(number + 1),
+            (None, Some(number)) if number > 0 => Some(number + 1),
+            (_, _) => None,
+        };
+        Self {
+            clean_print: matches.get_flag(options::CLEAN_PRINT),
+            lines,
+            print_over: matches.get_flag(options::PRINT_OVER),
+            silent: matches.get_flag(options::SILENT),
+            squeeze: matches.get_flag(options::SQUEEZE),
+        }
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let args = args.collect_lossy();
+    let matches = match uu_app().try_get_matches_from(&args) {
+        Ok(m) => m,
+        Err(e) => return Err(e.into()),
+    };
+
+    let options = Options::from(&matches);
 
     let mut buff = String::new();
-    let silent = matches.get_flag(options::SILENT);
+
     if let Some(files) = matches.get_many::<String>(options::FILES) {
         let mut stdout = setup_term();
         let length = files.len();
@@ -81,16 +118,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if length > 1 {
                 buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
             }
-            let mut reader = BufReader::new(File::open(file).unwrap());
+            let opened_file = match File::open(file) {
+                Err(why) => {
+                    terminal::disable_raw_mode().unwrap();
+                    return Err(USimpleError::new(
+                        1,
+                        format!("cannot open {}: {}", file.quote(), why.kind()),
+                    ));
+                }
+                Ok(opened_file) => opened_file,
+            };
+            let mut reader = BufReader::new(opened_file);
             reader.read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, next_file.copied(), silent)?;
+            more(&buff, &mut stdout, next_file.copied(), &options)?;
             buff.clear();
         }
         reset_term(&mut stdout);
     } else if !std::io::stdin().is_terminal() {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
-        more(&buff, &mut stdout, None, silent)?;
+        more(&buff, &mut stdout, None, &options)?;
         reset_term(&mut stdout);
     } else {
         return Err(UUsageError::new(1, "bad usage"));
@@ -105,11 +152,49 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .infer_long_args(true)
         .arg(
+            Arg::new(options::PRINT_OVER)
+                .short('c')
+                .long(options::PRINT_OVER)
+                .help("Do not scroll, display text and clean line ends")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new(options::SILENT)
                 .short('d')
                 .long(options::SILENT)
                 .help("Display help instead of ringing bell")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::CLEAN_PRINT)
+                .short('p')
+                .long(options::CLEAN_PRINT)
+                .help("Do not scroll, clean screen and display text")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::SQUEEZE)
+                .short('s')
+                .long(options::SQUEEZE)
+                .help("Squeeze multiple blank lines into one")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::LINES)
+                .short('n')
+                .long(options::LINES)
+                .value_name("number")
+                .num_args(1)
+                .value_parser(value_parser!(u16).range(0..))
+                .help("The number of lines per screen full"),
+        )
+        .arg(
+            Arg::new(options::NUMBER)
+                .long(options::NUMBER)
+                .required(false)
+                .num_args(1)
+                .value_parser(value_parser!(u16).range(0..))
+                .help("Same as --lines"),
         )
         // The commented arguments below are unimplemented:
         /*
@@ -126,44 +211,10 @@ pub fn uu_app() -> Command {
                 .help("Suppress pause after form feed"),
         )
         .arg(
-            Arg::new(options::PRINT_OVER)
-                .short('c')
-                .long(options::PRINT_OVER)
-                .help("Do not scroll, display text and clean line ends"),
-        )
-        .arg(
-            Arg::new(options::CLEAN_PRINT)
-                .short('p')
-                .long(options::CLEAN_PRINT)
-                .help("Do not scroll, clean screen and display text"),
-        )
-        .arg(
-            Arg::new(options::SQUEEZE)
-                .short('s')
-                .long(options::SQUEEZE)
-                .help("Squeeze multiple blank lines into one"),
-        )
-        .arg(
             Arg::new(options::PLAIN)
                 .short('u')
                 .long(options::PLAIN)
                 .help("Suppress underlining and bold"),
-        )
-        .arg(
-            Arg::new(options::LINES)
-                .short('n')
-                .long(options::LINES)
-                .value_name("number")
-                .takes_value(true)
-                .help("The number of lines per screen full"),
-        )
-        .arg(
-            Arg::new(options::NUMBER)
-                .allow_hyphen_values(true)
-                .long(options::NUMBER)
-                .required(false)
-                .takes_value(true)
-                .help("Same as --lines"),
         )
         .arg(
             Arg::new(options::FROM_LINE)
@@ -209,7 +260,7 @@ fn setup_term() -> usize {
 fn reset_term(stdout: &mut std::io::Stdout) {
     terminal::disable_raw_mode().unwrap();
     // Clear the prompt
-    queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+    queue!(stdout, terminal::Clear(ClearType::CurrentLine)).unwrap();
     // Move cursor to the beginning without printing new line
     print!("\r");
     stdout.flush().unwrap();
@@ -219,11 +270,20 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) -> UResult<()> {
-    let (cols, rows) = terminal::size().unwrap();
+fn more(
+    buff: &str,
+    stdout: &mut Stdout,
+    next_file: Option<&str>,
+    options: &Options,
+) -> UResult<()> {
+    let (cols, mut rows) = terminal::size().unwrap();
+    if let Some(number) = options.lines {
+        rows = number;
+    }
+
     let lines = break_buff(buff, usize::from(cols));
 
-    let mut pager = Pager::new(rows, lines, next_file, silent);
+    let mut pager = Pager::new(rows, lines, next_file, options);
     pager.draw(stdout, None);
     if pager.should_close() {
         return Ok(());
@@ -258,6 +318,11 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                     ..
                 })
                 | Event::Key(KeyEvent {
+                    code: KeyCode::PageDown,
+                    modifiers: KeyModifiers::NONE,
+                    ..
+                })
+                | Event::Key(KeyEvent {
                     code: KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
                     ..
@@ -272,8 +337,14 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                     code: KeyCode::Up,
                     modifiers: KeyModifiers::NONE,
                     ..
+                })
+                | Event::Key(KeyEvent {
+                    code: KeyCode::PageUp,
+                    modifiers: KeyModifiers::NONE,
+                    ..
                 }) => {
                     pager.page_up();
+                    paging_add_back_message(options, stdout)?;
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Char('j'),
@@ -294,7 +365,7 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                     pager.prev_line();
                 }
                 Event::Resize(col, row) => {
-                    pager.page_resize(col, row);
+                    pager.page_resize(col, row, options.lines);
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Char(k),
@@ -303,6 +374,16 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                 _ => continue,
             }
 
+            if options.print_over {
+                execute!(
+                    std::io::stdout(),
+                    MoveTo(0, 0),
+                    Clear(ClearType::FromCursorDown)
+                )
+                .unwrap();
+            } else if options.clean_print {
+                execute!(std::io::stdout(), Clear(ClearType::All), MoveTo(0, 0)).unwrap();
+            }
             pager.draw(stdout, wrong_key);
         }
     }
@@ -317,10 +398,12 @@ struct Pager<'a> {
     next_file: Option<&'a str>,
     line_count: usize,
     silent: bool,
+    squeeze: bool,
+    line_squeezed: usize,
 }
 
 impl<'a> Pager<'a> {
-    fn new(rows: u16, lines: Vec<String>, next_file: Option<&'a str>, silent: bool) -> Self {
+    fn new(rows: u16, lines: Vec<String>, next_file: Option<&'a str>, options: &Options) -> Self {
         let line_count = lines.len();
         Self {
             upper_mark: 0,
@@ -328,7 +411,9 @@ impl<'a> Pager<'a> {
             lines,
             next_file,
             line_count,
-            silent,
+            silent: options.silent,
+            squeeze: options.squeeze,
+            line_squeezed: 0,
         }
     }
 
@@ -354,7 +439,21 @@ impl<'a> Pager<'a> {
     }
 
     fn page_up(&mut self) {
-        self.upper_mark = self.upper_mark.saturating_sub(self.content_rows.into());
+        let content_row_usize: usize = self.content_rows.into();
+        self.upper_mark = self
+            .upper_mark
+            .saturating_sub(content_row_usize.saturating_add(self.line_squeezed));
+
+        if self.squeeze {
+            let iter = self.lines.iter().take(self.upper_mark).rev();
+            for line in iter {
+                if line.is_empty() {
+                    self.upper_mark = self.upper_mark.saturating_sub(1);
+                } else {
+                    break;
+                }
+            }
+        }
     }
 
     fn next_line(&mut self) {
@@ -366,11 +465,13 @@ impl<'a> Pager<'a> {
     }
 
     // TODO: Deal with column size changes.
-    fn page_resize(&mut self, _: u16, row: u16) {
-        self.content_rows = row.saturating_sub(1);
+    fn page_resize(&mut self, _: u16, row: u16, option_line: Option<u16>) {
+        if option_line.is_none() {
+            self.content_rows = row.saturating_sub(1);
+        };
     }
 
-    fn draw(&self, stdout: &mut std::io::Stdout, wrong_key: Option<char>) {
+    fn draw(&mut self, stdout: &mut std::io::Stdout, wrong_key: Option<char>) {
         let lower_mark = self
             .line_count
             .min(self.upper_mark.saturating_add(self.content_rows.into()));
@@ -379,13 +480,44 @@ impl<'a> Pager<'a> {
         stdout.flush().unwrap();
     }
 
-    fn draw_lines(&self, stdout: &mut std::io::Stdout) {
+    fn draw_lines(&mut self, stdout: &mut std::io::Stdout) {
         execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
-        let displayed_lines = self
-            .lines
-            .iter()
-            .skip(self.upper_mark)
-            .take(self.content_rows.into());
+
+        self.line_squeezed = 0;
+        let mut previous_line_blank = false;
+        let mut displayed_lines = Vec::new();
+        let mut iter = self.lines.iter().skip(self.upper_mark);
+
+        while displayed_lines.len() < self.content_rows as usize {
+            match iter.next() {
+                Some(line) => {
+                    if self.squeeze {
+                        match (line.is_empty(), previous_line_blank) {
+                            (true, false) => {
+                                previous_line_blank = true;
+                                displayed_lines.push(line);
+                            }
+                            (false, true) => {
+                                previous_line_blank = false;
+                                displayed_lines.push(line);
+                            }
+                            (false, false) => displayed_lines.push(line),
+                            (true, true) => {
+                                self.line_squeezed += 1;
+                                self.upper_mark += 1;
+                            }
+                        }
+                    } else {
+                        displayed_lines.push(line);
+                    }
+                }
+                // if none the end of the file is reached
+                None => {
+                    self.upper_mark = self.line_count;
+                    break;
+                }
+            }
+        }
 
         for line in displayed_lines {
             stdout.write_all(format!("\r{line}\n").as_bytes()).unwrap();
@@ -422,6 +554,14 @@ impl<'a> Pager<'a> {
         )
         .unwrap();
     }
+}
+
+fn paging_add_back_message(options: &Options, stdout: &mut std::io::Stdout) -> UResult<()> {
+    if options.lines.is_some() {
+        execute!(stdout, MoveUp(1))?;
+        stdout.write_all("\n\r...back 1 page\n".as_bytes())?;
+    }
+    Ok(())
 }
 
 // Break the lines on the cols of the terminal

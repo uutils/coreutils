@@ -2,7 +2,7 @@
 
 [package]
 name = "uucore"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uutils ~ 'core' uutils code library (cross-platform)"
@@ -20,7 +20,7 @@ path="src/lib/lib.rs"
 [dependencies]
 clap = { workspace=true }
 uucore_procs = { workspace=true }
-dns-lookup = { version="1.0.8", optional=true }
+dns-lookup = { version="2.0.2", optional=true }
 dunce = "1.0.4"
 wild = "2.1"
 glob = "0.3.1"
@@ -29,8 +29,8 @@ itertools = { version="0.10.5", optional=true }
 thiserror = { workspace=true, optional=true }
 time = { workspace=true, optional=true, features = ["formatting", "local-offset", "macros"] }
 # * "problem" dependencies (pinned)
-data-encoding = { version="2.3", optional=true }
-data-encoding-macro = { version="0.1.12", optional=true }
+data-encoding = { version="2.4", optional=true }
+data-encoding-macro = { version="0.1.13", optional=true }
 z85 = { version="3.0.5", optional=true }
 libc = { version="0.2.144", optional=true }
 once_cell = { workspace=true }
@@ -58,7 +58,7 @@ tempfile = { workspace=true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi-util = { version= "0.1.5", optional=true }
-windows-sys = { version = "0.45.0", optional = true, default-features = false, features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_WindowsProgramming"] }
+windows-sys = { version = "0.48.0", optional = true, default-features = false, features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_WindowsProgramming"] }
 
 [features]
 default = []

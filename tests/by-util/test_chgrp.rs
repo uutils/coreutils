@@ -1,7 +1,7 @@
 // spell-checker:ignore (words) nosuchgroup groupname
 
 use crate::common::util::TestScenario;
-use rust_users::get_effective_gid;
+use uucore::process::getegid;
 
 #[test]
 fn test_invalid_option() {
@@ -53,7 +53,7 @@ fn test_invalid_group() {
 
 #[test]
 fn test_1() {
-    if get_effective_gid() != 0 {
+    if getegid() != 0 {
         new_ucmd!().arg("bin").arg(DIR).fails().stderr_contains(
             // linux fails with "Operation not permitted (os error 1)"
             // because of insufficient permissions,
@@ -66,7 +66,7 @@ fn test_1() {
 
 #[test]
 fn test_fail_silently() {
-    if get_effective_gid() != 0 {
+    if getegid() != 0 {
         for opt in ["-f", "--silent", "--quiet", "--sil", "--qui"] {
             new_ucmd!()
                 .arg(opt)
@@ -137,7 +137,7 @@ fn test_reference() {
     // skip for root or MS-WSL
     // * MS-WSL is bugged (as of 2019-12-25), allowing non-root accounts su-level privileges for `chgrp`
     // * for MS-WSL, succeeds and stdout == 'group of /etc retained as root'
-    if !(get_effective_gid() == 0 || uucore::os::is_wsl_1()) {
+    if !(getegid() == 0 || uucore::os::is_wsl_1()) {
         new_ucmd!()
             .arg("-v")
             .arg("--reference=/etc/passwd")
@@ -203,7 +203,7 @@ fn test_missing_files() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_big_p() {
-    if get_effective_gid() != 0 {
+    if getegid() != 0 {
         new_ucmd!()
             .arg("-RP")
             .arg("bin")
@@ -218,7 +218,7 @@ fn test_big_p() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_big_h() {
-    if get_effective_gid() != 0 {
+    if getegid() != 0 {
         assert!(
             new_ucmd!()
                 .arg("-RH")

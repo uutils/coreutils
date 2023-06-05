@@ -825,7 +825,7 @@ fn test_mv_arg_update_none() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(file2), file2_content)
+    assert_eq!(at.read(file2), file2_content);
 }
 
 #[test]
@@ -847,7 +847,7 @@ fn test_mv_arg_update_all() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(file2), file1_content)
+    assert_eq!(at.read(file2), file1_content);
 }
 
 #[test]
@@ -872,7 +872,7 @@ fn test_mv_arg_update_older_dest_not_older() {
         .no_stderr()
         .no_stdout();
 
-    assert_eq!(at.read(new), new_content)
+    assert_eq!(at.read(new), new_content);
 }
 
 #[test]
@@ -1241,6 +1241,29 @@ fn test_mv_info_self() {
         .arg(dir2)
         .fails()
         .stderr_contains("mv: cannot move 'dir2' to a subdirectory of itself, 'dir2/dir2'");
+}
+
+#[test]
+fn test_mv_arg_interactive_skipped() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    ucmd.args(&["-vi", "a", "b"])
+        .pipe_in("N\n")
+        .ignore_stdin_write_error()
+        .fails()
+        .stderr_is("mv: overwrite 'b'? ")
+        .stdout_is("skipped 'b'\n");
+}
+
+#[test]
+fn test_mv_arg_interactive_skipped_vin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    ucmd.args(&["-vin", "a", "b"])
+        .fails()
+        .stdout_is("skipped 'b'\n");
 }
 
 #[test]

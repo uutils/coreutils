@@ -28,6 +28,7 @@ impl WordCountable for StdinLock<'_> {
         self
     }
 }
+
 impl WordCountable for File {
     type Buffered = BufReader<Self>;
 

@@ -1,6 +1,6 @@
 [package]
 name = "uu_yes"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "yes ~ (uutils) repeatedly display a line with STRING (or 'y')"
@@ -16,6 +16,7 @@ path = "src/yes.rs"
 
 [dependencies]
 clap = { workspace=true }
+itertools = { workspace=true }
 
 [target.'cfg(unix)'.dependencies]
 uucore = { workspace=true, features=["pipes", "signals"] }

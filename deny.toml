@@ -61,14 +61,21 @@ highlight = "all"
 skip = [
     # is-terminal
     { name = "hermit-abi", version = "0.3.1" },
-    # is-terminal
-    { name = "rustix", version = "0.36.8" },
-    # is-terminal (via rustix)
-    { name = "io-lifetimes", version = "1.0.5" },
-    # is-terminal
-    { name = "linux-raw-sys", version = "0.1.4" },
-    # is-terminal
+    # procfs
+    { name = "rustix", version = "0.36.14" },
+        { name = "linux-raw-sys", version = "0.1.4" },
+    # various crates
     { name = "windows-sys", version = "0.45.0" },
+        { name = "windows-targets", version = "0.42.2" },
+            { name = "windows_aarch64_gnullvm", version = "0.42.2" },
+            { name = "windows_aarch64_msvc", version = "0.42.2" },
+            { name = "windows_i686_gnu", version = "0.42.2" },
+            { name = "windows_i686_msvc", version = "0.42.2" },
+            { name = "windows_x86_64_gnu", version = "0.42.2" },
+            { name = "windows_x86_64_gnullvm", version = "0.42.2" },
+            { name = "windows_x86_64_msvc", version = "0.42.2" },
+    # tempfile
+    { name = "redox_syscall", version = "0.3.5" },
     # cpp_macros
     { name = "aho-corasick", version = "0.7.19" },
 ]

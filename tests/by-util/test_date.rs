@@ -3,7 +3,7 @@
 use crate::common::util::TestScenario;
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
-use rust_users::get_effective_uid;
+use uucore::process::geteuid;
 
 #[test]
 fn test_invalid_arg() {
@@ -321,7 +321,7 @@ fn test_date_format_literal() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid() {
-    if get_effective_uid() == 0 {
+    if geteuid() == 0 {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-12 13:30:00+08:00")
@@ -342,7 +342,7 @@ fn test_date_set_invalid() {
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_date_set_permissions_error() {
-    if !(get_effective_uid() == 0 || uucore::os::is_wsl_1()) {
+    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00+08:00")
@@ -369,7 +369,7 @@ fn test_date_set_mac_unavailable() {
 #[cfg(all(unix, not(target_os = "macos")))]
 /// TODO: expected to fail currently; change to succeeds() when required.
 fn test_date_set_valid_2() {
-    if get_effective_uid() == 0 {
+    if geteuid() == 0 {
         let result = new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
@@ -411,6 +411,7 @@ fn test_date_for_no_permission_file() {
     );
 }
 
+#[test]
 fn test_date_for_dir_as_file() {
     let result = new_ucmd!().arg("--file").arg("/").fails();
     result.no_stdout();
@@ -432,7 +433,7 @@ fn test_date_for_file() {
 #[cfg(all(unix, not(target_os = "macos")))]
 /// TODO: expected to fail currently; change to succeeds() when required.
 fn test_date_set_valid_3() {
-    if get_effective_uid() == 0 {
+    if geteuid() == 0 {
         let result = new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
@@ -446,7 +447,7 @@ fn test_date_set_valid_3() {
 #[cfg(all(unix, not(target_os = "macos")))]
 /// TODO: expected to fail currently; change to succeeds() when required.
 fn test_date_set_valid_4() {
-    if get_effective_uid() == 0 {
+    if geteuid() == 0 {
         let result = new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
@@ -461,6 +462,13 @@ fn test_invalid_format_string() {
     let result = new_ucmd!().arg("+%!").fails();
     result.no_stdout();
     assert!(result.stderr_str().starts_with("date: invalid format "));
+}
+
+#[test]
+fn test_unsupported_format() {
+    let result = new_ucmd!().arg("+%#z").fails();
+    result.no_stdout();
+    assert!(result.stderr_str().starts_with("date: invalid format %#z"));
 }
 
 #[test]

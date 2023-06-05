@@ -209,6 +209,144 @@ fn test_check_file_not_found_warning() {
         .stderr_is("sha1sum: warning: 1 listed file could not be read\n");
 }
 
+// Asterisk `*` is a reserved paths character on win32, nor the path can end with a whitespace.
+// ref: https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions
+#[test]
+fn test_check_md5sum() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    #[cfg(not(windows))]
+    {
+        for f in &["a", " b", "*c", "dd", " "] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "60b725f10c9c85c70d97880dfe8191b3  a\n\
+             bf35d7536c785cf06730d5a40301eba2   b\n\
+             f5b61709718c1ecf8db1aea8547d4698  *c\n\
+             b064a020db8018f18ff5ae367d01b212  dd\n\
+             d784fa8b6d98d27699781bd9a7cf19f0   ",
+        );
+        scene
+            .ccmd("md5sum")
+            .arg("--strict")
+            .arg("-c")
+            .arg("check.md5sum")
+            .succeeds()
+            .stdout_is("a: OK\n b: OK\n*c: OK\ndd: OK\n : OK\n")
+            .stderr_is("");
+    }
+    #[cfg(windows)]
+    {
+        for f in &["a", " b", "dd"] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "60b725f10c9c85c70d97880dfe8191b3  a\n\
+             bf35d7536c785cf06730d5a40301eba2   b\n\
+             b064a020db8018f18ff5ae367d01b212  dd",
+        );
+        scene
+            .ccmd("md5sum")
+            .arg("--strict")
+            .arg("-c")
+            .arg("check.md5sum")
+            .succeeds()
+            .stdout_is("a: OK\n b: OK\ndd: OK\n")
+            .stderr_is("");
+    }
+}
+
+#[test]
+fn test_check_md5sum_reverse_bsd() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    #[cfg(not(windows))]
+    {
+        for f in &["a", " b", "*c", "dd", " "] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "60b725f10c9c85c70d97880dfe8191b3 a\n\
+             bf35d7536c785cf06730d5a40301eba2  b\n\
+             f5b61709718c1ecf8db1aea8547d4698 *c\n\
+             b064a020db8018f18ff5ae367d01b212 dd\n\
+             d784fa8b6d98d27699781bd9a7cf19f0  ",
+        );
+        scene
+            .ccmd("md5sum")
+            .arg("--strict")
+            .arg("-c")
+            .arg("check.md5sum")
+            .succeeds()
+            .stdout_is("a: OK\n b: OK\n*c: OK\ndd: OK\n : OK\n")
+            .stderr_is("");
+    }
+    #[cfg(windows)]
+    {
+        for f in &["a", " b", "dd"] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "60b725f10c9c85c70d97880dfe8191b3 a\n\
+             bf35d7536c785cf06730d5a40301eba2  b\n\
+             b064a020db8018f18ff5ae367d01b212 dd",
+        );
+        scene
+            .ccmd("md5sum")
+            .arg("--strict")
+            .arg("-c")
+            .arg("check.md5sum")
+            .succeeds()
+            .stdout_is("a: OK\n b: OK\ndd: OK\n")
+            .stderr_is("");
+    }
+}
+
+#[test]
+fn test_check_md5sum_mixed_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    #[cfg(not(windows))]
+    {
+        for f in &[" b", "*c", "dd", " "] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "bf35d7536c785cf06730d5a40301eba2  b\n\
+             f5b61709718c1ecf8db1aea8547d4698 *c\n\
+             b064a020db8018f18ff5ae367d01b212 dd\n\
+             d784fa8b6d98d27699781bd9a7cf19f0  ",
+        );
+    }
+    #[cfg(windows)]
+    {
+        for f in &[" b", "dd"] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "bf35d7536c785cf06730d5a40301eba2  b\n\
+             b064a020db8018f18ff5ae367d01b212 dd",
+        );
+    }
+    scene
+        .ccmd("md5sum")
+        .arg("--strict")
+        .arg("-c")
+        .arg("check.md5sum")
+        .fails()
+        .code_is(1);
+}
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);

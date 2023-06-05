@@ -29,19 +29,3 @@ impl AddAssign for WordCount {
         *self = *self + other;
     }
 }
-
-impl WordCount {
-    pub fn with_title(self, title: Option<String>) -> TitledWordCount {
-        TitledWordCount { title, count: self }
-    }
-}
-
-/// This struct supplements the actual word count with an optional title that is
-/// displayed to the user at the end of the program.
-/// The reason we don't simply include title in the `WordCount` struct is that
-/// it would result in unnecessary copying of `String`.
-#[derive(Debug, Default, Clone)]
-pub struct TitledWordCount {
-    pub title: Option<String>,
-    pub count: WordCount,
-}
