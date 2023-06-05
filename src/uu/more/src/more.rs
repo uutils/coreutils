@@ -312,7 +312,7 @@ fn more(
         pager.content_rows += 3;
     }
 
-    if pager.should_close() {
+    if pager.should_close() && next_file.is_none() {
         return Ok(());
     }
 
@@ -499,10 +499,10 @@ impl<'a> Pager<'a> {
     }
 
     fn draw(&mut self, stdout: &mut std::io::Stdout, wrong_key: Option<char>) {
+        self.draw_lines(stdout);
         let lower_mark = self
             .line_count
             .min(self.upper_mark.saturating_add(self.content_rows.into()));
-        self.draw_lines(stdout);
         self.draw_prompt(stdout, lower_mark, wrong_key);
         stdout.flush().unwrap();
     }
