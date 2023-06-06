@@ -290,7 +290,7 @@ humantime_to_duration = "0.2.1"
 indicatif = "0.17"
 is-terminal = "0.4.7"
 itertools = "0.10.5"
-libc = "0.2.144"
+libc = "0.2.146"
 lscolors = { version = "0.14.0", default-features=false, features = ["nu-ansi-term"] }
 memchr = "2"
 nix = { version="0.26", default-features=false }
