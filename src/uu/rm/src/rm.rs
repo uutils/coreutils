@@ -304,12 +304,25 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     }
 
     if options.recursive && (!is_root || !options.preserve_root) {
-        return remove_dir_recursively(path, options);
+        let had_err = remove_dir_all(path, options);
+        if had_err {
+            return remove_dir_recursively(path, options);
+        } else {
+            return had_err;
+        }
     }
 
     // this is when trying to remove root with `--preserve-root`
     show_error!("could not remove directory {}", path.quote());
-    false
+    true
+}
+
+fn remove_dir_all(path: &Path, options: &Options) -> bool {
+    if options.interactive == InteractiveMode::Always || options.verbose {
+        return true;
+    }
+
+    fs::remove_dir_all(path).is_err()
 }
 
 fn remove_dir_recursively(path: &Path, options: &Options) -> bool {
@@ -416,7 +429,10 @@ fn remove_empty_dir_no_perm(path: &Path, options: &Options) -> bool {
         Ok(metadata) => {
             let original_perm = metadata.permissions();
             #[cfg(unix)]
-            fs::set_permissions(path, fs::Permissions::from_mode(0o777)).unwrap();
+            if let Err(e) = fs::set_permissions(path, fs::Permissions::from_mode(0o777)) {
+                show_error!("cannot remove {}: {}", path.quote(), e);
+                return true;
+            };
             if fs::read_dir(path).unwrap().next().is_none() {
                 match fs::remove_dir(path) {
                     Ok(_) => {

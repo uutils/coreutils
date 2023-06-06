@@ -125,9 +125,10 @@ fn test_rm_force_multiple() {
 }
 
 #[test]
-fn test_rm_recurs_force_empty_inacc_dir() {
+#[cfg(not(windows))]
+fn test_rm_recurs_force_empty_inaccessible_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let dir = "test_rm_recurs_force_empty_inacc_dir_dir";
+    let dir = "test_rm_recurs_force_empty_inaccessible_dir_dir";
 
     at.mkdir(dir);
 
@@ -140,6 +141,7 @@ fn test_rm_recurs_force_empty_inacc_dir() {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn test_rm_recurs_force_empty_unreadable_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let parent_dir = "parent";
@@ -157,6 +159,7 @@ fn test_rm_recurs_force_empty_unreadable_dir() {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn test_rm_d_unreadable_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_d_unreadable_dir_dir";
@@ -283,6 +286,11 @@ fn test_rm_verbose() {
         .arg(file_b)
         .succeeds()
         .stdout_only(format!("removed '{file_a}'\nremoved '{file_b}'\n"));
+}
+
+#[test]
+fn test_rm_preserve_root() {
+    new_ucmd!().arg("/").arg("--preserve-root").fails();
 }
 
 #[test]
@@ -515,6 +523,23 @@ fn test_rm_descend_directory() {
     assert!(!at.dir_exists("a"));
     assert!(!at.file_exists(file_1));
     assert!(!at.file_exists(file_2));
+}
+
+#[test]
+fn test_rm_descent_reject() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let dir1 = "dir1";
+    let dir2 = "dir1/dir2";
+    let file = "dir1/dir2/file";
+
+    at.mkdir_all(dir2);
+    at.touch(file);
+
+    ucmd.arg("-ir").arg(dir1).pipe_in("y\nn\n").succeeds();
+
+    assert!(at.dir_exists(dir2));
+    assert!(at.file_exists(file));
 }
 
 #[cfg(feature = "chmod")]
