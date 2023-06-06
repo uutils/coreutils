@@ -125,6 +125,53 @@ fn test_rm_force_multiple() {
 }
 
 #[test]
+fn test_rm_recurs_force_empty_inacc_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_recurs_force_empty_inacc_dir_dir";
+
+    at.mkdir(dir);
+
+    // remove all permissions
+    at.set_mode(dir, 0);
+
+    ucmd.arg("-rf").arg(dir).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
+fn test_rm_recurs_force_empty_unreadable_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let parent_dir = "parent";
+    let dir = "parent/test_rm_recurs_force_empty_unreadable_dir_dir";
+
+    at.mkdir(parent_dir);
+    at.mkdir(dir);
+
+    // remove read permissions
+    at.set_mode(dir, 0o333);
+
+    ucmd.arg("-rf").arg(parent_dir).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(parent_dir));
+}
+
+#[test]
+fn test_rm_d_unreadable_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_d_unreadable_dir_dir";
+
+    at.mkdir(dir);
+
+    // remove read permissions
+    at.set_mode(dir, 0o333);
+
+    ucmd.arg("-d").arg(dir).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
 fn test_rm_empty_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_empty_directory";
