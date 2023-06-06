@@ -1565,6 +1565,28 @@ fn test_ls_sort_name() {
 }
 
 #[test]
+fn test_ls_sort_width() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("aaaaa");
+    at.touch("bbb");
+    at.touch("cccc");
+    at.touch("eee");
+    at.touch("d");
+    at.touch("fffff");
+    at.touch("abc");
+    at.touch("zz");
+    at.touch("bcdef");
+
+    scene
+        .ucmd()
+        .arg("--sort=width")
+        .succeeds()
+        .stdout_is("d\nzz\nabc\nbbb\neee\ncccc\naaaaa\nbcdef\nfffff\n");
+}
+
+#[test]
 fn test_ls_order_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
