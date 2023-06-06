@@ -46,6 +46,40 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_argument_from_file() {
+    if std::io::stdout().is_terminal() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let file = "test_file";
+
+        at.write(file, "1\n2");
+
+        // output all lines
+        scene
+            .ucmd()
+            .arg("-F")
+            .arg("0")
+            .arg(file)
+            .succeeds()
+            .no_stderr()
+            .stdout_contains("1")
+            .stdout_contains("2");
+
+        // output only the second line
+        scene
+            .ucmd()
+            .arg("-F")
+            .arg("2")
+            .arg(file)
+            .succeeds()
+            .no_stderr()
+            .stdout_contains("2")
+            .stdout_does_not_contain("1");
+    }
+}
+
+#[test]
 fn test_more_dir_arg() {
     // Run the test only if there's a valid terminal, else do nothing
     // Maybe we could capture the error, i.e. "Device not found" in that case
