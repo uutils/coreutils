@@ -294,6 +294,7 @@ enum Sort {
     Time,
     Version,
     Extension,
+    Width,
 }
 
 #[derive(PartialEq)]
@@ -496,6 +497,7 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
             "size" => Sort::Size,
             "version" => Sort::Version,
             "extension" => Sort::Extension,
+            "width" => Sort::Width,
             // below should never happen as clap already restricts the values.
             _ => unreachable!("Invalid field for --sort"),
         }
@@ -1322,9 +1324,9 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::SORT)
                 .long(options::SORT)
-                .help("Sort by <field>: name, none (-U), time (-t), size (-S) or extension (-X)")
+                .help("Sort by <field>: name, none (-U), time (-t), size (-S), extension (-X) or width")
                 .value_name("field")
-                .value_parser(["name", "none", "time", "size", "version", "extension"])
+                .value_parser(["name", "none", "time", "size", "version", "extension", "width"])
                 .require_equals(true)
                 .overrides_with_all([
                     options::SORT,
@@ -1936,6 +1938,12 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
                 .extension()
                 .cmp(&b.p_buf.extension())
                 .then(a.p_buf.file_stem().cmp(&b.p_buf.file_stem()))
+        }),
+        Sort::Width => entries.sort_by(|a, b| {
+            a.display_name
+                .len()
+                .cmp(&b.display_name.len())
+                .then(a.display_name.cmp(&b.display_name))
         }),
         Sort::None => {}
     }
