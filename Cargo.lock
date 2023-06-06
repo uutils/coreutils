@@ -1155,6 +1155,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "humantime_to_duration"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a80a233096ddccb74e62145f3a49cacea6a2669ee90f6e144e15fe28f4037c4"
+dependencies = [
+ "chrono",
+ "regex",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2528,9 +2538,8 @@ version = "0.0.19"
 dependencies = [
  "chrono",
  "clap",
- "humantime_to_duration",
+ "humantime_to_duration 0.3.1",
  "libc",
- "time",
  "uucore",
  "windows-sys 0.48.0",
 ]
@@ -3224,7 +3233,7 @@ version = "0.0.19"
 dependencies = [
  "clap",
  "filetime",
- "humantime_to_duration",
+ "humantime_to_duration 0.2.1",
  "time",
  "uucore",
  "windows-sys 0.48.0",
