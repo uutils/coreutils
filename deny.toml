@@ -78,11 +78,8 @@ skip = [
     { name = "redox_syscall", version = "0.3.5" },
     # cpp_macros
     { name = "aho-corasick", version = "0.7.19" },
-    # chrono -> time
-    { name = "wasi", version = "0.10.0+wasi-snapshot-preview1" },
-    # touch can be remove when touch switches from time to chrono
+    # touch, can be remove when touch switches from time to chrono
     { name = "humantime_to_duration", version = "0.2.1" },
-    { name = "time", version = "0.3.20" },
 ]
 # spell-checker: enable
 
