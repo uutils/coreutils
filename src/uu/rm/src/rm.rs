@@ -9,7 +9,7 @@
 
 use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, File, Metadata, Permissions};
+use std::fs::{self, File, Metadata};
 use std::io::ErrorKind;
 use std::ops::BitOr;
 #[cfg(unix)]
@@ -351,15 +351,15 @@ fn remove_dir_recursively(path: &Path, options: &Options) -> bool {
                 return had_err;
             }
 
-            return remove_dir(path, options);
+            remove_dir(path, options)
         }
         Err(e) => {
             if e.kind() == std::io::ErrorKind::PermissionDenied && options.force {
                 // try to see if dir to be removed is empty
-                return remove_empty_dir_no_perm(path, options);
+                remove_empty_dir_no_perm(path, options)
             } else {
                 show_error!("cannot remove {}: {}", path.quote(), e);
-                return true;
+                true
             }
         }
     }
@@ -416,7 +416,7 @@ fn remove_empty_dir_no_perm(path: &Path, options: &Options) -> bool {
         Ok(metadata) => {
             let original_perm = metadata.permissions();
             #[cfg(unix)]
-            fs::set_permissions(path, Permissions::from_mode(0o777)).unwrap();
+            fs::set_permissions(path, fs::Permissions::from_mode(0o777)).unwrap();
             if fs::read_dir(path).unwrap().next().is_none() {
                 match fs::remove_dir(path) {
                     Ok(_) => {
