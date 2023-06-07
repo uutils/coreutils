@@ -235,7 +235,6 @@ fn test_recursive_reporting() {
 #[test]
 fn test_mkdir_trailing_dot() {
     let _guard = TEST_MUTEX.lock();
-    let scene2 = TestScenario::new("ls");
 
     new_ucmd!().arg("-p").arg("-v").arg("test_dir").succeeds();
 
@@ -252,7 +251,9 @@ fn test_mkdir_trailing_dot() {
         .arg("test_dir_b/..")
         .succeeds()
         .stdout_contains("created directory 'test_dir_b'");
-    let result = scene2.ucmd().arg("-al").run();
+
+    let scene = TestScenario::new("ls");
+    let result = scene.ucmd().arg("-al").run();
     println!("ls dest {}", result.stdout_str());
 }
 
