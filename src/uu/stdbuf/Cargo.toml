@@ -15,12 +15,12 @@ edition = "2021"
 path = "src/stdbuf.rs"
 
 [dependencies]
-clap = { workspace=true }
-tempfile = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true }
 
 [build-dependencies]
-libstdbuf = { version="0.0.19", package="uu_stdbuf_libstdbuf", path="src/libstdbuf" }
+libstdbuf = { version = "0.0.19", package = "uu_stdbuf_libstdbuf", path = "src/libstdbuf" }
 
 [[bin]]
 name = "stdbuf"

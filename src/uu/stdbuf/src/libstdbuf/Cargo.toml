@@ -14,12 +14,15 @@ edition = "2021"
 [lib]
 name = "libstdbuf"
 path = "src/libstdbuf.rs"
-crate-type = ["cdylib", "rlib"] # XXX: note: the rlib is just to prevent Cargo from spitting out a warning
+crate-type = [
+  "cdylib",
+  "rlib",
+] # XXX: note: the rlib is just to prevent Cargo from spitting out a warning
 
 [dependencies]
 cpp = "0.5"
-libc = { workspace=true }
-uucore = { version=">=0.0.19", package="uucore", path="../../../../uucore" }
+libc = { workspace = true }
+uucore = { version = ">=0.0.19", package = "uucore", path = "../../../../uucore" }
 
 [build-dependencies]
 cpp_build = "0.5"

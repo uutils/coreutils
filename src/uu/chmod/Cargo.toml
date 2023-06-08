@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/chmod.rs"
 
 [dependencies]
-clap = { workspace=true }
-libc = { workspace=true }
-uucore = { workspace=true, features=["fs", "mode"] }
+clap = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true, features = ["fs", "mode"] }
 
 [[bin]]
 name = "chmod"

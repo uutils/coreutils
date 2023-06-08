@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/pinky.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["utmpx", "entries"] }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["utmpx", "entries"] }
 
 [[bin]]
 name = "pinky"
