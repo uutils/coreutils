@@ -1,10 +1,7 @@
 [package]
 name = "uu_install"
 version = "0.0.19"
-authors = [
-    "Ben Eills <ben@beneills.com>",
-    "uutils developers",
-]
+authors = ["Ben Eills <ben@beneills.com>", "uutils developers"]
 license = "MIT"
 description = "install ~ (uutils) copy files from SOURCE to DESTINATION (with specified attributes)"
 
@@ -18,11 +15,11 @@ edition = "2021"
 path = "src/install.rs"
 
 [dependencies]
-clap = { workspace=true }
-filetime = { workspace=true }
-file_diff = { workspace=true }
-libc = { workspace=true }
-uucore = { workspace=true, features=["fs", "mode", "perms", "entries"] }
+clap = { workspace = true }
+filetime = { workspace = true }
+file_diff = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true, features = ["fs", "mode", "perms", "entries"] }
 
 [[bin]]
 name = "install"

@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/dir.rs"
 
 [dependencies]
-clap = { workspace=true, features = ["env"] }
-uucore = { workspace=true, features=["entries", "fs"] }
-uu_ls = { workspace=true }
+clap = { workspace = true, features = ["env"] }
+uucore = { workspace = true, features = ["entries", "fs"] }
+uu_ls = { workspace = true }
 
 [[bin]]
 name = "dir"

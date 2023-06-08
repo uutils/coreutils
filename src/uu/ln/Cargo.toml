@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/ln.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["fs"] }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "ln"
