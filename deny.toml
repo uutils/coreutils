@@ -63,16 +63,25 @@ skip = [
   { name = "hermit-abi", version = "0.3.1" },
   # procfs
   { name = "rustix", version = "0.36.14" },
+  # rustix
   { name = "linux-raw-sys", version = "0.1.4" },
   # various crates
   { name = "windows-sys", version = "0.45.0" },
+  # windows-sys
   { name = "windows-targets", version = "0.42.2" },
+  # windows-targets
   { name = "windows_aarch64_gnullvm", version = "0.42.2" },
+  # windows-targets
   { name = "windows_aarch64_msvc", version = "0.42.2" },
+  # windows-targets
   { name = "windows_i686_gnu", version = "0.42.2" },
+  # windows-targets
   { name = "windows_i686_msvc", version = "0.42.2" },
+  # windows-targets
   { name = "windows_x86_64_gnu", version = "0.42.2" },
+  # windows-targets
   { name = "windows_x86_64_gnullvm", version = "0.42.2" },
+  # windows-targets
   { name = "windows_x86_64_msvc", version = "0.42.2" },
   # tempfile
   { name = "redox_syscall", version = "0.3.5" },
