@@ -15,10 +15,10 @@ edition = "2021"
 path = "src/nice.rs"
 
 [dependencies]
-clap = { workspace=true }
-libc = { workspace=true }
-nix = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+libc = { workspace = true }
+nix = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "nice"

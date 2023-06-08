@@ -15,20 +15,19 @@ edition = "2021"
 path = "src/ls.rs"
 
 [dependencies]
-clap = { workspace=true, features = ["env"] }
-chrono = { workspace=true }
-unicode-width = { workspace=true }
-number_prefix = { workspace=true }
-term_grid = { workspace=true }
-terminal_size = { workspace=true }
-glob = { workspace=true }
-lscolors = { workspace=true }
-uucore = { workspace=true, features = ["entries", "fs"] }
-uu_dircolors = { workspace=true }
-once_cell = { workspace=true }
-is-terminal = { workspace=true }
-selinux = { workspace=true, optional = true }
-regex = { workspace=true }
+clap = { workspace = true, features = ["env"] }
+chrono = { workspace = true }
+unicode-width = { workspace = true }
+number_prefix = { workspace = true }
+term_grid = { workspace = true }
+terminal_size = { workspace = true }
+glob = { workspace = true }
+lscolors = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs"] }
+uu_dircolors = { workspace = true }
+once_cell = { workspace = true }
+is-terminal = { workspace = true }
+selinux = { workspace = true, optional = true }
 
 [[bin]]
 name = "ls"

@@ -15,10 +15,10 @@ edition = "2021"
 path = "src/csplit.rs"
 
 [dependencies]
-clap = { workspace=true }
+clap = { workspace = true }
 thiserror = { workspace = true }
-regex = { workspace=true }
-uucore = { workspace=true, features=["entries", "fs"] }
+regex = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs"] }
 
 [[bin]]
 name = "csplit"

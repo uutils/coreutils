@@ -15,13 +15,13 @@ edition = "2021"
 path = "src/cat.rs"
 
 [dependencies]
-clap = { workspace=true }
+clap = { workspace = true }
 thiserror = { workspace = true }
 is-terminal = { workspace = true }
-uucore = { workspace=true, features=["fs", "pipes"] }
+uucore = { workspace = true, features = ["fs", "pipes"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace=true }
+nix = { workspace = true }
 
 [[bin]]
 name = "cat"

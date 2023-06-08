@@ -15,11 +15,11 @@ edition = "2021"
 path = "src/shuf.rs"
 
 [dependencies]
-clap = { workspace=true }
-memchr = { workspace=true }
-rand = { workspace=true }
-rand_core = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+memchr = { workspace = true }
+rand = { workspace = true }
+rand_core = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "shuf"
