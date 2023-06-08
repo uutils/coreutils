@@ -362,6 +362,74 @@ fn test_rm_interactive_never() {
 }
 
 #[test]
+fn test_rm_interactive_missing_value() {
+    // `--interactive` is equivalent to `--interactive=always` or `-i`
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file1 = "test_rm_interactive_missing_value_file1";
+    let file2 = "test_rm_interactive_missing_value_file2";
+
+    at.touch(file1);
+    at.touch(file2);
+
+    ucmd.arg("--interactive")
+        .arg(file1)
+        .arg(file2)
+        .pipe_in("y\ny")
+        .succeeds();
+
+    assert!(!at.file_exists(file1));
+    assert!(!at.file_exists(file2));
+}
+
+#[test]
+fn test_rm_interactive_once_prompt() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file1 = "test_rm_interactive_once_recursive_prompt_file1";
+    let file2 = "test_rm_interactive_once_recursive_prompt_file2";
+    let file3 = "test_rm_interactive_once_recursive_prompt_file3";
+    let file4 = "test_rm_interactive_once_recursive_prompt_file4";
+
+    at.touch(file1);
+    at.touch(file2);
+    at.touch(file3);
+    at.touch(file4);
+
+    ucmd.arg("--interactive=once")
+        .arg(file1)
+        .arg(file2)
+        .arg(file3)
+        .arg(file4)
+        .pipe_in("y")
+        .succeeds()
+        .stderr_contains("remove 4 arguments?");
+
+    assert!(!at.file_exists(file1));
+    assert!(!at.file_exists(file2));
+    assert!(!at.file_exists(file3));
+    assert!(!at.file_exists(file4));
+}
+
+#[test]
+fn test_rm_interactive_once_recursive_prompt() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file1 = "test_rm_interactive_once_recursive_prompt_file1";
+
+    at.touch(file1);
+
+    ucmd.arg("--interactive=once")
+        .arg("-r")
+        .arg(file1)
+        .pipe_in("y")
+        .succeeds()
+        .stderr_contains("remove 1 argument recursively?");
+
+    assert!(!at.file_exists(file1));
+}
+
+#[test]
 fn test_rm_descend_directory() {
     // This test descends into each directory and deletes the files and folders inside of them
     // This test will have the rm process asks 6 question and us answering Y to them will delete all the files and folders

@@ -1,6 +1,6 @@
 [package]
 name = "uu_install"
-version = "0.0.18"
+version = "0.0.19"
 authors = [
     "Ben Eills <ben@beneills.com>",
     "uutils developers",
@@ -23,9 +23,6 @@ filetime = { workspace=true }
 file_diff = { workspace=true }
 libc = { workspace=true }
 uucore = { workspace=true, features=["fs", "mode", "perms", "entries"] }
-
-[dev-dependencies]
-time = { workspace=true }
 
 [[bin]]
 name = "install"

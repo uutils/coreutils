@@ -17,6 +17,23 @@ fn test_valid_arg() {
 
         new_ucmd!().arg("-p").succeeds();
         new_ucmd!().arg("--clean-print").succeeds();
+
+        new_ucmd!().arg("-s").succeeds();
+        new_ucmd!().arg("--squeeze").succeeds();
+
+        new_ucmd!().arg("-n").arg("10").succeeds();
+        new_ucmd!().arg("--lines").arg("0").succeeds();
+        new_ucmd!().arg("--number").arg("0").succeeds();
+    }
+}
+
+#[test]
+fn test_invalid_arg() {
+    if std::io::stdout().is_terminal() {
+        new_ucmd!().arg("--invalid").fails();
+
+        new_ucmd!().arg("--lines").arg("-10").fails();
+        new_ucmd!().arg("--number").arg("-10").fails();
     }
 }
 
@@ -30,5 +47,23 @@ fn test_more_dir_arg() {
             .arg(".")
             .fails()
             .usage_error("'.' is a directory.");
+    }
+}
+
+#[test]
+#[cfg(target_family = "unix")]
+fn test_more_invalid_file_perms() {
+    use std::fs::{set_permissions, Permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    if std::io::stdout().is_terminal() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let permissions = Permissions::from_mode(0o244);
+        at.make_file("invalid-perms.txt");
+        set_permissions(at.plus("invalid-perms.txt"), permissions).unwrap();
+        ucmd.arg("invalid-perms.txt")
+            .fails()
+            .code_is(1)
+            .stderr_contains("permission denied");
     }
 }

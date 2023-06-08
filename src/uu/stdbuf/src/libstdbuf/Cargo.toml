@@ -1,6 +1,6 @@
 [package]
 name = "uu_stdbuf_libstdbuf"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stdbuf/libstdbuf ~ (uutils); dynamic library required for stdbuf"
@@ -19,7 +19,7 @@ crate-type = ["cdylib", "rlib"] # XXX: note: the rlib is just to prevent Cargo f
 [dependencies]
 cpp = "0.5"
 libc = { workspace=true }
-uucore = { version=">=0.0.18", package="uucore", path="../../../../uucore" }
+uucore = { version=">=0.0.19", package="uucore", path="../../../../uucore" }
 
 [build-dependencies]
 cpp_build = "0.5"

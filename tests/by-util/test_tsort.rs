@@ -21,6 +21,14 @@ fn test_sort_self_loop() {
 }
 
 #[test]
+fn test_sort_floating_nodes() {
+    new_ucmd!()
+        .pipe_in("d d\nc c\na a\nb b")
+        .succeeds()
+        .stdout_only("a\nb\nc\nd\n");
+}
+
+#[test]
 fn test_no_such_file() {
     new_ucmd!()
         .arg("invalid_file_txt")

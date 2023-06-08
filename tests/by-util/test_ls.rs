@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc colorterm
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff colorterm
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -1573,6 +1573,28 @@ fn test_ls_sort_name() {
         .arg("-A")
         .succeeds()
         .stdout_is(".a\n.b\na\nb\n");
+}
+
+#[test]
+fn test_ls_sort_width() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("aaaaa");
+    at.touch("bbb");
+    at.touch("cccc");
+    at.touch("eee");
+    at.touch("d");
+    at.touch("fffff");
+    at.touch("abc");
+    at.touch("zz");
+    at.touch("bcdef");
+
+    scene
+        .ucmd()
+        .arg("--sort=width")
+        .succeeds()
+        .stdout_is("d\nzz\nabc\nbbb\neee\ncccc\naaaaa\nbcdef\nfffff\n");
 }
 
 #[test]

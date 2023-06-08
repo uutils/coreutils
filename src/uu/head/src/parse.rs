@@ -114,7 +114,13 @@ pub fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
         return Err(ParseSizeError::ParseFailure(src.to_string()));
     }
 
-    parse_size(size_string).map(|n| (n, all_but_last))
+    // remove leading zeros so that size is interpreted as decimal, not octal
+    let trimmed_string = size_string.trim_start_matches('0');
+    if trimmed_string.is_empty() {
+        Ok((0, all_but_last))
+    } else {
+        parse_size(trimmed_string).map(|n| (n, all_but_last))
+    }
 }
 
 #[cfg(test)]

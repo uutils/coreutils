@@ -622,12 +622,10 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn test_arg_iterate_bad_encoding() {
-        #[allow(clippy::invalid_utf8_in_unchecked)]
-        let invalid = unsafe { std::str::from_utf8_unchecked(b"\x80\x81") };
+        use std::os::unix::ffi::OsStringExt;
+        let invalid = OsString::from_vec(vec![b'\x80', b'\x81']);
         // this arises from a conversion from OsString to &str
-        assert!(
-            arg_iterate(vec![OsString::from("head"), OsString::from(invalid)].into_iter()).is_err()
-        );
+        assert!(arg_iterate(vec![OsString::from("head"), invalid].into_iter()).is_err());
     }
     #[test]
     fn read_early_exit() {

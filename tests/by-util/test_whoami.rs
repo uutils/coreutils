@@ -50,3 +50,8 @@ fn test_normal_compare_env() {
         println!("test skipped:");
     }
 }
+
+#[test]
+fn test_succeeds_on_all_platforms() {
+    new_ucmd!().succeeds().no_stderr();
+}
