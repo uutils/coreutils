@@ -850,7 +850,7 @@ fn test_ls_zero() {
         .env("TERM", "xterm")
         .args(&["--zero", "--color=always"])
         .succeeds()
-        .stdout_only("\x1b[1;34m0-test-zero\x1b[0m\x002-test-zero\x003-test-zero\x00");
+        .stdout_only("\x1b[0m\x1b[01;34m0-test-zero\x1b[0m\x002-test-zero\x003-test-zero\x00");
 
     scene
         .ucmd()
@@ -909,9 +909,7 @@ fn test_ls_zero() {
             .env("TERM", "xterm")
             .args(&["--zero", "--color=always"])
             .succeeds()
-            .stdout_only(
-                "\x1b[1;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00",
-            );
+            .stdout_only("\x1b[0m\x1b[01;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00");
 
         scene
             .ucmd()

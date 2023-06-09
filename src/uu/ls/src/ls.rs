@@ -16,7 +16,6 @@ use is_terminal::IsTerminal;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
-use regex::RegexSet;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -38,7 +37,7 @@ use std::{
 use std::{collections::HashSet, env};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
-use uu_dircolors::DIRCOLORS;
+use uu_dircolors::DIRCOLORS_CONFIG_FILE;
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -541,25 +540,38 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
     }
 }
 
-/// Parse the dircolors terminal list into a RegexSet and check against
-/// current terminal if applicable
+/// check if the terminal used in TERM environment variable is part of the allowed list of
+/// terminals in DIRCOLOR config list
 ///
 /// # Returns
 ///
 /// Boolean
-fn check_env_variables_against_dircolors(dircolors: &str) -> bool {
-    let ls_colors = env::var("LS_COLORS").unwrap_or(String::new()).is_empty();
-    let colorterm = env::var("COLORTERM").unwrap_or(String::new()).is_empty();
-    if ls_colors && colorterm {
+fn check_if_term_is_allowed_in_dircolors_config_file(dircolors: &str) -> bool {
+    let ls_colors_missing_or_empty = env::var("LS_COLORS").unwrap_or(String::new()).is_empty();
+    let colorterm_missing_or_empty = env::var("COLORTERM").unwrap_or(String::new()).is_empty();
+    if ls_colors_missing_or_empty && colorterm_missing_or_empty {
         let term = env::var("TERM").unwrap_or(String::new());
         let terminals = dircolors
             .lines()
             .filter(|x| x.starts_with("TERM "))
             .map(|x| x.replace("TERM ", ""))
-            .map(|x| x.replace('*', ".*"))
             .collect::<Vec<String>>();
-        let dircolors_set = RegexSet::new(terminals).unwrap();
-        dircolors_set.matches(term.as_str()).matched_any()
+        for allowed_terminal in terminals {
+            let glob = match parse_glob::from_str(&allowed_terminal) {
+                Ok(g) => g,
+                Err(_) => {
+                    show_warning!("{} in DIRCOLOR terminal list could not be parsed, --color=none applied ", &allowed_terminal.quote());
+                    Pattern::new("").unwrap()
+                }
+            };
+            
+            if glob.matches(term.as_str())
+            {
+                println!("yes");
+                return true;
+            }
+        }
+        false
     } else {
         true
     }
@@ -571,7 +583,8 @@ fn check_env_variables_against_dircolors(dircolors: &str) -> bool {
 ///
 /// A boolean representing whether or not to use color.
 fn extract_color(options: &clap::ArgMatches) -> bool {
-    let dircolors_allowed = check_env_variables_against_dircolors(DIRCOLORS);
+    let dircolors_allowed =
+        check_if_term_is_allowed_in_dircolors_config_file(DIRCOLORS_CONFIG_FILE);
     match options
         .get_one::<String>(options::COLOR)
         .unwrap_or(&String::new())

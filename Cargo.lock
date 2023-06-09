@@ -2797,7 +2797,6 @@ dependencies = [
  "lscolors",
  "number_prefix",
  "once_cell",
- "regex",
  "selinux",
  "term_grid",
  "terminal_size",

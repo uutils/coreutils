@@ -28,7 +28,6 @@ uu_dircolors = { workspace = true }
 once_cell = { workspace = true }
 is-terminal = { workspace = true }
 selinux = { workspace = true, optional = true }
-regex = { workspace=true }
 
 [[bin]]
 name = "ls"

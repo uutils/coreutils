@@ -35,7 +35,7 @@ mod colors;
 use self::colors::INTERNAL_DB;
 
 // exposed for uu_ls
-pub const DIRCOLORS: &str = INTERNAL_DB;
+pub const DIRCOLORS_CONFIG_FILE: &str = INTERNAL_DB;
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum OutputFmt {
@@ -103,7 +103,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             ));
         }
-        println!("{DIRCOLORS}");
+        println!("{DIRCOLORS_CONFIG_FILE}");
         return Ok(());
     }
 
@@ -131,7 +131,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let result;
     if files.is_empty() {
-        result = parse(DIRCOLORS.lines(), &out_format, "");
+        result = parse(DIRCOLORS_CONFIG_FILE.lines(), &out_format, "");
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
