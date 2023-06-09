@@ -16,6 +16,7 @@ use is_terminal::IsTerminal;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
+use std::env::VarError;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -546,28 +547,35 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
 /// # Returns
 ///
 /// Boolean
-fn check_if_term_is_allowed_in_dircolors_config_file(dircolors: &str) -> bool {
-    let ls_colors_missing_or_empty = env::var("LS_COLORS").unwrap_or(String::new()).is_empty();
-    let colorterm_missing_or_empty = env::var("COLORTERM").unwrap_or(String::new()).is_empty();
+fn check_if_term_is_allowed_in_dircolors_config_file(
+    dircolors_config: &str,
+    ls_colors_env_variable: Result<String, VarError>,
+    colorterm_env_variable: Result<String, VarError>,
+    term_env_variable: Result<String, VarError>,
+) -> bool {
+    // unset env variables behave like empty ones in LS
+    let ls_colors_missing_or_empty = ls_colors_env_variable.unwrap_or(String::new()).is_empty();
+    let colorterm_missing_or_empty = colorterm_env_variable.unwrap_or(String::new()).is_empty();
     if ls_colors_missing_or_empty && colorterm_missing_or_empty {
-        let term = env::var("TERM").unwrap_or(String::new());
-        let terminals = dircolors
+        let term = term_env_variable.unwrap_or(String::new());
+        let terminal_list = dircolors_config
             .lines()
             .filter(|x| x.starts_with("TERM "))
             .map(|x| x.replace("TERM ", ""))
             .collect::<Vec<String>>();
-        for allowed_terminal in terminals {
+        for allowed_terminal in terminal_list {
             let glob = match parse_glob::from_str(&allowed_terminal) {
                 Ok(g) => g,
                 Err(_) => {
-                    show_warning!("{} in DIRCOLOR terminal list could not be parsed, --color=none applied ", &allowed_terminal.quote());
-                    Pattern::new("").unwrap()
+                    show_warning!(
+                        "{} in DIRCOLOR terminal list could not be parsed, --color=none applied ",
+                        &allowed_terminal.quote()
+                    );
+                    return false;
                 }
             };
-            
-            if glob.matches(term.as_str())
-            {
-                println!("yes");
+
+            if glob.matches(term.as_str()) {
                 return true;
             }
         }
@@ -583,8 +591,12 @@ fn check_if_term_is_allowed_in_dircolors_config_file(dircolors: &str) -> bool {
 ///
 /// A boolean representing whether or not to use color.
 fn extract_color(options: &clap::ArgMatches) -> bool {
-    let dircolors_allowed =
-        check_if_term_is_allowed_in_dircolors_config_file(DIRCOLORS_CONFIG_FILE);
+    let dircolors_allowed = check_if_term_is_allowed_in_dircolors_config_file(
+        DIRCOLORS_CONFIG_FILE,
+        env::var("LS_COLORS"),
+        env::var("COLORTERM"),
+        env::var("TERM"),
+    );
     match options
         .get_one::<String>(options::COLOR)
         .unwrap_or(&String::new())
@@ -3189,60 +3201,98 @@ mod tests {
 
     use super::*;
 
+    const ENV_EMPTY: Result<String, VarError> = Ok::<String, VarError>(String::new());
+    const ENV_UNSET: Result<String, VarError> = Err(VarError::NotPresent);
+
     #[test]
-    fn test_check_env_variables_against_dircolors_invalid_terminal_01() {
-        env::set_var("TERM", "dummy");
-        env::set_var("COLORTERM", "");
-        env::set_var("LS_COLORS", "");
-        assert!(!check_env_variables_against_dircolors(DIRCOLORS));
+    fn test_env_against_dircolors_config_invalid_terminal() {
+        assert!(!check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_EMPTY,
+            ENV_EMPTY,
+            Ok("dummy".to_string())
+        ));
+        assert!(!check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_UNSET,
+            ENV_UNSET,
+            Ok("dummy".to_string())
+        ));
     }
+
     #[test]
-    fn test_check_env_variables_against_dircolors_invalid_terminal_02() {
-        env::set_var("TERM", "dummy");
-        env::remove_var("COLORTERM");
-        env::remove_var("LS_COLORS");
-        assert!(!check_env_variables_against_dircolors(DIRCOLORS));
+    fn test_env_against_dircolors_config_valid_terminal() {
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_EMPTY,
+            ENV_EMPTY,
+            Ok("xterm".to_string())
+        ));
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_UNSET,
+            ENV_UNSET,
+            Ok("xterm".to_string())
+        ));
     }
+
     #[test]
-    fn test_check_env_variables_against_dircolors_valid_terminal_01() {
-        env::set_var("TERM", "xterm");
-        env::set_var("COLORTERM", "");
-        env::set_var("LS_COLORS", "");
-        assert!(check_env_variables_against_dircolors(DIRCOLORS));
+    fn test_env_against_dircolors_config_ls_colors_set() {
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_EMPTY,
+            Ok("rs=0:di=01;34:".to_string()),
+            ENV_EMPTY
+        ));
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_UNSET,
+            Ok("rs=0:di=01;34:".to_string()),
+            ENV_UNSET
+        ));
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_UNSET,
+            Ok("rs=0:di=01;34:".to_string()),
+            Ok("xterm".to_string())
+        ));
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            Ok("something".to_string()),
+            Ok("rs=0:di=01;34:".to_string()),
+            Ok("xterm".to_string())
+        ));
     }
+
     #[test]
-    fn test_check_env_variables_against_dircolors_valid_terminal_02() {
-        env::set_var("TERM", "xterm");
-        env::remove_var("COLORTERM");
-        env::remove_var("LS_COLORS");
-        assert!(check_env_variables_against_dircolors(DIRCOLORS));
+    fn test_env_against_dircolors_config_colorterm_set() {
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            Ok("something".to_string()),
+            ENV_EMPTY,
+            ENV_EMPTY
+        ));
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            Ok("something".to_string()),
+            ENV_UNSET,
+            ENV_UNSET
+        ));
     }
+
     #[test]
-    fn test_check_env_variables_against_dircolors_ls_color_set_01() {
-        env::set_var("TERM", "dummy");
-        env::set_var("COLORTERM", "");
-        env::set_var("LS_COLORS", "rs=0:di=01;34:ln=01;36");
-        assert!(check_env_variables_against_dircolors(DIRCOLORS));
-    }
-    #[test]
-    fn test_check_env_variables_against_dircolors_ls_color_set_02() {
-        env::set_var("TERM", "dummy");
-        env::remove_var("COLORTERM");
-        env::set_var("LS_COLORS", "rs=0:di=01;34:ln=01;36");
-        assert!(check_env_variables_against_dircolors(DIRCOLORS));
-    }
-    #[test]
-    fn test_check_env_variables_against_dircolors_colorterm_set_01() {
-        env::set_var("TERM", "dummy");
-        env::set_var("COLORTERM", "something");
-        env::set_var("LS_COLORS", "");
-        assert!(check_env_variables_against_dircolors(DIRCOLORS));
-    }
-    #[test]
-    fn test_check_env_variables_against_dircolors_colorterm_set_02() {
-        env::set_var("TERM", "dummy");
-        env::set_var("COLORTERM", "something");
-        env::remove_var("LS_COLORS");
-        assert!(check_env_variables_against_dircolors(DIRCOLORS));
+    fn test_env_against_dircolors_config_nothing_set() {
+        assert!(!check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_EMPTY,
+            ENV_EMPTY,
+            ENV_EMPTY
+        ));
+        assert!(!check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_UNSET,
+            ENV_UNSET,
+            ENV_UNSET
+        ));
     }
 }
