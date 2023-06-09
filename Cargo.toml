@@ -346,7 +346,6 @@ uu_ls = { version = ">=0.0.18", path = "src/uu/ls" }
 uu_base32 = { version = ">=0.0.18", path = "src/uu/base32" }
 uu_dircolors = { version = ">=0.0.18", path = "src/uu/dircolors" }
 
-
 [dependencies]
 clap = { workspace = true }
 once_cell = { workspace = true }
