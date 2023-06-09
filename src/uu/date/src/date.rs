@@ -9,7 +9,7 @@
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes humantime
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, Duration as ChronoDuration, FixedOffset, Local, Offset, Utc};
+use chrono::{DateTime, Duration, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
@@ -18,7 +18,6 @@ use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use time::Duration;
 use uucore::display::Quotable;
 #[cfg(not(any(target_os = "redox")))]
 use uucore::error::FromIo;
@@ -226,13 +225,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let iter = std::iter::once(date);
                 Box::new(iter)
             }
-            DateSource::Human(ref input) => {
-                // Get the current DateTime<FixedOffset> and convert the input time::Duration to chrono::Duration
-                // for things like "1 year ago"
+            DateSource::Human(relative_time) => {
+                // Get the current DateTime<FixedOffset> for things like "1 year ago"
                 let current_time = DateTime::<FixedOffset>::from(Local::now());
-                let input_chrono = ChronoDuration::seconds(input.as_seconds_f32() as i64)
-                    + ChronoDuration::nanoseconds(input.subsec_nanoseconds() as i64);
-                let iter = std::iter::once(Ok(current_time + input_chrono));
+                let iter = std::iter::once(Ok(current_time + relative_time));
                 Box::new(iter)
             }
             DateSource::File(ref path) => {

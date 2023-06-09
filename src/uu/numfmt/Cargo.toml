@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/numfmt.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "numfmt"

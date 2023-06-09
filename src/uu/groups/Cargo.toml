@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/groups.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["entries", "process"] }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["entries", "process"] }
 
 [[bin]]
 name = "groups"

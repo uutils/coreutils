@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/basenc.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features = ["encoding"] }
-uu_base32 = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["encoding"] }
+uu_base32 = { workspace = true }
 
 [[bin]]
 name = "basenc"

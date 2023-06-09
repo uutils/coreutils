@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/rmdir.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["fs"] }
-libc = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
+libc = { workspace = true }
 
 [[bin]]
 name = "rmdir"

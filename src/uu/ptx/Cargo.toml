@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/ptx.rs"
 
 [dependencies]
-clap = { workspace=true }
-regex = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+regex = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "ptx"

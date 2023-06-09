@@ -20,15 +20,12 @@ run_task = "_init"
 
 [tasks._init]
 private = true
-dependencies = [
-	"_init-vars",
-]
+dependencies = ["_init-vars"]
 
 [tasks._init-vars]
 private = true
 script_runner = "@duckscript"
-script = [
-'''
+script = ['''
 # reset build/test flags
 set_env CARGO_MAKE_CARGO_BUILD_TEST_FLAGS ""
 # determine features
@@ -90,54 +87,36 @@ for arg in "${args_utils_list}"
 end
 args_utils = trim "${args_utils}"
 set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${args_utils}"
-'''
-]
+''']
 
 ### tasks
 
 [tasks.default]
 description = "## *DEFAULT* Build (debug-mode) and test project"
 category = "[project]"
-dependencies = [
-	"action-build-debug",
-	"test-terse",
-]
+dependencies = ["action-build-debug", "test-terse"]
 
 ##
 
 [tasks.build]
 description = "## Build (release-mode) project"
 category = "[project]"
-dependencies = [
-	"core::pre-build",
-	"action-build-release",
-	"core::post-build",
-]
+dependencies = ["core::pre-build", "action-build-release", "core::post-build"]
 
 [tasks.build-debug]
 description = "## Build (debug-mode) project"
 category = "[project]"
-dependencies = [
-	"action-build-debug",
-]
+dependencies = ["action-build-debug"]
 
 [tasks.build-examples]
 description = "## Build (release-mode) project example(s); usage: `cargo make (build-examples | examples) [EXAMPLE]...`"
 category = "[project]"
-dependencies = [
-	"core::pre-build",
-	"action-build-examples",
-	"core::post-build",
-]
+dependencies = ["core::pre-build", "action-build-examples", "core::post-build"]
 
 [tasks.build-features]
 description = "## Build (with features; release-mode) project; usage: `cargo make (build-features | features) FEATURE...`"
 category = "[project]"
-dependencies = [
-	"core::pre-build",
-	"action-build-features",
-	"core::post-build",
-]
+dependencies = ["core::pre-build", "action-build-features", "core::post-build"]
 
 [tasks.build-release]
 alias = "build"
@@ -148,9 +127,7 @@ alias = "build-debug"
 [tasks.example]
 description = "hidden singular-form alias for 'examples'"
 category = "[project]"
-dependencies = [
-	"examples",
-]
+dependencies = ["examples"]
 
 [tasks.examples]
 alias = "build-examples"
@@ -161,17 +138,12 @@ alias = "build-features"
 [tasks.format]
 description = "## Format code files (with `cargo fmt`; includes tests)"
 category = "[project]"
-dependencies = [
-	"action-format",
-	"action-format-tests",
-]
+dependencies = ["action-format", "action-format-tests"]
 
 [tasks.help]
 description = "## Display help"
 category = "[project]"
-dependencies = [
-	"action-display-help",
-]
+dependencies = ["action-display-help"]
 
 [tasks.install]
 description = "## Install project binary (to $HOME/.cargo/bin)"
@@ -182,10 +154,7 @@ args = ["install", "--path", "."]
 [tasks.lint]
 description = "## Display lint report"
 category = "[project]"
-dependencies = [
-	"action-clippy",
-	"action-fmt_report",
-]
+dependencies = ["action-clippy", "action-fmt_report"]
 
 [tasks.release]
 alias = "build"
@@ -193,48 +162,32 @@ alias = "build"
 [tasks.test]
 description = "## Run project tests"
 category = "[project]"
-dependencies = [
-	"core::pre-test",
-	"core::test",
-	"core::post-test",
-]
+dependencies = ["core::pre-test", "core::test", "core::post-test"]
 
 [tasks.test-terse]
 description = "## Run project tests (with terse/summary output)"
 category = "[project]"
-dependencies = [
-	"core::pre-test",
-	"action-test_quiet",
-	"core::post-test",
-]
+dependencies = ["core::pre-test", "action-test_quiet", "core::post-test"]
 
 [tasks.test-util]
 description = "## Test (individual) utilities; usage: `cargo make (test-util | test-uutil) [UTIL_NAME...]`"
 category = "[project]"
-dependencies = [
-	"action-test-utils",
-]
+dependencies = ["action-test-utils"]
 
 [tasks.test-utils]
 description = "hidden plural-form alias for 'test-util'"
 category = "[project]"
-dependencies = [
-	"test-util",
-]
+dependencies = ["test-util"]
 
 [tasks.test-uutil]
 description = "hidden alias for 'test-util'"
 category = "[project]"
-dependencies = [
-	"test-util",
-]
+dependencies = ["test-util"]
 
 [tasks.test-uutils]
 description = "hidden alias for 'test-util'"
 category = "[project]"
-dependencies = [
-	"test-util",
-]
+dependencies = ["test-util"]
 
 [tasks.uninstall]
 description = "## Remove project binary (from $HOME/.cargo/bin)"
@@ -246,63 +199,66 @@ args = ["uninstall"]
 description = "## Build (individual; release-mode) utilities; usage: `cargo make (util | uutil) [UTIL_NAME...]`"
 category = "[project]"
 dependencies = [
-	"core::pre-build",
-	"action-determine-utils",
-	"action-build-utils",
-	"core::post-build",
+  "core::pre-build",
+  "action-determine-utils",
+  "action-build-utils",
+  "core::post-build",
 ]
 
 [tasks.utils]
 description = "hidden plural-form alias for 'util'"
 category = "[project]"
-dependencies = [
-	"util",
-]
+dependencies = ["util"]
 
 [tasks.uutil]
 description = "hidden alias for 'util'"
 category = "[project]"
-dependencies = [
-	"util",
-]
+dependencies = ["util"]
 
 [tasks.uutils]
 description = "hidden plural-form alias for 'util'"
 category = "[project]"
-dependencies = [
-	"util",
-]
+dependencies = ["util"]
 
 ### actions
 
 [tasks.action-build-release]
 description = "`cargo build --release`"
 command = "cargo"
-args = ["build", "--release", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )" ]
+args = ["build", "--release", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )"]
 
 [tasks.action-build-debug]
 description = "`cargo build`"
 command = "cargo"
-args = ["build", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )" ]
+args = ["build", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )"]
 
 [tasks.action-build-examples]
 description = "`cargo build (--examples|(--example EXAMPLE)...)`"
 command = "cargo"
-args = ["build", "--release", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )", "${CARGO_MAKE_TASK_BUILD_EXAMPLES_ARGS}" ]
+args = [
+  "build",
+  "--release",
+  "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )",
+  "${CARGO_MAKE_TASK_BUILD_EXAMPLES_ARGS}",
+]
 
 [tasks.action-build-features]
 description = "`cargo build --release --features FEATURES`"
 command = "cargo"
-args = ["build", "--release", "--no-default-features", "--features", "${CARGO_MAKE_TASK_BUILD_FEATURES_ARGS}" ]
+args = [
+  "build",
+  "--release",
+  "--no-default-features",
+  "--features",
+  "${CARGO_MAKE_TASK_BUILD_FEATURES_ARGS}",
+]
 
 [tasks.action-build-utils]
 description = "Build individual utilities"
-dependencies = [
-	"action-determine-utils",
-]
+dependencies = ["action-determine-utils"]
 command = "cargo"
 # args = ["build", "@@remove-empty(CARGO_MAKE_TASK_BUILD_UTILS_ARGS)" ]
-args = ["build", "--release", "@@split(CARGO_MAKE_TASK_BUILD_UTILS_ARGS, )" ]
+args = ["build", "--release", "@@split(CARGO_MAKE_TASK_BUILD_UTILS_ARGS, )"]
 
 [tasks.action-clippy]
 description = "`cargo clippy` lint report"
@@ -311,8 +267,7 @@ args = ["clippy", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )"]
 
 [tasks.action-determine-utils]
 script_runner = "@duckscript"
-script = [
-'''
+script = ['''
 package_options = get_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS
 if is_empty "${package_options}"
 	show_utils = get_env CARGO_MAKE_VAR_SHOW_UTILS
@@ -335,13 +290,11 @@ if is_empty "${package_options}"
 	package_options = trim "${package_options}"
 end_if
 set_env CARGO_MAKE_TASK_BUILD_UTILS_ARGS "${package_options}"
-'''
-]
+''']
 
 [tasks.action-determine-tests]
 script_runner = "@duckscript"
-script = [
-'''
+script = ['''
 test_files = glob_array tests/**/*.rs
 for file in ${test_files}
 	file = replace "${file}" "\\" "/"
@@ -354,8 +307,7 @@ for file in ${test_files}
 	end_if
 end
 set_env CARGO_MAKE_VAR_TESTS "${tests}"
-'''
-]
+''']
 
 [tasks.action-format]
 description = "`cargo fmt`"
@@ -364,9 +316,7 @@ args = ["fmt"]
 
 [tasks.action-format-tests]
 description = "`cargo fmt` tests"
-dependencies = [
-	"action-determine-tests",
-]
+dependencies = ["action-determine-tests"]
 command = "cargo"
 args = ["fmt", "--", "@@split(CARGO_MAKE_VAR_TESTS, )"]
 
@@ -381,16 +331,18 @@ args = ["fmt", "--", "--check"]
 [tasks.action-spellcheck-codespell]
 description = "`codespell` spellcheck repository"
 command = "codespell" # (from `pip install codespell`)
-args = [".", "--skip=*/.git,./target,./tests/fixtures", "--ignore-words-list=mut,od"]
+args = [
+  ".",
+  "--skip=*/.git,./target,./tests/fixtures",
+  "--ignore-words-list=mut,od",
+]
 
 [tasks.action-test-utils]
 description = "Build individual utilities"
-dependencies = [
-	"action-determine-utils",
-]
+dependencies = ["action-determine-utils"]
 command = "cargo"
 # args = ["build", "@@remove-empty(CARGO_MAKE_TASK_BUILD_UTILS_ARGS)" ]
-args = ["test", "@@split(CARGO_MAKE_TASK_BUILD_UTILS_ARGS, )" ]
+args = ["test", "@@split(CARGO_MAKE_TASK_BUILD_UTILS_ARGS, )"]
 
 [tasks.action-test_quiet]
 description = "Test (in `--quiet` mode)"
@@ -399,8 +351,7 @@ args = ["test", "--quiet", "@@split(CARGO_MAKE_CARGO_BUILD_TEST_FLAGS, )"]
 
 [tasks.action-display-help]
 script_runner = "@duckscript"
-script = [
-'''
+script = ['''
 	echo ""
 	echo "usage: `cargo make TARGET [ARGS...]`"
 	echo ""
@@ -432,5 +383,4 @@ script = [
 		end_if
 	end
 	echo ""
-'''
-]
+''']

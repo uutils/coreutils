@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/head.rs"
 
 [dependencies]
-clap = { workspace=true }
-memchr = { workspace=true }
-uucore = { workspace=true, features=["ringbuffer", "lines"] }
+clap = { workspace = true }
+memchr = { workspace = true }
+uucore = { workspace = true, features = ["ringbuffer", "lines"] }
 
 [[bin]]
 name = "head"

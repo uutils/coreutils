@@ -11,7 +11,7 @@ unmaintained = "warn"
 yanked = "warn"
 notice = "warn"
 ignore = [
-    #"RUSTSEC-0000-0000",
+  #"RUSTSEC-0000-0000",
 ]
 
 # This section is considered when running `cargo deny check licenses`
@@ -20,15 +20,15 @@ ignore = [
 [licenses]
 unlicensed = "deny"
 allow = [
-    "MIT",
-    "Apache-2.0",
-    "ISC",
-    "BSD-2-Clause",
-    "BSD-2-Clause-FreeBSD",
-    "BSD-3-Clause",
-    "CC0-1.0",
-    "MPL-2.0", # XXX considered copyleft?
-    "Unicode-DFS-2016",
+  "MIT",
+  "Apache-2.0",
+  "ISC",
+  "BSD-2-Clause",
+  "BSD-2-Clause-FreeBSD",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  "MPL-2.0",              # XXX considered copyleft?
+  "Unicode-DFS-2016",
 ]
 copyleft = "deny"
 allow-osi-fsf-free = "neither"
@@ -59,25 +59,36 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-    # is-terminal
-    { name = "hermit-abi", version = "0.3.1" },
-    # procfs
-    { name = "rustix", version = "0.36.14" },
-        { name = "linux-raw-sys", version = "0.1.4" },
-    # various crates
-    { name = "windows-sys", version = "0.45.0" },
-        { name = "windows-targets", version = "0.42.2" },
-            { name = "windows_aarch64_gnullvm", version = "0.42.2" },
-            { name = "windows_aarch64_msvc", version = "0.42.2" },
-            { name = "windows_i686_gnu", version = "0.42.2" },
-            { name = "windows_i686_msvc", version = "0.42.2" },
-            { name = "windows_x86_64_gnu", version = "0.42.2" },
-            { name = "windows_x86_64_gnullvm", version = "0.42.2" },
-            { name = "windows_x86_64_msvc", version = "0.42.2" },
-    # tempfile
-    { name = "redox_syscall", version = "0.3.5" },
-    # cpp_macros
-    { name = "aho-corasick", version = "0.7.19" },
+  # is-terminal
+  { name = "hermit-abi", version = "0.3.1" },
+  # procfs
+  { name = "rustix", version = "0.36.14" },
+  # rustix
+  { name = "linux-raw-sys", version = "0.1.4" },
+  # various crates
+  { name = "windows-sys", version = "0.45.0" },
+  # windows-sys
+  { name = "windows-targets", version = "0.42.2" },
+  # windows-targets
+  { name = "windows_aarch64_gnullvm", version = "0.42.2" },
+  # windows-targets
+  { name = "windows_aarch64_msvc", version = "0.42.2" },
+  # windows-targets
+  { name = "windows_i686_gnu", version = "0.42.2" },
+  # windows-targets
+  { name = "windows_i686_msvc", version = "0.42.2" },
+  # windows-targets
+  { name = "windows_x86_64_gnu", version = "0.42.2" },
+  # windows-targets
+  { name = "windows_x86_64_gnullvm", version = "0.42.2" },
+  # windows-targets
+  { name = "windows_x86_64_msvc", version = "0.42.2" },
+  # tempfile
+  { name = "redox_syscall", version = "0.3.5" },
+  # cpp_macros
+  { name = "aho-corasick", version = "0.7.19" },
+  # touch, can be remove when touch switches from time to chrono
+  { name = "humantime_to_duration", version = "0.2.1" },
 ]
 # spell-checker: enable
 
