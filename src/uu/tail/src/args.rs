@@ -9,7 +9,7 @@ use crate::paths::Input;
 use crate::{parse, platform, Quotable};
 use clap::crate_version;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use fundu::DurationParser;
+use fundu::{DurationParser, SaturatingInto};
 use is_terminal::IsTerminal;
 use same_file::Handle;
 use std::collections::VecDeque;
@@ -235,12 +235,15 @@ impl Settings {
             //   `DURATION::MAX` or `infinity` was given
             // * not applied here but it supports customizable time units and provides better error
             //   messages
-            settings.sleep_sec =
-                DurationParser::without_time_units()
-                    .parse(source)
-                    .map_err(|_| {
-                        UUsageError::new(1, format!("invalid number of seconds: '{source}'"))
-                    })?;
+            settings.sleep_sec = match DurationParser::without_time_units().parse(source) {
+                Ok(duration) => SaturatingInto::<std::time::Duration>::saturating_into(duration),
+                Err(_) => {
+                    return Err(UUsageError::new(
+                        1,
+                        format!("invalid number of seconds: '{source}'"),
+                    ))
+                }
+            }
         }
 
         if let Some(s) = matches.get_one::<String>(options::MAX_UNCHANGED_STATS) {
