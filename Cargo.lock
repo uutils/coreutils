@@ -2562,6 +2562,7 @@ name = "uu_df"
 version = "0.0.19"
 dependencies = [
  "clap",
+ "tempfile",
  "unicode-width",
  "uucore",
 ]
