@@ -11,21 +11,15 @@ use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::lines::lines;
-use uucore::{format_usage, show};
+use uucore::{format_usage, help_about, help_usage, show};
 
 const BUF_SIZE: usize = 65536;
 
 /// The capacity in bytes for buffered writers.
 const BUFWRITER_CAPACITY: usize = 16_384; // 16 kilobytes
 
-const ABOUT: &str = "\
-                     Print the first 10 lines of each FILE to standard output.\n\
-                     With more than one FILE, precede each with a header giving the file name.\n\
-                     With no FILE, or when FILE is -, read standard input.\n\
-                     \n\
-                     Mandatory arguments to long flags are mandatory for short flags too.\
-                     ";
-const USAGE: &str = "{} [FLAG]... [FILE]...";
+const ABOUT: &str = help_about!("head.md");
+const USAGE: &str = help_usage!("head.md");
 
 mod options {
     pub const BYTES_NAME: &str = "BYTES";
@@ -438,6 +432,7 @@ fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Resul
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn uu_head(options: &HeadOptions) -> UResult<()> {
     let mut first = true;
     for file in &options.files {
@@ -627,12 +622,10 @@ mod tests {
     #[test]
     #[cfg(target_os = "linux")]
     fn test_arg_iterate_bad_encoding() {
-        #[allow(clippy::invalid_utf8_in_unchecked)]
-        let invalid = unsafe { std::str::from_utf8_unchecked(b"\x80\x81") };
+        use std::os::unix::ffi::OsStringExt;
+        let invalid = OsString::from_vec(vec![b'\x80', b'\x81']);
         // this arises from a conversion from OsString to &str
-        assert!(
-            arg_iterate(vec![OsString::from("head"), OsString::from(invalid)].into_iter()).is_err()
-        );
+        assert!(arg_iterate(vec![OsString::from("head"), invalid].into_iter()).is_err());
     }
     #[test]
     fn read_early_exit() {

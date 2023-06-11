@@ -56,7 +56,7 @@ where
     I: PeekRead,
 {
     /// calls `peek_read` on the internal stream to (re)fill the buffer. Returns a
-    /// MemoryDecoder providing access to the result or returns an i/o error.
+    /// `MemoryDecoder` providing access to the result or returns an i/o error.
     pub fn peek_read(&mut self) -> io::Result<MemoryDecoder> {
         match self
             .input
@@ -81,7 +81,7 @@ impl<'a, I> HasError for InputDecoder<'a, I>
 where
     I: HasError,
 {
-    /// calls has_error on the internal stream.
+    /// calls `has_error` on the internal stream.
     fn has_error(&self) -> bool {
         self.input.has_error()
     }

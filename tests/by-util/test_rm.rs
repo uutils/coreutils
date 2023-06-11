@@ -1,6 +1,6 @@
 use std::process::Stdio;
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -54,6 +54,8 @@ fn test_rm_interactive() {
 
     at.touch(file_a);
     at.touch(file_b);
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
 
     scene
         .ucmd()
@@ -84,6 +86,11 @@ fn test_rm_force() {
     let file_a = "test_rm_force_a";
     let file_b = "test_rm_force_b";
 
+    at.touch(file_a);
+    at.touch(file_b);
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+
     ucmd.arg("-f")
         .arg(file_a)
         .arg(file_b)
@@ -99,6 +106,11 @@ fn test_rm_force_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_rm_force_a";
     let file_b = "test_rm_force_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
 
     ucmd.arg("-f")
         .arg("-f")
@@ -350,6 +362,74 @@ fn test_rm_interactive_never() {
 }
 
 #[test]
+fn test_rm_interactive_missing_value() {
+    // `--interactive` is equivalent to `--interactive=always` or `-i`
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file1 = "test_rm_interactive_missing_value_file1";
+    let file2 = "test_rm_interactive_missing_value_file2";
+
+    at.touch(file1);
+    at.touch(file2);
+
+    ucmd.arg("--interactive")
+        .arg(file1)
+        .arg(file2)
+        .pipe_in("y\ny")
+        .succeeds();
+
+    assert!(!at.file_exists(file1));
+    assert!(!at.file_exists(file2));
+}
+
+#[test]
+fn test_rm_interactive_once_prompt() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file1 = "test_rm_interactive_once_recursive_prompt_file1";
+    let file2 = "test_rm_interactive_once_recursive_prompt_file2";
+    let file3 = "test_rm_interactive_once_recursive_prompt_file3";
+    let file4 = "test_rm_interactive_once_recursive_prompt_file4";
+
+    at.touch(file1);
+    at.touch(file2);
+    at.touch(file3);
+    at.touch(file4);
+
+    ucmd.arg("--interactive=once")
+        .arg(file1)
+        .arg(file2)
+        .arg(file3)
+        .arg(file4)
+        .pipe_in("y")
+        .succeeds()
+        .stderr_contains("remove 4 arguments?");
+
+    assert!(!at.file_exists(file1));
+    assert!(!at.file_exists(file2));
+    assert!(!at.file_exists(file3));
+    assert!(!at.file_exists(file4));
+}
+
+#[test]
+fn test_rm_interactive_once_recursive_prompt() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file1 = "test_rm_interactive_once_recursive_prompt_file1";
+
+    at.touch(file1);
+
+    ucmd.arg("--interactive=once")
+        .arg("-r")
+        .arg(file1)
+        .pipe_in("y")
+        .succeeds()
+        .stderr_contains("remove 1 argument recursively?");
+
+    assert!(!at.file_exists(file1));
+}
+
+#[test]
 fn test_rm_descend_directory() {
     // This test descends into each directory and deletes the files and folders inside of them
     // This test will have the rm process asks 6 question and us answering Y to them will delete all the files and folders
@@ -577,4 +657,25 @@ fn test_fifo_removal() {
         .arg("some_fifo")
         .timeout(Duration::from_secs(2))
         .succeeds();
+}
+
+#[test]
+#[cfg(any(unix, target_os = "wasi"))]
+#[cfg(not(target_os = "macos"))]
+fn test_non_utf8() {
+    use std::ffi::OsStr;
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
+    #[cfg(target_os = "wasi")]
+    use std::os::wasi::ffi::OsStrExt;
+
+    let file = OsStr::from_bytes(b"not\xffutf8"); // spell-checker:disable-line
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch(file);
+    assert!(at.file_exists(file));
+
+    ucmd.arg(file).succeeds();
+    assert!(!at.file_exists(file));
 }

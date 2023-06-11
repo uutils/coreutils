@@ -22,7 +22,10 @@ use std::num::IntErrorKind;
 use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UError, UResult, USimpleError};
-use uucore::{crash, crash_if_err};
+use uucore::{crash, crash_if_err, format_usage, help_about, help_usage};
+
+const ABOUT: &str = help_about!("join.md");
+const USAGE: &str = help_usage!("join.md");
 
 #[derive(Debug)]
 enum JoinError {
@@ -597,6 +600,7 @@ impl<'a> State<'a> {
 }
 
 #[uucore::main]
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
@@ -699,12 +703,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
-        .about(
-            "For each pair of input lines with identical join fields, write a line to
-standard output. The default join field is the first, delimited by blanks.
-
-When FILE1 or FILE2 (not both) is -, read standard input.",
-        )
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
             Arg::new("a")

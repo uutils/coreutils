@@ -1,13 +1,10 @@
-use crate::common::util::*;
+use crate::common::util::{AtPath, TestScenario, UCommand};
 use once_cell::sync::Lazy;
 use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Mutex;
 
-extern crate libc;
-use uucore::mode::strip_minus_from_mode;
-extern crate chmod;
-use self::libc::umask;
+use libc::umask;
 
 static TEST_FILE: &str = "file";
 static REFERENCE_FILE: &str = "reference";
@@ -504,35 +501,6 @@ fn test_chmod_symlink_non_existing_file_recursive() {
 }
 
 #[test]
-fn test_chmod_strip_minus_from_mode() {
-    let tests = vec![
-        // ( before, after )
-        ("chmod -v -xw -R FILE", "chmod -v xw -R FILE"),
-        ("chmod g=rwx FILE -c", "chmod g=rwx FILE -c"),
-        (
-            "chmod -c -R -w,o+w FILE --preserve-root",
-            "chmod -c -R w,o+w FILE --preserve-root",
-        ),
-        ("chmod -c -R +w FILE ", "chmod -c -R +w FILE "),
-        ("chmod a=r,=xX FILE", "chmod a=r,=xX FILE"),
-        (
-            "chmod -v --reference REF_FILE -R FILE",
-            "chmod -v --reference REF_FILE -R FILE",
-        ),
-        ("chmod -Rvc -w-x FILE", "chmod -Rvc w-x FILE"),
-        ("chmod 755 -v FILE", "chmod 755 -v FILE"),
-        ("chmod -v +0004 FILE -R", "chmod -v +0004 FILE -R"),
-        ("chmod -v -0007 FILE -R", "chmod -v 0007 FILE -R"),
-    ];
-
-    for test in tests {
-        let mut args: Vec<String> = test.0.split(' ').map(|v| v.to_string()).collect();
-        let _mode_had_minus_prefix = strip_minus_from_mode(&mut args);
-        assert_eq!(test.1, args.join(" "));
-    }
-}
-
-#[test]
 fn test_chmod_keep_setgid() {
     for (from, arg, to) in [
         (0o7777, "777", 0o46777),
@@ -570,13 +538,14 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_mode_after_dash_dash() {
     let (at, ucmd) = at_and_ucmd!();
     run_single_test(
         &TestCase {
             args: vec!["--", "-r", TEST_FILE],
-            before: 0o100777,
-            after: 0o100333,
+            before: 0o100_777,
+            after: 0o100_333,
         },
         &at,
         ucmd,
@@ -600,7 +569,7 @@ fn test_chmod_file_after_non_existing_file() {
         .stderr_contains("chmod: cannot access 'does-not-exist': No such file or directory")
         .code_is(1);
 
-    assert_eq!(at.metadata(TEST_FILE).permissions().mode(), 0o100764);
+    assert_eq!(at.metadata(TEST_FILE).permissions().mode(), 0o100_764);
 
     scene
         .ucmd()
@@ -611,7 +580,7 @@ fn test_chmod_file_after_non_existing_file() {
         .fails()
         .no_stderr()
         .code_is(1);
-    assert_eq!(at.metadata("file2").permissions().mode(), 0o100764);
+    assert_eq!(at.metadata("file2").permissions().mode(), 0o100_764);
 }
 
 #[test]
@@ -647,7 +616,7 @@ fn test_chmod_file_symlink_after_non_existing_file() {
         .stderr_contains(expected_stderr);
     assert_eq!(
         at.metadata(test_existing_symlink).permissions().mode(),
-        0o100764
+        0o100_764
     );
 }
 
@@ -670,4 +639,70 @@ fn test_quiet_n_verbose_used_multiple_times() {
         .arg("--quiet")
         .arg("file")
         .succeeds();
+}
+
+#[test]
+fn test_gnu_invalid_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("u+gr").arg("file").fails();
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_gnu_options() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("-w").arg("file").succeeds();
+    scene.ucmd().arg("file").arg("-w").succeeds();
+    scene.ucmd().arg("-w").arg("--").arg("file").succeeds();
+}
+
+#[test]
+fn test_gnu_repeating_options() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("-w").arg("-w").arg("file").succeeds();
+    scene
+        .ucmd()
+        .arg("-w")
+        .arg("-w")
+        .arg("-w")
+        .arg("file")
+        .succeeds();
+}
+
+#[test]
+fn test_gnu_special_filenames() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let perms_before = Permissions::from_mode(0o100_640);
+    let perms_after = Permissions::from_mode(0o100_440);
+
+    make_file(&at.plus_as_string("--"), perms_before.mode());
+    scene.ucmd().arg("-w").arg("--").arg("--").succeeds();
+    assert_eq!(at.metadata("--").permissions(), perms_after);
+    set_permissions(at.plus("--"), perms_before.clone()).unwrap();
+    scene.ucmd().arg("--").arg("-w").arg("--").succeeds();
+    assert_eq!(at.metadata("--").permissions(), perms_after);
+    at.remove("--");
+
+    make_file(&at.plus_as_string("-w"), perms_before.mode());
+    scene.ucmd().arg("-w").arg("--").arg("-w").succeeds();
+    assert_eq!(at.metadata("-w").permissions(), perms_after);
+    set_permissions(at.plus("-w"), perms_before).unwrap();
+    scene.ucmd().arg("--").arg("-w").arg("-w").succeeds();
+    assert_eq!(at.metadata("-w").permissions(), perms_after);
+}
+
+#[test]
+fn test_gnu_special_options() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene.ucmd().arg("--").arg("--").arg("file").succeeds();
+    scene.ucmd().arg("--").arg("--").fails();
 }

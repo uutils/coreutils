@@ -6,6 +6,7 @@
 
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
+use chrono::{DateTime, Local};
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use quick_error::ResultExt;
@@ -15,39 +16,15 @@ use std::fs::{metadata, File};
 use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use time::macros::format_description;
-use time::OffsetDateTime;
 
 use quick_error::quick_error;
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
-const ABOUT: &str =
-    "Write content of given file or standard input to standard output with pagination filter";
-const AFTER_HELP: &str =
-    "    +PAGE\n            Begin output at page number page of the formatted input.
-    -COLUMN\n            Produce multi-column output. See --column
-
-The pr utility is a printing and pagination filter
-for text files.  When multiple input files are specified,
-each is read, formatted, and written to standard
-output.  By default, the input is separated
-into 66-line pages, each with
-
-o   A 5-line header with the page number, date,
-    time, and the pathname of the file.
-
-o   A 5-line trailer consisting of blank lines.
-
-If standard output is associated with a terminal,
-diagnostic messages are suppressed until the pr
-utility has completed processing.
-
-When multiple column output is specified, text columns
-are of equal width.  By default text columns
-are separated by at least one <blank>.  Input lines
-that do not fit into a text column are truncated.
-Lines are not truncated under single column output.";
+const ABOUT: &str = help_about!("pr.md");
+const USAGE: &str = help_usage!("pr.md");
+const AFTER_HELP: &str = help_section!("after help", "pr.md");
 const TAB: char = '\t';
 const LINES_PER_PAGE: usize = 66;
 const LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
@@ -59,8 +36,7 @@ const DEFAULT_COLUMN_WIDTH: usize = 72;
 const DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 const FF: u8 = 0x0C_u8;
-const DATE_TIME_FORMAT: &[time::format_description::FormatItem] =
-    format_description!("[month repr:short] [day] [hour]:[minute] [year]");
+const DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
 
 mod options {
     pub const HEADER: &str = "header";
@@ -195,6 +171,7 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .args_override_self(true)
         .disable_help_flag(true)
@@ -509,6 +486,7 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         .map(from_parse_error_to_pr_error)
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn build_options(
     matches: &ArgMatches,
     paths: &[&str],
@@ -591,10 +569,8 @@ fn build_options(
     let line_separator = "\n".to_string();
 
     let last_modified_time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
-        // let date_time = Local::now();
-        // date_time.format("%b %d %H:%M %Y").to_string()
-        let date_time = OffsetDateTime::now_local().unwrap();
-        date_time.format(&DATE_TIME_FORMAT).unwrap()
+        let date_time = Local::now();
+        date_time.format(DATE_TIME_FORMAT).to_string()
     } else {
         file_last_modified_time(paths.first().unwrap())
     };
@@ -1042,6 +1018,7 @@ fn print_page(
     Ok(lines_written)
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn write_columns(
     lines: &[FileLine],
     options: &OutputOptions,
@@ -1234,12 +1211,8 @@ fn file_last_modified_time(path: &str) -> String {
         .map(|i| {
             i.modified()
                 .map(|x| {
-                    let date_time: OffsetDateTime = x.into();
-                    let offset = OffsetDateTime::now_local().unwrap().offset();
-                    date_time
-                        .to_offset(offset)
-                        .format(&DATE_TIME_FORMAT)
-                        .unwrap()
+                    let date_time: DateTime<Local> = x.into();
+                    date_time.format(DATE_TIME_FORMAT).to_string()
                 })
                 .unwrap_or_default()
         })

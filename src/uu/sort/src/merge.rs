@@ -362,16 +362,16 @@ impl<'a> Compare<MergeableFile> for FileComparator<'a> {
 
 // Wait for the child to exit and check its exit code.
 fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
-    if !matches!(
+    if matches!(
         child.wait().map(|e| e.code()),
         Ok(Some(0)) | Ok(None) | Err(_)
     ) {
+        Ok(())
+    } else {
         Err(SortError::CompressProgTerminatedAbnormally {
             prog: program.to_owned(),
         }
         .into())
-    } else {
-        Ok(())
     }
 }
 

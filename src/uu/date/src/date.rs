@@ -9,7 +9,7 @@
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
+use chrono::{DateTime, Duration, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
@@ -19,10 +19,10 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use uucore::display::Quotable;
-#[cfg(not(any(target_os = "macos", target_os = "redox")))]
+#[cfg(not(any(target_os = "redox")))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, help_about, help_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
@@ -36,10 +36,8 @@ const MINUTE: &str = "minute";
 const SECOND: &str = "second";
 const NS: &str = "ns";
 
-const ABOUT: &str = "Print or set the system date and time";
-const USAGE: &str = "\
-    {} [OPTION]... [+FORMAT]...
-    {} [OPTION]... [MMDDhhmm[[CC]YY][.ss]]";
+const ABOUT: &str = help_about!("date.md");
+const USAGE: &str = help_usage!("date.md");
 
 const OPT_DATE: &str = "date";
 const OPT_FORMAT: &str = "format";
@@ -98,6 +96,7 @@ enum DateSource {
     Now,
     Custom(String),
     File(PathBuf),
+    Human(Duration),
 }
 
 enum Iso8601Format {
@@ -116,8 +115,8 @@ impl<'a> From<&'a str> for Iso8601Format {
             SECONDS | SECOND => Self::Seconds,
             NS => Self::Ns,
             DATE => Self::Date,
-            // Should be caught by clap
-            _ => panic!("Invalid format: {s}"),
+            // Note: This is caught by clap via `possible_values`
+            _ => unreachable!(),
         }
     }
 }
@@ -141,6 +140,7 @@ impl<'a> From<&'a str> for Rfc3339Format {
 }
 
 #[uucore::main]
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
@@ -170,7 +170,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        DateSource::Custom(date.into())
+        if let Ok(duration) = parse_datetime::from_str(date.as_str()) {
+            DateSource::Human(duration)
+        } else {
+            DateSource::Custom(date.into())
+        }
     } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
         DateSource::File(file.into())
     } else {
@@ -205,9 +209,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         return set_system_datetime(date);
     } else {
-        // Declare a file here because it needs to outlive the `dates` iterator.
-        let file: File;
-
         // Get the current time, either in the local time zone or UTC.
         let now: DateTime<FixedOffset> = if settings.utc {
             let now = Utc::now();
@@ -224,10 +225,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let iter = std::iter::once(date);
                 Box::new(iter)
             }
+            DateSource::Human(relative_time) => {
+                // Get the current DateTime<FixedOffset> for things like "1 year ago"
+                let current_time = DateTime::<FixedOffset>::from(Local::now());
+                let iter = std::iter::once(Ok(current_time + relative_time));
+                Box::new(iter)
+            }
             DateSource::File(ref path) => {
-                file = File::open(path).unwrap();
+                if path.is_dir() {
+                    return Err(USimpleError::new(
+                        2,
+                        format!("expected file, got directory {}", path.quote()),
+                    ));
+                }
+                let file = File::open(path)
+                    .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
                 let lines = BufReader::new(file).lines();
-                let iter = lines.filter_map(Result::ok).map(parse_date);
+                let iter = lines.map_while(Result::ok).map(parse_date);
                 Box::new(iter)
             }
             DateSource::Now => {
@@ -244,6 +258,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Ok(date) => {
                     // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
                     let format_string = &format_string.replace("%N", "%f");
+                    // Refuse to pass this string to chrono as it is crashing in this crate
+                    if format_string.contains("%#z") {
+                        return Err(USimpleError::new(
+                            1,
+                            format!("invalid format {}", format_string.replace("%f", "%N")),
+                        ));
+                    }
                     // Hack to work around panic in chrono,
                     // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
                     let format_items = StrftimeItems::new(format_string);
@@ -259,7 +280,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         .replace("%f", "%N");
                     println!("{formatted}");
                 }
-                Err((input, _err)) => show_error!("invalid date {}", input.quote()),
+                Err((input, _err)) => show!(USimpleError::new(
+                    1,
+                    format!("invalid date {}", input.quote())
+                )),
             }
         }
     }
@@ -293,6 +317,9 @@ pub fn uu_app() -> Command {
                 .short('I')
                 .long(OPT_ISO_8601)
                 .value_name("FMT")
+                .value_parser([DATE, HOUR, HOURS, MINUTE, MINUTES, SECOND, SECONDS, NS])
+                .num_args(0..=1)
+                .default_missing_value(OPT_DATE)
                 .help(ISO_8601_HELP_STRING),
         )
         .arg(
@@ -306,6 +333,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RFC_3339)
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
+                .value_parser([DATE, SECOND, SECONDS, NS])
                 .help(RFC_3339_HELP_STRING),
         )
         .arg(
@@ -405,10 +433,10 @@ fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
 
     let result = unsafe { clock_settime(CLOCK_REALTIME, &timespec) };
 
-    if result != 0 {
-        Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
-    } else {
+    if result == 0 {
         Ok(())
+    } else {
+        Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
     }
 }
 

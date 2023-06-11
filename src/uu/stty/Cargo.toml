@@ -1,6 +1,6 @@
 [package]
 name = "uu_stty"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stty ~ (uutils) print or change terminal characteristics"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/stty.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
-nix = { workspace=true, features = ["term", "ioctl"] }
+clap = { workspace = true }
+uucore = { workspace = true }
+nix = { workspace = true, features = ["term", "ioctl"] }
 
 [[bin]]
 name = "stty"

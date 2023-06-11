@@ -14,12 +14,12 @@ use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 mod helper;
 
-static ABOUT: &str = "Number lines of files";
-static USAGE: &str = "{} [OPTION]... [FILE]...";
+static ABOUT: &str = help_about!("nl.md");
+static USAGE: &str = help_usage!("nl.md");
 
 // Settings store options used by nl to produce its output.
 pub struct Settings {
@@ -236,6 +236,7 @@ pub fn uu_app() -> Command {
 }
 
 // nl implements the main functionality for an individual buffer.
+#[allow(clippy::cognitive_complexity)]
 fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     let regexp: regex::Regex = regex::Regex::new(r".?").unwrap();
     let mut line_no = settings.starting_line_number;

@@ -1,6 +1,6 @@
 [package]
 name = "uu_nohup"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "nohup ~ (uutils) run COMMAND, ignoring hangup signals"
@@ -15,10 +15,10 @@ edition = "2021"
 path = "src/nohup.rs"
 
 [dependencies]
-clap = { workspace=true }
-libc = { workspace=true }
-is-terminal = { workspace=true }
-uucore = { workspace=true, features=["fs"] }
+clap = { workspace = true }
+libc = { workspace = true }
+is-terminal = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "nohup"

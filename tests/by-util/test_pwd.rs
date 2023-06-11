@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use crate::common::util::*;
+use crate::common::util::{TestScenario, UCommand};
 
 #[test]
 fn test_invalid_arg() {
@@ -27,7 +27,7 @@ fn test_deleted_dir() {
     use std::process::Command;
 
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = ts.fixtures;
     let output = Command::new("sh")
         .arg("-c")
         .arg(format!(
@@ -116,7 +116,7 @@ fn test_symlinked_default_posix_p() {
         .env("POSIXLY_CORRECT", "1")
         .arg("-P")
         .succeeds()
-        .stdout_is(env.symdir + "\n");
+        .stdout_is(env.subdir + "\n");
 }
 
 #[cfg(not(windows))]

@@ -1,6 +1,6 @@
 [package]
 name = "uu_fold"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "fold ~ (uutils) wrap each line of input"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/fold.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "fold"

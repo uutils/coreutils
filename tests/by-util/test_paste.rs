@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 struct TestData<'b> {
     name: &'b str,
@@ -153,6 +153,39 @@ fn test_multi_stdin() {
             .pipe_in_fixture("html_colors.txt")
             .succeeds()
             .stdout_is_fixture("html_colors.expected");
+    }
+}
+
+#[test]
+// TODO: make this test work on Windows
+#[cfg(not(windows))]
+fn test_delimiter_list_ending_with_escaped_backslash() {
+    for d in ["-d", "--delimiters"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let mut ins = vec![];
+        for (i, _in) in ["a\n", "b\n"].iter().enumerate() {
+            let file = format!("in{}", i);
+            at.write(&file, _in);
+            ins.push(file);
+        }
+        ucmd.args(&[d, "\\\\"])
+            .args(&ins)
+            .succeeds()
+            .stdout_is("a\\b\n");
+    }
+}
+
+#[test]
+fn test_delimiter_list_ending_with_unescaped_backslash() {
+    for d in ["-d", "--delimiters"] {
+        new_ucmd!()
+            .args(&[d, "\\"])
+            .fails()
+            .stderr_contains("delimiter list ends with an unescaped backslash: \\");
+        new_ucmd!()
+            .args(&[d, "_\\"])
+            .fails()
+            .stderr_contains("delimiter list ends with an unescaped backslash: _\\");
     }
 }
 

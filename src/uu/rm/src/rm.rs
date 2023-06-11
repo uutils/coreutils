@@ -7,8 +7,9 @@
 
 // spell-checker:ignore (path) eacces
 
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, Command};
+use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
 use std::collections::VecDeque;
+use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, Metadata};
 use std::io::ErrorKind;
 use std::ops::BitOr;
@@ -59,9 +60,9 @@ static ARG_FILES: &str = "files";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
-    let files: Vec<String> = matches
-        .get_many::<String>(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let files: Vec<&OsStr> = matches
+        .get_many::<OsString>(ARG_FILES)
+        .map(|v| v.map(OsString::as_os_str).collect())
         .unwrap_or_default();
 
     let force_flag = matches.get_flag(OPT_FORCE);
@@ -114,11 +115,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             verbose: matches.get_flag(OPT_VERBOSE),
         };
         if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
-            let msg = if options.recursive {
-                "Remove all arguments recursively?"
-            } else {
-                "Remove all arguments?"
-            };
+            let msg: String = format!(
+                "remove {} {}{}",
+                files.len(),
+                if files.len() > 1 {
+                    "arguments"
+                } else {
+                    "argument"
+                },
+                if options.recursive {
+                    " recursively?"
+                } else {
+                    "?"
+                }
+            );
             if !prompt_yes!("{}", msg) {
                 return Ok(());
             }
@@ -168,6 +178,9 @@ pub fn uu_app() -> Command {
                     prompts always",
                 )
                 .value_name("WHEN")
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value("always")
                 .overrides_with_all([OPT_PROMPT, OPT_PROMPT_MORE]),
         )
         .arg(
@@ -231,13 +244,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
+                .value_parser(ValueParser::os_string())
                 .num_args(1..)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
 
 // TODO: implement one-file-system (this may get partially implemented in walkdir)
-fn remove(files: &[String], options: &Options) -> bool {
+fn remove(files: &[&OsStr], options: &Options) -> bool {
     let mut had_err = false;
 
     for filename in files {
@@ -257,14 +271,14 @@ fn remove(files: &[String], options: &Options) -> bool {
                 // TODO: When the error is not about missing files
                 // (e.g., permission), even rm -f should fail with
                 // outputting the error, but there's no easy eay.
-                if !options.force {
+                if options.force {
+                    false
+                } else {
                     show_error!(
                         "cannot remove {}: No such file or directory",
                         filename.quote()
                     );
                     true
-                } else {
-                    false
                 }
             }
         }
@@ -274,6 +288,7 @@ fn remove(files: &[String], options: &Options) -> bool {
     had_err
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
 
@@ -422,6 +437,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
     false
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
     // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {

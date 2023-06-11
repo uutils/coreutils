@@ -7,8 +7,6 @@
 
 /* Last synced with: sync (GNU coreutils) 8.13 */
 
-extern crate libc;
-
 use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::errno::Errno;
@@ -21,10 +19,11 @@ use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Synchronize cached writes to persistent storage";
-const USAGE: &str = "{} [OPTION]... FILE...";
+const ABOUT: &str = help_about!("sync.md");
+const USAGE: &str = help_usage!("sync.md");
+
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";
     pub static DATA: &str = "data";
@@ -34,7 +33,6 @@ static ARG_FILES: &str = "files";
 
 #[cfg(unix)]
 mod platform {
-    use super::libc;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::fs::File;
     #[cfg(any(target_os = "linux", target_os = "android"))]

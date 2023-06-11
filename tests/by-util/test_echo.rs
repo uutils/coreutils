@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) araba merci
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_default() {

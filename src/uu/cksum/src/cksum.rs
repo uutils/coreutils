@@ -6,7 +6,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) fname, algo
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use hex::encode;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -15,15 +15,16 @@ use std::iter;
 use std::path::Path;
 use uucore::{
     error::{FromIo, UResult},
-    format_usage,
+    format_usage, help_about, help_section, help_usage,
     sum::{
         div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
         BSD, CRC, SYSV,
     },
 };
 
-const USAGE: &str = "{} [OPTIONS] [FILE]...";
-const ABOUT: &str = "Print CRC and size for each file";
+const USAGE: &str = help_usage!("cksum.md");
+const ABOUT: &str = help_about!("cksum.md");
+const AFTER_HELP: &str = help_section!("after help", "cksum.md");
 
 const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
 const ALGORITHM_OPTIONS_BSD: &str = "bsd";
@@ -102,6 +103,7 @@ struct Options {
     algo_name: &'static str,
     digest: Box<dyn Digest + 'static>,
     output_bits: usize,
+    untagged: bool,
 }
 
 /// Calculate checksum
@@ -158,8 +160,22 @@ where
                 div_ceil(sz, options.output_bits),
                 filename.display()
             ),
-            (_, true) => println!("{sum} {sz}"),
-            (_, false) => println!("{sum} {sz} {}", filename.display()),
+            (ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
+            (ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
+            (ALGORITHM_OPTIONS_BLAKE2B, _) if !options.untagged => {
+                println!("BLAKE2b ({}) = {sum}", filename.display());
+            }
+            _ => {
+                if options.untagged {
+                    println!("{sum}  {}", filename.display());
+                } else {
+                    println!(
+                        "{} ({}) = {sum}",
+                        options.algo_name.to_ascii_uppercase(),
+                        filename.display()
+                    );
+                }
+            }
         }
     }
 
@@ -201,24 +217,10 @@ fn digest_read<T: Read>(
 }
 
 mod options {
-    pub static FILE: &str = "file";
-    pub static ALGORITHM: &str = "algorithm";
+    pub const ALGORITHM: &str = "algorithm";
+    pub const FILE: &str = "file";
+    pub const UNTAGGED: &str = "untagged";
 }
-
-const ALGORITHM_HELP_DESC: &str =
-    "DIGEST determines the digest algorithm and default output format:\n\
-\n\
--a=sysv:    (equivalent to sum -s)\n\
--a=bsd:     (equivalent to sum -r)\n\
--a=crc:     (equivalent to cksum)\n\
--a=md5:     (equivalent to md5sum)\n\
--a=sha1:    (equivalent to sha1sum)\n\
--a=sha224:  (equivalent to sha224sum)\n\
--a=sha256:  (equivalent to sha256sum)\n\
--a=sha384:  (equivalent to sha384sum)\n\
--a=sha512:  (equivalent to sha512sum)\n\
--a=blake2b: (equivalent to b2sum)\n\
--a=sm3:     (only available through cksum)\n";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -236,6 +238,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         algo_name: name,
         digest: algo,
         output_bits: bits,
+        untagged: matches.get_flag(options::UNTAGGED),
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -278,5 +281,11 @@ pub fn uu_app() -> Command {
                     ALGORITHM_OPTIONS_SM3,
                 ]),
         )
-        .after_help(ALGORITHM_HELP_DESC)
+        .arg(
+            Arg::new(options::UNTAGGED)
+                .long(options::UNTAGGED)
+                .help("create a reversed style checksum, without digest type")
+                .action(ArgAction::SetTrue),
+        )
+        .after_help(AFTER_HELP)
 }

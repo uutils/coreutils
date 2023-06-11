@@ -45,26 +45,15 @@ use std::str::Utf8Error;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
 use uucore::parse_size::{ParseSizeError, Parser};
 use uucore::version_cmp::version_cmp;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 use crate::tmp_dir::TmpDirWrapper;
 
-const ABOUT: &str = "\
-    Display sorted concatenation of all FILE(s). \
-    With no FILE, or when FILE is -, read standard input.";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
-
-const LONG_HELP_KEYS: &str = "The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS].
-
-Fields by default are separated by the first whitespace after a non-whitespace character. Use -t to specify a custom separator.
-In the default case, whitespace is appended at the beginning of each field. Custom separators however are not included in fields.
-
-FIELD and CHAR both start at 1 (i.e. they are 1-indexed). If there is no end specified after a comma, the end will be the end of the line.
-If CHAR is set 0, it means the end of the field. CHAR defaults to 1 for the start position and to 0 for the end position.
-
-Valid options are: MbdfhnRrV. They override the global options for this key.";
+const ABOUT: &str = help_about!("sort.md");
+const USAGE: &str = help_usage!("sort.md");
+const AFTER_HELP: &str = help_section!("after help", "sort.md");
 
 mod options {
     pub mod modes {
@@ -185,7 +174,9 @@ impl Display for SortError {
                 line,
                 silent,
             } => {
-                if !silent {
+                if *silent {
+                    Ok(())
+                } else {
                     write!(
                         f,
                         "{}:{}: disorder: {}",
@@ -193,8 +184,6 @@ impl Display for SortError {
                         line_number,
                         line
                     )
-                } else {
-                    Ok(())
                 }
             }
             Self::OpenFailed { path, error } => {
@@ -582,7 +571,15 @@ impl<'a> Line<'a> {
                     selection.start += num_range.start;
                     selection.end = selection.start + num_range.len();
 
-                    if num_range != (0..0) {
+                    if num_range == (0..0) {
+                        // This was not a valid number.
+                        // Report no match at the first non-whitespace character.
+                        let leading_whitespace = self.line[selection.clone()]
+                            .find(|c: char| !c.is_whitespace())
+                            .unwrap_or(0);
+                        selection.start += leading_whitespace;
+                        selection.end += leading_whitespace;
+                    } else {
                         // include a trailing si unit
                         if selector.settings.mode == SortMode::HumanNumeric
                             && self.line[selection.end..initial_selection.end]
@@ -597,14 +594,6 @@ impl<'a> Line<'a> {
                         {
                             selection.start -= 1;
                         }
-                    } else {
-                        // This was not a valid number.
-                        // Report no match at the first non-whitespace character.
-                        let leading_whitespace = self.line[selection.clone()]
-                            .find(|c: char| !c.is_whitespace())
-                            .unwrap_or(0);
-                        selection.start += leading_whitespace;
-                        selection.end += leading_whitespace;
                     }
                 }
                 SortMode::GeneralNumeric => {
@@ -1044,6 +1033,7 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: &'static str) -> Ar
 }
 
 #[uucore::main]
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
     let mut settings = GlobalSettings::default();
@@ -1292,7 +1282,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(LONG_HELP_KEYS)
+        .after_help(AFTER_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .disable_help_flag(true)
@@ -1572,10 +1562,7 @@ fn compare_by<'a>(
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
     for selector in &global_settings.selectors {
-        let (a_str, b_str) = if !selector.needs_selection {
-            // We can select the whole line.
-            (a.line, b.line)
-        } else {
+        let (a_str, b_str) = if selector.needs_selection {
             let selections = (
                 a_line_data.selections
                     [a.index * global_settings.precomputed.selections_per_line + selection_index],
@@ -1584,6 +1571,9 @@ fn compare_by<'a>(
             );
             selection_index += 1;
             selections
+        } else {
+            // We can select the whole line.
+            (a.line, b.line)
         };
 
         let settings = &selector.settings;
@@ -1665,6 +1655,7 @@ fn compare_by<'a>(
 // In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and
 // scientific notation, so we strip those lines only after the end of the following numeric string.
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
+#[allow(clippy::cognitive_complexity)]
 fn get_leading_gen(input: &str) -> Range<usize> {
     let trimmed = input.trim_start();
     let leading_whitespace_len = input.len() - trimmed.len();

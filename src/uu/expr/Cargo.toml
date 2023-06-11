@@ -1,6 +1,6 @@
 [package]
 name = "uu_expr"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "expr ~ (uutils) display the value of EXPRESSION"
@@ -15,11 +15,11 @@ edition = "2021"
 path = "src/expr.rs"
 
 [dependencies]
-clap = { workspace=true }
-num-bigint = { workspace=true }
-num-traits = { workspace=true }
-onig = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+onig = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "expr"

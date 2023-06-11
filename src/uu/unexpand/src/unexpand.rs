@@ -19,11 +19,10 @@ use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::{crash, crash_if_err, format_usage};
+use uucore::{crash, crash_if_err, format_usage, help_about, help_usage};
 
-static USAGE: &str = "{} [OPTION]... [FILE]...";
-static ABOUT: &str = "Convert blanks in each FILE to tabs, writing to standard output.\n\n\
-                      With no FILE, or when FILE is -, read standard input.";
+const USAGE: &str = help_usage!("unexpand.md");
+const ABOUT: &str = help_about!("unexpand.md");
 
 const DEFAULT_TABSTOP: usize = 8;
 
@@ -319,6 +318,7 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
     (ctype, cwidth, nbytes)
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn unexpand(options: &Options) -> std::io::Result<()> {
     let mut output = BufWriter::new(stdout());
     let ts = &options.tabstops[..];

@@ -11,7 +11,6 @@
 
 // spell-checker:ignore DATETIME subsecond (arch) bitrig ; (fs) cifs smbfs
 
-extern crate time;
 use time::macros::format_description;
 use time::UtcOffset;
 
@@ -295,10 +294,10 @@ impl MountInfo {
                 fs_type_buf.len() as u32,
             )
         };
-        let fs_type = if 0 != success {
-            Some(LPWSTR2String(&fs_type_buf))
-        } else {
+        let fs_type = if 0 == success {
             None
+        } else {
+            Some(LPWSTR2String(&fs_type_buf))
         };
         let mut mn_info = Self {
             dev_id: volume_name,
@@ -410,7 +409,7 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         let reader = BufReader::new(f);
         Ok(reader
             .lines()
-            .filter_map(|line| line.ok())
+            .map_while(Result::ok)
             .filter_map(|line| {
                 let raw_data = line.split_whitespace().collect::<Vec<&str>>();
                 MountInfo::new(file_name, &raw_data)
@@ -862,10 +861,10 @@ pub fn pretty_time(sec: i64, nsec: i64) -> String {
 pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
     match mode & S_IFMT {
         S_IFREG => {
-            if size != 0 {
-                "regular file"
-            } else {
+            if size == 0 {
                 "regular empty file"
+            } else {
+                "regular file"
             }
         }
         S_IFDIR => "directory",

@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::{vec_of_size, TestScenario};
 
 // spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
 
@@ -268,12 +268,16 @@ fn test_multiple_default() {
             "lorem_ipsum.txt",
             "moby_dick.txt",
             "alice_in_wonderland.txt",
+            "alice in wonderland.txt",
         ])
         .run()
-        .stdout_is(
-            "  13  109  772 lorem_ipsum.txt\n  18  204 1115 moby_dick.txt\n   5   57  302 \
-             alice_in_wonderland.txt\n  36  370 2189 total\n",
-        );
+        .stdout_is(concat!(
+            "  13  109  772 lorem_ipsum.txt\n",
+            "  18  204 1115 moby_dick.txt\n",
+            "   5   57  302 alice_in_wonderland.txt\n",
+            "   5   57  302 alice in wonderland.txt\n",
+            "  41  427 2491 total\n",
+        ));
 }
 
 /// Test for an empty file.
@@ -352,17 +356,24 @@ fn test_file_bytes_dictate_width() {
     new_ucmd!()
         .args(&["-lwc", "alice_in_wonderland.txt", "lorem_ipsum.txt"])
         .run()
-        .stdout_is(
-            "   5   57  302 alice_in_wonderland.txt\n  13  109  772 \
-                    lorem_ipsum.txt\n  18  166 1074 total\n",
-        );
+        .stdout_is(concat!(
+            "   5   57  302 alice_in_wonderland.txt\n",
+            "  13  109  772 lorem_ipsum.txt\n",
+            "  18  166 1074 total\n",
+        ));
 
     // . is a directory, so minimum_width should get set to 7
     #[cfg(not(windows))]
-    const STDOUT: &str = "      0       0       0 emptyfile.txt\n      0       0       0 \
-                          .\n      0       0       0 total\n";
+    const STDOUT: &str = concat!(
+        "      0       0       0 emptyfile.txt\n",
+        "      0       0       0 .\n",
+        "      0       0       0 total\n",
+    );
     #[cfg(windows)]
-    const STDOUT: &str = "      0       0       0 emptyfile.txt\n      0       0       0 total\n";
+    const STDOUT: &str = concat!(
+        "      0       0       0 emptyfile.txt\n",
+        "      0       0       0 total\n",
+    );
     new_ucmd!()
         .args(&["-lwc", "emptyfile.txt", "."])
         .run()
@@ -375,7 +386,7 @@ fn test_read_from_directory_error() {
     #[cfg(not(windows))]
     const STDERR: &str = ".: Is a directory";
     #[cfg(windows)]
-    const STDERR: &str = ".: Access is denied";
+    const STDERR: &str = ".: Permission denied";
 
     #[cfg(not(windows))]
     const STDOUT: &str = "      0       0       0 .\n";
@@ -392,15 +403,10 @@ fn test_read_from_directory_error() {
 /// Test that getting counts from nonexistent file is an error.
 #[test]
 fn test_read_from_nonexistent_file() {
-    #[cfg(not(windows))]
-    const MSG: &str = "bogusfile: No such file or directory";
-    #[cfg(windows)]
-    const MSG: &str = "bogusfile: The system cannot find the file specified";
     new_ucmd!()
         .args(&["bogusfile"])
         .fails()
-        .stderr_contains(MSG)
-        .stdout_is("");
+        .stderr_only("wc: bogusfile: No such file or directory\n");
 }
 
 #[test]
@@ -424,13 +430,30 @@ fn test_files0_disabled_files_argument() {
 
 #[test]
 fn test_files0_from() {
+    // file
     new_ucmd!()
         .args(&["--files0-from=files0_list.txt"])
         .run()
-        .stdout_is(
-            "  13  109  772 lorem_ipsum.txt\n  18  204 1115 moby_dick.txt\n   5   57  302 \
-             alice_in_wonderland.txt\n  36  370 2189 total\n",
-        );
+        .success()
+        .stdout_is(concat!(
+            "  13  109  772 lorem_ipsum.txt\n",
+            "  18  204 1115 moby_dick.txt\n",
+            "   5   57  302 alice_in_wonderland.txt\n",
+            "  36  370 2189 total\n",
+        ));
+
+    // stream
+    new_ucmd!()
+        .args(&["--files0-from=-"])
+        .pipe_in_fixture("files0_list.txt")
+        .run()
+        .success()
+        .stdout_is(concat!(
+            "13 109 772 lorem_ipsum.txt\n",
+            "18 204 1115 moby_dick.txt\n",
+            "5 57 302 alice_in_wonderland.txt\n",
+            "36 370 2189 total\n",
+        ));
 }
 
 #[test]
@@ -439,7 +462,7 @@ fn test_files0_from_with_stdin() {
         .args(&["--files0-from=-"])
         .pipe_in("lorem_ipsum.txt")
         .run()
-        .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
+        .stdout_is("13 109 772 lorem_ipsum.txt\n");
 }
 
 #[test]
@@ -448,10 +471,12 @@ fn test_files0_from_with_stdin_in_file() {
         .args(&["--files0-from=files0_list_with_stdin.txt"])
         .pipe_in_fixture("alice_in_wonderland.txt")
         .run()
-        .stdout_is(
-            "     13     109     772 lorem_ipsum.txt\n     18     204    1115 moby_dick.txt\n      5      57     302 \
-             -\n     36     370    2189 total\n",
-        );
+        .stdout_is(concat!(
+            "     13     109     772 lorem_ipsum.txt\n",
+            "     18     204    1115 moby_dick.txt\n",
+            "      5      57     302 -\n", // alice_in_wonderland.txt
+            "     36     370    2189 total\n",
+        ));
 }
 
 #[test]
@@ -463,4 +488,219 @@ fn test_files0_from_with_stdin_try_read_from_stdin() {
         .fails()
         .stderr_contains(MSG)
         .stdout_is("");
+}
+
+#[test]
+fn test_total_auto() {
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "--total=auto"])
+        .run()
+        .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
+
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=auto"])
+        .run()
+        .stdout_is(concat!(
+            "  13  109  772 lorem_ipsum.txt\n",
+            "  18  204 1115 moby_dick.txt\n",
+            "  31  313 1887 total\n",
+        ));
+}
+
+#[test]
+fn test_total_always() {
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "--total=always"])
+        .run()
+        .stdout_is(concat!(
+            " 13 109 772 lorem_ipsum.txt\n",
+            " 13 109 772 total\n",
+        ));
+
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=always"])
+        .run()
+        .stdout_is(concat!(
+            "  13  109  772 lorem_ipsum.txt\n",
+            "  18  204 1115 moby_dick.txt\n",
+            "  31  313 1887 total\n",
+        ));
+}
+
+#[test]
+fn test_total_never() {
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "--total=never"])
+        .run()
+        .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
+
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=never"])
+        .run()
+        .stdout_is(concat!(
+            "  13  109  772 lorem_ipsum.txt\n",
+            "  18  204 1115 moby_dick.txt\n",
+        ));
+}
+
+#[test]
+fn test_total_only() {
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "--total=only"])
+        .run()
+        .stdout_is("13 109 772\n");
+
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=only"])
+        .run()
+        .stdout_is("31 313 1887\n");
+}
+
+#[test]
+fn test_zero_length_files() {
+    // A trailing zero is ignored, but otherwise empty file names are an error...
+    const LIST: &str = "\0moby_dick.txt\0\0alice_in_wonderland.txt\0\0lorem_ipsum.txt\0";
+
+    // Try with and without the last \0
+    for l in [LIST.len(), LIST.len() - 1] {
+        new_ucmd!()
+            .args(&["--files0-from=-"])
+            .pipe_in(&LIST[..l])
+            .run()
+            .failure()
+            .stdout_is(concat!(
+                "18 204 1115 moby_dick.txt\n",
+                "5 57 302 alice_in_wonderland.txt\n",
+                "13 109 772 lorem_ipsum.txt\n",
+                "36 370 2189 total\n",
+            ))
+            .stderr_is(concat!(
+                "wc: -:1: invalid zero-length file name\n",
+                "wc: -:3: invalid zero-length file name\n",
+                "wc: -:5: invalid zero-length file name\n",
+            ));
+    }
+
+    // But, just as important, a zero-length file name may still be at the end...
+    new_ucmd!()
+        .args(&["--files0-from=-"])
+        .pipe_in(
+            LIST.as_bytes()
+                .iter()
+                .chain(b"\0")
+                .copied()
+                .collect::<Vec<_>>(),
+        )
+        .run()
+        .failure()
+        .stdout_is(concat!(
+            "18 204 1115 moby_dick.txt\n",
+            "5 57 302 alice_in_wonderland.txt\n",
+            "13 109 772 lorem_ipsum.txt\n",
+            "36 370 2189 total\n",
+        ))
+        .stderr_is(concat!(
+            "wc: -:1: invalid zero-length file name\n",
+            "wc: -:3: invalid zero-length file name\n",
+            "wc: -:5: invalid zero-length file name\n",
+            "wc: -:7: invalid zero-length file name\n",
+        ));
+}
+
+#[test]
+fn test_files0_errors_quoting() {
+    new_ucmd!()
+        .args(&["--files0-from=files0 with nonexistent.txt"])
+        .run()
+        .failure()
+        .stderr_is(concat!(
+            "wc: this_file_does_not_exist.txt: No such file or directory\n",
+            "wc: 'files0 with nonexistent.txt':2: invalid zero-length file name\n",
+            "wc: 'this file does not exist.txt': No such file or directory\n",
+            "wc: \"this files doesn't exist either.txt\": No such file or directory\n",
+        ))
+        .stdout_is("0 0 0 total\n");
+}
+
+#[test]
+fn test_files0_progressive_stream() {
+    use std::process::Stdio;
+    // You should be able to run wc and have a back-and-forth exchange with wc...
+    let mut child = new_ucmd!()
+        .args(&["--files0-from=-"])
+        .set_stdin(Stdio::piped())
+        .set_stdout(Stdio::piped())
+        .set_stderr(Stdio::piped())
+        .run_no_wait();
+
+    macro_rules! chk {
+        ($fn:ident, $exp:literal) => {
+            assert_eq!(child.$fn($exp.len()), $exp.as_bytes());
+        };
+    }
+
+    // File in, count out...
+    child.write_in("moby_dick.txt\0");
+    chk!(stdout_exact_bytes, "18 204 1115 moby_dick.txt\n");
+    child.write_in("lorem_ipsum.txt\0");
+    chk!(stdout_exact_bytes, "13 109 772 lorem_ipsum.txt\n");
+
+    // Introduce an error!
+    child.write_in("\0");
+    chk!(
+        stderr_exact_bytes,
+        "wc: -:3: invalid zero-length file name\n"
+    );
+
+    // wc is quick to forgive, let's move on...
+    child.write_in("alice_in_wonderland.txt\0");
+    chk!(stdout_exact_bytes, "5 57 302 alice_in_wonderland.txt\n");
+
+    // Fin.
+    child
+        .wait()
+        .expect("wc should finish")
+        .failure()
+        .stdout_only("36 370 2189 total\n");
+}
+
+#[test]
+fn files0_from_dir() {
+    // On Unix, `read(open("."))` fails. On Windows, `open(".")` fails. Thus, the errors happen in
+    // different contexts.
+    #[cfg(not(windows))]
+    macro_rules! dir_err {
+        ($p:literal) => {
+            concat!("wc: ", $p, ": read error: Is a directory\n")
+        };
+    }
+    #[cfg(windows)]
+    macro_rules! dir_err {
+        ($p:literal) => {
+            concat!("wc: cannot open ", $p, " for reading: Permission denied\n")
+        };
+    }
+
+    new_ucmd!()
+        .args(&["--files0-from=dir with spaces"])
+        .fails()
+        .stderr_only(dir_err!("'dir with spaces'"));
+
+    // Those contexts have different rules about quoting in errors...
+    #[cfg(windows)]
+    const DOT_ERR: &str = dir_err!("'.'");
+    #[cfg(not(windows))]
+    const DOT_ERR: &str = dir_err!(".");
+    new_ucmd!()
+        .args(&["--files0-from=."])
+        .fails()
+        .stderr_only(DOT_ERR);
+
+    // That also means you cannot `< . wc --files0-from=-` on Windows.
+    #[cfg(not(windows))]
+    new_ucmd!()
+        .args(&["--files0-from=-"])
+        .set_stdin(std::fs::File::open(".").unwrap())
+        .fails()
+        .stderr_only(dir_err!("-"));
 }

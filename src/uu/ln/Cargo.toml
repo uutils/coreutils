@@ -1,6 +1,6 @@
 [package]
 name = "uu_ln"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "ln ~ (uutils) create a (file system) link to TARGET"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/ln.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["fs"] }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "ln"

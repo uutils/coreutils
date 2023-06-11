@@ -45,7 +45,7 @@ use uucore::error::{set_exit_code, USimpleError};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::process::{getegid, geteuid, getgid, getuid};
-use uucore::{format_usage, show_error};
+use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 macro_rules! cstr2cow {
     ($v:expr) => {
@@ -53,9 +53,9 @@ macro_rules! cstr2cow {
     };
 }
 
-static ABOUT: &str = "Print user and group information for each specified USER,
-or (when USER omitted) for the current user.";
-const USAGE: &str = "{} [OPTION]... [USER]...";
+const ABOUT: &str = help_about!("id.md");
+const USAGE: &str = help_usage!("id.md");
+const AFTER_HELP: &str = help_section!("after help", "id.md");
 
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print only the security context of the process (not enabled)";
@@ -74,15 +74,6 @@ mod options {
     pub const OPT_REAL_ID: &str = "real";
     pub const OPT_ZERO: &str = "zero"; // BSD's id does not have this
     pub const ARG_USERS: &str = "USER";
-}
-
-fn get_description() -> &'static str {
-    "The id utility displays the user and group names and numeric IDs, of the \
-    calling process, to the standard output. If the real and effective IDs are \
-    different, both are displayed, otherwise only the real ID is displayed.\n\n\
-    If a user (login name or user ID) is specified, the user and group IDs of \
-    that user are displayed. In this case, the real and effective IDs are \
-    assumed to be the same."
 }
 
 struct Ids {
@@ -121,9 +112,7 @@ struct State {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app()
-        .after_help(get_description())
-        .try_get_matches_from(args)?;
+    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
     let users: Vec<String> = matches
         .get_many::<String>(options::ARG_USERS)
@@ -214,9 +203,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     for i in 0..=users.len() {
-        let possible_pw = if !state.user_specified {
-            None
-        } else {
+        let possible_pw = if state.user_specified {
             match Passwd::locate(users[i].as_str()) {
                 Ok(p) => Some(p),
                 Err(_) => {
@@ -229,6 +216,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                 }
             }
+        } else {
+            None
         };
 
         // GNU's `id` does not support the flags: -p/-P/-A.

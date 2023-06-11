@@ -3,13 +3,10 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 // spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes onehundredlines nbbbb
-extern crate rand;
-extern crate regex;
 
-use self::rand::{thread_rng, Rng};
-use self::regex::Regex;
-use crate::common::util::*;
-use rand::SeedableRng;
+use crate::common::util::{AtPath, TestScenario};
+use rand::{thread_rng, Rng, SeedableRng};
+use regex::Regex;
 #[cfg(not(windows))]
 use std::env;
 use std::path::Path;

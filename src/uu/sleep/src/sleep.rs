@@ -10,10 +10,11 @@ use std::time::Duration;
 
 use uucore::{
     error::{UResult, USimpleError, UUsageError},
-    format_usage, help_about, help_section, help_usage, show,
+    format_usage, help_about, help_section, help_usage, show_error,
 };
 
 use clap::{crate_version, Arg, ArgAction, Command};
+use fundu::{self, DurationParser, ParseError, SaturatingInto};
 
 static ABOUT: &str = help_about!("sleep.md");
 const USAGE: &str = help_usage!("sleep.md");
@@ -61,15 +62,39 @@ pub fn uu_app() -> Command {
 
 fn sleep(args: &[&str]) -> UResult<()> {
     let mut arg_error = false;
-    let intervals = args.iter().map(|s| match uucore::parse_time::from_str(s) {
-        Ok(result) => result,
-        Err(err) => {
-            arg_error = true;
-            show!(USimpleError::new(1, err));
-            Duration::new(0, 0)
-        }
-    });
-    let sleep_dur = intervals.fold(Duration::new(0, 0), |acc, n| acc + n);
+
+    use fundu::TimeUnit::{Day, Hour, Minute, Second};
+    let parser = DurationParser::with_time_units(&[Second, Minute, Hour, Day]);
+
+    let sleep_dur = args
+        .iter()
+        .filter_map(|input| match parser.parse(input.trim()) {
+            Ok(duration) => Some(duration),
+            Err(error) => {
+                arg_error = true;
+
+                let reason = match error {
+                    ParseError::Empty if input.is_empty() => "Input was empty".to_string(),
+                    ParseError::Empty => "Found only whitespace in input".to_string(),
+                    ParseError::Syntax(pos, description)
+                    | ParseError::TimeUnit(pos, description) => {
+                        format!("{description} at position {}", pos.saturating_add(1))
+                    }
+                    ParseError::NegativeExponentOverflow | ParseError::PositiveExponentOverflow => {
+                        "Exponent was out of bounds".to_string()
+                    }
+                    ParseError::NegativeNumber => "Number was negative".to_string(),
+                    error => error.to_string(),
+                };
+                show_error!("invalid time interval '{input}': {reason}");
+
+                None
+            }
+        })
+        .fold(Duration::ZERO, |acc, n| {
+            acc.saturating_add(SaturatingInto::<std::time::Duration>::saturating_into(n))
+        });
+
     if arg_error {
         return Err(UUsageError::new(1, ""));
     };

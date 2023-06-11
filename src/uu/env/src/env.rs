@@ -23,13 +23,11 @@ use std::os::unix::process::ExitStatusExt;
 use std::process;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
-use uucore::{format_usage, show_warning};
+use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 
-const ABOUT: &str = "Set each NAME to VALUE in the environment and run COMMAND";
-const USAGE: &str = "{} [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
-const AFTER_HELP: &str = "\
-A mere - implies -i. If no COMMAND, print the resulting environment.
-";
+const ABOUT: &str = help_about!("env.md");
+const USAGE: &str = help_usage!("env.md");
+const AFTER_HELP: &str = help_section!("after help", "env.md");
 
 struct Options<'a> {
     ignore_env: bool,
@@ -177,6 +175,7 @@ pub fn uu_app() -> Command {
         .arg(Arg::new("vars").action(ArgAction::Append))
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn run_env(args: impl uucore::Args) -> UResult<()> {
     let app = uu_app();
     let matches = app.try_get_matches_from(args).with_exit_code(125)?;
@@ -301,7 +300,10 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
         env::set_var(name, val);
     }
 
-    if !opts.program.is_empty() {
+    if opts.program.is_empty() {
+        // no program provided, so just dump all env vars to stdout
+        print_env(opts.null);
+    } else {
         // we need to execute a command
         let (prog, args) = build_command(&mut opts.program);
 
@@ -346,9 +348,6 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
             Err(_) => return Err(126.into()),
             Ok(_) => (),
         }
-    } else {
-        // no program provided, so just dump all env vars to stdout
-        print_env(opts.null);
     }
 
     Ok(())

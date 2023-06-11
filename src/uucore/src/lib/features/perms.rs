@@ -182,6 +182,7 @@ pub enum TraverseSymlinks {
 pub struct ChownExecutor {
     pub dest_uid: Option<u32>,
     pub dest_gid: Option<u32>,
+    pub raw_owner: String, // The owner of the file as input by the user in the command line.
     pub traverse_symlinks: TraverseSymlinks,
     pub verbosity: Verbosity,
     pub filter: IfFrom,
@@ -203,11 +204,21 @@ impl ChownExecutor {
         Ok(())
     }
 
+    #[allow(clippy::cognitive_complexity)]
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
         let path = root.as_ref();
         let meta = match self.obtain_meta(path, self.dereference) {
             Some(m) => m,
-            _ => return 1,
+            _ => {
+                if self.verbosity.level == VerbosityLevel::Verbose {
+                    println!(
+                        "failed to change ownership of {} to {}",
+                        path.quote(),
+                        self.raw_owner
+                    );
+                }
+                return 1;
+            }
         };
 
         // Prohibit only if:
@@ -260,16 +271,22 @@ impl ChownExecutor {
                 }
             }
         } else {
+            self.print_verbose_ownership_retained_as(
+                path,
+                meta.uid(),
+                self.dest_gid.map(|_| meta.gid()),
+            );
             0
         };
 
-        if !self.recursive {
-            ret
-        } else {
+        if self.recursive {
             ret | self.dive_into(&root)
+        } else {
+            ret
         }
     }
 
+    #[allow(clippy::cognitive_complexity)]
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
         let root = root.as_ref();
 
@@ -320,6 +337,11 @@ impl ChownExecutor {
             };
 
             if !self.matched(meta.uid(), meta.gid()) {
+                self.print_verbose_ownership_retained_as(
+                    path,
+                    meta.uid(),
+                    self.dest_gid.map(|_| meta.gid()),
+                );
                 continue;
             }
 
@@ -381,6 +403,35 @@ impl ChownExecutor {
             IfFrom::UserGroup(u, g) => u == uid && g == gid,
         }
     }
+
+    fn print_verbose_ownership_retained_as(&self, path: &Path, uid: u32, gid: Option<u32>) {
+        if self.verbosity.level == VerbosityLevel::Verbose {
+            match (self.dest_uid, self.dest_gid, gid) {
+                (Some(_), Some(_), Some(gid)) => {
+                    println!(
+                        "ownership of {} retained as {}:{}",
+                        path.quote(),
+                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                    );
+                }
+                (None, Some(_), Some(gid)) => {
+                    println!(
+                        "ownership of {} retained as {}",
+                        path.quote(),
+                        entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()),
+                    );
+                }
+                (_, _, _) => {
+                    println!(
+                        "ownership of {} retained as {}",
+                        path.quote(),
+                        entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
+                    );
+                }
+            }
+        }
+    }
 }
 
 pub mod options {
@@ -412,7 +463,13 @@ pub mod options {
     pub const ARG_FILES: &str = "FILE";
 }
 
-type GidUidFilterParser = fn(&ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)>;
+pub struct GidUidOwnerFilter {
+    pub dest_gid: Option<u32>,
+    pub dest_uid: Option<u32>,
+    pub raw_owner: String,
+    pub filter: IfFrom,
+}
+type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
 
 /// Base implementation for `chgrp` and `chown`.
 ///
@@ -421,11 +478,12 @@ type GidUidFilterParser = fn(&ArgMatches) -> UResult<(Option<u32>, Option<u32>, 
 /// `parse_gid_uid_and_filter` will be called to obtain the target gid and uid, and the filter,
 /// from `ArgMatches`.
 /// `groups_only` determines whether verbose output will only mention the group.
+#[allow(clippy::cognitive_complexity)]
 pub fn chown_base(
     mut command: Command,
     args: impl crate::Args,
     add_arg_if_not_reference: &'static str,
-    parse_gid_uid_and_filter: GidUidFilterParser,
+    parse_gid_uid_and_filter: GidUidFilterOwnerParser,
     groups_only: bool,
 ) -> UResult<()> {
     let args: Vec<_> = args.collect();
@@ -508,12 +566,18 @@ pub fn chown_base(
     } else {
         VerbosityLevel::Normal
     };
-    let (dest_gid, dest_uid, filter) = parse_gid_uid_and_filter(&matches)?;
+    let GidUidOwnerFilter {
+        dest_gid,
+        dest_uid,
+        raw_owner,
+        filter,
+    } = parse_gid_uid_and_filter(&matches)?;
 
     let executor = ChownExecutor {
         traverse_symlinks,
         dest_gid,
         dest_uid,
+        raw_owner,
         verbosity: Verbosity {
             groups_only,
             level: verbosity_level,

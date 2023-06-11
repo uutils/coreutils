@@ -1,6 +1,6 @@
 // spell-checker:ignore (words) gpghome
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 use uucore::display::Quotable;
 
@@ -426,7 +426,6 @@ fn test_mktemp_tmpdir_one_arg() {
 
     let result = scene
         .ucmd()
-        .keep_env()
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
         .succeeds();
@@ -440,7 +439,6 @@ fn test_mktemp_directory_tmpdir() {
 
     let result = scene
         .ucmd()
-        .keep_env()
         .arg("--directory")
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
@@ -568,6 +566,32 @@ fn test_template_path_separator() {
         .stderr_only(format!(
             "mktemp: invalid template, {}, contains directory separator\n",
             r"a\bXXX".quote()
+        ));
+}
+
+/// Test that a prefix with a point is valid.
+#[test]
+fn test_prefix_template_separator() {
+    new_ucmd!().args(&["-p", ".", "-t", "a.XXXX"]).succeeds();
+}
+
+#[test]
+fn test_prefix_template_with_path_separator() {
+    #[cfg(not(windows))]
+    new_ucmd!()
+        .args(&["-t", "a/XXX"])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, {}, contains directory separator\n",
+            "a/XXX".quote()
+        ));
+    #[cfg(windows)]
+    new_ucmd!()
+        .args(&["-t", r"a\XXX"])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, {}, contains directory separator\n",
+            r"a\XXX".quote()
         ));
 }
 
@@ -704,16 +728,18 @@ fn test_tmpdir_env_var() {
     assert_suffix_matches_template!("tmp.XXXXXXXXXX", filename);
     assert!(at.file_exists(filename));
 
-    // FIXME This is not working because --tmpdir is configured to
-    // require a value.
-    //
-    // // `TMPDIR=. mktemp --tmpdir`
-    // let (at, mut ucmd) = at_and_ucmd!();
-    // let result = ucmd.env(TMPDIR, ".").arg("--tmpdir").succeeds();
-    // let filename = result.no_stderr().stdout_str().trim_end();
-    // let template = format!(".{}tmp.XXXXXXXXXX", MAIN_SEPARATOR);
-    // assert_matches_template!(&template, filename);
-    // assert!(at.file_exists(filename));
+    // `TMPDIR=. mktemp --tmpdir`
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.env(TMPDIR, ".").arg("--tmpdir").succeeds();
+    let filename = result.no_stderr().stdout_str().trim_end();
+    #[cfg(not(windows))]
+    {
+        let template = format!(".{MAIN_SEPARATOR}tmp.XXXXXXXXXX");
+        assert_matches_template!(&template, filename);
+    }
+    #[cfg(windows)]
+    assert_suffix_matches_template!("tmp.XXXXXXXXXX", filename);
+    assert!(at.file_exists(filename));
 
     // `TMPDIR=. mktemp --tmpdir XXX`
     let (at, mut ucmd) = at_and_ucmd!();
@@ -825,6 +851,53 @@ fn test_nonexistent_dir_prefix() {
 
 #[test]
 fn test_default_missing_value() {
+    new_ucmd!().arg("-d").arg("--tmpdir").succeeds();
+}
+
+#[test]
+fn test_default_issue_4821_t_tmpdir() {
     let scene = TestScenario::new(util_name!());
-    scene.ucmd().arg("-d").arg("--tmpdir").succeeds();
+    let pathname = scene.fixtures.as_string();
+    let result = scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg("foo.XXXX")
+        .succeeds();
+    let stdout = result.stdout_str();
+    println!("stdout = {stdout}");
+    assert!(stdout.contains(&pathname));
+}
+
+#[test]
+fn test_default_issue_4821_t_tmpdir_p() {
+    let scene = TestScenario::new(util_name!());
+    let pathname = scene.fixtures.as_string();
+    let result = scene
+        .ucmd()
+        .arg("-t")
+        .arg("-p")
+        .arg(&pathname)
+        .arg("foo.XXXX")
+        .succeeds();
+    let stdout = result.stdout_str();
+    println!("stdout = {stdout}");
+    assert!(stdout.contains(&pathname));
+}
+
+#[test]
+fn test_t_ensure_tmpdir_has_higher_priority_than_p() {
+    let scene = TestScenario::new(util_name!());
+    let pathname = scene.fixtures.as_string();
+    let result = scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg("-p")
+        .arg("should_not_attempt_to_write_in_this_nonexisting_dir")
+        .arg("foo.XXXX")
+        .succeeds();
+    let stdout = result.stdout_str();
+    println!("stdout = {stdout}");
+    assert!(stdout.contains(&pathname));
 }

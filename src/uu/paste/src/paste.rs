@@ -12,10 +12,11 @@ use std::fmt::Display;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Write lines consisting of the sequentially corresponding lines from each
-FILE, separated by TABs, to standard output.";
+const ABOUT: &str = help_about!("paste.md");
+const USAGE: &str = help_usage!("paste.md");
 
 mod options {
     pub const DELIMITER: &str = "delimiters";
@@ -76,6 +77,7 @@ pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
+        .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
             Arg::new(options::SERIAL)
@@ -109,6 +111,7 @@ pub fn uu_app() -> Command {
         )
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn paste(
     filenames: Vec<String>,
     serial: bool,
@@ -125,6 +128,16 @@ fn paste(
             Some(BufReader::new(r))
         };
         files.push(file);
+    }
+
+    if delimiters.ends_with('\\') && !delimiters.ends_with("\\\\") {
+        return Err(USimpleError::new(
+            1,
+            format!(
+                "delimiter list ends with an unescaped backslash: {}",
+                delimiters
+            ),
+        ));
     }
 
     let delimiters: Vec<char> = unescape(delimiters).chars().collect();
@@ -220,10 +233,8 @@ fn paste(
 }
 
 // Unescape all special characters
-// TODO: this will need work to conform to GNU implementation
 fn unescape(s: &str) -> String {
     s.replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\\\\", "\\")
-        .replace('\\', "")
 }

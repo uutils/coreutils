@@ -5,23 +5,18 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
-use std::path::Path;
+use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Write};
 use std::str::FromStr;
-use strum_macros::{AsRefStr, EnumString};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_section, help_usage};
 
-const ABOUT: &str = "Report or omit repeated lines.";
-const USAGE: &str = "{} [OPTION]... [INPUT [OUTPUT]]...";
-const LONG_USAGE: &str = "\
-    Filter adjacent matching lines from INPUT (or standard input),\n\
-    writing to OUTPUT (or standard output).\n\n\
-    Note: 'uniq' does not detect repeated lines unless they are adjacent.\n\
-    You may want to sort the input first, or use 'sort -u' without 'uniq'.";
+const ABOUT: &str = help_about!("uniq.md");
+const USAGE: &str = help_usage!("uniq.md");
+const AFTER_HELP: &str = help_section!("after help", "uniq.md");
 
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
@@ -38,8 +33,7 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-#[derive(PartialEq, Clone, Copy, AsRefStr, EnumString)]
-#[strum(serialize_all = "snake_case")]
+#[derive(PartialEq, Clone, Copy)]
 enum Delimiters {
     Append,
     Prepend,
@@ -70,11 +64,7 @@ macro_rules! write_line_terminator {
 }
 
 impl Uniq {
-    pub fn print_uniq<R: Read, W: Write>(
-        &self,
-        reader: &mut BufReader<R>,
-        writer: &mut BufWriter<W>,
-    ) -> UResult<()> {
+    pub fn print_uniq(&self, reader: impl BufRead, mut writer: impl Write) -> UResult<()> {
         let mut first_line_printed = false;
         let mut group_count = 1;
         let line_terminator = self.get_line_terminator();
@@ -83,6 +73,8 @@ impl Uniq {
             Some(l) => l?,
             None => return Ok(()),
         };
+
+        let writer = &mut writer;
 
         // compare current `line` with consecutive lines (`next_line`) of the input
         // and if needed, print `line` based on the command line options provided
@@ -128,7 +120,6 @@ impl Uniq {
                 }
                 match char_indices.find(|(_, c)| c.is_whitespace()) {
                     None => return "",
-
                     Some((next_field_i, _)) => i = next_field_i,
                 }
             }
@@ -201,9 +192,9 @@ impl Uniq {
                 || self.delimiters == Delimiters::Both)
     }
 
-    fn print_line<W: Write>(
+    fn print_line(
         &self,
-        writer: &mut BufWriter<W>,
+        writer: &mut impl Write,
         line: &str,
         count: usize,
         first_line_printed: bool,
@@ -215,7 +206,7 @@ impl Uniq {
         }
 
         if self.show_counts {
-            writer.write_all(format!("{count:7} {line}").as_bytes())
+            write!(writer, "{count:7} {line}")
         } else {
             writer.write_all(line.as_bytes())
         }
@@ -249,21 +240,14 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Optio
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
+    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
-    let files: Vec<String> = matches
-        .get_many::<String>(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let files = matches.get_many::<OsString>(ARG_FILES);
+
+    let (in_file_name, out_file_name) = files
+        .map(|fi| fi.map(AsRef::as_ref))
+        .map(|mut fi| (fi.next(), fi.next()))
         .unwrap_or_default();
-
-    let (in_file_name, out_file_name) = match files.len() {
-        0 => ("-".to_owned(), "-".to_owned()),
-        1 => (files[0].clone(), "-".to_owned()),
-        2 => (files[0].clone(), files[1].clone()),
-        _ => {
-            unreachable!() // Cannot happen as clap will fail earlier
-        }
-    };
 
     let uniq = Uniq {
         repeats_only: matches.get_flag(options::REPEATED)
@@ -288,8 +272,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     uniq.print_uniq(
-        &mut open_input_file(&in_file_name)?,
-        &mut open_output_file(&out_file_name)?,
+        open_input_file(in_file_name)?,
+        open_output_file(out_file_name)?,
     )
 }
 
@@ -393,6 +377,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
+                .value_parser(ValueParser::os_string())
                 .num_args(0..=2)
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -403,7 +388,14 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
         .get_one::<String>(options::ALL_REPEATED)
         .or_else(|| matches.get_one::<String>(options::GROUP));
     if let Some(delimiter_arg) = value {
-        Delimiters::from_str(delimiter_arg).unwrap() // All possible values for ALL_REPEATED are Delimiters (of type `&str`)
+        match delimiter_arg.as_ref() {
+            "append" => Delimiters::Append,
+            "prepend" => Delimiters::Prepend,
+            "separate" => Delimiters::Separate,
+            "both" => Delimiters::Both,
+            "none" => Delimiters::None,
+            _ => unreachable!("Should have been caught by possible values in clap"),
+        }
     } else if matches.contains_id(options::GROUP) {
         Delimiters::Separate
     } else {
@@ -411,26 +403,26 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
     }
 }
 
-fn open_input_file(in_file_name: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
-    let in_file = if in_file_name == "-" {
-        Box::new(stdin()) as Box<dyn Read>
-    } else {
-        let path = Path::new(in_file_name);
-        let in_file = File::open(path)
-            .map_err_context(|| format!("Could not open {}", in_file_name.maybe_quote()))?;
-        Box::new(in_file) as Box<dyn Read>
-    };
-    Ok(BufReader::new(in_file))
+// None or "-" means stdin.
+fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
+    Ok(match in_file_name {
+        Some(path) if path != "-" => {
+            let in_file = File::open(path)
+                .map_err_context(|| format!("Could not open {}", path.maybe_quote()))?;
+            Box::new(BufReader::new(in_file))
+        }
+        _ => Box::new(stdin().lock()),
+    })
 }
 
-fn open_output_file(out_file_name: &str) -> UResult<BufWriter<Box<dyn Write + 'static>>> {
-    let out_file = if out_file_name == "-" {
-        Box::new(stdout()) as Box<dyn Write>
-    } else {
-        let path = Path::new(out_file_name);
-        let out_file = File::create(path)
-            .map_err_context(|| format!("Could not create {}", out_file_name.maybe_quote()))?;
-        Box::new(out_file) as Box<dyn Write>
-    };
-    Ok(BufWriter::new(out_file))
+// None or "-" means stdout.
+fn open_output_file(out_file_name: Option<&OsStr>) -> UResult<Box<dyn Write>> {
+    Ok(match out_file_name {
+        Some(path) if path != "-" => {
+            let out_file = File::create(path)
+                .map_err_context(|| format!("Could not open {}", path.maybe_quote()))?;
+            Box::new(BufWriter::new(out_file))
+        }
+        _ => Box::new(stdout().lock()),
+    })
 }

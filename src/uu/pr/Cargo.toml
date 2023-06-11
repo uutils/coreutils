@@ -1,6 +1,6 @@
 [package]
 name = "uu_pr"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "pr ~ (uutils) convert text files for printing"
@@ -15,12 +15,12 @@ edition = "2021"
 path = "src/pr.rs"
 
 [dependencies]
-clap = { workspace=true }
-time = { workspace=true, features = ["local-offset", "macros", "formatting"] }
-uucore = { workspace=true, features=["entries"] }
-quick-error = { workspace=true }
-itertools = { workspace=true }
-regex = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["entries"] }
+quick-error = { workspace = true }
+itertools = { workspace = true }
+regex = { workspace = true }
+chrono = { workspace = true }
 
 [[bin]]
 name = "pr"

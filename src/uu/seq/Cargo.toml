@@ -1,7 +1,7 @@
 # spell-checker:ignore bigdecimal
 [package]
 name = "uu_seq"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "seq ~ (uutils) display a sequence of numbers"
@@ -16,11 +16,11 @@ edition = "2021"
 path = "src/seq.rs"
 
 [dependencies]
-bigdecimal = { workspace=true }
-clap = { workspace=true }
-num-bigint = { workspace=true }
-num-traits = { workspace=true }
-uucore = { workspace=true, features=["memo"] }
+bigdecimal = { workspace = true }
+clap = { workspace = true }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+uucore = { workspace = true, features = ["memo"] }
 
 [[bin]]
 name = "seq"

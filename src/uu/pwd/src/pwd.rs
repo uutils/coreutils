@@ -10,15 +10,15 @@ use clap::{crate_version, Arg, Command};
 use std::env;
 use std::io;
 use std::path::PathBuf;
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 
-static ABOUT: &str = "Display the full filename of the current working directory.";
-const USAGE: &str = "{} [OPTION]... FILE...";
-static OPT_LOGICAL: &str = "logical";
-static OPT_PHYSICAL: &str = "physical";
+const ABOUT: &str = help_about!("pwd.md");
+const USAGE: &str = help_usage!("pwd.md");
+const OPT_LOGICAL: &str = "logical";
+const OPT_PHYSICAL: &str = "physical";
 
 fn physical_path() -> io::Result<PathBuf> {
     // std::env::current_dir() is a thin wrapper around libc::getcwd().
@@ -84,36 +84,22 @@ fn logical_path() -> io::Result<PathBuf> {
             {
                 use std::fs::metadata;
                 use std::os::unix::fs::MetadataExt;
-                let path_info = match metadata(path) {
-                    Ok(info) => info,
-                    Err(_) => return false,
-                };
-                let real_info = match metadata(".") {
-                    Ok(info) => info,
-                    Err(_) => return false,
-                };
-                if path_info.dev() != real_info.dev() || path_info.ino() != real_info.ino() {
-                    return false;
+                match (metadata(path), metadata(".")) {
+                    (Ok(info1), Ok(info2)) => {
+                        info1.dev() == info2.dev() && info1.ino() == info2.ino()
+                    }
+                    _ => false,
                 }
             }
 
             #[cfg(not(unix))]
             {
                 use std::fs::canonicalize;
-                let canon_path = match canonicalize(path) {
-                    Ok(path) => path,
-                    Err(_) => return false,
-                };
-                let real_path = match canonicalize(".") {
-                    Ok(path) => path,
-                    Err(_) => return false,
-                };
-                if canon_path != real_path {
-                    return false;
+                match (canonicalize(path), canonicalize(".")) {
+                    (Ok(path1), Ok(path2)) => path1 == path2,
+                    _ => false,
                 }
             }
-
-            true
         }
 
         match env::var_os("PWD").map(PathBuf::from) {
@@ -129,7 +115,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // if POSIXLY_CORRECT is set, we want to a logical resolution.
     // This produces a different output when doing mkdir -p a/b && ln -s a/b c && cd c && pwd
     // We should get c in this case instead of a/b at the end of the path
-    let cwd = if matches.get_flag(OPT_LOGICAL) || env::var("POSIXLY_CORRECT").is_ok() {
+    let cwd = if matches.get_flag(OPT_PHYSICAL) {
+        physical_path()
+    } else if matches.get_flag(OPT_LOGICAL) || env::var("POSIXLY_CORRECT").is_ok() {
         logical_path()
     } else {
         physical_path()

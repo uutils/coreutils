@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -25,7 +25,6 @@ fn test_shred_remove() {
     assert!(at.file_exists(file_b));
 }
 
-#[cfg(not(target_os = "freebsd"))]
 #[test]
 fn test_shred_force() {
     let scene = TestScenario::new(util_name!());
@@ -51,4 +50,15 @@ fn test_shred_force() {
 
     // file_a was deleted.
     assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_hex() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "test_hex";
+
+    at.touch(file);
+
+    ucmd.arg("--size=0x10").arg(file).succeeds();
 }

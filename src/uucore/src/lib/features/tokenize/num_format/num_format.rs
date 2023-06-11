@@ -87,6 +87,7 @@ fn get_provided(str_in_opt: Option<&String>) -> Option<u8> {
 // a base,
 // and an offset for index after all
 //  initial spacing, sign, base prefix, and leading zeroes
+#[allow(clippy::cognitive_complexity)]
 fn get_initial_prefix(str_in: &str, field_type: &FieldType) -> InitialPrefix {
     let mut str_it = str_in.chars();
     let mut ret = InitialPrefix {

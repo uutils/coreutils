@@ -1,4 +1,4 @@
-## Benchmarking `sum`
+# Benchmarking `sum`
 
 <!-- spell-checker:ignore wikidatawiki -->
 
@@ -7,17 +7,17 @@ Large sample files can for example be found in the [Wikipedia database dumps](ht
 After you have obtained and uncompressed such a file, you need to build `sum` in release mode
 
 ```shell
-$ cargo build --release --package uu_sum
+cargo build --release --package uu_sum
 ```
 
 and then you can time how it long it takes to checksum the file by running
 
 ```shell
-$ time ./target/release/sum wikidatawiki-20211001-pages-logging.xml
+time ./target/release/sum wikidatawiki-20211001-pages-logging.xml
 ```
 
 For more systematic measurements that include warm-ups, repetitions and comparisons, [Hyperfine](https://github.com/sharkdp/hyperfine) can be helpful. For example, to compare this implementation to the one provided by your distribution run
 
 ```shell
-$ hyperfine "./target/release/sum wikidatawiki-20211001-pages-logging.xml" "sum wikidatawiki-20211001-pages-logging.xml"
+hyperfine "./target/release/sum wikidatawiki-20211001-pages-logging.xml" "sum wikidatawiki-20211001-pages-logging.xml"
 ```

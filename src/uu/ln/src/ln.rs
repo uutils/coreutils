@@ -199,7 +199,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::LOGICAL)
                 .short('L')
                 .long(options::LOGICAL)
-                .help("dereference TARGETs that are symbolic links")
+                .help("follow TARGETs that are symbolic links")
                 .overrides_with(options::PHYSICAL)
                 .action(ArgAction::SetTrue),
         )
@@ -292,6 +292,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     link(&files[0], &files[1], settings)
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> UResult<()> {
     if !target_dir.is_dir() {
         return Err(LnError::TargetIsDirectory(target_dir.to_owned()).into());
@@ -364,6 +365,7 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
     src.into()
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {
@@ -391,8 +393,8 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
-                if !prompt_yes!("overwrite {}?", dst.quote()) {
-                    return Ok(());
+                if !prompt_yes!("replace {}?", dst.quote()) {
+                    return Err(LnError::SomeLinksFailed.into());
                 }
 
                 if fs::remove_file(dst).is_ok() {};

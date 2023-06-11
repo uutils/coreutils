@@ -2,7 +2,7 @@
 
 [package]
 name = "uu_tac"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tac ~ (uutils) concatenate and display input lines in reverse order"
@@ -17,11 +17,11 @@ edition = "2021"
 path = "src/tac.rs"
 
 [dependencies]
-memchr = { workspace=true }
-memmap2 = "0.5"
-regex = { workspace=true }
-clap = { workspace=true }
-uucore = { workspace=true }
+memchr = { workspace = true }
+memmap2 = "0.7"
+regex = { workspace = true }
+clap = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "tac"

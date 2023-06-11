@@ -579,16 +579,16 @@ impl LinesChunkBuffer {
             }
         }
 
-        if !&self.chunks.is_empty() {
+        if self.chunks.is_empty() {
+            // chunks is empty when a file is empty so quitting early here
+            return Ok(());
+        } else {
             let length = &self.chunks.len();
             let last = &mut self.chunks[length - 1];
             if !last.get_buffer().ends_with(&[self.delimiter]) {
                 last.lines += 1;
                 self.lines += 1;
             }
-        } else {
-            // chunks is empty when a file is empty so quitting early here
-            return Ok(());
         }
 
         // skip unnecessary chunks and save the first chunk which may hold some lines we have to

@@ -19,11 +19,10 @@ use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::{crash, format_usage};
+use uucore::{crash, format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Convert tabs in each FILE to spaces, writing to standard output.
- With no FILE, or when FILE is -, read standard input.";
-const USAGE: &str = "{} [OPTION]... [FILE]...";
+const ABOUT: &str = help_about!("expand.md");
+const USAGE: &str = help_usage!("expand.md");
 
 pub mod options {
     pub static TABS: &str = "tabs";
@@ -374,6 +373,7 @@ enum CharType {
     Other,
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn expand(options: &Options) -> std::io::Result<()> {
     use self::CharType::*;
 

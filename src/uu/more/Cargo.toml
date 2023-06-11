@@ -1,6 +1,6 @@
 [package]
 name = "uu_more"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "more ~ (uutils) input perusal filter"
@@ -15,15 +15,15 @@ edition = "2021"
 path = "src/more.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
-crossterm = { workspace=true }
-is-terminal = { workspace=true }
-unicode-width = { workspace=true }
-unicode-segmentation = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
+crossterm = { workspace = true }
+is-terminal = { workspace = true }
+unicode-width = { workspace = true }
+unicode-segmentation = { workspace = true }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
-nix = { workspace=true }
+nix = { workspace = true }
 
 [[bin]]
 name = "more"

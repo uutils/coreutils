@@ -1,16 +1,16 @@
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff
 
-#[cfg(not(windows))]
-extern crate libc;
-extern crate regex;
-#[cfg(not(windows))]
-extern crate tempfile;
-
-use self::regex::Regex;
-use crate::common::util::*;
+#[cfg(any(unix, feature = "feat_selinux"))]
+use crate::common::util::expected_result;
+use crate::common::util::TestScenario;
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
+use regex::Regex;
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
+use std::ffi::OsStr;
+#[cfg(target_os = "linux")]
+use std::os::unix::ffi::OsStrExt;
 #[cfg(all(unix, feature = "chmod"))]
 use std::os::unix::io::IntoRawFd;
 use std::path::Path;
@@ -609,10 +609,10 @@ fn test_ls_a() {
 fn test_ls_width() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(&at.plus_as_string("test-width-1"));
-    at.touch(&at.plus_as_string("test-width-2"));
-    at.touch(&at.plus_as_string("test-width-3"));
-    at.touch(&at.plus_as_string("test-width-4"));
+    at.touch(at.plus_as_string("test-width-1"));
+    at.touch(at.plus_as_string("test-width-2"));
+    at.touch(at.plus_as_string("test-width-3"));
+    at.touch(at.plus_as_string("test-width-4"));
 
     for option in [
         "-w 100",
@@ -692,10 +692,10 @@ fn test_ls_width() {
 fn test_ls_columns() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(&at.plus_as_string("test-columns-1"));
-    at.touch(&at.plus_as_string("test-columns-2"));
-    at.touch(&at.plus_as_string("test-columns-3"));
-    at.touch(&at.plus_as_string("test-columns-4"));
+    at.touch(at.plus_as_string("test-columns-1"));
+    at.touch(at.plus_as_string("test-columns-2"));
+    at.touch(at.plus_as_string("test-columns-3"));
+    at.touch(at.plus_as_string("test-columns-4"));
 
     // Columns is the default
     let result = scene.ucmd().succeeds();
@@ -753,10 +753,10 @@ fn test_ls_columns() {
 fn test_ls_across() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(&at.plus_as_string("test-across-1"));
-    at.touch(&at.plus_as_string("test-across-2"));
-    at.touch(&at.plus_as_string("test-across-3"));
-    at.touch(&at.plus_as_string("test-across-4"));
+    at.touch(at.plus_as_string("test-across-1"));
+    at.touch(at.plus_as_string("test-across-2"));
+    at.touch(at.plus_as_string("test-across-3"));
+    at.touch(at.plus_as_string("test-across-4"));
 
     for option in ACROSS_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
@@ -781,10 +781,10 @@ fn test_ls_across() {
 fn test_ls_commas() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(&at.plus_as_string("test-commas-1"));
-    at.touch(&at.plus_as_string("test-commas-2"));
-    at.touch(&at.plus_as_string("test-commas-3"));
-    at.touch(&at.plus_as_string("test-commas-4"));
+    at.touch(at.plus_as_string("test-commas-1"));
+    at.touch(at.plus_as_string("test-commas-2"));
+    at.touch(at.plus_as_string("test-commas-3"));
+    at.touch(at.plus_as_string("test-commas-4"));
 
     for option in COMMA_ARGS {
         let result = scene.ucmd().arg(option).succeeds();
@@ -814,8 +814,8 @@ fn test_ls_zero() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("0-test-zero");
-    at.touch(&at.plus_as_string("2-test-zero"));
-    at.touch(&at.plus_as_string("3-test-zero"));
+    at.touch(at.plus_as_string("2-test-zero"));
+    at.touch(at.plus_as_string("3-test-zero"));
 
     let ignored_opts = [
         "--quoting-style=c",
@@ -870,7 +870,7 @@ fn test_ls_zero() {
 
     #[cfg(unix)]
     {
-        at.touch(&at.plus_as_string("1\ntest-zero"));
+        at.touch(at.plus_as_string("1\ntest-zero"));
 
         let ignored_opts = [
             "--quoting-style=c",
@@ -933,9 +933,9 @@ fn test_ls_zero() {
 fn test_ls_commas_trailing() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(&at.plus_as_string("test-commas-trailing-2"));
+    at.touch(at.plus_as_string("test-commas-trailing-2"));
 
-    at.touch(&at.plus_as_string("test-commas-trailing-1"));
+    at.touch(at.plus_as_string("test-commas-trailing-1"));
     at.append(
         "test-commas-trailing-1",
         &(0..2000)
@@ -957,7 +957,7 @@ fn test_ls_commas_trailing() {
 fn test_ls_long() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(&at.plus_as_string("test-long"));
+    at.touch(at.plus_as_string("test-long"));
 
     for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).arg("test-long").succeeds();
@@ -975,7 +975,7 @@ fn test_ls_long_format() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir(&at.plus_as_string("test-long-dir"));
-    at.touch(&at.plus_as_string("test-long-dir/test-long-file"));
+    at.touch(at.plus_as_string("test-long-dir/test-long-file"));
     at.mkdir(&at.plus_as_string("test-long-dir/test-long-dir"));
 
     for arg in LONG_ARGS {
@@ -1231,9 +1231,9 @@ fn test_ls_long_symlink_color() {
 fn test_ls_long_total_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(&at.plus_as_string("test-long"));
+    at.touch(at.plus_as_string("test-long"));
     at.append("test-long", "1");
-    at.touch(&at.plus_as_string("test-long2"));
+    at.touch(at.plus_as_string("test-long2"));
     at.append("test-long2", "2");
 
     let expected_prints: HashMap<_, _> = if cfg!(unix) {
@@ -1243,7 +1243,7 @@ fn test_ls_long_total_size() {
             ("long_si", "total 8.2k"),
         ]
         .iter()
-        .cloned()
+        .copied()
         .collect()
     } else {
         [
@@ -1252,7 +1252,7 @@ fn test_ls_long_total_size() {
             ("long_si", "total 2"),
         ]
         .iter()
-        .cloned()
+        .copied()
         .collect()
     };
 
@@ -1275,12 +1275,12 @@ fn test_ls_long_total_size() {
 fn test_ls_long_formats() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(&at.plus_as_string("test-long-formats"));
+    at.touch(at.plus_as_string("test-long-formats"));
 
     // Zero or one "." for indicating a file with security context
 
     // Regex for three names, so all of author, group and owner
-    let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z]+ ){3}0").unwrap();
+    let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
 
     #[cfg(unix)]
     let re_three_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){3}0").unwrap();
@@ -1289,13 +1289,13 @@ fn test_ls_long_formats() {
     // - group and owner
     // - author and owner
     // - author and group
-    let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z]+ ){2}0").unwrap();
+    let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
 
     #[cfg(unix)]
     let re_two_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){2}0").unwrap();
 
     // Regex for one name: author, group or owner
-    let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z]+ 0").unwrap();
+    let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z.A-Z]+ 0").unwrap();
 
     #[cfg(unix)]
     let re_one_num = Regex::new(r"[xrw-]{9}\.? \d \d+ 0").unwrap();
@@ -1422,8 +1422,8 @@ fn test_ls_long_formats() {
 fn test_ls_oneline() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.touch(&at.plus_as_string("test-oneline-1"));
-    at.touch(&at.plus_as_string("test-oneline-2"));
+    at.touch(at.plus_as_string("test-oneline-1"));
+    at.touch(at.plus_as_string("test-oneline-2"));
 
     // Bit of a weird situation: in the tests oneline and columns have the same output,
     // except on Windows.
@@ -1443,7 +1443,7 @@ fn test_ls_deref() {
     let path_regexp = r"(.*)test-long.link -> (.*)test-long(.*)";
     let re = Regex::new(path_regexp).unwrap();
 
-    at.touch(&at.plus_as_string("test-long"));
+    at.touch(at.plus_as_string("test-long"));
     at.symlink_file("test-long", "test-long.link");
     assert!(at.is_symlink("test-long.link"));
 
@@ -1565,6 +1565,28 @@ fn test_ls_sort_name() {
 }
 
 #[test]
+fn test_ls_sort_width() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("aaaaa");
+    at.touch("bbb");
+    at.touch("cccc");
+    at.touch("eee");
+    at.touch("d");
+    at.touch("fffff");
+    at.touch("abc");
+    at.touch("zz");
+    at.touch("bcdef");
+
+    scene
+        .ucmd()
+        .arg("--sort=width")
+        .succeeds()
+        .stdout_is("d\nzz\nabc\nbbb\neee\ncccc\naaaaa\nbcdef\nfffff\n");
+}
+
+#[test]
 fn test_ls_order_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1644,88 +1666,103 @@ fn test_ls_styles() {
     at.touch("test");
 
     let re_full = Regex::new(
-        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test\n",
+        r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test\n",
     )
     .unwrap();
     let re_long =
-        Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
-    let re_iso = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+    let re_iso =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
     let re_locale =
-        Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n").unwrap();
-    let re_custom_format = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}__\d{2} test\n").unwrap();
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n")
+            .unwrap();
+    let re_custom_format =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test\n").unwrap();
 
     //full-iso
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=full-iso")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_full);
     //long-iso
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=long-iso")
-        .succeeds();
-    assert!(re_long.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_long);
     //iso
-    let result = scene.ucmd().arg("-l").arg("--time-style=iso").succeeds();
-    assert!(re_iso.is_match(result.stdout_str()));
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=iso")
+        .succeeds()
+        .stdout_matches(&re_iso);
     //locale
-    let result = scene.ucmd().arg("-l").arg("--time-style=locale").succeeds();
-    assert!(re_locale.is_match(result.stdout_str()));
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=locale")
+        .succeeds()
+        .stdout_matches(&re_locale);
 
     //+FORMAT
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=+%Y__%M")
-        .succeeds();
-    assert!(re_custom_format.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_custom_format);
 
     // Also fails due to not having full clap support for time_styles
     scene.ucmd().arg("-l").arg("-time-style=invalid").fails();
 
     //Overwrite options tests
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=long-iso")
         .arg("--time-style=iso")
-        .succeeds();
-    assert!(re_iso.is_match(result.stdout_str()));
-    let result = scene
+        .succeeds()
+        .stdout_matches(&re_iso);
+    scene
         .ucmd()
         .arg("--time-style=iso")
         .arg("--full-time")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
-    let result = scene
+        .succeeds()
+        .stdout_matches(&re_full);
+    scene
         .ucmd()
         .arg("--full-time")
         .arg("--time-style=iso")
-        .succeeds();
-    assert!(re_iso.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_iso);
 
-    let result = scene
+    scene
         .ucmd()
         .arg("--full-time")
         .arg("--time-style=iso")
         .arg("--full-time")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_full);
 
-    let result = scene
+    scene
         .ucmd()
         .arg("--full-time")
         .arg("-x")
         .arg("-l")
-        .succeeds();
-    assert!(re_full.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_full);
 
     at.touch("test2");
-    let result = scene.ucmd().arg("--full-time").arg("-x").succeeds();
-    assert_eq!(result.stdout_str(), "test  test2\n");
+    scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("-x")
+        .succeeds()
+        .stdout_is("test  test2\n");
 }
 
 #[test]
@@ -1780,9 +1817,15 @@ fn test_ls_order_time() {
         at.open("test-4").metadata().unwrap().accessed().unwrap();
 
         // It seems to be dependent on the platform whether the access time is actually set
-        #[cfg(all(unix, not(target_os = "android")))]
-        result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
-        #[cfg(any(windows, target_os = "android"))]
+        #[cfg(unix)]
+        {
+            let expected = unwrap_or_return!(expected_result(&scene, &["-t", arg]));
+            at.open("test-3").metadata().unwrap().accessed().unwrap();
+            at.open("test-4").metadata().unwrap().accessed().unwrap();
+
+            result.stdout_only(expected.stdout_str());
+        }
+        #[cfg(windows)]
         result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
     }
 
@@ -1808,8 +1851,8 @@ fn test_ls_files_dirs() {
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     at.mkdir("z");
-    at.touch(&at.plus_as_string("a/a"));
-    at.touch(&at.plus_as_string("a/b/b"));
+    at.touch(at.plus_as_string("a/a"));
+    at.touch(at.plus_as_string("a/b/b"));
 
     scene.ucmd().arg("a").succeeds();
     scene.ucmd().arg("a/a").succeeds();
@@ -1840,8 +1883,8 @@ fn test_ls_recursive() {
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     at.mkdir("z");
-    at.touch(&at.plus_as_string("a/a"));
-    at.touch(&at.plus_as_string("a/b/b"));
+    at.touch(at.plus_as_string("a/a"));
+    at.touch(at.plus_as_string("a/b/b"));
 
     scene.ucmd().arg("a").succeeds();
     scene.ucmd().arg("a/a").succeeds();
@@ -1880,7 +1923,7 @@ fn test_ls_color() {
         .join("nested_file")
         .to_string_lossy()
         .to_string();
-    at.touch(&nested_file);
+    at.touch(nested_file);
     at.touch("test-color");
 
     let a_with_colors = "\x1b[1;34ma\x1b[0m";
@@ -1985,7 +2028,7 @@ fn test_ls_indicator_style() {
     at.mkdir("directory");
     assert!(at.dir_exists("directory"));
 
-    at.touch(&at.plus_as_string("link-src"));
+    at.touch(at.plus_as_string("link-src"));
     at.symlink_file("link-src", "link-dest.link");
     assert!(at.is_symlink("link-dest.link"));
 
@@ -2077,7 +2120,7 @@ fn test_ls_indicator_style() {
     at.mkdir("directory");
     assert!(at.dir_exists("directory"));
 
-    at.touch(&at.plus_as_string("link-src"));
+    at.touch(at.plus_as_string("link-src"));
     at.symlink_file("link-src", "link-dest.link");
     assert!(at.is_symlink("link-dest.link"));
 
@@ -3375,4 +3418,55 @@ fn test_tabsize_formatting() {
     ucmd.args(&["-T", "0"])
         .succeeds()
         .stdout_is("aaaaaaaa bbbb\ncccc     dddddddd");
+}
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "illumos",
+    target_os = "solaris"
+))]
+#[test]
+fn test_device_number() {
+    use std::fs::{metadata, read_dir};
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    use uucore::libc::{dev_t, major, minor};
+
+    let dev_dir = read_dir("/dev").unwrap();
+    // let's use the first device for test
+    let blk_dev = dev_dir
+        .map(|res_entry| res_entry.unwrap())
+        .find(|entry| {
+            entry.file_type().unwrap().is_block_device()
+                || entry.file_type().unwrap().is_char_device()
+        })
+        .expect("Expect a block/char device");
+    let blk_dev_path = blk_dev.path();
+    let blk_dev_meta = metadata(blk_dev_path.as_path()).unwrap();
+    let blk_dev_number = blk_dev_meta.rdev() as dev_t;
+    let (major, minor) = unsafe { (major(blk_dev_number), minor(blk_dev_number)) };
+    let major_minor_str = format!("{}, {}", major, minor);
+
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg(blk_dev_path.to_str().expect("should be UTF-8 encoded"))
+        .succeeds()
+        .stdout_contains(major_minor_str);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_invalid_utf8() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let filename = OsStr::from_bytes(b"-\xE0-foo");
+    at.touch(filename);
+    ucmd.succeeds();
 }

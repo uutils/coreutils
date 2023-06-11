@@ -275,6 +275,7 @@ impl<'a> ParagraphStream<'a> {
 impl<'a> Iterator for ParagraphStream<'a> {
     type Item = Result<Paragraph, String>;
 
+    #[allow(clippy::cognitive_complexity)]
     fn next(&mut self) -> Option<Result<Paragraph, String>> {
         // return a NoFormatLine in an Err; it should immediately be output
         let noformat = match self.lines.peek() {
@@ -580,11 +581,11 @@ impl<'a> Iterator for WordSplit<'a> {
         // points to whitespace character OR end of string
         let mut word_nchars = 0;
         self.position = match self.string[word_start..].find(|x: char| {
-            if !x.is_whitespace() {
+            if x.is_whitespace() {
+                true
+            } else {
                 word_nchars += char_width(x);
                 false
-            } else {
-                true
             }
         }) {
             None => self.length,

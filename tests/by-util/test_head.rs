@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 static INPUT: &str = "lorem_ipsum.txt";
 
@@ -187,6 +187,15 @@ fn test_no_such_file_or_directory() {
         .arg("no_such_file.toml")
         .fails()
         .stderr_contains("cannot open 'no_such_file.toml' for reading: No such file or directory");
+}
+
+#[test]
+fn test_lines_leading_zeros() {
+    new_ucmd!()
+        .arg("--lines=010")
+        .pipe_in("\n\n\n\n\n\n\n\n\n\n\n\n")
+        .succeeds()
+        .stdout_is("\n\n\n\n\n\n\n\n\n\n");
 }
 
 /// Test that each non-existent files gets its own error message printed.

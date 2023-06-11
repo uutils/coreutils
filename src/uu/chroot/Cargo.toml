@@ -1,6 +1,6 @@
 [package]
 name = "uu_chroot"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chroot ~ (uutils) run COMMAND under a new root directory"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/chroot.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["entries", "fs"] }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs"] }
 
 [[bin]]
 name = "chroot"

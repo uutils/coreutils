@@ -122,6 +122,15 @@ fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {
             'o' => srwx = ((fperm << 6) & 0o700) | ((fperm << 3) & 0o070) | (fperm & 0o007),
             _ => break,
         };
+        if ch == 'u' || ch == 'g' || ch == 'o' {
+            // symbolic modes only allows perms to be a single letter of 'ugo'
+            // therefore this must either be the first char or it is unexpected
+            if pos != 0 {
+                break;
+            }
+            pos = 1;
+            break;
+        }
         pos += 1;
     }
     if pos == 0 {
@@ -200,7 +209,7 @@ mod test {
         assert_eq!(super::parse_mode("u+x").unwrap(), 0o766);
         assert_eq!(
             super::parse_mode("+x").unwrap(),
-            if !crate::os::is_wsl_1() { 0o777 } else { 0o776 }
+            if crate::os::is_wsl_1() { 0o776 } else { 0o777 }
         );
         assert_eq!(super::parse_mode("a-w").unwrap(), 0o444);
         assert_eq!(super::parse_mode("g-r").unwrap(), 0o626);

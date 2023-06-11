@@ -1,6 +1,6 @@
 [package]
 name = "uu_mktemp"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mktemp ~ (uutils) create and display a temporary file or directory from TEMPLATE"
@@ -15,10 +15,10 @@ edition = "2021"
 path = "src/mktemp.rs"
 
 [dependencies]
-clap = { workspace=true }
-rand = { workspace=true }
-tempfile = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+rand = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "mktemp"

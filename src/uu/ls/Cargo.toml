@@ -1,6 +1,6 @@
 [package]
 name = "uu_ls"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "ls ~ (uutils) display directory contents"
@@ -15,18 +15,18 @@ edition = "2021"
 path = "src/ls.rs"
 
 [dependencies]
-clap = { workspace=true, features = ["env"] }
-chrono = { workspace=true }
-unicode-width = { workspace=true }
-number_prefix = { workspace=true }
-term_grid = { workspace=true }
-terminal_size = { workspace=true }
-glob = { workspace=true }
-lscolors = { workspace=true }
-uucore = { workspace=true, features = ["entries", "fs"] }
-once_cell = { workspace=true }
-is-terminal = { workspace=true }
-selinux = { workspace=true, optional = true }
+clap = { workspace = true, features = ["env"] }
+chrono = { workspace = true }
+unicode-width = { workspace = true }
+number_prefix = { workspace = true }
+term_grid = { workspace = true }
+terminal_size = { workspace = true }
+glob = { workspace = true }
+lscolors = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs"] }
+once_cell = { workspace = true }
+is-terminal = { workspace = true }
+selinux = { workspace = true, optional = true }
 
 [[bin]]
 name = "ls"

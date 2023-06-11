@@ -24,15 +24,33 @@ use uucore::{help_about, help_usage};
 const ABOUT: &str = help_about!("basenc.md");
 const USAGE: &str = help_usage!("basenc.md");
 
-const ENCODINGS: &[(&str, Format)] = &[
-    ("base64", Format::Base64),
-    ("base64url", Format::Base64Url),
-    ("base32", Format::Base32),
-    ("base32hex", Format::Base32Hex),
-    ("base16", Format::Base16),
-    ("base2lsbf", Format::Base2Lsbf),
-    ("base2msbf", Format::Base2Msbf),
-    ("z85", Format::Z85),
+const ENCODINGS: &[(&str, Format, &str)] = &[
+    ("base64", Format::Base64, "same as 'base64' program"),
+    ("base64url", Format::Base64Url, "file- and url-safe base64"),
+    ("base32", Format::Base32, "same as 'base32' program"),
+    (
+        "base32hex",
+        Format::Base32Hex,
+        "extended hex alphabet base32",
+    ),
+    ("base16", Format::Base16, "hex encoding"),
+    (
+        "base2lsbf",
+        Format::Base2Lsbf,
+        "bit string with least significant bit (lsb) first",
+    ),
+    (
+        "base2msbf",
+        Format::Base2Msbf,
+        "bit string with most significant bit (msb) first",
+    ),
+    (
+        "z85",
+        Format::Z85,
+        "ascii85-like encoding;\n\
+        when encoding, input length must be a multiple of 4;\n\
+        when decoding, input length must be a multiple of 5",
+    ),
 ];
 
 pub fn uu_app() -> Command {
@@ -41,6 +59,7 @@ pub fn uu_app() -> Command {
         command = command.arg(
             Arg::new(encoding.0)
                 .long(encoding.0)
+                .help(encoding.2)
                 .action(ArgAction::SetTrue),
         );
     }

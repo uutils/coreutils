@@ -1,6 +1,8 @@
 // spell-checker:ignore (words) araba newroot userspec chdir pwd's isroot
 
-use crate::common::util::*;
+#[cfg(not(target_os = "android"))]
+use crate::common::util::is_ci;
+use crate::common::util::{run_ucmd_as_root, TestScenario};
 
 #[test]
 fn test_invalid_arg() {
@@ -15,7 +17,7 @@ fn test_missing_operand() {
 
     assert!(result
         .stderr_str()
-        .starts_with("error: The following required arguments were not provided"));
+        .starts_with("error: the following required arguments were not provided"));
 
     assert!(result.stderr_str().contains("<newroot>"));
 }
@@ -39,7 +41,7 @@ fn test_enter_chroot_fails() {
 fn test_no_such_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch(&at.plus_as_string("a"));
+    at.touch(at.plus_as_string("a"));
 
     ucmd.arg("a")
         .fails()

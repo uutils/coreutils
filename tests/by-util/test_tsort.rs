@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 #[test]
 fn test_invalid_arg() {
@@ -18,6 +18,14 @@ fn test_sort_self_loop() {
         .pipe_in("first first\nfirst second second second")
         .succeeds()
         .stdout_only("first\nsecond\n");
+}
+
+#[test]
+fn test_sort_floating_nodes() {
+    new_ucmd!()
+        .pipe_in("d d\nc c\na a\nb b")
+        .succeeds()
+        .stdout_only("a\nb\nc\nd\n");
 }
 
 #[test]
@@ -50,7 +58,5 @@ fn test_multiple_arguments() {
         .arg("call_graph.txt")
         .arg("invalid_file")
         .fails()
-        .stderr_contains(
-            "Found argument 'invalid_file' which wasn't expected, or isn't valid in this context",
-        );
+        .stderr_contains("unexpected argument 'invalid_file' found");
 }

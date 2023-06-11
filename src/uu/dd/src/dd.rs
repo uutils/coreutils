@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE
 
 mod datastructures;
 use datastructures::*;
@@ -27,11 +27,14 @@ use std::cmp;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Stdin, Stdout, Write};
-#[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
+use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
+#[cfg(unix)]
+use std::os::unix::{
+    fs::FileTypeExt,
+    io::{AsRawFd, FromRawFd},
+};
 use std::path::Path;
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
@@ -42,9 +45,16 @@ use std::time::{Duration, Instant};
 
 use clap::{crate_version, Arg, Command};
 use gcd::Gcd;
+#[cfg(target_os = "linux")]
+use nix::{
+    errno::Errno,
+    fcntl::{posix_fadvise, PosixFadviseAdvice},
+};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+#[cfg(target_os = "linux")]
+use uucore::{show, show_if_err};
 
 const ABOUT: &str = help_about!("dd.md");
 const AFTER_HELP: &str = help_section!("after help", "dd.md");
@@ -135,12 +145,20 @@ impl Num {
 }
 
 /// Data sources.
+///
+/// Use [`Source::stdin_as_file`] if available to enable more
+/// fine-grained access to reading from stdin.
 enum Source {
     /// Input from stdin.
-    Stdin(Stdin),
+    #[cfg(not(unix))]
+    Stdin(io::Stdin),
 
     /// Input from a file.
     File(File),
+
+    /// Input from stdin, opened from its file descriptor.
+    #[cfg(unix)]
+    StdinFile(File),
 
     /// Input from a named pipe, also known as a FIFO.
     #[cfg(unix)]
@@ -148,9 +166,43 @@ enum Source {
 }
 
 impl Source {
+    /// Create a source from stdin using its raw file descriptor.
+    ///
+    /// This returns an instance of the `Source::StdinFile` variant,
+    /// using the raw file descriptor of [`std::io::Stdin`] to create
+    /// the [`std::fs::File`] parameter. You can use this instead of
+    /// `Source::Stdin` to allow reading from stdin without consuming
+    /// the entire contents of stdin when this process terminates.
+    #[cfg(unix)]
+    fn stdin_as_file() -> Self {
+        let fd = io::stdin().as_raw_fd();
+        let f = unsafe { File::from_raw_fd(fd) };
+        Self::StdinFile(f)
+    }
+
+    /// The length of the data source in number of bytes.
+    ///
+    /// If it cannot be determined, then this function returns 0.
+    fn len(&self) -> std::io::Result<i64> {
+        match self {
+            Self::File(f) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
+            _ => Ok(0),
+        }
+    }
+
     fn skip(&mut self, n: u64) -> io::Result<u64> {
         match self {
+            #[cfg(not(unix))]
             Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
+                Ok(m) if m < n => {
+                    show_error!("'standard input': cannot skip to specified offset");
+                    Ok(m)
+                }
+                Ok(m) => Ok(m),
+                Err(e) => Err(e),
+            },
+            #[cfg(unix)]
+            Self::StdinFile(f) => match io::copy(&mut f.take(n), &mut io::sink()) {
                 Ok(m) if m < n => {
                     show_error!("'standard input': cannot skip to specified offset");
                     Ok(m)
@@ -163,13 +215,33 @@ impl Source {
             Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
         }
     }
+
+    /// Discard the system file cache for the given portion of the data source.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the data
+    /// source. This function informs the kernel that the specified
+    /// portion of the source is no longer needed. If not possible,
+    /// then this function returns an error.
+    #[cfg(target_os = "linux")]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+        match self {
+            Self::File(f) => {
+                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
+                posix_fadvise(f.as_raw_fd(), offset, len, advice)
+            }
+            _ => Err(Errno::ESPIPE), // "Illegal seek"
+        }
+    }
 }
 
 impl Read for Source {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
+            #[cfg(not(unix))]
             Self::Stdin(stdin) => stdin.read(buf),
             Self::File(f) => f.read(buf),
+            #[cfg(unix)]
+            Self::StdinFile(f) => f.read(buf),
             #[cfg(unix)]
             Self::Fifo(f) => f.read(buf),
         }
@@ -193,7 +265,10 @@ struct Input<'a> {
 impl<'a> Input<'a> {
     /// Instantiate this struct with stdin as a source.
     fn new_stdin(settings: &'a Settings) -> UResult<Self> {
+        #[cfg(not(unix))]
         let mut src = Source::Stdin(io::stdin());
+        #[cfg(unix)]
+        let mut src = Source::stdin_as_file();
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
@@ -266,10 +341,10 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
         flag |= libc::O_SYNC;
     }
 
-    if flag != 0 {
-        Some(flag)
-    } else {
+    if flag == 0 {
         None
+    } else {
+        Some(flag)
     }
 }
 
@@ -297,6 +372,29 @@ impl<'a> Read for Input<'a> {
 }
 
 impl<'a> Input<'a> {
+    /// Discard the system file cache for the given portion of the input.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the input.
+    /// This function informs the kernel that the specified portion of
+    /// the input file is no longer needed. If not possible, then this
+    /// function prints an error message to stderr and sets the exit
+    /// status code to 1.
+    #[allow(unused_variables)]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+        #[cfg(target_os = "linux")]
+        {
+            show_if_err!(self
+                .src
+                .discard_cache(offset, len)
+                .map_err_context(|| "failed to discard cache for: 'standard input'".to_string()));
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            // TODO Is there a way to discard filesystem cache on
+            // these other operating systems?
+        }
+    }
+
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
@@ -318,13 +416,13 @@ impl<'a> Input<'a> {
                 _ => break,
             }
         }
-
         buf.truncate(bytes_total);
         Ok(ReadStat {
             reads_complete,
             reads_partial,
             // Records are not truncated when filling.
             records_truncated: 0,
+            bytes_total: bytes_total.try_into().unwrap(),
         })
     }
 
@@ -335,6 +433,7 @@ impl<'a> Input<'a> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
+        let mut bytes_total = 0;
 
         while base_idx < buf.len() {
             let next_blk = cmp::min(base_idx + self.settings.ibs, buf.len());
@@ -343,11 +442,13 @@ impl<'a> Input<'a> {
             match self.read(&mut buf[base_idx..next_blk])? {
                 0 => break,
                 rlen if rlen < target_len => {
+                    bytes_total += rlen;
                     reads_partial += 1;
                     let padding = vec![pad; target_len - rlen];
                     buf.splice(base_idx + rlen..next_blk, padding.into_iter());
                 }
-                _ => {
+                rlen => {
+                    bytes_total += rlen;
                     reads_complete += 1;
                 }
             }
@@ -360,6 +461,7 @@ impl<'a> Input<'a> {
             reads_complete,
             reads_partial,
             records_truncated: 0,
+            bytes_total: bytes_total.try_into().unwrap(),
         })
     }
 }
@@ -446,6 +548,33 @@ impl Dest {
                 f.set_len(pos)
             }
             _ => Ok(()),
+        }
+    }
+
+    /// Discard the system file cache for the given portion of the destination.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the
+    /// destination. This function informs the kernel that the
+    /// specified portion of the destination is no longer needed. If
+    /// not possible, then this function returns an error.
+    #[cfg(target_os = "linux")]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+        match self {
+            Self::File(f, _) => {
+                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
+                posix_fadvise(f.as_raw_fd(), offset, len, advice)
+            }
+            _ => Err(Errno::ESPIPE), // "Illegal seek"
+        }
+    }
+
+    /// The length of the data destination in number of bytes.
+    ///
+    /// If it cannot be determined, then this function returns 0.
+    fn len(&self) -> std::io::Result<i64> {
+        match self {
+            Self::File(f, _) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
+            _ => Ok(0),
         }
     }
 }
@@ -581,6 +710,29 @@ impl<'a> Output<'a> {
         Ok(Self { dst, settings })
     }
 
+    /// Discard the system file cache for the given portion of the output.
+    ///
+    /// `offset` and `len` specify a contiguous portion of the output.
+    /// This function informs the kernel that the specified portion of
+    /// the output file is no longer needed. If not possible, then
+    /// this function prints an error message to stderr and sets the
+    /// exit status code to 1.
+    #[allow(unused_variables)]
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+        #[cfg(target_os = "linux")]
+        {
+            show_if_err!(self
+                .dst
+                .discard_cache(offset, len)
+                .map_err_context(|| "failed to discard cache for: 'standard output'".to_string()));
+        }
+        #[cfg(target_os = "linux")]
+        {
+            // TODO Is there a way to discard filesystem cache on
+            // these other operating systems?
+        }
+    }
+
     /// Write the given bytes one block at a time.
     ///
     /// This may write partial blocks (for example, if the underlying
@@ -674,6 +826,27 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
     // Optimization: if no blocks are to be written, then don't
     // bother allocating any buffers.
     if let Some(Num::Blocks(0) | Num::Bytes(0)) = i.settings.count {
+        // Even though we are not reading anything from the input
+        // file, we still need to honor the `nocache` flag, which
+        // requests that we inform the system that we no longer
+        // need the contents of the input file in a system cache.
+        //
+        // TODO Better error handling for overflowing `len`.
+        if i.settings.iflags.nocache {
+            let offset = 0;
+            #[allow(clippy::useless_conversion)]
+            let len = i.src.len()?.try_into().unwrap();
+            i.discard_cache(offset, len);
+        }
+        // Similarly, discard the system cache for the output file.
+        //
+        // TODO Better error handling for overflowing `len`.
+        if i.settings.oflags.nocache {
+            let offset = 0;
+            #[allow(clippy::useless_conversion)]
+            let len = o.dst.len()?.try_into().unwrap();
+            o.discard_cache(offset, len);
+        }
         return finalize(&mut o, rstat, wstat, start, &prog_tx, output_thread);
     };
 
@@ -686,6 +859,13 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
     //
     // This avoids the need to query the OS monotonic clock for every block.
     let alarm = Alarm::with_interval(Duration::from_secs(1));
+
+    // Index in the input file where we are reading bytes and in
+    // the output file where we are writing bytes.
+    //
+    // These are updated on each iteration of the main loop.
+    let mut read_offset = 0;
+    let mut write_offset = 0;
 
     // The main read/write loop.
     //
@@ -705,6 +885,30 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
             break;
         }
         let wstat_update = o.write_blocks(&buf)?;
+
+        // Discard the system file cache for the read portion of
+        // the input file.
+        //
+        // TODO Better error handling for overflowing `offset` and `len`.
+        let read_len = rstat_update.bytes_total;
+        if i.settings.iflags.nocache {
+            let offset = read_offset.try_into().unwrap();
+            let len = read_len.try_into().unwrap();
+            i.discard_cache(offset, len);
+        }
+        read_offset += read_len;
+
+        // Discard the system file cache for the written portion
+        // of the output file.
+        //
+        // TODO Better error handling for overflowing `offset` and `len`.
+        let write_len = wstat_update.bytes_total;
+        if o.settings.oflags.nocache {
+            let offset = write_offset.try_into().unwrap();
+            let len = write_len.try_into().unwrap();
+            o.discard_cache(offset, len);
+        }
+        write_offset += write_len;
 
         // Update the read/write stats and inform the progress thread once per second.
         //
@@ -757,6 +961,7 @@ fn finalize<T>(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[allow(clippy::cognitive_complexity)]
 fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     let mut flag = 0;
 
@@ -789,10 +994,10 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
         flag |= libc::O_SYNC;
     }
 
-    if flag != 0 {
-        Some(flag)
-    } else {
+    if flag == 0 {
         None
+    } else {
+        Some(flag)
     }
 }
 

@@ -168,10 +168,10 @@ pub struct Passwd {
 /// SAFETY: ptr must point to a valid C string.
 /// Returns None if ptr is null.
 unsafe fn cstr2string(ptr: *const c_char) -> Option<String> {
-    if !ptr.is_null() {
-        Some(CStr::from_ptr(ptr).to_string_lossy().into_owned())
-    } else {
+    if ptr.is_null() {
         None
+    } else {
+        Some(CStr::from_ptr(ptr).to_string_lossy().into_owned())
     }
 }
 
@@ -321,7 +321,8 @@ macro_rules! f {
                 } else {
                     // SAFETY: We're holding PW_LOCK.
                     unsafe {
-                        let data = $fnam(CString::new(k).unwrap().as_ptr());
+                        let cstring = CString::new(k).unwrap();
+                        let data = $fnam(cstring.as_ptr());
                         if !data.is_null() {
                             Ok($st::from_raw(ptr::read(data as *const _)))
                         } else {

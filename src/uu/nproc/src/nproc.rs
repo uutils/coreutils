@@ -11,7 +11,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::{env, thread};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
@@ -25,10 +25,8 @@ pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
 
-static ABOUT: &str = r#"Print the number of cores available to the current process.
-If the OMP_NUM_THREADS or OMP_THREAD_LIMIT environment variables are set, then
-they will determine the minimum and maximum returned value respectively."#;
-const USAGE: &str = "{} [OPTIONS]...";
+const ABOUT: &str = help_about!("nproc.md");
+const USAGE: &str = help_usage!("nproc.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {

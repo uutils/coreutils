@@ -7,10 +7,12 @@
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
 
-extern crate tail;
-
-use crate::common::random::*;
-use crate::common::util::*;
+use crate::common::random::{AlphanumericNewline, RandomString};
+#[cfg(unix)]
+use crate::common::util::expected_result;
+#[cfg(not(windows))]
+use crate::common::util::is_ci;
+use crate::common::util::TestScenario;
 use pretty_assertions::assert_eq;
 use rand::distributions::Alphanumeric;
 use rstest::rstest;
@@ -34,18 +36,25 @@ use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
 ))]
 use tail::text;
 
-static FOOBAR_TXT: &str = "foobar.txt";
-static FOOBAR_2_TXT: &str = "foobar2.txt";
-static FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
+const FOOBAR_TXT: &str = "foobar.txt";
+const FOOBAR_2_TXT: &str = "foobar2.txt";
+const FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
 #[allow(dead_code)]
-static FOLLOW_NAME_TXT: &str = "follow_name.txt";
+const FOLLOW_NAME_TXT: &str = "follow_name.txt";
 #[allow(dead_code)]
-static FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
+const FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
 #[allow(dead_code)]
-static FOLLOW_NAME_EXP: &str = "follow_name.expected";
+const FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
 #[cfg(not(windows))]
 const DEFAULT_SLEEP_INTERVAL_MILLIS: u64 = 1000;
+
+// The binary integer "10000000" is *not* a valid UTF-8 encoding
+// of a character: https://en.wikipedia.org/wiki/UTF-8#Encoding
+#[cfg(unix)]
+const INVALID_UTF8: u8 = 0x80;
+#[cfg(windows)]
+const INVALID_UTF16: u16 = 0xD800;
 
 #[test]
 fn test_invalid_arg() {
@@ -469,16 +478,13 @@ fn test_follow_non_utf8_bytes() {
 
     // Now append some bytes that are not valid UTF-8.
     //
-    // The binary integer "10000000" is *not* a valid UTF-8 encoding
-    // of a character: https://en.wikipedia.org/wiki/UTF-8#Encoding
-    //
     // We also write the newline character because our implementation
     // of `tail` is attempting to read a line of input, so the
     // presence of a newline character will force the `follow()`
     // function to conclude reading input bytes and start writing them
     // to output. The newline character is not fundamental to this
     // test, it is just a requirement of the current implementation.
-    let expected = [0b10000000, b'\n'];
+    let expected = [INVALID_UTF8, b'\n'];
     at.append_bytes(FOOBAR_TXT, &expected);
 
     child
@@ -1530,6 +1536,7 @@ fn test_retry8() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
+    not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd")
 ))] // FIXME: for currently not working platforms
@@ -1610,6 +1617,7 @@ fn test_retry9() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
+    not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd")
 ))] // FIXME: for currently not working platforms
@@ -1672,6 +1680,7 @@ fn test_follow_descriptor_vs_rename1() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
+    not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd")
 ))] // FIXME: for currently not working platforms
@@ -2112,6 +2121,7 @@ fn test_follow_name_move_create1() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
+    not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd")
 ))] // FIXME: for currently not working platforms
@@ -4352,14 +4362,7 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
         .stdout_only(expected_stdout);
 }
 
-// Fails with:
-// 'Assertion failed. Expected 'tail' to be running but exited with status=exit status: 1.
-// stdout:
-// stderr: tail: warning: --retry ignored; --retry is useful only when following
-// tail: error reading 'dir': Is a directory
-// '
 #[test]
-#[cfg(disabled_until_fixed)]
 fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
@@ -4371,8 +4374,16 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
          tail: {0}: cannot follow end of this type of file\n",
         dirname
     );
-
     let mut child = scene.ucmd().args(&["-F", "--retry", "dir"]).run_no_wait();
+
+    child.make_assertion_with_delay(500).is_alive();
+    child
+        .kill()
+        .make_assertion()
+        .with_current_output()
+        .stderr_only(&expected_stderr);
+
+    let mut child = scene.ucmd().args(&["--retry", "-F", "dir"]).run_no_wait();
 
     child.make_assertion_with_delay(500).is_alive();
     child
@@ -4455,7 +4466,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same
 }
 
 #[rstest]
-#[case::exponent_exceed_float_max("1.0e2048")]
+#[case::exponent_exceed_float_max("1.0e100000")]
 #[case::underscore_delimiter("1_000")]
 #[case::only_point(".")]
 #[case::space_in_primes("' '")]
@@ -4473,5 +4484,321 @@ fn test_args_sleep_interval_when_illegal_argument_then_usage_error(#[case] sleep
         .args(&["--sleep-interval", sleep_interval])
         .run()
         .usage_error(format!("invalid number of seconds: '{sleep_interval}'"))
+        .code_is(1);
+}
+
+#[test]
+fn test_gnu_args_plus_c() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-plus-c1
+    scene
+        .ucmd()
+        .arg("+2c")
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("bcd");
+    // obs-plus-c2
+    scene
+        .ucmd()
+        .arg("+8c")
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("");
+    // obs-plus-x1: same as +10c
+    scene
+        .ucmd()
+        .arg("+c")
+        .pipe_in(format!("x{}z", "y".repeat(10)))
+        .succeeds()
+        .stdout_only("yyz");
+}
+
+#[test]
+fn test_gnu_args_c() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-c3
+    scene
+        .ucmd()
+        .arg("-1c")
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("d");
+    // obs-c4
+    scene
+        .ucmd()
+        .arg("-9c")
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_only("abcd");
+    // obs-c5
+    scene
+        .ucmd()
+        .arg("-12c")
+        .pipe_in(format!("x{}z", "y".repeat(12)))
+        .succeeds()
+        .stdout_only(&format!("{}z", "y".repeat(11)));
+}
+
+#[test]
+fn test_gnu_args_l() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-l1
+    scene
+        .ucmd()
+        .arg("-1l")
+        .pipe_in("x")
+        .succeeds()
+        .stdout_only("x");
+    // obs-l2
+    scene
+        .ucmd()
+        .arg("-1l")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("y\n");
+    // obs-l3
+    scene
+        .ucmd()
+        .arg("-1l")
+        .pipe_in("x\ny")
+        .succeeds()
+        .stdout_only("y");
+    // obs-l: same as -10l
+    scene
+        .ucmd()
+        .arg("-l")
+        .pipe_in(format!("x{}z", "y\n".repeat(10)))
+        .succeeds()
+        .stdout_only(&format!("{}z", "y\n".repeat(9)));
+}
+
+#[test]
+fn test_gnu_args_plus_l() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-plus-l4
+    scene
+        .ucmd()
+        .arg("+1l")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("x\ny\n");
+    // ops-plus-l5
+    scene
+        .ucmd()
+        .arg("+2l")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("y\n");
+    // obs-plus-x2: same as +10l
+    scene
+        .ucmd()
+        .arg("+l")
+        .pipe_in(format!("x\n{}z", "y\n".repeat(10)))
+        .succeeds()
+        .stdout_only("y\ny\nz");
+}
+
+#[test]
+fn test_gnu_args_number() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-1
+    scene
+        .ucmd()
+        .arg("-1")
+        .pipe_in("x")
+        .succeeds()
+        .stdout_only("x");
+    // obs-2
+    scene
+        .ucmd()
+        .arg("-1")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("y\n");
+    // obs-3
+    scene
+        .ucmd()
+        .arg("-1")
+        .pipe_in("x\ny")
+        .succeeds()
+        .stdout_only("y");
+}
+
+#[test]
+fn test_gnu_args_plus_number() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-plus-4
+    scene
+        .ucmd()
+        .arg("+1")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("x\ny\n");
+    // ops-plus-5
+    scene
+        .ucmd()
+        .arg("+2")
+        .pipe_in("x\ny\n")
+        .succeeds()
+        .stdout_only("y\n");
+}
+
+#[test]
+fn test_gnu_args_b() {
+    let scene = TestScenario::new(util_name!());
+
+    // obs-b
+    scene
+        .ucmd()
+        .arg("-b")
+        .pipe_in("x\n".repeat(512 * 10 / 2 + 1))
+        .succeeds()
+        .stdout_only(&"x\n".repeat(512 * 10 / 2));
+}
+
+#[test]
+fn test_gnu_args_err() {
+    let scene = TestScenario::new(util_name!());
+
+    // err-1
+    scene
+        .ucmd()
+        .arg("+cl")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: cannot open '+cl' for reading: No such file or directory\n")
+        .code_is(1);
+    // err-2
+    scene
+        .ucmd()
+        .arg("-cl")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: invalid number of bytes: 'l'\n")
+        .code_is(1);
+    // err-3
+    scene
+        .ucmd()
+        .arg("+2cz")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: cannot open '+2cz' for reading: No such file or directory\n")
+        .code_is(1);
+    // err-4
+    scene
+        .ucmd()
+        .arg("-2cX")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: option used in invalid context -- 2\n")
+        .code_is(1);
+    // err-5
+    scene
+        .ucmd()
+        .arg("-c99999999999999999999")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: invalid number of bytes: '99999999999999999999'\n")
+        .code_is(1);
+    // err-6
+    scene
+        .ucmd()
+        .arg("-c --")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: invalid number of bytes: '-'\n")
+        .code_is(1);
+    scene
+        .ucmd()
+        .arg("-5cz")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: option used in invalid context -- 5\n")
+        .code_is(1);
+    scene
+        .ucmd()
+        .arg("-9999999999999999999b")
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: invalid number: '-9999999999999999999b'\n")
+        .code_is(1);
+    scene
+        .ucmd()
+        .arg("-999999999999999999999b")
+        .fails()
+        .no_stdout()
+        .stderr_is(
+            "tail: invalid number: '-999999999999999999999b': Numerical result out of range\n",
+        )
+        .code_is(1);
+}
+
+#[test]
+fn test_gnu_args_f() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "file";
+    at.touch(source);
+    let mut p = scene.ucmd().args(&["+f", source]).run_no_wait();
+    p.make_assertion_with_delay(500).is_alive();
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .no_stderr()
+        .no_stdout();
+
+    let mut p = scene
+        .ucmd()
+        .set_stdin(Stdio::piped())
+        .arg("+f")
+        .run_no_wait();
+    p.make_assertion_with_delay(500).is_alive();
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_obsolete_encoding_unix() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let invalid_utf8_arg = OsStr::from_bytes(&[b'-', INVALID_UTF8, b'b']);
+
+    scene
+        .ucmd()
+        .arg(invalid_utf8_arg)
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: bad argument encoding: '-�b'\n")
+        .code_is(1);
+}
+
+#[test]
+#[cfg(windows)]
+fn test_obsolete_encoding_windows() {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    let scene = TestScenario::new(util_name!());
+    let invalid_utf16_arg = OsString::from_wide(&['-' as u16, INVALID_UTF16, 'b' as u16]);
+
+    scene
+        .ucmd()
+        .arg(&invalid_utf16_arg)
+        .fails()
+        .no_stdout()
+        .stderr_is("tail: bad argument encoding: '-�b'\n")
         .code_is(1);
 }

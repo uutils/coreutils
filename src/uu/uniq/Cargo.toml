@@ -1,6 +1,6 @@
 [package]
 name = "uu_uniq"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uniq ~ (uutils) filter identical adjacent lines from input"
@@ -15,10 +15,8 @@ edition = "2021"
 path = "src/uniq.rs"
 
 [dependencies]
-clap = { workspace=true }
-strum = { workspace=true }
-strum_macros = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "uniq"

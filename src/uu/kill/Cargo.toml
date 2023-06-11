@@ -1,6 +1,6 @@
 [package]
 name = "uu_kill"
-version = "0.0.17"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "kill ~ (uutils) send a signal to a process"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/kill.rs"
 
 [dependencies]
-clap = { workspace=true }
-nix = { workspace=true, features = ["signal"] }
-uucore = { workspace=true, features=["signals"] }
+clap = { workspace = true }
+nix = { workspace = true, features = ["signal"] }
+uucore = { workspace = true, features = ["signals"] }
 
 [[bin]]
 name = "kill"

@@ -1,4 +1,4 @@
-use crate::common::util::*;
+use crate::common::util::TestScenario;
 
 // tests for basic tee functionality.
 // inspired by:
@@ -108,7 +108,7 @@ fn test_tee_no_more_writeable_2() {
 
 #[cfg(target_os = "linux")]
 mod linux_only {
-    use crate::common::util::*;
+    use crate::common::util::{AtPath, TestScenario, UCommand};
 
     use std::fs::File;
     use std::process::{Output, Stdio};
@@ -118,9 +118,10 @@ mod linux_only {
         use std::os::unix::io::FromRawFd;
 
         let mut fds: [c_int; 2] = [0, 0];
-        if unsafe { libc::pipe(&mut fds as *mut c_int) } != 0 {
-            panic!("Failed to create pipe");
-        }
+        assert!(
+            (unsafe { libc::pipe(&mut fds as *mut c_int) } == 0),
+            "Failed to create pipe"
+        );
 
         // Drop the read end of the pipe
         let _ = unsafe { File::from_raw_fd(fds[0]) };
@@ -130,7 +131,7 @@ mod linux_only {
     }
 
     fn run_tee(proc: &mut UCommand) -> (String, Output) {
-        let content = (1..=100000).map(|x| format!("{x}\n")).collect::<String>();
+        let content = (1..=100_000).map(|x| format!("{x}\n")).collect::<String>();
 
         #[allow(deprecated)]
         let output = proc

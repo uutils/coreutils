@@ -13,7 +13,7 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use regex::Regex;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::{crash_if_err, format_usage};
+use uucore::{crash_if_err, format_usage, help_about, help_section, help_usage};
 
 mod csplit_error;
 mod patterns;
@@ -22,9 +22,9 @@ mod split_name;
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 
-static ABOUT: &str = "Split a file into sections determined by context lines";
-static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
-const USAGE: &str = "{} [OPTION]... FILE PATTERN...";
+const ABOUT: &str = help_about!("csplit.md");
+const AFTER_HELP: &str = help_section!("after help", "csplit.md");
+const USAGE: &str = help_usage!("csplit.md");
 
 mod options {
     pub const SUFFIX_FORMAT: &str = "suffix-format";
@@ -356,6 +356,7 @@ impl<'a> SplitWriter<'a> {
     /// - if no line matched, an [`CsplitError::MatchNotFound`].
     /// - if there are not enough lines to accommodate the offset, an
     /// [`CsplitError::LineOutOfRange`].
+    #[allow(clippy::cognitive_complexity)]
     fn do_to_match<I>(
         &mut self,
         pattern_as_str: &str,
@@ -814,5 +815,5 @@ pub fn uu_app() -> Command {
                 .action(clap::ArgAction::Append)
                 .required(true),
         )
-        .after_help(LONG_HELP)
+        .after_help(AFTER_HELP)
 }

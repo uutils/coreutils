@@ -8,6 +8,7 @@ import urllib
 import os
 import glob
 import json
+import sys
 
 base = "../gnu/tests/"
 urllib.request.urlretrieve(
@@ -18,7 +19,8 @@ urllib.request.urlretrieve(
 types = ("/*/*.sh", "/*/*.pl", "/*/*.xpl")
 
 tests = []
-error_or_skip_tests = []
+error_tests = []
+skip_tests = []
 
 for files in types:
     tests.extend(glob.glob(base + files))
@@ -51,16 +53,29 @@ for d in data:
 
         # the tests pass, we don't care anymore
         if data[d][e] == "PASS":
+            try:
+                list_of_files.remove(a)
+            except ValueError:
+                print("Could not find test '%s'. Maybe update the GNU repo?" % a)
+                sys.exit(1)
+
+        # if it is SKIP, show it
+        if data[d][e] == "SKIP":
             list_of_files.remove(a)
+            skip_tests.append(a)
 
-        # if it is SKIP or ERROR, show it
-        if data[d][e] == "SKIP" or data[d][e] == "ERROR":
+        # if it is ERROR, show it
+        if data[d][e] == "ERROR":
             list_of_files.remove(a)
-            error_or_skip_tests.append(a)
+            error_tests.append(a)
 
-
-print("SKIP and ERROR tests:")
-show_list(error_or_skip_tests)
+print("===============")
+print("SKIP tests:")
+show_list(skip_tests)
+print("")
+print("===============")
+print("ERROR tests:")
+show_list(error_tests)
 print("")
 print("===============")
 print("FAIL tests:")
