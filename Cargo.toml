@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) libselinux gethostid procfs bigdecimal kqueue fundu mangen humantime uuhelp
+# spell-checker:ignore (libs) libselinux gethostid procfs bigdecimal kqueue fundu mangen datetime uuhelp
 
 [package]
 name = "coreutils"
@@ -284,7 +284,6 @@ fundu = "1.0.0"
 gcd = "2.3"
 glob = "0.3.1"
 half = "2.2"
-humantime_to_duration = "0.3.1"
 indicatif = "0.17"
 is-terminal = "0.4.7"
 itertools = "0.10.5"
@@ -302,6 +301,7 @@ number_prefix = "0.4"
 once_cell = "1.18.0"
 onig = { version = "~6.4", default-features = false }
 ouroboros = "0.15.6"
+parse_datetime = "0.4.0"
 phf = "0.11.1"
 phf_codegen = "0.11.1"
 platform-info = "2.0.1"
