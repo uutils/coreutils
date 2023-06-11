@@ -1,4 +1,4 @@
-# spell-checker:ignore humantime
+# spell-checker:ignore datetime
 [package]
 name = "uu_date"
 version = "0.0.19"
@@ -19,7 +19,7 @@ path = "src/date.rs"
 chrono = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true }
-humantime_to_duration = { workspace = true }
+parse_datetime = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

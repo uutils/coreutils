@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes humantime
+// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 use chrono::format::{Item, StrftimeItems};
 use chrono::{DateTime, Duration, FixedOffset, Local, Offset, Utc};
@@ -170,7 +170,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        if let Ok(duration) = humantime_to_duration::from_str(date.as_str()) {
+        if let Ok(duration) = parse_datetime::from_str(date.as_str()) {
             DateSource::Human(duration)
         } else {
             DateSource::Custom(date.into())
