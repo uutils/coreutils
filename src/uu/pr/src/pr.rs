@@ -514,12 +514,14 @@ fn build_options(
 
     let header = matches
         .get_one::<String>(options::HEADER)
-        .map(|s| s.as_str())
-        .unwrap_or(if is_merge_mode || paths[0] == FILE_STDIN {
-            ""
-        } else {
-            paths[0]
-        })
+        .map_or(
+            if is_merge_mode || paths[0] == FILE_STDIN {
+                ""
+            } else {
+                paths[0]
+            },
+            |s| s.as_str(),
+        )
         .to_string();
 
     let default_first_number = NumberingMode::default().first_number;
@@ -1239,7 +1241,7 @@ fn trailer_content(options: &OutputOptions) -> Vec<String> {
 /// If -N is specified the first line number changes otherwise
 /// default is 1.
 fn get_start_line_number(opts: &OutputOptions) -> usize {
-    opts.number.as_ref().map(|i| i.first_number).unwrap_or(1)
+    opts.number.as_ref().map_or(1, |i| i.first_number)
 }
 
 /// Returns number of lines to read from input for constructing one page of pr output.

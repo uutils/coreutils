@@ -345,11 +345,6 @@ fn push_op_to_stack(
     {
         loop {
             match op_stack.last() {
-                None | Some(&(_, Token::ParOpen)) => {
-                    op_stack.push((token_idx, token.clone()));
-                    return Ok(());
-                }
-
                 Some(&(
                     _,
                     Token::InfixOp {
@@ -365,7 +360,7 @@ fn push_op_to_stack(
                     }
                 }
 
-                Some(&(_, Token::PrefixOp { .. })) => {
+                Some(&(_, Token::PrefixOp { .. })) | None | Some(&(_, Token::ParOpen)) => {
                     op_stack.push((token_idx, token.clone()));
                     return Ok(());
                 }
@@ -452,8 +447,7 @@ fn operator_match(values: &[String]) -> Result<String, String> {
         .map_err(|err| err.description().to_string())?;
     Ok(if re.captures_len() > 0 {
         re.captures(&values[0])
-            .map(|captures| captures.at(1).unwrap())
-            .unwrap_or("")
+            .map_or("", |captures| captures.at(1).unwrap())
             .to_string()
     } else {
         re.find(&values[0])

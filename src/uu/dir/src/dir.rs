@@ -57,8 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let locs = matches
         .get_many::<OsString>(options::PATHS)
-        .map(|v| v.map(Path::new).collect())
-        .unwrap_or_else(|| vec![Path::new(".")]);
+        .map_or_else(|| vec![Path::new(".")], |v| v.map(Path::new).collect());
 
     uu_ls::list(locs, &config)
 }

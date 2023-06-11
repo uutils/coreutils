@@ -47,30 +47,34 @@ fn format_item_c(bytes: &[u8]) -> String {
     let b = bytes[0];
 
     if b & 0x80 == 0x00 {
-        match C_CHARS.get(b as usize) {
-            Some(s) => format!("{s:>4}"),
-            None => format!("{b:>4}"),
+        if let Some(s) = C_CHARS.get(b as usize) {
+            format!("{s:>4}")
+        } else {
+            format!("{b:>4}")
         }
     } else if (b & 0xc0) == 0x80 {
         // second or subsequent octet of an utf-8 sequence
         String::from("  **")
     } else if ((b & 0xe0) == 0xc0) && (bytes.len() >= 2) {
         // start of a 2 octet utf-8 sequence
-        match from_utf8(&bytes[0..2]) {
-            Ok(s) => format!("{s:>4}"),
-            Err(_) => format!(" {b:03o}"),
+        if let Ok(s) = from_utf8(&bytes[0..2]) {
+            format!("{s:>4}")
+        } else {
+            format!(" {b:03o}")
         }
     } else if ((b & 0xf0) == 0xe0) && (bytes.len() >= 3) {
         // start of a 3 octet utf-8 sequence
-        match from_utf8(&bytes[0..3]) {
-            Ok(s) => format!("{s:>4}"),
-            Err(_) => format!(" {b:03o}"),
+        if let Ok(s) = from_utf8(&bytes[0..3]) {
+            format!("{s:>4}")
+        } else {
+            format!(" {b:03o}")
         }
     } else if ((b & 0xf8) == 0xf0) && (bytes.len() >= 4) {
         // start of a 4 octet utf-8 sequence
-        match from_utf8(&bytes[0..4]) {
-            Ok(s) => format!("{s:>4}"),
-            Err(_) => format!(" {b:03o}"),
+        if let Ok(s) = from_utf8(&bytes[0..4]) {
+            format!("{s:>4}")
+        } else {
+            format!(" {b:03o}")
         }
     } else {
         // invalid utf-8
