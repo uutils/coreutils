@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
-use uucore::fs::are_hardlinks_to_same_file;
+use uucore::fs::are_hardlinks_or_one_way_symlink_to_same_file;
 use uucore::update_control::{self, UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
@@ -255,7 +255,7 @@ fn handle_two_paths(source: &Path, target: &Path, b: &Behavior) -> UResult<()> {
         return Err(MvError::NoSuchFile(source.quote().to_string()).into());
     }
 
-    if (source.eq(target) || are_hardlinks_to_same_file(source, target))
+    if (source.eq(target) || are_hardlinks_or_one_way_symlink_to_same_file(source, target))
         && b.backup != BackupMode::SimpleBackup
     {
         if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
