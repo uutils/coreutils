@@ -19,7 +19,7 @@ path = "src/touch.rs"
 filetime = { workspace = true }
 clap = { workspace = true }
 # TODO: use workspace dependency (0.3) when switching from time to chrono
-humantime_to_duration = "0.2.1"
+humantime_to_duration = "0.3.1"
 time = { workspace = true, features = [
   "parsing",
   "formatting",
