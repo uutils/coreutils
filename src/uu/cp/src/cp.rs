@@ -675,19 +675,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let paths: Vec<PathBuf> = matches
             .remove_many::<PathBuf>(options::PATHS)
-            .map(|v| v.collect())
+            .map(std::iter::Iterator::collect)
             .unwrap_or_default();
 
         let (sources, target) = parse_path_args(paths, &options)?;
 
         if let Err(error) = copy(&sources, &target, &options) {
-            match error {
+            if let Error::NotAllFilesCopied = error {
+            } else {
                 // Error::NotAllFilesCopied is non-fatal, but the error
                 // code should still be EXIT_ERR as does GNU cp
-                Error::NotAllFilesCopied => {}
                 // Else we caught a fatal bubbled-up error, log it to stderr
-                _ => show_error!("{}", error),
-            };
+                show_error!("{}", error)
+            }
             set_exit_code(EXIT_ERR);
         }
     }
@@ -1544,7 +1544,7 @@ fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a
     // Get the matching number of elements from the ancestors of the
     // destination path (for example, get "d/a" and "d/a/b").
     let k = source_ancestors.len();
-    let dest_ancestors = &dest_ancestors[1..1 + k];
+    let dest_ancestors = &dest_ancestors[1..=k];
 
     // Now we have two slices of the same length, so we zip them.
     let mut result = vec![];
@@ -1882,13 +1882,14 @@ fn copy_link(
     // Here, we will copy the symlink itself (actually, just recreate it)
     let link = fs::read_link(source)?;
     let dest: Cow<'_, Path> = if dest.is_dir() {
-        match source.file_name() {
-            Some(name) => dest.join(name).into(),
-            None => crash!(
+        if let Some(name) = source.file_name() {
+            dest.join(name).into()
+        } else {
+            crash!(
                 EXIT_ERR,
                 "cannot stat {}: No such file or directory",
                 source.quote()
-            ),
+            )
         }
     } else {
         // we always need to remove the file to be able to create a symlink,

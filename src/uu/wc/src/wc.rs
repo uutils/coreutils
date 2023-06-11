@@ -862,9 +862,8 @@ fn print_stats(
 
 // TODO: remove and just use usize::ilog10 once the MSRV is >= 1.67.
 fn ilog10_u64(mut u: u64) -> u32 {
-    if u == 0 {
-        panic!("cannot compute log of 0")
-    }
+    assert!(!(u == 0), "cannot compute log of 0");
+
     let mut log = 0;
     if u >= 10_000_000_000 {
         log += 10;

@@ -131,13 +131,14 @@ fn create_sha3(matches: &ArgMatches) -> (&'static str, Box<dyn Digest>, usize) {
 ///
 /// Panics if the `--bits` flag is missing.
 fn create_shake128(matches: &ArgMatches) -> (&'static str, Box<dyn Digest>, usize) {
-    match matches.get_one::<usize>("bits") {
-        Some(bits) => (
+    if let Some(bits) = matches.get_one::<usize>("bits") {
+        (
             "SHAKE128",
             Box::new(Shake128::new()) as Box<dyn Digest>,
             *bits,
-        ),
-        None => crash!(1, "--bits required for SHAKE-128"),
+        )
+    } else {
+        crash!(1, "--bits required for SHAKE-128")
     }
 }
 
@@ -151,13 +152,14 @@ fn create_shake128(matches: &ArgMatches) -> (&'static str, Box<dyn Digest>, usiz
 ///
 /// Panics if the `--bits` flag is missing.
 fn create_shake256(matches: &ArgMatches) -> (&'static str, Box<dyn Digest>, usize) {
-    match matches.get_one::<usize>("bits") {
-        Some(bits) => (
+    if let Some(bits) = matches.get_one::<usize>("bits") {
+        (
             "SHAKE256",
             Box::new(Shake256::new()) as Box<dyn Digest>,
             *bits,
-        ),
-        None => crash!(1, "--bits required for SHAKE-256"),
+        )
+    } else {
+        crash!(1, "--bits required for SHAKE-256")
     }
 }
 
@@ -674,13 +676,14 @@ where
                     Some(caps) => {
                         handle_captures(&caps, &bytes_marker, &mut bsd_reversed, &mut gnu_re)?
                     }
-                    None => match bsd_re.captures(&line) {
-                        Some(caps) => (
-                            caps.name("fileName").unwrap().as_str().to_string(),
-                            caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
-                            true,
-                        ),
-                        None => {
+                    None => {
+                        if let Some(caps) = bsd_re.captures(&line) {
+                            (
+                                caps.name("fileName").unwrap().as_str().to_string(),
+                                caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
+                                true,
+                            )
+                        } else {
                             bad_format += 1;
                             if options.strict {
                                 return Err(HashsumError::InvalidFormat.into());
@@ -695,7 +698,7 @@ where
                             }
                             continue;
                         }
-                    },
+                    }
                 };
                 let f = match File::open(ck_filename.clone()) {
                     Err(_) => {

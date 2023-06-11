@@ -604,9 +604,21 @@ impl<'a> State<'a> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let keys = parse_field_number_option(matches.get_one::<String>("j").map(|s| s.as_str()))?;
-    let key1 = parse_field_number_option(matches.get_one::<String>("1").map(|s| s.as_str()))?;
-    let key2 = parse_field_number_option(matches.get_one::<String>("2").map(|s| s.as_str()))?;
+    let keys = parse_field_number_option(
+        matches
+            .get_one::<String>("j")
+            .map(std::string::String::as_str),
+    )?;
+    let key1 = parse_field_number_option(
+        matches
+            .get_one::<String>("1")
+            .map(std::string::String::as_str),
+    )?;
+    let key2 = parse_field_number_option(
+        matches
+            .get_one::<String>("2")
+            .map(std::string::String::as_str),
+    )?;
 
     let mut settings = Settings::default();
 

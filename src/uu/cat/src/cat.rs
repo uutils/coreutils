@@ -219,7 +219,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
     let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
-        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
+        Some(v) => v.clone().map(|v| v.clone()).collect(),
         None => vec!["-".to_owned()],
     };
 
@@ -543,40 +543,34 @@ fn write_lines<R: FdReadable>(
 // however, write_nonprint_to_end doesn't need to stop at \r because it will always write \r as ^M.
 // Return the number of written symbols
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
-    match in_buf.iter().position(|c| *c == b'\n' || *c == b'\r') {
-        Some(p) => {
-            writer.write_all(&in_buf[..p]).unwrap();
-            p
-        }
-        None => {
-            writer.write_all(in_buf).unwrap();
-            in_buf.len()
-        }
+    if let Some(p) = in_buf.iter().position(|c| *c == b'\n' || *c == b'\r') {
+        writer.write_all(&in_buf[..p]).unwrap();
+        p
+    } else {
+        writer.write_all(in_buf).unwrap();
+        in_buf.len()
     }
 }
 
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
     let mut count = 0;
     loop {
-        match in_buf
+        if let Some(p) = in_buf
             .iter()
             .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
         {
-            Some(p) => {
-                writer.write_all(&in_buf[..p]).unwrap();
-                if in_buf[p] == b'\t' {
-                    writer.write_all(b"^I").unwrap();
-                    in_buf = &in_buf[p + 1..];
-                    count += p + 1;
-                } else {
-                    // b'\n' or b'\r'
-                    return count + p;
-                }
+            writer.write_all(&in_buf[..p]).unwrap();
+            if in_buf[p] == b'\t' {
+                writer.write_all(b"^I").unwrap();
+                in_buf = &in_buf[p + 1..];
+                count += p + 1;
+            } else {
+                // b'\n' or b'\r'
+                return count + p;
             }
-            None => {
-                writer.write_all(in_buf).unwrap();
-                return in_buf.len();
-            }
+        } else {
+            writer.write_all(in_buf).unwrap();
+            return in_buf.len();
         };
     }
 }
