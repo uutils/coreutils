@@ -27,7 +27,6 @@ allow = [
   "BSD-2-Clause-FreeBSD",
   "BSD-3-Clause",
   "CC0-1.0",
-  "MPL-2.0",              # XXX considered copyleft?
   "Unicode-DFS-2016",
 ]
 copyleft = "deny"
@@ -59,8 +58,16 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
+  # bindgen (from uu_chcon); non-WinOS
+  { name = "bitflags", version = "1.3.2" },
+  # cpp_macros (from uu_stdbuf); non-WinOS
+  { name = "aho-corasick", version = "0.7.19" },
+  # ctor (from pretty-assertions) / data-encoding-macro (from uucore)
+  { name = "syn", version = "1.0.109" },
   # is-terminal
   { name = "hermit-abi", version = "0.3.1" },
+  # ordered-multimap (via rust-ini)
+  { name = "hashbrown", version = "0.13.2" },
   # procfs
   { name = "rustix", version = "0.36.14" },
   # rustix
@@ -85,10 +92,6 @@ skip = [
   { name = "windows_x86_64_msvc", version = "0.42.2" },
   # tempfile
   { name = "redox_syscall", version = "0.3.5" },
-  # cpp_macros
-  { name = "aho-corasick", version = "0.7.19" },
-  # ordered-multimap (via rust-ini)
-  { name = "hashbrown", version = "0.13.2" },
 ]
 # spell-checker: enable
 
