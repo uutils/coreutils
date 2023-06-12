@@ -635,12 +635,12 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
-    let source_metadata = match fs::metadata(source) {
+    let source_metadata = match fs::symlink_metadata(source) {
         Ok(metadata) => metadata,
         Err(_) => return false,
     };
 
-    let target_metadata = match fs::metadata(target) {
+    let target_metadata = match fs::symlink_metadata(target) {
         Ok(metadata) => metadata,
         Err(_) => return false,
     };
