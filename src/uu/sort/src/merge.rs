@@ -288,7 +288,7 @@ impl<'a> FileMerger<'a> {
                 file_number: file.file_number,
             });
 
-            file.current_chunk.with_contents(|contents| {
+            file.current_chunk.with_dependent(|_, contents| {
                 let current_line = &contents.lines[file.line_idx];
                 if settings.unique {
                     if let Some(prev) = &prev {
