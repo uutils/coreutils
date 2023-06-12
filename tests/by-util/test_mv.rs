@@ -467,6 +467,35 @@ fn test_mv_same_symlink() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_hardlink_to_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let symlink_file = "symlink";
+    let hardlink_to_symlink_file = "hardlink_to_symlink";
+
+    at.touch(file);
+    at.symlink_file(file, symlink_file);
+    at.hard_link(symlink_file, hardlink_to_symlink_file);
+
+    ucmd.arg(symlink_file).arg(hardlink_to_symlink_file).fails();
+
+    let (at2, mut ucmd2) = at_and_ucmd!();
+
+    at2.touch(file);
+    at2.symlink_file(file, symlink_file);
+    at2.hard_link(symlink_file, hardlink_to_symlink_file);
+
+    ucmd2
+        .arg("--backup")
+        .arg(symlink_file)
+        .arg(hardlink_to_symlink_file)
+        .succeeds();
+    assert!(!at2.symlink_exists(symlink_file));
+    assert!(at2.symlink_exists(&format!("{hardlink_to_symlink_file}~")));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_mv_same_hardlink_backup_simple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
