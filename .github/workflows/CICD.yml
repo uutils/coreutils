@@ -5,7 +5,7 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers
 # spell-checker:ignore (people) DavidAnson dawidd6 dtolnay Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup sccache shopt utmpdump xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nextest nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR dedupe gecos gnueabihf issuecomment maint multisize nextest nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -337,13 +337,19 @@ jobs:
           # * ensure '.clippy.toml' MSRV configuration setting is equal to ${{ env.RUST_MIN_SRV }}
           CLIPPY_MSRV=$(grep -P "(?i)^\s*msrv\s*=\s*" .clippy.toml | grep -oP "\d+([.]\d+)+")
           if [ "${CLIPPY_MSRV}" != "${{ env.RUST_MIN_SRV }}" ]; then { echo "::error file=.clippy.toml::Incorrect MSRV configuration for clippy (found '${CLIPPY_MSRV}'; should be '${{ env.RUST_MIN_SRV }}'); update '.clippy.toml' with 'msrv = \"${{ env.RUST_MIN_SRV }}\"'" ; exit 1 ; } ; fi
-      - name: Info
+      - name: Build Detail
         shell: bash
         run: |
-          ## Info
+          ## Build Detail
+          # repo/commit info
+          echo "## repo/commit"
+          echo GITHUB_REPOSITORY=${GITHUB_REPOSITORY}
+          echo GITHUB_REF=${GITHUB_REF}
+          echo GITHUB_SHA=${GITHUB_SHA}
           # environment
           echo "## environment"
           echo "CI='${CI}'"
+          echo "PWD='${PWD}'"
           # tooling info display
           echo "## tooling"
           which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
@@ -351,12 +357,11 @@ jobs:
           rustup show active-toolchain
           cargo -V
           rustc -V
-          cargo tree -V
           # dependencies
           echo "## dependency list"
-          ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-          RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
-          RUSTUP_TOOLCHAIN=stable cargo tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
+          # * note: for applications, use `--locked` for `cargo fetch`` and `cargo tree`) and commit *Cargo.lock*
+          cargo fetch --locked --quiet
+          cargo tree --locked --edges=no-dev --prefix=none --workspace | grep -vE "\(.*[/\\]${GITHUB_REPOSITORY##*/}\)" | sort --unique
       - name: Test
         run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
         env:
@@ -754,10 +759,10 @@ jobs:
           echo UTILITY_LIST=${UTILITY_LIST}
           CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
           outputs CARGO_UTILITY_LIST_OPTIONS
-      - name: Info
+      - name: Build Detail
         shell: bash
         run: |
-          ## Info
+          ## Build Detail
           # commit info
           echo "## commit"
           echo GITHUB_REF=${GITHUB_REF}
@@ -772,11 +777,11 @@ jobs:
           rustup show active-toolchain
           cargo -V
           rustc -V
-          cargo tree -V
           # dependencies
           echo "## dependency list"
+          # * note: for applications, use `--locked` for `cargo fetch`` and `cargo tree`) and commit *Cargo.lock*
           cargo fetch --locked --quiet
-          cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
+          cargo tree --locked --edges=no-dev --prefix=none --workspace --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "\(.*[/\\]${GITHUB_REPOSITORY##*/}\)" | sort --unique
       - name: Build
         shell: bash
         run: |
