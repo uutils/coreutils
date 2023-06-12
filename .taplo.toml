@@ -1,0 +1,8 @@
+# `taplo` configuration
+# ref: [`taplo` ~ Configuration File](https://taplo.tamasfe.dev/configuration.html)
+# note: use `cargo install taplo-cli` to install and use `taplo` locally
+# spell-checker:ignore taplo
+[formatting]
+align_comments = false
+array_auto_collapse = false
+array_auto_expand = false
