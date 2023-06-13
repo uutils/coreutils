@@ -1,17 +1,17 @@
 name: CICD
 
-# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl taiki
+# spell-checker:ignore (abbrev/names) CICD CodeCOV MacOS MinGW MSVC musl taiki taplo
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers
-# spell-checker:ignore (people) Peltoche rivy dtolnay
-# spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup shopt utmpdump xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
+# spell-checker:ignore (people) DavidAnson dawidd6 dtolnay Peltoche rivy
+# spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot fdesc fdescfs gmake grcov halium lcov libssl mkdir popd printf pushd rsync rustc rustfmt rustup sccache shopt utmpdump xargs
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos gnueabihf issuecomment maint multisize nextest nullglob onexitbegin onexitend pell runtest Swatinem tempfile testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
-  PROJECT_DESC: "Core universal (cross-platform) utilities"
-  PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.64.0"
+  PROJECT_DESC: 'Core universal (cross-platform) utilities'
+  PROJECT_AUTH: 'uutils'
+  RUST_MIN_SRV: '1.64.0'
   # * style job configuration
   STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
@@ -26,12 +26,13 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  cargo-deny:
+  style_cargo-deny:
     name: Style/cargo-deny
     runs-on: ubuntu-latest
+    # continue-on-error: ${{ env.STYLE_FAIL_ON_FAULT != 'true' }}
     steps:
-    - uses: actions/checkout@v3
-    - uses: EmbarkStudios/cargo-deny-action@v1
+      - uses: actions/checkout@v3
+      - uses: EmbarkStudios/cargo-deny-action@v1
 
   style_deps:
     ## ToDO: [2021-11-10; rivy] 'Style/deps' needs more informative output and better integration of results into the GHA dashboard
@@ -43,44 +44,104 @@ jobs:
         job:
           # note: `cargo-udeps` panics when processing stdbuf/libstdbuf ("uu_stdbuf_libstdbuf"); either b/c of the 'cpp' crate or 'libstdbuf' itself
           #   ... b/c of the panic, a more limited feature set is tested (though only excluding `stdbuf`)
-          - { os: ubuntu-latest  , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
-          - { os: macos-latest   , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
+          - { os: ubuntu-latest  , features: 'feat_Tier1,feat_require_unix,feat_require_unix_utmpx' }
+          - { os: macos-latest   , features: 'feat_Tier1,feat_require_unix,feat_require_unix_utmpx' }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@nightly
-    ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
-    ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
-    - uses: taiki-e/install-action@cargo-udeps
-    - uses: Swatinem/rust-cache@v2
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # failure mode
-        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
-          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
-          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
-        esac;
-        outputs FAIL_ON_FAULT FAULT_TYPE
-        # target-specific options
-        # * CARGO_FEATURES_OPTION
-        CARGO_FEATURES_OPTION='' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        outputs CARGO_FEATURES_OPTION
-    - name: Detect unused dependencies
-      shell: bash
-      run: |
-        ## Detect unused dependencies
-        unset fault
-        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
-        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
-        #
-        cargo +nightly udeps ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all-targets &> udeps.log || cat udeps.log
-        grep --ignore-case "all deps seem to have been used" udeps.log || { printf "%s\n" "::${fault_type} ::${fault_prefix}: \`cargo udeps\`: style violation (unused dependency found)" ; fault=true ; }
-        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+      ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
+      ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
+      - uses: taiki-e/install-action@cargo-udeps
+      - uses: Swatinem/rust-cache@v2
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          # failure mode
+          unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+            ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
+            *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
+          esac;
+          outputs FAIL_ON_FAULT FAULT_TYPE
+          # target-specific options
+          # * CARGO_FEATURES_OPTION
+          CARGO_FEATURES_OPTION='' ;
+          if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+          outputs CARGO_FEATURES_OPTION
+      - name: Detect unused dependencies
+        shell: bash
+        run: |
+          ## Detect unused dependencies
+          unset fault
+          fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
+          fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
+          #
+          cargo +nightly udeps ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all-targets &> udeps.log || cat udeps.log
+          grep --ignore-case "all deps seem to have been used" udeps.log || { printf "%s\n" "::${fault_type} ::${fault_prefix}: \`cargo udeps\`: style violation (unused dependency found)" ; fault=true ; }
+          if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
+
+  style_docs:
+    name: Style/docs
+    runs-on: ${{ matrix.job.os }}
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest  , features: feat_os_unix }
+          # maint: [2021-01; sylvestre] for now, don't build it on mac & windows because...
+          # + the doc is only published from linux
+          # + it needs a bunch of duplication for build
+          # + don't want to add a doc step in the regular build to avoid long builds
+          # - { os: macos-latest   , features: feat_os_macos }
+          # - { os: windows-latest , features: feat_os_windows }
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          # failure mode
+          unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+            ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
+            *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
+          esac;
+          outputs FAIL_ON_FAULT FAULT_TYPE
+          # target-specific options
+          # * CARGO_FEATURES_OPTION
+          CARGO_FEATURES_OPTION='--all-features' ;
+          if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
+          outputs CARGO_FEATURES_OPTION
+          # * determine sub-crate utility list
+          UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+          echo UTILITY_LIST=${UTILITY_LIST}
+          CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
+          outputs CARGO_UTILITY_LIST_OPTIONS
+      - name: '`cargo doc` with warnings'
+        shell: bash
+        run: |
+          RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
+      - uses: DavidAnson/markdownlint-cli2-action@v11
+        with:
+          command: fix
+          globs: |
+            *.md
+            docs/src/*.md
+            src/uu/*/*.md
 
   style_format:
     name: Style/format
@@ -89,84 +150,48 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-latest, features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-        components: rustfmt
-    - uses: Swatinem/rust-cache@v2
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # failure mode
-        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
-          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
-          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
-        esac;
-        outputs FAIL_ON_FAULT FAULT_TYPE
-        # target-specific options
-        # * CARGO_FEATURES_OPTION
-        CARGO_FEATURES_OPTION='' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        outputs CARGO_FEATURES_OPTION
-    - name: "`cargo fmt` testing"
-      shell: bash
-      run: |
-        ## `cargo fmt` testing
-        unset fault
-        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
-        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
-        # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::${fault_type} file=\1,line=\2::${fault_prefix}: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt -- \"\1\"\`)/p" ; fault=true ; }
-        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
-
-  fuzz:
-    name: Run the fuzzers
-    runs-on: ubuntu-latest
-    env:
-      RUN_FOR: 60
-    steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@nightly
-    - name: Install `cargo-fuzz`
-      run: cargo install cargo-fuzz
-    - uses: Swatinem/rust-cache@v2
-    - name: Run fuzz_date for XX seconds
-      shell: bash
-      run: |
-        ## Run it
-        cd fuzz
-        cargo +nightly fuzz run fuzz_date -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
-    - name: Run fuzz_parse_glob for XX seconds
-      shell: bash
-      run: |
-        ## Run it
-        cd fuzz
-        cargo +nightly fuzz run fuzz_parse_glob -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
-    - name: Run fuzz_parse_size for XX seconds
-      shell: bash
-      run: |
-        ## Run it
-        cd fuzz
-        cargo +nightly fuzz run fuzz_parse_size -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
-    - name: Run fuzz_parse_time for XX seconds
-      shell: bash
-      run: |
-        ## Run it
-        cd fuzz
-        cargo +nightly fuzz run fuzz_parse_time -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          # failure mode
+          unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+            ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
+            *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
+          esac;
+          outputs FAIL_ON_FAULT FAULT_TYPE
+          # target-specific options
+          # * CARGO_FEATURES_OPTION
+          CARGO_FEATURES_OPTION='' ;
+          if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+          outputs CARGO_FEATURES_OPTION
+      - name: '`cargo fmt` testing'
+        shell: bash
+        run: |
+          ## `cargo fmt` testing
+          unset fault
+          fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
+          fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
+          # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+          S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::${fault_type} file=\1,line=\2::${fault_prefix}: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt -- \"\1\"\`)/p" ; fault=true ; }
+          if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   style_lint:
     name: Style/lint
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
     strategy:
       fail-fast: false
       matrix:
@@ -175,53 +200,53 @@ jobs:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-        components: clippy
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # failure mode
-        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
-          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
-          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
-        esac;
-        outputs FAIL_ON_FAULT FAULT_TYPE
-        # target-specific options
-        # * CARGO_FEATURES_OPTION
-        CARGO_FEATURES_OPTION='--all-features' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
-        outputs CARGO_FEATURES_OPTION
-        # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
-        echo UTILITY_LIST=${UTILITY_LIST}
-        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
-        outputs CARGO_UTILITY_LIST_OPTIONS
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for show-utils.sh
-        esac
-    - name: "`cargo clippy` lint testing"
-      shell: bash
-      run: |
-        ## `cargo clippy` lint testing
-        unset fault
-        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
-        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
-        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -- -W clippy::manual_string_new -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
-        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          # failure mode
+          unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+            ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
+            *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
+          esac;
+          outputs FAIL_ON_FAULT FAULT_TYPE
+          # target-specific options
+          # * CARGO_FEATURES_OPTION
+          CARGO_FEATURES_OPTION='--all-features' ;
+          if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
+          outputs CARGO_FEATURES_OPTION
+          # * determine sub-crate utility list
+          UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+          echo UTILITY_LIST=${UTILITY_LIST}
+          CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
+          outputs CARGO_UTILITY_LIST_OPTIONS
+      - name: Install/setup prerequisites
+        shell: bash
+        run: |
+          ## Install/setup prerequisites
+          case '${{ matrix.job.os }}' in
+            macos-latest) brew install coreutils ;; # needed for show-utils.sh
+          esac
+      - name: '`cargo clippy` lint testing'
+        shell: bash
+        run: |
+          ## `cargo clippy` lint testing
+          unset fault
+          fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
+          fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
+          # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+          S=$(cargo clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -- -W clippy::manual_string_new -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
+          if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   style_spellcheck:
     name: Style/spelling
@@ -229,173 +254,114 @@ jobs:
     strategy:
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-latest, features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v3
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # failure mode
-        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
-          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
-          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
-        esac;
-        outputs FAIL_ON_FAULT FAULT_TYPE
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        # * pin installed cspell to v4.2.8 (cspell v5+ is broken for NodeJS < v12)
-        ## maint: [2021-11-10; rivy] `cspell` version may be advanced to v5 when used with NodeJS >= v12
-        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell@4.2.8 -g ;
-    - name: Run `cspell`
-      shell: bash
-      run: |
-        ## Run `cspell`
-        unset fault
-        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
-        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
-        # * find cspell configuration ; note: avoid quotes around ${cfg_file} b/c `cspell` (v4) doesn't correctly dequote the config argument (or perhaps a subshell expansion issue?)
-        cfg_files=($(shopt -s nullglob ; echo {.vscode,.}/{,.}c[sS]pell{.json,.config{.js,.cjs,.json,.yaml,.yml},.yaml,.yml} ;))
-        cfg_file=${cfg_files[0]}
-        unset CSPELL_CFG_OPTION ; if [ -n "$cfg_file" ]; then CSPELL_CFG_OPTION="--config $cfg_file" ; fi
-        # * `cspell`
-        ## maint: [2021-11-10; rivy] the `--no-progress` option for `cspell` is a `cspell` v5+ option
-        # S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
-        S=$(cspell ${CSPELL_CFG_OPTION} --no-summary "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
-        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
-
-  doc_warnings:
-    name: Documentation/warnings
-    runs-on: ${{ matrix.job.os }}
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
-# for now, don't build it on mac & windows because the doc is only published from linux
-# + it needs a bunch of duplication for build
-# and I don't want to add a doc step in the regular build to avoid long builds
-#          - { os: macos-latest   , features: feat_os_macos }
-#          - { os: windows-latest , features: feat_os_windows }
-    steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-        components: clippy
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # failure mode
-        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
-          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
-          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
-        esac;
-        outputs FAIL_ON_FAULT FAULT_TYPE
-        # target-specific options
-        # * CARGO_FEATURES_OPTION
-        CARGO_FEATURES_OPTION='--all-features' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
-        outputs CARGO_FEATURES_OPTION
-        # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
-        echo UTILITY_LIST=${UTILITY_LIST}
-        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
-        outputs CARGO_UTILITY_LIST_OPTIONS
-    - name: "`cargo doc` with warnings"
-      shell: bash
-      run: |
-        RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v11
-      with:
-        command: fix
-        globs: |
-          *.md
-          docs/src/*.md
-          src/uu/*/*.md
+      - uses: actions/checkout@v3
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          # failure mode
+          unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+            ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
+            *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
+          esac;
+          outputs FAIL_ON_FAULT FAULT_TYPE
+      - name: Install/setup prerequisites
+        shell: bash
+        run: |
+          ## Install/setup prerequisites
+          # * pin installed cspell to v4.2.8 (cspell v5+ is broken for NodeJS < v12)
+          ## maint: [2021-11-10; rivy] `cspell` version may be advanced to v5 when used with NodeJS >= v12
+          sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell@4.2.8 -g ;
+      - name: Run `cspell`
+        shell: bash
+        run: |
+          ## Run `cspell`
+          unset fault
+          fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
+          fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
+          # * find cspell configuration ; note: avoid quotes around ${cfg_file} b/c `cspell` (v4) doesn't correctly dequote the config argument (or perhaps a subshell expansion issue?)
+          cfg_files=($(shopt -s nullglob ; echo {.vscode,.}/{,.}c[sS]pell{.json,.config{.js,.cjs,.json,.yaml,.yml},.yaml,.yml} ;))
+          cfg_file=${cfg_files[0]}
+          unset CSPELL_CFG_OPTION ; if [ -n "$cfg_file" ]; then CSPELL_CFG_OPTION="--config $cfg_file" ; fi
+          # * `cspell`
+          ## maint: [2021-11-10; rivy] the `--no-progress` option for `cspell` is a `cspell` v5+ option
+          # S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
+          S=$(cspell ${CSPELL_CFG_OPTION} --no-summary "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
+          if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   min_version:
     name: MinRustV # Minimum supported rust version (aka, MinSRV or MSRV)
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
     strategy:
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-latest, features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ env.RUST_MIN_SRV }}
-        components: rustfmt
-    - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # target-specific options
-        # * CARGO_FEATURES_OPTION
-        unset CARGO_FEATURES_OPTION
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        outputs CARGO_FEATURES_OPTION
-    - name: Confirm MinSRV compatible 'Cargo.lock'
-      shell: bash
-      run: |
-        ## Confirm MinSRV compatible 'Cargo.lock'
-        # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
-        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::Incompatible (or out-of-date) 'Cargo.lock' file; update using \`cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
-    - name: Confirm MinSRV equivalence for '.clippy.toml'
-      shell: bash
-      run: |
-        ## Confirm MinSRV equivalence for '.clippy.toml'
-        # * ensure '.clippy.toml' MSRV configuration setting is equal to ${{ env.RUST_MIN_SRV }}
-        CLIPPY_MSRV=$(grep -P "(?i)^\s*msrv\s*=\s*" .clippy.toml | grep -oP "\d+([.]\d+)+")
-        if [ "${CLIPPY_MSRV}" != "${{ env.RUST_MIN_SRV }}" ]; then { echo "::error file=.clippy.toml::Incorrect MSRV configuration for clippy (found '${CLIPPY_MSRV}'; should be '${{ env.RUST_MIN_SRV }}'); update '.clippy.toml' with 'msrv = \"${{ env.RUST_MIN_SRV }}\"'" ; exit 1 ; } ; fi
-    - name: Info
-      shell: bash
-      run: |
-        ## Info
-        # environment
-        echo "## environment"
-        echo "CI='${CI}'"
-        # tooling info display
-        echo "## tooling"
-        which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
-        rustup -V 2>/dev/null
-        rustup show active-toolchain
-        cargo -V
-        rustc -V
-        cargo tree -V
-        # dependencies
-        echo "## dependency list"
-        ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
-        RUSTUP_TOOLCHAIN=stable cargo tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
-    - name: Test
-      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
-      env:
-        RUSTFLAGS: "-Awarnings"
-        RUST_BACKTRACE: "1"
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_MIN_SRV }}
+          components: rustfmt
+      - uses: taiki-e/install-action@nextest
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          # target-specific options
+          # * CARGO_FEATURES_OPTION
+          unset CARGO_FEATURES_OPTION
+          if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+          outputs CARGO_FEATURES_OPTION
+      - name: Confirm MinSRV compatible 'Cargo.lock'
+        shell: bash
+        run: |
+          ## Confirm MinSRV compatible 'Cargo.lock'
+          # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
+          cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::Incompatible (or out-of-date) 'Cargo.lock' file; update using \`cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
+      - name: Confirm MinSRV equivalence for '.clippy.toml'
+        shell: bash
+        run: |
+          ## Confirm MinSRV equivalence for '.clippy.toml'
+          # * ensure '.clippy.toml' MSRV configuration setting is equal to ${{ env.RUST_MIN_SRV }}
+          CLIPPY_MSRV=$(grep -P "(?i)^\s*msrv\s*=\s*" .clippy.toml | grep -oP "\d+([.]\d+)+")
+          if [ "${CLIPPY_MSRV}" != "${{ env.RUST_MIN_SRV }}" ]; then { echo "::error file=.clippy.toml::Incorrect MSRV configuration for clippy (found '${CLIPPY_MSRV}'; should be '${{ env.RUST_MIN_SRV }}'); update '.clippy.toml' with 'msrv = \"${{ env.RUST_MIN_SRV }}\"'" ; exit 1 ; } ; fi
+      - name: Info
+        shell: bash
+        run: |
+          ## Info
+          # environment
+          echo "## environment"
+          echo "CI='${CI}'"
+          # tooling info display
+          echo "## tooling"
+          which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
+          rustup -V 2>/dev/null
+          rustup show active-toolchain
+          cargo -V
+          rustc -V
+          cargo tree -V
+          # dependencies
+          echo "## dependency list"
+          ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
+          RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
+          RUSTUP_TOOLCHAIN=stable cargo tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
+      - name: Test
+        run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
+        env:
+          RUSTFLAGS: '-Awarnings'
+          RUST_BACKTRACE: '1'
 
   deps:
     name: Dependencies
@@ -404,649 +370,685 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-latest, features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
-    - name: "`cargo update` testing"
-      shell: bash
-      run: |
-        ## `cargo update` testing
-        # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::'Cargo.lock' file requires update (use \`cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: '`cargo update` testing'
+        shell: bash
+        run: |
+          ## `cargo update` testing
+          # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+          cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::'Cargo.lock' file requires update (use \`cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
 
   build_makefile:
     name: Build/Makefile
-    needs: [ min_version, deps ]
+    needs: [min_version, deps]
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-latest, features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: "`make build`"
-      shell: bash
-      run: |
-        make build
-    - name: "`make nextest`"
-      shell: bash
-      run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
-      env:
-        RUST_BACKTRACE: "1"
-    - name: "`make install`"
-      shell: bash
-      run: |
-        DESTDIR=/tmp/ make PROFILE=release install
-        # Check that the manpage is present
-        test -f /tmp/usr/local/share/man/man1/whoami.1
-        # Check that the completion is present
-        test -f /tmp/usr/local/share/zsh/site-functions/_install
-      env:
-        RUST_BACKTRACE: "1"
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@nextest
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: '`make build`'
+        shell: bash
+        run: |
+          make build
+      - name: '`make nextest`'
+        shell: bash
+        run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
+        env:
+          RUST_BACKTRACE: '1'
+      - name: '`make install`'
+        shell: bash
+        run: |
+          DESTDIR=/tmp/ make PROFILE=release install
+          # Check that the manpage is present
+          test -f /tmp/usr/local/share/man/man1/whoami.1
+          # Check that the completion is present
+          test -f /tmp/usr/local/share/zsh/site-functions/_install
+        env:
+          RUST_BACKTRACE: '1'
 
   build_rust_stable:
     name: Build/stable
-    needs: [ min_version, deps ]
+    needs: [min_version, deps]
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_macos }
-          - { os: windows-latest , features: feat_os_windows }
+          - { os: ubuntu-latest, features: feat_os_unix }
+          - { os: macos-latest, features: feat_os_macos }
+          - { os: windows-latest, features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Test
-      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
-      env:
-        RUST_BACKTRACE: "1"
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@nextest
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Test
+        run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+        env:
+          RUST_BACKTRACE: '1'
 
   build_rust_nightly:
     name: Build/nightly
-    needs: [ min_version, deps ]
+    needs: [min_version, deps]
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_macos }
-          - { os: windows-latest , features: feat_os_windows }
+          - { os: ubuntu-latest, features: feat_os_unix }
+          - { os: macos-latest, features: feat_os_macos }
+          - { os: windows-latest, features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@nightly
-    - uses: taiki-e/install-action@nextest
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Test
-      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
-      env:
-        RUST_BACKTRACE: "1"
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: taiki-e/install-action@nextest
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Test
+        run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+        env:
+          RUST_BACKTRACE: '1'
 
   compute_size:
     name: Binary sizes
-    needs: [ min_version, deps ]
+    needs: [min_version, deps]
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-latest, features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Install dependencies
-      shell: bash
-      run: |
-        ## Install dependencies
-        sudo apt-get update
-        sudo apt-get install jq
-    - name: "`make install`"
-      shell: bash
-      run: |
-        ## `make install`
-        make install DESTDIR=target/size-release/
-        make install MULTICALL=y DESTDIR=target/size-multi-release/
-        # strip the results
-        strip target/size*/usr/local/bin/*
-    - name: Compute uutil release sizes
-      shell: bash
-      run: |
-        ## Compute uutil release sizes
-        DATE=$(date --rfc-email)
-        find target/size-release/usr/local/bin -type f -printf '%f\0' | sort -z |
-          while IFS= read -r -d '' name; do
-            size=$(du -s target/size-release/usr/local/bin/$name | awk '{print $1}')
-            echo "\"$name\""
-            echo "$size"
-          done | \
-            jq -n \
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Install dependencies
+        shell: bash
+        run: |
+          ## Install dependencies
+          sudo apt-get update
+          sudo apt-get install jq
+      - name: '`make install`'
+        shell: bash
+        run: |
+          ## `make install`
+          make install DESTDIR=target/size-release/
+          make install MULTICALL=y DESTDIR=target/size-multi-release/
+          # strip the results
+          strip target/size*/usr/local/bin/*
+      - name: Compute uutil release sizes
+        shell: bash
+        run: |
+          ## Compute uutil release sizes
+          DATE=$(date --rfc-email)
+          find target/size-release/usr/local/bin -type f -printf '%f\0' | sort -z |
+            while IFS= read -r -d '' name; do
+              size=$(du -s target/size-release/usr/local/bin/$name | awk '{print $1}')
+              echo "\"$name\""
+              echo "$size"
+            done | \
+              jq -n \
                 --arg date "$DATE" \
                 --arg sha "$GITHUB_SHA" \
                 'reduce inputs as $name ({}; . + { ($name): input }) | { ($date): {sha: $sha, sizes: map_values(.)} }' > individual-size-result.json
-        SIZE=$(cat individual-size-result.json | jq '[.[] | .sizes | .[]] | reduce .[] as $num (0; . + $num)')
-        SIZE_MULTI=$(du -s target/size-multi-release/usr/local/bin/coreutils | awk '{print $1}')
-        jq -n \
-              --arg date "$DATE" \
-              --arg sha "$GITHUB_SHA" \
-              --arg size "$SIZE" \
-              --arg multisize "$SIZE_MULTI" \
-              '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
-    - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v2
-      with:
-        workflow: CICD.yml
-        name: individual-size-result
-        repo: uutils/coreutils
-        path: dl
-    - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v2
-      with:
-        workflow: CICD.yml
-        name: size-result
-        repo: uutils/coreutils
-        path: dl
-    - name: Check uutil release sizes
-      shell: bash
-      run: |
-        check() {
-          # Warn if the size increases by more than 5%
-          threshold='1.05'
-          ratio=$(jq -n "$2 / $3")
-          echo "$1: size=$2, previous_size=$3, ratio=$ratio, threshold=$threshold"
-          if [[ "$(jq -n "$ratio > $threshold")" == 'true' ]]; then
-            echo "::warning file=$4::Size of $1 increases by more than 5%"
-          fi
-        }
-        ## Check individual size result
-        while read -r name previous_size; do
-          size=$(cat individual-size-result.json | jq -r ".[] | .sizes | .\"$name\"")
-          check "\`$name\` binary" "$size" "$previous_size" 'individual-size-result.json'
-        done < <(cat dl/individual-size-result.json | jq -r '.[] | .sizes | to_entries[] | "\(.key) \(.value)"')
-        ## Check size result
-        size=$(cat size-result.json | jq -r '.[] | .size')
-        previous_size=$(cat dl/size-result.json | jq -r '.[] | .size')
-        check 'multiple binaries' "$size" "$previous_size" 'size-result.json'
-        multisize=$(cat size-result.json | jq -r '.[] | .multisize')
-        previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
-        check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
-    - name: Upload the individual size result
-      uses: actions/upload-artifact@v3
-      with:
-        name: individual-size-result
-        path: individual-size-result.json
-    - name: Upload the size result
-      uses: actions/upload-artifact@v3
-      with:
-        name: size-result
-        path: size-result.json
+          SIZE=$(cat individual-size-result.json | jq '[.[] | .sizes | .[]] | reduce .[] as $num (0; . + $num)')
+          SIZE_MULTI=$(du -s target/size-multi-release/usr/local/bin/coreutils | awk '{print $1}')
+          jq -n \
+            --arg date "$DATE" \
+            --arg sha "$GITHUB_SHA" \
+            --arg size "$SIZE" \
+            --arg multisize "$SIZE_MULTI" \
+            '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
+      - name: Download the previous individual size result
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: CICD.yml
+          name: individual-size-result
+          repo: uutils/coreutils
+          path: dl
+      - name: Download the previous size result
+        uses: dawidd6/action-download-artifact@v2
+        with:
+          workflow: CICD.yml
+          name: size-result
+          repo: uutils/coreutils
+          path: dl
+      - name: Check uutil release sizes
+        shell: bash
+        run: |
+          check() {
+            # Warn if the size increases by more than 5%
+            threshold='1.05'
+            ratio=$(jq -n "$2 / $3")
+            echo "$1: size=$2, previous_size=$3, ratio=$ratio, threshold=$threshold"
+            if [[ "$(jq -n "$ratio > $threshold")" == 'true' ]]; then
+              echo "::warning file=$4::Size of $1 increases by more than 5%"
+            fi
+          }
+          ## Check individual size result
+          while read -r name previous_size; do
+            size=$(cat individual-size-result.json | jq -r ".[] | .sizes | .\"$name\"")
+            check "\`$name\` binary" "$size" "$previous_size" 'individual-size-result.json'
+          done < <(cat dl/individual-size-result.json | jq -r '.[] | .sizes | to_entries[] | "\(.key) \(.value)"')
+          ## Check size result
+          size=$(cat size-result.json | jq -r '.[] | .size')
+          previous_size=$(cat dl/size-result.json | jq -r '.[] | .size')
+          check 'multiple binaries' "$size" "$previous_size" 'size-result.json'
+          multisize=$(cat size-result.json | jq -r '.[] | .multisize')
+          previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
+          check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
+      - name: Upload the individual size result
+        uses: actions/upload-artifact@v3
+        with:
+          name: individual-size-result
+          path: individual-size-result.json
+      - name: Upload the size result
+        uses: actions/upload-artifact@v3
+        with:
+          name: size-result
+          path: size-result.json
 
   build:
     permissions:
       contents: write # to create GitHub release (softprops/action-gh-release)
 
     name: Build
-    needs: [ min_version, deps ]
+    needs: [min_version, deps]
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
     env:
       DOCKER_OPTS: '--volume /etc/passwd:/etc/passwd --volume /etc/group:/etc/group'
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
     strategy:
       fail-fast: false
       matrix:
         job:
           # { os , target , cargo-options , features , use-cross , toolchain }
-          - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf, features: feat_os_unix_gnueabihf, use-cross: use-cross, }
+          - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf , use-cross: use-cross }
-          # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
-          - { os: ubuntu-latest   , target: i686-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross }
-          - { os: ubuntu-latest   , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
-          - { os: ubuntu-latest   , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
-          - { os: ubuntu-latest   , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
+          # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross } ## [2023-06; rivy] needs work before testable via GHA
+          - { os: ubuntu-latest  , target: i686-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross }
+          - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
+          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
+          - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows } ## note: requires rust >= 1.43.0 to link correctly
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ env.RUST_MIN_SRV }}
-        targets: ${{ matrix.job.target }}
-    - uses: Swatinem/rust-cache@v2
-      with:
-        key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # toolchain
-        TOOLCHAIN="stable" ## default to "stable" toolchain
-        # * specify alternate/non-default TOOLCHAIN for *-pc-windows-gnu targets; gnu targets on Windows are broken for the standard *-pc-windows-msvc toolchain (refs: GH:rust-lang/rust#47048, GH:rust-lang/rust#53454, GH:rust-lang/cargo#6754)
-        case ${{ matrix.job.target }} in *-pc-windows-gnu) TOOLCHAIN="stable-${{ matrix.job.target }}" ;; esac;
-        # * use requested TOOLCHAIN if specified
-        if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
-        outputs TOOLCHAIN
-        # staging directory
-        STAGING='_staging'
-        outputs STAGING
-        # determine EXE suffix
-        EXE_suffix="" ; case '${{ matrix.job.target }}' in *-pc-windows-*) EXE_suffix=".exe" ;; esac;
-        outputs EXE_suffix
-        # parse commit reference info
-        echo GITHUB_REF=${GITHUB_REF}
-        echo GITHUB_SHA=${GITHUB_SHA}
-        REF_NAME=${GITHUB_REF#refs/*/}
-        unset REF_BRANCH ; case "${GITHUB_REF}" in refs/heads/*) REF_BRANCH=${GITHUB_REF#refs/heads/} ;; esac;
-        unset REF_TAG ; case "${GITHUB_REF}" in refs/tags/*) REF_TAG=${GITHUB_REF#refs/tags/} ;; esac;
-        REF_SHAS=${GITHUB_SHA:0:10}
-        outputs REF_NAME REF_BRANCH REF_TAG REF_SHAS
-        # parse target
-        unset TARGET_ARCH
-        case '${{ matrix.job.target }}' in
-          aarch64-*) TARGET_ARCH=arm64 ;;
-          arm-*-*hf) TARGET_ARCH=armhf ;;
-          i586-*) TARGET_ARCH=i586 ;;
-          i686-*) TARGET_ARCH=i686 ;;
-          x86_64-*) TARGET_ARCH=x86_64 ;;
-        esac;
-        unset TARGET_OS ; case '${{ matrix.job.target }}' in *-linux-*) TARGET_OS=linux ;; *-apple-*) TARGET_OS=macos ;; *-windows-*) TARGET_OS=windows ;; esac;
-        outputs TARGET_ARCH TARGET_OS
-        # package name
-        PKG_suffix=".tar.gz" ; case '${{ matrix.job.target }}' in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
-        PKG_BASENAME=${PROJECT_NAME}-${REF_TAG:-$REF_SHAS}-${{ matrix.job.target }}
-        PKG_NAME=${PKG_BASENAME}${PKG_suffix}
-        outputs PKG_suffix PKG_BASENAME PKG_NAME
-        # deployable tag? (ie, leading "vM" or "M"; M == version number)
-        unset DEPLOY ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DEPLOY='true' ; fi
-        outputs DEPLOY
-        # DPKG architecture?
-        unset DPKG_ARCH
-        case ${{ matrix.job.target }} in
-          x86_64-*-linux-*) DPKG_ARCH=amd64 ;;
-          *-linux-*) DPKG_ARCH=${TARGET_ARCH} ;;
-        esac
-        outputs DPKG_ARCH
-        # DPKG version?
-        unset DPKG_VERSION ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DPKG_VERSION=${REF_TAG/#[vV]/} ; fi
-        outputs DPKG_VERSION
-        # DPKG base name/conflicts?
-        DPKG_BASENAME=${PROJECT_NAME}
-        DPKG_CONFLICTS=${PROJECT_NAME}-musl
-        case ${{ matrix.job.target }} in *-musl) DPKG_BASENAME=${PROJECT_NAME}-musl ; DPKG_CONFLICTS=${PROJECT_NAME} ;; esac;
-        outputs DPKG_BASENAME DPKG_CONFLICTS
-        # DPKG name
-        unset DPKG_NAME;
-        if [[ -n $DPKG_ARCH && -n $DPKG_VERSION ]]; then DPKG_NAME="${DPKG_BASENAME}_${DPKG_VERSION}_${DPKG_ARCH}.deb" ; fi
-        outputs DPKG_NAME
-        # target-specific options
-        # * CARGO_FEATURES_OPTION
-        CARGO_FEATURES_OPTION='' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
-        outputs CARGO_FEATURES_OPTION
-        # * CARGO_CMD
-        CARGO_CMD='cross' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) CARGO_CMD='cargo' ;; esac;
-        outputs CARGO_CMD
-        # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
-        if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
-          printf "[build.env]\npassthrough = [\"CI\", \"RUST_BACKTRACE\", \"CARGO_TERM_COLOR\"]\n" > Cross.toml
-        fi
-        # * test only library and/or binaries for arm-type targets
-        unset CARGO_TEST_OPTIONS ; case '${{ matrix.job.target }}' in aarch64-* | arm-*) CARGO_TEST_OPTIONS="--bins" ;; esac;
-        outputs CARGO_TEST_OPTIONS
-        # * executable for `strip`?
-        STRIP="strip"
-        case ${{ matrix.job.target }} in
-          aarch64-*-linux-gnu) STRIP="aarch64-linux-gnu-strip" ;;
-          arm-*-linux-gnueabihf) STRIP="arm-linux-gnueabihf-strip" ;;
-          *-pc-windows-msvc) STRIP="" ;;
-        esac;
-        outputs STRIP
-    - uses: taiki-e/install-action@v2
-      if: steps.vars.outputs.CARGO_CMD == 'cross'
-      with:
-        tool: cross@0.2.1
-    - name: Create all needed build/work directories
-      shell: bash
-      run: |
-        ## Create build/work space
-        mkdir -p '${{ steps.vars.outputs.STAGING }}'
-        mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}'
-        mkdir -p '${{ steps.vars.outputs.STAGING }}/dpkg'
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        case '${{ matrix.job.target }}' in
-          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-        esac
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
-        case '${{ matrix.job.os }}' in
-          ubuntu-*)
-            # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
-            # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands. The account also has empty gecos fields.
-            # To work around this for pinky tests, we create a fake login entry for the GH runner account...
-            FAKE_UTMP='[7] [999999] [tty2] [runner] [tty2] [] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
-            # ... by dumping the login records, adding our fake line, then reverse dumping ...
-            (utmpdump /var/run/utmp ; echo $FAKE_UTMP) | sudo utmpdump -r -o /var/run/utmp
-            # ... and add a full name to each account with a gecos field but no full name.
-            sudo sed -i 's/:,/:runner name,/' /etc/passwd
-            # We also create a couple optional files pinky looks for
-            touch /home/runner/.project
-            echo "foo" > /home/runner/.plan
-            ;;
-        esac
-    - name: Initialize toolchain-dependent workflow variables
-      id: dep_vars
-      shell: bash
-      run: |
-        ## Dependent VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
-        echo UTILITY_LIST=${UTILITY_LIST}
-        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
-        outputs CARGO_UTILITY_LIST_OPTIONS
-    - name: Info
-      shell: bash
-      run: |
-        ## Info
-        # commit info
-        echo "## commit"
-        echo GITHUB_REF=${GITHUB_REF}
-        echo GITHUB_SHA=${GITHUB_SHA}
-        # environment
-        echo "## environment"
-        echo "CI='${CI}'"
-        # tooling info display
-        echo "## tooling"
-        which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
-        rustup -V 2>/dev/null
-        rustup show active-toolchain
-        cargo -V
-        rustc -V
-        cargo tree -V
-        # dependencies
-        echo "## dependency list"
-        cargo fetch --locked --quiet
-        cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
-    - name: Build
-      shell: bash
-      run: |
-        ## Build
-        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} build --release \
-        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
-    - name: Test
-      shell: bash
-      run: |
-        ## Test
-        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
-        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
-      env:
-        RUST_BACKTRACE: "1"
-    - name: Test individual utilities
-      shell: bash
-      run: |
-        ## Test individual utilities
-        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
-        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
-      env:
-        RUST_BACKTRACE: "1"
-    - name: Archive executable artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}
-        path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}
-    - name: Package
-      shell: bash
-      run: |
-        ## Package artifact(s)
-        # binary
-        cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
-        # `strip` binary (if needed)
-        if [ -n "${{ steps.vars.outputs.STRIP }}" ]; then "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' ; fi
-        # README and LICENSE
-        # * spell-checker:ignore EADME ICENSE
-        (shopt -s nullglob; for f in [R]"EADME"{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
-        (shopt -s nullglob; for f in [L]"ICENSE"{-*,}{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
-        # core compressed package
-        pushd '${{ steps.vars.outputs.STAGING }}/' >/dev/null
-        case '${{ matrix.job.target }}' in
-          *-pc-windows-*) 7z -y a '${{ steps.vars.outputs.PKG_NAME }}' '${{ steps.vars.outputs.PKG_BASENAME }}'/* | tail -2 ;;
-          *) tar czf '${{ steps.vars.outputs.PKG_NAME }}' '${{ steps.vars.outputs.PKG_BASENAME }}'/* ;;
-        esac
-        popd >/dev/null
-        # dpkg
-        if [ -n "${{ steps.vars.outputs.DPKG_NAME }}" ]; then
-          DPKG_DIR="${{ steps.vars.outputs.STAGING }}/dpkg"
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_MIN_SRV }}
+          targets: ${{ matrix.job.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: '${{ matrix.job.os }}_${{ matrix.job.target }}'
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          # toolchain
+          TOOLCHAIN="stable" ## default to "stable" toolchain
+          # * specify alternate/non-default TOOLCHAIN for *-pc-windows-gnu targets; gnu targets on Windows are broken for the standard *-pc-windows-msvc toolchain (refs: GH:rust-lang/rust#47048, GH:rust-lang/rust#53454, GH:rust-lang/cargo#6754)
+          case ${{ matrix.job.target }} in *-pc-windows-gnu) TOOLCHAIN="stable-${{ matrix.job.target }}" ;; esac;
+          # * use requested TOOLCHAIN if specified
+          if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
+          outputs TOOLCHAIN
+          # staging directory
+          STAGING='_staging'
+          outputs STAGING
+          # determine EXE suffix
+          EXE_suffix="" ; case '${{ matrix.job.target }}' in *-pc-windows-*) EXE_suffix=".exe" ;; esac;
+          outputs EXE_suffix
+          # parse commit reference info
+          echo GITHUB_REF=${GITHUB_REF}
+          echo GITHUB_SHA=${GITHUB_SHA}
+          REF_NAME=${GITHUB_REF#refs/*/}
+          unset REF_BRANCH ; case "${GITHUB_REF}" in refs/heads/*) REF_BRANCH=${GITHUB_REF#refs/heads/} ;; esac;
+          unset REF_TAG ; case "${GITHUB_REF}" in refs/tags/*) REF_TAG=${GITHUB_REF#refs/tags/} ;; esac;
+          REF_SHAS=${GITHUB_SHA:0:10}
+          outputs REF_NAME REF_BRANCH REF_TAG REF_SHAS
+          # parse target
+          unset TARGET_ARCH
+          case '${{ matrix.job.target }}' in
+            aarch64-*) TARGET_ARCH=arm64 ;;
+            arm-*-*hf) TARGET_ARCH=armhf ;;
+            i586-*) TARGET_ARCH=i586 ;;
+            i686-*) TARGET_ARCH=i686 ;;
+            x86_64-*) TARGET_ARCH=x86_64 ;;
+          esac;
+          unset TARGET_OS ; case '${{ matrix.job.target }}' in *-linux-*) TARGET_OS=linux ;; *-apple-*) TARGET_OS=macos ;; *-windows-*) TARGET_OS=windows ;; esac;
+          outputs TARGET_ARCH TARGET_OS
+          # package name
+          PKG_suffix=".tar.gz" ; case '${{ matrix.job.target }}' in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
+          PKG_BASENAME=${PROJECT_NAME}-${REF_TAG:-$REF_SHAS}-${{ matrix.job.target }}
+          PKG_NAME=${PKG_BASENAME}${PKG_suffix}
+          outputs PKG_suffix PKG_BASENAME PKG_NAME
+          # deployable tag? (ie, leading "vM" or "M"; M == version number)
+          unset DEPLOY ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DEPLOY='true' ; fi
+          outputs DEPLOY
+          # DPKG architecture?
+          unset DPKG_ARCH
+          case ${{ matrix.job.target }} in
+            x86_64-*-linux-*) DPKG_ARCH=amd64 ;;
+            *-linux-*) DPKG_ARCH=${TARGET_ARCH} ;;
+          esac
+          outputs DPKG_ARCH
+          # DPKG version?
+          unset DPKG_VERSION ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DPKG_VERSION=${REF_TAG/#[vV]/} ; fi
+          outputs DPKG_VERSION
+          # DPKG base name/conflicts?
+          DPKG_BASENAME=${PROJECT_NAME}
+          DPKG_CONFLICTS=${PROJECT_NAME}-musl
+          case ${{ matrix.job.target }} in *-musl) DPKG_BASENAME=${PROJECT_NAME}-musl ; DPKG_CONFLICTS=${PROJECT_NAME} ;; esac;
+          outputs DPKG_BASENAME DPKG_CONFLICTS
+          # DPKG name
+          unset DPKG_NAME;
+          if [[ -n $DPKG_ARCH && -n $DPKG_VERSION ]]; then DPKG_NAME="${DPKG_BASENAME}_${DPKG_VERSION}_${DPKG_ARCH}.deb" ; fi
+          outputs DPKG_NAME
+          # target-specific options
+          # * CARGO_FEATURES_OPTION
+          CARGO_FEATURES_OPTION='' ;
+          if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
+          outputs CARGO_FEATURES_OPTION
+          # * CARGO_CMD
+          CARGO_CMD='cross' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) CARGO_CMD='cargo' ;; esac;
+          outputs CARGO_CMD
+          # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
+          if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
+            printf "[build.env]\npassthrough = [\"CI\", \"RUST_BACKTRACE\", \"CARGO_TERM_COLOR\"]\n" > Cross.toml
+          fi
+          # * test only library and/or binaries for arm-type targets
+          unset CARGO_TEST_OPTIONS ; case '${{ matrix.job.target }}' in aarch64-* | arm-*) CARGO_TEST_OPTIONS="--bins" ;; esac;
+          outputs CARGO_TEST_OPTIONS
+          # * executable for `strip`?
+          STRIP="strip"
+          case ${{ matrix.job.target }} in
+            aarch64-*-linux-gnu) STRIP="aarch64-linux-gnu-strip" ;;
+            arm-*-linux-gnueabihf) STRIP="arm-linux-gnueabihf-strip" ;;
+            *-pc-windows-msvc) STRIP="" ;;
+          esac;
+          outputs STRIP
+      - uses: taiki-e/install-action@v2
+        if: steps.vars.outputs.CARGO_CMD == 'cross'
+        with:
+          tool: cross@0.2.1
+      - name: Create all needed build/work directories
+        shell: bash
+        run: |
+          ## Create build/work space
+          mkdir -p '${{ steps.vars.outputs.STAGING }}'
+          mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}'
+          mkdir -p '${{ steps.vars.outputs.STAGING }}/dpkg'
+      - name: Install/setup prerequisites
+        shell: bash
+        run: |
+          ## Install/setup prerequisites
+          case '${{ matrix.job.target }}' in
+            arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
+            aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
+          esac
+          case '${{ matrix.job.os }}' in
+            macos-latest) brew install coreutils ;; # needed for testing
+          esac
+          case '${{ matrix.job.os }}' in
+            ubuntu-*)
+              # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
+              # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands. The account also has empty gecos fields.
+              # To work around this for pinky tests, we create a fake login entry for the GH runner account...
+              FAKE_UTMP='[7] [999999] [tty2] [runner] [tty2] [] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
+              # ... by dumping the login records, adding our fake line, then reverse dumping ...
+              (utmpdump /var/run/utmp ; echo $FAKE_UTMP) | sudo utmpdump -r -o /var/run/utmp
+              # ... and add a full name to each account with a gecos field but no full name.
+              sudo sed -i 's/:,/:runner name,/' /etc/passwd
+              # We also create a couple optional files pinky looks for
+              touch /home/runner/.project
+              echo "foo" > /home/runner/.plan
+              ;;
+          esac
+      - name: Initialize toolchain-dependent workflow variables
+        id: dep_vars
+        shell: bash
+        run: |
+          ## Dependent VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          # * determine sub-crate utility list
+          UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
+          echo UTILITY_LIST=${UTILITY_LIST}
+          CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
+          outputs CARGO_UTILITY_LIST_OPTIONS
+      - name: Info
+        shell: bash
+        run: |
+          ## Info
+          # commit info
+          echo "## commit"
+          echo GITHUB_REF=${GITHUB_REF}
+          echo GITHUB_SHA=${GITHUB_SHA}
+          # environment
+          echo "## environment"
+          echo "CI='${CI}'"
+          # tooling info display
+          echo "## tooling"
+          which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
+          rustup -V 2>/dev/null
+          rustup show active-toolchain
+          cargo -V
+          rustc -V
+          cargo tree -V
+          # dependencies
+          echo "## dependency list"
+          cargo fetch --locked --quiet
+          cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
+      - name: Build
+        shell: bash
+        run: |
+          ## Build
+          ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} build --release \
+          --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      - name: Test
+        shell: bash
+        run: |
+          ## Test
+          ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
+          ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+        env:
+          RUST_BACKTRACE: '1'
+      - name: Test individual utilities
+        shell: bash
+        run: |
+          ## Test individual utilities
+          ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
+          ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+        env:
+          RUST_BACKTRACE: '1'
+      - name: Archive executable artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}
+          path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}
+      - name: Package
+        shell: bash
+        run: |
+          ## Package artifact(s)
           # binary
-          install -Dm755 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' "${DPKG_DIR}/usr/bin/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}"
-          if [ -n "${{ steps.vars.outputs.STRIP }}" ]; then "${{ steps.vars.outputs.STRIP }}" "${DPKG_DIR}/usr/bin/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}" ; fi
+          cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
+          # `strip` binary (if needed)
+          if [ -n "${{ steps.vars.outputs.STRIP }}" ]; then "${{ steps.vars.outputs.STRIP }}" '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' ; fi
           # README and LICENSE
-          (shopt -s nullglob; for f in [R]"EADME"{,.*}; do install -Dm644 "$f" "${DPKG_DIR}/usr/share/doc/${{ env.PROJECT_NAME }}/$f" ; done)
-          (shopt -s nullglob; for f in [L]"ICENSE"{-*,}{,.*}; do install -Dm644 "$f" "${DPKG_DIR}/usr/share/doc/${{ env.PROJECT_NAME }}/$f" ; done)
-          # control file
-          mkdir -p "${DPKG_DIR}/DEBIAN"
-          printf "Package: ${{ steps.vars.outputs.DPKG_BASENAME }}\nVersion: ${{ steps.vars.outputs.DPKG_VERSION }}\nSection: utils\nPriority: optional\nMaintainer: ${{ env.PROJECT_AUTH }}\nArchitecture: ${{ steps.vars.outputs.DPKG_ARCH }}\nProvides: ${{ env.PROJECT_NAME }}\nConflicts: ${{ steps.vars.outputs.DPKG_CONFLICTS }}\nDescription: ${{ env.PROJECT_DESC }}\n" > "${DPKG_DIR}/DEBIAN/control"
-          # build dpkg
-          fakeroot dpkg-deb --build "${DPKG_DIR}" "${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.DPKG_NAME }}"
-        fi
-    - name: Publish
-      uses: softprops/action-gh-release@v1
-      if: steps.vars.outputs.DEPLOY
-      with:
-        files: |
-          ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
-          ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.DPKG_NAME }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # * spell-checker:ignore EADME ICENSE
+          (shopt -s nullglob; for f in [R]"EADME"{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
+          (shopt -s nullglob; for f in [L]"ICENSE"{-*,}{,.*}; do cp $f '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/' ; done)
+          # core compressed package
+          pushd '${{ steps.vars.outputs.STAGING }}/' >/dev/null
+          case '${{ matrix.job.target }}' in
+            *-pc-windows-*) 7z -y a '${{ steps.vars.outputs.PKG_NAME }}' '${{ steps.vars.outputs.PKG_BASENAME }}'/* | tail -2 ;;
+            *) tar czf '${{ steps.vars.outputs.PKG_NAME }}' '${{ steps.vars.outputs.PKG_BASENAME }}'/* ;;
+          esac
+          popd >/dev/null
+          # dpkg
+          if [ -n "${{ steps.vars.outputs.DPKG_NAME }}" ]; then
+            DPKG_DIR="${{ steps.vars.outputs.STAGING }}/dpkg"
+            # binary
+            install -Dm755 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' "${DPKG_DIR}/usr/bin/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}"
+            if [ -n "${{ steps.vars.outputs.STRIP }}" ]; then "${{ steps.vars.outputs.STRIP }}" "${DPKG_DIR}/usr/bin/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}" ; fi
+            # README and LICENSE
+            (shopt -s nullglob; for f in [R]"EADME"{,.*}; do install -Dm644 "$f" "${DPKG_DIR}/usr/share/doc/${{ env.PROJECT_NAME }}/$f" ; done)
+            (shopt -s nullglob; for f in [L]"ICENSE"{-*,}{,.*}; do install -Dm644 "$f" "${DPKG_DIR}/usr/share/doc/${{ env.PROJECT_NAME }}/$f" ; done)
+            # control file
+            mkdir -p "${DPKG_DIR}/DEBIAN"
+            printf "Package: ${{ steps.vars.outputs.DPKG_BASENAME }}\nVersion: ${{ steps.vars.outputs.DPKG_VERSION }}\nSection: utils\nPriority: optional\nMaintainer: ${{ env.PROJECT_AUTH }}\nArchitecture: ${{ steps.vars.outputs.DPKG_ARCH }}\nProvides: ${{ env.PROJECT_NAME }}\nConflicts: ${{ steps.vars.outputs.DPKG_CONFLICTS }}\nDescription: ${{ env.PROJECT_DESC }}\n" > "${DPKG_DIR}/DEBIAN/control"
+            # build dpkg
+            fakeroot dpkg-deb --build "${DPKG_DIR}" "${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.DPKG_NAME }}"
+          fi
+      - name: Publish
+        uses: softprops/action-gh-release@v1
+        if: steps.vars.outputs.DEPLOY
+        with:
+          files: |
+            ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
+            ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.DPKG_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   test_busybox:
     name: Tests/BusyBox test suite
-    needs: [ min_version, deps ]
+    needs: [min_version, deps]
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
     strategy:
       fail-fast: false
       matrix:
         job:
           - { os: ubuntu-latest }
     steps:
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
-    - uses: actions/checkout@v3
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        make prepare-busytest
-    - name: Run BusyBox test suite
-      id: summary
-      shell: bash
-      run: |
-        ## Run BusyBox test suite
-        set -v
-        cp .busybox-config target/debug/.config
-        ## Run BusyBox test suite
-        bindir=$(pwd)/target/debug
-        cd tmp/busybox-*/testsuite
-        output=$(bindir=$bindir ./runtest 2>&1 || true)
-        printf "%s\n" "${output}"
-        FAIL=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
-        PASS=$(echo "$output" | grep "^PASS:\s" | wc --lines)
-        SKIP=$(echo "$output" | grep "^SKIPPED:\s" | wc --lines)
-        TOTAL=`expr $FAIL + $PASS + $SKIP`
-        echo "FAIL $FAIL"
-        echo "SKIP $SKIP"
-        echo "PASS $PASS"
-        echo "TOTAL $TOTAL"
-        cd -
-        output="Busybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
-        echo "${output}"
-        if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
-        jq -n \
-                --arg date "$(date --rfc-email)" \
-                --arg sha "$GITHUB_SHA" \
-                --arg total "$TOTAL" \
-                --arg pass "$PASS" \
-                --arg skip "$SKIP" \
-                --arg fail "$FAIL" \
-                '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
-          HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
-          echo "HASH=${HASH}" >> $GITHUB_OUTPUT
-    - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v3
-      with:
-        name: "${{ steps.summary.outputs.HASH }}"
-        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
-    - name: Reserve test results summary
-      uses: actions/upload-artifact@v3
-      with:
-        name: test-summary
-        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
-    - name: Upload json results
-      uses: actions/upload-artifact@v3
-      with:
-        name: busybox-result.json
-        path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Install/setup prerequisites
+        shell: bash
+        run: |
+          ## Install/setup prerequisites
+          make prepare-busytest
+      - name: Run BusyBox test suite
+        id: summary
+        shell: bash
+        run: |
+          ## Run BusyBox test suite
+          set -v
+          cp .busybox-config target/debug/.config
+          ## Run BusyBox test suite
+          bindir=$(pwd)/target/debug
+          cd tmp/busybox-*/testsuite
+          output=$(bindir=$bindir ./runtest 2>&1 || true)
+          printf "%s\n" "${output}"
+          FAIL=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
+          PASS=$(echo "$output" | grep "^PASS:\s" | wc --lines)
+          SKIP=$(echo "$output" | grep "^SKIPPED:\s" | wc --lines)
+          TOTAL=`expr $FAIL + $PASS + $SKIP`
+          echo "FAIL $FAIL"
+          echo "SKIP $SKIP"
+          echo "PASS $PASS"
+          echo "TOTAL $TOTAL"
+          cd -
+          output="Busybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
+          echo "${output}"
+          if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
+          jq -n \
+                  --arg date "$(date --rfc-email)" \
+                  --arg sha "$GITHUB_SHA" \
+                  --arg total "$TOTAL" \
+                  --arg pass "$PASS" \
+                  --arg skip "$SKIP" \
+                  --arg fail "$FAIL" \
+                  '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+            HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+            echo "HASH=${HASH}" >> $GITHUB_OUTPUT
+      - name: Reserve SHA1/ID of 'test-summary'
+        uses: actions/upload-artifact@v3
+        with:
+          name: '${{ steps.summary.outputs.HASH }}'
+          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+      - name: Reserve test results summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-summary
+          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+      - name: Upload json results
+        uses: actions/upload-artifact@v3
+        with:
+          name: busybox-result.json
+          path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
+
+  test_fuzz:
+    name: Fuzz testing
+    runs-on: ubuntu-latest
+    env:
+      RUN_FOR: 60
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install `cargo-fuzz`
+        run: cargo install cargo-fuzz
+      - uses: Swatinem/rust-cache@v2
+      - name: Run fuzz_date for XX seconds
+        shell: bash
+        run: |
+          ## Run it
+          cd fuzz
+          cargo +nightly fuzz run fuzz_date -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+      - name: Run fuzz_parse_glob for XX seconds
+        shell: bash
+        run: |
+          ## Run it
+          cd fuzz
+          cargo +nightly fuzz run fuzz_parse_glob -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+      - name: Run fuzz_parse_size for XX seconds
+        shell: bash
+        run: |
+          ## Run it
+          cd fuzz
+          cargo +nightly fuzz run fuzz_parse_size -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+      - name: Run fuzz_parse_time for XX seconds
+        shell: bash
+        run: |
+          ## Run it
+          cd fuzz
+          cargo +nightly fuzz run fuzz_parse_time -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
 
   test_toybox:
     name: Tests/Toybox test suite
-    needs: [ min_version, deps ]
+    needs: [min_version, deps]
     runs-on: ${{ matrix.job.os }}
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
     strategy:
       fail-fast: false
       matrix:
         job:
           - { os: ubuntu-latest }
     steps:
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        TEST_SUMMARY_FILE="toybox-result.json"
-        outputs TEST_SUMMARY_FILE
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ env.RUST_MIN_SRV }}
-        components: rustfmt
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    - name: Build coreutils as multiple binaries
-      shell: bash
-      run: |
-        ## Build individual uutil binaries
-        set -v
-        make
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        make toybox-src
-    - name: Run Toybox test suite
-      id: summary
-      shell: bash
-      run: |
-        ## Run Toybox test suite
-        set -v
-        cd tmp/toybox-*/
-        make defconfig
-        make tests &> tmp.log || true
-        cat tmp.log
-        FAIL=$(grep "FAIL" tmp.log | wc --lines)
-        PASS=$(grep "PASS:"  tmp.log| wc --lines)
-        SKIP=$(grep " disabled$"  tmp.log| wc --lines)
-        TOTAL=`expr $FAIL + $PASS + $SKIP`
-        echo "FAIL $FAIL"
-        echo "SKIP $SKIP"
-        echo "PASS $PASS"
-        echo "TOTAL $TOTAL"
-        cd -
-        jq -n \
-                --arg date "$(date --rfc-email)" \
-                --arg sha "$GITHUB_SHA" \
-                --arg total "$TOTAL" \
-                --arg pass "$PASS" \
-                --arg skip "$SKIP" \
-                --arg fail "$FAIL" \
-                '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
-        output="Toybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
-        echo "${output}"
-        if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
-        HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          TEST_SUMMARY_FILE="toybox-result.json"
+          outputs TEST_SUMMARY_FILE
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_MIN_SRV }}
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Build coreutils as multiple binaries
+        shell: bash
+        run: |
+          ## Build individual uutil binaries
+          set -v
+          make
+      - name: Install/setup prerequisites
+        shell: bash
+        run: |
+          ## Install/setup prerequisites
+          make toybox-src
+      - name: Run Toybox test suite
+        id: summary
+        shell: bash
+        run: |
+          ## Run Toybox test suite
+          set -v
+          cd tmp/toybox-*/
+          make defconfig
+          make tests &> tmp.log || true
+          cat tmp.log
+          FAIL=$(grep "FAIL" tmp.log | wc --lines)
+          PASS=$(grep "PASS:"  tmp.log| wc --lines)
+          SKIP=$(grep " disabled$"  tmp.log| wc --lines)
+          TOTAL=`expr $FAIL + $PASS + $SKIP`
+          echo "FAIL $FAIL"
+          echo "SKIP $SKIP"
+          echo "PASS $PASS"
+          echo "TOTAL $TOTAL"
+          cd -
+          jq -n \
+            --arg date "$(date --rfc-email)" \
+            --arg sha "$GITHUB_SHA" \
+            --arg total "$TOTAL" \
+            --arg pass "$PASS" \
+            --arg skip "$SKIP" \
+            --arg fail "$FAIL" \
+            '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+          output="Toybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
+          echo "${output}"
+          if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
+          HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
           echo "HASH=${HASH}" >> $GITHUB_OUTPUT
-    - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v3
-      with:
-        name: "${{ steps.summary.outputs.HASH }}"
-        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
-    - name: Reserve test results summary
-      uses: actions/upload-artifact@v3
-      with:
-        name: test-summary
-        path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
-    - name: Upload json results
-      uses: actions/upload-artifact@v3
-      with:
-        name: toybox-result.json
-        path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
+      - name: Reserve SHA1/ID of 'test-summary'
+        uses: actions/upload-artifact@v3
+        with:
+          name: '${{ steps.summary.outputs.HASH }}'
+          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+      - name: Reserve test results summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-summary
+          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+      - name: Upload json results
+        uses: actions/upload-artifact@v3
+        with:
+          name: toybox-result.json
+          path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
 
   toml_format:
     runs-on: ubuntu-latest
@@ -1062,131 +1064,130 @@ jobs:
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: unix, toolchain: nightly }
-          - { os: macos-latest   , features: macos, toolchain: nightly }
-          - { os: windows-latest , features: windows, toolchain: nightly-x86_64-pc-windows-gnu }
+          - { os: ubuntu-latest  , features: feat_os_unix    , toolchain: nightly }
+          - { os: macos-latest   , features: feat_os_macos   , toolchain: nightly }
+          - { os: windows-latest , features: feat_os_windows , toolchain: nightly-x86_64-pc-windows-gnu }
     steps:
-    - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ matrix.job.toolchain }}
-        components: rustfmt
-    - uses: taiki-e/install-action@nextest
-    - uses: taiki-e/install-action@grcov
-    - uses: Swatinem/rust-cache@v2
-    - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.3
-    # - name: Reattach HEAD ## may be needed for accurate code coverage info
-    #   run: git checkout ${{ github.head_ref }}
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # toolchain
-        TOOLCHAIN="nightly" ## default to "nightly" toolchain (required for certain required unstable compiler flags) ## !maint: refactor when stable channel has needed support
-        # * specify gnu-type TOOLCHAIN for windows; `grcov` requires gnu-style code coverage data files
-        case ${{ matrix.job.os }} in windows-*) TOOLCHAIN="$TOOLCHAIN-x86_64-pc-windows-gnu" ;; esac;
-        # * use requested TOOLCHAIN if specified
-        if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
-        outputs TOOLCHAIN
-        # staging directory
-        STAGING='_staging'
-        outputs STAGING
-        # target-specific options
-        # * CARGO_FEATURES_OPTION
-        CARGO_FEATURES_OPTION='--all-features' ;  ## default to '--all-features' for code coverage
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
-        outputs CARGO_FEATURES_OPTION
-        # * CODECOV_FLAGS
-        CODECOV_FLAGS=$( echo "${{ matrix.job.os }}" | sed 's/[^[:alnum:]]/_/g' )
-        outputs CODECOV_FLAGS
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
-        case '${{ matrix.job.os }}' in
-          ubuntu-latest)
-            # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
-            # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands. The account also has empty gecos fields.
-            # To work around this for pinky tests, we create a fake login entry for the GH runner account...
-            FAKE_UTMP='[7] [999999] [tty2] [runner] [tty2] [] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
-            # ... by dumping the login records, adding our fake line, then reverse dumping ...
-            (utmpdump /var/run/utmp ; echo $FAKE_UTMP) | sudo utmpdump -r -o /var/run/utmp
-            # ... and add a full name to each account with a gecos field but no full name.
-            sudo sed -i 's/:,/:runner name,/' /etc/passwd
-            # We also create a couple optional files pinky looks for
-            touch /home/runner/.project
-            echo "foo" > /home/runner/.plan
-            ;;
-        esac
-    - name: Initialize toolchain-dependent workflow variables
-      id: dep_vars
-      shell: bash
-      run: |
-        ## Dependent VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-        # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
-        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
-        outputs CARGO_UTILITY_LIST_OPTIONS
-    - name: Test uucore
-      run: cargo nextest run --profile ci --hide-progress-bar -p uucore
-      env:
-        RUSTC_WRAPPER: ""
-        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
-        RUSTDOCFLAGS: "-Cpanic=abort"
-        RUST_BACKTRACE: "1"
-        # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
-    - name: Test
-      run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
-      env:
-        RUSTC_WRAPPER: ""
-        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
-        RUSTDOCFLAGS: "-Cpanic=abort"
-        RUST_BACKTRACE: "1"
-        # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
-    - name: Test individual utilities
-      run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
-      env:
-        RUSTC_WRAPPER: ""
-        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
-        RUSTDOCFLAGS: "-Cpanic=abort"
-        RUST_BACKTRACE: "1"
-        # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
-    - name: Generate coverage data (via `grcov`)
-      id: coverage
-      shell: bash
-      run: |
-        ## Generate coverage data
-        COVERAGE_REPORT_DIR="target/debug"
-        COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
-        # GRCOV_IGNORE_OPTION='--ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*"' ## `grcov` ignores these params when passed as an environment variable (why?)
-        # GRCOV_EXCLUDE_OPTION='--excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"' ## `grcov` ignores these params when passed as an environment variable (why?)
-        mkdir -p "${COVERAGE_REPORT_DIR}"
-        # display coverage files
-        ~/.cargo/bin/grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
-        # generate coverage report
-        ~/.cargo/bin/grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
-        echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
-    - name: Upload coverage results (to Codecov.io)
-      uses: codecov/codecov-action@v3
-      # if: steps.vars.outputs.HAS_CODECOV_TOKEN
-      with:
-        # token: ${{ secrets.CODECOV_TOKEN }}
-        file: ${{ steps.coverage.outputs.report }}
-        ## flags: IntegrationTests, UnitTests, ${{ steps.vars.outputs.CODECOV_FLAGS }}
-        flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
-        name: codecov-umbrella
-        fail_ci_if_error: false
-
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.job.toolchain }}
+          components: rustfmt
+      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@grcov
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      # - name: Reattach HEAD ## may be needed for accurate code coverage info
+      #   run: git checkout ${{ github.head_ref }}
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          # toolchain
+          TOOLCHAIN="nightly" ## default to "nightly" toolchain (required for certain required unstable compiler flags) ## !maint: refactor when stable channel has needed support
+          # * specify gnu-type TOOLCHAIN for windows; `grcov` requires gnu-style code coverage data files
+          case ${{ matrix.job.os }} in windows-*) TOOLCHAIN="$TOOLCHAIN-x86_64-pc-windows-gnu" ;; esac;
+          # * use requested TOOLCHAIN if specified
+          if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
+          outputs TOOLCHAIN
+          # staging directory
+          STAGING='_staging'
+          outputs STAGING
+          # target-specific options
+          # * CARGO_FEATURES_OPTION
+          CARGO_FEATURES_OPTION='--all-features' ;  ## default to '--all-features' for code coverage
+          if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
+          outputs CARGO_FEATURES_OPTION
+          # * CODECOV_FLAGS
+          CODECOV_FLAGS=$( echo "${{ matrix.job.os }}" | sed 's/[^[:alnum:]]/_/g' )
+          outputs CODECOV_FLAGS
+      - name: Install/setup prerequisites
+        shell: bash
+        run: |
+          ## Install/setup prerequisites
+          case '${{ matrix.job.os }}' in
+            macos-latest) brew install coreutils ;; # needed for testing
+          esac
+          case '${{ matrix.job.os }}' in
+            ubuntu-latest)
+              # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
+              # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands. The account also has empty gecos fields.
+              # To work around this for pinky tests, we create a fake login entry for the GH runner account...
+              FAKE_UTMP='[7] [999999] [tty2] [runner] [tty2] [] [0.0.0.0] [2022-02-22T22:22:22,222222+00:00]'
+              # ... by dumping the login records, adding our fake line, then reverse dumping ...
+              (utmpdump /var/run/utmp ; echo $FAKE_UTMP) | sudo utmpdump -r -o /var/run/utmp
+              # ... and add a full name to each account with a gecos field but no full name.
+              sudo sed -i 's/:,/:runner name,/' /etc/passwd
+              # We also create a couple optional files pinky looks for
+              touch /home/runner/.project
+              echo "foo" > /home/runner/.plan
+              ;;
+          esac
+      - name: Initialize toolchain-dependent workflow variables
+        id: dep_vars
+        shell: bash
+        run: |
+          ## Dependent VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          # * determine sub-crate utility list
+          UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
+          CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
+          outputs CARGO_UTILITY_LIST_OPTIONS
+      - name: Test uucore
+        run: cargo nextest run --profile ci --hide-progress-bar -p uucore
+        env:
+          RUSTC_WRAPPER: ''
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTDOCFLAGS: '-Cpanic=abort'
+          RUST_BACKTRACE: '1'
+          # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
+      - name: Test
+        run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+        env:
+          RUSTC_WRAPPER: ''
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTDOCFLAGS: '-Cpanic=abort'
+          RUST_BACKTRACE: '1'
+          # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
+      - name: Test individual utilities
+        run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+        env:
+          RUSTC_WRAPPER: ''
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+          RUSTDOCFLAGS: '-Cpanic=abort'
+          RUST_BACKTRACE: '1'
+          # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
+      - name: Generate coverage data (via `grcov`)
+        id: coverage
+        shell: bash
+        run: |
+          ## Generate coverage data
+          COVERAGE_REPORT_DIR="target/debug"
+          COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
+          # GRCOV_IGNORE_OPTION='--ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*"' ## `grcov` ignores these params when passed as an environment variable (why?)
+          # GRCOV_EXCLUDE_OPTION='--excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"' ## `grcov` ignores these params when passed as an environment variable (why?)
+          mkdir -p "${COVERAGE_REPORT_DIR}"
+          # display coverage files
+          ~/.cargo/bin/grcov . --output-type files --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()" | sort --unique
+          # generate coverage report
+          ~/.cargo/bin/grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
+          echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
+      - name: Upload coverage results (to Codecov.io)
+        uses: codecov/codecov-action@v3
+        # if: steps.vars.outputs.HAS_CODECOV_TOKEN
+        with:
+          # token: ${{ secrets.CODECOV_TOKEN }}
+          file: ${{ steps.coverage.outputs.report }}
+          ## flags: IntegrationTests, UnitTests, ${{ steps.vars.outputs.CODECOV_FLAGS }}
+          flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
+          name: codecov-umbrella
+          fail_ci_if_error: false
