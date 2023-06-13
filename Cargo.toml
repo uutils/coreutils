@@ -289,7 +289,7 @@ indicatif = "0.17"
 is-terminal = "0.4.7"
 itertools = "0.10.5"
 libc = "0.2.146"
-lscolors = { git = "https://github.com/alexkunde/lscolors.git", rev = "b10b4bc", default-features=false, features = ["gnu_legacy"] }
+lscolors = { git = "https://github.com/alexkunde/lscolors.git", rev = "cb4679b", default-features=false, features = ["gnu_legacy"] }
 memchr = "2"
 nix = { version = "0.26", default-features = false }
 nom = "7.1.3"

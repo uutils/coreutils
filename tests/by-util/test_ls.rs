@@ -1935,9 +1935,9 @@ fn test_ls_color() {
     at.touch(nested_file);
     at.touch("test-color");
 
-    let a_with_colors = "\x1b[1;34ma\x1b[0m";
-    let z_with_colors = "\x1b[1;34mz\x1b[0m";
-    let nested_dir_with_colors = "\x1b[1;34mnested_dir\x1b[0m"; // spell-checker:disable-line
+    let a_with_colors = "\x1b[01;34ma\x1b[0m";
+    let z_with_colors = "\x1b[01;34mz\x1b[0m";
+    let nested_dir_with_colors = "\x1b[01;34mnested_dir\x1b[0m"; // spell-checker:disable-line
 
     // Color is disabled by default, only when neither TERM, LS_COLORS nor COLORTERM env variable are set
     let result = scene.ucmd().succeeds();
@@ -1997,7 +1997,9 @@ fn test_ls_color() {
         .arg("-w=15")
         .arg("-C")
         .succeeds()
-        .stdout_only(format!("{a_with_colors}  test-color\nb  {z_with_colors}\n"));
+        .stdout_only(format!(
+            "\x1b[0m{a_with_colors}  test-color\nb  {z_with_colors}\n"
+        ));
 }
 
 #[cfg(unix)]

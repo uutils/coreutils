@@ -1376,7 +1376,7 @@ dependencies = [
 [[package]]
 name = "lscolors"
 version = "0.14.0"
-source = "git+https://github.com/alexkunde/lscolors.git?rev=b10b4bc#b10b4bc4daf3595c2050b2559680b92cb1e84bfa"
+source = "git+https://github.com/alexkunde/lscolors.git?rev=cb4679b#cb4679bc3ddba0385546f177eb80304b9a9ab581"
 dependencies = [
  "nu-ansi-term",
 ]

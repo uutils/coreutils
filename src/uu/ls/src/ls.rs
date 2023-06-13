@@ -15,6 +15,7 @@ use glob::{MatchOptions, Pattern};
 use is_terminal::IsTerminal;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
+use once_cell::sync::OnceCell as SyncOnceCell;
 use once_cell::unsync::OnceCell;
 use std::env::VarError;
 #[cfg(windows)]
@@ -3030,9 +3031,19 @@ fn display_file_name(
     }
 }
 
+// sticky icky
+static FIRST_TIME_COLORING: SyncOnceCell<bool> = SyncOnceCell::new();
+
 fn color_name(name: String, path: &Path, md: Option<&Metadata>, ls_colors: &LsColors) -> String {
     match ls_colors.style_for_path_with_metadata(path, md) {
         Some(style) => {
+            if FIRST_TIME_COLORING.get().is_none() {
+                let _ = FIRST_TIME_COLORING.set(true);
+                return style
+                    .to_nu_ansi_term_style_with_reset()
+                    .paint(name)
+                    .to_string();
+            }
             return style.to_nu_ansi_term_style().paint(name).to_string();
         }
         None => name,
