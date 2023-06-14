@@ -26,14 +26,13 @@ use uucore::{format_usage, help_about, help_usage, show};
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
+use uucore::shortcut_value_parser::ShortcutValueParser;
+
 // Options
 const DATE: &str = "date";
 const HOURS: &str = "hours";
 const MINUTES: &str = "minutes";
 const SECONDS: &str = "seconds";
-const HOUR: &str = "hour";
-const MINUTE: &str = "minute";
-const SECOND: &str = "second";
 const NS: &str = "ns";
 
 const ABOUT: &str = help_about!("date.md");
@@ -110,9 +109,9 @@ enum Iso8601Format {
 impl<'a> From<&'a str> for Iso8601Format {
     fn from(s: &str) -> Self {
         match s {
-            HOURS | HOUR => Self::Hours,
-            MINUTES | MINUTE => Self::Minutes,
-            SECONDS | SECOND => Self::Seconds,
+            HOURS => Self::Hours,
+            MINUTES => Self::Minutes,
+            SECONDS => Self::Seconds,
             NS => Self::Ns,
             DATE => Self::Date,
             // Note: This is caught by clap via `possible_values`
@@ -131,7 +130,7 @@ impl<'a> From<&'a str> for Rfc3339Format {
     fn from(s: &str) -> Self {
         match s {
             DATE => Self::Date,
-            SECONDS | SECOND => Self::Seconds,
+            SECONDS => Self::Seconds,
             NS => Self::Ns,
             // Should be caught by clap
             _ => panic!("Invalid format: {s}"),
@@ -317,7 +316,9 @@ pub fn uu_app() -> Command {
                 .short('I')
                 .long(OPT_ISO_8601)
                 .value_name("FMT")
-                .value_parser([DATE, HOUR, HOURS, MINUTE, MINUTES, SECOND, SECONDS, NS])
+                .value_parser(ShortcutValueParser::new([
+                    DATE, HOURS, MINUTES, SECONDS, NS,
+                ]))
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
                 .help(ISO_8601_HELP_STRING),
@@ -333,7 +334,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RFC_3339)
                 .long(OPT_RFC_3339)
                 .value_name("FMT")
-                .value_parser([DATE, SECOND, SECONDS, NS])
+                .value_parser(ShortcutValueParser::new([DATE, SECONDS, NS]))
                 .help(RFC_3339_HELP_STRING),
         )
         .arg(
