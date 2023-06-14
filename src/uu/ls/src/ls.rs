@@ -3040,7 +3040,8 @@ fn color_name(name: String, path: &Path, md: Option<&Metadata>, ls_colors: &LsCo
             if FIRST_TIME_COLORING.get().is_none() {
                 let _ = FIRST_TIME_COLORING.set(true);
                 return style
-                    .to_nu_ansi_term_style_with_reset()
+                    .to_nu_ansi_term_style()
+                    .reset_before_style()
                     .paint(name)
                     .to_string();
             }
