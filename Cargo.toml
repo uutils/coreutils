@@ -300,7 +300,7 @@ num-traits = "0.2.15"
 number_prefix = "0.4"
 once_cell = "1.18.0"
 onig = { version = "~6.4", default-features = false }
-ouroboros = "0.15.6"
+ouroboros = "0.16.0"
 parse_datetime = "0.4.0"
 phf = "0.11.1"
 phf_codegen = "0.11.1"
