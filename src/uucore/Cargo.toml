@@ -38,15 +38,15 @@ sha2 = { workspace = true }
 sha3 = { workspace = true }
 sm3 = { workspace = true }
 # * optional
-data-encoding = { version="2.3", optional=true }
-data-encoding-macro = { version="0.1.12", optional=true }
-dns-lookup = { version="1.0.8", optional=true }
-itertools = { version="0.10.5", optional=true }
-libc = { version="0.2.144", optional=true }
-z85 = { version="3.0.5", optional=true }
+data-encoding = { version = "2.3", optional = true }
+data-encoding-macro = { version = "0.1.12", optional = true }
+dns-lookup = { version = "1.0.8", optional = true }
+itertools = { version = "0.10.5", optional = true }
+libc = { version = "0.2.144", optional = true }
+z85 = { version = "3.0.5", optional = true }
 # * optional/workspace
-thiserror = { workspace=true, optional=true }
-time = { workspace=true, optional=true, features = ["formatting", "local-offset", "macros"] }
+thiserror = { workspace = true, optional = true }
+time = { workspace = true, optional = true, features = ["formatting", "local-offset", "macros"] }
 # * "problem" dependencies (pinned); note: examples are retained for reference
 ## * backtrace: transitive dependency via 'failure'; pin to <= v0.3.30 to avoid increasing MinSRV to v1.33.0
 #backtrace = ">= 0.3.3, <= 0.3.30"
@@ -56,17 +56,17 @@ time = { workspace=true, optional=true, features = ["formatting", "local-offset"
 #libc = { version = "0.2.15, <= 0.2.66", optional = true }
 
 [target.'cfg(unix)'.dependencies]
-walkdir = { workspace=true, optional=true }
-nix = { workspace=true, features = ["fs", "uio", "zerocopy", "signal"] }
+walkdir = { workspace = true, optional = true }
+nix = { workspace = true, features = ["fs", "uio", "zerocopy", "signal"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-winapi-util = { version= "0.1.5", optional=true }
+winapi-util = { version = "0.1.5", optional = true }
 windows-sys = { version = "0.45.0", optional = true, default-features = false, features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_WindowsProgramming"] }
 
 [dev-dependencies]
-clap = { workspace=true }
-once_cell = { workspace=true }
-tempfile = { workspace=true }
+clap = { workspace = true }
+once_cell = { workspace = true }
+tempfile = { workspace = true }
 
 [features]
 default = []

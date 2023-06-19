@@ -270,7 +270,7 @@ blake3 = "1.4.0"
 bstr = "1.5"
 bytecount = "0.6.3"
 byteorder = "1.4.3"
-chrono = { version = "^0.4.26", default-features = false, features = [ "std", "alloc", "clock" ] }
+chrono = { version = "^0.4.26", default-features = false, features = ["std", "alloc", "clock"] }
 clap = { version = "4.3", features = ["wrap_help", "cargo"] }
 clap_complete = "4.3"
 clap_mangen = "0.2"
@@ -294,7 +294,7 @@ indicatif = "0.17"
 is-terminal = "0.4.7"
 itertools = "0.10.5"
 libc = "0.2.146"
-lscolors = { version = "0.14.0", default-features = false, features = [ "nu-ansi-term" ] }
+lscolors = { version = "0.14.0", default-features = false, features = ["nu-ansi-term"] }
 md-5 = "0.10.5"
 memchr = "2"
 nix = { version = "0.26", default-features = false }
