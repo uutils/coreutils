@@ -302,8 +302,8 @@ jobs:
           S=$(cspell ${CSPELL_CFG_OPTION} --no-summary "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
           if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
-  min_version:
-    name: MinRustV # Minimum supported rust version (aka, MinSRV or MSRV)
+  verify_min_version:
+    name: Verify/MinRustV # Minimum supported rust version (aka, MinSRV or MSRV)
     runs-on: ${{ matrix.job.os }}
     env:
       SCCACHE_GHA_ENABLED: 'true'
@@ -377,8 +377,8 @@ jobs:
           RUSTFLAGS: '-Awarnings'
           RUST_BACKTRACE: '1'
 
-  deps:
-    name: Dependencies
+  verify_deps:
+    name: Verify/dependencies
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -396,102 +396,9 @@ jobs:
           # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
           cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::'Cargo.lock' file requires update (use \`cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
 
-  build_makefile:
-    name: Build/Makefile
-    needs: [min_version, deps]
-    runs-on: ${{ matrix.job.os }}
-    env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: 'sccache'
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest, features: feat_os_unix }
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@nextest
-      - uses: Swatinem/rust-cache@v2
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
-      - name: '`make build`'
-        shell: bash
-        run: |
-          make build
-      - name: '`make nextest`'
-        shell: bash
-        run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
-        env:
-          RUST_BACKTRACE: '1'
-      - name: '`make install`'
-        shell: bash
-        run: |
-          DESTDIR=/tmp/ make PROFILE=release install
-          # Check that the manpage is present
-          test -f /tmp/usr/local/share/man/man1/whoami.1
-          # Check that the completion is present
-          test -f /tmp/usr/local/share/zsh/site-functions/_install
-        env:
-          RUST_BACKTRACE: '1'
-
-  build_rust_stable:
-    name: Build/stable
-    needs: [min_version, deps]
-    runs-on: ${{ matrix.job.os }}
-    timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: 'sccache'
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest, features: feat_os_unix }
-          - { os: macos-latest, features: feat_os_macos }
-          - { os: windows-latest, features: feat_os_windows }
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@nextest
-      - uses: Swatinem/rust-cache@v2
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
-      - name: Test
-        run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
-        env:
-          RUST_BACKTRACE: '1'
-
-  build_rust_nightly:
-    name: Build/nightly
-    needs: [min_version, deps]
-    runs-on: ${{ matrix.job.os }}
-    timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: 'sccache'
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest, features: feat_os_unix }
-          - { os: macos-latest, features: feat_os_macos }
-          - { os: windows-latest, features: feat_os_windows }
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@nightly
-      - uses: taiki-e/install-action@nextest
-      - uses: Swatinem/rust-cache@v2
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
-      - name: Test
-        run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
-        env:
-          RUST_BACKTRACE: '1'
-
-  compute_size:
-    name: Binary sizes
-    needs: [min_version, deps]
+  info_compute_size:
+    name: Info/Binary sizes
+    needs: [verify_min_version, verify_deps]
     runs-on: ${{ matrix.job.os }}
     env:
       SCCACHE_GHA_ENABLED: 'true'
@@ -593,12 +500,312 @@ jobs:
           name: size-result
           path: size-result.json
 
+  test_fuzz:
+    name: Tests/Fuzz testing
+    needs: [verify_min_version, verify_deps]
+    runs-on: ${{ matrix.job.os }}
+    env:
+      RUN_FOR: 60
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - uses: actions/checkout@v3
+    - uses: dtolnay/rust-toolchain@nightly
+    - name: Install `cargo-fuzz`
+      run: cargo install cargo-fuzz
+    - uses: Swatinem/rust-cache@v2
+    - name: Run fuzz_date for XX seconds
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_date -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_parse_glob for XX seconds
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_parse_glob -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_parse_size for XX seconds
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_parse_size -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_parse_time for XX seconds
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_parse_time -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+
+  test_busybox:
+    name: Tests/BusyBox test suite
+    needs: [verify_min_version, verify_deps]
+    runs-on: ${{ matrix.job.os }}
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Install/setup prerequisites
+        shell: bash
+        run: |
+          ## Install/setup prerequisites
+          make prepare-busytest
+      - name: Run BusyBox test suite
+        id: summary
+        shell: bash
+        run: |
+          ## Run BusyBox test suite
+          set -v
+          cp .busybox-config target/debug/.config
+          ## Run BusyBox test suite
+          bindir=$(pwd)/target/debug
+          cd tmp/busybox-*/testsuite
+          output=$(bindir=$bindir ./runtest 2>&1 || true)
+          printf "%s\n" "${output}"
+          FAIL=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
+          PASS=$(echo "$output" | grep "^PASS:\s" | wc --lines)
+          SKIP=$(echo "$output" | grep "^SKIPPED:\s" | wc --lines)
+          TOTAL=`expr $FAIL + $PASS + $SKIP`
+          echo "FAIL $FAIL"
+          echo "SKIP $SKIP"
+          echo "PASS $PASS"
+          echo "TOTAL $TOTAL"
+          cd -
+          output="Busybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
+          echo "${output}"
+          if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
+          jq -n \
+            --arg date "$(date --rfc-email)" \
+            --arg sha "$GITHUB_SHA" \
+            --arg total "$TOTAL" \
+            --arg pass "$PASS" \
+            --arg skip "$SKIP" \
+            --arg fail "$FAIL" \
+            '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+          HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+          echo "HASH=${HASH}" >> $GITHUB_OUTPUT
+      - name: Reserve SHA1/ID of 'test-summary'
+        uses: actions/upload-artifact@v3
+        with:
+          name: '${{ steps.summary.outputs.HASH }}'
+          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+      - name: Reserve test results summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-summary
+          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+      - name: Upload json results
+        uses: actions/upload-artifact@v3
+        with:
+          name: busybox-result.json
+          path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
+
+  test_toybox:
+    name: Tests/Toybox test suite
+    needs: [verify_min_version, verify_deps]
+    runs-on: ${{ matrix.job.os }}
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+      - name: Initialize workflow variables
+        id: vars
+        shell: bash
+        run: |
+          ## VARs setup
+          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
+          TEST_SUMMARY_FILE="toybox-result.json"
+          outputs TEST_SUMMARY_FILE
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_MIN_SRV }}
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Build coreutils as multiple binaries
+        shell: bash
+        run: |
+          ## Build individual uutil binaries
+          set -v
+          make
+      - name: Install/setup prerequisites
+        shell: bash
+        run: |
+          ## Install/setup prerequisites
+          make toybox-src
+      - name: Run Toybox test suite
+        id: summary
+        shell: bash
+        run: |
+          ## Run Toybox test suite
+          set -v
+          cd tmp/toybox-*/
+          make defconfig
+          make tests &> tmp.log || true
+          cat tmp.log
+          FAIL=$(grep "FAIL" tmp.log | wc --lines)
+          PASS=$(grep "PASS:"  tmp.log| wc --lines)
+          SKIP=$(grep " disabled$"  tmp.log| wc --lines)
+          TOTAL=`expr $FAIL + $PASS + $SKIP`
+          echo "FAIL $FAIL"
+          echo "SKIP $SKIP"
+          echo "PASS $PASS"
+          echo "TOTAL $TOTAL"
+          cd -
+          jq -n \
+            --arg date "$(date --rfc-email)" \
+            --arg sha "$GITHUB_SHA" \
+            --arg total "$TOTAL" \
+            --arg pass "$PASS" \
+            --arg skip "$SKIP" \
+            --arg fail "$FAIL" \
+            '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+          output="Toybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
+          echo "${output}"
+          if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
+          HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
+          echo "HASH=${HASH}" >> $GITHUB_OUTPUT
+      - name: Reserve SHA1/ID of 'test-summary'
+        uses: actions/upload-artifact@v3
+        with:
+          name: '${{ steps.summary.outputs.HASH }}'
+          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+      - name: Reserve test results summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-summary
+          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
+      - name: Upload json results
+        uses: actions/upload-artifact@v3
+        with:
+          name: toybox-result.json
+          path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
+
+  build_makefile:
+    name: Build/Makefile
+    needs: [verify_min_version, verify_deps]
+    runs-on: ${{ matrix.job.os }}
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest, features: feat_os_unix }
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@nextest
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: '`make build`'
+        shell: bash
+        run: |
+          make build
+      - name: '`make nextest`'
+        shell: bash
+        run: make nextest CARGOFLAGS="--profile ci --hide-progress-bar"
+        env:
+          RUST_BACKTRACE: '1'
+      - name: '`make install`'
+        shell: bash
+        run: |
+          DESTDIR=/tmp/ make PROFILE=release install
+          # Check that the manpage is present
+          test -f /tmp/usr/local/share/man/man1/whoami.1
+          # Check that the completion is present
+          test -f /tmp/usr/local/share/zsh/site-functions/_install
+        env:
+          RUST_BACKTRACE: '1'
+
+  build_rust_stable:
+    name: Build/stable
+    needs: [verify_min_version, verify_deps]
+    runs-on: ${{ matrix.job.os }}
+    timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest, features: feat_os_unix }
+          - { os: macos-latest, features: feat_os_macos }
+          - { os: windows-latest, features: feat_os_windows }
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@nextest
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Test
+        run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+        env:
+          RUST_BACKTRACE: '1'
+
+  build_rust_nightly:
+    name: Build/nightly
+    needs: [verify_min_version, verify_deps]
+    runs-on: ${{ matrix.job.os }}
+    timeout-minutes: 90
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest, features: feat_os_unix }
+          - { os: macos-latest, features: feat_os_macos }
+          - { os: windows-latest, features: feat_os_windows }
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: taiki-e/install-action@nextest
+      - uses: Swatinem/rust-cache@v2
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Test
+        run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+        env:
+          RUST_BACKTRACE: '1'
+
   build:
     permissions:
       contents: write # to create GitHub release (softprops/action-gh-release)
 
     name: Build
-    needs: [min_version, deps]
+    needs: [verify_min_version, verify_deps]
     runs-on: ${{ matrix.job.os }}
     timeout-minutes: 90
     env:
@@ -861,208 +1068,6 @@ jobs:
             ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.DPKG_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  test_busybox:
-    name: Tests/BusyBox test suite
-    needs: [min_version, deps]
-    runs-on: ${{ matrix.job.os }}
-    env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: 'sccache'
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest }
-    steps:
-      - name: Initialize workflow variables
-        id: vars
-        shell: bash
-        run: |
-          ## VARs setup
-          echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
-      - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v2
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
-      - name: Install/setup prerequisites
-        shell: bash
-        run: |
-          ## Install/setup prerequisites
-          make prepare-busytest
-      - name: Run BusyBox test suite
-        id: summary
-        shell: bash
-        run: |
-          ## Run BusyBox test suite
-          set -v
-          cp .busybox-config target/debug/.config
-          ## Run BusyBox test suite
-          bindir=$(pwd)/target/debug
-          cd tmp/busybox-*/testsuite
-          output=$(bindir=$bindir ./runtest 2>&1 || true)
-          printf "%s\n" "${output}"
-          FAIL=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
-          PASS=$(echo "$output" | grep "^PASS:\s" | wc --lines)
-          SKIP=$(echo "$output" | grep "^SKIPPED:\s" | wc --lines)
-          TOTAL=`expr $FAIL + $PASS + $SKIP`
-          echo "FAIL $FAIL"
-          echo "SKIP $SKIP"
-          echo "PASS $PASS"
-          echo "TOTAL $TOTAL"
-          cd -
-          output="Busybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
-          echo "${output}"
-          if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
-          jq -n \
-                  --arg date "$(date --rfc-email)" \
-                  --arg sha "$GITHUB_SHA" \
-                  --arg total "$TOTAL" \
-                  --arg pass "$PASS" \
-                  --arg skip "$SKIP" \
-                  --arg fail "$FAIL" \
-                  '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
-            HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
-            echo "HASH=${HASH}" >> $GITHUB_OUTPUT
-      - name: Reserve SHA1/ID of 'test-summary'
-        uses: actions/upload-artifact@v3
-        with:
-          name: '${{ steps.summary.outputs.HASH }}'
-          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
-      - name: Reserve test results summary
-        uses: actions/upload-artifact@v3
-        with:
-          name: test-summary
-          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
-      - name: Upload json results
-        uses: actions/upload-artifact@v3
-        with:
-          name: busybox-result.json
-          path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
-
-  test_fuzz:
-    name: Fuzz testing
-    runs-on: ubuntu-latest
-    env:
-      RUN_FOR: 60
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@nightly
-      - name: Install `cargo-fuzz`
-        run: cargo install cargo-fuzz
-      - uses: Swatinem/rust-cache@v2
-      - name: Run fuzz_date for XX seconds
-        shell: bash
-        run: |
-          ## Run it
-          cd fuzz
-          cargo +nightly fuzz run fuzz_date -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
-      - name: Run fuzz_parse_glob for XX seconds
-        shell: bash
-        run: |
-          ## Run it
-          cd fuzz
-          cargo +nightly fuzz run fuzz_parse_glob -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
-      - name: Run fuzz_parse_size for XX seconds
-        shell: bash
-        run: |
-          ## Run it
-          cd fuzz
-          cargo +nightly fuzz run fuzz_parse_size -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
-      - name: Run fuzz_parse_time for XX seconds
-        shell: bash
-        run: |
-          ## Run it
-          cd fuzz
-          cargo +nightly fuzz run fuzz_parse_time -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
-
-  test_toybox:
-    name: Tests/Toybox test suite
-    needs: [min_version, deps]
-    runs-on: ${{ matrix.job.os }}
-    env:
-      SCCACHE_GHA_ENABLED: 'true'
-      RUSTC_WRAPPER: 'sccache'
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest }
-    steps:
-      - name: Initialize workflow variables
-        id: vars
-        shell: bash
-        run: |
-          ## VARs setup
-          outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
-          TEST_SUMMARY_FILE="toybox-result.json"
-          outputs TEST_SUMMARY_FILE
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_MIN_SRV }}
-          components: rustfmt
-      - uses: Swatinem/rust-cache@v2
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
-      - name: Build coreutils as multiple binaries
-        shell: bash
-        run: |
-          ## Build individual uutil binaries
-          set -v
-          make
-      - name: Install/setup prerequisites
-        shell: bash
-        run: |
-          ## Install/setup prerequisites
-          make toybox-src
-      - name: Run Toybox test suite
-        id: summary
-        shell: bash
-        run: |
-          ## Run Toybox test suite
-          set -v
-          cd tmp/toybox-*/
-          make defconfig
-          make tests &> tmp.log || true
-          cat tmp.log
-          FAIL=$(grep "FAIL" tmp.log | wc --lines)
-          PASS=$(grep "PASS:"  tmp.log| wc --lines)
-          SKIP=$(grep " disabled$"  tmp.log| wc --lines)
-          TOTAL=`expr $FAIL + $PASS + $SKIP`
-          echo "FAIL $FAIL"
-          echo "SKIP $SKIP"
-          echo "PASS $PASS"
-          echo "TOTAL $TOTAL"
-          cd -
-          jq -n \
-            --arg date "$(date --rfc-email)" \
-            --arg sha "$GITHUB_SHA" \
-            --arg total "$TOTAL" \
-            --arg pass "$PASS" \
-            --arg skip "$SKIP" \
-            --arg fail "$FAIL" \
-            '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, }}' > '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
-          output="Toybox tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / SKIP: $SKIP"
-          echo "${output}"
-          if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
-          HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
-          echo "HASH=${HASH}" >> $GITHUB_OUTPUT
-      - name: Reserve SHA1/ID of 'test-summary'
-        uses: actions/upload-artifact@v3
-        with:
-          name: '${{ steps.summary.outputs.HASH }}'
-          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
-      - name: Reserve test results summary
-        uses: actions/upload-artifact@v3
-        with:
-          name: test-summary
-          path: '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}'
-      - name: Upload json results
-        uses: actions/upload-artifact@v3
-        with:
-          name: toybox-result.json
-          path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
 
   coverage:
     name: Code Coverage
