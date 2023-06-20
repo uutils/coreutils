@@ -628,6 +628,35 @@ fn test_skip_bytes() {
 }
 
 #[test]
+fn test_skip_bytes_hex() {
+    let input = "abcdefghijklmnopq"; // spell-checker:disable-line
+    new_ucmd!()
+        .arg("-c")
+        .arg("--skip-bytes=0xB")
+        .run_piped_stdin(input.as_bytes())
+        .no_stderr()
+        .success()
+        .stdout_is(unindent(
+            "
+            0000013   l   m   n   o   p   q
+            0000021
+            ",
+        ));
+    new_ucmd!()
+        .arg("-c")
+        .arg("--skip-bytes=0xE")
+        .run_piped_stdin(input.as_bytes())
+        .no_stderr()
+        .success()
+        .stdout_is(unindent(
+            "
+            0000016   o   p   q
+            0000021
+            ",
+        ));
+}
+
+#[test]
 fn test_skip_bytes_error() {
     let input = "12345";
     new_ucmd!()
