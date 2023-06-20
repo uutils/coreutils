@@ -29,7 +29,7 @@ pub mod options {
     pub mod sources {
         pub static DATE: &str = "date";
         pub static REFERENCE: &str = "reference";
-        pub static CURRENT: &str = "current";
+        pub static TIMESTAMP: &str = "timestamp";
     }
     pub static HELP: &str = "help";
     pub static ACCESS: &str = "access";
@@ -120,12 +120,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             (timestamp, timestamp)
         }
         (None, None) => {
-            let timestamp =
-                if let Some(current) = matches.get_one::<String>(options::sources::CURRENT) {
-                    parse_timestamp(current)?
-                } else {
-                    local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap())
-                };
+            let timestamp = if let Some(ts) = matches.get_one::<String>(options::sources::TIMESTAMP)
+            {
+                parse_timestamp(ts)?
+            } else {
+                local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap())
+            };
             (timestamp, timestamp)
         }
     };
@@ -243,7 +243,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::sources::CURRENT)
+            Arg::new(options::sources::TIMESTAMP)
                 .short('t')
                 .help("use [[CC]YY]MMDDhhmm[.ss] instead of the current time")
                 .value_name("STAMP"),
@@ -255,7 +255,7 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .help("parse argument and use it instead of current time")
                 .value_name("STRING")
-                .conflicts_with(options::sources::CURRENT),
+                .conflicts_with(options::sources::TIMESTAMP),
         )
         .arg(
             Arg::new(options::MODIFICATION)
@@ -288,7 +288,7 @@ pub fn uu_app() -> Command {
                 .value_name("FILE")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath)
-                .conflicts_with(options::sources::CURRENT),
+                .conflicts_with(options::sources::TIMESTAMP),
         )
         .arg(
             Arg::new(options::TIME)
@@ -311,7 +311,7 @@ pub fn uu_app() -> Command {
         .group(
             ArgGroup::new(options::SOURCES)
                 .args([
-                    options::sources::CURRENT,
+                    options::sources::TIMESTAMP,
                     options::sources::DATE,
                     options::sources::REFERENCE,
                 ])
