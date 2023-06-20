@@ -236,4 +236,4 @@ sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du
 # disable two kind of tests:
 # "hostid BEFORE --help" doesn't fail for GNU. we fail. we are probably doing better
 # "hostid BEFORE --help AFTER " same for this
-sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/help/help-version-getopt.sh
+sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/misc/help-version-getopt.sh
