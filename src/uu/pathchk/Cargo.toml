@@ -1,6 +1,6 @@
 [package]
 name = "uu_pathchk"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "pathchk ~ (uutils) diagnose invalid or non-portable PATHNAME"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/pathchk.rs"
 
 [dependencies]
-clap = { workspace=true }
-libc = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "pathchk"

@@ -1,6 +1,7 @@
+# spell-checker:ignore datetime
 [package]
 name = "uu_date"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "date ~ (uutils) display or set the current time"
@@ -15,15 +16,19 @@ edition = "2021"
 path = "src/date.rs"
 
 [dependencies]
-chrono = { workspace=true }
-clap = { workspace=true }
-uucore = { workspace=true }
+chrono = { workspace = true }
+clap = { workspace = true }
+uucore = { workspace = true }
+parse_datetime = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-libc = { workspace=true }
+libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace=true, features = ["Win32_Foundation", "Win32_System_SystemInformation"] }
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_System_SystemInformation",
+] }
 
 [[bin]]
 name = "date"

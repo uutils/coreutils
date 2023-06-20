@@ -293,8 +293,9 @@ impl Parser {
         }
     }
 
+    #[allow(clippy::cognitive_complexity)]
     fn parse_input_flags(&mut self, val: &str) -> Result<(), ParseError> {
-        let mut i = &mut self.iflag;
+        let i = &mut self.iflag;
         for f in val.split(',') {
             match f {
                 // Common flags
@@ -303,7 +304,7 @@ impl Parser {
                 "directory" => linux_only!(f, i.directory = true),
                 "dsync" => linux_only!(f, i.dsync = true),
                 "sync" => linux_only!(f, i.sync = true),
-                "nocache" => return Err(ParseError::Unimplemented(f.to_string())),
+                "nocache" => linux_only!(f, i.nocache = true),
                 "nonblock" => linux_only!(f, i.nonblock = true),
                 "noatime" => linux_only!(f, i.noatime = true),
                 "noctty" => linux_only!(f, i.noctty = true),
@@ -324,8 +325,9 @@ impl Parser {
         Ok(())
     }
 
+    #[allow(clippy::cognitive_complexity)]
     fn parse_output_flags(&mut self, val: &str) -> Result<(), ParseError> {
-        let mut o = &mut self.oflag;
+        let o = &mut self.oflag;
         for f in val.split(',') {
             match f {
                 // Common flags
@@ -334,7 +336,7 @@ impl Parser {
                 "directory" => linux_only!(f, o.directory = true),
                 "dsync" => linux_only!(f, o.dsync = true),
                 "sync" => linux_only!(f, o.sync = true),
-                "nocache" => return Err(ParseError::Unimplemented(f.to_string())),
+                "nocache" => linux_only!(f, o.nocache = true),
                 "nonblock" => linux_only!(f, o.nonblock = true),
                 "noatime" => linux_only!(f, o.noatime = true),
                 "noctty" => linux_only!(f, o.noctty = true),
@@ -355,7 +357,7 @@ impl Parser {
     }
 
     fn parse_conv_flags(&mut self, val: &str) -> Result<(), ParseError> {
-        let mut c = &mut self.conv;
+        let c = &mut self.conv;
         for f in val.split(',') {
             match f {
                 // Conversion

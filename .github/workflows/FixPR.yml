@@ -1,6 +1,6 @@
 name: FixPR
 
-# spell-checker:ignore Swatinem
+# spell-checker:ignore Swatinem dtolnay
 
 # Trigger automated fixes for PRs being merged (with associated commits)
 
@@ -36,11 +36,7 @@ jobs:
         # surface MSRV from CICD workflow
         RUST_MIN_SRV=$(grep -P "^\s+RUST_MIN_SRV:" .github/workflows/CICD.yml | grep -Po "(?<=\x22)\d+[.]\d+(?:[.]\d+)?(?=\x22)" )
         outputs RUST_MIN_SRV
-    - name: Install `rust` toolchain (v${{ steps.vars.outputs.RUST_MIN_SRV }})
-      run: |
-        ## Install `rust` toolchain (v${{ steps.vars.outputs.RUST_MIN_SRV }})
-        rustup toolchain install ${{ steps.vars.outputs.RUST_MIN_SRV }} --profile minimal
-        rustup default ${{ steps.vars.outputs.RUST_MIN_SRV }}
+    - uses: dtolnay/rust-toolchain@${{ steps.vars.outputs.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
     - name: Ensure updated 'Cargo.lock'
       shell: bash
@@ -101,12 +97,10 @@ jobs:
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
-    - name: Install `rust` toolchain
-      run: |
-        ## Install `rust` toolchain
-        rm -f "${HOME}/.cargo/bin/"{rustfmt,cargo-fmt}
-        rustup toolchain install stable -c rustfmt --profile minimal
-        rustup default stable
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+        components: rustfmt
     - uses: Swatinem/rust-cache@v2
     - name: "`cargo fmt`"
       shell: bash

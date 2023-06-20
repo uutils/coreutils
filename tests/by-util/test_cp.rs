@@ -245,6 +245,192 @@ fn test_cp_arg_update_interactive_error() {
 }
 
 #[test]
+fn test_cp_arg_update_none() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--update=none")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+}
+
+#[test]
+fn test_cp_arg_update_all() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--update=all")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(
+        at.read(TEST_HOW_ARE_YOU_SOURCE),
+        at.read(TEST_HELLO_WORLD_SOURCE)
+    );
+}
+
+#[test]
+fn test_cp_arg_update_older_dest_not_older_than_src() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_dest_not_older_file1";
+    let new = "test_cp_arg_update_dest_not_older_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
+
+    at.write(old, old_content);
+    at.write(new, new_content);
+
+    ucmd.arg(old)
+        .arg(new)
+        .arg("--update=older")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(new), "new content\n");
+}
+
+#[test]
+fn test_cp_arg_update_older_dest_older_than_src() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_dest_older_file1";
+    let new = "test_cp_arg_update_dest_older_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
+
+    at.write(old, old_content);
+
+    sleep(Duration::from_secs(1));
+
+    at.write(new, new_content);
+
+    ucmd.arg(new)
+        .arg(old)
+        .arg("--update=older")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(old), "new content\n");
+}
+
+#[test]
+fn test_cp_arg_update_short_no_overwrite() {
+    // same as --update=older
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_short_no_overwrite_file1";
+    let new = "test_cp_arg_update_short_no_overwrite_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
+
+    at.write(old, old_content);
+
+    sleep(Duration::from_secs(1));
+
+    at.write(new, new_content);
+
+    ucmd.arg(old)
+        .arg(new)
+        .arg("-u")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(new), "new content\n");
+}
+
+#[test]
+fn test_cp_arg_update_short_overwrite() {
+    // same as --update=older
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_short_overwrite_file1";
+    let new = "test_cp_arg_update_short_overwrite_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
+
+    at.write(old, old_content);
+
+    sleep(Duration::from_secs(1));
+
+    at.write(new, new_content);
+
+    ucmd.arg(new)
+        .arg(old)
+        .arg("-u")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(old), "new content\n");
+}
+
+#[test]
+fn test_cp_arg_update_none_then_all() {
+    // take last if multiple update args are supplied,
+    // update=all wins in this case
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_none_then_all_file1";
+    let new = "test_cp_arg_update_none_then_all_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
+
+    at.write(old, old_content);
+
+    sleep(Duration::from_secs(1));
+
+    at.write(new, new_content);
+
+    ucmd.arg(old)
+        .arg(new)
+        .arg("--update=none")
+        .arg("--update=all")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(new), "old content\n");
+}
+
+#[test]
+fn test_cp_arg_update_all_then_none() {
+    // take last if multiple update args are supplied,
+    // update=none wins in this case
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let old = "test_cp_arg_update_all_then_none_file1";
+    let new = "test_cp_arg_update_all_then_none_file2";
+    let old_content = "old content\n";
+    let new_content = "new content\n";
+
+    at.write(old, old_content);
+
+    sleep(Duration::from_secs(1));
+
+    at.write(new, new_content);
+
+    ucmd.arg(old)
+        .arg(new)
+        .arg("--update=all")
+        .arg("--update=none")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+
+    assert_eq!(at.read(new), "new content\n");
+}
+
+#[test]
 fn test_cp_arg_interactive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
@@ -257,6 +443,7 @@ fn test_cp_arg_interactive() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_cp_arg_interactive_update() {
     // -u -i won't show the prompt to validate the override or not
     // Therefore, the error code will be 0
@@ -267,6 +454,29 @@ fn test_cp_arg_interactive_update() {
         .pipe_in("N\n")
         .succeeds()
         .no_stdout();
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_cp_arg_interactive_verbose() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    ucmd.args(&["-vi", "a", "b"])
+        .pipe_in("N\n")
+        .fails()
+        .stdout_is("skipped 'b'\n");
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_cp_arg_interactive_verbose_clobber() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    ucmd.args(&["-vin", "a", "b"])
+        .fails()
+        .stdout_is("skipped 'b'\n");
 }
 
 #[test]
@@ -300,7 +510,8 @@ fn test_cp_arg_no_clobber() {
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--no-clobber")
-        .succeeds();
+        .fails()
+        .stderr_contains("not replacing");
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
@@ -311,7 +522,7 @@ fn test_cp_arg_no_clobber_inferred_arg() {
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--no-clob")
-        .succeeds();
+        .fails();
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
@@ -338,7 +549,7 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
-        .succeeds();
+        .fails();
 
     assert_eq!(at.read("source.txt"), "some-content");
     // Should be empty as the "no-clobber" should keep
@@ -889,6 +1100,88 @@ fn test_cp_parents_dest_not_directory() {
 }
 
 #[test]
+fn test_cp_parents_with_permissions_copy_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let dir = "dir";
+    let file = "p1/p2/file";
+
+    at.mkdir(dir);
+    at.mkdir_all("p1/p2");
+    at.touch(file);
+
+    let p1_mode = 0o0777;
+    let p2_mode = 0o0711;
+    let file_mode = 0o0702;
+
+    #[cfg(unix)]
+    {
+        at.set_mode("p1", p1_mode);
+        at.set_mode("p1/p2", p2_mode);
+        at.set_mode(file, file_mode);
+    }
+
+    ucmd.arg("-p")
+        .arg("--parents")
+        .arg(file)
+        .arg(dir)
+        .succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        let p1_metadata = at.metadata("p1");
+        let p2_metadata = at.metadata("p1/p2");
+        let file_metadata = at.metadata(file);
+
+        assert_metadata_eq!(p1_metadata, at.metadata("dir/p1"));
+        assert_metadata_eq!(p2_metadata, at.metadata("dir/p1/p2"));
+        assert_metadata_eq!(file_metadata, at.metadata("dir/p1/p2/file"));
+    }
+}
+
+#[test]
+fn test_cp_parents_with_permissions_copy_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let dir1 = "dir";
+    let dir2 = "p1/p2";
+    let file = "p1/p2/file";
+
+    at.mkdir(dir1);
+    at.mkdir_all(dir2);
+    at.touch(file);
+
+    let p1_mode = 0o0777;
+    let p2_mode = 0o0711;
+    let file_mode = 0o0702;
+
+    #[cfg(unix)]
+    {
+        at.set_mode("p1", p1_mode);
+        at.set_mode("p1/p2", p2_mode);
+        at.set_mode(file, file_mode);
+    }
+
+    ucmd.arg("-p")
+        .arg("--parents")
+        .arg("-r")
+        .arg(dir2)
+        .arg(dir1)
+        .succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        let p1_metadata = at.metadata("p1");
+        let p2_metadata = at.metadata("p1/p2");
+        let file_metadata = at.metadata(file);
+
+        assert_metadata_eq!(p1_metadata, at.metadata("dir/p1"));
+        assert_metadata_eq!(p2_metadata, at.metadata("dir/p1/p2"));
+        assert_metadata_eq!(file_metadata, at.metadata("dir/p1/p2/file"));
+    }
+}
+
+#[test]
 #[cfg(unix)]
 fn test_cp_writable_special_file_permissions() {
     new_ucmd!().arg("/dev/null").arg("/dev/zero").succeeds();
@@ -918,6 +1211,33 @@ fn test_cp_preserve_no_args() {
     ucmd.arg(src_file)
         .arg(dst_file)
         .arg("--preserve")
+        .succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        // Assert that the mode, ownership, and timestamps are preserved
+        // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+        let metadata_src = at.metadata(src_file);
+        let metadata_dst = at.metadata(dst_file);
+        assert_metadata_eq!(metadata_src, metadata_dst);
+    }
+}
+
+#[test]
+fn test_cp_preserve_no_args_before_opts() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src_file = "a";
+    let dst_file = "b";
+
+    // Prepare the source file
+    at.touch(src_file);
+    #[cfg(unix)]
+    at.set_mode(src_file, 0o0500);
+
+    // Copy
+    ucmd.arg("--preserve")
+        .arg(src_file)
+        .arg(dst_file)
         .succeeds();
 
     #[cfg(all(unix, not(target_os = "freebsd")))]
@@ -1394,13 +1714,13 @@ fn test_cp_one_file_system() {
     use walkdir::WalkDir;
 
     let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
     // Test must be run as root (or with `sudo -E`)
     if scene.cmd("whoami").run().stdout_str() != "root\n" {
         return;
     }
 
-    let at = scene.fixtures.clone();
     let at_src = AtPath::new(&at.plus(TEST_MOUNT_COPY_FROM_FOLDER));
     let at_dst = AtPath::new(&at.plus(TEST_COPY_TO_FOLDER_NEW));
 
@@ -1542,7 +1862,7 @@ fn test_cp_reflink_insufficient_permission() {
         .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)\n");
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 #[test]
 fn test_closes_file_descriptors() {
     use procfs::process::Process;
@@ -1900,6 +2220,17 @@ fn test_copy_through_dangling_symlink() {
         .arg("target")
         .fails()
         .stderr_only("cp: not writing through dangling symlink 'target'\n");
+}
+
+#[test]
+fn test_copy_through_dangling_symlink_posixly_correct() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.symlink_file("nonexistent", "target");
+    ucmd.arg("file")
+        .arg("target")
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds();
 }
 
 #[test]
@@ -2297,6 +2628,20 @@ fn test_remove_destination_symbolic_link_loop() {
     assert!(at.file_exists("loop"));
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_cp_symbolic_link_loop() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("loop", "loop");
+    at.plus("loop");
+    at.touch("f");
+    ucmd.args(&["-f", "f", "loop"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists("loop"));
+}
+
 /// Test that copying a directory to itself is disallowed.
 #[test]
 fn test_copy_directory_to_itself_disallowed() {
@@ -2614,4 +2959,247 @@ fn test_cp_archive_on_directory_ending_dot() {
     at.touch("dir1/file");
     ucmd.args(&["-a", "dir1/.", "dir2"]).succeeds();
     assert!(at.file_exists("dir2/file"));
+}
+
+#[test]
+fn test_cp_debug_default() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts.ucmd().arg("--debug").arg("a").arg("b").succeeds();
+
+    let stdout_str = result.stdout_str();
+    #[cfg(target_os = "macos")]
+    if !stdout_str
+        .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+    #[cfg(target_os = "linux")]
+    if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+
+    #[cfg(windows)]
+    if !stdout_str
+        .contains("copy offload: unsupported, reflink: unsupported, sparse detection: unsupported")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+fn test_cp_debug_multiple_default() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "dir";
+    at.touch("a");
+    at.touch("b");
+    at.mkdir(dir);
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("a")
+        .arg("b")
+        .arg(dir)
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+
+    #[cfg(target_os = "macos")]
+    {
+        if !stdout_str
+            .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
+        {
+            panic!("Failure: stdout was \n{stdout_str}");
+        }
+
+        // two files, two occurrences
+        assert_eq!(
+            result
+                .stdout_str()
+                .matches(
+                    "copy offload: unknown, reflink: unsupported, sparse detection: unsupported"
+                )
+                .count(),
+            2
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no")
+        {
+            panic!("Failure: stdout was \n{stdout_str}");
+        }
+
+        // two files, two occurrences
+        assert_eq!(
+            result
+                .stdout_str()
+                .matches("copy offload: unknown, reflink: unsupported, sparse detection: no")
+                .count(),
+            2
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if !stdout_str.contains(
+            "copy offload: unsupported, reflink: unsupported, sparse detection: unsupported",
+        ) {
+            panic!("Failure: stdout was \n{stdout_str}");
+        }
+
+        // two files, two occurrences
+        assert_eq!(
+            result
+                .stdout_str()
+                .matches("copy offload: unsupported, reflink: unsupported, sparse detection: unsupported")
+                .count(),
+            2
+        );
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_sparse_reflink() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=always")
+        .arg("--reflink=never")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: zeros") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_sparse_always() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=always")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: unsupported, sparse detection: zeros")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_sparse_never() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=never")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+fn test_cp_debug_sparse_auto() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=auto")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+    let stdout_str = result.stdout_str();
+
+    #[cfg(target_os = "macos")]
+    if !stdout_str
+        .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+
+    #[cfg(target_os = "linux")]
+    if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+fn test_cp_debug_reflink_auto() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=auto")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let stdout_str = result.stdout_str();
+        if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no")
+        {
+            panic!("Failure: stdout was \n{stdout_str}");
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let stdout_str = result.stdout_str();
+        if !stdout_str
+            .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
+        {
+            panic!("Failure: stdout was \n{stdout_str}");
+        }
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_sparse_always_reflink_auto() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=always")
+        .arg("--reflink=auto")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: unsupported, sparse detection: zeros")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
 }

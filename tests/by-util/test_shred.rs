@@ -18,7 +18,7 @@ fn test_shred_remove() {
     at.touch(file_b);
 
     // Shred file_a.
-    scene.ucmd().arg("-u").arg(file_a).run();
+    scene.ucmd().arg("-u").arg(file_a).succeeds();
 
     // file_a was deleted, file_b exists.
     assert!(!at.file_exists(file_a));
@@ -50,4 +50,15 @@ fn test_shred_force() {
 
     // file_a was deleted.
     assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_hex() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "test_hex";
+
+    at.touch(file);
+
+    ucmd.arg("--size=0x10").arg(file).succeeds();
 }

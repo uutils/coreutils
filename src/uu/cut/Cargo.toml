@@ -1,6 +1,6 @@
 [package]
 name = "uu_cut"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "cut ~ (uutils) display byte/field columns of input lines"
@@ -15,11 +15,11 @@ edition = "2021"
 path = "src/cut.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
-memchr = { workspace=true }
-bstr = { workspace=true }
-is-terminal = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
+memchr = { workspace = true }
+bstr = { workspace = true }
+is-terminal = { workspace = true }
 
 [[bin]]
 name = "cut"

@@ -6,10 +6,8 @@
 // See https://github.com/time-rs/time/issues/293#issuecomment-946382614=
 // Defined in .cargo/config
 
-extern crate touch;
-use self::touch::filetime::{self, FileTime};
+use filetime::FileTime;
 
-extern crate time;
 use time::macros::format_description;
 
 use crate::common::util::{AtPath, TestScenario};
@@ -251,14 +249,39 @@ fn test_touch_set_both_date_and_reference() {
     let ref_file = "test_touch_reference";
     let file = "test_touch_set_both_date_and_reference";
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501011234");
 
     at.touch(ref_file);
     set_file_times(&at, ref_file, start_of_year, start_of_year);
     assert!(at.file_exists(ref_file));
 
     ucmd.args(&["-d", "Thu Jan 01 12:34:00 2015", "-r", ref_file, file])
-        .fails();
+        .succeeds()
+        .no_stderr();
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, start_of_year);
+    assert_eq!(mtime, start_of_year);
+}
+
+#[test]
+fn test_touch_set_both_offset_date_and_reference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ref_file = "test_touch_reference";
+    let file = "test_touch_set_both_date_and_reference";
+
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501011234");
+    let five_days_later = str_to_filetime("%Y%m%d%H%M", "201501061234");
+
+    at.touch(ref_file);
+    set_file_times(&at, ref_file, start_of_year, start_of_year);
+    assert!(at.file_exists(ref_file));
+
+    ucmd.args(&["-d", "+5 days", "-r", ref_file, file])
+        .succeeds()
+        .no_stderr();
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, five_days_later);
+    assert_eq!(mtime, five_days_later);
 }
 
 #[test]
@@ -585,7 +608,15 @@ fn test_touch_set_date_relative_smoke() {
     // > (equivalent to ‘day’), the string ‘yesterday’ is worth one day
     // > in the past (equivalent to ‘day ago’).
     //
-    let times = ["yesterday", "tomorrow", "now"];
+    let times = [
+        "yesterday",
+        "tomorrow",
+        "now",
+        "2 seconds",
+        "2 years 1 week",
+        "2 days ago",
+        "2 months and 1 second",
+    ];
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
@@ -594,6 +625,11 @@ fn test_touch_set_date_relative_smoke() {
             .no_stderr()
             .no_stdout();
     }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    ucmd.args(&["-d", "a", "f"])
+        .fails()
+        .stderr_contains("touch: Unable to parse date");
 }
 
 #[test]
@@ -792,4 +828,28 @@ fn test_touch_trailing_slash_no_create() {
     at.mkdir("dir2");
     at.relative_symlink_dir("dir2", "link2");
     ucmd.args(&["-c", "link2/"]).succeeds();
+}
+
+#[test]
+fn test_touch_no_dereference_ref_dangling() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.relative_symlink_file("nowhere", "dangling");
+
+    ucmd.args(&["-h", "-r", "dangling", "file"]).succeeds();
+}
+
+#[test]
+fn test_touch_no_dereference_dangling() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("nowhere", "dangling");
+
+    ucmd.args(&["-h", "dangling"]).succeeds();
+}
+
+#[test]
+fn test_touch_dash() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    ucmd.args(&["-h", "-"]).succeeds().no_stderr().no_stdout();
 }

@@ -42,7 +42,7 @@ pub(crate) struct Filesystem {
 /// This function returns the element of `mounts` on which `path` is
 /// mounted. If there are no matches, this function returns
 /// [`None`]. If there are two or more matches, then the single
-/// [`MountInfo`] with the longest mount directory is returned.
+/// [`MountInfo`] with the device name corresponding to the entered path.
 ///
 /// If `canonicalize` is `true`, then the `path` is canonicalized
 /// before checking whether it matches any mount directories.
@@ -68,9 +68,19 @@ where
         path.as_ref().to_path_buf()
     };
 
+    // Find the potential mount point that matches entered path
     let maybe_mount_point = mounts
         .iter()
-        .find(|mi| mi.dev_name.eq(&path.to_string_lossy()));
+        // Create pair MountInfo, canonicalized device name
+        // TODO Abstract from accessing real filesystem to
+        // make code more testable
+        .map(|m| (m, std::fs::canonicalize(&m.dev_name)))
+        // Ignore non existing paths
+        .filter(|m| m.1.is_ok())
+        .map(|m| (m.0, m.1.ok().unwrap()))
+        // Try to find canonicalized device name corresponding to entered path
+        .find(|m| m.1.eq(&path))
+        .map(|m| m.0);
 
     maybe_mount_point.or_else(|| {
         mounts
@@ -211,10 +221,16 @@ mod tests {
 
         #[test]
         fn test_dev_name_match() {
+            let tmp = tempfile::TempDir::new().expect("Failed to create temp dir");
+            let dev_name = std::fs::canonicalize(tmp.path())
+                .expect("Failed to canonicalize tmp path")
+                .to_string_lossy()
+                .to_string();
+
             let mut mount_info = mount_info("/foo");
-            mount_info.dev_name = "/dev/sda2".to_string();
+            mount_info.dev_name = dev_name.clone();
             let mounts = [mount_info];
-            let actual = mount_info_from_path(&mounts, "/dev/sda2", false).unwrap();
+            let actual = mount_info_from_path(&mounts, dev_name, false).unwrap();
             assert!(mount_info_eq(actual, &mounts[0]));
         }
     }

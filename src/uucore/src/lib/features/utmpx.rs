@@ -42,13 +42,10 @@ use std::ptr;
 use std::sync::{Mutex, MutexGuard};
 
 pub use self::ut::*;
-use libc::utmpx;
-// pub use libc::getutxid;
-// pub use libc::getutxline;
-// pub use libc::pututxline;
 pub use libc::endutxent;
 pub use libc::getutxent;
 pub use libc::setutxent;
+use libc::utmpx;
 #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "netbsd"))]
 pub use libc::utmpxname;
 
@@ -230,7 +227,6 @@ impl Utmpx {
         let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
 
         if !hostname.is_empty() {
-            extern crate dns_lookup;
             use dns_lookup::{getaddrinfo, AddrInfoHints};
 
             const AI_CANONNAME: i32 = 0x2;

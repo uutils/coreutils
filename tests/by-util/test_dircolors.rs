@@ -1,8 +1,7 @@
 // spell-checker:ignore overridable
 use crate::common::util::TestScenario;
 
-extern crate dircolors;
-use self::dircolors::{guess_syntax, OutputFmt, StrUtils};
+use dircolors::{guess_syntax, OutputFmt, StrUtils};
 
 #[test]
 fn test_invalid_arg() {

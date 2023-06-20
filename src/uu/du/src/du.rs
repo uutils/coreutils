@@ -33,7 +33,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
 use uucore::error::FromIo;
-use uucore::error::{UError, UResult};
+use uucore::error::{set_exit_code, UError, UResult};
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::{
@@ -68,6 +68,7 @@ mod options {
     pub const TIME_STYLE: &str = "time-style";
     pub const ONE_FILE_SYSTEM: &str = "one-file-system";
     pub const DEREFERENCE: &str = "dereference";
+    pub const DEREFERENCE_ARGS: &str = "dereference-args";
     pub const INODES: &str = "inodes";
     pub const EXCLUDE: &str = "exclude";
     pub const EXCLUDE_FROM: &str = "exclude-from";
@@ -88,9 +89,16 @@ struct Options {
     total: bool,
     separate_dirs: bool,
     one_file_system: bool,
-    dereference: bool,
+    dereference: Deref,
     inodes: bool,
     verbose: bool,
+}
+
+#[derive(PartialEq)]
+enum Deref {
+    All,
+    Args(Vec<PathBuf>),
+    None,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -112,12 +120,21 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: PathBuf, options: &Options) -> Result<Self> {
-        let metadata = if options.dereference {
-            fs::metadata(&path)?
-        } else {
-            fs::symlink_metadata(&path)?
+    fn new(path: &Path, options: &Options) -> Result<Self> {
+        // Determine whether to dereference (follow) the symbolic link
+        let should_dereference = match &options.dereference {
+            Deref::All => true,
+            Deref::Args(paths) => paths.contains(&path.to_path_buf()),
+            Deref::None => false,
         };
+
+        let metadata = if should_dereference {
+            // Get metadata, following symbolic links if necessary
+            fs::metadata(path)
+        } else {
+            // Get metadata without following symbolic links
+            fs::symlink_metadata(path)
+        }?;
 
         #[cfg(not(windows))]
         let file_info = FileInfo {
@@ -126,7 +143,7 @@ impl Stat {
         };
         #[cfg(not(windows))]
         return Ok(Self {
-            path,
+            path: path.to_path_buf(),
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             blocks: metadata.blocks(),
@@ -138,12 +155,12 @@ impl Stat {
         });
 
         #[cfg(windows)]
-        let size_on_disk = get_size_on_disk(&path);
+        let size_on_disk = get_size_on_disk(path);
         #[cfg(windows)]
-        let file_info = get_file_info(&path);
+        let file_info = get_file_info(path);
         #[cfg(windows)]
         Ok(Self {
-            path,
+            path: path.to_path_buf(),
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             blocks: size_on_disk / 1024 * 2,
@@ -272,6 +289,7 @@ fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
 
 // this takes `my_stat` to avoid having to stat files multiple times.
 // XXX: this should use the impl Trait return type when it is stabilized
+#[allow(clippy::cognitive_complexity)]
 fn du(
     mut my_stat: Stat,
     options: &Options,
@@ -296,7 +314,7 @@ fn du(
         'file_loop: for f in read {
             match f {
                 Ok(entry) => {
-                    match Stat::new(entry.path(), options) {
+                    match Stat::new(&entry.path(), options) {
                         Ok(this_stat) => {
                             // We have an exclude list
                             for pattern in exclude {
@@ -395,6 +413,20 @@ fn convert_size_m(size: u64, multiplier: u64, _block_size: u64) -> String {
 
 fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
     format!("{}", ((size as f64) / (block_size as f64)).ceil())
+}
+
+fn get_convert_size_fn(matches: &ArgMatches) -> Box<dyn Fn(u64, u64, u64) -> String> {
+    if matches.get_flag(options::HUMAN_READABLE) || matches.get_flag(options::SI) {
+        Box::new(convert_size_human)
+    } else if matches.get_flag(options::BYTES) {
+        Box::new(convert_size_b)
+    } else if matches.get_flag(options::BLOCK_SIZE_1K) {
+        Box::new(convert_size_k)
+    } else if matches.get_flag(options::BLOCK_SIZE_1M) {
+        Box::new(convert_size_m)
+    } else {
+        Box::new(convert_size_other)
+    }
 }
 
 #[derive(Debug)]
@@ -505,24 +537,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         summarize,
     )?;
 
+    let files = match matches.get_one::<String>(options::FILE) {
+        Some(_) => matches
+            .get_many::<String>(options::FILE)
+            .unwrap()
+            .map(PathBuf::from)
+            .collect(),
+        None => vec![PathBuf::from(".")],
+    };
+
     let options = Options {
         all: matches.get_flag(options::ALL),
         max_depth,
         total: matches.get_flag(options::TOTAL),
         separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
         one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
-        dereference: matches.get_flag(options::DEREFERENCE),
+        dereference: if matches.get_flag(options::DEREFERENCE) {
+            Deref::All
+        } else if matches.get_flag(options::DEREFERENCE_ARGS) {
+            // We don't care about the cost of cloning as it is rarely used
+            Deref::Args(files.clone())
+        } else {
+            Deref::None
+        },
         inodes: matches.get_flag(options::INODES),
         verbose: matches.get_flag(options::VERBOSE),
-    };
-
-    let files = match matches.get_one::<String>(options::FILE) {
-        Some(_) => matches
-            .get_many::<String>(options::FILE)
-            .unwrap()
-            .map(|s| s.as_str())
-            .collect(),
-        None => vec!["."],
     };
 
     if options.inodes
@@ -547,19 +586,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         1024
     };
-    let convert_size_fn = {
-        if matches.get_flag(options::HUMAN_READABLE) || matches.get_flag(options::SI) {
-            convert_size_human
-        } else if matches.get_flag(options::BYTES) {
-            convert_size_b
-        } else if matches.get_flag(options::BLOCK_SIZE_1K) {
-            convert_size_k
-        } else if matches.get_flag(options::BLOCK_SIZE_1M) {
-            convert_size_m
-        } else {
-            convert_size_other
-        }
-    };
+
+    let convert_size_fn = get_convert_size_fn(&matches);
+
     let convert_size = |size: u64| {
         if options.inodes {
             size.to_string()
@@ -580,11 +609,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let excludes = build_exclude_patterns(&matches)?;
 
     let mut grand_total = 0;
-    'loop_file: for path_string in files {
+    'loop_file: for path in files {
         // Skip if we don't want to ignore anything
         if !&excludes.is_empty() {
+            let path_string = path.to_string_lossy();
             for pattern in &excludes {
-                if pattern.matches(path_string) {
+                if pattern.matches(&path_string) {
                     // if the directory is ignored, leave early
                     if options.verbose {
                         println!("{} ignored", path_string.quote());
@@ -594,9 +624,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        let path = PathBuf::from(&path_string);
         // Check existence of path provided in argument
-        if let Ok(stat) = Stat::new(path, &options) {
+        if let Ok(stat) = Stat::new(&path, &options) {
             // Kick off the computation of disk usage from the initial path
             let mut inodes: HashSet<FileInfo> = HashSet::new();
             if let Some(inode) = stat.inode {
@@ -616,20 +645,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
                 if matches.contains_id(options::TIME) {
                     let tm = {
-                        let secs = {
-                            match matches.get_one::<String>(options::TIME) {
-                                Some(s) => match s.as_str() {
-                                    "ctime" | "status" => stat.modified,
-                                    "access" | "atime" | "use" => stat.accessed,
-                                    "birth" | "creation" => stat
-                                        .created
-                                        .ok_or_else(|| DuError::InvalidTimeArg(s.into()))?,
-                                    // below should never happen as clap already restricts the values.
-                                    _ => unreachable!("Invalid field for --time"),
-                                },
-                                None => stat.modified,
-                            }
-                        };
+                        let secs = matches
+                            .get_one::<String>(options::TIME)
+                            .map(|s| get_time_secs(s, &stat))
+                            .transpose()?
+                            .unwrap_or(stat.modified);
                         DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
                     };
                     if !summarize || index == len - 1 {
@@ -652,9 +672,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             show_error!(
                 "{}: {}",
-                path_string.maybe_quote(),
+                path.to_string_lossy().maybe_quote(),
                 "No such file or directory"
             );
+            set_exit_code(1);
         }
     }
 
@@ -664,6 +685,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     Ok(())
+}
+
+fn get_time_secs(s: &str, stat: &Stat) -> std::result::Result<u64, DuError> {
+    let secs = match s {
+        "ctime" | "status" => stat.modified,
+        "access" | "atime" | "use" => stat.accessed,
+        "birth" | "creation" => stat
+            .created
+            .ok_or_else(|| DuError::InvalidTimeArg(s.into()))?,
+        // below should never happen as clap already restricts the values.
+        _ => unreachable!("Invalid field for --time"),
+    };
+    Ok(secs)
 }
 
 fn parse_time_style(s: Option<&str>) -> UResult<&str> {
@@ -785,7 +819,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
-                .help("dereference all symbolic links")
+                .help("follow all symbolic links")
+                .action(ArgAction::SetTrue)
+        )
+        .arg(
+            Arg::new(options::DEREFERENCE_ARGS)
+                .short('D')
+                .long(options::DEREFERENCE_ARGS)
+                .help("follow only symlinks that are listed on the command line")
                 .action(ArgAction::SetTrue)
         )
         // .arg(

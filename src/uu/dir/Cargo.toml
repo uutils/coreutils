@@ -1,6 +1,6 @@
 [package]
 name = "uu_dir"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "shortcut to ls -C -b"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/dir.rs"
 
 [dependencies]
-clap = { workspace=true, features = ["env"] }
-uucore = { workspace=true, features=["entries", "fs"] }
-uu_ls = { workspace=true }
+clap = { workspace = true, features = ["env"] }
+uucore = { workspace = true, features = ["entries", "fs"] }
+uu_ls = { workspace = true }
 
 [[bin]]
 name = "dir"

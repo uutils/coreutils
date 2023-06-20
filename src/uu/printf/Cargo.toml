@@ -1,10 +1,7 @@
 [package]
 name = "uu_printf"
-version = "0.0.18"
-authors = [
-  "Nathan Ross",
-  "uutils developers",
-]
+version = "0.0.19"
+authors = ["Nathan Ross", "uutils developers"]
 license = "MIT"
 description = "printf ~ (uutils) FORMAT and display ARGUMENTS"
 
@@ -18,8 +15,8 @@ edition = "2021"
 path = "src/printf.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["memo"] }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["memo"] }
 
 [[bin]]
 name = "printf"

@@ -1,9 +1,6 @@
 #[macro_use]
 mod common;
 
-#[cfg(unix)]
-extern crate rust_users;
-
 #[cfg(feature = "arch")]
 #[path = "by-util/test_arch.rs"]
 mod test_arch;

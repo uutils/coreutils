@@ -915,6 +915,7 @@ fn test_compress_merge() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_compress_fail() {
     #[cfg(not(windows))]
     TestScenario::new(util_name!())

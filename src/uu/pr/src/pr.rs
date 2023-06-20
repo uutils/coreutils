@@ -6,6 +6,7 @@
 
 // spell-checker:ignore (ToDO) adFfmprt, kmerge
 
+use chrono::{DateTime, Local};
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use quick_error::ResultExt;
@@ -15,8 +16,6 @@ use std::fs::{metadata, File};
 use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use time::macros::format_description;
-use time::OffsetDateTime;
 
 use quick_error::quick_error;
 use uucore::display::Quotable;
@@ -37,8 +36,7 @@ const DEFAULT_COLUMN_WIDTH: usize = 72;
 const DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 const FF: u8 = 0x0C_u8;
-const DATE_TIME_FORMAT: &[time::format_description::FormatItem] =
-    format_description!("[month repr:short] [day] [hour]:[minute] [year]");
+const DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
 
 mod options {
     pub const HEADER: &str = "header";
@@ -488,6 +486,7 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         .map(from_parse_error_to_pr_error)
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn build_options(
     matches: &ArgMatches,
     paths: &[&str],
@@ -570,10 +569,8 @@ fn build_options(
     let line_separator = "\n".to_string();
 
     let last_modified_time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
-        // let date_time = Local::now();
-        // date_time.format("%b %d %H:%M %Y").to_string()
-        let date_time = OffsetDateTime::now_local().unwrap();
-        date_time.format(&DATE_TIME_FORMAT).unwrap()
+        let date_time = Local::now();
+        date_time.format(DATE_TIME_FORMAT).to_string()
     } else {
         file_last_modified_time(paths.first().unwrap())
     };
@@ -1021,6 +1018,7 @@ fn print_page(
     Ok(lines_written)
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn write_columns(
     lines: &[FileLine],
     options: &OutputOptions,
@@ -1213,12 +1211,8 @@ fn file_last_modified_time(path: &str) -> String {
         .map(|i| {
             i.modified()
                 .map(|x| {
-                    let date_time: OffsetDateTime = x.into();
-                    let offset = OffsetDateTime::now_local().unwrap().offset();
-                    date_time
-                        .to_offset(offset)
-                        .format(&DATE_TIME_FORMAT)
-                        .unwrap()
+                    let date_time: DateTime<Local> = x.into();
+                    date_time.format(DATE_TIME_FORMAT).to_string()
                 })
                 .unwrap_or_default()
         })

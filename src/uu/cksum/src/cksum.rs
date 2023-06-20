@@ -6,7 +6,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) fname, algo
-use clap::{crate_version, Arg, Command};
+use clap::{crate_version, Arg, ArgAction, Command};
 use hex::encode;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -103,6 +103,7 @@ struct Options {
     algo_name: &'static str,
     digest: Box<dyn Digest + 'static>,
     output_bits: usize,
+    untagged: bool,
 }
 
 /// Calculate checksum
@@ -159,8 +160,22 @@ where
                 div_ceil(sz, options.output_bits),
                 filename.display()
             ),
-            (_, true) => println!("{sum} {sz}"),
-            (_, false) => println!("{sum} {sz} {}", filename.display()),
+            (ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
+            (ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
+            (ALGORITHM_OPTIONS_BLAKE2B, _) if !options.untagged => {
+                println!("BLAKE2b ({}) = {sum}", filename.display());
+            }
+            _ => {
+                if options.untagged {
+                    println!("{sum}  {}", filename.display());
+                } else {
+                    println!(
+                        "{} ({}) = {sum}",
+                        options.algo_name.to_ascii_uppercase(),
+                        filename.display()
+                    );
+                }
+            }
         }
     }
 
@@ -202,8 +217,9 @@ fn digest_read<T: Read>(
 }
 
 mod options {
-    pub static FILE: &str = "file";
-    pub static ALGORITHM: &str = "algorithm";
+    pub const ALGORITHM: &str = "algorithm";
+    pub const FILE: &str = "file";
+    pub const UNTAGGED: &str = "untagged";
 }
 
 #[uucore::main]
@@ -222,6 +238,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         algo_name: name,
         digest: algo,
         output_bits: bits,
+        untagged: matches.get_flag(options::UNTAGGED),
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -263,6 +280,12 @@ pub fn uu_app() -> Command {
                     ALGORITHM_OPTIONS_BLAKE2B,
                     ALGORITHM_OPTIONS_SM3,
                 ]),
+        )
+        .arg(
+            Arg::new(options::UNTAGGED)
+                .long(options::UNTAGGED)
+                .help("create a reversed style checksum, without digest type")
+                .action(ArgAction::SetTrue),
         )
         .after_help(AFTER_HELP)
 }

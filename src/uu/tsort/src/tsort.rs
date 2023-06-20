@@ -6,18 +6,16 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 use clap::{crate_version, Arg, Command};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::format_usage;
+use uucore::{format_usage, help_about, help_usage};
 
-static ABOUT: &str = "Topological sort the strings in FILE.
-Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline).
-If FILE is not passed in, stdin is used instead.";
-static USAGE: &str = "{} [OPTIONS] FILE";
+const ABOUT: &str = help_about!("tsort.md");
+const USAGE: &str = help_usage!("tsort.md");
 
 mod options {
     pub const FILE: &str = "file";
@@ -105,8 +103,8 @@ pub fn uu_app() -> Command {
 // but using integer may improve performance.
 #[derive(Default)]
 struct Graph {
-    in_edges: HashMap<String, HashSet<String>>,
-    out_edges: HashMap<String, Vec<String>>,
+    in_edges: BTreeMap<String, BTreeSet<String>>,
+    out_edges: BTreeMap<String, Vec<String>>,
     result: Vec<String>,
 }
 
@@ -124,7 +122,7 @@ impl Graph {
     }
 
     fn init_node(&mut self, n: &str) {
-        self.in_edges.insert(n.to_string(), HashSet::new());
+        self.in_edges.insert(n.to_string(), BTreeSet::new());
         self.out_edges.insert(n.to_string(), vec![]);
     }
 

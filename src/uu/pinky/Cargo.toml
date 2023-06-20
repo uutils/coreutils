@@ -1,6 +1,6 @@
 [package]
 name = "uu_pinky"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "pinky ~ (uutils) display user information"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/pinky.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["utmpx", "entries"] }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["utmpx", "entries"] }
 
 [[bin]]
 name = "pinky"

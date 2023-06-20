@@ -1,6 +1,6 @@
 [package]
 name = "uu_mknod"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mknod ~ (uutils) create special file NAME of TYPE"
@@ -16,9 +16,9 @@ name = "uu_mknod"
 path = "src/mknod.rs"
 
 [dependencies]
-clap = { workspace=true }
-libc = { workspace=true }
-uucore = { workspace=true, features=["mode"] }
+clap = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true, features = ["mode"] }
 
 [[bin]]
 name = "mknod"

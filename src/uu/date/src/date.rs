@@ -9,7 +9,7 @@
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
+use chrono::{DateTime, Duration, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
@@ -96,6 +96,7 @@ enum DateSource {
     Now,
     Custom(String),
     File(PathBuf),
+    Human(Duration),
 }
 
 enum Iso8601Format {
@@ -139,6 +140,7 @@ impl<'a> From<&'a str> for Rfc3339Format {
 }
 
 #[uucore::main]
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
@@ -168,7 +170,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        DateSource::Custom(date.into())
+        if let Ok(duration) = parse_datetime::from_str(date.as_str()) {
+            DateSource::Human(duration)
+        } else {
+            DateSource::Custom(date.into())
+        }
     } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
         DateSource::File(file.into())
     } else {
@@ -219,6 +225,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let iter = std::iter::once(date);
                 Box::new(iter)
             }
+            DateSource::Human(relative_time) => {
+                // Get the current DateTime<FixedOffset> for things like "1 year ago"
+                let current_time = DateTime::<FixedOffset>::from(Local::now());
+                let iter = std::iter::once(Ok(current_time + relative_time));
+                Box::new(iter)
+            }
             DateSource::File(ref path) => {
                 if path.is_dir() {
                     return Err(USimpleError::new(
@@ -246,6 +258,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Ok(date) => {
                     // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
                     let format_string = &format_string.replace("%N", "%f");
+                    // Refuse to pass this string to chrono as it is crashing in this crate
+                    if format_string.contains("%#z") {
+                        return Err(USimpleError::new(
+                            1,
+                            format!("invalid format {}", format_string.replace("%f", "%N")),
+                        ));
+                    }
                     // Hack to work around panic in chrono,
                     // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
                     let format_items = StrftimeItems::new(format_string);

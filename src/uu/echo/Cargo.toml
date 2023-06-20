@@ -1,6 +1,6 @@
 [package]
 name = "uu_echo"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "echo ~ (uutils) display TEXT"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/echo.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "echo"

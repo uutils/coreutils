@@ -126,6 +126,70 @@ fn test_check_sha1() {
 }
 
 #[test]
+fn test_check_b2sum_length_option_0() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+    at.write("testf.b2sum", "9e2bf63e933e610efee4a8d6cd4a9387e80860edee97e27db3b37a828d226ab1eb92a9cdd8ca9ca67a753edaf8bd89a0558496f67a30af6f766943839acf0110  testf\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=0")
+        .arg("-c")
+        .arg(at.subdir.join("testf.b2sum"))
+        .succeeds()
+        .stdout_only("testf: OK\n");
+}
+
+#[test]
+fn test_check_b2sum_length_option_8() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+    at.write("testf.b2sum", "6a  testf\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=8")
+        .arg("-c")
+        .arg(at.subdir.join("testf.b2sum"))
+        .succeeds()
+        .stdout_only("testf: OK\n");
+}
+
+#[test]
+fn test_invalid_b2sum_length_option_not_multiple_of_8() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=9")
+        .arg(at.subdir.join("testf"))
+        .fails()
+        .code_is(1);
+}
+
+#[test]
+fn test_invalid_b2sum_length_option_too_large() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=513")
+        .arg(at.subdir.join("testf"))
+        .fails()
+        .code_is(1);
+}
+
+#[test]
 fn test_check_file_not_found_warning() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -143,6 +207,144 @@ fn test_check_file_not_found_warning() {
         .succeeds()
         .stdout_is("sha1sum: testf: No such file or directory\ntestf: FAILED open or read\n")
         .stderr_is("sha1sum: warning: 1 listed file could not be read\n");
+}
+
+// Asterisk `*` is a reserved paths character on win32, nor the path can end with a whitespace.
+// ref: https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions
+#[test]
+fn test_check_md5sum() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    #[cfg(not(windows))]
+    {
+        for f in &["a", " b", "*c", "dd", " "] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "60b725f10c9c85c70d97880dfe8191b3  a\n\
+             bf35d7536c785cf06730d5a40301eba2   b\n\
+             f5b61709718c1ecf8db1aea8547d4698  *c\n\
+             b064a020db8018f18ff5ae367d01b212  dd\n\
+             d784fa8b6d98d27699781bd9a7cf19f0   ",
+        );
+        scene
+            .ccmd("md5sum")
+            .arg("--strict")
+            .arg("-c")
+            .arg("check.md5sum")
+            .succeeds()
+            .stdout_is("a: OK\n b: OK\n*c: OK\ndd: OK\n : OK\n")
+            .stderr_is("");
+    }
+    #[cfg(windows)]
+    {
+        for f in &["a", " b", "dd"] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "60b725f10c9c85c70d97880dfe8191b3  a\n\
+             bf35d7536c785cf06730d5a40301eba2   b\n\
+             b064a020db8018f18ff5ae367d01b212  dd",
+        );
+        scene
+            .ccmd("md5sum")
+            .arg("--strict")
+            .arg("-c")
+            .arg("check.md5sum")
+            .succeeds()
+            .stdout_is("a: OK\n b: OK\ndd: OK\n")
+            .stderr_is("");
+    }
+}
+
+#[test]
+fn test_check_md5sum_reverse_bsd() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    #[cfg(not(windows))]
+    {
+        for f in &["a", " b", "*c", "dd", " "] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "60b725f10c9c85c70d97880dfe8191b3 a\n\
+             bf35d7536c785cf06730d5a40301eba2  b\n\
+             f5b61709718c1ecf8db1aea8547d4698 *c\n\
+             b064a020db8018f18ff5ae367d01b212 dd\n\
+             d784fa8b6d98d27699781bd9a7cf19f0  ",
+        );
+        scene
+            .ccmd("md5sum")
+            .arg("--strict")
+            .arg("-c")
+            .arg("check.md5sum")
+            .succeeds()
+            .stdout_is("a: OK\n b: OK\n*c: OK\ndd: OK\n : OK\n")
+            .stderr_is("");
+    }
+    #[cfg(windows)]
+    {
+        for f in &["a", " b", "dd"] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "60b725f10c9c85c70d97880dfe8191b3 a\n\
+             bf35d7536c785cf06730d5a40301eba2  b\n\
+             b064a020db8018f18ff5ae367d01b212 dd",
+        );
+        scene
+            .ccmd("md5sum")
+            .arg("--strict")
+            .arg("-c")
+            .arg("check.md5sum")
+            .succeeds()
+            .stdout_is("a: OK\n b: OK\ndd: OK\n")
+            .stderr_is("");
+    }
+}
+
+#[test]
+fn test_check_md5sum_mixed_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    #[cfg(not(windows))]
+    {
+        for f in &[" b", "*c", "dd", " "] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "bf35d7536c785cf06730d5a40301eba2  b\n\
+             f5b61709718c1ecf8db1aea8547d4698 *c\n\
+             b064a020db8018f18ff5ae367d01b212 dd\n\
+             d784fa8b6d98d27699781bd9a7cf19f0  ",
+        );
+    }
+    #[cfg(windows)]
+    {
+        for f in &[" b", "dd"] {
+            at.write(f, &format!("{f}\n"));
+        }
+        at.write(
+            "check.md5sum",
+            "bf35d7536c785cf06730d5a40301eba2  b\n\
+             b064a020db8018f18ff5ae367d01b212 dd",
+        );
+    }
+    scene
+        .ccmd("md5sum")
+        .arg("--strict")
+        .arg("-c")
+        .arg("check.md5sum")
+        .fails()
+        .code_is(1);
 }
 
 #[test]

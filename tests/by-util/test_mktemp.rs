@@ -569,6 +569,32 @@ fn test_template_path_separator() {
         ));
 }
 
+/// Test that a prefix with a point is valid.
+#[test]
+fn test_prefix_template_separator() {
+    new_ucmd!().args(&["-p", ".", "-t", "a.XXXX"]).succeeds();
+}
+
+#[test]
+fn test_prefix_template_with_path_separator() {
+    #[cfg(not(windows))]
+    new_ucmd!()
+        .args(&["-t", "a/XXX"])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, {}, contains directory separator\n",
+            "a/XXX".quote()
+        ));
+    #[cfg(windows)]
+    new_ucmd!()
+        .args(&["-t", r"a\XXX"])
+        .fails()
+        .stderr_only(format!(
+            "mktemp: invalid template, {}, contains directory separator\n",
+            r"a\XXX".quote()
+        ));
+}
+
 /// Test that a suffix with a path separator is invalid.
 #[test]
 fn test_suffix_path_separator() {
@@ -825,6 +851,53 @@ fn test_nonexistent_dir_prefix() {
 
 #[test]
 fn test_default_missing_value() {
+    new_ucmd!().arg("-d").arg("--tmpdir").succeeds();
+}
+
+#[test]
+fn test_default_issue_4821_t_tmpdir() {
     let scene = TestScenario::new(util_name!());
-    scene.ucmd().arg("-d").arg("--tmpdir").succeeds();
+    let pathname = scene.fixtures.as_string();
+    let result = scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg("foo.XXXX")
+        .succeeds();
+    let stdout = result.stdout_str();
+    println!("stdout = {stdout}");
+    assert!(stdout.contains(&pathname));
+}
+
+#[test]
+fn test_default_issue_4821_t_tmpdir_p() {
+    let scene = TestScenario::new(util_name!());
+    let pathname = scene.fixtures.as_string();
+    let result = scene
+        .ucmd()
+        .arg("-t")
+        .arg("-p")
+        .arg(&pathname)
+        .arg("foo.XXXX")
+        .succeeds();
+    let stdout = result.stdout_str();
+    println!("stdout = {stdout}");
+    assert!(stdout.contains(&pathname));
+}
+
+#[test]
+fn test_t_ensure_tmpdir_has_higher_priority_than_p() {
+    let scene = TestScenario::new(util_name!());
+    let pathname = scene.fixtures.as_string();
+    let result = scene
+        .ucmd()
+        .env(TMPDIR, &pathname)
+        .arg("-t")
+        .arg("-p")
+        .arg("should_not_attempt_to_write_in_this_nonexisting_dir")
+        .arg("foo.XXXX")
+        .succeeds();
+    let stdout = result.stdout_str();
+    println!("stdout = {stdout}");
+    assert!(stdout.contains(&pathname));
 }

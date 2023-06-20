@@ -3,10 +3,9 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty
+// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink
 #[cfg(not(windows))]
 use regex::Regex;
-#[cfg(not(windows))]
 use std::io::Write;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -122,7 +121,7 @@ fn test_du_invalid_size() {
 fn test_du_basics_bad_name() {
     new_ucmd!()
         .arg("bad_name")
-        .succeeds() // TODO: replace with ".fails()" once `du` is fixed
+        .fails()
         .stderr_only("du: bad_name: No such file or directory\n");
 }
 
@@ -284,6 +283,30 @@ fn test_du_dereference() {
     }
 
     _du_dereference(result.stdout_str());
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_dereference_args() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("subdir");
+    let mut file1 = at.make_file("subdir/file-ignore1");
+    file1.write_all(b"azeaze").unwrap();
+    let mut file2 = at.make_file("subdir/file-ignore1");
+    file2.write_all(b"amaz?ng").unwrap();
+    at.symlink_dir("subdir", "sublink");
+
+    let result = ts.ucmd().arg("-D").arg("-s").arg("sublink").succeeds();
+    let stdout = result.stdout_str();
+
+    assert!(!stdout.starts_with('0'));
+    assert!(stdout.contains("sublink"));
+
+    // Without the option
+    let result = ts.ucmd().arg("-s").arg("sublink").succeeds();
+    result.stdout_contains("0\tsublink\n");
 }
 
 #[cfg(target_vendor = "apple")]
@@ -850,4 +873,30 @@ fn test_du_exclude_invalid_syntax() {
         .arg("azerty")
         .fails()
         .stderr_contains("du: Invalid exclude syntax");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_symlink_fail() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.symlink_file("non-existing.txt", "target.txt");
+
+    ts.ucmd().arg("-L").arg("target.txt").fails().code_is(1);
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_symlink_multiple_fail() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.symlink_file("non-existing.txt", "target.txt");
+    let mut file1 = at.make_file("file1");
+    file1.write_all(b"azeaze").unwrap();
+
+    let result = ts.ucmd().arg("-L").arg("target.txt").arg("file1").fails();
+    assert_eq!(result.code(), 1);
+    result.stdout_contains("4\tfile1\n");
 }

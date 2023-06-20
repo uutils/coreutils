@@ -1,6 +1,6 @@
 [package]
 name = "uu_pwd"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "pwd ~ (uutils) display current working directory"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/pwd.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "pwd"

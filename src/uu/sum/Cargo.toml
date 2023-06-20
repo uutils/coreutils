@@ -1,6 +1,6 @@
 [package]
 name = "uu_sum"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sum ~ (uutils) display checksum and block counts for input"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/sum.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "sum"

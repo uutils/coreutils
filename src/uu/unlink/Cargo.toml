@@ -1,6 +1,6 @@
 [package]
 name = "uu_unlink"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "unlink ~ (uutils) remove a (file system) link to FILE"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/unlink.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "unlink"

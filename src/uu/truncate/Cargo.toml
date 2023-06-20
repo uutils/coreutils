@@ -1,6 +1,6 @@
 [package]
 name = "uu_truncate"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "truncate ~ (uutils) truncate (or extend) FILE to SIZE"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/truncate.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "truncate"

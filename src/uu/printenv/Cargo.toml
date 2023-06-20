@@ -1,6 +1,6 @@
 [package]
 name = "uu_printenv"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "printenv ~ (uutils) display value of environment VAR"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/printenv.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "printenv"

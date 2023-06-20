@@ -1,6 +1,6 @@
 [package]
 name = "uu_split"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "split ~ (uutils) split input into output files"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/split.rs"
 
 [dependencies]
-clap = { workspace=true }
-memchr = { workspace=true }
-uucore = { workspace=true, features=["fs"] }
+clap = { workspace = true }
+memchr = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "split"

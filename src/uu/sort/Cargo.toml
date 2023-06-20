@@ -1,6 +1,6 @@
 [package]
 name = "uu_sort"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sort ~ (uutils) sort input lines"
@@ -15,19 +15,19 @@ edition = "2021"
 path = "src/sort.rs"
 
 [dependencies]
-binary-heap-plus = { workspace=true }
-clap = { workspace=true }
-compare = { workspace=true }
-ctrlc = { workspace=true }
-fnv = { workspace=true }
-itertools = { workspace=true }
-memchr = { workspace=true }
-ouroboros = { workspace=true }
-rand = { workspace=true }
-rayon = { workspace=true }
-tempfile = { workspace=true }
-unicode-width = { workspace=true }
-uucore = { workspace=true, features=["fs"] }
+binary-heap-plus = { workspace = true }
+clap = { workspace = true }
+compare = { workspace = true }
+ctrlc = { workspace = true }
+fnv = { workspace = true }
+itertools = { workspace = true }
+memchr = { workspace = true }
+ouroboros = { workspace = true }
+rand = { workspace = true }
+rayon = { workspace = true }
+tempfile = { workspace = true }
+unicode-width = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "sort"

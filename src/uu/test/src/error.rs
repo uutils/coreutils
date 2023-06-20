@@ -16,12 +16,12 @@ pub type ParseResult<T> = Result<T, ParseError>;
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Expected(s) => write!(f, "expected {}", s),
+            Self::Expected(s) => write!(f, "expected {s}"),
             Self::ExpectedValue => write!(f, "expected value"),
-            Self::MissingArgument(s) => write!(f, "missing argument after {}", s),
-            Self::ExtraArgument(s) => write!(f, "extra argument {}", s),
-            Self::UnknownOperator(s) => write!(f, "unknown operator {}", s),
-            Self::InvalidInteger(s) => write!(f, "invalid integer {}", s),
+            Self::MissingArgument(s) => write!(f, "missing argument after {s}"),
+            Self::ExtraArgument(s) => write!(f, "extra argument {s}"),
+            Self::UnknownOperator(s) => write!(f, "unknown operator {s}"),
+            Self::InvalidInteger(s) => write!(f, "invalid integer {s}"),
         }
     }
 }

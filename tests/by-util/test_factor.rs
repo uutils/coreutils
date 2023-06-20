@@ -28,7 +28,14 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_valid_arg_exponents() {
+    new_ucmd!().arg("-h").succeeds().code_is(0);
+    new_ucmd!().arg("--exponents").succeeds().code_is(0);
+}
+
+#[test]
 #[cfg(feature = "sort")]
+#[cfg(not(target_os = "android"))]
 fn test_parallel() {
     use crate::common::util::AtPath;
     use hex_literal::hex;
@@ -100,6 +107,33 @@ fn test_first_1000_integers() {
     );
 }
 
+#[test]
+fn test_first_1000_integers_with_exponents() {
+    use hex_literal::hex;
+    use sha1::{Digest, Sha1};
+
+    let n_integers = 1000;
+    let mut input_string = String::new();
+    for i in 0..=n_integers {
+        input_string.push_str(&(format!("{i} "))[..]);
+    }
+
+    println!("STDIN='{input_string}'");
+    let result = new_ucmd!()
+        .arg("-h")
+        .pipe_in(input_string.as_bytes())
+        .succeeds();
+
+    // Using factor from GNU Coreutils 9.2
+    // `seq 0 1000 | factor -h | sha1sum` => "45f5f758a9319870770bd1fec2de23d54331944d"
+    let mut hasher = Sha1::new();
+    hasher.update(result.stdout());
+    let hash_check = hasher.finalize();
+    assert_eq!(
+        hash_check[..],
+        hex!("45f5f758a9319870770bd1fec2de23d54331944d")
+    );
+}
 #[test]
 fn test_cli_args() {
     // Make sure that factor works with CLI arguments as well.
@@ -277,6 +311,35 @@ fn run(input_string: &[u8], output_string: &[u8]) {
         .pipe_in(input_string)
         .run()
         .stdout_is(String::from_utf8(output_string.to_owned()).unwrap());
+}
+
+#[test]
+fn test_primes_with_exponents() {
+    let mut input_string = String::new();
+    let mut output_string = String::new();
+    for primes in PRIMES_BY_BITS.iter() {
+        for &prime in *primes {
+            input_string.push_str(&(format!("{prime} "))[..]);
+            output_string.push_str(&(format!("{prime}: {prime}\n"))[..]);
+        }
+    }
+
+    println!(
+        "STDIN='{}'",
+        String::from_utf8_lossy(input_string.as_bytes())
+    );
+    println!(
+        "STDOUT(expected)='{}'",
+        String::from_utf8_lossy(output_string.as_bytes())
+    );
+
+    // run factor with --exponents
+    new_ucmd!()
+        .timeout(Duration::from_secs(240))
+        .arg("--exponents")
+        .pipe_in(input_string)
+        .run()
+        .stdout_is(String::from_utf8(output_string.as_bytes().to_owned()).unwrap());
 }
 
 const PRIMES_BY_BITS: &[&[u64]] = &[

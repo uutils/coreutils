@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore tldr
+// spell-checker:ignore tldr uuhelp
 
 use clap::Command;
 use std::collections::HashMap;
@@ -133,7 +133,7 @@ impl<'a, 'b> MDWriter<'a, 'b> {
         write!(self.w, "# {}\n\n", self.name)?;
         self.additional()?;
         self.usage()?;
-        self.description()?;
+        self.about()?;
         self.options()?;
         self.after_help()?;
         self.examples()
@@ -177,54 +177,34 @@ impl<'a, 'b> MDWriter<'a, 'b> {
     }
 
     fn usage(&mut self) -> io::Result<()> {
-        writeln!(self.w, "\n```")?;
-        let mut usage: String = self
-            .command
-            .render_usage()
-            .to_string()
-            .lines()
-            .map(|l| l.strip_prefix("Usage:").unwrap_or(l))
-            .map(|l| l.trim())
-            .filter(|l| !l.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n");
-        usage = usage
-            .to_string()
-            .replace(uucore::execution_phrase(), self.name);
-        writeln!(self.w, "{}", usage)?;
-        writeln!(self.w, "```")
+        if let Some(markdown) = &self.markdown {
+            let usage = uuhelp_parser::parse_usage(markdown);
+            let usage = usage.replace("{}", self.name);
+
+            writeln!(self.w, "\n```")?;
+            writeln!(self.w, "{}", usage)?;
+            writeln!(self.w, "```")
+        } else {
+            Ok(())
+        }
     }
 
-    fn description(&mut self) -> io::Result<()> {
-        if let Some(after_help) = self.markdown_section("about") {
-            return writeln!(self.w, "\n\n{}", after_help);
-        }
-
-        if let Some(about) = self
-            .command
-            .get_long_about()
-            .or_else(|| self.command.get_about())
-        {
-            writeln!(self.w, "{}", about)
+    fn about(&mut self) -> io::Result<()> {
+        if let Some(markdown) = &self.markdown {
+            writeln!(self.w, "{}", uuhelp_parser::parse_about(markdown))
         } else {
             Ok(())
         }
     }
 
     fn after_help(&mut self) -> io::Result<()> {
-        if let Some(after_help) = self.markdown_section("after help") {
-            return writeln!(self.w, "\n\n{}", after_help);
+        if let Some(markdown) = &self.markdown {
+            if let Some(after_help) = uuhelp_parser::parse_section("after help", markdown) {
+                return writeln!(self.w, "\n\n{after_help}");
+            }
         }
 
-        if let Some(after_help) = self
-            .command
-            .get_after_long_help()
-            .or_else(|| self.command.get_after_help())
-        {
-            writeln!(self.w, "\n\n{}", after_help)
-        } else {
-            Ok(())
-        }
+        Ok(())
     }
 
     fn examples(&mut self) -> io::Result<()> {
@@ -236,6 +216,10 @@ impl<'a, 'b> MDWriter<'a, 'b> {
             } else if let Some(f) = get_zip_content(zip, &format!("pages/linux/{}.md", self.name)) {
                 f
             } else {
+                println!(
+                    "Warning: Could not find tldr examples for page '{}'",
+                    self.name
+                );
                 return Ok(());
             };
 
@@ -274,10 +258,10 @@ impl<'a, 'b> MDWriter<'a, 'b> {
             write!(self.w, "<dt>")?;
             let mut first = true;
             for l in arg.get_long_and_visible_aliases().unwrap_or_default() {
-                if !first {
-                    write!(self.w, ", ")?;
-                } else {
+                if first {
                     first = false;
+                } else {
+                    write!(self.w, ", ")?;
                 }
                 write!(self.w, "<code>")?;
                 write!(self.w, "--{}", l)?;
@@ -295,10 +279,10 @@ impl<'a, 'b> MDWriter<'a, 'b> {
                 write!(self.w, "</code>")?;
             }
             for s in arg.get_short_and_visible_aliases().unwrap_or_default() {
-                if !first {
-                    write!(self.w, ", ")?;
-                } else {
+                if first {
                     first = false;
+                } else {
+                    write!(self.w, ", ")?;
                 }
                 write!(self.w, "<code>")?;
                 write!(self.w, "-{}", s)?;
@@ -326,32 +310,6 @@ impl<'a, 'b> MDWriter<'a, 'b> {
             )?;
         }
         writeln!(self.w, "</dl>\n")
-    }
-
-    fn markdown_section(&self, section: &str) -> Option<String> {
-        let md = self.markdown.as_ref()?;
-        let section = section.to_lowercase();
-
-        fn is_section_header(line: &str, section: &str) -> bool {
-            line.strip_prefix("##")
-                .map_or(false, |l| l.trim().to_lowercase() == section)
-        }
-
-        let result = md
-            .lines()
-            .skip_while(|&l| !is_section_header(l, &section))
-            .skip(1)
-            .take_while(|l| !l.starts_with("##"))
-            .collect::<Vec<_>>()
-            .join("\n")
-            .trim()
-            .to_string();
-
-        if !result.is_empty() {
-            Some(result)
-        } else {
-            None
-        }
     }
 }
 

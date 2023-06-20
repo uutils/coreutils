@@ -1,6 +1,6 @@
 [package]
 name = "uu_id"
-version = "0.0.18"
+version = "0.0.19"
 authors = ["uutils developers"]
 license = "MIT"
 description = "id ~ (uutils) display user and group information for USER"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/id.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["entries", "process"] }
-selinux = { workspace=true, optional=true }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["entries", "process"] }
+selinux = { workspace = true, optional = true }
 
 [[bin]]
 name = "id"

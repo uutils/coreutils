@@ -42,6 +42,11 @@ static OPT_T: &str = "t";
 
 static ARG_TEMPLATE: &str = "template";
 
+#[cfg(not(windows))]
+const TMPDIR_ENV_VAR: &str = "TMPDIR";
+#[cfg(windows)]
+const TMPDIR_ENV_VAR: &str = "TMP";
+
 #[derive(Debug)]
 enum MkTempError {
     PersistError(PathBuf),
@@ -191,7 +196,16 @@ impl Options {
                     (tmpdir, template.to_string())
                 }
                 Some(template) => {
-                    let tmpdir = matches.get_one::<String>(OPT_TMPDIR).map(String::from);
+                    let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok() && matches.get_flag(OPT_T) {
+                        env::var(TMPDIR_ENV_VAR).ok()
+                    } else if matches.contains_id(OPT_TMPDIR) {
+                        matches.get_one::<String>(OPT_TMPDIR).map(String::from)
+                    } else if matches.get_flag(OPT_T) {
+                        // mktemp -t foo.xxx should export in TMPDIR
+                        Some(env::temp_dir().display().to_string())
+                    } else {
+                        matches.get_one::<String>(OPT_TMPDIR).map(String::from)
+                    };
                     (tmpdir, template.to_string())
                 }
             }
@@ -281,7 +295,7 @@ impl Params {
             .join(prefix_from_template)
             .display()
             .to_string();
-        if options.treat_as_template && prefix.contains(MAIN_SEPARATOR) {
+        if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
             return Err(MkTempError::PrefixContainsDirSeparator(options.template));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {

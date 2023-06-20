@@ -4,9 +4,7 @@ use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Mutex;
 
-extern crate chmod;
-extern crate libc;
-use self::libc::umask;
+use libc::umask;
 
 static TEST_FILE: &str = "file";
 static REFERENCE_FILE: &str = "reference";
@@ -540,6 +538,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_mode_after_dash_dash() {
     let (at, ucmd) = at_and_ucmd!();
     run_single_test(
@@ -651,6 +650,7 @@ fn test_gnu_invalid_mode() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_gnu_options() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
