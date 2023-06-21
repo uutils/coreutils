@@ -36,6 +36,11 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_version() {
+    new_ucmd!().arg("--version").succeeds();
+}
+
+#[test]
 fn test_simple() {
     run(NO_ARGS, b"y\ny\ny\ny\n");
 }
