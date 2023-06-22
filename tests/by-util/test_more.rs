@@ -67,3 +67,19 @@ fn test_more_invalid_file_perms() {
             .stderr_contains("permission denied");
     }
 }
+
+#[test]
+fn test_more_error_on_multiple_files() {
+    if std::io::stdout().is_terminal() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir_all("folder");
+        at.make_file("file1");
+        ucmd.arg("folder")
+            .arg("file2")
+            .arg("file1")
+            .succeeds()
+            .stdout_contains("folder")
+            .stdout_contains("file2")
+            .stdout_contains("file1");
+    }
+}
