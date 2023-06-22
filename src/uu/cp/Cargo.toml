@@ -35,6 +35,15 @@ uucore = { workspace = true, features = [
 walkdir = { workspace = true }
 indicatif = { workspace = true }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_System_IO",
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_Security",
+    "Win32_System_Ioctl",
+] }
+
 [target.'cfg(unix)'.dependencies]
 xattr = { workspace = true }
 exacl = { workspace = true, optional = true }
