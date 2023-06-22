@@ -18,8 +18,8 @@ use uucore::{format_usage, help_about, help_usage};
 
 mod helper;
 
-static ABOUT: &str = help_about!("nl.md");
-static USAGE: &str = help_usage!("nl.md");
+const ABOUT: &str = help_about!("nl.md");
+const USAGE: &str = help_usage!("nl.md");
 
 // Settings store options used by nl to produce its output.
 pub struct Settings {
