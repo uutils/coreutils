@@ -42,6 +42,24 @@ pub struct Settings {
     number_separator: String,
 }
 
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            header_numbering: NumberingStyle::NumberForNone,
+            body_numbering: NumberingStyle::NumberForAll,
+            footer_numbering: NumberingStyle::NumberForNone,
+            section_delimiter: ['\\', ':'],
+            starting_line_number: 1,
+            line_increment: 1,
+            join_blank_lines: 1,
+            number_width: 6,
+            number_format: NumberFormat::Right,
+            renumber: true,
+            number_separator: String::from("\t"),
+        }
+    }
+}
+
 // NumberingStyle stores which lines are to be numbered.
 // The possible options are:
 // 1. Number all lines
@@ -87,20 +105,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(args)?;
 
-    // A mutable settings object, initialized with the defaults.
-    let mut settings = Settings {
-        header_numbering: NumberingStyle::NumberForNone,
-        body_numbering: NumberingStyle::NumberForAll,
-        footer_numbering: NumberingStyle::NumberForNone,
-        section_delimiter: ['\\', ':'],
-        starting_line_number: 1,
-        line_increment: 1,
-        join_blank_lines: 1,
-        number_width: 6,
-        number_format: NumberFormat::Right,
-        renumber: true,
-        number_separator: String::from("\t"),
-    };
+    let mut settings = Settings::default();
 
     // Update the settings from the command line options, and terminate the
     // program if some options could not successfully be parsed.
