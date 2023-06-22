@@ -6,8 +6,6 @@
 //  * file that was distributed with this source code.
 //  *
 
-// spell-checker:ignore (ToDO) corasick memchr
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
