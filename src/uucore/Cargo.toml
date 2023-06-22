@@ -25,7 +25,7 @@ dunce = "1.0.4"
 wild = "2.1"
 glob = "0.3.1"
 # * optional
-itertools = { version = "0.10.5", optional = true }
+itertools = { version = "0.11.0", optional = true }
 thiserror = { workspace = true, optional = true }
 time = { workspace = true, optional = true, features = [
   "formatting",
