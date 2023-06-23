@@ -22,7 +22,7 @@ use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
-use uucore::backup_control::{self, BackupMode};
+use uucore::backup_control::{self, source_is_target_backup, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::fs::{are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file};
@@ -251,6 +251,17 @@ fn parse_paths(files: &[OsString], b: &Behavior) -> Vec<PathBuf> {
 }
 
 fn handle_two_paths(source: &Path, target: &Path, b: &Behavior) -> UResult<()> {
+    if b.backup == BackupMode::SimpleBackup && source_is_target_backup(source, target, &b.suffix) {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "backing up {} might destroy source;  {} not moved",
+                target.quote(),
+                source.quote()
+            ),
+        )
+        .into());
+    }
     if source.symlink_metadata().is_err() {
         return Err(MvError::NoSuchFile(source.quote().to_string()).into());
     }
