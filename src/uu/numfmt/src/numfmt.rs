@@ -488,7 +488,7 @@ mod tests {
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Warn;
         let result = handle_buffer(BufReader::new(&input_value[..]), &options);
-        assert!(result.is_ok(), "did not return Ok for valid input");
+        assert!(result.is_ok(), "did not return Ok for invalid input");
     }
 
     #[test]
@@ -497,7 +497,7 @@ mod tests {
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Ignore;
         let result = handle_buffer(BufReader::new(&input_value[..]), &options);
-        assert!(result.is_ok(), "did not return Ok for valid input");
+        assert!(result.is_ok(), "did not return Ok for invalid input");
     }
 
     #[test]
