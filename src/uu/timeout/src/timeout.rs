@@ -10,6 +10,7 @@ mod status;
 
 use crate::status::ExitStatus;
 use clap::{crate_version, Arg, ArgAction, Command};
+use fundu::{DurationParser, SaturatingInto, TimeUnit};
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
@@ -25,6 +26,15 @@ use uucore::{
     format_usage, help_about, help_usage, show_error,
     signals::{signal_by_name_or_value, signal_name_by_value},
 };
+
+const DURATION_PARSER: DurationParser = DurationParser::builder()
+    .time_units(&[
+        TimeUnit::Second,
+        TimeUnit::Minute,
+        TimeUnit::Hour,
+        TimeUnit::Day,
+    ])
+    .build();
 
 const ABOUT: &str = help_about!("timeout.md");
 const USAGE: &str = help_usage!("timeout.md");
@@ -72,17 +82,40 @@ impl Config {
 
         let kill_after = match options.get_one::<String>(options::KILL_AFTER) {
             None => None,
-            Some(kill_after) => match uucore::parse_time::from_str(kill_after) {
-                Ok(k) => Some(k),
-                Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
+            Some(kill_after) => match DURATION_PARSER.parse(kill_after.trim_start()) {
+                Ok(k) => Some(SaturatingInto::<Duration>::saturating_into(k)),
+                Err(err) => {
+                    let reason = match err {
+                        fundu::ParseError::Syntax(pos, description)
+                        | fundu::ParseError::TimeUnit(pos, description) => {
+                            format!("{description} at position {}", pos.saturating_add(1))
+                        }
+                        error => error.to_string(),
+                    };
+                    return Err(UUsageError::new(
+                        ExitStatus::TimeoutFailed.into(),
+                        format!("invalid time interval '{kill_after}': {reason}"),
+                    ));
+                }
             },
         };
 
-        let duration = match uucore::parse_time::from_str(
-            options.get_one::<String>(options::DURATION).unwrap(),
-        ) {
-            Ok(duration) => duration,
-            Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
+        let duration_str = options.get_one::<String>(options::DURATION).unwrap();
+        let duration = match DURATION_PARSER.parse(duration_str.trim_start()) {
+            Ok(duration) => SaturatingInto::<Duration>::saturating_into(duration),
+            Err(err) => {
+                let reason = match err {
+                    fundu::ParseError::Syntax(pos, description)
+                    | fundu::ParseError::TimeUnit(pos, description) => {
+                        format!("{description} at position {}", pos.saturating_add(1))
+                    }
+                    error => error.to_string(),
+                };
+                return Err(UUsageError::new(
+                    ExitStatus::TimeoutFailed.into(),
+                    format!("invalid time interval '{duration_str}': {reason}"),
+                ));
+            }
         };
 
         let preserve_status: bool = options.get_flag(options::PRESERVE_STATUS);

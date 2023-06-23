@@ -22,7 +22,7 @@ fn test_invalid_time_interval() {
         .args(&["xyz", "sleep", "0"])
         .fails()
         .code_is(125)
-        .usage_error("invalid time interval 'xyz'");
+        .usage_error("invalid time interval 'xyz': Invalid input: 'xyz' at position 1");
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn test_invalid_kill_after() {
         .args(&["-k", "xyz", "1", "sleep", "0"])
         .fails()
         .code_is(125)
-        .usage_error("invalid time interval 'xyz'");
+        .usage_error("invalid time interval 'xyz': Invalid input: 'xyz' at position 1");
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn test_command_empty_args() {
     new_ucmd!()
         .args(&["", ""])
         .fails()
-        .stderr_contains("timeout: empty string");
+        .usage_error("invalid time interval '': Empty input");
 }
 
 #[test]
@@ -110,7 +110,7 @@ fn test_negative_interval() {
     new_ucmd!()
         .args(&["--", "-1", "sleep", "0"])
         .fails()
-        .usage_error("invalid time interval '-1'");
+        .usage_error("invalid time interval '-1': Number was negative");
 }
 
 #[test]
@@ -126,7 +126,7 @@ fn test_invalid_multi_byte_characters() {
     new_ucmd!()
         .args(&["10€", "sleep", "0"])
         .fails()
-        .usage_error("invalid time interval '10€'");
+        .usage_error("invalid time interval '10€': Invalid time unit: '€' at position 3");
 }
 
 /// Test that the long form of the `--kill-after` argument is recognized.

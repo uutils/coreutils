@@ -19,6 +19,7 @@ clap = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true, features = ["signal"] }
 uucore = { workspace = true, features = ["process", "signals"] }
+fundu = { workspace = true }
 
 [[bin]]
 name = "timeout"

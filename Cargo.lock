@@ -3270,6 +3270,7 @@ name = "uu_timeout"
 version = "0.0.19"
 dependencies = [
  "clap",
+ "fundu",
  "libc",
  "nix",
  "uucore",
