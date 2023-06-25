@@ -61,7 +61,11 @@ feature is adopted from [FreeBSD](https://www.freebsd.org/cgi/man.cgi?cut).
 
 ## `fmt`
 
-`fmt` has additional flags for prefixes: `-P/--skip-prefix`, `-x/--exact-prefix`, and
-`-X/--exact-skip-prefix`. With `-m/--preserve-headers`, an attempt is made to detect and preserve
-mail headers in the input. `-q/--quick` breaks lines more quickly. And `-T/--tab-width` defines the
+`fmt` has additional flags for prefixes: `-P`/`--skip-prefix`, `-x`/`--exact-prefix`, and
+`-X`/`--exact-skip-prefix`. With `-m`/`--preserve-headers`, an attempt is made to detect and preserve
+mail headers in the input. `-q`/`--quick` breaks lines more quickly. And `-T`/`--tab-width` defines the
 number of spaces representing a tab when determining the line length.
+
+## `seq`
+
+`seq` provides `-t`/`--terminator` to set the terminator character.
