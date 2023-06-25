@@ -72,10 +72,10 @@ impl Display for SeqError {
             f,
             "{}{}",
             self.argtype(),
-            if self.arg() != "" {
-                self.arg().quote().to_string()
+            if self.arg() == "" {
+                String::new()
             } else {
-                "".to_string()
+                self.arg().quote().to_string()
             }
         )
     }
