@@ -2724,7 +2724,7 @@ fn test_copy_dir_preserve_permissions_inaccessible_file() {
     ucmd.args(&["-p", "-R", "d1", "d2"])
         .fails()
         .code_is(1)
-        .stderr_only("cp: cannot open 'd1/f' for reading: Permission denied\n");
+        .stderr_only("cp: cannot open 'd1/f' for reading: permission denied\n");
     assert!(at.dir_exists("d2"));
     assert!(!at.file_exists("d2/f"));
 
