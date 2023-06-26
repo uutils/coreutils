@@ -63,23 +63,32 @@ skip = [
   { name = "hermit-abi", version = "0.3.1" },
   # procfs
   { name = "rustix", version = "0.36.14" },
+  # rustix
   { name = "linux-raw-sys", version = "0.1.4" },
   # various crates
   { name = "windows-sys", version = "0.45.0" },
+  # windows-sys
   { name = "windows-targets", version = "0.42.2" },
+  # windows-targets
   { name = "windows_aarch64_gnullvm", version = "0.42.2" },
+  # windows-targets
   { name = "windows_aarch64_msvc", version = "0.42.2" },
+  # windows-targets
   { name = "windows_i686_gnu", version = "0.42.2" },
+  # windows-targets
   { name = "windows_i686_msvc", version = "0.42.2" },
+  # windows-targets
   { name = "windows_x86_64_gnu", version = "0.42.2" },
+  # windows-targets
   { name = "windows_x86_64_gnullvm", version = "0.42.2" },
+  # windows-targets
   { name = "windows_x86_64_msvc", version = "0.42.2" },
   # tempfile
   { name = "redox_syscall", version = "0.3.5" },
   # cpp_macros
   { name = "aho-corasick", version = "0.7.19" },
-  # touch, can be remove when touch switches from time to chrono
-  { name = "humantime_to_duration", version = "0.2.1" },
+  # ordered-multimap (via rust-ini)
+  { name = "hashbrown", version = "0.13.2" },
 ]
 # spell-checker: enable
 

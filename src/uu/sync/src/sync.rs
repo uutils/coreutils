@@ -173,7 +173,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let path = Path::new(&f);
             if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
                 if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    return e.map_err_context(|| format!("cannot stat {}", f.quote()))?;
+                    return e.map_err_context(|| format!("error opening {}", f.quote()))?;
                 }
             }
         }
@@ -183,7 +183,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if !Path::new(&f).exists() {
                 return Err(USimpleError::new(
                     1,
-                    format!("cannot stat {}: No such file or directory", f.quote()),
+                    format!("error opening {}: No such file or directory", f.quote()),
                 ));
             }
         }

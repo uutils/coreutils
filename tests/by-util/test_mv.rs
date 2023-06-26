@@ -419,6 +419,83 @@ fn test_mv_same_hardlink() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_same_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_same_file_a";
+    let file_b = "test_mv_same_file_b";
+    let file_c = "test_mv_same_file_c";
+
+    at.touch(file_a);
+
+    at.symlink_file(file_a, file_b);
+
+    ucmd.arg(file_b)
+        .arg(file_a)
+        .fails()
+        .stderr_is(format!("mv: '{file_b}' and '{file_a}' are the same file\n",));
+
+    let (at2, mut ucmd2) = at_and_ucmd!();
+    at2.touch(file_a);
+
+    at2.symlink_file(file_a, file_b);
+    ucmd2.arg(file_a).arg(file_b).succeeds();
+    assert!(at2.file_exists(file_b));
+    assert!(!at2.file_exists(file_a));
+
+    let (at3, mut ucmd3) = at_and_ucmd!();
+    at3.touch(file_a);
+
+    at3.symlink_file(file_a, file_b);
+    at3.symlink_file(file_b, file_c);
+
+    ucmd3.arg(file_c).arg(file_b).succeeds();
+    assert!(!at3.symlink_exists(file_c));
+    assert!(at3.symlink_exists(file_b));
+
+    let (at4, mut ucmd4) = at_and_ucmd!();
+    at4.touch(file_a);
+
+    at4.symlink_file(file_a, file_b);
+    at4.symlink_file(file_b, file_c);
+
+    ucmd4
+        .arg(file_c)
+        .arg(file_a)
+        .fails()
+        .stderr_is(format!("mv: '{file_c}' and '{file_a}' are the same file\n",));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_hardlink_to_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let symlink_file = "symlink";
+    let hardlink_to_symlink_file = "hardlink_to_symlink";
+
+    at.touch(file);
+    at.symlink_file(file, symlink_file);
+    at.hard_link(symlink_file, hardlink_to_symlink_file);
+
+    ucmd.arg(symlink_file).arg(hardlink_to_symlink_file).fails();
+
+    let (at2, mut ucmd2) = at_and_ucmd!();
+
+    at2.touch(file);
+    at2.symlink_file(file, symlink_file);
+    at2.hard_link(symlink_file, hardlink_to_symlink_file);
+
+    ucmd2
+        .arg("--backup")
+        .arg(symlink_file)
+        .arg(hardlink_to_symlink_file)
+        .succeeds();
+    assert!(!at2.symlink_exists(symlink_file));
+    assert!(at2.symlink_exists(&format!("{hardlink_to_symlink_file}~")));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_mv_same_hardlink_backup_simple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
