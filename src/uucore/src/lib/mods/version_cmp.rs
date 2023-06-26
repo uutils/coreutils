@@ -141,8 +141,7 @@ pub fn version_cmp(mut a: &str, mut b: &str) -> Ordering {
         b = &b[b_numerical_end..];
 
         if a.is_empty() && b.is_empty() {
-            // Default to the lexical comparison.
-            return str_cmp;
+            return std::cmp::Ordering::Equal;
         }
     }
 }
@@ -229,14 +228,14 @@ mod tests {
         // Leading zeroes
         assert_eq!(
             version_cmp("012", "12"),
-            Ordering::Less,
-            "A single leading zero can make a difference"
+            Ordering::Equal,
+            "A single leading zero does not make a difference"
         );
 
         assert_eq!(
             version_cmp("000800", "0000800"),
-            Ordering::Greater,
-            "Leading number of zeroes is used even if both non-zero number of zeros"
+            Ordering::Equal,
+            "Multiple leading zeros do not make a difference"
         );
 
         // Numbers and other characters combined
@@ -280,14 +279,8 @@ mod tests {
 
         assert_eq!(
             version_cmp("aa10aa0022", "aa010aa022"),
-            Ordering::Greater,
-            "The leading zeroes of the first number has priority."
-        );
-
-        assert_eq!(
-            version_cmp("aa10aa0022", "aa10aa022"),
-            Ordering::Less,
-            "The leading zeroes of other numbers than the first are used."
+            Ordering::Equal,
+            "Test multiple numeric values with leading zeros"
         );
 
         assert_eq!(
@@ -307,7 +300,7 @@ mod tests {
 
         assert_eq!(
             version_cmp("aa2000000000000000000000bb", "aa002000000000000000000000bb"),
-            Ordering::Greater,
+            Ordering::Equal,
             "Leading zeroes for numbers larger than u64::MAX are \
             handled correctly without crashing"
         );
