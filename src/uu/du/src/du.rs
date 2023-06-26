@@ -145,7 +145,7 @@ impl Stat {
         return Ok(Self {
             path: path.to_path_buf(),
             is_dir: metadata.is_dir(),
-            size: metadata.len(),
+            size: if path.is_dir() { 0 } else { metadata.len() },
             blocks: metadata.blocks(),
             inodes: 1,
             inode: Some(file_info),
@@ -162,7 +162,7 @@ impl Stat {
         Ok(Self {
             path: path.to_path_buf(),
             is_dir: metadata.is_dir(),
-            size: metadata.len(),
+            size: if path.is_dir() { 0 } else { metadata.len() },
             blocks: size_on_disk / 1024 * 2,
             inode: file_info,
             inodes: 1,
