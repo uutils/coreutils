@@ -1110,12 +1110,12 @@ fn test_cp_parents_with_permissions_copy_file() {
     at.mkdir_all("p1/p2");
     at.touch(file);
 
-    let p1_mode = 0o0777;
-    let p2_mode = 0o0711;
-    let file_mode = 0o0702;
-
     #[cfg(unix)]
     {
+        let p1_mode = 0o0777;
+        let p2_mode = 0o0711;
+        let file_mode = 0o0702;
+
         at.set_mode("p1", p1_mode);
         at.set_mode("p1/p2", p2_mode);
         at.set_mode(file, file_mode);
@@ -1151,12 +1151,12 @@ fn test_cp_parents_with_permissions_copy_dir() {
     at.mkdir_all(dir2);
     at.touch(file);
 
-    let p1_mode = 0o0777;
-    let p2_mode = 0o0711;
-    let file_mode = 0o0702;
-
     #[cfg(unix)]
     {
+        let p1_mode = 0o0777;
+        let p2_mode = 0o0711;
+        let file_mode = 0o0702;
+
         at.set_mode("p1", p1_mode);
         at.set_mode("p1/p2", p2_mode);
         at.set_mode(file, file_mode);
@@ -3134,6 +3134,8 @@ fn test_cp_debug_sparse_auto() {
         .arg("a")
         .arg("b")
         .succeeds();
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let stdout_str = result.stdout_str();
 
     #[cfg(target_os = "macos")]
