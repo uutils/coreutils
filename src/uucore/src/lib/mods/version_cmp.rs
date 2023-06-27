@@ -106,7 +106,7 @@ pub fn version_cmp(mut a: &str, mut b: &str) -> Ordering {
     // 1. Compare leading non-numerical part
     // 2. Compare leading numerical part
     // 3. Repeat
-    loop {
+    while !a.is_empty() || !b.is_empty() {
         let a_numerical_start = a.find(|c: char| c.is_ascii_digit()).unwrap_or(a.len());
         let b_numerical_start = b.find(|c: char| c.is_ascii_digit()).unwrap_or(b.len());
 
@@ -139,11 +139,9 @@ pub fn version_cmp(mut a: &str, mut b: &str) -> Ordering {
 
         a = &a[a_numerical_end..];
         b = &b[b_numerical_end..];
-
-        if a.is_empty() && b.is_empty() {
-            return std::cmp::Ordering::Equal;
-        }
     }
+
+    Ordering::Equal
 }
 
 #[cfg(test)]
