@@ -31,7 +31,7 @@ const USAGE: &str = help_usage!("seq.md");
 
 const OPT_SEPARATOR: &str = "separator";
 const OPT_TERMINATOR: &str = "terminator";
-const OPT_WIDTHS: &str = "widths";
+const OPT_EQUAL_WIDTH: &str = "equal-width";
 const OPT_FORMAT: &str = "format";
 
 const ARG_NUMBERS: &str = "numbers";
@@ -40,7 +40,7 @@ const ARG_NUMBERS: &str = "numbers";
 struct SeqOptions<'a> {
     separator: String,
     terminator: String,
-    widths: bool,
+    equal_width: bool,
     format: Option<&'a str>,
 }
 
@@ -74,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map(|s| s.as_str())
             .unwrap_or("\n")
             .to_string(),
-        widths: matches.get_flag(OPT_WIDTHS),
+        equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
         format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
     };
 
@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 (first, increment, last),
                 &options.separator,
                 &options.terminator,
-                options.widths,
+                options.equal_width,
                 padding,
                 options.format,
             )
@@ -137,7 +137,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             largest_dec,
             &options.separator,
             &options.terminator,
-            options.widths,
+            options.equal_width,
             padding,
             options.format,
         ),
@@ -170,9 +170,9 @@ pub fn uu_app() -> Command {
                 .help("Terminator character (defaults to \\n)"),
         )
         .arg(
-            Arg::new(OPT_WIDTHS)
+            Arg::new(OPT_EQUAL_WIDTH)
                 .short('w')
-                .long("widths")
+                .long("equal-width")
                 .help("Equalize widths of all numbers by padding with zeros")
                 .action(ArgAction::SetTrue),
         )
