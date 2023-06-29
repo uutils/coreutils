@@ -11,25 +11,28 @@ ME="${0}"
 ME_dir="$(dirname -- "$(readlink -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
 
-echo "ME='${ME}'"
-echo "ME_dir='${ME_dir}'"
-echo "REPO_main_dir='${REPO_main_dir}'"
-
 ### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
 
 path_UUTILS=${path_UUTILS:-${REPO_main_dir}}
 path_GNU="$(readlink -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 
-echo "path_UUTILS='${path_UUTILS}'"
-echo "path_GNU='${path_GNU}'"
-
 ###
 
 if test ! -d "${path_GNU}"; then
-    echo "Could not find GNU (expected at '${path_GNU}')"
+    echo "Could not find GNU coreutils (expected at '${path_GNU}')"
+    echo "Run the following to download into the expected path:"
     echo "git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
     exit 1
 fi
+
+###
+
+echo "ME='${ME}'"
+echo "ME_dir='${ME_dir}'"
+echo "REPO_main_dir='${REPO_main_dir}'"
+
+echo "path_UUTILS='${path_UUTILS}'"
+echo "path_GNU='${path_GNU}'"
 
 ###
 
