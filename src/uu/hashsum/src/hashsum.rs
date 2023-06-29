@@ -306,7 +306,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     // if there is no program name for some reason, default to "hashsum"
     let program = args.next().unwrap_or_else(|| OsString::from(NAME));
     let binary_name = Path::new(&program)
-        .file_name()
+        .file_stem()
         .unwrap_or_else(|| OsStr::new(NAME))
         .to_string_lossy();
 
