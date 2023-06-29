@@ -438,6 +438,32 @@ fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
     }
 }
 
+/// Returns true if the source file is likely to be the simple backup file for the target file.
+///
+/// # Arguments
+///
+/// * `source` - A Path reference that holds the source (backup) file path.
+/// * `target` - A Path reference that holds the target file path.
+/// * `suffix` - Str that holds the backup suffix.
+///
+/// # Examples
+///
+/// ```
+/// use std::path::Path;
+/// use uucore::backup_control::source_is_target_backup;
+/// let source = Path::new("data.txt~");
+/// let target = Path::new("data.txt");
+/// let suffix = String::from("~");
+///
+/// assert_eq!(source_is_target_backup(&source, &target, &suffix), true);
+/// ```
+///
+pub fn source_is_target_backup(source: &Path, target: &Path, suffix: &str) -> bool {
+    let source_filename = source.to_string_lossy();
+    let target_backup_filename = format!("{}{suffix}", target.to_string_lossy());
+    source_filename == target_backup_filename
+}
+
 //
 // Tests for this module
 //
@@ -625,5 +651,31 @@ mod tests {
 
         let result = determine_backup_suffix(&matches);
         assert_eq!(result, "-v");
+    }
+    #[test]
+    fn test_source_is_target_backup() {
+        let source = Path::new("data.txt.bak");
+        let target = Path::new("data.txt");
+        let suffix = String::from(".bak");
+
+        assert!(source_is_target_backup(&source, &target, &suffix));
+    }
+
+    #[test]
+    fn test_source_is_not_target_backup() {
+        let source = Path::new("data.txt");
+        let target = Path::new("backup.txt");
+        let suffix = String::from(".bak");
+
+        assert!(!source_is_target_backup(&source, &target, &suffix));
+    }
+
+    #[test]
+    fn test_source_is_target_backup_with_tilde_suffix() {
+        let source = Path::new("example~");
+        let target = Path::new("example");
+        let suffix = String::from("~");
+
+        assert!(source_is_target_backup(&source, &target, &suffix));
     }
 }
