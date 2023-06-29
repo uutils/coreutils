@@ -13,7 +13,7 @@ Copy, and optionally convert, a file system resource
 
 ### Operands
 
-- `Bs=BYTES` : read and write up to BYTES bytes at a time (default: 512);
+- `bs=BYTES` : read and write up to BYTES bytes at a time (default: 512);
    overwrites `ibs` and `obs`.
 - `cbs=BYTES` : the 'conversion block size' in bytes. Applies to the
    `conv=block`, and `conv=unblock` operations.
@@ -114,7 +114,7 @@ Copy, and optionally convert, a file system resource
 
 ### General Flags
 
-- `Direct` : use direct I/O for data.
+- `direct` : use direct I/O for data.
 - `directory` : fail unless the given input (if used as an iflag) or
   output (if used as an oflag) is a directory.
 - `dsync` : use synchronized I/O for data.
