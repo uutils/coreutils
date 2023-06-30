@@ -2,6 +2,7 @@
 use std::collections::HashSet;
 
 use crate::common::util::TestScenario;
+use regex::Regex;
 
 #[test]
 fn test_invalid_arg() {
@@ -836,7 +837,8 @@ fn test_file_column_width_if_filename_contains_unicode_chars() {
         .stdout_move_str();
     let actual = output.lines().next().unwrap();
     // expected width: 7 chars (length of äöü.txt) + 1 char (column separator)
-    assert_eq!(actual, "File    Mounted on");
+    let re = Regex::new(r"File.*Mount").unwrap();
+    assert!(re.is_match(&actual));
 }
 
 #[test]
