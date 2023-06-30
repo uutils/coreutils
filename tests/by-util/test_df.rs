@@ -261,10 +261,10 @@ fn test_type_option() {
 #[test]
 #[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
 fn test_type_option_with_file() {
-    let fs_type = new_ucmd!()
-        .args(&["--output=fstype", "."])
-        .succeeds()
-        .stdout_move_str();
+    let result = new_ucmd!().args(&["--output=fstype", "."]).succeeds();
+
+    println!("result.stdout = {}", result.stdout_str());
+    let fs_type = result.stdout_move_str();
     let fs_type = fs_type.lines().nth(1).unwrap().trim();
 
     new_ucmd!().args(&["-t", fs_type, "."]).succeeds();
@@ -821,6 +821,7 @@ fn test_output_file_specific_files() {
         .args(&["--output=file", "a", "b", "c"])
         .succeeds()
         .stdout_move_str();
+    println!("output = {}", output);
     let actual: Vec<&str> = output.lines().collect();
     assert_eq!(actual, vec!["File", "a", "b", "c"]);
 }
@@ -852,13 +853,21 @@ fn test_output_field_no_more_than_once() {
 #[test]
 #[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
 fn test_nonexistent_file() {
-    new_ucmd!()
-        .arg("does-not-exist")
-        .fails()
-        .stderr_only("df: does-not-exist: No such file or directory\n");
-    new_ucmd!()
+    let result = new_ucmd!().arg("does-not-exist").fails();
+
+    assert_eq!(
+        result.stderr_move_str(),
+        "df: does-not-exist: No such file or directory\n"
+    );
+
+    let result = new_ucmd!()
         .args(&["--output=file", "does-not-exist", "."])
-        .fails()
-        .stderr_is("df: does-not-exist: No such file or directory\n")
-        .stdout_is("File\n.\n");
+        .fails();
+
+    assert_eq!(
+        result.clone().stderr_move_str(),
+        "df: does-not-exist: No such file or directory\n"
+    );
+
+    assert_eq!(result.stdout_move_str(), "File\n.\n");
 }
