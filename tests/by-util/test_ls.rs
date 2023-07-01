@@ -3139,6 +3139,16 @@ fn test_ls_dangling_symlinks() {
 
     scene
         .ucmd()
+        .arg("-LZ")
+        .arg("temp_dir")
+        .fails()
+        .code_is(1)
+        .stderr_contains("cannot access")
+        .stderr_contains("No such file or directory")
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+
+    scene
+        .ucmd()
         .arg("-Ll")
         .arg("temp_dir")
         .fails()
