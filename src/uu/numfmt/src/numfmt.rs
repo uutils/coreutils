@@ -11,11 +11,13 @@ use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use std::io::{BufRead, Write};
+use std::str::FromStr;
+
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{UError, UResult};
 use uucore::ranges::Range;
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
 pub mod errors;
 pub mod format;
@@ -28,12 +30,8 @@ const USAGE: &str = help_usage!("numfmt.md");
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {
-        match format_and_print(l, options) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
-        }?;
+        format_and_handle_validation(l, options)?;
     }
-
     Ok(())
 }
 
@@ -41,20 +39,38 @@ fn handle_buffer<R>(input: R, options: &NumfmtOptions) -> UResult<()>
 where
     R: BufRead,
 {
-    let mut lines = input.lines();
-    for (idx, line) in lines.by_ref().enumerate() {
-        match line {
-            Ok(l) if idx < options.header => {
-                println!("{l}");
+    for (idx, line_result) in input.lines().by_ref().enumerate() {
+        match line_result {
+            Ok(line) if idx < options.header => {
+                println!("{line}");
                 Ok(())
             }
-            Ok(l) => match format_and_print(&l, options) {
-                Ok(_) => Ok(()),
-                Err(e) => Err(NumfmtError::FormattingError(e.to_string())),
-            },
-            Err(e) => Err(NumfmtError::IoError(e.to_string())),
+            Ok(line) => format_and_handle_validation(line.as_ref(), options),
+            Err(err) => return Err(Box::new(NumfmtError::IoError(err.to_string()))),
         }?;
     }
+    Ok(())
+}
+
+fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UResult<()> {
+    let handled_line = format_and_print(input_line, options);
+
+    if let Err(error_message) = handled_line {
+        match options.invalid {
+            InvalidModes::Abort => {
+                return Err(Box::new(NumfmtError::FormattingError(error_message)));
+            }
+            InvalidModes::Fail => {
+                show!(NumfmtError::FormattingError(error_message));
+            }
+            InvalidModes::Warn => {
+                show_error!("{}", error_message);
+            }
+            InvalidModes::Ignore => {}
+        };
+        println!("{}", input_line);
+    }
+
     Ok(())
 }
 
@@ -201,6 +217,9 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         .get_one::<String>(options::SUFFIX)
         .map(|s| s.to_owned());
 
+    let invalid =
+        InvalidModes::from_str(args.get_one::<String>(options::INVALID).unwrap()).unwrap();
+
     Ok(NumfmtOptions {
         transform,
         padding,
@@ -210,6 +229,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         round,
         suffix,
         format,
+        invalid,
     })
 }
 
@@ -358,6 +378,17 @@ pub fn uu_app() -> Command {
                 .value_name("SUFFIX"),
         )
         .arg(
+            Arg::new(options::INVALID)
+                .long(options::INVALID)
+                .help(
+                    "set the failure mode for invalid input; \
+                    valid options are abort, fail, warn or ignore",
+                )
+                .default_value("abort")
+                .value_parser(["abort", "fail", "warn", "ignore"])
+                .value_name("INVALID"),
+        )
+        .arg(
             Arg::new(options::NUMBER)
                 .hide(true)
                 .action(ArgAction::Append),
@@ -366,9 +397,11 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+    use uucore::error::get_exit_code;
+
     use super::{
-        handle_buffer, parse_unit_size, parse_unit_size_suffix, FormatOptions, NumfmtOptions,
-        Range, RoundMethod, TransformOptions, Unit,
+        handle_args, handle_buffer, parse_unit_size, parse_unit_size_suffix, FormatOptions,
+        InvalidModes, NumfmtOptions, Range, RoundMethod, TransformOptions, Unit,
     };
     use std::io::{BufReader, Error, ErrorKind, Read};
     struct MockBuffer {}
@@ -394,6 +427,7 @@ mod tests {
             round: RoundMethod::Nearest,
             suffix: None,
             format: FormatOptions::default(),
+            invalid: InvalidModes::Abort,
         }
     }
 
@@ -404,6 +438,20 @@ mod tests {
             .expect_err("returned Ok after receiving IO error");
         let result_debug = format!("{result:?}");
         let result_display = format!("{result}");
+        assert_eq!(result_debug, "IoError(\"broken pipe\")");
+        assert_eq!(result_display, "broken pipe");
+        assert_eq!(result.code(), 1);
+    }
+
+    #[test]
+    fn broken_buffer_returns_io_error_after_header() {
+        let mock_buffer = MockBuffer {};
+        let mut options = get_valid_options();
+        options.header = 0;
+        let result = handle_buffer(BufReader::new(mock_buffer), &options)
+            .expect_err("returned Ok after receiving IO error");
+        let result_debug = format!("{:?}", result);
+        let result_display = format!("{}", result);
         assert_eq!(result_debug, "IoError(\"broken pipe\")");
         assert_eq!(result_display, "broken pipe");
         assert_eq!(result.code(), 1);
@@ -429,6 +477,66 @@ mod tests {
         let input_value = b"165\n100\n300\n500";
         let result = handle_buffer(BufReader::new(&input_value[..]), &get_valid_options());
         assert!(result.is_ok(), "did not return Ok for valid input");
+    }
+
+    #[test]
+    fn warn_returns_ok_for_invalid_input() {
+        let input_value = b"5\n4Q\n";
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Warn;
+        let result = handle_buffer(BufReader::new(&input_value[..]), &options);
+        assert!(result.is_ok(), "did not return Ok for invalid input");
+    }
+
+    #[test]
+    fn ignore_returns_ok_for_invalid_input() {
+        let input_value = b"5\n4Q\n";
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Ignore;
+        let result = handle_buffer(BufReader::new(&input_value[..]), &options);
+        assert!(result.is_ok(), "did not return Ok for invalid input");
+    }
+
+    #[test]
+    fn buffer_fail_returns_status_2_for_invalid_input() {
+        let input_value = b"5\n4Q\n";
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Fail;
+        handle_buffer(BufReader::new(&input_value[..]), &options).unwrap();
+        assert!(
+            get_exit_code() == 2,
+            "should set exit code 2 for formatting errors"
+        );
+    }
+
+    #[test]
+    fn abort_returns_status_2_for_invalid_input() {
+        let input_value = b"5\n4Q\n";
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Abort;
+        let result = handle_buffer(BufReader::new(&input_value[..]), &options);
+        assert!(result.is_err(), "did not return err for invalid input");
+    }
+
+    #[test]
+    fn args_fail_returns_status_2_for_invalid_input() {
+        let input_value = ["5", "4Q"].into_iter();
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Fail;
+        handle_args(input_value, &options).unwrap();
+        assert!(
+            get_exit_code() == 2,
+            "should set exit code 2 for formatting errors"
+        );
+    }
+
+    #[test]
+    fn args_warn_returns_status_0_for_invalid_input() {
+        let input_value = ["5", "4Q"].into_iter();
+        let mut options = get_valid_options();
+        options.invalid = InvalidModes::Warn;
+        let result = handle_args(input_value, &options);
+        assert!(result.is_ok(), "did not return ok for invalid input");
     }
 
     #[test]
