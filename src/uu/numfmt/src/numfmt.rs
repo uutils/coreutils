@@ -74,7 +74,6 @@ fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UR
     Ok(())
 }
 
-
 fn parse_unit(s: &str) -> Result<Unit> {
     match s {
         "auto" => Ok(Unit::Auto),
