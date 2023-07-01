@@ -21,9 +21,15 @@ fn test_valid_arg() {
         new_ucmd!().arg("-s").succeeds();
         new_ucmd!().arg("--squeeze").succeeds();
 
+        new_ucmd!().arg("-u").succeeds();
+        new_ucmd!().arg("--plain").succeeds();
+
         new_ucmd!().arg("-n").arg("10").succeeds();
         new_ucmd!().arg("--lines").arg("0").succeeds();
         new_ucmd!().arg("--number").arg("0").succeeds();
+
+        new_ucmd!().arg("-F").arg("10").succeeds();
+        new_ucmd!().arg("--from-line").arg("0").succeeds();
     }
 }
 
@@ -34,6 +40,42 @@ fn test_invalid_arg() {
 
         new_ucmd!().arg("--lines").arg("-10").fails();
         new_ucmd!().arg("--number").arg("-10").fails();
+
+        new_ucmd!().arg("--from-line").arg("-10").fails();
+    }
+}
+
+#[test]
+fn test_argument_from_file() {
+    if std::io::stdout().is_terminal() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let file = "test_file";
+
+        at.write(file, "1\n2");
+
+        // output all lines
+        scene
+            .ucmd()
+            .arg("-F")
+            .arg("0")
+            .arg(file)
+            .succeeds()
+            .no_stderr()
+            .stdout_contains("1")
+            .stdout_contains("2");
+
+        // output only the second line
+        scene
+            .ucmd()
+            .arg("-F")
+            .arg("2")
+            .arg(file)
+            .succeeds()
+            .no_stderr()
+            .stdout_contains("2")
+            .stdout_does_not_contain("1");
     }
 }
 
