@@ -62,20 +62,18 @@ fn format_and_handle_validation(input_line: &str, options: &NumfmtOptions) -> UR
             }
             InvalidModes::Fail => {
                 show!(NumfmtError::FormattingError(error_message));
-                println!("{input_line}");
-            }
-            InvalidModes::Ignore => {
-                println!("{input_line}");
             }
             InvalidModes::Warn => {
                 show_error!("{}", error_message);
-                println!("{input_line}");
             }
+            InvalidModes::Ignore => {}
         };
+        println!("{}", input_line);
     }
 
     Ok(())
 }
+
 
 fn parse_unit(s: &str) -> Result<Unit> {
     match s {
