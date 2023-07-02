@@ -869,5 +869,8 @@ fn test_nonexistent_file() {
         "df: does-not-exist: No such file or directory\n"
     );
 
+    #[cfg(windows)]
+    assert_eq!(result.stdout_move_str(), "File\n");
+    #[cfg(not(windows))]
     assert_eq!(result.stdout_move_str(), "File\n.\n");
 }
