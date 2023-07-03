@@ -2345,12 +2345,8 @@ fn test_dir_recursive_copy() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.mkdir("parent1");
-    at.mkdir("parent2");
-    at.mkdir("parent1/child");
-    at.mkdir("parent2/child1");
-    at.mkdir("parent2/child1/child2");
-    at.mkdir("parent2/child1/child2/child3");
+    at.mkdir_all("parent1/child");
+    at.mkdir_all("parent2/child1/child2/child3");
 
     // case-1: copy parent1 -> parent1: should fail
     scene
