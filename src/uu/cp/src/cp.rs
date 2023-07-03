@@ -383,6 +383,7 @@ pub fn uu_app() -> Command {
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::TARGET_DIRECTORY)
                 .short('t')
