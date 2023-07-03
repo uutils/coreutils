@@ -267,7 +267,11 @@ impl NumberType {
                 let num_chunks = n_str
                     .parse()
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                Ok(Self::Bytes(num_chunks))
+                if num_chunks > 0 {
+                    Ok(Self::Bytes(num_chunks))
+                } else {
+                    Err(NumberTypeError::NumberOfChunks(s.to_string()))
+                }
             }
             ["l", n_str] => {
                 let num_chunks = n_str
@@ -357,6 +361,20 @@ impl fmt::Display for StrategyError {
 impl Strategy {
     /// Parse a strategy from the command-line arguments.
     fn from(matches: &ArgMatches) -> Result<Self, StrategyError> {
+        fn get_and_parse(
+            matches: &ArgMatches,
+            option: &str,
+            strategy: fn(u64) -> Strategy,
+            error: fn(ParseSizeError) -> StrategyError,
+        ) -> Result<Strategy, StrategyError> {
+            let s = matches.get_one::<String>(option).unwrap();
+            let n = parse_size(&s).map_err(error)?;
+            if n > 0 {
+                Ok(strategy(n))
+            } else {
+                Err(error(ParseSizeError::ParseFailure(s.to_string())))
+            }
+        }
         // Check that the user is not specifying more than one strategy.
         //
         // Note: right now, this exact behavior cannot be handled by
@@ -370,20 +388,17 @@ impl Strategy {
         ) {
             (false, false, false, false) => Ok(Self::Lines(1000)),
             (true, false, false, false) => {
-                let s = matches.get_one::<String>(OPT_LINES).unwrap();
-                let n = parse_size(s).map_err(StrategyError::Lines)?;
-                Ok(Self::Lines(n))
+                get_and_parse(matches, OPT_LINES, Self::Lines, StrategyError::Lines)
             }
             (false, true, false, false) => {
-                let s = matches.get_one::<String>(OPT_BYTES).unwrap();
-                let n = parse_size(s).map_err(StrategyError::Bytes)?;
-                Ok(Self::Bytes(n))
+                get_and_parse(matches, OPT_BYTES, Self::Bytes, StrategyError::Bytes)
             }
-            (false, false, true, false) => {
-                let s = matches.get_one::<String>(OPT_LINE_BYTES).unwrap();
-                let n = parse_size(s).map_err(StrategyError::Bytes)?;
-                Ok(Self::LineBytes(n))
-            }
+            (false, false, true, false) => get_and_parse(
+                matches,
+                OPT_LINE_BYTES,
+                Self::LineBytes,
+                StrategyError::Bytes,
+            ),
             (false, false, false, true) => {
                 let s = matches.get_one::<String>(OPT_NUMBER).unwrap();
                 let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
