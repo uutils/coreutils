@@ -10,10 +10,7 @@ use std::ffi::OsStr;
 use std::fs::{File, Metadata};
 use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
-use std::os::unix::{
-    fs::{FileTypeExt, MetadataExt},
-    prelude::OsStrExt,
-};
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 
@@ -26,9 +23,7 @@ pub enum InputKind {
 #[cfg(unix)]
 impl From<&OsStr> for InputKind {
     fn from(value: &OsStr) -> Self {
-        const DASH: [u8; 1] = [b'-'];
-
-        if value.as_bytes() == DASH {
+        if value == OsStr::new("-") {
             Self::Stdin
         } else {
             Self::File(PathBuf::from(value))

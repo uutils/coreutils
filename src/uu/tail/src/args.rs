@@ -7,7 +7,7 @@
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
-use clap::crate_version;
+use clap::{crate_version, value_parser};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use fundu::DurationParser;
 use is_terminal::IsTerminal;
@@ -283,7 +283,7 @@ impl Settings {
         }
 
         settings.inputs = matches
-            .get_raw(options::ARG_FILES)
+            .get_many::<OsString>(options::ARG_FILES)
             .map(|v| v.map(Input::from).collect())
             .unwrap_or_else(|| vec![Input::default()]);
 
@@ -584,6 +584,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
+                .value_parser(value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
