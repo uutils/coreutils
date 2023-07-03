@@ -7,12 +7,11 @@
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
-use clap::crate_version;
+use clap::{crate_version, value_parser};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use fundu::{DurationParser, SaturatingInto};
 use is_terminal::IsTerminal;
 use same_file::Handle;
-use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -141,7 +140,8 @@ pub struct Settings {
     pub use_polling: bool,
     pub verbose: bool,
     pub presume_input_pipe: bool,
-    pub inputs: VecDeque<Input>,
+    /// `FILE(s)` positional arguments
+    pub inputs: Vec<Input>,
 }
 
 impl Default for Settings {
@@ -173,11 +173,11 @@ impl Settings {
         }
         settings.mode = FilterMode::from_obsolete_args(args);
         let input = if let Some(name) = name {
-            Input::from(&name)
+            Input::from(name)
         } else {
             Input::default()
         };
-        settings.inputs.push_back(input);
+        settings.inputs.push(input);
         settings
     }
 
@@ -285,19 +285,13 @@ impl Settings {
             }
         }
 
-        let mut inputs: VecDeque<Input> = matches
-            .get_many::<String>(options::ARG_FILES)
-            .map(|v| v.map(|string| Input::from(&string)).collect())
-            .unwrap_or_default();
+        settings.inputs = matches
+            .get_many::<OsString>(options::ARG_FILES)
+            .map(|v| v.map(Input::from).collect())
+            .unwrap_or_else(|| vec![Input::default()]);
 
-        // apply default and add '-' to inputs if none is present
-        if inputs.is_empty() {
-            inputs.push_front(Input::default());
-        }
-
-        settings.verbose = inputs.len() > 1 && !matches.get_flag(options::verbosity::QUIET);
-
-        settings.inputs = inputs;
+        settings.verbose =
+            settings.inputs.len() > 1 && !matches.get_flag(options::verbosity::QUIET);
 
         Ok(settings)
     }
@@ -593,6 +587,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
+                .value_parser(value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
