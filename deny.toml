@@ -59,8 +59,6 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-  # is-terminal
-  { name = "hermit-abi", version = "0.3.1" },
   # procfs
   { name = "rustix", version = "0.36.14" },
   # rustix
