@@ -213,7 +213,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_RENUMBER)
                 .short('p')
                 .long(options::NO_RENUMBER)
-                .help("do not reset line numbers at logical pages"),
+                .help("do not reset line numbers at logical pages")
+                .action(ArgAction::SetFalse),
         )
         .arg(
             Arg::new(options::NUMBER_SEPARATOR)

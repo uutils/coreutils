@@ -29,7 +29,7 @@ fn parse_style(chars: &[char]) -> Result<crate::NumberingStyle, String> {
 pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) -> Vec<String> {
     // This vector holds error messages encountered.
     let mut errs: Vec<String> = vec![];
-    settings.renumber = !opts.contains_id(options::NO_RENUMBER);
+    settings.renumber = opts.get_flag(options::NO_RENUMBER);
     match opts.get_one::<String>(options::NUMBER_SEPARATOR) {
         None => {}
         Some(val) => {

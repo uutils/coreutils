@@ -71,3 +71,10 @@ fn test_sections_and_styles() {
     }
     // spell-checker:enable
 }
+
+#[test]
+fn test_no_renumber() {
+    for arg in ["-p", "--no-renumber"] {
+        new_ucmd!().arg(arg).succeeds();
+    }
+}
