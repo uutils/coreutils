@@ -368,7 +368,7 @@ impl Strategy {
             error: fn(ParseSizeError) -> StrategyError,
         ) -> Result<Strategy, StrategyError> {
             let s = matches.get_one::<String>(option).unwrap();
-            let n = parse_size(&s).map_err(error)?;
+            let n = parse_size(s).map_err(error)?;
             if n > 0 {
                 Ok(strategy(n))
             } else {
