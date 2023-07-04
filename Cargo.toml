@@ -496,7 +496,7 @@ rstest = "0.17.0"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
 procfs = { version = "0.15", default-features = false }
-rlimit = "0.9.1"
+rlimit = "0.10.0"
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["process", "signal", "user"] }
