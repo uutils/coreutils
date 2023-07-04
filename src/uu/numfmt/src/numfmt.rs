@@ -360,10 +360,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::ROUND)
                 .long(options::ROUND)
-                .help(
-                    "use METHOD for rounding when scaling; METHOD can be: up,\
-                    down, from-zero, towards-zero, nearest",
-                )
+                .help("use METHOD for rounding when scaling")
                 .value_name("METHOD")
                 .default_value("from-zero")
                 .value_parser(["up", "down", "from-zero", "towards-zero", "nearest"]),
@@ -380,10 +377,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::INVALID)
                 .long(options::INVALID)
-                .help(
-                    "set the failure mode for invalid input; \
-                    valid options are abort, fail, warn or ignore",
-                )
+                .help("set the failure mode for invalid input")
                 .default_value("abort")
                 .value_parser(["abort", "fail", "warn", "ignore"])
                 .value_name("INVALID"),
