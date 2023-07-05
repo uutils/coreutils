@@ -8,6 +8,14 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_no_args() {
+    new_ucmd!()
+        .fails()
+        .code_is(1)
+        .stderr_contains("missing operand");
+}
+
+#[test]
 fn test_hex_rejects_sign_after_identifier() {
     new_ucmd!()
         .args(&["0x-123ABC"])
