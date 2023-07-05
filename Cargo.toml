@@ -259,7 +259,7 @@ test = ["uu_test"]
 [workspace.dependencies]
 bigdecimal = "0.4"
 binary-heap-plus = "0.5.0"
-bstr = "1.5"
+bstr = "1.6"
 bytecount = "0.6.3"
 byteorder = "1.4.3"
 chrono = { version = "^0.4.26", default-features = false, features = [
