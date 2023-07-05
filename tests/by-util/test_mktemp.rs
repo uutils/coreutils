@@ -923,7 +923,10 @@ fn test_missing_xs_tmpdir_template() {
 #[test]
 fn test_both_tmpdir_flags_present() {
     let scene = TestScenario::new(util_name!());
+
+    #[cfg(not(windows))]
     let template = format!(".{MAIN_SEPARATOR}foobarXXXX");
+
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
         .env(TMPDIR, ".")
@@ -933,14 +936,19 @@ fn test_both_tmpdir_flags_present() {
         .arg("foobarXXXX")
         .succeeds();
     let filename = result.no_stderr().stdout_str().trim_end();
+
+    #[cfg(not(windows))]
     assert_matches_template!(&template, filename);
+    #[cfg(windows)]
+    assert_suffix_matches_template!("foobarXXXX", filename);
+
     assert!(at.file_exists(filename));
 
     scene
         .ucmd()
         .arg("-p")
         .arg(".")
-        .arg("--tmpdir=doesnotexist")
+        .arg("--tmpdir=does_not_exist")
         .fails()
         .no_stdout()
         .stderr_contains("failed to create file via template");
@@ -953,7 +961,12 @@ fn test_both_tmpdir_flags_present() {
         .arg(".")
         .succeeds();
     let filename = result.no_stderr().stdout_str().trim_end();
+
+    #[cfg(not(windows))]
     assert_matches_template!(&template, filename);
+    #[cfg(windows)]
+    assert_suffix_matches_template!("foobarXXXX", filename);
+
     assert!(at.file_exists(filename));
 }
 
