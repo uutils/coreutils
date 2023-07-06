@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore numberparse argtype
+// spell-checker:ignore numberparse
 //! Errors returned by seq.
 use std::error::Error;
 use std::fmt::Display;
@@ -30,29 +30,6 @@ pub enum SeqError {
     NoArguments,
 }
 
-impl SeqError {
-    /// The [`String`] argument as read from the command-line.
-    fn arg(&self) -> &str {
-        match self {
-            Self::ParseError(s, _) => s,
-            Self::ZeroIncrement(s) => s,
-            Self::NoArguments => "",
-        }
-    }
-
-    /// The type of argument that is causing the error.
-    fn argtype(&self) -> &str {
-        match self {
-            Self::ParseError(_, e) => match e {
-                ParseNumberError::Float => "invalid floating point argument: ",
-                ParseNumberError::Nan => "invalid 'not-a-number' argument: ",
-                ParseNumberError::Hex => "invalid hexadecimal argument: ",
-            },
-            Self::ZeroIncrement(_) => "invalid Zero increment value: ",
-            Self::NoArguments => "missing operand",
-        }
-    }
-}
 impl UError for SeqError {
     /// Always return 1.
     fn code(&self) -> i32 {
@@ -68,15 +45,17 @@ impl Error for SeqError {}
 
 impl Display for SeqError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}{}",
-            self.argtype(),
-            if self.arg() == "" {
-                String::new()
-            } else {
-                self.arg().quote().to_string()
+        match self {
+            Self::ParseError(s, e) => {
+                let error_type = match e {
+                    ParseNumberError::Float => "floating point",
+                    ParseNumberError::Nan => "'not-a-number'",
+                    ParseNumberError::Hex => "hexadecimal",
+                };
+                write!(f, "invalid {error_type} argument: {}", s.quote())
             }
-        )
+            Self::ZeroIncrement(s) => write!(f, "invalid Zero increment value: {}", s.quote()),
+            Self::NoArguments => write!(f, "missing operand"),
+        }
     }
 }
