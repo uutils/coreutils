@@ -74,3 +74,7 @@ number of spaces representing a tab when determining the line length.
 
 GNU `ls` provides two ways to use a long listing format: `-l` and `--format=long`. We support a
 third way: `--long`.
+
+## `du`
+
+`du` allows `birth` and `creation` as values for the `--time` argument to show the creation time.
