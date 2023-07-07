@@ -1,6 +1,7 @@
 <!-- markdownlint-disable MD033 MD041 MD002 -->
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda -->
+<div class="oranda-hide">
 <div align="center">
 
 ![uutils logo](docs/src/logo.svg)
@@ -19,10 +20,13 @@
 
 ---
 
+</div>
 
 uutils coreutils is a cross-platform reimplementation of the GNU coreutils in
 [Rust](http://www.rust-lang.org). While all programs have been implemented, some
 options might be missing or different behavior might be experienced.
+
+<div class="oranda-hide">
 
 To install it:
 
@@ -30,6 +34,8 @@ To install it:
 cargo install coreutils
 ~/.cargo/bin/coreutils
 ```
+
+</div>
 
 <!-- markdownlint-disable-next-line MD026 -->
 
@@ -42,6 +48,8 @@ uutils aims to work on as many platforms as possible, to be able to use the same
 utils on Linux, Mac, Windows and other platforms. This ensures, for example,
 that scripts can be easily transferred between platforms.
 
+<div class="oranda-hide">
+
 ## Documentation
 
 uutils has both user and developer documentation available:
@@ -51,6 +59,7 @@ uutils has both user and developer documentation available:
 
 Both can also be generated locally, the instructions for that can be found in
 the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
+
 
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
 
@@ -300,6 +309,8 @@ See <https://github.com/uutils/coreutils/issues/3336> for the main meta bugs
 (many are missing).
 
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
+
+</div> <!-- close oranda-hide div -->
 
 ## Contributing
 
