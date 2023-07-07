@@ -201,10 +201,10 @@ fn stty(opts: &Options) -> UResult<()> {
     Ok(())
 }
 
-fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
+fn get_baud_rate_string(termios: &Termios) -> String {
     let speed = cfgetospeed(termios);
 
-    // BSDs use a u32 for the baud rate, so we can simply print it.
+    // BSDs use a u32 for the baud rate, so we can simply return it.
     #[cfg(any(
         target_os = "freebsd",
         target_os = "dragonfly",
@@ -213,9 +213,9 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
-    print!("speed {speed} baud; ");
+    return format!("{}", speed);
 
-    // Other platforms need to use the baud rate enum, so printing the right value
+    // Other platforms need to use the baud rate enum, so returning the right value
     // becomes slightly more complicated.
     #[cfg(not(any(
         target_os = "freebsd",
@@ -225,12 +225,19 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
         target_os = "netbsd",
         target_os = "openbsd"
     )))]
-    for (text, baud_rate) in BAUD_RATES {
-        if *baud_rate == speed {
-            print!("speed {text} baud; ");
-            break;
+    {
+        for (text, baud_rate) in BAUD_RATES {
+            if *baud_rate == speed {
+                return text.to_string();
+            }
         }
+        panic!("Unable to determine current baud rate");
     }
+}
+
+fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
+    let baud_rate = get_baud_rate_string(termios);
+    print!("speed {baud_rate} baud; ");
 
     if opts.all {
         let size = get_term_size(opts.file)?;
