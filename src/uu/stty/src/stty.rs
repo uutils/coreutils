@@ -148,6 +148,12 @@ ioctl_write_ptr_bad!(
     TermSize
 );
 
+fn get_term_size(fd: RawFd) -> nix::Result<TermSize> {
+    let mut size = TermSize::default();
+    unsafe { tiocgwinsz(fd, &mut size as *mut _)? };
+    Ok(size)
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
@@ -227,8 +233,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     }
 
     if opts.all {
-        let mut size = TermSize::default();
-        unsafe { tiocgwinsz(opts.file, &mut size as *mut _)? };
+        let size = get_term_size(opts.file)?;
         print!("rows {}; columns {}; ", size.rows, size.columns);
     }
 
