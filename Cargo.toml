@@ -492,7 +492,7 @@ uucore = { workspace = true, features = ["entries", "process", "signals"] }
 walkdir = { workspace = true }
 is-terminal = { workspace = true }
 hex-literal = "0.4.1"
-rstest = "0.17.0"
+rstest = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
 procfs = { version = "0.15", default-features = false }

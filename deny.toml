@@ -87,6 +87,8 @@ skip = [
   { name = "aho-corasick", version = "0.7.19" },
   # ordered-multimap (via rust-ini)
   { name = "hashbrown", version = "0.13.2" },
+  # various crates
+  { name = "syn", version = "1.0.109" },
 ]
 # spell-checker: enable
 
