@@ -3,7 +3,7 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
-// spell-checker:ignore clocal tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort
+// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime
 
 mod flags;
 
@@ -11,7 +11,7 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
 use nix::sys::termios::{
     cfgetospeed, cfsetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags,
-    OutputFlags, Termios,
+    OutputFlags, SpecialCharacterIndices, Termios,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::io::{self, stdout};
@@ -30,7 +30,7 @@ use uucore::{format_usage, help_about, help_usage};
     target_os = "openbsd"
 )))]
 use flags::BAUD_RATES;
-use flags::{CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
+use flags::{CONTROL_CHARS, CONTROL_FLAGS, INPUT_FLAGS, LOCAL_FLAGS, OUTPUT_FLAGS};
 
 const USAGE: &str = help_usage!("stty.md");
 const SUMMARY: &str = help_about!("stty.md");
@@ -245,6 +245,52 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     Ok(())
 }
 
+fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
+    if cc == 0 {
+        return Ok("<undef>".to_string());
+    }
+
+    let (meta_prefix, code) = if cc >= 0x80 {
+        ("M-", cc - 0x80)
+    } else {
+        ("", cc)
+    };
+
+    // Determine the '^'-prefix if applicable and character based on the code
+    let (ctrl_prefix, character) = match code {
+        // Control characters in ASCII range
+        0..=0x1f => Ok(("^", (b'@' + code) as char)),
+        // Printable ASCII characters
+        0x20..=0x7e => Ok(("", code as char)),
+        // DEL character
+        0x7f => Ok(("^", '?')),
+        // Out of range (above 8 bits)
+        _ => Err(nix::errno::Errno::ERANGE),
+    }?;
+
+    Ok(format!("{meta_prefix}{ctrl_prefix}{character}"))
+}
+
+fn print_control_chars(termios: &Termios, opts: &Options) -> nix::Result<()> {
+    if !opts.all {
+        // TODO: this branch should print values that differ from defaults
+        return Ok(());
+    }
+
+    for (text, cc_index) in CONTROL_CHARS {
+        print!(
+            "{text} = {}; ",
+            control_char_to_string(termios.control_chars[*cc_index as usize])?
+        );
+    }
+    println!(
+        "min = {}; time = {};",
+        termios.control_chars[SpecialCharacterIndices::VMIN as usize],
+        termios.control_chars[SpecialCharacterIndices::VTIME as usize]
+    );
+    Ok(())
+}
+
 fn print_in_save_format(termios: &Termios) {
     print!(
         "{:x}:{:x}:{:x}:{:x}",
@@ -264,6 +310,7 @@ fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
         print_in_save_format(termios);
     } else {
         print_terminal_size(termios, opts)?;
+        print_control_chars(termios, opts)?;
         print_flags(termios, opts, CONTROL_FLAGS);
         print_flags(termios, opts, INPUT_FLAGS);
         print_flags(termios, opts, OUTPUT_FLAGS);
