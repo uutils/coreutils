@@ -295,7 +295,7 @@ pub fn uu_app() -> Command {
                      equivalent to -m",
                 )
                 .value_name("WORD")
-                .value_parser(["access", "atime", "use"]),
+                .value_parser(["access", "atime", "use", "modify", "mtime"]),
         )
         .arg(
             Arg::new(ARG_FILES)
