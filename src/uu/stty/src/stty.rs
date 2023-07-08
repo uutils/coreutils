@@ -244,12 +244,30 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
     Ok(())
 }
 
+fn print_in_save_format(termios: &Termios) {
+    print!(
+        "{:x}:{:x}:{:x}:{:x}",
+        termios.input_flags.bits(),
+        termios.output_flags.bits(),
+        termios.control_flags.bits(),
+        termios.local_flags.bits()
+    );
+    for cc in termios.control_chars {
+        print!(":{cc:x}");
+    }
+    println!();
+}
+
 fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
-    print_terminal_size(termios, opts)?;
-    print_flags(termios, opts, CONTROL_FLAGS);
-    print_flags(termios, opts, INPUT_FLAGS);
-    print_flags(termios, opts, OUTPUT_FLAGS);
-    print_flags(termios, opts, LOCAL_FLAGS);
+    if opts.save {
+        print_in_save_format(termios);
+    } else {
+        print_terminal_size(termios, opts)?;
+        print_flags(termios, opts, CONTROL_FLAGS);
+        print_flags(termios, opts, INPUT_FLAGS);
+        print_flags(termios, opts, OUTPUT_FLAGS);
+        print_flags(termios, opts, LOCAL_FLAGS);
+    }
     Ok(())
 }
 
