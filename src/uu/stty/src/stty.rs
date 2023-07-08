@@ -3,14 +3,15 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
-// spell-checker:ignore clocal tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed ushort
+// spell-checker:ignore clocal tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort
 
 mod flags;
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{c_ushort, O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ};
 use nix::sys::termios::{
-    cfgetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags, OutputFlags, Termios,
+    cfgetospeed, cfsetospeed, tcgetattr, tcsetattr, ControlFlags, InputFlags, LocalFlags,
+    OutputFlags, Termios,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::io::{self, stdout};
@@ -308,6 +309,8 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
 /// The value inside the `Break` variant of the `ControlFlow` indicates whether
 /// the setting has been applied.
 fn apply_setting(termios: &mut Termios, s: &str) -> ControlFlow<bool> {
+    apply_baud_rate_flag(termios, s)?;
+
     let (remove, name) = match s.strip_prefix('-') {
         Some(s) => (true, s),
         None => (false, s),
@@ -344,6 +347,39 @@ fn apply_flag<T: TermiosFlag>(
                 group.apply(termios, false);
             }
             flag.apply(termios, !remove);
+            return ControlFlow::Break(true);
+        }
+    }
+    ControlFlow::Continue(())
+}
+
+fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool> {
+    // BSDs use a u32 for the baud rate, so any decimal number applies.
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    if let Ok(n) = input.parse::<u32>() {
+        cfsetospeed(termios, n).expect("Failed to set baud rate");
+        return ControlFlow::Break(true);
+    }
+
+    // Other platforms use an enum.
+    #[cfg(not(any(
+        target_os = "freebsd",
+        target_os = "dragonfly",
+        target_os = "ios",
+        target_os = "macos",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    for (text, baud_rate) in BAUD_RATES {
+        if *text == input {
+            cfsetospeed(termios, *baud_rate).expect("Failed to set baud rate");
             return ControlFlow::Break(true);
         }
     }
