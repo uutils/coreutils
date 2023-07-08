@@ -204,19 +204,23 @@ fn test_touch_set_cymdhms_time() {
 
 #[test]
 fn test_touch_set_only_atime() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let atime_args = ["-a", "--time=access", "--time=atime", "--time=use"];
     let file = "test_touch_set_only_atime";
 
-    ucmd.args(&["-t", "201501011234", "-a", file])
-        .succeeds()
-        .no_stderr();
+    for atime_arg in atime_args {
+        let (at, mut ucmd) = at_and_ucmd!();
 
-    assert!(at.file_exists(file));
+        ucmd.args(&["-t", "201501011234", atime_arg, file])
+            .succeeds()
+            .no_stderr();
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
-    let (atime, mtime) = get_file_times(&at, file);
-    assert!(atime != mtime);
-    assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+        assert!(at.file_exists(file));
+
+        let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+        let (atime, mtime) = get_file_times(&at, file);
+        assert!(atime != mtime);
+        assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+    }
 }
 
 #[test]
@@ -301,19 +305,23 @@ fn test_touch_set_both_time_and_date() {
 
 #[test]
 fn test_touch_set_only_mtime() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let mtime_args = ["-m", "--time=modify", "--time=mtime"];
     let file = "test_touch_set_only_mtime";
 
-    ucmd.args(&["-t", "201501011234", "-m", file])
-        .succeeds()
-        .no_stderr();
+    for mtime_arg in mtime_args {
+        let (at, mut ucmd) = at_and_ucmd!();
 
-    assert!(at.file_exists(file));
+        ucmd.args(&["-t", "201501011234", mtime_arg, file])
+            .succeeds()
+            .no_stderr();
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
-    let (atime, mtime) = get_file_times(&at, file);
-    assert!(atime != mtime);
-    assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+        assert!(at.file_exists(file));
+
+        let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+        let (atime, mtime) = get_file_times(&at, file);
+        assert!(atime != mtime);
+        assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+    }
 }
 
 #[test]
