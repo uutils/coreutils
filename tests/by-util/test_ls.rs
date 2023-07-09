@@ -22,7 +22,6 @@ use std::time::Duration;
 const LONG_ARGS: &[&str] = &[
     "-l",
     "--long",
-    "--l",
     "--format=long",
     "--for=long",
     "--format=verbose",
@@ -2370,6 +2369,7 @@ fn test_ls_quoting_style() {
             ("--quoting-style=literal", "one?two"),
             ("-N", "one?two"),
             ("--literal", "one?two"),
+            ("--l", "one?two"),
             ("--quoting-style=c", "\"one\\ntwo\""),
             ("-Q", "\"one\\ntwo\""),
             ("--quote-name", "\"one\\ntwo\""),
@@ -2394,6 +2394,7 @@ fn test_ls_quoting_style() {
             ("--quoting-style=literal", "one\ntwo"),
             ("-N", "one\ntwo"),
             ("--literal", "one\ntwo"),
+            ("--l", "one\ntwo"),
             ("--quoting-style=shell", "one\ntwo"), // FIXME: GNU ls quotes this case
             ("--quoting-style=shell-always", "'one\ntwo'"),
         ] {
@@ -2455,6 +2456,7 @@ fn test_ls_quoting_style() {
         ("--quoting-style=literal", "one two"),
         ("-N", "one two"),
         ("--literal", "one two"),
+        ("--l", "one two"),
         ("--quoting-style=c", "\"one two\""),
         ("-Q", "\"one two\""),
         ("--quote-name", "\"one two\""),
