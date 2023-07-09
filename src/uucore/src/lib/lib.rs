@@ -33,6 +33,7 @@ pub use crate::mods::version_cmp;
 pub use crate::parser::parse_glob;
 pub use crate::parser::parse_size;
 pub use crate::parser::parse_time;
+pub use crate::parser::shortcut_value_parser;
 
 // * feature-gated modules
 #[cfg(feature = "encoding")]

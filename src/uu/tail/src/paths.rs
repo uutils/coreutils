@@ -20,6 +20,28 @@ pub enum InputKind {
     Stdin,
 }
 
+#[cfg(unix)]
+impl From<&OsStr> for InputKind {
+    fn from(value: &OsStr) -> Self {
+        if value == OsStr::new("-") {
+            Self::Stdin
+        } else {
+            Self::File(PathBuf::from(value))
+        }
+    }
+}
+
+#[cfg(not(unix))]
+impl From<&OsStr> for InputKind {
+    fn from(value: &OsStr) -> Self {
+        if value == OsStr::new(text::DASH) {
+            Self::Stdin
+        } else {
+            Self::File(PathBuf::from(value))
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Input {
     kind: InputKind,
@@ -27,22 +49,13 @@ pub struct Input {
 }
 
 impl Input {
-    pub fn from<T: AsRef<OsStr>>(string: &T) -> Self {
-        let kind = if string.as_ref() == Path::new(text::DASH) {
-            InputKind::Stdin
-        } else {
-            InputKind::File(PathBuf::from(string.as_ref()))
-        };
+    pub fn from<T: AsRef<OsStr>>(string: T) -> Self {
+        let string = string.as_ref();
 
+        let kind = string.into();
         let display_name = match kind {
-            InputKind::File(_) => string.as_ref().to_string_lossy().to_string(),
-            InputKind::Stdin => {
-                if cfg!(unix) {
-                    text::STDIN_HEADER.to_string()
-                } else {
-                    string.as_ref().to_string_lossy().to_string()
-                }
-            }
+            InputKind::File(_) => string.to_string_lossy().to_string(),
+            InputKind::Stdin => text::STDIN_HEADER.to_string(),
         };
 
         Self { kind, display_name }

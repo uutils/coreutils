@@ -159,6 +159,20 @@ fn test_cp_recurse() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))]
+fn test_cp_recurse_several() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-r")
+        .arg("-r")
+        .arg(TEST_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_TO_FOLDER_NEW)
+        .succeeds();
+
+    // Check the content of the destination file that was copied.
+    assert_eq!(at.read(TEST_COPY_TO_FOLDER_NEW_FILE), "Hello, World!\n");
+}
+
+#[test]
 fn test_cp_with_dirs_t() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("-t")
@@ -1110,12 +1124,12 @@ fn test_cp_parents_with_permissions_copy_file() {
     at.mkdir_all("p1/p2");
     at.touch(file);
 
-    let p1_mode = 0o0777;
-    let p2_mode = 0o0711;
-    let file_mode = 0o0702;
-
     #[cfg(unix)]
     {
+        let p1_mode = 0o0777;
+        let p2_mode = 0o0711;
+        let file_mode = 0o0702;
+
         at.set_mode("p1", p1_mode);
         at.set_mode("p1/p2", p2_mode);
         at.set_mode(file, file_mode);
@@ -1151,12 +1165,12 @@ fn test_cp_parents_with_permissions_copy_dir() {
     at.mkdir_all(dir2);
     at.touch(file);
 
-    let p1_mode = 0o0777;
-    let p2_mode = 0o0711;
-    let file_mode = 0o0702;
-
     #[cfg(unix)]
     {
+        let p1_mode = 0o0777;
+        let p2_mode = 0o0711;
+        let file_mode = 0o0702;
+
         at.set_mode("p1", p1_mode);
         at.set_mode("p1/p2", p2_mode);
         at.set_mode(file, file_mode);
@@ -2345,12 +2359,8 @@ fn test_dir_recursive_copy() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.mkdir("parent1");
-    at.mkdir("parent2");
-    at.mkdir("parent1/child");
-    at.mkdir("parent2/child1");
-    at.mkdir("parent2/child1/child2");
-    at.mkdir("parent2/child1/child2/child3");
+    at.mkdir_all("parent1/child");
+    at.mkdir_all("parent2/child1/child2/child3");
 
     // case-1: copy parent1 -> parent1: should fail
     scene
@@ -2724,7 +2734,7 @@ fn test_copy_dir_preserve_permissions_inaccessible_file() {
     ucmd.args(&["-p", "-R", "d1", "d2"])
         .fails()
         .code_is(1)
-        .stderr_only("cp: cannot open 'd1/f' for reading: Permission denied\n");
+        .stderr_only("cp: cannot open 'd1/f' for reading: permission denied\n");
     assert!(at.dir_exists("d2"));
     assert!(!at.file_exists("d2/f"));
 
@@ -3127,25 +3137,39 @@ fn test_cp_debug_sparse_auto() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.touch("a");
-    let result = ts
-        .ucmd()
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    ts.ucmd()
         .arg("--debug")
         .arg("--sparse=auto")
         .arg("a")
         .arg("b")
         .succeeds();
-    let stdout_str = result.stdout_str();
 
-    #[cfg(target_os = "macos")]
-    if !stdout_str
-        .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     {
-        panic!("Failure: stdout was \n{stdout_str}");
-    }
+        let result = ts
+            .ucmd()
+            .arg("--debug")
+            .arg("--sparse=auto")
+            .arg("a")
+            .arg("b")
+            .succeeds();
 
-    #[cfg(target_os = "linux")]
-    if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no") {
-        panic!("Failure: stdout was \n{stdout_str}");
+        let stdout_str = result.stdout_str();
+
+        #[cfg(target_os = "macos")]
+        if !stdout_str
+            .contains("copy offload: unknown, reflink: unsupported, sparse detection: unsupported")
+        {
+            panic!("Failure: stdout was \n{stdout_str}");
+        }
+
+        #[cfg(target_os = "linux")]
+        if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no")
+        {
+            panic!("Failure: stdout was \n{stdout_str}");
+        }
     }
 }
 

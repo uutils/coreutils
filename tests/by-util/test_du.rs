@@ -6,6 +6,7 @@
 // spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink
 #[cfg(not(windows))]
 use regex::Regex;
+#[cfg(not(windows))]
 use std::io::Write;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -580,97 +581,58 @@ fn test_du_invalid_threshold() {
 
 #[test]
 fn test_du_apparent_size() {
-    let ts = TestScenario::new(util_name!());
-    let result = ts.ucmd().arg("--apparent-size").succeeds();
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    at.mkdir_all("a/b");
+
+    at.write("a/b/file1", "foo");
+    at.write("a/b/file2", "foobar");
+
+    let result = ucmd.args(&["--apparent-size", "--all", "a"]).succeeds();
+
+    #[cfg(not(target_os = "windows"))]
     {
-        let result_reference = unwrap_or_return!(expected_result(&ts, &["--apparent-size"]));
-        assert_eq!(result.stdout_str(), result_reference.stdout_str());
+        result.stdout_contains_line("1\ta/b/file2");
+        result.stdout_contains_line("1\ta/b/file1");
+        result.stdout_contains_line("1\ta/b");
+        result.stdout_contains_line("1\ta");
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    _du_apparent_size(result.stdout_str());
-}
-
-#[cfg(target_os = "windows")]
-fn _du_apparent_size(s: &str) {
-    assert_eq!(
-        s,
-        "1\t.\\subdir\\deeper\\deeper_dir
-1\t.\\subdir\\deeper
-6\t.\\subdir\\links
-6\t.\\subdir
-6\t.
-"
-    );
-}
-#[cfg(target_vendor = "apple")]
-fn _du_apparent_size(s: &str) {
-    assert_eq!(
-        s,
-        "1\t./subdir/deeper/deeper_dir
-1\t./subdir/deeper
-6\t./subdir/links
-6\t./subdir
-6\t.
-"
-    );
-}
-#[cfg(target_os = "freebsd")]
-fn _du_apparent_size(s: &str) {
-    assert_eq!(
-        s,
-        "1\t./subdir/deeper/deeper_dir
-2\t./subdir/deeper
-6\t./subdir/links
-8\t./subdir
-8\t.
-"
-    );
-}
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "freebsd")
-))]
-fn _du_apparent_size(s: &str) {
-    assert_eq!(
-        s,
-        "5\t./subdir/deeper/deeper_dir
-9\t./subdir/deeper
-10\t./subdir/links
-22\t./subdir
-26\t.
-"
-    );
+    #[cfg(target_os = "windows")]
+    {
+        result.stdout_contains_line("1\ta\\b\\file2");
+        result.stdout_contains_line("1\ta\\b\\file1");
+        result.stdout_contains_line("1\ta\\b");
+        result.stdout_contains_line("1\ta");
+    }
 }
 
 #[test]
 fn test_du_bytes() {
-    let ts = TestScenario::new(util_name!());
-    let result = ts.ucmd().arg("--bytes").succeeds();
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    at.mkdir_all("a/b");
+
+    at.write("a/b/file1", "foo");
+    at.write("a/b/file2", "foobar");
+
+    let result = ucmd.args(&["--bytes", "--all", "a"]).succeeds();
+
+    #[cfg(not(target_os = "windows"))]
     {
-        let result_reference = unwrap_or_return!(expected_result(&ts, &["--bytes"]));
-        assert_eq!(result.stdout_str(), result_reference.stdout_str());
+        result.stdout_contains_line("6\ta/b/file2");
+        result.stdout_contains_line("3\ta/b/file1");
+        result.stdout_contains_line("9\ta/b");
+        result.stdout_contains_line("9\ta");
     }
 
     #[cfg(target_os = "windows")]
-    result.stdout_contains("5145\t.\\subdir\n");
-    #[cfg(target_vendor = "apple")]
-    result.stdout_contains("5625\t./subdir\n");
-    #[cfg(target_os = "freebsd")]
-    result.stdout_contains("7193\t./subdir\n");
-    #[cfg(all(
-        not(target_vendor = "apple"),
-        not(target_os = "windows"),
-        not(target_os = "freebsd"),
-        not(target_os = "linux"),
-        not(target_os = "android"),
-    ))]
-    result.stdout_contains("21529\t./subdir\n");
+    {
+        result.stdout_contains_line("6\ta\\b\\file2");
+        result.stdout_contains_line("3\ta\\b\\file1");
+        result.stdout_contains_line("9\ta\\b");
+        result.stdout_contains_line("9\ta");
+    }
 }
 
 #[test]

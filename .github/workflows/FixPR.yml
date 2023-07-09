@@ -31,12 +31,12 @@ jobs:
       id: vars
       shell: bash
       run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # surface MSRV from CICD workflow
         RUST_MIN_SRV=$(grep -P "^\s+RUST_MIN_SRV:" .github/workflows/CICD.yml | grep -Po "(?<=\x22)\d+[.]\d+(?:[.]\d+)?(?=\x22)" )
-        outputs RUST_MIN_SRV
-    - uses: dtolnay/rust-toolchain@${{ steps.vars.outputs.RUST_MIN_SRV }}
+        echo "RUST_MIN_SRV=${RUST_MIN_SRV}" >> $GITHUB_OUTPUT
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ steps.vars.outputs.RUST_MIN_SRV }}
     - uses: Swatinem/rust-cache@v2
     - name: Ensure updated 'Cargo.lock'
       shell: bash
@@ -67,7 +67,7 @@ jobs:
     - name: Commit any changes (to '${{ env.BRANCH_TARGET }}')
       uses: EndBug/add-and-commit@v9
       with:
-        branch: ${{ env.BRANCH_TARGET }}
+        new_branch: ${{ env.BRANCH_TARGET }}
         default_author: github_actions
         message: "maint ~ refresh 'Cargo.lock'"
         add: Cargo.lock
@@ -90,13 +90,11 @@ jobs:
       id: vars
       shell: bash
       run: |
-        ## VARs setup
-        outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        outputs CARGO_FEATURES_OPTION
+        echo "CARGO_FEATURES_OPTION=${CARGO_FEATURES_OPTION}" >> $GITHUB_OUTPUT
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: stable
@@ -114,7 +112,7 @@ jobs:
     - name: Commit any changes (to '${{ env.BRANCH_TARGET }}')
       uses: EndBug/add-and-commit@v9
       with:
-        branch: ${{ env.BRANCH_TARGET }}
+        new_branch: ${{ env.BRANCH_TARGET }}
         default_author: github_actions
         message: "maint ~ rustfmt (`cargo fmt`)"
       env:

@@ -758,3 +758,36 @@ fn test_round_robin() {
     assert_eq!(file_read("xaa"), "1\n3\n5\n");
     assert_eq!(file_read("xab"), "2\n4\n");
 }
+
+#[test]
+fn test_split_invalid_input() {
+    // Test if stdout/stderr for '--lines' option is correct
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .args(&["--lines", "0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("split: invalid number of lines: 0");
+    scene
+        .ucmd()
+        .args(&["-C", "0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("split: invalid number of bytes: 0");
+    scene
+        .ucmd()
+        .args(&["-b", "0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("split: invalid number of bytes: 0");
+    scene
+        .ucmd()
+        .args(&["-n", "0", "file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("split: invalid number of chunks: 0");
+}

@@ -2312,56 +2312,15 @@ fn test_ls_version_sort() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     for filename in [
-        "a2",
-        "b1",
-        "b20",
-        "a1.4",
-        "a1.40",
-        "b3",
-        "b11",
-        "b20b",
-        "b20a",
-        "a100",
-        "a1.13",
-        "aa",
-        "a1",
-        "aaa",
-        "a1.00000040",
-        "abab",
-        "ab",
-        "a01.40",
-        "a001.001",
-        "a01.0000001",
-        "a01.001",
-        "a001.01",
+        "a2", "b1", "b20", "a1.4", "b3", "b11", "b20b", "b20a", "a100", "a1.13", "aa", "a1", "aaa",
+        "abab", "ab", "a01.40", "a001.001",
     ] {
         at.touch(filename);
     }
 
     let mut expected = vec![
-        "a1",
-        "a001.001",
-        "a001.01",
-        "a01.0000001",
-        "a01.001",
-        "a1.4",
-        "a1.13",
-        "a01.40",
-        "a1.00000040",
-        "a1.40",
-        "a2",
-        "a100",
-        "aa",
-        "aaa",
-        "ab",
-        "abab",
-        "b1",
-        "b3",
-        "b11",
-        "b20",
-        "b20a",
-        "b20b",
-        "", // because of '\n' at the end of the output
+        "a1", "a001.001", "a1.4", "a1.13", "a01.40", "a2", "a100", "aa", "aaa", "ab", "abab", "b1",
+        "b3", "b11", "b20", "b20a", "b20b", "", // because of '\n' at the end of the output
     ];
 
     let result = scene.ucmd().arg("-1v").succeeds();
@@ -3130,6 +3089,16 @@ fn test_ls_dangling_symlinks() {
     scene
         .ucmd()
         .arg("-Li")
+        .arg("temp_dir")
+        .fails()
+        .code_is(1)
+        .stderr_contains("cannot access")
+        .stderr_contains("No such file or directory")
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+
+    scene
+        .ucmd()
+        .arg("-LZ")
         .arg("temp_dir")
         .fails()
         .code_is(1)

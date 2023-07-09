@@ -18,7 +18,7 @@ fn test_shred_remove() {
     at.touch(file_b);
 
     // Shred file_a.
-    scene.ucmd().arg("-u").arg(file_a).run();
+    scene.ucmd().arg("-u").arg(file_a).succeeds();
 
     // file_a was deleted, file_b exists.
     assert!(!at.file_exists(file_a));

@@ -158,7 +158,7 @@ fn reader_writer<
 /// The function that is executed on the sorter thread.
 fn sorter(receiver: &Receiver<Chunk>, sender: &SyncSender<Chunk>, settings: &GlobalSettings) {
     while let Ok(mut payload) = receiver.recv() {
-        payload.with_contents_mut(|contents| {
+        payload.with_dependent_mut(|_, contents| {
             sort_by(&mut contents.lines, settings, &contents.line_data);
         });
         if sender.send(payload).is_err() {

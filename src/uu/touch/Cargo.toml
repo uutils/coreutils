@@ -1,4 +1,4 @@
-# spell-checker:ignore humantime
+# spell-checker:ignore datetime
 [package]
 name = "uu_touch"
 version = "0.0.19"
@@ -18,8 +18,7 @@ path = "src/touch.rs"
 [dependencies]
 filetime = { workspace = true }
 clap = { workspace = true }
-# TODO: use workspace dependency (0.3) when switching from time to chrono
-humantime_to_duration = "0.2.1"
+parse_datetime = { workspace = true }
 time = { workspace = true, features = [
   "parsing",
   "formatting",

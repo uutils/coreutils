@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv PWSTR lpszfilepath hresult mktime YYYYMMDDHHMM YYMMDDHHMM DATETIME YYYYMMDDHHMMS subsecond humantime
+// spell-checker:ignore (ToDO) filetime datetime MMDDhhmm lpszfilepath mktime YYYYMMDDHHMM YYMMDDHHMM DATETIME YYYYMMDDHHMMS subsecond humantime
 
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, ArgGroup, Command};
@@ -29,7 +29,7 @@ pub mod options {
     pub mod sources {
         pub static DATE: &str = "date";
         pub static REFERENCE: &str = "reference";
-        pub static CURRENT: &str = "current";
+        pub static TIMESTAMP: &str = "timestamp";
     }
     pub static HELP: &str = "help";
     pub static ACCESS: &str = "access";
@@ -84,13 +84,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     ) {
         (Some(reference), Some(date)) => {
             let (atime, mtime) = stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?;
-            if let Ok(offset) = humantime_to_duration::from_str(date) {
-                let mut seconds = offset.whole_seconds();
-                let mut nanos = offset.subsec_nanoseconds();
-                if nanos < 0 {
-                    nanos += 1_000_000_000;
-                    seconds -= 1;
-                }
+            if let Ok(offset) = parse_datetime::from_str(date) {
+                let seconds = offset.num_seconds();
+                let nanos = offset.num_nanoseconds().unwrap_or(0) % 1_000_000_000;
 
                 let ref_atime_secs = atime.unix_seconds();
                 let ref_atime_nanos = atime.nanoseconds();
@@ -120,12 +116,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             (timestamp, timestamp)
         }
         (None, None) => {
-            let timestamp =
-                if let Some(current) = matches.get_one::<String>(options::sources::CURRENT) {
-                    parse_timestamp(current)?
-                } else {
-                    local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap())
-                };
+            let timestamp = if let Some(ts) = matches.get_one::<String>(options::sources::TIMESTAMP)
+            {
+                parse_timestamp(ts)?
+            } else {
+                local_dt_to_filetime(time::OffsetDateTime::now_local().unwrap())
+            };
             (timestamp, timestamp)
         }
     };
@@ -243,7 +239,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::sources::CURRENT)
+            Arg::new(options::sources::TIMESTAMP)
                 .short('t')
                 .help("use [[CC]YY]MMDDhhmm[.ss] instead of the current time")
                 .value_name("STAMP"),
@@ -255,7 +251,7 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .help("parse argument and use it instead of current time")
                 .value_name("STRING")
-                .conflicts_with(options::sources::CURRENT),
+                .conflicts_with(options::sources::TIMESTAMP),
         )
         .arg(
             Arg::new(options::MODIFICATION)
@@ -288,7 +284,7 @@ pub fn uu_app() -> Command {
                 .value_name("FILE")
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::AnyPath)
-                .conflicts_with(options::sources::CURRENT),
+                .conflicts_with(options::sources::TIMESTAMP),
         )
         .arg(
             Arg::new(options::TIME)
@@ -299,7 +295,7 @@ pub fn uu_app() -> Command {
                      equivalent to -m",
                 )
                 .value_name("WORD")
-                .value_parser(["access", "atime", "use"]),
+                .value_parser(["access", "atime", "use", "modify", "mtime"]),
         )
         .arg(
             Arg::new(ARG_FILES)
@@ -311,7 +307,7 @@ pub fn uu_app() -> Command {
         .group(
             ArgGroup::new(options::SOURCES)
                 .args([
-                    options::sources::CURRENT,
+                    options::sources::TIMESTAMP,
                     options::sources::DATE,
                     options::sources::REFERENCE,
                 ])
@@ -445,9 +441,13 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         }
     }
 
-    if let Ok(duration) = humantime_to_duration::from_str(s) {
+    if let Ok(duration) = parse_datetime::from_str(s) {
         let now_local = time::OffsetDateTime::now_local().unwrap();
-        let diff = now_local.checked_add(duration).unwrap();
+        let diff = now_local
+            .checked_add(time::Duration::nanoseconds(
+                duration.num_nanoseconds().unwrap(),
+            ))
+            .unwrap();
         return Ok(local_dt_to_filetime(diff));
     }
 

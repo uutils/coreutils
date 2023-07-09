@@ -6,8 +6,6 @@
 //  * file that was distributed with this source code.
 //  *
 
-// spell-checker:ignore (ToDO) corasick memchr
-
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
@@ -18,8 +16,8 @@ use uucore::{format_usage, help_about, help_usage};
 
 mod helper;
 
-static ABOUT: &str = help_about!("nl.md");
-static USAGE: &str = help_usage!("nl.md");
+const ABOUT: &str = help_about!("nl.md");
+const USAGE: &str = help_usage!("nl.md");
 
 // Settings store options used by nl to produce its output.
 pub struct Settings {
@@ -40,6 +38,24 @@ pub struct Settings {
     renumber: bool,
     // The string appended to each line number output.
     number_separator: String,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            header_numbering: NumberingStyle::NumberForNone,
+            body_numbering: NumberingStyle::NumberForAll,
+            footer_numbering: NumberingStyle::NumberForNone,
+            section_delimiter: ['\\', ':'],
+            starting_line_number: 1,
+            line_increment: 1,
+            join_blank_lines: 1,
+            number_width: 6,
+            number_format: NumberFormat::Right,
+            renumber: true,
+            number_separator: String::from("\t"),
+        }
+    }
 }
 
 // NumberingStyle stores which lines are to be numbered.
@@ -87,20 +103,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(args)?;
 
-    // A mutable settings object, initialized with the defaults.
-    let mut settings = Settings {
-        header_numbering: NumberingStyle::NumberForNone,
-        body_numbering: NumberingStyle::NumberForAll,
-        footer_numbering: NumberingStyle::NumberForNone,
-        section_delimiter: ['\\', ':'],
-        starting_line_number: 1,
-        line_increment: 1,
-        join_blank_lines: 1,
-        number_width: 6,
-        number_format: NumberFormat::Right,
-        renumber: true,
-        number_separator: String::from("\t"),
-    };
+    let mut settings = Settings::default();
 
     // Update the settings from the command line options, and terminate the
     // program if some options could not successfully be parsed.
@@ -210,7 +213,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_RENUMBER)
                 .short('p')
                 .long(options::NO_RENUMBER)
-                .help("do not reset line numbers at logical pages"),
+                .help("do not reset line numbers at logical pages")
+                .action(ArgAction::SetFalse),
         )
         .arg(
             Arg::new(options::NUMBER_SEPARATOR)

@@ -3010,6 +3010,20 @@ fn display_inode(metadata: &Metadata) -> String {
 #[allow(unused_variables)]
 fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
     let substitute_string = "?".to_string();
+    // If we must dereference, ensure that the symlink is actually valid even if the system
+    // does not support SELinux.
+    // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
+    if must_dereference {
+        match get_metadata(p_buf, must_dereference) {
+            Err(err) => {
+                // The Path couldn't be dereferenced, so return early and set exit code 1
+                // to indicate a minor error
+                show!(LsError::IOErrorContext(err, p_buf.to_path_buf(), false));
+                return substitute_string;
+            }
+            Ok(md) => (),
+        }
+    }
     if config.selinux_supported {
         #[cfg(feature = "selinux")]
         {
