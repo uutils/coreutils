@@ -41,7 +41,7 @@
 #
 # Or to find all crates with multiple versions (like cargo deny):
 # ```
-# > $dep | where versions > 1   
+# > $dep | where num_versions > 1   
 # ```
 #
 # Ideas to expand this:
