@@ -1202,6 +1202,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::quoting::LITERAL)
                 .short('N')
                 .long(options::quoting::LITERAL)
+                .alias("l")
                 .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
                 .overrides_with_all([
                     options::QUOTING_STYLE,
