@@ -75,10 +75,23 @@ enum NumberingStyle {
 // NumberFormat specifies how line numbers are output within their allocated
 // space. They are justified to the left or right, in the latter case with
 // the option of having all unused space to its left turned into leading zeroes.
+#[derive(Default)]
 enum NumberFormat {
     Left,
+    #[default]
     Right,
     RightZero,
+}
+
+impl<T: AsRef<str>> From<T> for NumberFormat {
+    fn from(s: T) -> Self {
+        match s.as_ref() {
+            "ln" => Self::Left,
+            "rn" => Self::Right,
+            "rz" => Self::RightZero,
+            _ => unreachable!("Should have been caught by clap"),
+        }
+    }
 }
 
 pub mod options {
@@ -207,7 +220,8 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(options::NUMBER_FORMAT)
                 .help("insert line numbers according to FORMAT")
-                .value_name("FORMAT"),
+                .value_name("FORMAT")
+                .value_parser(["ln", "rn", "rz"]),
         )
         .arg(
             Arg::new(options::NO_RENUMBER)

@@ -36,23 +36,10 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
             settings.number_separator = val.to_owned();
         }
     }
-    match opts.get_one::<String>(options::NUMBER_FORMAT) {
-        None => {}
-        Some(val) => match val.as_str() {
-            "ln" => {
-                settings.number_format = crate::NumberFormat::Left;
-            }
-            "rn" => {
-                settings.number_format = crate::NumberFormat::Right;
-            }
-            "rz" => {
-                settings.number_format = crate::NumberFormat::RightZero;
-            }
-            _ => {
-                errs.push(String::from("Illegal value for -n"));
-            }
-        },
-    }
+    settings.number_format = opts
+        .get_one::<String>(options::NUMBER_FORMAT)
+        .map(Into::into)
+        .unwrap_or_default();
     match opts.get_one::<String>(options::BODY_NUMBERING) {
         None => {}
         Some(val) => {
