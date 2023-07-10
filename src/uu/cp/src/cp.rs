@@ -13,7 +13,7 @@
 
 use quick_error::quick_error;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
@@ -1140,6 +1140,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     let mut non_fatal_errors = false;
     let mut seen_sources = HashSet::with_capacity(sources.len());
     let mut symlinked_files = HashSet::new();
+    let mut hardlinked_files = HashMap::with_capacity(sources.len());
 
     let progress_bar = if options.progress_bar {
         let pb = ProgressBar::new(disk_usage(sources, options.recursive)?)
@@ -1157,12 +1158,19 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     };
 
     for source in sources.iter() {
+        let dest = construct_dest_path(source, target, &target_type, options)?;
         if seen_sources.contains(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
+        } else if preserve_hard_links && source.is_symlink() {
+            if let Some(new_source) = hardlinked_files.get(&source.read_link()?) {
+                if file_or_link_exists(&dest) {
+                    std::fs::remove_file(&dest)?;
+                }
+                std::fs::hard_link(new_source, &dest)?;
+            }
         } else {
             let found_hard_link = if preserve_hard_links && !source.is_dir() {
-                let dest = construct_dest_path(source, target, &target_type, options)?;
                 preserve_hardlinks(&mut hard_links, source, &dest)?
             } else {
                 false
@@ -1181,6 +1189,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                 }
             }
             seen_sources.insert(source);
+            hardlinked_files.insert(source, dest);
         }
     }
     if non_fatal_errors {
