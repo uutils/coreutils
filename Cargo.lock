@@ -915,18 +915,18 @@ dependencies = [
 
 [[package]]
 name = "fundu"
-version = "1.1.0"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d579dcb632d86591bdd7fc445e705b96cb2a7fb5488d918d956f392b6148e898"
+checksum = "34804ed59f10b3a630c79822ebf7370b562b7281028369e9baa40547c17f8bdc"
 dependencies = [
  "fundu-core",
 ]
 
 [[package]]
 name = "fundu-core"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a363b75dd1e4b5bd2cdc305c47399c524cae24638b368b66b1a4c2a36482801f"
+checksum = "71a99190954ca83bade03ba054799b17a158ea948a6855c6bb8121adb6b49d9f"
 
 [[package]]
 name = "futures"
@@ -1819,9 +1819,9 @@ checksum = "f1bfbf25d7eb88ddcbb1ec3d755d0634da8f7657b2cb8b74089121409ab8228f"
 
 [[package]]
 name = "regex"
-version = "1.9.0"
+version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89089e897c013b3deb627116ae56a6955a72b8bed395c9526af31c9fe528b484"
+checksum = "b2eae68fc220f7cf2532e4494aded17545fce192d59cd996e0fe7887f4ceb575"
 dependencies = [
  "aho-corasick 1.0.1",
  "memchr",
@@ -1831,9 +1831,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa250384981ea14565685dea16a9ccc4d1c541a13f82b9c168572264d1df8c56"
+checksum = "e9aaecc05d5c4b5f7da074b9a0d1a0867e71fd36e7fc0482d8bcfe8e8fc56290"
 dependencies = [
  "aho-corasick 1.0.1",
  "memchr",

@@ -1202,6 +1202,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::quoting::LITERAL)
                 .short('N')
                 .long(options::quoting::LITERAL)
+                .alias("l")
                 .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
                 .overrides_with_all([
                     options::QUOTING_STYLE,
@@ -1931,8 +1932,10 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
         Sort::Size => entries.sort_by_key(|k| Reverse(k.md(out).map(|md| md.len()).unwrap_or(0))),
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
-        Sort::Version => entries
-            .sort_by(|a, b| version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())),
+        Sort::Version => entries.sort_by(|a, b| {
+            version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())
+                .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
+        }),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
                 .extension()

@@ -165,7 +165,7 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::BODY_NUMBERING)
                 .help("use STYLE for numbering body lines")
-                .value_name("SYNTAX"),
+                .value_name("STYLE"),
         )
         .arg(
             Arg::new(options::SECTION_DELIMITER)
