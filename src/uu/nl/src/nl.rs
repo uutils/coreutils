@@ -12,11 +12,12 @@ use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 mod helper;
 
 const ABOUT: &str = help_about!("nl.md");
+const AFTER_HELP: &str = help_section!("after help", "nl.md");
 const USAGE: &str = help_usage!("nl.md");
 
 // Settings store options used by nl to produce its output.
@@ -146,6 +147,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
+        .after_help(AFTER_HELP)
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
