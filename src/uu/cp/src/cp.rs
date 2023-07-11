@@ -1162,6 +1162,26 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
         } else if preserve_hard_links && source.is_symlink() {
+            // issue 5031 case
+            //
+            // touch a && ln -s a b && mkdir c
+            // cp --preserve=links -R -H a b c
+            // inode of c/a and c/b should be the same
+            //
+            // inode number | filename
+            // 33473704         a
+            // 33473729         b -> a
+            // 35143635         c
+            // 35143846         ├── a
+            // 35143846         └── b
+            //
+            // runs | source | dest
+            // 1        a       c/a
+            // 2        b->a    c/b
+            //
+            // c/b must be the hard link of c/a
+            // so the solution we can have is to remember the files (source & dest) we visited
+            // to achive the goal.
             if let Some(new_source) = seen_sources.get(&source.read_link()?) {
                 if file_or_link_exists(&dest) {
                     std::fs::remove_file(&dest)?;
