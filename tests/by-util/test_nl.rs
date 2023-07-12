@@ -1,4 +1,4 @@
-// spell-checker:ignore ninvalid
+// spell-checker:ignore ninvalid winvalid
 use crate::common::util::TestScenario;
 
 #[test]
@@ -116,6 +116,40 @@ fn test_number_format_rz() {
 #[test]
 fn test_invalid_number_format() {
     for arg in ["-ninvalid", "--number-format=invalid"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("invalid value 'invalid'");
+    }
+}
+
+#[test]
+fn test_number_width() {
+    for width in 1..10 {
+        for arg in [format!("-w{width}"), format!("--number-width={width}")] {
+            let spaces = " ".repeat(width - 1);
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in("test")
+                .succeeds()
+                .stdout_is(format!("{spaces}1\ttest\n"));
+        }
+    }
+}
+
+#[test]
+fn test_number_width_zero() {
+    for arg in ["-w0", "--number-width=0"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("Invalid line number field width: ‘0’: Numerical result out of range");
+    }
+}
+
+#[test]
+fn test_invalid_number_width() {
+    for arg in ["-winvalid", "--number-width=invalid"] {
         new_ucmd!()
             .arg(arg)
             .fails()

@@ -251,7 +251,8 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long(options::NUMBER_WIDTH)
                 .help("use NUMBER columns for line numbers")
-                .value_name("NUMBER"),
+                .value_name("NUMBER")
+                .value_parser(clap::value_parser!(usize)),
         )
 }
 
