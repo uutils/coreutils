@@ -670,6 +670,23 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
 
+    for option in [
+        "-w 100000000000000",
+        "-w=100000000000000",
+        "--width=100000000000000",
+        "--width 100000000000000",
+        "-w 07777777777777777777",
+        "-w=07777777777777777777",
+        "--width=07777777777777777777",
+        "--width 07777777777777777777",
+    ] {
+        scene
+            .ucmd()
+            .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
+            .succeeds()
+            .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
+    }
     scene
         .ucmd()
         .arg("-w=bad")
