@@ -17,6 +17,8 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use std::collections::HashSet;
+use std::num::IntErrorKind;
+
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -657,6 +659,19 @@ fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
     }
 }
 
+fn parse_width(s: &str) -> Result<u16, LsError> {
+    let radix = match s.starts_with('0') && s.len() > 1 {
+        true => 8,
+        false => 10,
+    };
+    match u16::from_str_radix(s, radix) {
+        Ok(x) => Ok(x),
+        Err(e) => match e.kind() {
+            IntErrorKind::PosOverflow => Ok(u16::MAX),
+            _ => Err(LsError::InvalidLineWidth(s.into())),
+        },
+    }
+}
 impl Config {
     #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
@@ -795,20 +810,7 @@ impl Config {
         };
 
         let width = match options.get_one::<String>(options::WIDTH) {
-            Some(x) => {
-                if x.starts_with('0') && x.len() > 1 {
-                    // Read number as octal
-                    match u16::from_str_radix(x, 8) {
-                        Ok(v) => v,
-                        Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
-                    }
-                } else {
-                    match x.parse::<u16>() {
-                        Ok(u) => u,
-                        Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
-                    }
-                }
-            }
+            Some(x) => parse_width(x)?,
             None => match terminal_size::terminal_size() {
                 Some((width, _)) => width.0,
                 None => match std::env::var_os("COLUMNS") {
