@@ -156,3 +156,14 @@ fn test_invalid_number_width() {
             .stderr_contains("invalid value 'invalid'");
     }
 }
+
+#[test]
+fn test_number_separator() {
+    for arg in ["-s:-:", "--number-separator=:-:"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("     1:-:test\n");
+    }
+}
