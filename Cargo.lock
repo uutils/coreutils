@@ -1646,9 +1646,9 @@ checksum = "6ac9a59f73473f1b8d852421e59e64809f025994837ef743615c6d0c5b305160"
 
 [[package]]
 name = "platform-info"
-version = "2.0.1"
+version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "827dc4f7a81331d48c8abf11b5ac18673b390d33e9632327e286d940289aefab"
+checksum = "d6259c4860e53bf665016f1b2f46a8859cadfa717581dc9d597ae4069de6300f"
 dependencies = [
  "libc",
  "winapi",

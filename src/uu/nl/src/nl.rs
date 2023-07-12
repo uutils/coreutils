@@ -12,11 +12,12 @@ use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 mod helper;
 
 const ABOUT: &str = help_about!("nl.md");
+const AFTER_HELP: &str = help_section!("after help", "nl.md");
 const USAGE: &str = help_usage!("nl.md");
 
 // Settings store options used by nl to produce its output.
@@ -75,10 +76,23 @@ enum NumberingStyle {
 // NumberFormat specifies how line numbers are output within their allocated
 // space. They are justified to the left or right, in the latter case with
 // the option of having all unused space to its left turned into leading zeroes.
+#[derive(Default)]
 enum NumberFormat {
     Left,
+    #[default]
     Right,
     RightZero,
+}
+
+impl<T: AsRef<str>> From<T> for NumberFormat {
+    fn from(s: T) -> Self {
+        match s.as_ref() {
+            "ln" => Self::Left,
+            "rn" => Self::Right,
+            "rz" => Self::RightZero,
+            _ => unreachable!("Should have been caught by clap"),
+        }
+    }
 }
 
 pub mod options {
@@ -146,6 +160,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
+        .after_help(AFTER_HELP)
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
@@ -207,7 +222,8 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(options::NUMBER_FORMAT)
                 .help("insert line numbers according to FORMAT")
-                .value_name("FORMAT"),
+                .value_name("FORMAT")
+                .value_parser(["ln", "rn", "rz"]),
         )
         .arg(
             Arg::new(options::NO_RENUMBER)
@@ -235,7 +251,8 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long(options::NUMBER_WIDTH)
                 .help("use NUMBER columns for line numbers")
-                .value_name("NUMBER"),
+                .value_name("NUMBER")
+                .value_parser(clap::value_parser!(usize)),
         )
 }
 

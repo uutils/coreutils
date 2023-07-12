@@ -1,3 +1,4 @@
+// spell-checker:ignore ninvalid winvalid
 use crate::common::util::TestScenario;
 
 #[test]
@@ -76,5 +77,82 @@ fn test_sections_and_styles() {
 fn test_no_renumber() {
     for arg in ["-p", "--no-renumber"] {
         new_ucmd!().arg(arg).succeeds();
+    }
+}
+
+#[test]
+fn test_number_format_ln() {
+    for arg in ["-nln", "--number-format=ln"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("1     \ttest\n");
+    }
+}
+
+#[test]
+fn test_number_format_rn() {
+    for arg in ["-nrn", "--number-format=rn"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("     1\ttest\n");
+    }
+}
+
+#[test]
+fn test_number_format_rz() {
+    for arg in ["-nrz", "--number-format=rz"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("000001\ttest\n");
+    }
+}
+
+#[test]
+fn test_invalid_number_format() {
+    for arg in ["-ninvalid", "--number-format=invalid"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("invalid value 'invalid'");
+    }
+}
+
+#[test]
+fn test_number_width() {
+    for width in 1..10 {
+        for arg in [format!("-w{width}"), format!("--number-width={width}")] {
+            let spaces = " ".repeat(width - 1);
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in("test")
+                .succeeds()
+                .stdout_is(format!("{spaces}1\ttest\n"));
+        }
+    }
+}
+
+#[test]
+fn test_number_width_zero() {
+    for arg in ["-w0", "--number-width=0"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("Invalid line number field width: ‘0’: Numerical result out of range");
+    }
+}
+
+#[test]
+fn test_invalid_number_width() {
+    for arg in ["-winvalid", "--number-width=invalid"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("invalid value 'invalid'");
     }
 }
