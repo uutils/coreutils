@@ -3264,8 +3264,7 @@ fn test_cp_debug_default() {
     }
 
     #[cfg(windows)]
-    if !stdout_str
-        .contains("copy offload: unsupported, reflink: no, sparse detection: unsupported")
+    if !stdout_str.contains("copy offload: unsupported, reflink: no, sparse detection: unsupported")
     {
         panic!("Failure: stdout was \n{stdout_str}");
     }
@@ -3329,9 +3328,9 @@ fn test_cp_debug_multiple_default() {
 
     #[cfg(target_os = "windows")]
     {
-        if !stdout_str.contains(
-            "copy offload: unsupported, reflink: no, sparse detection: unsupported",
-        ) {
+        if !stdout_str
+            .contains("copy offload: unsupported, reflink: no, sparse detection: unsupported")
+        {
             panic!("Failure: stdout was \n{stdout_str}");
         }
 

@@ -7,8 +7,8 @@ use std::{
     cmp::min,
     fs::File,
     mem::{size_of, size_of_val, zeroed},
-    os::windows::{fs::MetadataExt, prelude::RawHandle},
     os::windows::prelude::AsRawHandle,
+    os::windows::{fs::MetadataExt, prelude::RawHandle},
     path::Path,
     ptr::{null, null_mut},
 };
@@ -60,7 +60,8 @@ fn duplicate_extents(source: &Path, dest: &Path) -> std::io::Result<()> {
     set_sparse(dest_handle, true)?;
     // if the source was not sparse we should unset sparse on the destination
     // when we're done or if there's an error
-    let should_be_sparse = dest_file.metadata()?.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE != 0;
+    let should_be_sparse =
+        dest_file.metadata()?.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE != 0;
 
     dest_file.set_len(size as u64)?;
 
@@ -146,18 +147,16 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::Yes;
             duplicate_extents(source, dest)
         }
-        ReflinkMode::Auto => {
-            match duplicate_extents(source, dest) {
-                Err(_) => {
-                    copy_debug.reflink = OffloadReflinkDebug::No;
-                    std::fs::copy(source, dest).map(|_| ())
-                },
-                Ok(_) => {
-                    copy_debug.reflink = OffloadReflinkDebug::Yes;
-                    Ok(())
-                }
+        ReflinkMode::Auto => match duplicate_extents(source, dest) {
+            Err(_) => {
+                copy_debug.reflink = OffloadReflinkDebug::No;
+                std::fs::copy(source, dest).map(|_| ())
             }
-        }
+            Ok(_) => {
+                copy_debug.reflink = OffloadReflinkDebug::Yes;
+                Ok(())
+            }
+        },
     };
     result.context(context)?;
     Ok(copy_debug)

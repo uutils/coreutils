@@ -17,7 +17,17 @@ mod linux;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) use self::linux::copy_on_write;
 
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "windows"
+)))]
 mod other;
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "macos",
+    target_os = "windows"
+)))]
 pub(crate) use self::other::copy_on_write;
