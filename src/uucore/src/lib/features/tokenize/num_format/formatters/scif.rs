@@ -10,7 +10,7 @@ pub struct Scif;
 
 impl Scif {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 impl Formatter for Scif {
