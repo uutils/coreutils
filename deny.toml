@@ -27,7 +27,6 @@ allow = [
   "BSD-2-Clause-FreeBSD",
   "BSD-3-Clause",
   "CC0-1.0",
-  "MPL-2.0",              # XXX considered copyleft?
   "Unicode-DFS-2016",
 ]
 copyleft = "deny"
