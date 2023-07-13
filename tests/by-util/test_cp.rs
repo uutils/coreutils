@@ -1350,6 +1350,36 @@ fn test_cp_preserve_xattr_fails_on_android() {
 }
 
 #[test]
+fn test_cp_issue_5031_case_1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.symlink_file("a", "b");
+    at.mkdir("c");
+
+    assert!(at.file_exists("a"));
+    assert!(at.symlink_exists("b"));
+    assert!(at.dir_exists("c"));
+
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-H")
+        .arg("a")
+        .arg("b")
+        .arg("c")
+        .succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    let metadata_a = std_fs::metadata(at.subdir.join("c").join("a")).unwrap();
+    let metadata_b = std_fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+    assert_eq!(metadata_a.ino(), metadata_b.ino());
+}
+
+#[test]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
