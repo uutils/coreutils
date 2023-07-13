@@ -1175,7 +1175,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
             while original_source.is_symlink() {
                 original_source = original_source.read_link()?;
             }
-            // unwrap it because the read_link method is successed
+            // unwrap it because the read_link method is sucessfull
             // so file_name won't be failed
             original_source = original_source.file_name().unwrap().into();
 
