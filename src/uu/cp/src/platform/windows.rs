@@ -73,9 +73,9 @@ fn duplicate_extents(source: &Path, dest: &Path) -> std::io::Result<()> {
         TargetFileOffset: 0,
     };
 
-    let mut integrety_info: FSCTL_GET_INTEGRITY_INFORMATION_BUFFER;
+    let mut integrity_info: FSCTL_GET_INTEGRITY_INFORMATION_BUFFER;
     unsafe {
-        integrety_info = zeroed();
+        integrity_info = zeroed();
         // this will fail on non-ReFS filesystems, which is fine
         // since ReFS is the only major filesystem on windows that supports reflinking
         if 0 == DeviceIoControl(
@@ -83,7 +83,7 @@ fn duplicate_extents(source: &Path, dest: &Path) -> std::io::Result<()> {
             FSCTL_GET_INTEGRITY_INFORMATION,
             null(),
             0,
-            &mut integrety_info as *mut _ as _,
+            &mut integrity_info as *mut _ as _,
             size_of_val(&integrety_info).try_into().unwrap(),
             null_mut(),
             null_mut(),
@@ -92,7 +92,7 @@ fn duplicate_extents(source: &Path, dest: &Path) -> std::io::Result<()> {
             return Err(std::io::Error::last_os_error());
         }
     }
-    let blksize: i64 = integrety_info.ClusterSizeInBytes.into();
+    let blksize: i64 = integrity_info.ClusterSizeInBytes.into();
     while dup_extents_data.SourceFileOffset < size {
         let mut chunk_size = min(
             4_294_967_296 - blksize,
