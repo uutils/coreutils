@@ -1165,7 +1165,6 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
             show_warning!("source {} specified more than once", source.quote());
         } else if let Some(new_source) = should_hard_linked_files.get(source) {
             std::fs::hard_link(new_source, &dest)?;
-            // should_hard_linked_files.remove(source);
         } else if preserve_hard_links && source.is_symlink() && cli_dereference {
             // issue 5031 case
             // touch a && ln -s a b && mkdir c
