@@ -1369,14 +1369,14 @@ fn test_cp_issue_5031_case_1() {
         .arg("c")
         .succeeds();
 
-    #[cfg(not(any(target_os = "freebsd", target_os = "macos")))]
+    #[cfg(all(unix, not(target_os = "freebsd")))]
     {
         assert!(at.dir_exists("c"));
         assert!(at.plus("c").join("a").exists());
         assert!(at.plus("c").join("b").exists());
 
-        let metadata_a = std_fs::metadata(at.subdir.join("c").join("a")).unwrap();
-        let metadata_b = std_fs::metadata(at.subdir.join("c").join("b")).unwrap();
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
         assert_eq!(metadata_a.ino(), metadata_b.ino());
     }
@@ -1402,16 +1402,52 @@ fn test_cp_issue_5031_case_2() {
         .arg("c")
         .succeeds();
 
-    #[cfg(not(any(target_os = "freebsd", target_os = "macos")))]
+    #[cfg(all(unix, not(target_os = "freebsd")))]
     {
         assert!(at.dir_exists("c"));
         assert!(at.plus("c").join("a").exists());
         assert!(at.plus("c").join("b").exists());
 
-        let metadata_a = std_fs::metadata(at.subdir.join("c").join("a")).unwrap();
-        let metadata_b = std_fs::metadata(at.subdir.join("c").join("b")).unwrap();
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
         assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+fn test_cp_issue_5031_case_3() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.symlink_file("a", "b");
+    at.symlink_file("b", "c");
+    at.mkdir("d");
+
+    assert!(at.file_exists("a"));
+    assert!(at.symlink_exists("b"));
+    assert!(at.symlink_exists("c"));
+    assert!(at.dir_exists("d"));
+
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-H")
+        .arg("b")
+        .arg("c")
+        .arg("d")
+        .succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        assert!(at.dir_exists("d"));
+        assert!(!at.plus("d").join("a").exists());
+        assert!(at.plus("d").join("b").exists());
+        assert!(at.plus("d").join("c").exists());
+
+        let metadata_b = std::fs::metadata(at.subdir.join("d").join("b")).unwrap();
+        let metadata_c = std::fs::metadata(at.subdir.join("d").join("c")).unwrap();
+
+        assert_eq!(metadata_b.ino(), metadata_c.ino());
     }
 }
 

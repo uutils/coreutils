@@ -1165,7 +1165,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
             show_warning!("source {} specified more than once", source.quote());
         } else if let Some(new_source) = should_hard_linked_files.get(source) {
             std::fs::hard_link(new_source, &dest)?;
-            should_hard_linked_files.remove(source);
+            // should_hard_linked_files.remove(source);
         } else if preserve_hard_links && source.is_symlink() && cli_dereference {
             // issue 5031 case
             // touch a && ln -s a b && mkdir c
@@ -1175,8 +1175,8 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
             while original_source.is_symlink() {
                 original_source = original_source.read_link()?;
             }
-            // unwrap it because the read_link method is sucessfull
-            // so file_name won't be failed
+            // unwrap it because the read_link method above is ok
+            // so this file_name won't be failed
             original_source = original_source.file_name().unwrap().into();
 
             match seen_sources.get(&original_source) {
@@ -1184,22 +1184,31 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                     std::fs::hard_link(new_source, &dest)?;
                 }
                 None => {
-                    // TODO: GNU cp can deal with this case
-                    // for example:
-                    // touch a && ln -s a b && mkdir c
-                    // cp --preserve=links -R -H b a c
-                    if let Err(error) = copy_source(
-                        &progress_bar,
-                        source,
-                        target,
-                        &target_type,
-                        options,
-                        &mut symlinked_files,
-                    ) {
-                        show_error_if_needed(&error);
-                        non_fatal_errors = true;
+                    match should_hard_linked_files.get(&original_source) {
+                        Some(new_source) => {
+                            // GNU cp can deal with this case:
+                            // touch a && ln -s a b && ln -s b c && mkdir d
+                            // cp --preserve=links -R -H b c d
+                            std::fs::hard_link(new_source, &dest)?;
+                        }
+                        None => {
+                            // GNU cp can deal with this case:
+                            // touch a && ln -s a b && mkdir c
+                            // cp --preserve=links -R -H b a c
+                            if let Err(error) = copy_source(
+                                &progress_bar,
+                                source,
+                                target,
+                                &target_type,
+                                options,
+                                &mut symlinked_files,
+                            ) {
+                                show_error_if_needed(&error);
+                                non_fatal_errors = true;
+                            }
+                            should_hard_linked_files.insert(original_source, dest.clone());
+                        }
                     }
-                    should_hard_linked_files.insert(original_source, dest.clone());
                 }
             }
         } else {
