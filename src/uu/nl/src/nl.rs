@@ -29,8 +29,8 @@ pub struct Settings {
     // The variable corresponding to -d
     section_delimiter: [char; 2],
     // The variables corresponding to the options -v, -i, -l, -w.
-    starting_line_number: u64,
-    line_increment: u64,
+    starting_line_number: i64,
+    line_increment: i64,
     join_blank_lines: u64,
     number_width: usize, // Used with String::from_char, hence usize.
     // The format of the number and the (default value for)
@@ -208,7 +208,8 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(options::LINE_INCREMENT)
                 .help("line number increment at each line")
-                .value_name("NUMBER"),
+                .value_name("NUMBER")
+                .value_parser(clap::value_parser!(i64)),
         )
         .arg(
             Arg::new(options::JOIN_BLANK_LINES)
@@ -244,7 +245,8 @@ pub fn uu_app() -> Command {
                 .short('v')
                 .long(options::STARTING_LINE_NUMBER)
                 .help("first line number on each logical page")
-                .value_name("NUMBER"),
+                .value_name("NUMBER")
+                .value_parser(clap::value_parser!(i64)),
         )
         .arg(
             Arg::new(options::NUMBER_WIDTH)
@@ -267,7 +269,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     let line_no_width_initial = line_no_width;
     // Stores the smallest integer with one more digit than line_no, so that
     // when line_no >= line_no_threshold, we need to use one more digit.
-    let mut line_no_threshold = 10u64.pow(line_no_width as u32);
+    let mut line_no_threshold = 10i64.pow(line_no_width as u32);
     let mut empty_line_count: u64 = 0;
     let fill_char = match settings.number_format {
         NumberFormat::RightZero => '0',
@@ -329,7 +331,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
                     if settings.renumber {
                         line_no = settings.starting_line_number;
                         line_no_width = line_no_width_initial;
-                        line_no_threshold = 10u64.pow(line_no_width as u32);
+                        line_no_threshold = 10i64.pow(line_no_width as u32);
                     }
                     &settings.header_numbering
                 }

@@ -1,4 +1,4 @@
-// spell-checker:ignore ninvalid winvalid
+// spell-checker:ignore iinvalid ninvalid vinvalid winvalid
 use crate::common::util::TestScenario;
 
 #[test]
@@ -13,6 +13,7 @@ fn test_stdin_no_newline() {
         .run()
         .stdout_is("     1\tNo Newline\n");
 }
+
 #[test]
 fn test_stdin_newline() {
     new_ucmd!()
@@ -165,5 +166,70 @@ fn test_number_separator() {
             .pipe_in("test")
             .succeeds()
             .stdout_is("     1:-:test\n");
+    }
+}
+
+#[test]
+fn test_starting_line_number() {
+    for arg in ["-v10", "--starting-line-number=10"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("    10\ttest\n");
+    }
+}
+
+#[test]
+fn test_negative_starting_line_number() {
+    for arg in ["-v-10", "--starting-line-number=-10"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("   -10\ttest\n");
+    }
+}
+
+#[test]
+fn test_invalid_starting_line_number() {
+    for arg in ["-vinvalid", "--starting-line-number=invalid"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("invalid value 'invalid'");
+    }
+}
+
+#[test]
+fn test_line_increment() {
+    for arg in ["-i10", "--line-increment=10"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n    11\tb\n");
+    }
+}
+
+#[test]
+fn test_negative_line_increment() {
+    // TODO make this test work with -10
+    for arg in ["-i-1", "--line-increment=-1"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n     0\tb\n");
+    }
+}
+
+#[test]
+fn test_invalid_line_increment() {
+    for arg in ["-iinvalid", "--line-increment=invalid"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("invalid value 'invalid'");
     }
 }
