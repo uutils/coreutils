@@ -1140,6 +1140,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
 
     let mut non_fatal_errors = false;
     let mut seen_sources = HashMap::with_capacity(sources.len());
+    let mut should_hard_linked_files = HashMap::with_capacity(sources.len());
     let mut symlinked_files = HashSet::new();
 
     let progress_bar = if options.progress_bar {
@@ -1159,18 +1160,23 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
 
     for source in sources.iter() {
         let dest = construct_dest_path(source, target, &target_type, options)?;
-        if seen_sources.contains_key(source) {
+        if seen_sources.contains_key(source) && !should_hard_linked_files.contains_key(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
+        } else if let Some(new_source) = should_hard_linked_files.get(source) {
+            std::fs::hard_link(new_source, &dest)?;
+            should_hard_linked_files.remove(source);
         } else if preserve_hard_links && source.is_symlink() && cli_dereference {
             // issue 5031 case
+            // touch a && ln -s a b && mkdir c
             // cp --preserve=links -R -H a b c
 
             let mut original_source = source.read_link()?;
             while original_source.is_symlink() {
                 original_source = original_source.read_link()?;
             }
-            //
+            // unwrap it because the read_link method is successed
+            // so file_name won't be failed
             original_source = original_source.file_name().unwrap().into();
 
             match seen_sources.get(&original_source) {
@@ -1180,7 +1186,20 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                 None => {
                     // TODO: GNU cp can deal with this case
                     // for example:
+                    // touch a && ln -s a b && mkdir c
                     // cp --preserve=links -R -H b a c
+                    if let Err(error) = copy_source(
+                        &progress_bar,
+                        source,
+                        target,
+                        &target_type,
+                        options,
+                        &mut symlinked_files,
+                    ) {
+                        show_error_if_needed(&error);
+                        non_fatal_errors = true;
+                    }
+                    should_hard_linked_files.insert(original_source, dest.clone());
                 }
             }
         } else {

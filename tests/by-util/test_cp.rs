@@ -1369,14 +1369,50 @@ fn test_cp_issue_5031_case_1() {
         .arg("c")
         .succeeds();
 
+    #[cfg(not(any(target_os = "freebsd", target_os = "macos")))]
+    {
+        assert!(at.dir_exists("c"));
+        assert!(at.plus("c").join("a").exists());
+        assert!(at.plus("c").join("b").exists());
+
+        let metadata_a = std_fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std_fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+fn test_cp_issue_5031_case_2() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.symlink_file("a", "b");
+    at.mkdir("c");
+
+    assert!(at.file_exists("a"));
+    assert!(at.symlink_exists("b"));
     assert!(at.dir_exists("c"));
-    assert!(at.plus("c").join("a").exists());
-    assert!(at.plus("c").join("b").exists());
 
-    let metadata_a = std_fs::metadata(at.subdir.join("c").join("a")).unwrap();
-    let metadata_b = std_fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-H")
+        .arg("b")
+        .arg("a")
+        .arg("c")
+        .succeeds();
 
-    assert_eq!(metadata_a.ino(), metadata_b.ino());
+    #[cfg(not(any(target_os = "freebsd", target_os = "macos")))]
+    {
+        assert!(at.dir_exists("c"));
+        assert!(at.plus("c").join("a").exists());
+        assert!(at.plus("c").join("b").exists());
+
+        let metadata_a = std_fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std_fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
 }
 
 #[test]
