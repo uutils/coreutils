@@ -37,7 +37,7 @@ apk update uutils-coreutils
 
 ### Arch
 
-[![Arch package](https://repology.org/badge/version-for-repo/arch/uutils-coreutils.svg)](https://archlinux.org/packages/community/x86_64/uutils-coreutils/)
+[![Arch package](https://repology.org/badge/version-for-repo/arch/uutils-coreutils.svg)](https://archlinux.org/packages/extra/x86_64/uutils-coreutils/)
 
 ```shell
 pacman -S uutils-coreutils
