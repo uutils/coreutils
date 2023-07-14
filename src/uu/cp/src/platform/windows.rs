@@ -84,7 +84,7 @@ fn duplicate_extents(source: &Path, dest: &Path) -> std::io::Result<()> {
             null(),
             0,
             &mut integrity_info as *mut _ as _,
-            size_of_val(&integrety_info).try_into().unwrap(),
+            size_of_val(&integrity_info).try_into().unwrap(),
             null_mut(),
             null_mut(),
         ) {
