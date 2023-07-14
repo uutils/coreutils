@@ -1,6 +1,6 @@
 [package]
 name = "uu_fmt"
-version = "0.0.19"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "fmt ~ (uutils) reformat each paragraph of input"

@@ -1,6 +1,6 @@
 [package]
 name = "uu_factor"
-version = "0.0.19"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "factor ~ (uutils) display the prime factors of each NUMBER"
