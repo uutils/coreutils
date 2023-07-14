@@ -575,7 +575,7 @@ mod tests {
     }
     #[test]
     fn test_options_correct_defaults() {
-        let opts: HeadOptions = Default::default();
+        let opts = HeadOptions::default();
 
         assert!(!opts.verbose);
         assert!(!opts.quiet);

@@ -746,7 +746,7 @@ mod tests {
 
         #[test]
         fn test_remote_included() {
-            let opt = Default::default();
+            let opt = Options::default();
             let m = mount_info("ext4", "/mnt/foo", true, false);
             assert!(is_included(&m, &opt));
         }
@@ -773,7 +773,7 @@ mod tests {
 
         #[test]
         fn test_dummy_excluded() {
-            let opt = Default::default();
+            let opt = Options::default();
             let m = mount_info("ext4", "/mnt/foo", false, true);
             assert!(!is_included(&m, &opt));
         }
@@ -864,11 +864,11 @@ mod tests {
 
     mod filter_mount_list {
 
-        use crate::filter_mount_list;
+        use crate::{filter_mount_list, Options};
 
         #[test]
         fn test_empty() {
-            let opt = Default::default();
+            let opt = Options::default();
             let mount_infos = vec![];
             assert!(filter_mount_list(mount_infos, &opt).is_empty());
         }

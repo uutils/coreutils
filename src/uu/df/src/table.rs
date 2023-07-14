@@ -513,7 +513,7 @@ mod tests {
 
     #[test]
     fn test_default_header() {
-        let options = Default::default();
+        let options = Options::default();
         assert_eq!(
             Header::get_headers(&options),
             vec!(

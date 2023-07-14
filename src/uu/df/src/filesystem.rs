@@ -158,12 +158,12 @@ mod tests {
         // Create a fake `MountInfo` with the given directory name.
         fn mount_info(mount_dir: &str) -> MountInfo {
             MountInfo {
-                dev_id: Default::default(),
-                dev_name: Default::default(),
-                fs_type: Default::default(),
+                dev_id: String::default(),
+                dev_name: String::default(),
+                fs_type: String::default(),
                 mount_dir: String::from(mount_dir),
-                mount_option: Default::default(),
-                mount_root: Default::default(),
+                mount_option: String::default(),
+                mount_root: String::default(),
                 remote: Default::default(),
                 dummy: Default::default(),
             }
