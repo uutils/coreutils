@@ -149,21 +149,21 @@ impl Default for Settings {
         Self {
             max_unchanged_stats: 5,
             sleep_sec: Duration::from_secs_f32(1.0),
-            follow: Default::default(),
-            mode: Default::default(),
+            follow: Option::default(),
+            mode: FilterMode::default(),
             pid: Default::default(),
             retry: Default::default(),
             use_polling: Default::default(),
             verbose: Default::default(),
             presume_input_pipe: Default::default(),
-            inputs: Default::default(),
+            inputs: Vec::default(),
         }
     }
 }
 
 impl Settings {
     pub fn from_obsolete_args(args: &parse::ObsoleteArgs, name: Option<&OsString>) -> Self {
-        let mut settings: Self = Default::default();
+        let mut settings = Self::default();
         if args.follow {
             settings.follow = if name.is_some() {
                 Some(FollowMode::Name)

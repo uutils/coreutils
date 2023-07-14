@@ -269,7 +269,7 @@ mod tests {
     fn parses_exp() {
         let n = "1";
         assert_eq!(
-            NumInfo::parse(n, &Default::default()),
+            NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
                 NumInfo {
                     exponent: 0,
@@ -280,7 +280,7 @@ mod tests {
         );
         let n = "100";
         assert_eq!(
-            NumInfo::parse(n, &Default::default()),
+            NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
                 NumInfo {
                     exponent: 2,
@@ -308,7 +308,7 @@ mod tests {
         );
         let n = "1,000";
         assert_eq!(
-            NumInfo::parse(n, &Default::default()),
+            NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
                 NumInfo {
                     exponent: 0,
@@ -319,7 +319,7 @@ mod tests {
         );
         let n = "1000.00";
         assert_eq!(
-            NumInfo::parse(n, &Default::default()),
+            NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
                 NumInfo {
                     exponent: 3,
@@ -333,7 +333,7 @@ mod tests {
     fn parses_negative_exp() {
         let n = "0.00005";
         assert_eq!(
-            NumInfo::parse(n, &Default::default()),
+            NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
                 NumInfo {
                     exponent: -5,
@@ -344,7 +344,7 @@ mod tests {
         );
         let n = "00000.00005";
         assert_eq!(
-            NumInfo::parse(n, &Default::default()),
+            NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
                 NumInfo {
                     exponent: -5,
@@ -359,7 +359,7 @@ mod tests {
     fn parses_sign() {
         let n = "5";
         assert_eq!(
-            NumInfo::parse(n, &Default::default()),
+            NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
                 NumInfo {
                     exponent: 0,
@@ -370,7 +370,7 @@ mod tests {
         );
         let n = "-5";
         assert_eq!(
-            NumInfo::parse(n, &Default::default()),
+            NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
                 NumInfo {
                     exponent: 0,
@@ -381,7 +381,7 @@ mod tests {
         );
         let n = "    -5";
         assert_eq!(
-            NumInfo::parse(n, &Default::default()),
+            NumInfo::parse(n, &NumInfoParseSettings::default()),
             (
                 NumInfo {
                     exponent: 0,
@@ -393,8 +393,8 @@ mod tests {
     }
 
     fn test_helper(a: &str, b: &str, expected: Ordering) {
-        let (a_info, a_range) = NumInfo::parse(a, &Default::default());
-        let (b_info, b_range) = NumInfo::parse(b, &Default::default());
+        let (a_info, a_range) = NumInfo::parse(a, &NumInfoParseSettings::default());
+        let (b_info, b_range) = NumInfo::parse(b, &NumInfoParseSettings::default());
         let ordering = numeric_str_cmp(
             (&a[a_range.to_owned()], &a_info),
             (&b[b_range.to_owned()], &b_info),
@@ -469,7 +469,7 @@ mod tests {
     }
     #[test]
     fn single_minus() {
-        let info = NumInfo::parse("-", &Default::default());
+        let info = NumInfo::parse("-", &NumInfoParseSettings::default());
         assert_eq!(
             info,
             (

@@ -498,7 +498,7 @@ mod tests {
 
     fn prog_update_write(n: u128) -> ProgUpdate {
         ProgUpdate {
-            read_stat: Default::default(),
+            read_stat: ReadStat::default(),
             write_stat: WriteStat {
                 bytes_total: n,
                 ..Default::default()
@@ -510,8 +510,8 @@ mod tests {
 
     fn prog_update_duration(duration: Duration) -> ProgUpdate {
         ProgUpdate {
-            read_stat: Default::default(),
-            write_stat: Default::default(),
+            read_stat: ReadStat::default(),
+            write_stat: WriteStat::default(),
             duration,
             complete: false,
         }
@@ -557,8 +557,8 @@ mod tests {
     #[test]
     fn test_prog_update_write_prog_line() {
         let prog_update = ProgUpdate {
-            read_stat: Default::default(),
-            write_stat: Default::default(),
+            read_stat: ReadStat::default(),
+            write_stat: WriteStat::default(),
             duration: Duration::new(1, 0), // one second
             complete: false,
         };
@@ -613,8 +613,8 @@ mod tests {
     #[test]
     fn write_transfer_stats() {
         let prog_update = ProgUpdate {
-            read_stat: Default::default(),
-            write_stat: Default::default(),
+            read_stat: ReadStat::default(),
+            write_stat: WriteStat::default(),
             duration: Duration::new(1, 0), // one second
             complete: false,
         };
@@ -634,8 +634,8 @@ mod tests {
     fn write_final_transfer_stats() {
         // Tests the formatting of the final statistics written after a progress line.
         let prog_update = ProgUpdate {
-            read_stat: Default::default(),
-            write_stat: Default::default(),
+            read_stat: ReadStat::default(),
+            write_stat: WriteStat::default(),
             duration: Duration::new(1, 0), // one second
             complete: false,
         };
