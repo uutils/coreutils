@@ -9,7 +9,7 @@ mod platform {
     pub const DYLIB_EXT: &str = ".so";
 }
 
-#[cfg(any(target_vendor = "apple"))]
+#[cfg(target_vendor = "apple")]
 mod platform {
     pub const DYLIB_EXT: &str = ".dylib";
 }

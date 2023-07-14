@@ -10,7 +10,7 @@ use super::float_common::{get_primitive_dec, primitive_to_str_common, FloatAnaly
 pub struct Floatf;
 impl Floatf {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 impl Formatter for Floatf {

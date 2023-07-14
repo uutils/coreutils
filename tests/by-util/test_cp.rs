@@ -1337,7 +1337,7 @@ fn test_cp_preserve_all_context_fails_on_non_selinux() {
 }
 
 #[test]
-#[cfg(any(target_os = "android"))]
+#[cfg(target_os = "android")]
 fn test_cp_preserve_xattr_fails_on_android() {
     // Because of the SELinux extended attributes used on Android, trying to copy extended
     // attributes has to fail in this case, since we specify `--preserve=xattr` and this puts it
@@ -2768,7 +2768,7 @@ fn test_same_file_force() {
 }
 
 /// Test that copying file to itself with forced backup succeeds.
-#[cfg(all(not(windows)))]
+#[cfg(not(windows))]
 #[test]
 fn test_same_file_force_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
