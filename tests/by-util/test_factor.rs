@@ -233,7 +233,7 @@ fn test_random_big() {
         // to generate an even split of this range, generate n-1 random elements
         // in the range, add the desired total value to the end, sort this list,
         // and then compute the sequential differences.
-        let mut f_bits = Vec::new();
+        let mut f_bits = Vec::with_capacity(n_factors);
         for _ in 0..n_factors {
             f_bits.push(extra_range.sample(&mut rng));
         }
@@ -256,7 +256,7 @@ fn test_random_big() {
 
         let mut n_bits = 0;
         let mut product = 1_u64;
-        let mut factors = Vec::new();
+        let mut factors = Vec::with_capacity(f_bits.len());
         for bit in f_bits {
             assert!(bit < 37);
             n_bits += 14 + bit;
