@@ -290,7 +290,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::SHOW_NONPRINTING_TABS)
                 .short('t')
-                .long(options::SHOW_NONPRINTING_TABS)
                 .help("equivalent to -vT")
                 .action(ArgAction::SetTrue),
         )
