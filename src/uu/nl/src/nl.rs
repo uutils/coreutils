@@ -263,13 +263,8 @@ pub fn uu_app() -> Command {
 fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     let regexp: regex::Regex = regex::Regex::new(r".?").unwrap();
     let mut line_no = settings.starting_line_number;
-    // The current line number's width as a string. Using to_string is inefficient
-    // but since we only do it once, it should not hurt.
-    let mut line_no_width = line_no.to_string().len();
+    let mut line_no_width = line_no.len();
     let line_no_width_initial = line_no_width;
-    // Stores the smallest integer with one more digit than line_no, so that
-    // when line_no >= line_no_threshold, we need to use one more digit.
-    let mut line_no_threshold = 10i64.pow(line_no_width as u32);
     let mut empty_line_count: u64 = 0;
     let fill_char = match settings.number_format {
         NumberFormat::RightZero => '0',
@@ -331,7 +326,6 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
                     if settings.renumber {
                         line_no = settings.starting_line_number;
                         line_no_width = line_no_width_initial;
-                        line_no_threshold = 10i64.pow(line_no_width as u32);
                     }
                     &settings.header_numbering
                 }
@@ -400,11 +394,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
         // Now update the variables for the (potential) next
         // line.
         line_no += settings.line_increment;
-        while line_no >= line_no_threshold {
-            // The line number just got longer.
-            line_no_threshold *= 10;
-            line_no_width += 1;
-        }
+        line_no_width = line_no.len();
     }
     Ok(())
 }
@@ -423,4 +413,40 @@ fn pass_none(_: &str, _: &regex::Regex) -> bool {
 
 fn pass_all(_: &str, _: &regex::Regex) -> bool {
     true
+}
+
+trait Length {
+    fn len(&self) -> usize;
+}
+
+impl Length for i64 {
+    // Returns the length in `char`s.
+    fn len(&self) -> usize {
+        if *self == 0 {
+            return 1;
+        };
+
+        let sign_len = if *self < 0 { 1 } else { 0 };
+        (0..).take_while(|i| 10i64.pow(*i) <= self.abs()).count() + sign_len
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_len() {
+        assert_eq!((-1).len(), 2);
+        assert_eq!((-10).len(), 3);
+        assert_eq!((-100).len(), 4);
+        assert_eq!((-1000).len(), 5);
+
+        assert_eq!(0.len(), 1);
+
+        assert_eq!(1.len(), 1);
+        assert_eq!(10.len(), 2);
+        assert_eq!(100.len(), 3);
+        assert_eq!(1000.len(), 4);
+    }
 }
