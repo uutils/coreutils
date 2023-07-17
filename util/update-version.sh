@@ -47,4 +47,3 @@ sed -i -e "s|uucore = { version=\">=$FROM\",|uucore = { version=\">=$TO\",|" $PR
 # Update crates using uucore_procs
 #shellcheck disable=SC2086
 sed -i -e "s|uucore_procs = { version=\">=$FROM\",|uucore_procs = { version=\">=$TO\",|" $PROGS
-
