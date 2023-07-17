@@ -145,7 +145,7 @@ fn test_stdin_redirect_offset() {
 }
 
 #[test]
-#[cfg(all(not(target_vendor = "apple")))] // FIXME: for currently not working platforms
+#[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_offset2() {
     // like test_stdin_redirect_offset but with multiple files
 

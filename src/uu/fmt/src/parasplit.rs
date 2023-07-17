@@ -598,7 +598,7 @@ impl<'a> Iterator for WordSplit<'a> {
             self.prev_punct && (before_tab.is_some() || word_start_relative > 1);
 
         // now record whether this word ends in punctuation
-        self.prev_punct = match self.string[..self.position].chars().rev().next() {
+        self.prev_punct = match self.string[..self.position].chars().next_back() {
             Some(ch) => WordSplit::is_punctuation(ch),
             _ => panic!("fatal: expected word not to be empty"),
         };

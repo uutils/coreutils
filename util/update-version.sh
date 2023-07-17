@@ -14,8 +14,8 @@
 # 7) Run util/publish.sh --do-it
 # 8) In some cases, you might have to fix dependencies and run import
 
-FROM="0.0.18"
-TO="0.0.19"
+FROM="0.0.19"
+TO="0.0.20"
 
 PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml Cargo.toml)
 
@@ -47,4 +47,3 @@ sed -i -e "s|uucore = { version=\">=$FROM\",|uucore = { version=\">=$TO\",|" $PR
 # Update crates using uucore_procs
 #shellcheck disable=SC2086
 sed -i -e "s|uucore_procs = { version=\">=$FROM\",|uucore_procs = { version=\">=$TO\",|" $PROGS
-

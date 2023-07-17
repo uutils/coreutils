@@ -1,6 +1,6 @@
 [package]
 name = "uu_basenc"
-version = "0.0.19"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "basenc ~ (uutils) decode/encode input"
