@@ -1416,6 +1416,10 @@ fn test_cp_issue_5031_case_2() {
 }
 
 #[test]
+// android will
+// stderr = cp: Permission denied (os error 13)
+// panicked at Command was expected to succeed.
+#[cfg(not(target_os = "android"))]
 fn test_cp_issue_5031_case_3() {
     let (at, mut ucmd) = at_and_ucmd!();
 
