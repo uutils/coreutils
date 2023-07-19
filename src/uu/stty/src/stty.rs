@@ -124,6 +124,10 @@ impl<'a> Options<'a> {
     }
 }
 
+struct Context {
+    termios: Termios,
+}
+
 // Needs to be repr(C) because we pass it to the ioctl calls.
 #[repr(C)]
 #[derive(Default, Debug)]
@@ -181,11 +185,13 @@ fn stty(opts: &Options) -> UResult<()> {
     }
 
     // TODO: Figure out the right error message for when tcgetattr fails
-    let mut termios = tcgetattr(opts.file).expect("Could not get terminal attributes");
+    let termios = tcgetattr(opts.file).expect("Could not get terminal attributes");
 
     if let Some(settings) = &opts.settings {
+        let mut ctx = Context { termios };
+
         for setting in settings {
-            if let ControlFlow::Break(false) = apply_setting(&mut termios, setting) {
+            if let ControlFlow::Break(false) = apply_setting(&mut ctx, setting) {
                 return Err(USimpleError::new(
                     1,
                     format!("invalid argument '{setting}'"),
@@ -193,7 +199,7 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
 
-        tcsetattr(opts.file, nix::sys::termios::SetArg::TCSANOW, &termios)
+        tcsetattr(opts.file, nix::sys::termios::SetArg::TCSANOW, &ctx.termios)
             .expect("Could not write terminal attributes");
     } else {
         print_settings(&termios, opts).expect("TODO: make proper error here from nix error");
@@ -367,17 +373,17 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
 ///
 /// The value inside the `Break` variant of the `ControlFlow` indicates whether
 /// the setting has been applied.
-fn apply_setting(termios: &mut Termios, s: &str) -> ControlFlow<bool> {
-    apply_baud_rate_flag(termios, s)?;
+fn apply_setting(ctx: &mut Context, s: &str) -> ControlFlow<bool> {
+    apply_baud_rate_flag(ctx, s)?;
 
     let (remove, name) = match s.strip_prefix('-') {
         Some(s) => (true, s),
         None => (false, s),
     };
-    apply_flag(termios, CONTROL_FLAGS, name, remove)?;
-    apply_flag(termios, INPUT_FLAGS, name, remove)?;
-    apply_flag(termios, OUTPUT_FLAGS, name, remove)?;
-    apply_flag(termios, LOCAL_FLAGS, name, remove)?;
+    apply_flag(ctx, CONTROL_FLAGS, name, remove)?;
+    apply_flag(ctx, INPUT_FLAGS, name, remove)?;
+    apply_flag(ctx, OUTPUT_FLAGS, name, remove)?;
+    apply_flag(ctx, LOCAL_FLAGS, name, remove)?;
     ControlFlow::Break(false)
 }
 
@@ -386,7 +392,7 @@ fn apply_setting(termios: &mut Termios, s: &str) -> ControlFlow<bool> {
 /// The value inside the `Break` variant of the `ControlFlow` indicates whether
 /// the setting has been applied.
 fn apply_flag<T: TermiosFlag>(
-    termios: &mut Termios,
+    ctx: &mut Context,
     flags: &[Flag<T>],
     input: &str,
     remove: bool,
@@ -403,16 +409,16 @@ fn apply_flag<T: TermiosFlag>(
             }
             // If there is a group, the bits for that group should be cleared before applying the flag
             if let Some(group) = group {
-                group.apply(termios, false);
+                group.apply(&mut ctx.termios, false);
             }
-            flag.apply(termios, !remove);
+            flag.apply(&mut ctx.termios, !remove);
             return ControlFlow::Break(true);
         }
     }
     ControlFlow::Continue(())
 }
 
-fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool> {
+fn apply_baud_rate_flag(ctx: &mut Context, input: &str) -> ControlFlow<bool> {
     // BSDs use a u32 for the baud rate, so any decimal number applies.
     #[cfg(any(
         target_os = "freebsd",
@@ -423,7 +429,7 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
         target_os = "openbsd"
     ))]
     if let Ok(n) = input.parse::<u32>() {
-        cfsetospeed(termios, n).expect("Failed to set baud rate");
+        cfsetospeed(&mut ctx.termios, n).expect("Failed to set baud rate");
         return ControlFlow::Break(true);
     }
 
@@ -438,7 +444,7 @@ fn apply_baud_rate_flag(termios: &mut Termios, input: &str) -> ControlFlow<bool>
     )))]
     for (text, baud_rate) in BAUD_RATES {
         if *text == input {
-            cfsetospeed(termios, *baud_rate).expect("Failed to set baud rate");
+            cfsetospeed(&mut ctx.termios, *baud_rate).expect("Failed to set baud rate");
             return ControlFlow::Break(true);
         }
     }
