@@ -3,7 +3,7 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
-// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime
+// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsadrain tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime
 
 mod flags;
 
@@ -126,6 +126,7 @@ impl<'a> Options<'a> {
 
 struct Context {
     termios: Termios,
+    set_arg: nix::sys::termios::SetArg,
     fd: RawFd,
 }
 
@@ -191,6 +192,7 @@ fn stty(opts: &Options) -> UResult<()> {
     if let Some(settings) = &opts.settings {
         let mut ctx = Context {
             termios,
+            set_arg: nix::sys::termios::SetArg::TCSADRAIN,
             fd: opts.file,
         };
 
@@ -203,7 +205,7 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
 
-        tcsetattr(opts.file, nix::sys::termios::SetArg::TCSANOW, &ctx.termios)
+        tcsetattr(opts.file, ctx.set_arg, &ctx.termios)
             .expect("Could not write terminal attributes");
     } else {
         print_settings(&termios, opts).expect("TODO: make proper error here from nix error");
@@ -385,6 +387,7 @@ fn apply_setting(ctx: &mut Context, s: &str) -> ControlFlow<bool> {
         Some(s) => (true, s),
         None => (false, s),
     };
+    apply_drain_flag(ctx, name, remove)?;
     apply_flag(ctx, CONTROL_FLAGS, name, remove)?;
     apply_flag(ctx, INPUT_FLAGS, name, remove)?;
     apply_flag(ctx, OUTPUT_FLAGS, name, remove)?;
@@ -419,6 +422,18 @@ fn apply_flag<T: TermiosFlag>(
             flag.apply(&mut ctx.termios, !remove);
             return ControlFlow::Break(true);
         }
+    }
+    ControlFlow::Continue(())
+}
+
+fn apply_drain_flag(ctx: &mut Context, input: &str, remove: bool) -> ControlFlow<bool> {
+    if input == "drain" {
+        if remove {
+            ctx.set_arg = nix::sys::termios::SetArg::TCSANOW;
+        } else {
+            ctx.set_arg = nix::sys::termios::SetArg::TCSADRAIN;
+        }
+        return ControlFlow::Break(true);
     }
     ControlFlow::Continue(())
 }
