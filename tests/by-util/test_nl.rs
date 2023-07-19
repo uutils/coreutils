@@ -115,6 +115,18 @@ fn test_number_format_rz() {
 }
 
 #[test]
+fn test_number_format_rz_with_negative_line_number() {
+    for arg in ["-nrz", "--number-format=rz"] {
+        new_ucmd!()
+            .arg(arg)
+            .arg("-v-12")
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("-00012\ttest\n");
+    }
+}
+
+#[test]
 fn test_invalid_number_format() {
     for arg in ["-ninvalid", "--number-format=invalid"] {
         new_ucmd!()
