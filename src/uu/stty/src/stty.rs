@@ -235,7 +235,7 @@ fn get_baud_rate_string(termios: &Termios) -> String {
     }
 }
 
-fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
+fn print_speed_size_and_line_discipline(termios: &Termios, opts: &Options) -> nix::Result<()> {
     let baud_rate = get_baud_rate_string(termios);
     print!("speed {baud_rate} baud; ");
 
@@ -321,7 +321,7 @@ fn print_settings(termios: &Termios, opts: &Options) -> nix::Result<()> {
     if opts.save {
         print_in_save_format(termios);
     } else {
-        print_terminal_size(termios, opts)?;
+        print_speed_size_and_line_discipline(termios, opts)?;
         print_control_chars(termios, opts)?;
         print_flags(termios, opts, CONTROL_FLAGS);
         print_flags(termios, opts, INPUT_FLAGS);
