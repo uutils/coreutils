@@ -126,6 +126,7 @@ impl<'a> Options<'a> {
 
 struct Context {
     termios: Termios,
+    fd: RawFd,
 }
 
 // Needs to be repr(C) because we pass it to the ioctl calls.
@@ -188,7 +189,10 @@ fn stty(opts: &Options) -> UResult<()> {
     let termios = tcgetattr(opts.file).expect("Could not get terminal attributes");
 
     if let Some(settings) = &opts.settings {
-        let mut ctx = Context { termios };
+        let mut ctx = Context {
+            termios,
+            fd: opts.file,
+        };
 
         for setting in settings {
             if let ControlFlow::Break(false) = apply_setting(&mut ctx, setting) {
@@ -375,6 +379,7 @@ fn print_flags<T: TermiosFlag>(termios: &Termios, opts: &Options, flags: &[Flag<
 /// the setting has been applied.
 fn apply_setting(ctx: &mut Context, s: &str) -> ControlFlow<bool> {
     apply_baud_rate_flag(ctx, s)?;
+    apply_printing_flag(ctx, s)?;
 
     let (remove, name) = match s.strip_prefix('-') {
         Some(s) => (true, s),
@@ -449,6 +454,21 @@ fn apply_baud_rate_flag(ctx: &mut Context, input: &str) -> ControlFlow<bool> {
         }
     }
     ControlFlow::Continue(())
+}
+
+fn apply_printing_flag(ctx: &Context, input: &str) -> ControlFlow<bool> {
+    match input {
+        "speed" => {
+            println!("{}", get_baud_rate_string(&ctx.termios));
+            ControlFlow::Break(true)
+        }
+        "size" => {
+            let size = get_term_size(ctx.fd).expect("Failed to get terminal size");
+            println!("{} {}", size.rows, size.columns);
+            ControlFlow::Break(true)
+        }
+        _ => ControlFlow::Continue(()),
+    }
 }
 
 pub fn uu_app() -> Command {
