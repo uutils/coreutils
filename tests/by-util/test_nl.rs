@@ -213,14 +213,25 @@ fn test_line_increment() {
 }
 
 #[test]
-fn test_negative_line_increment() {
-    // TODO make this test work with -10
-    for arg in ["-i-1", "--line-increment=-1"] {
+fn test_line_increment_from_negative_starting_line() {
+    for arg in ["-i10", "--line-increment=10"] {
         new_ucmd!()
             .arg(arg)
-            .pipe_in("a\nb")
+            .arg("-v-19")
+            .pipe_in("a\nb\nc")
             .succeeds()
-            .stdout_is("     1\ta\n     0\tb\n");
+            .stdout_is("   -19\ta\n    -9\tb\n     1\tc\n");
+    }
+}
+
+#[test]
+fn test_negative_line_increment() {
+    for arg in ["-i-10", "--line-increment=-10"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nb\nc")
+            .succeeds()
+            .stdout_is("     1\ta\n    -9\tb\n   -19\tc\n");
     }
 }
 
