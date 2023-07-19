@@ -1350,6 +1350,10 @@ fn test_cp_preserve_xattr_fails_on_android() {
 }
 
 #[test]
+// android will
+// stderr = cp: Permission denied (os error 13)
+// panicked at Command was expected to succeed.
+#[cfg(not(target_os = "android"))]
 fn test_cp_issue_5031_case_1() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1383,6 +1387,10 @@ fn test_cp_issue_5031_case_1() {
 }
 
 #[test]
+// android will
+// stderr = cp: Permission denied (os error 13)
+// panicked at Command was expected to succeed.
+#[cfg(not(target_os = "android"))]
 fn test_cp_issue_5031_case_2() {
     let (at, mut ucmd) = at_and_ucmd!();
 
