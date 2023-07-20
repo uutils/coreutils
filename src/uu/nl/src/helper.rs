@@ -5,17 +5,15 @@ use crate::options;
 // parse_style parses a style string into a NumberingStyle.
 fn parse_style(chars: &[char]) -> Result<crate::NumberingStyle, String> {
     if chars.len() == 1 && chars[0] == 'a' {
-        Ok(crate::NumberingStyle::NumberForAll)
+        Ok(crate::NumberingStyle::All)
     } else if chars.len() == 1 && chars[0] == 't' {
-        Ok(crate::NumberingStyle::NumberForNonEmpty)
+        Ok(crate::NumberingStyle::NonEmpty)
     } else if chars.len() == 1 && chars[0] == 'n' {
-        Ok(crate::NumberingStyle::NumberForNone)
+        Ok(crate::NumberingStyle::None)
     } else if chars.len() > 1 && chars[0] == 'p' {
         let s: String = chars[1..].iter().cloned().collect();
         match regex::Regex::new(&s) {
-            Ok(re) => Ok(crate::NumberingStyle::NumberForRegularExpression(Box::new(
-                re,
-            ))),
+            Ok(re) => Ok(crate::NumberingStyle::Regex(Box::new(re))),
             Err(_) => Err(String::from("Illegal regular expression")),
         }
     } else {
