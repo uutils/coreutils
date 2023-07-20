@@ -485,7 +485,7 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
+                return Err(io::Error::new(io::ErrorKind::Other, "Directory with the same name already exists at destination"));
             }
         }
     }
