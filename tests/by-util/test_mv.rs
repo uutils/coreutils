@@ -1181,6 +1181,33 @@ fn test_mv_overwrite_nonempty_dir() {
 }
 
 #[test]
+fn test_mv_nonempty_directory_exists() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "test_mv_nonempty_directory_exists_a";
+    let dir_b = "test_mv_nonempty_directory_exists_b";
+    let dummy = "test_mv_nonempty_directory_exists_a/file";
+    let dummy2 = "test_mv_nonempty_directory_exists_b/file";
+    at.mkdir(dir_a);
+    at.mkdir(dir_b);
+    at.touch(dummy);
+    at.touch(dummy2);
+
+    // Not same error as GNU; the error message is custom.
+    // GNU: "mv: Couldn't move (Directory not empty; from=a; to=b)
+    // Current: "mv: Couldn't move {} to {}: A directory exists with the same name at destination"
+
+    // Verbose output for the move should not be shown on failure
+    let result = ucmd.arg("-vT").arg(dir_a).arg(dir_b).fails();
+    result.no_stdout();
+    assert!(!result.stderr_str().is_empty());
+
+    assert!(at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+    assert!(at.file_exists(dummy));
+    assert!(at.file_exists(dummy2));
+}
+
+#[test]
 fn test_mv_backup_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir_a = "test_mv_backup_dir_dir_a";
