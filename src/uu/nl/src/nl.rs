@@ -216,7 +216,8 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::JOIN_BLANK_LINES)
                 .help("group of NUMBER empty lines counted as one")
-                .value_name("NUMBER"),
+                .value_name("NUMBER")
+                .value_parser(clap::value_parser!(u64)),
         )
         .arg(
             Arg::new(options::NUMBER_FORMAT)
