@@ -127,7 +127,7 @@ where
     I: Iterator<Item = (usize, io::Result<String>)>,
 {
     // split the file based on patterns
-    for pattern in patterns.into_iter() {
+    for pattern in patterns {
         let pattern_as_str = pattern.to_string();
         let is_skip = matches!(pattern, patterns::Pattern::SkipToMatch(_, _, _));
         match pattern {
