@@ -288,7 +288,7 @@ indicatif = "0.17"
 is-terminal = "0.4.7"
 itertools = "0.11.0"
 libc = "0.2.147"
-lscolors = { version = "0.14.0", default-features = false, features = [
+lscolors = { version = "0.15.0", default-features = false, features = [
   "nu-ansi-term",
 ] }
 memchr = "2"
