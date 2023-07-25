@@ -299,7 +299,7 @@ fn copy_direntry(
                 Err(e) => return Err(e),
             }
         }
-        seen_sources.insert(source_relative, local_to_target);
+        seen_sources.insert(source_relative.file_name().unwrap().into(), local_to_target);
     }
 
     // In any other case, there is nothing to do, so we just return to
