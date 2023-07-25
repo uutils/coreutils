@@ -1500,6 +1500,44 @@ fn test_cp_issue_5031_case_4() {
 }
 
 #[test]
+// android will
+// stderr = cp: Permission denied (os error 13)
+// panicked at Command was expected to succeed.
+#[cfg(not(target_os = "android"))]
+fn test_cp_issue_5031_case_5() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("c");
+    at.mkdir("c/d");
+    at.touch("c/d/a");
+    at.symlink_file("c/d/a", "c/d/b");
+
+    assert!(at.dir_exists("c"));
+    assert!(at.dir_exists("c/d"));
+    assert!(at.file_exists("c/d/a"));
+    assert!(at.symlink_exists("c/d/b"));
+
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-L")
+        .arg("c")
+        .arg("e")
+        .succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        assert!(at.dir_exists("e"));
+        assert!(at.plus("e").join("d").join("a").exists());
+        assert!(at.plus("e").join("d").join("b").exists());
+
+        let metadata_a = std::fs::metadata(at.subdir.join("e").join("d").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("e").join("d").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
