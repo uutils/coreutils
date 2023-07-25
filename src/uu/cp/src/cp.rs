@@ -1134,7 +1134,6 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     verify_target_type(target, &target_type)?;
 
     let preserve_hard_links = options.preserve_hard_links();
-    let cli_dereference = options.cli_dereference;
 
     let mut hard_links: Vec<(String, u64)> = vec![];
 
@@ -1160,56 +1159,10 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
 
     for source in sources.iter() {
         let dest = construct_dest_path(source, target, &target_type, options)?;
+
         if seen_sources.contains_key(source) && !should_hard_linked_files.contains_key(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
-        } else if let Some(new_source) = should_hard_linked_files.get(source) {
-            std::fs::hard_link(new_source, &dest)?;
-        } else if preserve_hard_links && source.is_symlink() && cli_dereference {
-            // issue 5031 case
-            // touch a && ln -s a b && mkdir c
-            // cp --preserve=links -R -H a b c
-
-            let mut original_source = source.read_link()?;
-            while original_source.is_symlink() {
-                original_source = original_source.read_link()?;
-            }
-            // unwrap it because the read_link method above is ok
-            // so this file_name won't be failed
-            original_source = original_source.file_name().unwrap().into();
-
-            match seen_sources.get(&original_source) {
-                Some(new_source) => {
-                    std::fs::hard_link(new_source, &dest)?;
-                }
-                None => {
-                    match should_hard_linked_files.get(&original_source) {
-                        Some(new_source) => {
-                            // GNU cp can deal with this case:
-                            // touch a && ln -s a b && ln -s b c && mkdir d
-                            // cp --preserve=links -R -H b c d
-                            std::fs::hard_link(new_source, &dest)?;
-                        }
-                        None => {
-                            // GNU cp can deal with this case:
-                            // touch a && ln -s a b && mkdir c
-                            // cp --preserve=links -R -H b a c
-                            if let Err(error) = copy_source(
-                                &progress_bar,
-                                source,
-                                target,
-                                &target_type,
-                                options,
-                                &mut symlinked_files,
-                            ) {
-                                show_error_if_needed(&error);
-                                non_fatal_errors = true;
-                            }
-                            should_hard_linked_files.insert(original_source, dest.clone());
-                        }
-                    }
-                }
-            }
         } else {
             let found_hard_link = if preserve_hard_links && !source.is_dir() {
                 preserve_hardlinks(&mut hard_links, source, &dest)?
@@ -1224,14 +1177,17 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                     &target_type,
                     options,
                     &mut symlinked_files,
+                    &mut seen_sources,
+                    &mut should_hard_linked_files,
                 ) {
                     show_error_if_needed(&error);
                     non_fatal_errors = true;
                 }
             }
+            seen_sources.insert(source.to_path_buf(), dest);
         }
-        seen_sources.insert(source, dest);
     }
+
     if non_fatal_errors {
         Err(Error::NotAllFilesCopied)
     } else {
@@ -1277,11 +1233,22 @@ fn copy_source(
     target_type: &TargetType,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    seen_sources: &mut HashMap<PathBuf, PathBuf>,
+    should_hard_linked_files: &mut HashMap<PathBuf, PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
     if source_path.is_dir() {
         // Copy as directory
-        copy_directory(progress_bar, source, target, options, symlinked_files, true)
+        copy_directory(
+            progress_bar,
+            source,
+            target,
+            options,
+            symlinked_files,
+            seen_sources,
+            should_hard_linked_files,
+            true,
+        )
     } else {
         // Copy as file
         let dest = construct_dest_path(source_path, target, target_type, options)?;
@@ -1291,6 +1258,8 @@ fn copy_source(
             dest.as_path(),
             options,
             symlinked_files,
+            seen_sources,
+            should_hard_linked_files,
             true,
         );
         if options.parents {
@@ -1625,6 +1594,8 @@ fn copy_file(
     dest: &Path,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    seen_sources: &mut HashMap<PathBuf, PathBuf>,
+    should_hard_linked_files: &mut HashMap<PathBuf, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     if (options.update == UpdateMode::ReplaceIfOlder || options.update == UpdateMode::ReplaceNone)
@@ -1633,6 +1604,50 @@ fn copy_file(
         // `cp -i --update old new` when `new` exists doesn't copy anything
         // and exit with 0
         return Ok(());
+    }
+
+    // issue 5031 case
+    // touch a && ln -s a b && mkdir c
+    // cp --preserve=links -R -H a b c
+    if let Some(base_name) = source.file_name() {
+        let base_source: PathBuf = base_name.into();
+        if let Some(new_source) = should_hard_linked_files.get(&base_source) {
+            std::fs::hard_link(new_source, &dest)?;
+            return Ok(());
+        }
+    }
+    if source.is_symlink()
+        && options.dereference(source_in_command_line)
+        && options.preserve_hard_links()
+    {
+        let mut original_source = source.read_link()?;
+        while original_source.is_symlink() {
+            original_source = original_source.read_link()?;
+        }
+        // unwrap it because the read_link method above is ok
+        // so this file_name won't be failed
+        original_source = original_source.file_name().unwrap().into();
+
+        match seen_sources.get(&original_source) {
+            Some(new_source) => {
+                std::fs::hard_link(new_source, &dest)?;
+                return Ok(());
+            }
+            None => {
+                match should_hard_linked_files.get(&original_source) {
+                    Some(new_source) => {
+                        // GNU cp can deal with this case:
+                        // touch a && ln -s a b && ln -s b c && mkdir d
+                        // cp --preserve=links -R -H b c d
+                        std::fs::hard_link(new_source, &dest)?;
+                        return Ok(());
+                    }
+                    None => {
+                        should_hard_linked_files.insert(original_source, dest.to_path_buf());
+                    }
+                }
+            }
+        }
     }
 
     // Fail if dest is a dangling symlink or a symlink this program created previously

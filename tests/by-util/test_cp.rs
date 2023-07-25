@@ -1464,6 +1464,42 @@ fn test_cp_issue_5031_case_3() {
 }
 
 #[test]
+// android will
+// stderr = cp: Permission denied (os error 13)
+// panicked at Command was expected to succeed.
+#[cfg(not(target_os = "android"))]
+fn test_cp_issue_5031_case_4() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.touch("d/a");
+    at.symlink_file("d/a", "d/b");
+
+    assert!(at.dir_exists("d"));
+    assert!(at.file_exists("d/a"));
+    assert!(at.symlink_exists("d/b"));
+
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-L")
+        .arg("d")
+        .arg("c")
+        .succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        assert!(at.dir_exists("c"));
+        assert!(at.plus("c").join("a").exists());
+        assert!(at.plus("c").join("b").exists());
+
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]

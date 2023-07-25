@@ -8,7 +8,7 @@
 //! See the [`copy_directory`] function for more information.
 #[cfg(windows)]
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io;
@@ -201,6 +201,8 @@ fn copy_direntry(
     symlinked_files: &mut HashSet<FileInformation>,
     preserve_hard_links: bool,
     hard_links: &mut Vec<(String, u64)>,
+    seen_sources: &mut HashMap<PathBuf, PathBuf>,
+    should_hard_linked_files: &mut HashMap<PathBuf, PathBuf>,
 ) -> CopyResult<()> {
     let Entry {
         source_absolute,
@@ -249,6 +251,8 @@ fn copy_direntry(
                     local_to_target.as_path(),
                     options,
                     symlinked_files,
+                    seen_sources,
+                    should_hard_linked_files,
                     false,
                 ) {
                     Ok(_) => Ok(()),
@@ -277,6 +281,8 @@ fn copy_direntry(
                 local_to_target.as_path(),
                 options,
                 symlinked_files,
+                seen_sources,
+                should_hard_linked_files,
                 false,
             ) {
                 Ok(_) => {}
@@ -292,6 +298,7 @@ fn copy_direntry(
                 Err(e) => return Err(e),
             }
         }
+        seen_sources.insert(source_relative, local_to_target);
     }
 
     // In any other case, there is nothing to do, so we just return to
@@ -310,6 +317,8 @@ pub(crate) fn copy_directory(
     target: &TargetSlice,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    seen_sources: &mut HashMap<PathBuf, PathBuf>,
+    should_hard_linked_files: &mut HashMap<PathBuf, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     if !options.recursive {
@@ -324,6 +333,8 @@ pub(crate) fn copy_directory(
             target,
             options,
             symlinked_files,
+            seen_sources,
+            should_hard_linked_files,
             source_in_command_line,
         );
     }
@@ -398,6 +409,8 @@ pub(crate) fn copy_directory(
                     symlinked_files,
                     preserve_hard_links,
                     &mut hard_links,
+                    seen_sources,
+                    should_hard_linked_files,
                 )?;
             }
             // Print an error message, but continue traversing the directory.
