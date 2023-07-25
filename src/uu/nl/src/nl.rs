@@ -43,9 +43,9 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            header_numbering: NumberingStyle::NumberForNone,
-            body_numbering: NumberingStyle::NumberForAll,
-            footer_numbering: NumberingStyle::NumberForNone,
+            header_numbering: NumberingStyle::None,
+            body_numbering: NumberingStyle::All,
+            footer_numbering: NumberingStyle::None,
             section_delimiter: ['\\', ':'],
             starting_line_number: 1,
             line_increment: 1,
@@ -64,12 +64,11 @@ impl Default for Settings {
 // 2. Number only nonempty lines
 // 3. Don't number any lines at all
 // 4. Number all lines that match a basic regular expression.
-#[allow(clippy::enum_variant_names)]
 enum NumberingStyle {
-    NumberForAll,
-    NumberForNonEmpty,
-    NumberForNone,
-    NumberForRegularExpression(Box<regex::Regex>),
+    All,
+    NonEmpty,
+    None,
+    Regex(Box<regex::Regex>),
 }
 
 // NumberFormat specifies how line numbers are output within their allocated
@@ -279,7 +278,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     let mut empty_line_count: u64 = 0;
     // Initially, we use the body's line counting settings
     let mut regex_filter = match settings.body_numbering {
-        NumberingStyle::NumberForRegularExpression(ref re) => re,
+        NumberingStyle::Regex(ref re) => re,
         _ => &regexp,
     };
     let mut line_filter: fn(&str, &regex::Regex) -> bool = pass_regex;
@@ -340,16 +339,16 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
                 // a catch-all here.
                 _ => &settings.body_numbering,
             } {
-                NumberingStyle::NumberForAll => {
+                NumberingStyle::All => {
                     line_filter = pass_all;
                 }
-                NumberingStyle::NumberForNonEmpty => {
+                NumberingStyle::NonEmpty => {
                     line_filter = pass_nonempty;
                 }
-                NumberingStyle::NumberForNone => {
+                NumberingStyle::None => {
                     line_filter = pass_none;
                 }
-                NumberingStyle::NumberForRegularExpression(ref re) => {
+                NumberingStyle::Regex(ref re) => {
                     line_filter = pass_regex;
                     regex_filter = re;
                 }
