@@ -386,5 +386,6 @@ endif
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX),$(PROGS))
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX),$(PROGS))
 	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
+	rm -f $(addprefix $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX),$(addsuffix .1,$(PROGS)))
 
 .PHONY: all build build-coreutils build-pkgs test distclean clean busytest install uninstall

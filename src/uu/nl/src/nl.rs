@@ -9,7 +9,6 @@
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
-use std::iter::repeat;
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_section, help_usage};
@@ -91,6 +90,19 @@ impl<T: AsRef<str>> From<T> for NumberFormat {
             "rn" => Self::Right,
             "rz" => Self::RightZero,
             _ => unreachable!("Should have been caught by clap"),
+        }
+    }
+}
+
+impl NumberFormat {
+    // Turns a line number into a `String` with at least `min_width` chars,
+    // formatted according to the `NumberFormat`s variant.
+    fn format(&self, number: i64, min_width: usize) -> String {
+        match self {
+            Self::Left => format!("{number:<min_width$}"),
+            Self::Right => format!("{number:>min_width$}"),
+            Self::RightZero if number < 0 => format!("-{0:0>1$}", number.abs(), min_width - 1),
+            Self::RightZero => format!("{number:0>min_width$}"),
         }
     }
 }
@@ -263,13 +275,7 @@ pub fn uu_app() -> Command {
 fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     let regexp: regex::Regex = regex::Regex::new(r".?").unwrap();
     let mut line_no = settings.starting_line_number;
-    let mut line_no_width = line_no.len();
-    let line_no_width_initial = line_no_width;
     let mut empty_line_count: u64 = 0;
-    let fill_char = match settings.number_format {
-        NumberFormat::RightZero => '0',
-        _ => ' ',
-    };
     // Initially, we use the body's line counting settings
     let mut regex_filter = match settings.body_numbering {
         NumberingStyle::NumberForRegularExpression(ref re) => re,
@@ -322,10 +328,9 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
             match *match matched_groups {
                 3 => {
                     // This is a header, so we may need to reset the
-                    // line number and the line width
+                    // line number
                     if settings.renumber {
                         line_no = settings.starting_line_number;
-                        line_no_width = line_no_width_initial;
                     }
                     &settings.header_numbering
                 }
@@ -375,26 +380,17 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
         // way, start counting empties from zero once more.
         empty_line_count = 0;
         // A line number is to be printed.
-        let w = if settings.number_width > line_no_width {
-            settings.number_width - line_no_width
-        } else {
-            0
-        };
-        let fill: String = repeat(fill_char).take(w).collect();
-        match settings.number_format {
-            NumberFormat::Left => println!(
-                "{1}{0}{2}{3}",
-                fill, line_no, settings.number_separator, line
-            ),
-            _ => println!(
-                "{0}{1}{2}{3}",
-                fill, line_no, settings.number_separator, line
-            ),
-        }
-        // Now update the variables for the (potential) next
+        println!(
+            "{}{}{}",
+            settings
+                .number_format
+                .format(line_no, settings.number_width),
+            settings.number_separator,
+            line
+        );
+        // Now update the line number for the (potential) next
         // line.
         line_no += settings.line_increment;
-        line_no_width = line_no.len();
     }
     Ok(())
 }
@@ -415,38 +411,25 @@ fn pass_all(_: &str, _: &regex::Regex) -> bool {
     true
 }
 
-trait Length {
-    fn len(&self) -> usize;
-}
-
-impl Length for i64 {
-    // Returns the length in `char`s.
-    fn len(&self) -> usize {
-        if *self == 0 {
-            return 1;
-        };
-
-        let sign_len = if *self < 0 { 1 } else { 0 };
-        (0..).take_while(|i| 10i64.pow(*i) <= self.abs()).count() + sign_len
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
-    fn test_len() {
-        assert_eq!((-1).len(), 2);
-        assert_eq!((-10).len(), 3);
-        assert_eq!((-100).len(), 4);
-        assert_eq!((-1000).len(), 5);
+    fn test_format() {
+        assert_eq!(NumberFormat::Left.format(12, 1), "12");
+        assert_eq!(NumberFormat::Left.format(-12, 1), "-12");
+        assert_eq!(NumberFormat::Left.format(12, 4), "12  ");
+        assert_eq!(NumberFormat::Left.format(-12, 4), "-12 ");
 
-        assert_eq!(0.len(), 1);
+        assert_eq!(NumberFormat::Right.format(12, 1), "12");
+        assert_eq!(NumberFormat::Right.format(-12, 1), "-12");
+        assert_eq!(NumberFormat::Right.format(12, 4), "  12");
+        assert_eq!(NumberFormat::Right.format(-12, 4), " -12");
 
-        assert_eq!(1.len(), 1);
-        assert_eq!(10.len(), 2);
-        assert_eq!(100.len(), 3);
-        assert_eq!(1000.len(), 4);
+        assert_eq!(NumberFormat::RightZero.format(12, 1), "12");
+        assert_eq!(NumberFormat::RightZero.format(-12, 1), "-12");
+        assert_eq!(NumberFormat::RightZero.format(12, 4), "0012");
+        assert_eq!(NumberFormat::RightZero.format(-12, 4), "-012");
     }
 }
