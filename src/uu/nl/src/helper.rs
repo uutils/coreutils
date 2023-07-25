@@ -86,23 +86,18 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
             "Invalid line number field width: ‘0’: Numerical result out of range",
         )),
     }
+    match opts.get_one::<u64>(options::JOIN_BLANK_LINES) {
+        None => {}
+        Some(num) if *num > 0 => settings.join_blank_lines = *num,
+        Some(_) => errs.push(String::from(
+            "Invalid line number of blank lines: ‘0’: Numerical result out of range",
+        )),
+    }
     if let Some(num) = opts.get_one::<i64>(options::LINE_INCREMENT) {
         settings.line_increment = *num;
     }
     if let Some(num) = opts.get_one::<i64>(options::STARTING_LINE_NUMBER) {
         settings.starting_line_number = *num;
-    }
-    match opts.get_one::<String>(options::JOIN_BLANK_LINES) {
-        None => {}
-        Some(val) => {
-            let conv: Option<u64> = val.parse().ok();
-            match conv {
-                None => {
-                    errs.push(String::from("Illegal value for -l"));
-                }
-                Some(num) => settings.join_blank_lines = num,
-            }
-        }
     }
     errs
 }
