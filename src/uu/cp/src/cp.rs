@@ -1226,6 +1226,7 @@ fn construct_dest_path(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn copy_source(
     progress_bar: &Option<ProgressBar>,
     source: &SourceSlice,
@@ -1588,6 +1589,7 @@ fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
 #[allow(clippy::cognitive_complexity)]
+#[allow(clippy::too_many_arguments)]
 fn copy_file(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
@@ -1612,7 +1614,7 @@ fn copy_file(
     if let Some(base_name) = source.file_name() {
         let base_source: PathBuf = base_name.into();
         if let Some(new_source) = should_hard_linked_files.get(&base_source) {
-            std::fs::hard_link(new_source, &dest)?;
+            std::fs::hard_link(new_source, dest)?;
             return Ok(());
         }
     }
@@ -1630,7 +1632,7 @@ fn copy_file(
 
         match seen_sources.get(&original_source) {
             Some(new_source) => {
-                std::fs::hard_link(new_source, &dest)?;
+                std::fs::hard_link(new_source, dest)?;
                 return Ok(());
             }
             None => {
@@ -1639,7 +1641,7 @@ fn copy_file(
                         // GNU cp can deal with this case:
                         // touch a && ln -s a b && ln -s b c && mkdir d
                         // cp --preserve=links -R -H b c d
-                        std::fs::hard_link(new_source, &dest)?;
+                        std::fs::hard_link(new_source, dest)?;
                         return Ok(());
                     }
                     None => {

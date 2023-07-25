@@ -194,6 +194,7 @@ where
 }
 
 /// Copy a single entry during a directory traversal.
+#[allow(clippy::too_many_arguments)]
 fn copy_direntry(
     progress_bar: &Option<ProgressBar>,
     entry: Entry,
@@ -311,6 +312,7 @@ fn copy_direntry(
 ///
 /// Any errors encountered copying files in the tree will be logged but
 /// will not cause a short-circuit.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn copy_directory(
     progress_bar: &Option<ProgressBar>,
     root: &Path,
