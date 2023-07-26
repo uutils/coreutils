@@ -338,6 +338,8 @@ distclean: clean
 	$(CARGO) clean $(CARGOFLAGS) && $(CARGO) update $(CARGOFLAGS)
 
 manpages: build-coreutils
+	# sed is used to patch clap_mangen not rendering bullet lists correctly, will need to be removed
+	# once resolved
 	mkdir -p $(BUILDDIR)/man/
 	$(foreach prog, $(INSTALLEES), \
 		$(BUILDDIR)/coreutils manpage $(prog) | sed 's/^\* *\(.*\)/.IP \\[bu]\n\1/' > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1; \
