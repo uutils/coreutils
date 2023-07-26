@@ -340,7 +340,7 @@ distclean: clean
 manpages: build-coreutils
 	mkdir -p $(BUILDDIR)/man/
 	$(foreach prog, $(INSTALLEES), \
-		$(BUILDDIR)/coreutils manpage $(prog) > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1; \
+		$(BUILDDIR)/coreutils manpage $(prog) | sed 's/^\* *\(.*\)/.IP \\[bu]\n\1/' > $(BUILDDIR)/man/$(PROG_PREFIX)$(prog).1; \
 	)
 
 completions: build-coreutils
