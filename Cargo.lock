@@ -3124,10 +3124,10 @@ dependencies = [
 name = "uu_touch"
 version = "0.0.20"
 dependencies = [
+ "chrono",
  "clap",
  "filetime",
  "parse_datetime",
- "time",
  "uucore",
  "windows-sys 0.48.0",
 ]
