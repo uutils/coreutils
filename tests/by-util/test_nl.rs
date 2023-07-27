@@ -1,4 +1,4 @@
-// spell-checker:ignore iinvalid ninvalid vinvalid winvalid
+// spell-checker:ignore iinvalid linvalid ninvalid vinvalid winvalid
 use crate::common::util::TestScenario;
 
 #[test]
@@ -250,6 +250,25 @@ fn test_negative_line_increment() {
 #[test]
 fn test_invalid_line_increment() {
     for arg in ["-iinvalid", "--line-increment=invalid"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("invalid value 'invalid'");
+    }
+}
+
+#[test]
+fn test_join_blank_lines_zero() {
+    for arg in ["-l0", "--join-blank-lines=0"] {
+        new_ucmd!().arg(arg).fails().stderr_contains(
+            "Invalid line number of blank lines: ‘0’: Numerical result out of range",
+        );
+    }
+}
+
+#[test]
+fn test_invalid_join_blank_lines() {
+    for arg in ["-linvalid", "--join-blank-lines=invalid"] {
         new_ucmd!()
             .arg(arg)
             .fails()
