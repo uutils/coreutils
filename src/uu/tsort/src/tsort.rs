@@ -171,11 +171,6 @@ impl Graph {
     }
 
     fn is_acyclic(&self) -> bool {
-        for edges in self.out_edges.values() {
-            if !edges.is_empty() {
-                return false;
-            }
-        }
-        true
+        self.out_edges.values().all(|edge| edge.is_empty())
     }
 }
