@@ -8,11 +8,11 @@
 // spell-checker:ignore (ToDO) delim
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use std::fmt::Display;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("paste.md");
@@ -23,22 +23,6 @@ mod options {
     pub const SERIAL: &str = "serial";
     pub const FILE: &str = "file";
     pub const ZERO_TERMINATED: &str = "zero-terminated";
-}
-
-#[repr(u8)]
-#[derive(Clone, Copy)]
-enum LineEnding {
-    Newline = b'\n',
-    Nul = 0,
-}
-
-impl Display for LineEnding {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Newline => writeln!(f),
-            Self::Nul => write!(f, "\0"),
-        }
-    }
 }
 
 // Wraps BufReader and stdin
@@ -64,11 +48,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap()
         .map(|s| s.to_owned())
         .collect();
-    let line_ending = if matches.get_flag(options::ZERO_TERMINATED) {
-        LineEnding::Nul
-    } else {
-        LineEnding::Newline
-    };
+    let line_ending = LineEnding::from(matches.get_flag(options::ZERO_TERMINATED));
 
     paste(files, serial, delimiters, line_ending)
 }

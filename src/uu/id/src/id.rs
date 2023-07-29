@@ -44,6 +44,7 @@ use uucore::error::UResult;
 use uucore::error::{set_exit_code, USimpleError};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
+use uucore::line_ending::LineEnding;
 use uucore::process::{getegid, geteuid, getgid, getuid};
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
@@ -174,13 +175,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             " ".to_string()
         }
     };
-    let line_ending = {
-        if state.zflag {
-            '\0'
-        } else {
-            '\n'
-        }
-    };
+    let line_ending = LineEnding::from(state.zflag);
 
     if state.cflag {
         if state.selinux_supported {

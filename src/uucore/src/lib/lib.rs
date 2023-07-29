@@ -22,6 +22,7 @@ pub use uucore_procs::*;
 pub use crate::mods::backup_control;
 pub use crate::mods::display;
 pub use crate::mods::error;
+pub use crate::mods::line_ending;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::quoting_style;

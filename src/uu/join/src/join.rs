@@ -22,6 +22,7 @@ use std::num::IntErrorKind;
 use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UError, UResult, USimpleError};
+use uucore::line_ending::LineEnding;
 use uucore::{crash, crash_if_err, format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("join.md");
@@ -60,13 +61,6 @@ impl From<std::io::Error> for JoinError {
 enum FileNum {
     File1,
     File2,
-}
-
-#[repr(u8)]
-#[derive(Copy, Clone)]
-enum LineEnding {
-    Nul = 0,
-    Newline = b'\n',
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -683,9 +677,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.headers = true;
     }
 
-    if matches.get_flag("z") {
-        settings.line_ending = LineEnding::Nul;
-    }
+    settings.line_ending = LineEnding::from(matches.get_flag("z"));
 
     let file1 = matches.get_one::<String>("file1").unwrap();
     let file2 = matches.get_one::<String>("file2").unwrap();
