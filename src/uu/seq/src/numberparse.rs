@@ -69,27 +69,25 @@ fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberErr
         }
         Err(_) => {
             // Possibly "NaN" or "inf".
-            //
-            // TODO In Rust v1.53.0, this change
-            // https://github.com/rust-lang/rust/pull/78618 improves the
-            // parsing of floats to include being able to parse "NaN"
-            // and "inf". So when the minimum version of this crate is
-            // increased to 1.53.0, we should just use the built-in
-            // `f32` parsing instead.
-            if s.eq_ignore_ascii_case("inf") {
-                Ok(PreciseNumber::new(
-                    Number::Float(ExtendedBigDecimal::Infinity),
-                    0,
-                    0,
-                ))
-            } else if s.eq_ignore_ascii_case("-inf") {
-                Ok(PreciseNumber::new(
-                    Number::Float(ExtendedBigDecimal::MinusInfinity),
-                    0,
-                    0,
-                ))
-            } else if s.eq_ignore_ascii_case("nan") || s.eq_ignore_ascii_case("-nan") {
-                Err(ParseNumberError::Nan)
+            if let Ok(num) = f32::from_str(s) {
+                // pattern matching on floating point literal is not encouraged 'https://github.com/rust-lang/rust/issues/41620'
+                if num == f32::INFINITY {
+                    Ok(PreciseNumber::new(
+                        Number::Float(ExtendedBigDecimal::Infinity),
+                        0,
+                        0,
+                    ))
+                } else if num == f32::NEG_INFINITY {
+                    Ok(PreciseNumber::new(
+                        Number::Float(ExtendedBigDecimal::MinusInfinity),
+                        0,
+                        0,
+                    ))
+                } else if num.is_nan() {
+                    Err(ParseNumberError::Nan)
+                } else {
+                    Err(ParseNumberError::Float)
+                }
             } else {
                 Err(ParseNumberError::Float)
             }
