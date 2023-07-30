@@ -110,26 +110,15 @@ where
     I: Iterator<Item = &'a OsStr>,
 {
     for filename in files {
-        let filename = Path::new(filename);
-        let stdin_buf;
-        let file_buf;
-        let not_file = filename == OsStr::new("-");
-        let mut file = BufReader::new(if not_file {
-            stdin_buf = stdin();
-            Box::new(stdin_buf) as Box<dyn Read>
-        } else if filename.is_dir() {
-            Box::new(BufReader::new(io::empty())) as Box<dyn Read>
-        } else {
-            file_buf =
-                File::open(filename).map_err_context(|| filename.to_str().unwrap().to_string())?;
-            Box::new(file_buf) as Box<dyn Read>
-        });
+        let is_stdin = filename == OsStr::new("-");
+        let mut file = open_file(filename)?;
+        let path = Path::new(filename);
         let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
 
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
-        match (options.algo_name, not_file) {
+        match (options.algo_name, is_stdin) {
             (algorithm::SYSV, true) => println!(
                 "{} {}",
                 sum.parse::<u16>().unwrap(),
@@ -139,7 +128,7 @@ where
                 "{} {} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits),
-                filename.display()
+                path.display()
             ),
             (algorithm::BSD, true) => println!(
                 "{:0bsd_width$} {:bsd_width$}",
@@ -150,21 +139,21 @@ where
                 "{:0bsd_width$} {:bsd_width$} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits),
-                filename.display()
+                path.display()
             ),
             (algorithm::CRC, true) => println!("{sum} {sz}"),
-            (algorithm::CRC, false) => println!("{sum} {sz} {}", filename.display()),
+            (algorithm::CRC, false) => println!("{sum} {sz} {}", path.display()),
             (algorithm::BLAKE2B, _) if !options.untagged => {
-                println!("BLAKE2b ({}) = {sum}", filename.display());
+                println!("BLAKE2b ({}) = {sum}", path.display());
             }
             _ => {
                 if options.untagged {
-                    println!("{sum}  {}", filename.display());
+                    println!("{sum}  {}", path.display());
                 } else {
                     println!(
                         "{} ({}) = {sum}",
                         options.algo_name.to_ascii_uppercase(),
-                        filename.display()
+                        path.display()
                     );
                 }
             }
@@ -172,6 +161,26 @@ where
     }
 
     Ok(())
+}
+
+fn open_file(filename: &OsStr) -> UResult<BufReader<Box<dyn Read>>> {
+    let stdin_buf;
+    let file_buf;
+    let is_stdin = filename == OsStr::new("-");
+
+    let path = Path::new(filename);
+    let reader = if is_stdin {
+        stdin_buf = stdin();
+        Box::new(stdin_buf) as Box<dyn Read>
+    } else if path.is_dir() {
+        Box::new(BufReader::new(io::empty())) as Box<dyn Read>
+    } else {
+        file_buf =
+            File::open(filename).map_err_context(|| filename.to_str().unwrap().to_string())?;
+        Box::new(file_buf) as Box<dyn Read>
+    };
+
+    Ok(BufReader::new(reader))
 }
 
 fn digest_read<T: Read>(
