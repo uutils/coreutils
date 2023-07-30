@@ -69,9 +69,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         no_trailing_delimiter = false;
     }
     let line_ending = if no_trailing_delimiter {
-        LineEnding::None
+        None
     } else {
-        LineEnding::from_zero_flag(use_zero)
+        Some(LineEnding::from_zero_flag(use_zero))
     };
 
     for f in &files {
@@ -179,8 +179,11 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn show(path: &Path, line_ending: LineEnding) -> std::io::Result<()> {
+fn show(path: &Path, line_ending: Option<LineEnding>) -> std::io::Result<()> {
     let path = path.to_str().unwrap();
-    print!("{path}{line_ending}");
+    print!("{path}");
+    if let Some(line_ending) = line_ending {
+        print!("{line_ending}")
+    }
     stdout().flush()
 }

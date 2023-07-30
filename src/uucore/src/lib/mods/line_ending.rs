@@ -8,7 +8,6 @@ pub enum LineEnding {
     #[default]
     Newline = b'\n',
     Nul = 0,
-    None = 8, // abuse backspace \b to encode None
 }
 
 impl Display for LineEnding {
@@ -16,17 +15,13 @@ impl Display for LineEnding {
         match self {
             Self::Newline => writeln!(f),
             Self::Nul => write!(f, "\0"),
-            Self::None => std::fmt::Result::Ok(()),
         }
     }
 }
 
 impl From<LineEnding> for u8 {
     fn from(line_ending: LineEnding) -> Self {
-        match line_ending {
-            LineEnding::None => panic!("Cannot convert LineEnding::None to u8"),
-            _ => line_ending as Self,
-        }
+        line_ending as Self
     }
 }
 
