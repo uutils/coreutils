@@ -2488,7 +2488,13 @@ fn display_item_long(
 
         let dfn = display_file_name(item, config, None, String::new(), out).contents;
 
-        write!(out, " {} {}{}", display_date(md, config), dfn, config.line_ending)?;
+        write!(
+            out,
+            " {} {}{}",
+            display_date(md, config),
+            dfn,
+            config.line_ending
+        )?;
     } else {
         #[cfg(unix)]
         let leading_char = {

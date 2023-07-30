@@ -5,7 +5,8 @@ use std::fmt::Display;
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 /// Line terminator used for printing and parsing
 pub enum LineEnding {
-    #[default] Newline = b'\n',
+    #[default]
+    Newline = b'\n',
     Nul = 0,
     Space = b' ',
     None = 8, // abuse backspace \b to encode None

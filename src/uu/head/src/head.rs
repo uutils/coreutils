@@ -6,11 +6,11 @@
 // spell-checker:ignore (vars) zlines BUFWRITER seekable
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use uucore::line_ending::LineEnding;
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::line_ending::LineEnding;
 use uucore::lines::lines;
 use uucore::{format_usage, help_about, help_usage, show};
 
@@ -454,9 +454,11 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     }
                     Mode::FirstLines(n) => read_n_lines(&mut stdin, n, options.line_ending.into()),
                     // unwrap is guaranteed to succeed because we checked the value of n above
-                    Mode::AllButLastLines(n) => {
-                        read_but_last_n_lines(&mut stdin, n.try_into().unwrap(), options.line_ending.into())
-                    }
+                    Mode::AllButLastLines(n) => read_but_last_n_lines(
+                        &mut stdin,
+                        n.try_into().unwrap(),
+                        options.line_ending.into(),
+                    ),
                 }
             }
             (name, false) => {
@@ -547,7 +549,10 @@ mod tests {
         assert!(options("-q").unwrap().quiet);
         assert!(options("--verbose").unwrap().verbose);
         assert!(options("-v").unwrap().verbose);
-        assert_eq!(options("--zero-terminated").unwrap().line_ending, LineEnding::Nul);
+        assert_eq!(
+            options("--zero-terminated").unwrap().line_ending,
+            LineEnding::Nul
+        );
         assert_eq!(options("-z").unwrap().line_ending, LineEnding::Nul);
         assert_eq!(options("--lines 15").unwrap().mode, Mode::FirstLines(15));
         assert_eq!(options("-n 15").unwrap().mode, Mode::FirstLines(15));
