@@ -570,7 +570,7 @@ mod tests {
 
         assert!(!opts.verbose);
         assert!(!opts.quiet);
-        assert!(opts.line_ending == LineEnding::Newline);
+        assert_eq!(opts.line_ending, LineEnding::Newline);
         assert_eq!(opts.mode, Mode::FirstLines(10));
         assert!(opts.files.is_empty());
     }
