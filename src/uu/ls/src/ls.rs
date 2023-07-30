@@ -1006,7 +1006,7 @@ impl Config {
                 }
             },
             group_directories_first: options.get_flag(options::GROUP_DIRECTORIES_FIRST),
-            line_ending: LineEnding::from(options.get_flag(options::ZERO)),
+            line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
         })
     }
 }

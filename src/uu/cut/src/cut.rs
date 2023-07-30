@@ -377,7 +377,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             .unwrap_or_default()
                             .to_owned(),
                     ),
-                    line_ending: LineEnding::from(matches.get_flag(options::ZERO_TERMINATED)),
+                    line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED)),
                 },
             )
         }),
@@ -392,7 +392,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             .unwrap_or_default()
                             .to_owned(),
                     ),
-                    line_ending: LineEnding::from(matches.get_flag(options::ZERO_TERMINATED)),
+                    line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED)),
                 },
             )
         }),
@@ -412,7 +412,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
                 let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
                 let zero_terminated = matches.get_flag(options::ZERO_TERMINATED);
-                let line_ending = LineEnding::from(zero_terminated);
+                let line_ending = LineEnding::from_zero_flag(zero_terminated);
 
                 match matches.get_one::<String>(options::DELIMITER).map(|s| s.as_str()) {
                     Some(_) if whitespace_delimited => {

@@ -677,7 +677,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.headers = true;
     }
 
-    settings.line_ending = LineEnding::from(matches.get_flag("z"));
+    settings.line_ending = LineEnding::from_zero_flag(matches.get_flag("z"));
 
     let file1 = matches.get_one::<String>("file1").unwrap();
     let file2 = matches.get_one::<String>("file2").unwrap();

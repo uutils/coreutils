@@ -27,7 +27,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
-    let line_ending = LineEnding::from(matches.get_flag(options::ZERO));
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
     let dirnames: Vec<String> = matches
         .get_many::<String>(options::DIR)

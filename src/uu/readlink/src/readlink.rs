@@ -71,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = if no_trailing_delimiter {
         LineEnding::None
     } else {
-        LineEnding::from(use_zero)
+        LineEnding::from_zero_flag(use_zero)
     };
 
     for f in &files {

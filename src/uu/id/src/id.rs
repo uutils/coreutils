@@ -175,7 +175,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             " ".to_string()
         }
     };
-    let line_ending = LineEnding::from(state.zflag);
+    let line_ending = LineEnding::from_zero_flag(state.zflag);
 
     if state.cflag {
         if state.selinux_supported {

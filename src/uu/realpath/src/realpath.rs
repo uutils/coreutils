@@ -53,7 +53,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     let strip = matches.get_flag(OPT_STRIP);
-    let line_ending = LineEnding::from(matches.get_flag(OPT_ZERO));
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(OPT_ZERO));
     let quiet = matches.get_flag(OPT_QUIET);
     let logical = matches.get_flag(OPT_LOGICAL);
     let can_mode = if matches.get_flag(OPT_CANONICALIZE_EXISTING) {

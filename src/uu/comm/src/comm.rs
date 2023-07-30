@@ -137,7 +137,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
     }
 
     if opts.get_flag(options::TOTAL) {
-        let line_ending = LineEnding::from(opts.get_flag(options::ZERO_TERMINATED));
+        let line_ending = LineEnding::from_zero_flag(opts.get_flag(options::ZERO_TERMINATED));
         print!("{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}total{line_ending}");
     }
 }
@@ -159,7 +159,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
     let matches = uu_app().try_get_matches_from(args)?;
-    let line_ending = LineEnding::from(matches.get_flag(options::ZERO_TERMINATED));
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let filename1 = matches.get_one::<String>(options::FILE_1).unwrap();
     let filename2 = matches.get_one::<String>(options::FILE_2).unwrap();
     let mut f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string())?;

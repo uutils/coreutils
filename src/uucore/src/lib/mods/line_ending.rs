@@ -30,8 +30,8 @@ impl From<LineEnding> for u8 {
     }
 }
 
-impl From<bool> for LineEnding {
-    fn from(is_zero_terminated: bool) -> Self {
+impl LineEnding {
+    pub fn from_zero_flag(is_zero_terminated: bool) -> Self {
         if is_zero_terminated {
             Self::Nul
         } else {

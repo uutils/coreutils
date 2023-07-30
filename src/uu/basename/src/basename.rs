@@ -55,7 +55,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
-    let line_ending = LineEnding::from(matches.get_flag(options::ZERO));
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
     let opt_suffix = matches.get_one::<String>(options::SUFFIX).is_some();
     let opt_multiple = matches.get_flag(options::MULTIPLE);

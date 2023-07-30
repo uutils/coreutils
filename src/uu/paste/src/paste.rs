@@ -48,7 +48,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap()
         .map(|s| s.to_owned())
         .collect();
-    let line_ending = LineEnding::from(matches.get_flag(options::ZERO_TERMINATED));
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
 
     paste(files, serial, delimiters, line_ending)
 }

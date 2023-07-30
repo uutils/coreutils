@@ -601,7 +601,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let time_format_str =
         parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?;
 
-    let line_ending = LineEnding::from(matches.get_flag(options::NULL));
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::NULL));
 
     let excludes = build_exclude_patterns(&matches)?;
 

@@ -198,7 +198,7 @@ impl HeadOptions {
 
         options.quiet = matches.get_flag(options::QUIET_NAME);
         options.verbose = matches.get_flag(options::VERBOSE_NAME);
-        options.line_ending = LineEnding::from(matches.get_flag(options::ZERO_NAME));
+        options.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_NAME));
         options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(matches)?;

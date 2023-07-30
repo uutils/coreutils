@@ -1167,7 +1167,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         })?;
     }
 
-    settings.line_ending = LineEnding::from(matches.get_flag(options::ZERO_TERMINATED));
+    settings.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     settings.merge = matches.get_flag(options::MERGE);
 
     settings.check = matches.contains_id(options::check::CHECK);

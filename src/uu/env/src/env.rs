@@ -182,7 +182,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
     let matches = app.try_get_matches_from(args).with_exit_code(125)?;
 
     let ignore_env = matches.get_flag("ignore-environment");
-    let line_ending = LineEnding::from(matches.get_flag("null"));
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
     let running_directory = matches.get_one::<String>("chdir").map(|s| s.as_str());
     let files = match matches.get_many::<String>("file") {
         Some(v) => v.map(|s| s.as_str()).collect(),
