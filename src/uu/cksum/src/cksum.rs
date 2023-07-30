@@ -113,8 +113,13 @@ where
         let is_stdin = filename == OsStr::new("-");
         let mut file = open_file(filename)?;
         let path = Path::new(filename);
-        let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
-            .map_err_context(|| "failed to read input".to_string())?;
+        let (sum, sz) = digest_read(
+            &mut options.digest,
+            &mut file,
+            options.binary,
+            options.output_bits,
+        )
+        .map_err_context(|| "failed to read input".to_string())?;
 
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
@@ -186,6 +191,7 @@ fn open_file(filename: &OsStr) -> UResult<BufReader<Box<dyn Read>>> {
 fn digest_read<T: Read>(
     digest: &mut Box<dyn Digest>,
     reader: &mut BufReader<T>,
+    binary: bool,
     output_bits: usize,
 ) -> io::Result<(String, usize)> {
     digest.reset();
@@ -202,7 +208,7 @@ fn digest_read<T: Read>(
     // `DigestWriter` and only written if the following character is
     // "\n". But when "\r" is the last character read, we need to force
     // it to be written.)
-    let mut digest_writer = DigestWriter::new(digest, true);
+    let mut digest_writer = DigestWriter::new(digest, binary);
     let output_size = std::io::copy(reader, &mut digest_writer)? as usize;
     digest_writer.finalize();
 
@@ -249,7 +255,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         digest,
         output_bits,
         untagged,
-
         binary,
         check,
         tag,
