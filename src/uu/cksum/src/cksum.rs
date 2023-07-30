@@ -37,6 +37,29 @@ const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
 const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
 const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 
+mod options {
+    // cksum
+    pub const ALGORITHM: &str = "algorithm";
+    pub const FILE: &str = "file";
+    pub const UNTAGGED: &str = "untagged";
+
+    // common
+    pub const BINARY: &'static str = "binary";
+    pub const TEXT: &'static str = "text";
+    pub const CHECK: &'static str = "check";
+    pub const TAG: &'static str = "tag";
+    pub const STATUS: &'static str = "status";
+    pub const QUIET: &'static str = "quiet";
+    pub const STRICT: &'static str = "strict";
+    pub const WARN: &'static str = "warn";
+    pub const ZERO: &'static str = "zero";
+
+    // length argument for variable length utils
+    pub const LENGTH: &'static str = "length";
+}
+
+const BINARY_FLAG_DEFAULT: bool = cfg!(windows);
+
 fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize) {
     match program {
         ALGORITHM_OPTIONS_SYSV => (
@@ -99,10 +122,21 @@ fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize
 }
 
 struct Options {
+    // cksum
     algo_name: &'static str,
     digest: Box<dyn Digest + 'static>,
-    output_bits: usize,
     untagged: bool,
+    output_bits: usize,
+
+    // common
+    binary: bool,
+    check: bool,
+    tag: bool,
+    status: bool,
+    quiet: bool,
+    strict: bool,
+    warn: bool,
+    zero: bool,
 }
 
 /// Calculate checksum
@@ -214,12 +248,6 @@ fn digest_read<T: Read>(
     }
 }
 
-mod options {
-    pub const ALGORITHM: &str = "algorithm";
-    pub const FILE: &str = "file";
-    pub const UNTAGGED: &str = "untagged";
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
@@ -229,12 +257,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => ALGORITHM_OPTIONS_CRC,
     };
 
-    let (name, algo, bits) = detect_algo(algo_name);
+    let (algo_name, digest, output_bits) = detect_algo(algo_name);
+
+    let untagged = matches.get_flag(options::UNTAGGED);
+
+    let binary = if matches.get_flag(options::BINARY) {
+        true
+    } else if matches.get_flag(options::TEXT) {
+        false
+    } else {
+        BINARY_FLAG_DEFAULT
+    };
+    let check = matches.get_flag(options::CHECK);
+    let tag = matches.get_flag(options::TAG);
+    let status = matches.get_flag(options::STATUS);
+    let quiet = matches.get_flag(options::QUIET) || status;
+    let strict = matches.get_flag(options::STRICT);
+    let warn = matches.get_flag(options::WARN) && !status;
+    let zero = matches.get_flag(options::ZERO);
+
     let opts = Options {
-        algo_name: name,
-        digest: algo,
-        output_bits: bits,
-        untagged: matches.get_flag(options::UNTAGGED),
+        algo_name,
+        digest,
+        output_bits,
+        untagged,
+
+        binary,
+        check,
+        tag,
+        status,
+        quiet,
+        strict,
+        warn,
+        zero,
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -259,47 +314,47 @@ pub fn common_args() -> Vec<Arg> {
     const TEXT_HELP: &str = "read in text mode (default)";
 
     vec![
-        Arg::new("binary")
+        Arg::new(options::BINARY)
             .short('b')
             .long("binary")
             .help(BINARY_HELP)
             .action(ArgAction::SetTrue),
-        Arg::new("check")
+        Arg::new(options::CHECK)
             .short('c')
             .long("check")
             .help("read hashsums from the FILEs and check them")
             .action(ArgAction::SetTrue),
         // TODO: --ignore-missing
-        Arg::new("quiet")
+        Arg::new(options::QUIET)
             .short('q')
             .long("quiet")
             .help("don't print OK for each successfully verified file")
             .action(ArgAction::SetTrue),
-        Arg::new("status")
+        Arg::new(options::STATUS)
             .short('s')
             .long("status")
             .help("don't output anything, status code shows success")
             .action(ArgAction::SetTrue),
-        Arg::new("tag")
+        Arg::new(options::TAG)
             .long("tag")
             .help("create a BSD-style checksum")
             .action(ArgAction::SetTrue),
-        Arg::new("text")
+        Arg::new(options::TEXT)
             .short('t')
             .long("text")
             .help(TEXT_HELP)
             .conflicts_with("binary")
             .action(ArgAction::SetTrue),
-        Arg::new("warn")
+        Arg::new(options::WARN)
             .short('w')
             .long("warn")
             .help("warn about improperly formatted checksum lines")
             .action(ArgAction::SetTrue),
-        Arg::new("strict")
+        Arg::new(options::STRICT)
             .long("strict")
             .help("exit non-zero for improperly formatted checksum lines")
             .action(ArgAction::SetTrue),
-        Arg::new("zero")
+        Arg::new(options::ZERO)
             .short('z')
             .long("zero")
             .help("end each output line with NUL, not newline")
@@ -311,7 +366,7 @@ pub fn common_args() -> Vec<Arg> {
 ///
 /// Adds a length argument for the number of bits.
 pub fn length_arg() -> Arg {
-    Arg::new("length")
+    Arg::new(options::LENGTH)
         .short('l')
         .long("length")
         .help(
