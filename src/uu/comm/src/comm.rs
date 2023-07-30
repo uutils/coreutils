@@ -8,7 +8,6 @@
 // spell-checker:ignore (ToDO) delim mkdelim
 
 use std::cmp::Ordering;
-use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
