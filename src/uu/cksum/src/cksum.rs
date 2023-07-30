@@ -10,6 +10,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
 use std::iter;
+use std::num::ParseIntError;
 use std::path::Path;
 use uucore::{
     error::{FromIo, UResult},
@@ -244,6 +245,88 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
+/// The arguments to md5sum and similar utilities.
+///
+/// GNU documents this as md5sum-style, so that naming makes sense.
+pub fn common_args() -> Vec<Arg> {
+    #[cfg(windows)]
+    const BINARY_HELP: &str = "read in binary mode (default)";
+    #[cfg(not(windows))]
+    const BINARY_HELP: &str = "read in binary mode";
+    #[cfg(windows)]
+    const TEXT_HELP: &str = "read in text mode";
+    #[cfg(not(windows))]
+    const TEXT_HELP: &str = "read in text mode (default)";
+
+    vec![
+        Arg::new("binary")
+            .short('b')
+            .long("binary")
+            .help(BINARY_HELP)
+            .action(ArgAction::SetTrue),
+        Arg::new("check")
+            .short('c')
+            .long("check")
+            .help("read hashsums from the FILEs and check them")
+            .action(ArgAction::SetTrue),
+        // TODO: --ignore-missing
+        Arg::new("quiet")
+            .short('q')
+            .long("quiet")
+            .help("don't print OK for each successfully verified file")
+            .action(ArgAction::SetTrue),
+        Arg::new("status")
+            .short('s')
+            .long("status")
+            .help("don't output anything, status code shows success")
+            .action(ArgAction::SetTrue),
+        Arg::new("tag")
+            .long("tag")
+            .help("create a BSD-style checksum")
+            .action(ArgAction::SetTrue),
+        Arg::new("text")
+            .short('t')
+            .long("text")
+            .help(TEXT_HELP)
+            .conflicts_with("binary")
+            .action(ArgAction::SetTrue),
+        Arg::new("warn")
+            .short('w')
+            .long("warn")
+            .help("warn about improperly formatted checksum lines")
+            .action(ArgAction::SetTrue),
+        Arg::new("strict")
+            .long("strict")
+            .help("exit non-zero for improperly formatted checksum lines")
+            .action(ArgAction::SetTrue),
+        Arg::new("zero")
+            .short('z')
+            .long("zero")
+            .help("end each output line with NUL, not newline")
+            .action(ArgAction::SetTrue),
+    ]
+}
+
+/// b2sum-style args
+///
+/// Adds a length argument for the number of bits.
+pub fn length_arg() -> Arg {
+    Arg::new("length")
+        .short('l')
+        .long("length")
+        .help(
+            "digest length in bits; \
+                must not exceed the max for the blake2 algorithm (512) and must be a multiple of 8",
+        )
+        .value_name("BITS")
+        .value_parser(parse_bit_num)
+}
+
+// TODO: return custom error type
+fn parse_bit_num(arg: &str) -> Result<usize, ParseIntError> {
+    arg.parse()
+}
+
 pub fn uu_app() -> Command {
     Command::new(uucore::util_name())
         .version(crate_version!())
@@ -282,5 +365,7 @@ pub fn uu_app() -> Command {
                 .help("create a reversed style checksum, without digest type")
                 .action(ArgAction::SetTrue),
         )
+        .args(common_args())
+        .arg(length_arg())
         .after_help(AFTER_HELP)
 }
