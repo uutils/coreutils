@@ -34,6 +34,7 @@ use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
 use uucore::error::FromIo;
 use uucore::error::{set_exit_code, UError, UResult};
+use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::{
@@ -600,11 +601,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let time_format_str =
         parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?;
 
-    let line_separator = if matches.get_flag(options::NULL) {
-        "\0"
-    } else {
-        "\n"
-    };
+    let line_ending = LineEnding::from(matches.get_flag(options::NULL));
 
     let excludes = build_exclude_patterns(&matches)?;
 
@@ -656,12 +653,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         let time_str = tm.format(time_format_str).to_string();
                         print!("{}\t{}\t", convert_size(size), time_str);
                         print_verbatim(stat.path).unwrap();
-                        print!("{line_separator}");
+                        print!("{line_ending}");
                     }
                 } else if !summarize || index == len - 1 {
                     print!("{}\t", convert_size(size));
                     print_verbatim(stat.path).unwrap();
-                    print!("{line_separator}");
+                    print!("{line_ending}");
                 }
                 if options.total && index == (len - 1) {
                     // The last element will be the total size of the the path under
@@ -681,7 +678,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if options.total {
         print!("{}\ttotal", convert_size(grand_total));
-        print!("{line_separator}");
+        print!("{line_ending}");
     }
 
     Ok(())
