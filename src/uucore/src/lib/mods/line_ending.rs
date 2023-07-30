@@ -8,7 +8,6 @@ pub enum LineEnding {
     #[default]
     Newline = b'\n',
     Nul = 0,
-    Space = b' ',
     None = 8, // abuse backspace \b to encode None
 }
 
@@ -17,7 +16,6 @@ impl Display for LineEnding {
         match self {
             Self::Newline => writeln!(f),
             Self::Nul => write!(f, "\0"),
-            Self::Space => write!(f, " "),
             Self::None => std::fmt::Result::Ok(()),
         }
     }
