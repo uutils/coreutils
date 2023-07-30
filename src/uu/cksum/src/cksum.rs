@@ -25,17 +25,19 @@ const USAGE: &str = help_usage!("cksum.md");
 const ABOUT: &str = help_about!("cksum.md");
 const AFTER_HELP: &str = help_section!("after help", "cksum.md");
 
-const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
-const ALGORITHM_OPTIONS_BSD: &str = "bsd";
-const ALGORITHM_OPTIONS_CRC: &str = "crc";
-const ALGORITHM_OPTIONS_MD5: &str = "md5";
-const ALGORITHM_OPTIONS_SHA1: &str = "sha1";
-const ALGORITHM_OPTIONS_SHA224: &str = "sha224";
-const ALGORITHM_OPTIONS_SHA256: &str = "sha256";
-const ALGORITHM_OPTIONS_SHA384: &str = "sha384";
-const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
-const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
-const ALGORITHM_OPTIONS_SM3: &str = "sm3";
+mod algorithm {
+    pub const SYSV: &str = "sysv";
+    pub const BSD: &str = "bsd";
+    pub const CRC: &str = "crc";
+    pub const MD5: &str = "md5";
+    pub const SHA1: &str = "sha1";
+    pub const SHA224: &str = "sha224";
+    pub const SHA256: &str = "sha256";
+    pub const SHA384: &str = "sha384";
+    pub const SHA512: &str = "sha512";
+    pub const BLAKE2B: &str = "blake2b";
+    pub const SM3: &str = "sm3";
+}
 
 mod options {
     // cksum
@@ -61,62 +63,19 @@ mod options {
 const BINARY_FLAG_DEFAULT: bool = cfg!(windows);
 
 fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize) {
+    use algorithm::*;
     match program {
-        ALGORITHM_OPTIONS_SYSV => (
-            ALGORITHM_OPTIONS_SYSV,
-            Box::new(SYSV::new()) as Box<dyn Digest>,
-            512,
-        ),
-        ALGORITHM_OPTIONS_BSD => (
-            ALGORITHM_OPTIONS_BSD,
-            Box::new(BSD::new()) as Box<dyn Digest>,
-            1024,
-        ),
-        ALGORITHM_OPTIONS_CRC => (
-            ALGORITHM_OPTIONS_CRC,
-            Box::new(CRC::new()) as Box<dyn Digest>,
-            256,
-        ),
-        ALGORITHM_OPTIONS_MD5 => (
-            ALGORITHM_OPTIONS_MD5,
-            Box::new(Md5::new()) as Box<dyn Digest>,
-            128,
-        ),
-        ALGORITHM_OPTIONS_SHA1 => (
-            ALGORITHM_OPTIONS_SHA1,
-            Box::new(Sha1::new()) as Box<dyn Digest>,
-            160,
-        ),
-        ALGORITHM_OPTIONS_SHA224 => (
-            ALGORITHM_OPTIONS_SHA224,
-            Box::new(Sha224::new()) as Box<dyn Digest>,
-            224,
-        ),
-        ALGORITHM_OPTIONS_SHA256 => (
-            ALGORITHM_OPTIONS_SHA256,
-            Box::new(Sha256::new()) as Box<dyn Digest>,
-            256,
-        ),
-        ALGORITHM_OPTIONS_SHA384 => (
-            ALGORITHM_OPTIONS_SHA384,
-            Box::new(Sha384::new()) as Box<dyn Digest>,
-            384,
-        ),
-        ALGORITHM_OPTIONS_SHA512 => (
-            ALGORITHM_OPTIONS_SHA512,
-            Box::new(Sha512::new()) as Box<dyn Digest>,
-            512,
-        ),
-        ALGORITHM_OPTIONS_BLAKE2B => (
-            ALGORITHM_OPTIONS_BLAKE2B,
-            Box::new(Blake2b::new()) as Box<dyn Digest>,
-            512,
-        ),
-        ALGORITHM_OPTIONS_SM3 => (
-            ALGORITHM_OPTIONS_SM3,
-            Box::new(Sm3::new()) as Box<dyn Digest>,
-            512,
-        ),
+        SYSV => (SYSV, Box::new(SYSV::new()) as Box<dyn Digest>, 512),
+        BSD => (BSD, Box::new(BSD::new()) as Box<dyn Digest>, 1024),
+        CRC => (CRC, Box::new(CRC::new()) as Box<dyn Digest>, 256),
+        MD5 => (MD5, Box::new(Md5::new()) as Box<dyn Digest>, 128),
+        SHA1 => (SHA1, Box::new(Sha1::new()) as Box<dyn Digest>, 160),
+        SHA224 => (SHA224, Box::new(Sha224::new()) as Box<dyn Digest>, 224),
+        SHA256 => (SHA256, Box::new(Sha256::new()) as Box<dyn Digest>, 256),
+        SHA384 => (SHA384, Box::new(Sha384::new()) as Box<dyn Digest>, 384),
+        SHA512 => (SHA512, Box::new(Sha512::new()) as Box<dyn Digest>, 512),
+        BLAKE2B => (BLAKE2B, Box::new(Blake2b::new()) as Box<dyn Digest>, 512),
+        SM3 => (SM3, Box::new(Sm3::new()) as Box<dyn Digest>, 512),
         _ => unreachable!("unknown algorithm: clap should have prevented this case"),
     }
 }
@@ -171,31 +130,31 @@ where
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
         match (options.algo_name, not_file) {
-            (ALGORITHM_OPTIONS_SYSV, true) => println!(
+            (algorithm::SYSV, true) => println!(
                 "{} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits)
             ),
-            (ALGORITHM_OPTIONS_SYSV, false) => println!(
+            (algorithm::SYSV, false) => println!(
                 "{} {} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits),
                 filename.display()
             ),
-            (ALGORITHM_OPTIONS_BSD, true) => println!(
+            (algorithm::BSD, true) => println!(
                 "{:0bsd_width$} {:bsd_width$}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits)
             ),
-            (ALGORITHM_OPTIONS_BSD, false) => println!(
+            (algorithm::BSD, false) => println!(
                 "{:0bsd_width$} {:bsd_width$} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits),
                 filename.display()
             ),
-            (ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
-            (ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
-            (ALGORITHM_OPTIONS_BLAKE2B, _) if !options.untagged => {
+            (algorithm::CRC, true) => println!("{sum} {sz}"),
+            (algorithm::CRC, false) => println!("{sum} {sz} {}", filename.display()),
+            (algorithm::BLAKE2B, _) if !options.untagged => {
                 println!("BLAKE2b ({}) = {sum}", filename.display());
             }
             _ => {
@@ -254,7 +213,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let algo_name: &str = match matches.get_one::<String>(options::ALGORITHM) {
         Some(v) => v,
-        None => ALGORITHM_OPTIONS_CRC,
+        None => algorithm::CRC,
     };
 
     let (algo_name, digest, output_bits) = detect_algo(algo_name);
@@ -401,17 +360,17 @@ pub fn uu_app() -> Command {
                 .help("select the digest type to use. See DIGEST below")
                 .value_name("ALGORITHM")
                 .value_parser([
-                    ALGORITHM_OPTIONS_SYSV,
-                    ALGORITHM_OPTIONS_BSD,
-                    ALGORITHM_OPTIONS_CRC,
-                    ALGORITHM_OPTIONS_MD5,
-                    ALGORITHM_OPTIONS_SHA1,
-                    ALGORITHM_OPTIONS_SHA224,
-                    ALGORITHM_OPTIONS_SHA256,
-                    ALGORITHM_OPTIONS_SHA384,
-                    ALGORITHM_OPTIONS_SHA512,
-                    ALGORITHM_OPTIONS_BLAKE2B,
-                    ALGORITHM_OPTIONS_SM3,
+                    algorithm::SYSV,
+                    algorithm::BSD,
+                    algorithm::CRC,
+                    algorithm::MD5,
+                    algorithm::SHA1,
+                    algorithm::SHA224,
+                    algorithm::SHA256,
+                    algorithm::SHA384,
+                    algorithm::SHA512,
+                    algorithm::BLAKE2B,
+                    algorithm::SM3,
                 ]),
         )
         .arg(
