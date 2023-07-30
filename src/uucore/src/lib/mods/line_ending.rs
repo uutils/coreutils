@@ -1,4 +1,4 @@
-/// Aims to provide consistent newline/zero terminator handling
+//! Provides consistent newline/zero terminator handling
 use std::fmt::Display;
 
 #[repr(u8)]

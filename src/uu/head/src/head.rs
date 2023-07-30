@@ -527,7 +527,7 @@ mod tests {
     #[test]
     fn test_args_modes() {
         let args = options("-n -10M -vz").unwrap();
-        assert!(args.line_ending == LineEnding::Nul);
+        assert_eq!(args.line_ending, LineEnding::Nul);
         assert!(args.verbose);
         assert_eq!(args.mode, Mode::AllButLastLines(10 * 1024 * 1024));
     }
@@ -547,8 +547,8 @@ mod tests {
         assert!(options("-q").unwrap().quiet);
         assert!(options("--verbose").unwrap().verbose);
         assert!(options("-v").unwrap().verbose);
-        assert!(options("--zero-terminated").unwrap().line_ending == LineEnding::Nul);
-        assert!(options("-z").unwrap().line_ending == LineEnding::Nul);
+        assert_eq!(options("--zero-terminated").unwrap().line_ending, LineEnding::Nul);
+        assert_eq!(options("-z").unwrap().line_ending, LineEnding::Nul);
         assert_eq!(options("--lines 15").unwrap().mode, Mode::FirstLines(15));
         assert_eq!(options("-n 15").unwrap().mode, Mode::FirstLines(15));
         assert_eq!(options("--bytes 15").unwrap().mode, Mode::FirstBytes(15));
