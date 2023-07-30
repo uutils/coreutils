@@ -275,3 +275,47 @@ fn test_invalid_join_blank_lines() {
             .stderr_contains("invalid value 'invalid'");
     }
 }
+
+#[test]
+fn test_header_numbering_all_lines() {
+    for arg in ["-ha", "--header-numbering=a"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("\\:\\:\\:\na\n\nb")
+            .succeeds()
+            .stdout_is("\n     1\ta\n     2\t\n     3\tb\n");
+    }
+}
+
+#[test]
+fn test_body_numbering_all_lines() {
+    for arg in ["-ba", "--body-numbering=a"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("\\:\\:\na\n\nb")
+            .succeeds()
+            .stdout_is("\n     1\ta\n     2\t\n     3\tb\n");
+    }
+}
+
+#[test]
+fn test_body_numbering_all_lines_without_delimiter() {
+    for arg in ["-ba", "--body-numbering=a"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n     2\t\n     3\tb\n");
+    }
+}
+
+#[test]
+fn test_footer_numbering_all_lines() {
+    for arg in ["-fa", "--footer-numbering=a"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("\\:\na\n\nb")
+            .succeeds()
+            .stdout_is("\n     1\ta\n     2\t\n     3\tb\n");
+    }
+}
