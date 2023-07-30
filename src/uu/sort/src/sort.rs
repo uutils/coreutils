@@ -527,11 +527,11 @@ impl<'a> Line<'a> {
     }
 
     fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) {
-        if !settings.debug {
-            writer.write_all(self.line.as_bytes()).unwrap();
-            writer.write(&[settings.line_ending.into()]).unwrap();
-        } else {
+        if settings.debug {
             self.print_debug(settings, writer).unwrap();
+        } else {
+            writer.write_all(self.line.as_bytes()).unwrap();
+            writer.write_all(&[settings.line_ending.into()]).unwrap();
         }
     }
 
