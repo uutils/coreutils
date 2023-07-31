@@ -6,12 +6,17 @@
 // spell-checker:ignore (ToDO) fname, algo
 use clap::{crate_version, Arg, ArgAction, Command};
 use hex::encode;
+use regex::{Captures, Regex};
+use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{self, stdin, BufReader, Read};
+use std::io::{self, stdin, BufRead, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::display::Quotable;
+use uucore::error::UError;
+use uucore::show_warning;
 use uucore::{
     error::{FromIo, UResult},
     format_usage, help_about, help_section, help_usage,
@@ -62,6 +67,22 @@ mod options {
 
 const BINARY_FLAG_DEFAULT: bool = cfg!(windows);
 
+#[derive(Debug)]
+enum CksumError {
+    InvalidFormat,
+}
+
+impl Error for CksumError {}
+impl UError for CksumError {}
+
+impl std::fmt::Display for CksumError {
+    fn fmt(&self, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::InvalidFormat => Ok(()),
+        }
+    }
+}
+
 fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize) {
     use algorithm::*;
     match program {
@@ -84,7 +105,6 @@ struct Options {
     // cksum
     algo_name: &'static str,
     digest: Box<dyn Digest + 'static>,
-    untagged: bool,
     output_bits: usize,
 
     // common
@@ -95,7 +115,8 @@ struct Options {
     quiet: bool,
     strict: bool,
     warn: bool,
-    zero: bool,
+    // zero is unimplemented
+    _zero: bool,
 }
 
 /// Calculate checksum
@@ -105,7 +126,195 @@ struct Options {
 /// * `options` - CLI options for the assigning checksum algorithm
 /// * `files` - A iterator of OsStr which is a bunch of files that are using for calculating checksum
 #[allow(clippy::cognitive_complexity)]
-fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
+fn cksum<'a, I>(options: Options, files: I) -> UResult<()>
+where
+    I: Iterator<Item = &'a OsStr>,
+{
+    if options.check {
+        cksum_check(options, files)
+    } else {
+        cksum_print(options, files)
+    }
+}
+
+/// Creates a Regex for parsing lines based on the given format.
+/// The default value of `gnu_re` created with this function has to be recreated
+/// after the initial line has been parsed, as this line dictates the format
+/// for the rest of them, and mixing of formats is disallowed.
+fn gnu_re_template(bytes_marker: &str, format_marker: &str) -> Regex {
+    Regex::new(&format!(
+        r"^(?P<digest>[a-fA-F0-9]{bytes_marker}) {format_marker}(?P<fileName>.*)"
+    ))
+    .expect("internal error: invalid regex")
+}
+
+fn handle_captures(
+    caps: &Captures,
+    bytes_marker: &str,
+    bsd_reversed: &mut Option<bool>,
+    gnu_re: &mut Regex,
+) -> (String, String, bool) {
+    if bsd_reversed.is_none() {
+        let is_bsd_reversed = caps.name("binary").is_none();
+        let format_marker = if is_bsd_reversed {
+            ""
+        } else {
+            r"(?P<binary>[ \*])"
+        }
+        .to_string();
+
+        *bsd_reversed = Some(is_bsd_reversed);
+        *gnu_re = gnu_re_template(bytes_marker, &format_marker);
+    }
+
+    (
+        caps.name("fileName").unwrap().as_str().to_string(),
+        caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
+        if *bsd_reversed == Some(false) {
+            caps.name("binary").unwrap().as_str() == "*"
+        } else {
+            false
+        },
+    )
+}
+
+fn cksum_check<'a, I>(mut options: Options, files: I) -> UResult<()>
+where
+    I: Iterator<Item = &'a OsStr>,
+{
+    // Set up Regexes for line validation and parsing
+    //
+    // First, we compute the number of bytes we expect to be in
+    // the digest string. If the algorithm has a variable number
+    // of output bits, then we use the `+` modifier in the
+    // regular expression, otherwise we use the `{n}` modifier,
+    // where `n` is the number of bytes.
+    let bytes = options.digest.output_bits() / 4;
+    let bytes_marker = if bytes > 0 {
+        format!("{{{bytes}}}")
+    } else {
+        "+".to_string()
+    };
+
+    // BSD reversed mode format is similar to the default mode, but doesn’t use
+    // a character to distinguish binary and text modes.
+    let mut bsd_reversed = None;
+
+    let mut gnu_re = gnu_re_template(&bytes_marker, r"(?P<binary>[ \*])?");
+    let bsd_re = Regex::new(&format!(
+        r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
+        algorithm = options.algo_name,
+        digest_size = bytes_marker,
+    ))
+    .expect("internal error: invalid regex");
+
+    // Keep track of the number of errors to report at the end
+    let mut num_bad_format_errors = 0;
+    let mut num_failed_checksums = 0;
+    let mut num_failed_to_open = 0;
+
+    for filename in files {
+        let buffer = open_file(filename)?;
+        for (i, maybe_line) in buffer.lines().enumerate() {
+            let line = match maybe_line {
+                Ok(l) => l,
+                Err(e) => return Err(e.map_err_context(|| "failed to read file".to_string())),
+            };
+            let (ck_filename, sum, binary_check) = match gnu_re.captures(&line) {
+                Some(caps) => handle_captures(&caps, &bytes_marker, &mut bsd_reversed, &mut gnu_re),
+                None => match bsd_re.captures(&line) {
+                    Some(caps) => (
+                        caps.name("fileName").unwrap().as_str().to_string(),
+                        caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
+                        true,
+                    ),
+                    None => {
+                        num_bad_format_errors += 1;
+                        if options.strict {
+                            return Err(CksumError::InvalidFormat.into());
+                        }
+                        if options.warn {
+                            show_warning!(
+                                "{}: {}: improperly formatted {} checksum line",
+                                filename.maybe_quote(),
+                                i + 1,
+                                options.algo_name
+                            );
+                        }
+                        continue;
+                    }
+                },
+            };
+            let f = match File::open(ck_filename.clone()) {
+                Err(_) => {
+                    num_failed_to_open += 1;
+                    println!(
+                        "{}: {}: No such file or directory",
+                        uucore::util_name(),
+                        ck_filename
+                    );
+                    println!("{ck_filename}: FAILED open or read");
+                    continue;
+                }
+                Ok(file) => file,
+            };
+            let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
+            let real_sum = digest_read(
+                &mut options.digest,
+                &mut ckf,
+                binary_check,
+                options.output_bits,
+            )
+            .map_err_context(|| "failed to read input".to_string())?
+            .0
+            .to_ascii_lowercase();
+
+            // FIXME: Filenames with newlines should be treated specially.
+            // GNU appears to replace newlines by \n and backslashes by
+            // \\ and prepend a backslash (to the hash or filename) if it did
+            // this escaping.
+            // Different sorts of output (checking vs outputting hashes) may
+            // handle this differently. Compare carefully to GNU.
+            // If you can, try to preserve invalid unicode using OsStr(ing)Ext
+            // and display it using uucore::display::print_verbatim(). This is
+            // easier (and more important) on Unix than on Windows.
+            if sum == real_sum {
+                if !options.quiet {
+                    println!("{ck_filename}: OK");
+                }
+            } else {
+                if !options.status {
+                    println!("{ck_filename}: FAILED");
+                }
+                num_failed_checksums += 1;
+            }
+        }
+    }
+
+    if !options.status {
+        match num_bad_format_errors {
+            0 => {}
+            1 => show_warning!("1 line is improperly formatted"),
+            _ => show_warning!("{} lines are improperly formatted", num_bad_format_errors),
+        }
+        match num_failed_checksums {
+            0 => {}
+            1 => show_warning!("WARNING: 1 computed checksum did NOT match"),
+            _ => show_warning!(
+                "WARNING: {} computed checksum did NOT match",
+                num_failed_checksums
+            ),
+        }
+        match num_failed_to_open {
+            0 => {}
+            1 => show_warning!("1 listed file could not be read"),
+            _ => show_warning!("{} listed file could not be read", num_failed_to_open),
+        }
+    }
+    Ok(())
+}
+
+fn cksum_print<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
 {
@@ -148,39 +357,36 @@ where
             ),
             (algorithm::CRC, true) => println!("{sum} {sz}"),
             (algorithm::CRC, false) => println!("{sum} {sz} {}", path.display()),
-            (algorithm::BLAKE2B, _) if !options.untagged => {
+            (algorithm::BLAKE2B, _) if options.tag => {
                 println!("BLAKE2b ({}) = {sum}", path.display());
             }
             _ => {
-                if options.untagged {
-                    println!("{sum}  {}", path.display());
-                } else {
+                if options.tag {
                     println!(
                         "{} ({}) = {sum}",
                         options.algo_name.to_ascii_uppercase(),
                         path.display()
                     );
+                } else {
+                    println!("{sum}  {}", path.display());
                 }
             }
-        }
+        };
     }
-
     Ok(())
 }
 
 fn open_file(filename: &OsStr) -> UResult<BufReader<Box<dyn Read>>> {
-    let stdin_buf;
-    let file_buf;
     let is_stdin = filename == OsStr::new("-");
 
     let path = Path::new(filename);
     let reader = if is_stdin {
-        stdin_buf = stdin();
+        let stdin_buf = stdin();
         Box::new(stdin_buf) as Box<dyn Read>
     } else if path.is_dir() {
         Box::new(BufReader::new(io::empty())) as Box<dyn Read>
     } else {
-        file_buf =
+        let file_buf =
             File::open(filename).map_err_context(|| filename.to_str().unwrap().to_string())?;
         Box::new(file_buf) as Box<dyn Read>
     };
@@ -233,8 +439,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (algo_name, digest, output_bits) = detect_algo(algo_name);
 
-    let untagged = matches.get_flag(options::UNTAGGED);
-
+    // TODO: This is not supported by GNU. It is added here so we can use cksum
+    // as a base for the specialized utils, but it should ultimately be hidden
+    // on cksum itself.
     let binary = if matches.get_flag(options::BINARY) {
         true
     } else if matches.get_flag(options::TEXT) {
@@ -242,8 +449,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         BINARY_FLAG_DEFAULT
     };
+
     let check = matches.get_flag(options::CHECK);
-    let tag = matches.get_flag(options::TAG);
+    let tag = matches.get_flag(options::TAG) || !matches.get_flag(options::UNTAGGED);
     let status = matches.get_flag(options::STATUS);
     let quiet = matches.get_flag(options::QUIET) || status;
     let strict = matches.get_flag(options::STRICT);
@@ -254,7 +462,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         algo_name,
         digest,
         output_bits,
-        untagged,
         binary,
         check,
         tag,
@@ -262,7 +469,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         quiet,
         strict,
         warn,
-        zero,
+        _zero: zero,
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -391,7 +598,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::UNTAGGED)
                 .long(options::UNTAGGED)
                 .help("create a reversed style checksum, without digest type")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TAG),
         )
         .args(common_args())
         .arg(length_arg())

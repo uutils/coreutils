@@ -16,6 +16,7 @@ path = "src/cksum.rs"
 
 [dependencies]
 clap = { workspace = true }
+regex = { workspace = true }
 uucore = { workspace = true, features = ["sum"] }
 hex = { workspace = true }
 
