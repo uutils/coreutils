@@ -1470,7 +1470,11 @@ fn test_cp_preserve_links_case_5() {
     at.touch("d/a");
     at.hard_link("d/a", "d/b");
 
-    ucmd.arg("--preserve=links").arg("d").arg("c").succeeds();
+    ucmd.arg("-dR")
+        .arg("--no-preserve=links")
+        .arg("d")
+        .arg("c")
+        .succeeds();
 
     #[cfg(all(unix, not(target_os = "freebsd")))]
     {
