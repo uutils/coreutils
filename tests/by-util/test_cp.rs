@@ -1350,20 +1350,37 @@ fn test_cp_preserve_xattr_fails_on_android() {
 }
 
 #[test]
-// android will
-// stderr = cp: Permission denied (os error 13)
-// panicked at Command was expected to succeed.
 #[cfg(not(target_os = "android"))]
-fn test_cp_issue_5031_case_1() {
+fn test_cp_preserve_links_case_1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.hard_link("a", "b");
+    at.mkdir("c");
+
+    ucmd.arg("-d").arg("a").arg("b").arg("c").succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        assert!(at.dir_exists("c"));
+        assert!(at.plus("c").join("a").exists());
+        assert!(at.plus("c").join("b").exists());
+
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_2() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("a");
     at.symlink_file("a", "b");
     at.mkdir("c");
-
-    assert!(at.file_exists("a"));
-    assert!(at.symlink_exists("b"));
-    assert!(at.dir_exists("c"));
 
     ucmd.arg("--preserve=links")
         .arg("-R")
@@ -1387,97 +1404,42 @@ fn test_cp_issue_5031_case_1() {
 }
 
 #[test]
-// android will
-// stderr = cp: Permission denied (os error 13)
-// panicked at Command was expected to succeed.
 #[cfg(not(target_os = "android"))]
-fn test_cp_issue_5031_case_2() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    at.touch("a");
-    at.symlink_file("a", "b");
-    at.mkdir("c");
-
-    assert!(at.file_exists("a"));
-    assert!(at.symlink_exists("b"));
-    assert!(at.dir_exists("c"));
-
-    ucmd.arg("--preserve=links")
-        .arg("-R")
-        .arg("-H")
-        .arg("b")
-        .arg("a")
-        .arg("c")
-        .succeeds();
-
-    #[cfg(all(unix, not(target_os = "freebsd")))]
-    {
-        assert!(at.dir_exists("c"));
-        assert!(at.plus("c").join("a").exists());
-        assert!(at.plus("c").join("b").exists());
-
-        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
-
-        assert_eq!(metadata_a.ino(), metadata_b.ino());
-    }
-}
-
-#[test]
-// android will
-// stderr = cp: Permission denied (os error 13)
-// panicked at Command was expected to succeed.
-#[cfg(not(target_os = "android"))]
-fn test_cp_issue_5031_case_3() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    at.touch("a");
-    at.symlink_file("a", "b");
-    at.symlink_file("b", "c");
-    at.mkdir("d");
-
-    assert!(at.file_exists("a"));
-    assert!(at.symlink_exists("b"));
-    assert!(at.symlink_exists("c"));
-    assert!(at.dir_exists("d"));
-
-    ucmd.arg("--preserve=links")
-        .arg("-R")
-        .arg("-H")
-        .arg("b")
-        .arg("c")
-        .arg("d")
-        .succeeds();
-
-    #[cfg(all(unix, not(target_os = "freebsd")))]
-    {
-        assert!(at.dir_exists("d"));
-        assert!(!at.plus("d").join("a").exists());
-        assert!(at.plus("d").join("b").exists());
-        assert!(at.plus("d").join("c").exists());
-
-        let metadata_b = std::fs::metadata(at.subdir.join("d").join("b")).unwrap();
-        let metadata_c = std::fs::metadata(at.subdir.join("d").join("c")).unwrap();
-
-        assert_eq!(metadata_b.ino(), metadata_c.ino());
-    }
-}
-
-#[test]
-// android will
-// stderr = cp: Permission denied (os error 13)
-// panicked at Command was expected to succeed.
-#[cfg(not(target_os = "android"))]
-fn test_cp_issue_5031_case_4() {
+fn test_cp_preserve_links_case_3() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("d");
     at.touch("d/a");
     at.symlink_file("d/a", "d/b");
 
-    assert!(at.dir_exists("d"));
-    assert!(at.file_exists("d/a"));
-    assert!(at.symlink_exists("d/b"));
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-L")
+        .arg("d")
+        .arg("c")
+        .succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        assert!(at.dir_exists("c"));
+        assert!(at.plus("c").join("a").exists());
+        assert!(at.plus("c").join("b").exists());
+
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_4() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.touch("d/a");
+    at.hard_link("d/a", "d/b");
 
     ucmd.arg("--preserve=links")
         .arg("-R")
@@ -1500,38 +1462,48 @@ fn test_cp_issue_5031_case_4() {
 }
 
 #[test]
-// android will
-// stderr = cp: Permission denied (os error 13)
-// panicked at Command was expected to succeed.
 #[cfg(not(target_os = "android"))]
-fn test_cp_issue_5031_case_5() {
+fn test_cp_preserve_links_case_5() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.mkdir("c");
-    at.mkdir("c/d");
-    at.touch("c/d/a");
-    at.symlink_file("c/d/a", "c/d/b");
+    at.mkdir("d");
+    at.touch("d/a");
+    at.hard_link("d/a", "d/b");
 
-    assert!(at.dir_exists("c"));
-    assert!(at.dir_exists("c/d"));
-    assert!(at.file_exists("c/d/a"));
-    assert!(at.symlink_exists("c/d/b"));
-
-    ucmd.arg("--preserve=links")
-        .arg("-R")
-        .arg("-L")
-        .arg("c")
-        .arg("e")
-        .succeeds();
+    ucmd.arg("--preserve=links").arg("d").arg("c").succeeds();
 
     #[cfg(all(unix, not(target_os = "freebsd")))]
     {
-        assert!(at.dir_exists("e"));
-        assert!(at.plus("e").join("d").join("a").exists());
-        assert!(at.plus("e").join("d").join("b").exists());
+        assert!(at.dir_exists("c"));
+        assert!(at.plus("c").join("a").exists());
+        assert!(at.plus("c").join("b").exists());
 
-        let metadata_a = std::fs::metadata(at.subdir.join("e").join("d").join("a")).unwrap();
-        let metadata_b = std::fs::metadata(at.subdir.join("e").join("d").join("b")).unwrap();
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_6() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.hard_link("a", "b");
+    at.mkdir("c");
+
+    ucmd.arg("-d").arg("a").arg("b").arg("c").succeeds();
+
+    #[cfg(all(unix, not(target_os = "freebsd")))]
+    {
+        assert!(at.dir_exists("c"));
+        assert!(at.plus("c").join("a").exists());
+        assert!(at.plus("c").join("b").exists());
+
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
         assert_eq!(metadata_a.ino(), metadata_b.ino());
     }
