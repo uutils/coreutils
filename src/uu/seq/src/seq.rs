@@ -4,15 +4,12 @@
 //  * file that was distributed with this source code.
 // spell-checker:ignore (ToDO) istr chiter argptr ilen extendedbigdecimal extendedbigint numberparse
 use std::io::{stdout, ErrorKind, Write};
-use std::process::exit;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use num_traits::Zero;
 
-use uucore::error::FromIo;
 use uucore::error::UResult;
-use uucore::memo::printf;
-use uucore::show;
+use uucore::format::printf;
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;
@@ -251,7 +248,7 @@ fn print_seq(
     pad: bool,
     padding: usize,
     format: Option<&str>,
-) -> std::io::Result<()> {
+) -> UResult<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();
     let (first, increment, last) = range;
@@ -277,10 +274,7 @@ fn print_seq(
         match format {
             Some(f) => {
                 let s = format!("{value}");
-                if let Err(x) = printf(f, &[s]) {
-                    show!(x);
-                    exit(1);
-                }
+                printf(f, &[s])?;
             }
             None => write_value_float(
                 &mut stdout,
@@ -322,7 +316,7 @@ fn print_seq_integers(
     pad: bool,
     padding: usize,
     format: Option<&str>,
-) -> std::io::Result<()> {
+) -> UResult<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();
     let (first, increment, last) = range;
@@ -342,10 +336,7 @@ fn print_seq_integers(
         match format {
             Some(f) => {
                 let s = format!("{value}");
-                if let Err(x) = printf(f, &[s]) {
-                    show!(x);
-                    exit(1);
-                }
+                printf(f, &[s])?;
             }
             None => write_value_int(&mut stdout, &value, padding, pad, is_first_iteration)?,
         }

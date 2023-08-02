@@ -14,7 +14,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use uucore::error::UResult;
-use uucore::memo::sprintf;
+use uucore::format::sprintf;
 
 use crate::numbers::{to_magnitude_and_suffix, SuffixType};
 

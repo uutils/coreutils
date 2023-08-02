@@ -18,7 +18,7 @@ path = "src/dd.rs"
 clap = { workspace = true }
 gcd = { workspace = true }
 libc = { workspace = true }
-uucore = { workspace = true, features = ["memo"] }
+uucore = { workspace = true, features = ["format"] }
 
 [target.'cfg(any(target_os = "linux"))'.dependencies]
 nix = { workspace = true, features = ["fs"] }

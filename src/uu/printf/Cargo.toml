@@ -16,7 +16,7 @@ path = "src/printf.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["memo"] }
+uucore = { workspace = true, features = ["format"] }
 
 [[bin]]
 name = "printf"
