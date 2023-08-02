@@ -44,8 +44,8 @@ pub use crate::features::fs;
 pub use crate::features::fsext;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
-#[cfg(feature = "memo")]
-pub use crate::features::memo;
+#[cfg(feature = "format")]
+pub use crate::features::format;
 #[cfg(feature = "ringbuffer")]
 pub use crate::features::ringbuffer;
 #[cfg(feature = "sum")]
