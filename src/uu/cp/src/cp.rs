@@ -1587,7 +1587,6 @@ fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
 #[allow(clippy::cognitive_complexity)]
-#[allow(clippy::too_many_arguments)]
 fn copy_file(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
@@ -1605,7 +1604,8 @@ fn copy_file(
         return Ok(());
     }
 
-    if options.dereference(source_in_command_line) && options.preserve_hard_links() {
+    // issue 5031
+    if options.preserve_hard_links() {
         if let Some(new_source) = copied_files.get(&FileInformation::from_path(
             source,
             options.dereference(source_in_command_line),
