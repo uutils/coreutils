@@ -1140,6 +1140,14 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     let mut non_fatal_errors = false;
     let mut seen_sources = HashSet::with_capacity(sources.len());
     let mut symlinked_files = HashSet::new();
+
+    // to remember the copied files for further usage.
+    // the FileInformation implemented the Hash trait by using
+    // 1. inode number
+    // 2. device number
+    // the combination of a file's inode number and device number is unique throughout all the file systems.
+    //
+    // the copied_files hashmap's key is the source file's information and the value is the destination filepath.
     let mut copied_files: HashMap<FileInformation, PathBuf> = HashMap::with_capacity(sources.len());
 
     let progress_bar = if options.progress_bar {
@@ -1606,6 +1614,9 @@ fn copy_file(
 
     // issue 5031
     if options.preserve_hard_links() {
+        // if we encounter a matching device/inode pair in the source tree
+        // we can arrange to create a hard link between the corresponding names
+        // in the destination tree.
         if let Some(new_source) = copied_files.get(&FileInformation::from_path(
             source,
             options.dereference(source_in_command_line),
