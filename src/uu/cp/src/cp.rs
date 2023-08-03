@@ -1147,7 +1147,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     // 2. device number
     // the combination of a file's inode number and device number is unique throughout all the file systems.
     //
-    // the copied_files hashmap's key is the source file's information and the value is the destination filepath.
+    // the copied_files's key is the source file's information and the value is the destination filepath.
     let mut copied_files: HashMap<FileInformation, PathBuf> = HashMap::with_capacity(sources.len());
 
     let progress_bar = if options.progress_bar {
