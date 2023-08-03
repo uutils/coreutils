@@ -5,17 +5,15 @@ use crate::options;
 // parse_style parses a style string into a NumberingStyle.
 fn parse_style(chars: &[char]) -> Result<crate::NumberingStyle, String> {
     if chars.len() == 1 && chars[0] == 'a' {
-        Ok(crate::NumberingStyle::NumberForAll)
+        Ok(crate::NumberingStyle::All)
     } else if chars.len() == 1 && chars[0] == 't' {
-        Ok(crate::NumberingStyle::NumberForNonEmpty)
+        Ok(crate::NumberingStyle::NonEmpty)
     } else if chars.len() == 1 && chars[0] == 'n' {
-        Ok(crate::NumberingStyle::NumberForNone)
+        Ok(crate::NumberingStyle::None)
     } else if chars.len() > 1 && chars[0] == 'p' {
         let s: String = chars[1..].iter().cloned().collect();
         match regex::Regex::new(&s) {
-            Ok(re) => Ok(crate::NumberingStyle::NumberForRegularExpression(Box::new(
-                re,
-            ))),
+            Ok(re) => Ok(crate::NumberingStyle::Regex(Box::new(re))),
             Err(_) => Err(String::from("Illegal regular expression")),
         }
     } else {
@@ -86,23 +84,18 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
             "Invalid line number field width: ‘0’: Numerical result out of range",
         )),
     }
+    match opts.get_one::<u64>(options::JOIN_BLANK_LINES) {
+        None => {}
+        Some(num) if *num > 0 => settings.join_blank_lines = *num,
+        Some(_) => errs.push(String::from(
+            "Invalid line number of blank lines: ‘0’: Numerical result out of range",
+        )),
+    }
     if let Some(num) = opts.get_one::<i64>(options::LINE_INCREMENT) {
         settings.line_increment = *num;
     }
     if let Some(num) = opts.get_one::<i64>(options::STARTING_LINE_NUMBER) {
         settings.starting_line_number = *num;
-    }
-    match opts.get_one::<String>(options::JOIN_BLANK_LINES) {
-        None => {}
-        Some(val) => {
-            let conv: Option<u64> = val.parse().ok();
-            match conv {
-                None => {
-                    errs.push(String::from("Illegal value for -l"));
-                }
-                Some(num) => settings.join_blank_lines = num,
-            }
-        }
     }
     errs
 }
