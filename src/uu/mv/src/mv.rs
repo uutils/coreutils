@@ -400,7 +400,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         }
 
         match rename(sourcepath, &targetpath, b, multi_progress.as_ref()) {
-            Err(e) if e.to_string() == "" => set_exit_code(1),
+            Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 let e = e.map_err_context(|| {
                     format!(

@@ -31,6 +31,9 @@ use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
 
+/// Used to check if the `mode` has its `perm` bit set.
+///
+/// This macro expands to `mode & perm != 0`.
 #[cfg(unix)]
 #[macro_export]
 macro_rules! has {

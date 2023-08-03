@@ -45,7 +45,7 @@ echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
 cd "${path_UUTILS}" && echo "[ pwd:'${PWD}' ]"
 
 if [ "$(uname)" == "Linux" ]; then
-# only set on linux
+    # only set on linux
     export SELINUX_ENABLED=1
 fi
 

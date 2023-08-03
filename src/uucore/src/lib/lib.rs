@@ -86,6 +86,10 @@ use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
 
+/// Execute utility code for `util`.
+///
+/// This macro expands to a main function that invokes the `uumain` function in `util`
+/// Exits with code returned by `uumain`.
 #[macro_export]
 macro_rules! bin {
     ($util:ident) => {

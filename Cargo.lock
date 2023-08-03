@@ -3124,10 +3124,10 @@ dependencies = [
 name = "uu_touch"
 version = "0.0.20"
 dependencies = [
+ "chrono",
  "clap",
  "filetime",
  "parse_datetime",
- "time",
  "uucore",
  "windows-sys 0.48.0",
 ]
@@ -3593,9 +3593,9 @@ checksum = "1a515f5799fe4961cb532f983ce2b23082366b898e52ffbce459c86f67c8378a"
 
 [[package]]
 name = "xattr"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea263437ca03c1522846a4ddafbca2542d0ad5ed9b784909d4b27b76f62bc34a"
+checksum = "f4686009f71ff3e5c4dbcf1a282d0a44db3f021ba69350cd42086b3e5f1c6985"
 dependencies = [
  "libc",
 ]
