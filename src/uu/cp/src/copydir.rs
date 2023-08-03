@@ -194,7 +194,6 @@ where
 }
 
 /// Copy a single entry during a directory traversal.
-#[allow(clippy::too_many_arguments)]
 fn copy_direntry(
     progress_bar: &Option<ProgressBar>,
     entry: Entry,
@@ -202,8 +201,7 @@ fn copy_direntry(
     symlinked_files: &mut HashSet<FileInformation>,
     preserve_hard_links: bool,
     hard_links: &mut Vec<(String, u64)>,
-    seen_sources: &mut HashMap<PathBuf, PathBuf>,
-    should_hard_linked_files: &mut HashMap<PathBuf, PathBuf>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let Entry {
         source_absolute,
@@ -242,8 +240,8 @@ fn copy_direntry(
 
     // If the source is not a directory, then we need to copy the file.
     if !source_absolute.is_dir() {
+        let dest = local_to_target.as_path().to_path_buf();
         if preserve_hard_links {
-            let dest = local_to_target.as_path().to_path_buf();
             let found_hard_link = preserve_hardlinks(hard_links, &source_absolute, &dest)?;
             if !found_hard_link {
                 match copy_file(
@@ -252,11 +250,19 @@ fn copy_direntry(
                     local_to_target.as_path(),
                     options,
                     symlinked_files,
-                    seen_sources,
-                    should_hard_linked_files,
+                    copied_files,
                     false,
                 ) {
-                    Ok(_) => Ok(()),
+                    Ok(_) => {
+                        copied_files.insert(
+                            FileInformation::from_path(
+                                &source_absolute,
+                                options.dereference(false),
+                            )?,
+                            dest,
+                        );
+                        Ok(())
+                    }
                     Err(err) => {
                         if source_absolute.is_symlink() {
                             // silent the error with a symlink
@@ -282,11 +288,15 @@ fn copy_direntry(
                 local_to_target.as_path(),
                 options,
                 symlinked_files,
-                seen_sources,
-                should_hard_linked_files,
+                copied_files,
                 false,
             ) {
-                Ok(_) => {}
+                Ok(_) => {
+                    copied_files.insert(
+                        FileInformation::from_path(&source_absolute, options.dereference(false))?,
+                        dest,
+                    );
+                }
                 Err(Error::IoErrContext(e, _))
                     if e.kind() == std::io::ErrorKind::PermissionDenied =>
                 {
@@ -299,7 +309,6 @@ fn copy_direntry(
                 Err(e) => return Err(e),
             }
         }
-        seen_sources.insert(source_relative.file_name().unwrap().into(), local_to_target);
     }
 
     // In any other case, there is nothing to do, so we just return to
@@ -319,8 +328,7 @@ pub(crate) fn copy_directory(
     target: &TargetSlice,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
-    seen_sources: &mut HashMap<PathBuf, PathBuf>,
-    should_hard_linked_files: &mut HashMap<PathBuf, PathBuf>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     if !options.recursive {
@@ -335,8 +343,7 @@ pub(crate) fn copy_directory(
             target,
             options,
             symlinked_files,
-            seen_sources,
-            should_hard_linked_files,
+            copied_files,
             source_in_command_line,
         );
     }
@@ -411,8 +418,7 @@ pub(crate) fn copy_directory(
                     symlinked_files,
                     preserve_hard_links,
                     &mut hard_links,
-                    seen_sources,
-                    should_hard_linked_files,
+                    copied_files,
                 )?;
             }
             // Print an error message, but continue traversing the directory.

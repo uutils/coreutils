@@ -1138,9 +1138,9 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     let mut hard_links: Vec<(String, u64)> = vec![];
 
     let mut non_fatal_errors = false;
-    let mut seen_sources = HashMap::with_capacity(sources.len());
-    let mut should_hard_linked_files = HashMap::with_capacity(sources.len());
+    let mut seen_sources = HashSet::with_capacity(sources.len());
     let mut symlinked_files = HashSet::new();
+    let mut copied_files: HashMap<FileInformation, PathBuf> = HashMap::with_capacity(sources.len());
 
     let progress_bar = if options.progress_bar {
         let pb = ProgressBar::new(disk_usage(sources, options.recursive)?)
@@ -1158,12 +1158,11 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     };
 
     for source in sources.iter() {
-        let dest = construct_dest_path(source, target, &target_type, options)?;
-
-        if seen_sources.contains_key(source) && !should_hard_linked_files.contains_key(source) {
+        if seen_sources.contains(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
         } else {
+            let dest = construct_dest_path(source, target, &target_type, options)?;
             let found_hard_link = if preserve_hard_links && !source.is_dir() {
                 preserve_hardlinks(&mut hard_links, source, &dest)?
             } else {
@@ -1177,14 +1176,17 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                     &target_type,
                     options,
                     &mut symlinked_files,
-                    &mut seen_sources,
-                    &mut should_hard_linked_files,
+                    &mut copied_files,
                 ) {
                     show_error_if_needed(&error);
                     non_fatal_errors = true;
                 }
+                copied_files.insert(
+                    FileInformation::from_path(source, options.dereference(true))?,
+                    dest,
+                );
             }
-            seen_sources.insert(source.to_path_buf(), dest);
+            seen_sources.insert(source);
         }
     }
 
@@ -1226,7 +1228,6 @@ fn construct_dest_path(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn copy_source(
     progress_bar: &Option<ProgressBar>,
     source: &SourceSlice,
@@ -1234,8 +1235,7 @@ fn copy_source(
     target_type: &TargetType,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
-    seen_sources: &mut HashMap<PathBuf, PathBuf>,
-    should_hard_linked_files: &mut HashMap<PathBuf, PathBuf>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
     if source_path.is_dir() {
@@ -1246,8 +1246,7 @@ fn copy_source(
             target,
             options,
             symlinked_files,
-            seen_sources,
-            should_hard_linked_files,
+            copied_files,
             true,
         )
     } else {
@@ -1259,8 +1258,7 @@ fn copy_source(
             dest.as_path(),
             options,
             symlinked_files,
-            seen_sources,
-            should_hard_linked_files,
+            copied_files,
             true,
         );
         if options.parents {
@@ -1596,8 +1594,7 @@ fn copy_file(
     dest: &Path,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
-    seen_sources: &mut HashMap<PathBuf, PathBuf>,
-    should_hard_linked_files: &mut HashMap<PathBuf, PathBuf>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     if (options.update == UpdateMode::ReplaceIfOlder || options.update == UpdateMode::ReplaceNone)
@@ -1608,48 +1605,14 @@ fn copy_file(
         return Ok(());
     }
 
-    // issue 5031 case
-    // touch a && ln -s a b && mkdir c
-    // cp --preserve=links -R -H a b c
-    if let Some(base_name) = source.file_name() {
-        let base_source: PathBuf = base_name.into();
-        if let Some(new_source) = should_hard_linked_files.get(&base_source) {
+    if options.dereference(source_in_command_line) && options.preserve_hard_links() {
+        if let Some(new_source) = copied_files.get(&FileInformation::from_path(
+            source,
+            options.dereference(source_in_command_line),
+        )?) {
             std::fs::hard_link(new_source, dest)?;
             return Ok(());
-        }
-    }
-    if source.is_symlink()
-        && options.dereference(source_in_command_line)
-        && options.preserve_hard_links()
-    {
-        let mut original_source = source.read_link()?;
-        while original_source.is_symlink() {
-            original_source = original_source.read_link()?;
-        }
-        // unwrap it because the read_link method above is ok
-        // so this file_name won't be failed
-        original_source = original_source.file_name().unwrap().into();
-
-        match seen_sources.get(&original_source) {
-            Some(new_source) => {
-                std::fs::hard_link(new_source, dest)?;
-                return Ok(());
-            }
-            None => {
-                match should_hard_linked_files.get(&original_source) {
-                    Some(new_source) => {
-                        // GNU cp can deal with this case:
-                        // touch a && ln -s a b && ln -s b c && mkdir d
-                        // cp --preserve=links -R -H b c d
-                        std::fs::hard_link(new_source, dest)?;
-                        return Ok(());
-                    }
-                    None => {
-                        should_hard_linked_files.insert(original_source, dest.to_path_buf());
-                    }
-                }
-            }
-        }
+        };
     }
 
     // Fail if dest is a dangling symlink or a symlink this program created previously
