@@ -620,8 +620,18 @@ fn test_neg_inf() {
 }
 
 #[test]
+fn test_neg_infinity() {
+    run(&["--", "-infinity", "0"], b"-inf\n-inf\n-inf\n");
+}
+
+#[test]
 fn test_inf() {
     run(&["inf"], b"1\n2\n3\n");
+}
+
+#[test]
+fn test_infinity() {
+    run(&["infinity"], b"1\n2\n3\n");
 }
 
 #[test]

@@ -477,9 +477,21 @@ mod tests {
     #[test]
     fn test_parse_inf() {
         assert_eq!(parse("inf"), Number::Float(ExtendedBigDecimal::Infinity));
+        assert_eq!(
+            parse("infinity"),
+            Number::Float(ExtendedBigDecimal::Infinity)
+        );
         assert_eq!(parse("+inf"), Number::Float(ExtendedBigDecimal::Infinity));
         assert_eq!(
+            parse("+infinity"),
+            Number::Float(ExtendedBigDecimal::Infinity)
+        );
+        assert_eq!(
             parse("-inf"),
+            Number::Float(ExtendedBigDecimal::MinusInfinity)
+        );
+        assert_eq!(
+            parse("-infinity"),
             Number::Float(ExtendedBigDecimal::MinusInfinity)
         );
     }
