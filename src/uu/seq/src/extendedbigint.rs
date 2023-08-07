@@ -65,11 +65,7 @@ impl Display for ExtendedBigInt {
             Self::BigInt(n) => n.fmt(f),
             Self::Infinity => f32::INFINITY.fmt(f),
             Self::MinusInfinity => f32::NEG_INFINITY.fmt(f),
-            Self::MinusZero => {
-                // FIXME Come up with a way of formatting this with a
-                // "-" prefix.
-                0.fmt(f)
-            }
+            Self::MinusZero => "-0".fmt(f),
             Self::Nan => "nan".fmt(f),
         }
     }
@@ -206,13 +202,9 @@ mod tests {
     #[test]
     fn test_display() {
         assert_eq!(format!("{}", ExtendedBigInt::BigInt(BigInt::zero())), "0");
+        assert_eq!(format!("{}", ExtendedBigInt::MinusZero), "-0");
         assert_eq!(format!("{}", ExtendedBigInt::Infinity), "inf");
         assert_eq!(format!("{}", ExtendedBigInt::MinusInfinity), "-inf");
         assert_eq!(format!("{}", ExtendedBigInt::Nan), "nan");
-        // FIXME Come up with a way of displaying negative zero as
-        // "-0". Currently it displays as just "0".
-        //
-        //     assert_eq!(format!("{}", ExtendedBigInt::MinusZero), "-0");
-        //
     }
 }

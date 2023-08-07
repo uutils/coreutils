@@ -223,16 +223,13 @@ fn write_value_int(
     value: &ExtendedBigInt,
     width: usize,
     pad: bool,
-    is_first_iteration: bool,
 ) -> std::io::Result<()> {
     let value_as_str = if pad {
-        if *value == ExtendedBigInt::MinusZero && is_first_iteration {
-            format!("-{value:>0width$}", width = width - 1)
+        if *value == ExtendedBigInt::MinusZero {
+            format!("{value:0<width$}")
         } else {
             format!("{value:>0width$}")
         }
-    } else if *value == ExtendedBigInt::MinusZero && is_first_iteration {
-        format!("-{value}")
     } else {
         format!("{value}")
     };
@@ -347,7 +344,7 @@ fn print_seq_integers(
                     exit(1);
                 }
             }
-            None => write_value_int(&mut stdout, &value, padding, pad, is_first_iteration)?,
+            None => write_value_int(&mut stdout, &value, padding, pad)?,
         }
         // TODO Implement augmenting addition.
         value = value + increment.clone();
