@@ -206,7 +206,6 @@ fn write_value_float(
     value: &ExtendedBigDecimal,
     width: usize,
     precision: usize,
-    _is_first_iteration: bool,
 ) -> std::io::Result<()> {
     let value_as_str =
         if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity {
@@ -279,13 +278,7 @@ fn print_seq(
                     exit(1);
                 }
             }
-            None => write_value_float(
-                &mut stdout,
-                &value,
-                padding,
-                largest_dec,
-                is_first_iteration,
-            )?,
+            None => write_value_float(&mut stdout, &value, padding, largest_dec)?,
         }
         // TODO Implement augmenting addition.
         value = value + increment.clone();
