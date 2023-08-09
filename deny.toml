@@ -59,7 +59,7 @@ highlight = "all"
 # spell-checker: disable
 skip = [
   # procfs
-  { name = "rustix", version = "0.36.14" },
+  { name = "rustix", version = "0.36.15" },
   # rustix
   { name = "linux-raw-sys", version = "0.1.4" },
   # various crates
