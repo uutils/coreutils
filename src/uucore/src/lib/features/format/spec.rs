@@ -358,20 +358,28 @@ impl Spec {
                     return Err(FormatError::InvalidArgument(arg));
                 };
 
-                match positive_sign {
-                    PositiveSign::None => Ok(()),
-                    PositiveSign::Plus => write!(writer, "+"),
-                    PositiveSign::Space => write!(writer, " "),
+                if f.is_sign_positive() {
+                    match positive_sign {
+                        PositiveSign::None => Ok(()),
+                        PositiveSign::Plus => write!(writer, "+"),
+                        PositiveSign::Space => write!(writer, " "),
+                    }
+                    .map_err(FormatError::IoError)?;
                 }
-                .map_err(FormatError::IoError)?;
 
                 let s = match variant {
-                    FloatVariant::Decimal => format_float_decimal(f, precision, case, force_decimal),
+                    FloatVariant::Decimal => {
+                        format_float_decimal(f, precision, case, force_decimal)
+                    }
                     FloatVariant::Scientific => {
                         format_float_scientific(f, precision, case, force_decimal)
                     }
-                    FloatVariant::Shortest => format_float_shortest(f, precision, case, force_decimal),
-                    FloatVariant::Hexadecimal => todo!(),
+                    FloatVariant::Shortest => {
+                        format_float_shortest(f, precision, case, force_decimal)
+                    }
+                    FloatVariant::Hexadecimal => {
+                        format_float_hexadecimal(f, precision, case, force_decimal)
+                    }
                 };
 
                 match alignment {
@@ -385,6 +393,15 @@ impl Spec {
     }
 }
 
+fn format_float_nonfinite(f: f64, case: Case) -> String {
+    debug_assert!(!f.is_finite());
+    let mut s = format!("{f}");
+    if case == Case::Uppercase {
+        s.make_ascii_uppercase();
+    }
+    return s;
+}
+
 fn format_float_decimal(
     f: f64,
     precision: usize,
@@ -392,11 +409,7 @@ fn format_float_decimal(
     force_decimal: ForceDecimal,
 ) -> String {
     if !f.is_finite() {
-        let mut s = format!("{f}");
-        if case == Case::Lowercase {
-            s.make_ascii_uppercase();
-        }
-        return s;
+        return format_float_nonfinite(f, case);
     }
 
     if precision == 0 && force_decimal == ForceDecimal::Yes {
@@ -414,11 +427,7 @@ fn format_float_scientific(
 ) -> String {
     // If the float is NaN, -Nan, Inf or -Inf, format like any other float
     if !f.is_finite() {
-        let mut s = format!("{f}");
-        if case == Case::Lowercase {
-            s.make_ascii_uppercase();
-        }
-        return s;
+        return format_float_nonfinite(f, case);
     }
 
     let exponent: i32 = f.log10().floor() as i32;
@@ -456,6 +465,39 @@ fn format_float_shortest(
     } else {
         a
     }
+}
+
+fn format_float_hexadecimal(
+    f: f64,
+    precision: usize,
+    case: Case,
+    force_decimal: ForceDecimal,
+) -> String {
+    if !f.is_finite() {
+        return format_float_nonfinite(f, case);
+    }
+
+    let (first_digit, mantissa, exponent) = if f == 0.0 {
+        (0, 0, 0)
+    } else {
+        let bits = f.to_bits();
+        let exponent_bits = ((bits >> 52) & 0x7fff) as i64;
+        let exponent = exponent_bits - 1023;
+        let mantissa = bits & 0xf_ffff_ffff_ffff;
+        (1, mantissa, exponent)
+    };
+
+    let mut s = match (precision, force_decimal) {
+        (0, ForceDecimal::No) => format!("0x{first_digit}p{exponent:+x}"),
+        (0, ForceDecimal::Yes) => format!("0x{first_digit}.p{exponent:+x}"),
+        _ => format!("0x{first_digit}.{mantissa:0>13x}p{exponent:+x}")
+    };
+
+    if case == Case::Uppercase {
+        s.make_ascii_uppercase();
+    }
+
+    return s;
 }
 
 fn resolve_asterisk(
