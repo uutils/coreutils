@@ -494,17 +494,14 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
         }
         Err(err) => {
             if err.kind() == ErrorKind::PermissionDenied {
-                if let Ok(metadata) = fs::metadata(path) {
-                    if metadata.len() == 0 {
+                match fs::metadata(path) {
+                    Ok(metadata) if metadata.len() == 0 => {
                         prompt_yes!(
                             "remove write-protected regular empty file {}?",
                             path.quote()
                         )
-                    } else {
-                        prompt_yes!("remove write-protected regular file {}?", path.quote())
                     }
-                } else {
-                    prompt_yes!("remove write-protected regular file {}?", path.quote())
+                    _ => prompt_yes!("remove write-protected regular file {}?", path.quote()),
                 }
             } else {
                 true
