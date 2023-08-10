@@ -305,6 +305,19 @@ fn test_stdin_pipe_fifo2() {
 }
 
 #[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_stdin_with_fs_option() {
+    // $ stat -f -
+    new_ucmd!()
+        .arg("-f")
+        .arg("-")
+        .set_stdin(std::process::Stdio::null())
+        .fails()
+        .code_is(1)
+        .stderr_contains("using '-' to denote standard input does not work in file system mode");
+}
+
+#[test]
 #[cfg(all(
     unix,
     not(any(target_os = "android", target_os = "macos", target_os = "freebsd"))

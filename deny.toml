@@ -59,7 +59,7 @@ highlight = "all"
 # spell-checker: disable
 skip = [
   # procfs
-  { name = "rustix", version = "0.36.14" },
+  { name = "rustix", version = "0.36.15" },
   # rustix
   { name = "linux-raw-sys", version = "0.1.4" },
   # various crates
@@ -80,12 +80,12 @@ skip = [
   { name = "windows_x86_64_gnullvm", version = "0.42.2" },
   # windows-targets
   { name = "windows_x86_64_msvc", version = "0.42.2" },
-  # tempfile
-  { name = "redox_syscall", version = "0.3.5" },
   # cpp_macros
-  { name = "aho-corasick", version = "0.7.19" },
+  { name = "aho-corasick", version = "0.7.20" },
   # various crates
   { name = "syn", version = "1.0.109" },
+  # various crates
+  { name = "bitflags", version = "1.3.2" },
 ]
 # spell-checker: enable
 
