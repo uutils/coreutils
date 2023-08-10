@@ -433,9 +433,7 @@ fn rename(
     let mut backup_path = None;
 
     if to.exists() {
-        if (b.update == UpdateMode::ReplaceIfOlder || b.update == UpdateMode::ReplaceNone)
-            && b.overwrite == OverwriteMode::Interactive
-        {
+        if b.update == UpdateMode::ReplaceIfOlder && b.overwrite == OverwriteMode::Interactive {
             // `mv -i --update old new` when `new` exists doesn't move anything
             // and exit with 0
             return Ok(());
