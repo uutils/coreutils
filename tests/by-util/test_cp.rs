@@ -1363,10 +1363,13 @@ fn test_cp_preserve_links_case_1() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    #[cfg(all(unix))]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-    assert_eq!(metadata_a.ino(), metadata_b.ino());
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
 }
 
 #[test]
@@ -1389,10 +1392,13 @@ fn test_cp_preserve_links_case_2() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    #[cfg(all(unix))]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-    assert_eq!(metadata_a.ino(), metadata_b.ino());
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
 }
 
 #[test]
@@ -1414,10 +1420,13 @@ fn test_cp_preserve_links_case_3() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    #[cfg(all(unix))]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-    assert_eq!(metadata_a.ino(), metadata_b.ino());
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
 }
 
 #[test]
@@ -1439,10 +1448,13 @@ fn test_cp_preserve_links_case_4() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    #[cfg(all(unix))]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-    assert_eq!(metadata_a.ino(), metadata_b.ino());
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
 }
 
 #[test]
@@ -1463,10 +1475,13 @@ fn test_cp_preserve_links_case_5() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    #[cfg(all(unix))]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-    assert_eq!(metadata_a.ino(), metadata_b.ino());
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
 }
 
 #[test]
@@ -1483,10 +1498,13 @@ fn test_cp_preserve_links_case_6() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    #[cfg(all(unix))]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-    assert_eq!(metadata_a.ino(), metadata_b.ino());
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
 }
 
 #[test]
