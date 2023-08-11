@@ -1350,7 +1350,6 @@ fn test_cp_preserve_xattr_fails_on_android() {
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_1() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1360,21 +1359,17 @@ fn test_cp_preserve_links_case_1() {
 
     ucmd.arg("-d").arg("a").arg("b").arg("c").succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
-    {
-        assert!(at.dir_exists("c"));
-        assert!(at.plus("c").join("a").exists());
-        assert!(at.plus("c").join("b").exists());
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
 
-        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-        assert_eq!(metadata_a.ino(), metadata_b.ino());
-    }
+    assert_eq!(metadata_a.ino(), metadata_b.ino());
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_2() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1390,21 +1385,17 @@ fn test_cp_preserve_links_case_2() {
         .arg("c")
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
-    {
-        assert!(at.dir_exists("c"));
-        assert!(at.plus("c").join("a").exists());
-        assert!(at.plus("c").join("b").exists());
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
 
-        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-        assert_eq!(metadata_a.ino(), metadata_b.ino());
-    }
+    assert_eq!(metadata_a.ino(), metadata_b.ino());
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_3() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1419,21 +1410,17 @@ fn test_cp_preserve_links_case_3() {
         .arg("c")
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
-    {
-        assert!(at.dir_exists("c"));
-        assert!(at.plus("c").join("a").exists());
-        assert!(at.plus("c").join("b").exists());
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
 
-        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-        assert_eq!(metadata_a.ino(), metadata_b.ino());
-    }
+    assert_eq!(metadata_a.ino(), metadata_b.ino());
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_4() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1448,21 +1435,17 @@ fn test_cp_preserve_links_case_4() {
         .arg("c")
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
-    {
-        assert!(at.dir_exists("c"));
-        assert!(at.plus("c").join("a").exists());
-        assert!(at.plus("c").join("b").exists());
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
 
-        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-        assert_eq!(metadata_a.ino(), metadata_b.ino());
-    }
+    assert_eq!(metadata_a.ino(), metadata_b.ino());
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_5() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1476,21 +1459,17 @@ fn test_cp_preserve_links_case_5() {
         .arg("c")
         .succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
-    {
-        assert!(at.dir_exists("c"));
-        assert!(at.plus("c").join("a").exists());
-        assert!(at.plus("c").join("b").exists());
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
 
-        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-        assert_eq!(metadata_a.ino(), metadata_b.ino());
-    }
+    assert_eq!(metadata_a.ino(), metadata_b.ino());
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_6() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1500,17 +1479,14 @@ fn test_cp_preserve_links_case_6() {
 
     ucmd.arg("-d").arg("a").arg("b").arg("c").succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
-    {
-        assert!(at.dir_exists("c"));
-        assert!(at.plus("c").join("a").exists());
-        assert!(at.plus("c").join("b").exists());
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
 
-        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
-        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+    let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+    let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-        assert_eq!(metadata_a.ino(), metadata_b.ino());
-    }
+    assert_eq!(metadata_a.ino(), metadata_b.ino());
 }
 
 #[test]
