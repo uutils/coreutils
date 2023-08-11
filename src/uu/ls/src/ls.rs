@@ -17,6 +17,8 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use std::collections::HashSet;
+use std::num::IntErrorKind;
+
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -294,6 +296,7 @@ enum Sort {
     Time,
     Version,
     Extension,
+    Width,
 }
 
 #[derive(PartialEq)]
@@ -496,6 +499,7 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
             "size" => Sort::Size,
             "version" => Sort::Version,
             "extension" => Sort::Extension,
+            "width" => Sort::Width,
             // below should never happen as clap already restricts the values.
             _ => unreachable!("Invalid field for --sort"),
         }
@@ -655,6 +659,19 @@ fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
     }
 }
 
+fn parse_width(s: &str) -> Result<u16, LsError> {
+    let radix = match s.starts_with('0') && s.len() > 1 {
+        true => 8,
+        false => 10,
+    };
+    match u16::from_str_radix(s, radix) {
+        Ok(x) => Ok(x),
+        Err(e) => match e.kind() {
+            IntErrorKind::PosOverflow => Ok(u16::MAX),
+            _ => Err(LsError::InvalidLineWidth(s.into())),
+        },
+    }
+}
 impl Config {
     #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
@@ -793,20 +810,7 @@ impl Config {
         };
 
         let width = match options.get_one::<String>(options::WIDTH) {
-            Some(x) => {
-                if x.starts_with('0') && x.len() > 1 {
-                    // Read number as octal
-                    match u16::from_str_radix(x, 8) {
-                        Ok(v) => v,
-                        Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
-                    }
-                } else {
-                    match x.parse::<u16>() {
-                        Ok(u) => u,
-                        Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
-                    }
-                }
-            }
+            Some(x) => parse_width(x)?,
             None => match terminal_size::terminal_size() {
                 Some((width, _)) => width.0,
                 None => match std::env::var_os("COLUMNS") {
@@ -1200,6 +1204,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::quoting::LITERAL)
                 .short('N')
                 .long(options::quoting::LITERAL)
+                .alias("l")
                 .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
                 .overrides_with_all([
                     options::QUOTING_STYLE,
@@ -1322,9 +1327,9 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::SORT)
                 .long(options::SORT)
-                .help("Sort by <field>: name, none (-U), time (-t), size (-S) or extension (-X)")
+                .help("Sort by <field>: name, none (-U), time (-t), size (-S), extension (-X) or width")
                 .value_name("field")
-                .value_parser(["name", "none", "time", "size", "version", "extension"])
+                .value_parser(["name", "none", "time", "size", "version", "extension", "width"])
                 .require_equals(true)
                 .overrides_with_all([
                     options::SORT,
@@ -1929,13 +1934,21 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
         Sort::Size => entries.sort_by_key(|k| Reverse(k.md(out).map(|md| md.len()).unwrap_or(0))),
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
-        Sort::Version => entries
-            .sort_by(|a, b| version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())),
+        Sort::Version => entries.sort_by(|a, b| {
+            version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())
+                .then(a.p_buf.to_string_lossy().cmp(&b.p_buf.to_string_lossy()))
+        }),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
                 .extension()
                 .cmp(&b.p_buf.extension())
                 .then(a.p_buf.file_stem().cmp(&b.p_buf.file_stem()))
+        }),
+        Sort::Width => entries.sort_by(|a, b| {
+            a.display_name
+                .len()
+                .cmp(&b.display_name.len())
+                .then(a.display_name.cmp(&b.display_name))
         }),
         Sort::None => {}
     }
@@ -3000,6 +3013,20 @@ fn display_inode(metadata: &Metadata) -> String {
 #[allow(unused_variables)]
 fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
     let substitute_string = "?".to_string();
+    // If we must dereference, ensure that the symlink is actually valid even if the system
+    // does not support SELinux.
+    // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
+    if must_dereference {
+        match get_metadata(p_buf, must_dereference) {
+            Err(err) => {
+                // The Path couldn't be dereferenced, so return early and set exit code 1
+                // to indicate a minor error
+                show!(LsError::IOErrorContext(err, p_buf.to_path_buf(), false));
+                return substitute_string;
+            }
+            Ok(md) => (),
+        }
+    }
     if config.selinux_supported {
         #[cfg(feature = "selinux")]
         {

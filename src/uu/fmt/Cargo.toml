@@ -1,6 +1,6 @@
 [package]
 name = "uu_fmt"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "fmt ~ (uutils) reformat each paragraph of input"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/fmt.rs"
 
 [dependencies]
-clap = { workspace=true }
-unicode-width = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+unicode-width = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "fmt"

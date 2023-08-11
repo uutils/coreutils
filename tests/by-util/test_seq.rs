@@ -8,6 +8,14 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_no_args() {
+    new_ucmd!()
+        .fails()
+        .code_is(1)
+        .stderr_contains("missing operand");
+}
+
+#[test]
 fn test_hex_rejects_sign_after_identifier() {
     new_ucmd!()
         .args(&["0x-123ABC"])
@@ -208,10 +216,13 @@ fn test_separator_and_terminator() {
 
 #[test]
 fn test_equalize_widths() {
-    new_ucmd!()
-        .args(&["-w", "5", "10"])
-        .run()
-        .stdout_is("05\n06\n07\n08\n09\n10\n");
+    let args = ["-w", "--equal-width"];
+    for arg in args {
+        new_ucmd!()
+            .args(&[arg, "5", "10"])
+            .run()
+            .stdout_is("05\n06\n07\n08\n09\n10\n");
+    }
 }
 
 #[test]

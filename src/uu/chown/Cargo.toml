@@ -1,6 +1,6 @@
 [package]
 name = "uu_chown"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chown ~ (uutils) change the ownership of FILE"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/chown.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["entries", "fs", "perms"] }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs", "perms"] }
 
 [[bin]]
 name = "chown"

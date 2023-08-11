@@ -1,6 +1,6 @@
 [package]
 name = "uu_mkfifo"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mkfifo ~ (uutils) create FIFOs (named pipes)"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/mkfifo.rs"
 
 [dependencies]
-clap = { workspace=true }
-libc = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "mkfifo"

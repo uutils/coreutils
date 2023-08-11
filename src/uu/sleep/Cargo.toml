@@ -1,6 +1,6 @@
 [package]
 name = "uu_sleep"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sleep ~ (uutils) pause for DURATION"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/sleep.rs"
 
 [dependencies]
-clap = { workspace=true }
-fundu = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+fundu = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "sleep"

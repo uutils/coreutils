@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -22,7 +22,6 @@ use std::time::Duration;
 const LONG_ARGS: &[&str] = &[
     "-l",
     "--long",
-    "--l",
     "--format=long",
     "--for=long",
     "--format=verbose",
@@ -671,6 +670,23 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
 
+    for option in [
+        "-w 100000000000000",
+        "-w=100000000000000",
+        "--width=100000000000000",
+        "--width 100000000000000",
+        "-w 07777777777777777777",
+        "-w=07777777777777777777",
+        "--width=07777777777777777777",
+        "--width 07777777777777777777",
+    ] {
+        scene
+            .ucmd()
+            .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
+            .succeeds()
+            .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
+    }
     scene
         .ucmd()
         .arg("-w=bad")
@@ -1565,6 +1581,28 @@ fn test_ls_sort_name() {
 }
 
 #[test]
+fn test_ls_sort_width() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("aaaaa");
+    at.touch("bbb");
+    at.touch("cccc");
+    at.touch("eee");
+    at.touch("d");
+    at.touch("fffff");
+    at.touch("abc");
+    at.touch("zz");
+    at.touch("bcdef");
+
+    scene
+        .ucmd()
+        .arg("--sort=width")
+        .succeeds()
+        .stdout_is("d\nzz\nabc\nbbb\neee\ncccc\naaaaa\nbcdef\nfffff\n");
+}
+
+#[test]
 fn test_ls_order_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2389,6 +2427,7 @@ fn test_ls_quoting_style() {
             ("--quoting-style=literal", "one?two"),
             ("-N", "one?two"),
             ("--literal", "one?two"),
+            ("--l", "one?two"),
             ("--quoting-style=c", "\"one\\ntwo\""),
             ("-Q", "\"one\\ntwo\""),
             ("--quote-name", "\"one\\ntwo\""),
@@ -2413,6 +2452,7 @@ fn test_ls_quoting_style() {
             ("--quoting-style=literal", "one\ntwo"),
             ("-N", "one\ntwo"),
             ("--literal", "one\ntwo"),
+            ("--l", "one\ntwo"),
             ("--quoting-style=shell", "one\ntwo"), // FIXME: GNU ls quotes this case
             ("--quoting-style=shell-always", "'one\ntwo'"),
         ] {
@@ -2474,6 +2514,7 @@ fn test_ls_quoting_style() {
         ("--quoting-style=literal", "one two"),
         ("-N", "one two"),
         ("--literal", "one two"),
+        ("--l", "one two"),
         ("--quoting-style=c", "\"one two\""),
         ("-Q", "\"one two\""),
         ("--quote-name", "\"one two\""),
@@ -3108,6 +3149,16 @@ fn test_ls_dangling_symlinks() {
     scene
         .ucmd()
         .arg("-Li")
+        .arg("temp_dir")
+        .fails()
+        .code_is(1)
+        .stderr_contains("cannot access")
+        .stderr_contains("No such file or directory")
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+
+    scene
+        .ucmd()
+        .arg("-LZ")
         .arg("temp_dir")
         .fails()
         .code_is(1)

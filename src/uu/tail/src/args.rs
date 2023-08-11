@@ -7,12 +7,11 @@
 
 use crate::paths::Input;
 use crate::{parse, platform, Quotable};
-use clap::crate_version;
+use clap::{crate_version, value_parser};
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use fundu::DurationParser;
+use fundu::{DurationParser, SaturatingInto};
 use is_terminal::IsTerminal;
 use same_file::Handle;
-use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -80,7 +79,7 @@ impl FilterMode {
                 Err(e) => {
                     return Err(USimpleError::new(
                         1,
-                        format!("invalid number of bytes: {e}"),
+                        format!("invalid number of bytes: '{e}'"),
                     ))
                 }
             }
@@ -141,7 +140,8 @@ pub struct Settings {
     pub use_polling: bool,
     pub verbose: bool,
     pub presume_input_pipe: bool,
-    pub inputs: VecDeque<Input>,
+    /// `FILE(s)` positional arguments
+    pub inputs: Vec<Input>,
 }
 
 impl Default for Settings {
@@ -149,21 +149,21 @@ impl Default for Settings {
         Self {
             max_unchanged_stats: 5,
             sleep_sec: Duration::from_secs_f32(1.0),
-            follow: Default::default(),
-            mode: Default::default(),
+            follow: Option::default(),
+            mode: FilterMode::default(),
             pid: Default::default(),
             retry: Default::default(),
             use_polling: Default::default(),
             verbose: Default::default(),
             presume_input_pipe: Default::default(),
-            inputs: Default::default(),
+            inputs: Vec::default(),
         }
     }
 }
 
 impl Settings {
     pub fn from_obsolete_args(args: &parse::ObsoleteArgs, name: Option<&OsString>) -> Self {
-        let mut settings: Self = Default::default();
+        let mut settings = Self::default();
         if args.follow {
             settings.follow = if name.is_some() {
                 Some(FollowMode::Name)
@@ -173,11 +173,11 @@ impl Settings {
         }
         settings.mode = FilterMode::from_obsolete_args(args);
         let input = if let Some(name) = name {
-            Input::from(&name)
+            Input::from(name)
         } else {
             Input::default()
         };
-        settings.inputs.push_back(input);
+        settings.inputs.push(input);
         settings
     }
 
@@ -235,12 +235,15 @@ impl Settings {
             //   `DURATION::MAX` or `infinity` was given
             // * not applied here but it supports customizable time units and provides better error
             //   messages
-            settings.sleep_sec =
-                DurationParser::without_time_units()
-                    .parse(source)
-                    .map_err(|_| {
-                        UUsageError::new(1, format!("invalid number of seconds: '{source}'"))
-                    })?;
+            settings.sleep_sec = match DurationParser::without_time_units().parse(source) {
+                Ok(duration) => SaturatingInto::<std::time::Duration>::saturating_into(duration),
+                Err(_) => {
+                    return Err(UUsageError::new(
+                        1,
+                        format!("invalid number of seconds: '{source}'"),
+                    ))
+                }
+            }
         }
 
         if let Some(s) = matches.get_one::<String>(options::MAX_UNCHANGED_STATS) {
@@ -282,19 +285,13 @@ impl Settings {
             }
         }
 
-        let mut inputs: VecDeque<Input> = matches
-            .get_many::<String>(options::ARG_FILES)
-            .map(|v| v.map(|string| Input::from(&string)).collect())
-            .unwrap_or_default();
+        settings.inputs = matches
+            .get_many::<OsString>(options::ARG_FILES)
+            .map(|v| v.map(Input::from).collect())
+            .unwrap_or_else(|| vec![Input::default()]);
 
-        // apply default and add '-' to inputs if none is present
-        if inputs.is_empty() {
-            inputs.push_front(Input::default());
-        }
-
-        settings.verbose = inputs.len() > 1 && !matches.get_flag(options::verbosity::QUIET);
-
-        settings.inputs = inputs;
+        settings.verbose =
+            settings.inputs.len() > 1 && !matches.get_flag(options::verbosity::QUIET);
 
         Ok(settings)
     }
@@ -415,16 +412,17 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
                 starting_with = true;
             }
         }
-    } else {
-        return Err(ParseSizeError::ParseFailure(src.to_string()));
     }
 
-    parse_size(size_string).map(|n| match (n, starting_with) {
-        (0, true) => Signum::PlusZero,
-        (0, false) => Signum::MinusZero,
-        (n, true) => Signum::Positive(n),
-        (n, false) => Signum::Negative(n),
-    })
+    match parse_size(size_string) {
+        Ok(n) => match (n, starting_with) {
+            (0, true) => Ok(Signum::PlusZero),
+            (0, false) => Ok(Signum::MinusZero),
+            (n, true) => Ok(Signum::Positive(n)),
+            (n, false) => Ok(Signum::Negative(n)),
+        },
+        Err(_) => Err(ParseSizeError::ParseFailure(size_string.to_string())),
+    }
 }
 
 pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
@@ -589,6 +587,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ARG_FILES)
                 .action(ArgAction::Append)
                 .num_args(1..)
+                .value_parser(value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

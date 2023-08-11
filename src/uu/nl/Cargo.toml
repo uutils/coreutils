@@ -1,6 +1,6 @@
 [package]
 name = "uu_nl"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "nl ~ (uutils) display input with added line numbers"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/nl.rs"
 
 [dependencies]
-clap = { workspace=true }
-regex = { workspace=true }
-uucore = { workspace=true }
+clap = { workspace = true }
+regex = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "nl"

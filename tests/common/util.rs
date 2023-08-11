@@ -660,6 +660,17 @@ impl CmdResult {
     }
 
     #[track_caller]
+    pub fn stdout_contains_line<T: AsRef<str>>(&self, cmp: T) -> &Self {
+        assert!(
+            self.stdout_str().lines().any(|line| line == cmp.as_ref()),
+            "'{}' does not contain line '{}'",
+            self.stdout_str(),
+            cmp.as_ref()
+        );
+        self
+    }
+
+    #[track_caller]
     pub fn stderr_contains<T: AsRef<str>>(&self, cmp: T) -> &Self {
         assert!(
             self.stderr_str().contains(cmp.as_ref()),

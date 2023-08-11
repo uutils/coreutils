@@ -1,6 +1,6 @@
 [package]
 name = "uu_join"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "join ~ (uutils) merge lines from inputs with matching join fields"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/join.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true }
-memchr = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true }
+memchr = { workspace = true }
 
 [[bin]]
 name = "join"

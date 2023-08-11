@@ -127,7 +127,7 @@ where
     I: Iterator<Item = (usize, io::Result<String>)>,
 {
     // split the file based on patterns
-    for pattern in patterns.into_iter() {
+    for pattern in patterns {
         let pattern_as_str = pattern.to_string();
         let is_skip = matches!(pattern, patterns::Pattern::SkipToMatch(_, _, _));
         match pattern {
@@ -552,6 +552,109 @@ where
     }
 }
 
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args = args.collect_ignore();
+
+    let matches = uu_app().try_get_matches_from(args)?;
+
+    // get the file to split
+    let file_name = matches.get_one::<String>(options::FILE).unwrap();
+
+    // get the patterns to split on
+    let patterns: Vec<String> = matches
+        .get_many::<String>(options::PATTERN)
+        .unwrap()
+        .map(|s| s.to_string())
+        .collect();
+    let patterns = patterns::get_patterns(&patterns[..])?;
+    let options = CsplitOptions::new(&matches);
+    if file_name == "-" {
+        let stdin = io::stdin();
+        Ok(csplit(&options, patterns, stdin.lock())?)
+    } else {
+        let file = File::open(file_name)
+            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
+        let file_metadata = file
+            .metadata()
+            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
+        if !file_metadata.is_file() {
+            return Err(CsplitError::NotRegularFile(file_name.to_string()).into());
+        }
+        Ok(csplit(&options, patterns, BufReader::new(file))?)
+    }
+}
+
+pub fn uu_app() -> Command {
+    Command::new(uucore::util_name())
+        .version(crate_version!())
+        .about(ABOUT)
+        .override_usage(format_usage(USAGE))
+        .infer_long_args(true)
+        .arg(
+            Arg::new(options::SUFFIX_FORMAT)
+                .short('b')
+                .long(options::SUFFIX_FORMAT)
+                .value_name("FORMAT")
+                .help("use sprintf FORMAT instead of %02d"),
+        )
+        .arg(
+            Arg::new(options::PREFIX)
+                .short('f')
+                .long(options::PREFIX)
+                .value_name("PREFIX")
+                .help("use PREFIX instead of 'xx'"),
+        )
+        .arg(
+            Arg::new(options::KEEP_FILES)
+                .short('k')
+                .long(options::KEEP_FILES)
+                .help("do not remove output files on errors")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::SUPPRESS_MATCHED)
+                .long(options::SUPPRESS_MATCHED)
+                .help("suppress the lines matching PATTERN")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DIGITS)
+                .short('n')
+                .long(options::DIGITS)
+                .value_name("DIGITS")
+                .help("use specified number of digits instead of 2"),
+        )
+        .arg(
+            Arg::new(options::QUIET)
+                .short('s')
+                .long(options::QUIET)
+                .visible_alias("silent")
+                .help("do not print counts of output file sizes")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::ELIDE_EMPTY_FILES)
+                .short('z')
+                .long(options::ELIDE_EMPTY_FILES)
+                .help("remove empty output files")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::FILE)
+                .hide(true)
+                .required(true)
+                .value_hint(clap::ValueHint::FilePath),
+        )
+        .arg(
+            Arg::new(options::PATTERN)
+                .hide(true)
+                .action(clap::ArgAction::Append)
+                .required(true),
+        )
+        .after_help(AFTER_HELP)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -713,107 +816,4 @@ mod tests {
 
         assert!(input_splitter.next().is_none());
     }
-}
-
-#[uucore::main]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
-    let matches = uu_app().try_get_matches_from(args)?;
-
-    // get the file to split
-    let file_name = matches.get_one::<String>(options::FILE).unwrap();
-
-    // get the patterns to split on
-    let patterns: Vec<String> = matches
-        .get_many::<String>(options::PATTERN)
-        .unwrap()
-        .map(|s| s.to_string())
-        .collect();
-    let patterns = patterns::get_patterns(&patterns[..])?;
-    let options = CsplitOptions::new(&matches);
-    if file_name == "-" {
-        let stdin = io::stdin();
-        Ok(csplit(&options, patterns, stdin.lock())?)
-    } else {
-        let file = File::open(file_name)
-            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
-        let file_metadata = file
-            .metadata()
-            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
-        if !file_metadata.is_file() {
-            return Err(CsplitError::NotRegularFile(file_name.to_string()).into());
-        }
-        Ok(csplit(&options, patterns, BufReader::new(file))?)
-    }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::SUFFIX_FORMAT)
-                .short('b')
-                .long(options::SUFFIX_FORMAT)
-                .value_name("FORMAT")
-                .help("use sprintf FORMAT instead of %02d"),
-        )
-        .arg(
-            Arg::new(options::PREFIX)
-                .short('f')
-                .long(options::PREFIX)
-                .value_name("PREFIX")
-                .help("use PREFIX instead of 'xx'"),
-        )
-        .arg(
-            Arg::new(options::KEEP_FILES)
-                .short('k')
-                .long(options::KEEP_FILES)
-                .help("do not remove output files on errors")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SUPPRESS_MATCHED)
-                .long(options::SUPPRESS_MATCHED)
-                .help("suppress the lines matching PATTERN")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::DIGITS)
-                .short('n')
-                .long(options::DIGITS)
-                .value_name("DIGITS")
-                .help("use specified number of digits instead of 2"),
-        )
-        .arg(
-            Arg::new(options::QUIET)
-                .short('s')
-                .long(options::QUIET)
-                .visible_alias("silent")
-                .help("do not print counts of output file sizes")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::ELIDE_EMPTY_FILES)
-                .short('z')
-                .long(options::ELIDE_EMPTY_FILES)
-                .help("remove empty output files")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .hide(true)
-                .required(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::PATTERN)
-                .hide(true)
-                .action(clap::ArgAction::Append)
-                .required(true),
-        )
-        .after_help(AFTER_HELP)
 }

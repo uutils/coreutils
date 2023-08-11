@@ -41,7 +41,7 @@ fn test_sync_no_existing_files() {
         .arg("--data")
         .arg("do-no-exist")
         .fails()
-        .stderr_contains("cannot stat");
+        .stderr_contains("error opening");
 }
 
 #[test]
@@ -63,9 +63,9 @@ fn test_sync_no_permission_dir() {
 
     ts.ccmd("chmod").arg("0").arg(dir).succeeds();
     let result = ts.ucmd().arg("--data").arg(dir).fails();
-    result.stderr_contains("sync: cannot stat 'foo': Permission denied");
+    result.stderr_contains("sync: error opening 'foo': Permission denied");
     let result = ts.ucmd().arg(dir).fails();
-    result.stderr_contains("sync: cannot stat 'foo': Permission denied");
+    result.stderr_contains("sync: error opening 'foo': Permission denied");
 }
 
 #[cfg(not(target_os = "windows"))]

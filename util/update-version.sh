@@ -1,4 +1,6 @@
 #!/bin/sh
+# spell-checker:ignore uuhelp
+
 # This is a stupid helper. I will mass replace all versions (including other crates)
 # So, it should be triple-checked
 
@@ -7,12 +9,13 @@
 # 2) run it: sh util/update-version.sh
 # 3) Do a spot check with "git diff"
 # 4) cargo test --release --features unix
-# 5) Run util/publish.sh in dry mode (it will fail as packages needs more recent version of uucore)
-# 6) Run util/publish.sh --do-it
-# 7) In some cases, you might have to fix dependencies and run import
+# 5) git commit -m "New release"
+# 6) Run util/publish.sh in dry mode (it will fail as packages needs more recent version of uucore)
+# 7) Run util/publish.sh --do-it
+# 8) In some cases, you might have to fix dependencies and run import
 
-FROM="0.0.17"
-TO="0.0.18"
+FROM="0.0.19"
+TO="0.0.20"
 
 PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml src/uucore/Cargo.toml Cargo.toml)
 
@@ -22,6 +25,9 @@ sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" $PROGS
 
 # Update uucore_procs
 sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" src/uucore_procs/Cargo.toml
+
+# Update uuhelp_parser
+sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" src/uuhelp_parser/Cargo.toml
 
 # Update the stdbuf stuff
 sed -i -e "s|libstdbuf = { version=\"$FROM\"|libstdbuf = { version=\"$TO\"|" src/uu/stdbuf/Cargo.toml
@@ -41,4 +47,3 @@ sed -i -e "s|uucore = { version=\">=$FROM\",|uucore = { version=\">=$TO\",|" $PR
 # Update crates using uucore_procs
 #shellcheck disable=SC2086
 sed -i -e "s|uucore_procs = { version=\">=$FROM\",|uucore_procs = { version=\">=$TO\",|" $PROGS
-

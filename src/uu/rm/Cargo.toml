@@ -1,6 +1,6 @@
 [package]
 name = "uu_rm"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "rm ~ (uutils) remove PATHNAME"
@@ -15,15 +15,15 @@ edition = "2021"
 path = "src/rm.rs"
 
 [dependencies]
-clap = { workspace=true }
-walkdir = { workspace=true }
-uucore = { workspace=true, features=["fs"] }
+clap = { workspace = true }
+walkdir = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 
 [target.'cfg(unix)'.dependencies]
-libc = { workspace=true }
+libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace=true, features = ["Win32_Storage_FileSystem"] }
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 
 [[bin]]
 name = "rm"

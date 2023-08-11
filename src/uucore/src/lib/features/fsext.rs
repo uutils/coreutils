@@ -194,15 +194,10 @@ impl MountInfo {
         }
         #[cfg(unix)]
         {
-            if self.dev_name.find(':').is_some()
+            self.remote = self.dev_name.find(':').is_some()
                 || (self.dev_name.starts_with("//") && self.fs_type == "smbfs"
                     || self.fs_type == "cifs")
-                || self.dev_name == "-hosts"
-            {
-                self.remote = true;
-            } else {
-                self.remote = false;
-            }
+                || self.dev_name == "-hosts";
         }
     }
 
@@ -371,9 +366,9 @@ extern "C" {
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
     #[cfg(any(
-        all(target_os = "freebsd"),
-        all(target_os = "netbsd"),
-        all(target_os = "openbsd"),
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
         all(target_vendor = "apple", target_arch = "aarch64")
     ))]
     #[link_name = "getmntinfo"] // spell-checker:disable-line

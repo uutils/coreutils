@@ -1,6 +1,6 @@
 [package]
 name = "uu_tr"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tr ~ (uutils) translate characters within input and display"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/tr.rs"
 
 [dependencies]
-nom = { workspace=true }
-clap = { workspace=true }
-uucore = { workspace=true }
+nom = { workspace = true }
+clap = { workspace = true }
+uucore = { workspace = true }
 
 [[bin]]
 name = "tr"

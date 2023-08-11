@@ -220,7 +220,7 @@ jobs:
         fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
         fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -- -W clippy::manual_string_new -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
+        S=$(cargo clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -- -W clippy::default_trait_access -W clippy::manual_string_new -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   style_spellcheck:
@@ -319,7 +319,7 @@ jobs:
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v10
+    - uses: DavidAnson/markdownlint-cli2-action@v11
       with:
         command: fix
         globs: |
@@ -452,8 +452,20 @@ jobs:
         test -f /tmp/usr/local/share/man/man1/whoami.1
         # Check that the completion is present
         test -f /tmp/usr/local/share/zsh/site-functions/_install
+        test -f /tmp/usr/local/share/bash-completion/completions/head
+        test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
       env:
         RUST_BACKTRACE: "1"
+    - name: "`make uninstall`"
+      shell: bash
+      run: |
+        DESTDIR=/tmp/ make uninstall
+        # Check that the manpage is not present
+        ! test -f /tmp/usr/local/share/man/man1/whoami.1
+        # Check that the completion is not present
+        ! test -f /tmp/usr/local/share/zsh/site-functions/_install
+        ! test -f /tmp/usr/local/share/bash-completion/completions/head
+        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
 
   build_rust_stable:
     name: Build/stable
@@ -1047,6 +1059,15 @@ jobs:
       with:
         name: toybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
+
+  toml_format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v3
+
+      - name: Check
+        run: npx --yes @taplo/cli fmt --check
 
   coverage:
     name: Code Coverage

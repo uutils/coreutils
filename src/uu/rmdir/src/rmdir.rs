@@ -100,7 +100,7 @@ fn remove(mut path: &Path, opts: Opts) -> Result<(), Error<'_>> {
     if opts.parents {
         while let Some(new) = path.parent() {
             path = new;
-            if path.as_os_str() == "" {
+            if path.as_os_str().is_empty() {
                 break;
             }
             remove_single(path, opts)?;

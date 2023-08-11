@@ -205,7 +205,7 @@ jobs:
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
         # https://github.com/uutils/coreutils/issues/4294
         # https://github.com/uutils/coreutils/issues/4295
-        IGNORE_INTERMITTENT='${path_UUTILS}/.github/workflows/ignore-intermittent.txt'
+        IGNORE_INTERMITTENT="${path_UUTILS}/.github/workflows/ignore-intermittent.txt"
 
         mkdir -p ${{ steps.vars.outputs.path_reference }}
 

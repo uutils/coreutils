@@ -1,7 +1,7 @@
-# spell-checker:ignore humantime
+# spell-checker:ignore datetime
 [package]
 name = "uu_touch"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "touch ~ (uutils) change FILE timestamps"
@@ -16,14 +16,17 @@ edition = "2021"
 path = "src/touch.rs"
 
 [dependencies]
-filetime = { workspace=true }
-clap = { workspace=true }
-humantime_to_duration = { workspace=true }
-time = { workspace=true, features = ["parsing", "formatting", "local-offset", "macros"] }
-uucore = { workspace=true, features=["libc"] }
+filetime = { workspace = true }
+clap = { workspace = true }
+chrono = { workspace = true }
+parse_datetime = { workspace = true }
+uucore = { workspace = true, features = ["libc"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace=true, features = ["Win32_Storage_FileSystem", "Win32_Foundation"] }
+windows-sys = { workspace = true, features = [
+  "Win32_Storage_FileSystem",
+  "Win32_Foundation",
+] }
 
 [[bin]]
 name = "touch"

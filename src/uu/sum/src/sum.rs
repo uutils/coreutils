@@ -34,7 +34,7 @@ fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
             Ok(n) if n != 0 => {
                 bytes_read += n;
                 for &byte in buf[..n].iter() {
-                    checksum = (checksum >> 1) + ((checksum & 1) << 15);
+                    checksum = checksum.rotate_right(1);
                     checksum = checksum.wrapping_add(u16::from(byte));
                 }
             }

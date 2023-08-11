@@ -1,6 +1,6 @@
 [package]
 name = "uu_env"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "env ~ (uutils) set each NAME to VALUE in the environment and run COMMAND"
@@ -15,12 +15,12 @@ edition = "2021"
 path = "src/env.rs"
 
 [dependencies]
-clap = { workspace=true }
-rust-ini = { workspace=true }
-uucore = { workspace=true, features=["signals"]}
+clap = { workspace = true }
+rust-ini = { workspace = true }
+uucore = { workspace = true, features = ["signals"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace=true, features = ["signal"] }
+nix = { workspace = true, features = ["signal"] }
 
 
 [[bin]]

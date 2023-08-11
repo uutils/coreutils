@@ -1,6 +1,6 @@
 [package]
 name = "uu_chcon"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chcon ~ (uutils) change file security context"
@@ -14,12 +14,12 @@ edition = "2021"
 path = "src/chcon.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["entries", "fs", "perms"] }
-selinux = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs", "perms"] }
+selinux = { workspace = true }
 thiserror = { workspace = true }
-libc = { workspace=true }
-fts-sys = { workspace=true }
+libc = { workspace = true }
+fts-sys = { workspace = true }
 
 [[bin]]
 name = "chcon"

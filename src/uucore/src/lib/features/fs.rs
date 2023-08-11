@@ -31,6 +31,9 @@ use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
 
+/// Used to check if the `mode` has its `perm` bit set.
+///
+/// This macro expands to `mode & perm != 0`.
 #[cfg(unix)]
 #[macro_export]
 macro_rules! has {
@@ -635,12 +638,42 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
+    let source_metadata = match fs::symlink_metadata(source) {
+        Ok(metadata) => metadata,
+        Err(_) => return false,
+    };
+
+    let target_metadata = match fs::symlink_metadata(target) {
+        Ok(metadata) => metadata,
+        Err(_) => return false,
+    };
+
+    source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+}
+
+#[cfg(not(unix))]
+pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &Path) -> bool {
+    false
+}
+
+/// Checks if either two paths are hard links to the same file or if the source path is a symbolic link which when fully resolved points to target path
+///
+/// # Arguments
+///
+/// * `source` - A reference to a `Path` representing the source path.
+/// * `target` - A reference to a `Path` representing the target path.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
+#[cfg(unix)]
+pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
     let source_metadata = match fs::metadata(source) {
         Ok(metadata) => metadata,
         Err(_) => return false,
     };
 
-    let target_metadata = match fs::metadata(target) {
+    let target_metadata = match fs::symlink_metadata(target) {
         Ok(metadata) => metadata,
         Err(_) => return false,
     };

@@ -1,6 +1,6 @@
 [package]
 name = "uu_who"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "who ~ (uutils) display information about currently logged-in users"
@@ -15,8 +15,8 @@ edition = "2021"
 path = "src/who.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["utmpx"] }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["utmpx"] }
 
 [[bin]]
 name = "who"

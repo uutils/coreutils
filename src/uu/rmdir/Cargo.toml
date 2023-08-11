@@ -1,6 +1,6 @@
 [package]
 name = "uu_rmdir"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "rmdir ~ (uutils) remove empty DIRECTORY"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/rmdir.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["fs"] }
-libc = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
+libc = { workspace = true }
 
 [[bin]]
 name = "rmdir"

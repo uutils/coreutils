@@ -1,6 +1,6 @@
 [package]
 name = "uu_hostname"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "hostname ~ (uutils) display or set the host name of the current host"
@@ -15,12 +15,15 @@ edition = "2021"
 path = "src/hostname.rs"
 
 [dependencies]
-clap = { workspace=true }
+clap = { workspace = true }
 hostname = { version = "0.3", features = ["set"] }
-uucore = { workspace=true, features=["wide"] }
+uucore = { workspace = true, features = ["wide"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace=true, features = ["Win32_Networking_WinSock", "Win32_Foundation"] }
+windows-sys = { workspace = true, features = [
+  "Win32_Networking_WinSock",
+  "Win32_Foundation",
+] }
 
 [[bin]]
 name = "hostname"

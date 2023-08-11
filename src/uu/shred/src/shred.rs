@@ -19,6 +19,7 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::parse_size::parse_size;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_if_err};
 
 const ABOUT: &str = help_about!("shred.md");
@@ -238,7 +239,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>(options::SIZE)
         .map(|s| s.to_string());
     let size = get_size(size_arg);
-    let exact = matches.get_flag(options::EXACT) && size.is_none(); // if -s is given, ignore -x
+    let exact = matches.get_flag(options::EXACT) || size.is_some();
     let zero = matches.get_flag(options::ZERO);
     let verbose = matches.get_flag(options::VERBOSE);
 
@@ -318,38 +319,17 @@ pub fn uu_app() -> Command {
         )
 }
 
-// TODO: Add support for all postfixes here up to and including EiB
-//       http://www.gnu.org/software/coreutils/manual/coreutils.html#Block-size
 fn get_size(size_str_opt: Option<String>) -> Option<u64> {
-    size_str_opt.as_ref()?;
-
-    let mut size_str = size_str_opt.as_ref().unwrap().clone();
-    // Immutably look at last character of size string
-    let unit = match size_str.chars().last().unwrap() {
-        'K' => {
-            size_str.pop();
-            1024u64
-        }
-        'M' => {
-            size_str.pop();
-            (1024 * 1024) as u64
-        }
-        'G' => {
-            size_str.pop();
-            (1024 * 1024 * 1024) as u64
-        }
-        _ => 1u64,
-    };
-
-    let coefficient = match size_str.parse::<u64>() {
-        Ok(u) => u,
-        Err(_) => {
-            show_error!("{}: Invalid file size", size_str_opt.unwrap().maybe_quote());
-            std::process::exit(1);
-        }
-    };
-
-    Some(coefficient * unit)
+    size_str_opt
+        .as_ref()
+        .and_then(|size| parse_size(size.as_str()).ok())
+        .or_else(|| {
+            if let Some(size) = size_str_opt {
+                show_error!("invalid file size: {}", size.quote());
+                std::process::exit(1);
+            }
+            None
+        })
 }
 
 fn pass_name(pass_type: &PassType) -> String {
@@ -552,7 +532,9 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                     }
 
                     // Sync every file rename
-                    let new_file = File::open(new_path.clone())
+                    let new_file = OpenOptions::new()
+                        .write(true)
+                        .open(new_path.clone())
                         .expect("Failed to open renamed file for syncing");
                     new_file.sync_all().expect("Failed to sync renamed file");
 

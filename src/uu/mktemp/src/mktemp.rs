@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (paths) GPGHome findxs
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
@@ -38,6 +38,7 @@ static OPT_DRY_RUN: &str = "dry-run";
 static OPT_QUIET: &str = "quiet";
 static OPT_SUFFIX: &str = "suffix";
 static OPT_TMPDIR: &str = "tmpdir";
+static OPT_P: &str = "p";
 static OPT_T: &str = "t";
 
 static ARG_TEMPLATE: &str = "template";
@@ -130,7 +131,7 @@ struct Options {
     /// The directory in which to create the temporary file.
     ///
     /// If `None`, the file will be created in the current directory.
-    tmpdir: Option<String>,
+    tmpdir: Option<PathBuf>,
 
     /// The suffix to append to the temporary file, if any.
     suffix: Option<String>,
@@ -142,72 +143,32 @@ struct Options {
     template: String,
 }
 
-/// Decide whether the argument to `--tmpdir` should actually be the template.
-///
-/// This function is required to work around a limitation of `clap`,
-/// the command-line argument parsing library. In case the command
-/// line is
-///
-/// ```sh
-/// mktemp --tmpdir XXX
-/// ```
-///
-/// the program should behave like
-///
-/// ```sh
-/// mktemp --tmpdir=${TMPDIR:-/tmp} XXX
-/// ```
-///
-/// However, `clap` thinks that `XXX` is the value of the `--tmpdir`
-/// option. This function returns `true` in this case and `false`
-/// in all other cases.
-fn is_tmpdir_argument_actually_the_template(matches: &ArgMatches) -> bool {
-    if !matches.contains_id(ARG_TEMPLATE) {
-        if let Some(tmpdir) = matches.get_one::<String>(OPT_TMPDIR) {
-            if !Path::new(tmpdir).is_dir() && tmpdir.contains("XXX") {
-                return true;
-            }
-        }
-    }
-    false
-}
-
 impl Options {
     fn from(matches: &ArgMatches) -> Self {
-        // Special case to work around a limitation of `clap`; see
-        // `is_tmpdir_argument_actually_the_template()` for more
-        // information.
-        //
-        // Fixed in clap 3
-        // See https://github.com/clap-rs/clap/pull/1587
-        let (tmpdir, template) = if is_tmpdir_argument_actually_the_template(matches) {
-            let tmpdir = Some(env::temp_dir().display().to_string());
-            let template = matches.get_one::<String>(OPT_TMPDIR).unwrap().to_string();
-            (tmpdir, template)
-        } else {
+        let tmpdir = matches
+            .get_one::<PathBuf>(OPT_TMPDIR)
+            .or_else(|| matches.get_one::<PathBuf>(OPT_P))
+            .cloned();
+        let (tmpdir, template) = match matches.get_one::<String>(ARG_TEMPLATE) {
             // If no template argument is given, `--tmpdir` is implied.
-            match matches.get_one::<String>(ARG_TEMPLATE) {
-                None => {
-                    let tmpdir = match matches.get_one::<String>(OPT_TMPDIR) {
-                        None => Some(env::temp_dir().display().to_string()),
-                        Some(tmpdir) => Some(tmpdir.to_string()),
-                    };
-                    let template = DEFAULT_TEMPLATE;
-                    (tmpdir, template.to_string())
-                }
-                Some(template) => {
-                    let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok() && matches.get_flag(OPT_T) {
-                        env::var(TMPDIR_ENV_VAR).ok()
-                    } else if matches.contains_id(OPT_TMPDIR) {
-                        matches.get_one::<String>(OPT_TMPDIR).map(String::from)
-                    } else if matches.get_flag(OPT_T) {
-                        // mktemp -t foo.xxx should export in TMPDIR
-                        Some(env::temp_dir().display().to_string())
-                    } else {
-                        matches.get_one::<String>(OPT_TMPDIR).map(String::from)
-                    };
-                    (tmpdir, template.to_string())
-                }
+            None => {
+                let tmpdir = Some(tmpdir.unwrap_or_else(env::temp_dir));
+                let template = DEFAULT_TEMPLATE;
+                (tmpdir, template.to_string())
+            }
+            Some(template) => {
+                let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok() && matches.get_flag(OPT_T) {
+                    env::var_os(TMPDIR_ENV_VAR).map(|t| t.into())
+                } else if tmpdir.is_some() {
+                    tmpdir
+                } else if matches.get_flag(OPT_T) || matches.contains_id(OPT_TMPDIR) {
+                    // If --tmpdir is given without an argument, or -t is given
+                    // export in TMPDIR
+                    Some(env::temp_dir())
+                } else {
+                    None
+                };
+                (tmpdir, template.to_string())
             }
         };
         Self {
@@ -372,7 +333,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if env::var("POSIXLY_CORRECT").is_ok() {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
-        if is_tmpdir_argument_actually_the_template(&matches) || matches.contains_id(ARG_TEMPLATE) {
+        if matches.contains_id(ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.
             if args.last().unwrap() != &options.template {
                 return Err(Box::new(MkTempError::TooManyTemplates));
@@ -444,8 +405,16 @@ pub fn uu_app() -> Command {
                 .value_name("SUFFIX"),
         )
         .arg(
-            Arg::new(OPT_TMPDIR)
+            Arg::new(OPT_P)
                 .short('p')
+                .help("short form of --tmpdir")
+                .value_name("DIR")
+                .num_args(1)
+                .value_parser(ValueParser::path_buf())
+                .value_hint(clap::ValueHint::DirPath),
+        )
+        .arg(
+            Arg::new(OPT_TMPDIR)
                 .long(OPT_TMPDIR)
                 .help(
                     "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
@@ -457,6 +426,10 @@ pub fn uu_app() -> Command {
                 // Allows use of default argument just by setting --tmpdir. Else,
                 // use provided input to generate tmpdir
                 .num_args(0..=1)
+                // Require an equals to avoid ambiguity if no tmpdir is supplied
+                .require_equals(true)
+                .overrides_with(OPT_P)
+                .value_parser(ValueParser::path_buf())
                 .value_hint(clap::ValueHint::DirPath),
         )
         .arg(

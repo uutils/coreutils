@@ -1,6 +1,6 @@
 [package]
 name = "uu_basenc"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "basenc ~ (uutils) decode/encode input"
@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/basenc.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features = ["encoding"] }
-uu_base32 = { workspace=true }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["encoding"] }
+uu_base32 = { workspace = true }
 
 [[bin]]
 name = "basenc"

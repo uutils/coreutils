@@ -1,6 +1,6 @@
 [package]
 name = "uu_sync"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sync ~ (uutils) synchronize cache writes to storage"
@@ -15,15 +15,19 @@ edition = "2021"
 path = "src/sync.rs"
 
 [dependencies]
-clap = { workspace=true }
-libc = { workspace=true }
-uucore = { workspace=true, features=["wide"] }
+clap = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true, features = ["wide"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-nix = { workspace=true }
+nix = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace=true, features = ["Win32_Storage_FileSystem", "Win32_System_WindowsProgramming", "Win32_Foundation"] }
+windows-sys = { workspace = true, features = [
+  "Win32_Storage_FileSystem",
+  "Win32_System_WindowsProgramming",
+  "Win32_Foundation",
+] }
 
 [[bin]]
 name = "sync"

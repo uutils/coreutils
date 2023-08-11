@@ -1,16 +1,8 @@
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
 
-// This test relies on
-// --cfg unsound_local_offset
-// https://github.com/time-rs/time/blob/deb8161b84f355b31e39ce09e40c4d6ce3fea837/src/sys/local_offset_at/unix.rs#L112-L120=
-// See https://github.com/time-rs/time/issues/293#issuecomment-946382614=
-// Defined in .cargo/config
-
-use filetime::FileTime;
-
-use time::macros::format_description;
-
 use crate::common::util::{AtPath, TestScenario};
+use chrono::TimeZone;
+use filetime::{self, FileTime};
 use std::fs::remove_file;
 use std::path::PathBuf;
 
@@ -35,21 +27,9 @@ fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
     filetime::set_file_times(at.plus_as_string(path), atime, mtime).unwrap();
 }
 
-// Adjusts for local timezone
 fn str_to_filetime(format: &str, s: &str) -> FileTime {
-    let format_description = match format {
-        "%y%m%d%H%M" => format_description!("[year repr:last_two][month][day][hour][minute]"),
-        "%y%m%d%H%M.%S" => {
-            format_description!("[year repr:last_two][month][day][hour][minute].[second]")
-        }
-        "%Y%m%d%H%M" => format_description!("[year][month][day][hour][minute]"),
-        "%Y%m%d%H%M.%S" => format_description!("[year][month][day][hour][minute].[second]"),
-        _ => panic!("unexpected dt format"),
-    };
-    let tm = time::PrimitiveDateTime::parse(s, &format_description).unwrap();
-    let d = time::OffsetDateTime::now_utc();
-    let offset_dt = tm.assume_offset(d.offset());
-    FileTime::from_unix_time(offset_dt.unix_timestamp(), tm.nanosecond())
+    let tm = chrono::Utc.datetime_from_str(s, format).unwrap();
+    FileTime::from_unix_time(tm.timestamp(), tm.timestamp_subsec_nanos())
 }
 
 #[test]
@@ -204,19 +184,23 @@ fn test_touch_set_cymdhms_time() {
 
 #[test]
 fn test_touch_set_only_atime() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let atime_args = ["-a", "--time=access", "--time=atime", "--time=use"];
     let file = "test_touch_set_only_atime";
 
-    ucmd.args(&["-t", "201501011234", "-a", file])
-        .succeeds()
-        .no_stderr();
+    for atime_arg in atime_args {
+        let (at, mut ucmd) = at_and_ucmd!();
 
-    assert!(at.file_exists(file));
+        ucmd.args(&["-t", "201501011234", atime_arg, file])
+            .succeeds()
+            .no_stderr();
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
-    let (atime, mtime) = get_file_times(&at, file);
-    assert!(atime != mtime);
-    assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+        assert!(at.file_exists(file));
+
+        let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+        let (atime, mtime) = get_file_times(&at, file);
+        assert!(atime != mtime);
+        assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+    }
 }
 
 #[test]
@@ -301,19 +285,23 @@ fn test_touch_set_both_time_and_date() {
 
 #[test]
 fn test_touch_set_only_mtime() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let mtime_args = ["-m", "--time=modify", "--time=mtime"];
     let file = "test_touch_set_only_mtime";
 
-    ucmd.args(&["-t", "201501011234", "-m", file])
-        .succeeds()
-        .no_stderr();
+    for mtime_arg in mtime_args {
+        let (at, mut ucmd) = at_and_ucmd!();
 
-    assert!(at.file_exists(file));
+        ucmd.args(&["-t", "201501011234", mtime_arg, file])
+            .succeeds()
+            .no_stderr();
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
-    let (atime, mtime) = get_file_times(&at, file);
-    assert!(atime != mtime);
-    assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+        assert!(at.file_exists(file));
+
+        let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+        let (atime, mtime) = get_file_times(&at, file);
+        assert!(atime != mtime);
+        assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+    }
 }
 
 #[test]
@@ -659,7 +647,7 @@ fn test_touch_mtime_dst_succeeds() {
 }
 
 #[test]
-#[ignore = "not implemented"]
+#[cfg(unix)]
 fn test_touch_mtime_dst_fails() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_mtime_dst_fails";

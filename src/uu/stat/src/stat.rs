@@ -614,6 +614,10 @@ impl Stater {
     fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> i32 {
         let display_name = file.to_string_lossy();
         let file = if cfg!(unix) && display_name == "-" {
+            if self.show_fs {
+                show_error!("using '-' to denote standard input does not work in file system mode");
+                return 1;
+            }
             if let Ok(p) = Path::new("/dev/stdin").canonicalize() {
                 p.into_os_string()
             } else {
@@ -622,7 +626,6 @@ impl Stater {
         } else {
             OsString::from(file)
         };
-
         if self.show_fs {
             #[cfg(unix)]
             let p = file.as_bytes();

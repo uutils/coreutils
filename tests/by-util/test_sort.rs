@@ -135,6 +135,25 @@ fn test_version_empty_lines() {
 }
 
 #[test]
+fn test_version_sort_unstable() {
+    new_ucmd!()
+        .arg("--sort=version")
+        .pipe_in("0.1\n0.02\n0.2\n0.002\n0.3\n")
+        .succeeds()
+        .stdout_is("0.1\n0.002\n0.02\n0.2\n0.3\n");
+}
+
+#[test]
+fn test_version_sort_stable() {
+    new_ucmd!()
+        .arg("--stable")
+        .arg("--sort=version")
+        .pipe_in("0.1\n0.02\n0.2\n0.002\n0.3\n")
+        .succeeds()
+        .stdout_is("0.1\n0.02\n0.2\n0.002\n0.3\n");
+}
+
+#[test]
 fn test_human_numeric_whitespace() {
     test_helper(
         "human-numeric-whitespace",

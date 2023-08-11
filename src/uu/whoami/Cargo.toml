@@ -1,6 +1,6 @@
 [package]
 name = "uu_whoami"
-version = "0.0.18"
+version = "0.0.20"
 authors = ["uutils developers"]
 license = "MIT"
 description = "whoami ~ (uutils) display user name of current effective user ID"
@@ -15,14 +15,18 @@ edition = "2021"
 path = "src/whoami.rs"
 
 [dependencies]
-clap = { workspace=true }
-uucore = { workspace=true, features=["entries"] }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["entries"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace=true, features = ["Win32_NetworkManagement_NetManagement", "Win32_System_WindowsProgramming", "Win32_Foundation"] }
+windows-sys = { workspace = true, features = [
+  "Win32_NetworkManagement_NetManagement",
+  "Win32_System_WindowsProgramming",
+  "Win32_Foundation",
+] }
 
 [target.'cfg(unix)'.dependencies]
-libc = { workspace=true }
+libc = { workspace = true }
 
 [[bin]]
 name = "whoami"

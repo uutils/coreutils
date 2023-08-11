@@ -178,7 +178,7 @@ fn test_char() {
         DEV_FORMAT_STR,
         #[cfg(target_os = "linux")]
         "/dev/pts/ptmx",
-        #[cfg(any(target_vendor = "apple"))]
+        #[cfg(target_vendor = "apple")]
         "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (/%T) %u %U %W %X %y %Y %z %Z",
         #[cfg(any(target_os = "android", target_vendor = "apple"))]
         "/dev/ptmx",
@@ -198,7 +198,7 @@ fn test_date() {
         "%z",
         #[cfg(target_os = "linux")]
         "/bin/sh",
-        #[cfg(any(target_vendor = "apple"))]
+        #[cfg(target_vendor = "apple")]
         "%z",
         #[cfg(any(target_os = "android", target_vendor = "apple"))]
         "/bin/sh",
@@ -213,7 +213,7 @@ fn test_date() {
         "%z",
         #[cfg(target_os = "linux")]
         "/dev/ptmx",
-        #[cfg(any(target_vendor = "apple"))]
+        #[cfg(target_vendor = "apple")]
         "%z",
         #[cfg(any(target_os = "android", target_vendor = "apple"))]
         "/dev/ptmx",
@@ -302,6 +302,19 @@ fn test_stdin_pipe_fifo2() {
         .stdout_contains("character special file")
         .stdout_contains("File: -")
         .succeeded();
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_stdin_with_fs_option() {
+    // $ stat -f -
+    new_ucmd!()
+        .arg("-f")
+        .arg("-")
+        .set_stdin(std::process::Stdio::null())
+        .fails()
+        .code_is(1)
+        .stderr_contains("using '-' to denote standard input does not work in file system mode");
 }
 
 #[test]
