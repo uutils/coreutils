@@ -1,3 +1,4 @@
+// spell-checker:ignore abcdefgh
 use clap::{
     builder::{PossibleValue, TypedValueParser},
     error::{ContextKind, ContextValue, ErrorKind},
@@ -14,6 +15,34 @@ pub struct ShortcutValueParser(Vec<PossibleValue>);
 impl ShortcutValueParser {
     pub fn new(values: impl Into<Self>) -> Self {
         values.into()
+    }
+
+    fn generate_clap_error(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&clap::Arg>,
+        value: &str,
+    ) -> clap::Error {
+        let mut err = clap::Error::new(ErrorKind::InvalidValue).with_cmd(cmd);
+
+        if let Some(arg) = arg {
+            err.insert(
+                ContextKind::InvalidArg,
+                ContextValue::String(arg.to_string()),
+            );
+        }
+
+        err.insert(
+            ContextKind::InvalidValue,
+            ContextValue::String(value.to_string()),
+        );
+
+        err.insert(
+            ContextKind::ValidValue,
+            ContextValue::Strings(self.0.iter().map(|x| x.get_name().to_string()).collect()),
+        );
+
+        err
     }
 }
 
@@ -36,29 +65,16 @@ impl TypedValueParser for ShortcutValueParser {
             .filter(|x| x.get_name().starts_with(value))
             .collect();
 
-        if matched_values.len() == 1 {
-            Ok(matched_values[0].get_name().to_string())
-        } else {
-            let mut err = clap::Error::new(ErrorKind::InvalidValue).with_cmd(cmd);
-
-            if let Some(arg) = arg {
-                err.insert(
-                    ContextKind::InvalidArg,
-                    ContextValue::String(arg.to_string()),
-                );
+        match matched_values.len() {
+            0 => Err(self.generate_clap_error(cmd, arg, value)),
+            1 => Ok(matched_values[0].get_name().to_string()),
+            _ => {
+                if let Some(direct_match) = matched_values.iter().find(|x| x.get_name() == value) {
+                    Ok(direct_match.get_name().to_string())
+                } else {
+                    Err(self.generate_clap_error(cmd, arg, value))
+                }
             }
-
-            err.insert(
-                ContextKind::InvalidValue,
-                ContextValue::String(value.to_string()),
-            );
-
-            err.insert(
-                ContextKind::ValidValue,
-                ContextValue::Strings(self.0.iter().map(|x| x.get_name().to_string()).collect()),
-            );
-
-            Err(err)
         }
     }
 
@@ -125,6 +141,14 @@ mod tests {
 
         let result = parser.parse_ref(&cmd, None, OsStr::new("abe"));
         assert_eq!("abef", result.unwrap());
+    }
+
+    #[test]
+    fn test_parse_ref_with_ambiguous_value_that_is_a_possible_value() {
+        let cmd = Command::new("cmd");
+        let parser = ShortcutValueParser::new(["abcd", "abcdefgh"]);
+        let result = parser.parse_ref(&cmd, None, OsStr::new("abcd"));
+        assert_eq!("abcd", result.unwrap());
     }
 
     #[test]

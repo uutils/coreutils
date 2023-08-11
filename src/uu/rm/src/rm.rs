@@ -370,7 +370,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_dir(path: &Path, options: &Options) -> bool {
-    if prompt_file(path, options, true) {
+    if prompt_dir(path, options) {
         if let Ok(mut read_dir) = fs::read_dir(path) {
             if options.dir || options.recursive {
                 if read_dir.next().is_none() {
@@ -415,7 +415,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_file(path: &Path, options: &Options) -> bool {
-    if prompt_file(path, options, false) {
+    if prompt_file(path, options) {
         match fs::remove_file(path) {
             Ok(_) => {
                 if options.verbose {
@@ -437,8 +437,23 @@ fn remove_file(path: &Path, options: &Options) -> bool {
     false
 }
 
+fn prompt_dir(path: &Path, options: &Options) -> bool {
+    // If interactive is Never we never want to send prompts
+    if options.interactive == InteractiveMode::Never {
+        return true;
+    }
+
+    // We can't use metadata.permissions.readonly for directories because it only works on files
+    // So we have to handle whether a directory is writable manually
+    if let Ok(metadata) = fs::metadata(path) {
+        handle_writable_directory(path, options, &metadata)
+    } else {
+        true
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
-fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
+fn prompt_file(path: &Path, options: &Options) -> bool {
     // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {
         return true;
@@ -451,58 +466,45 @@ fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
             }
         }
     }
-    if is_dir {
-        // We can't use metadata.permissions.readonly for directories because it only works on files
-        // So we have to handle whether a directory is writable on not manually
-        if let Ok(metadata) = fs::metadata(path) {
-            handle_writable_directory(path, options, &metadata)
-        } else {
-            true
-        }
-    } else {
-        // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
-        match File::options().read(true).write(true).open(path) {
-            Ok(file) => {
-                if let Ok(metadata) = file.metadata() {
-                    if metadata.permissions().readonly() {
-                        if metadata.len() == 0 {
-                            prompt_yes!(
-                                "remove write-protected regular empty file {}?",
-                                path.quote()
-                            )
-                        } else {
-                            prompt_yes!("remove write-protected regular file {}?", path.quote())
-                        }
-                    } else if options.interactive == InteractiveMode::Always {
-                        if metadata.len() == 0 {
-                            prompt_yes!("remove regular empty file {}?", path.quote())
-                        } else {
-                            prompt_yes!("remove file {}?", path.quote())
-                        }
-                    } else {
-                        true
-                    }
-                } else {
-                    true
-                }
-            }
-            Err(err) => {
-                if err.kind() == ErrorKind::PermissionDenied {
-                    if let Ok(metadata) = fs::metadata(path) {
-                        if metadata.len() == 0 {
-                            prompt_yes!(
-                                "remove write-protected regular empty file {}?",
-                                path.quote()
-                            )
-                        } else {
-                            prompt_yes!("remove write-protected regular file {}?", path.quote())
-                        }
+    // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
+    match File::options().read(true).write(true).open(path) {
+        Ok(file) => {
+            if let Ok(metadata) = file.metadata() {
+                if metadata.permissions().readonly() {
+                    if metadata.len() == 0 {
+                        prompt_yes!(
+                            "remove write-protected regular empty file {}?",
+                            path.quote()
+                        )
                     } else {
                         prompt_yes!("remove write-protected regular file {}?", path.quote())
                     }
+                } else if options.interactive == InteractiveMode::Always {
+                    if metadata.len() == 0 {
+                        prompt_yes!("remove regular empty file {}?", path.quote())
+                    } else {
+                        prompt_yes!("remove file {}?", path.quote())
+                    }
                 } else {
                     true
                 }
+            } else {
+                true
+            }
+        }
+        Err(err) => {
+            if err.kind() == ErrorKind::PermissionDenied {
+                match fs::metadata(path) {
+                    Ok(metadata) if metadata.len() == 0 => {
+                        prompt_yes!(
+                            "remove write-protected regular empty file {}?",
+                            path.quote()
+                        )
+                    }
+                    _ => prompt_yes!("remove write-protected regular file {}?", path.quote()),
+                }
+            } else {
+                true
             }
         }
     }
