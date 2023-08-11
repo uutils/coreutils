@@ -9,7 +9,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell
 
 use quick_error::quick_error;
 use std::borrow::Cow;
@@ -51,6 +51,7 @@ use crate::copydir::copy_directory;
 
 mod copydir;
 mod platform;
+
 quick_error! {
     #[derive(Debug)]
     pub enum Error {
@@ -108,12 +109,8 @@ impl UError for Error {
 }
 
 pub type CopyResult<T> = Result<T, Error>;
-pub type Source = PathBuf;
-pub type SourceSlice = Path;
-pub type Target = PathBuf;
-pub type TargetSlice = Path;
 
-/// Specifies whether when overwrite files
+/// Specifies how to overwrite files.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum ClobberMode {
     Force,
@@ -121,7 +118,7 @@ pub enum ClobberMode {
     Standard,
 }
 
-/// Specifies whether when overwrite files
+/// Specifies whether files should be overwritten.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum OverwriteMode {
     /// [Default] Always overwrite existing files
@@ -148,12 +145,13 @@ pub enum SparseMode {
     Never,
 }
 
-/// Specifies the expected file type of copy target
+/// The expected file type of copy target
 pub enum TargetType {
     Directory,
     File,
 }
 
+/// Copy action to perform
 pub enum CopyMode {
     Link,
     SymLink,
@@ -162,6 +160,7 @@ pub enum CopyMode {
     AttrOnly,
 }
 
+/// Preservation settings for various attributes
 #[derive(Debug)]
 pub struct Attributes {
     #[cfg(unix)]
@@ -209,30 +208,76 @@ impl Preserve {
     }
 }
 
-/// Re-usable, extensible copy options
+/// Options for the `cp` command
+///
+/// All options are public so that the options can be programmatically
+/// constructed by other crates, such as nushell. That means that this struct
+/// is part of our public API. It should therefore not be changed without good
+/// reason.
+///
+/// The fields are documented with the arguments that determine their value.
 #[allow(dead_code)]
 pub struct Options {
-    attributes_only: bool,
-    backup: BackupMode,
-    copy_contents: bool,
-    cli_dereference: bool,
-    copy_mode: CopyMode,
-    dereference: bool,
-    no_target_dir: bool,
-    one_file_system: bool,
-    overwrite: OverwriteMode,
-    parents: bool,
-    sparse_mode: SparseMode,
-    strip_trailing_slashes: bool,
-    reflink_mode: ReflinkMode,
-    attributes: Attributes,
-    recursive: bool,
-    backup_suffix: String,
-    target_dir: Option<PathBuf>,
-    update: UpdateMode,
-    debug: bool,
-    verbose: bool,
-    progress_bar: bool,
+    /// `--attributes-only`
+    pub attributes_only: bool,
+    /// `--backup[=CONTROL]`, `-b`
+    pub backup: BackupMode,
+    /// `--copy-contents`
+    pub copy_contents: bool,
+    /// `-H`
+    pub cli_dereference: bool,
+    /// Determines the type of copying that should be done
+    ///
+    /// Set by the following arguments:
+    ///  - `-l`, `--link`: [`CopyMode::Link`]
+    ///  - `-s`, `--symbolic-link`: [`CopyMode::SymLink`]
+    ///  - `-u`, `--update[=WHEN]`: [`CopyMode::Update`]
+    ///  - `--attributes-only`: [`CopyMode::AttrOnly`]
+    ///  - otherwise: [`CopyMode::Copy`]
+    pub copy_mode: CopyMode,
+    /// `-L`, `--dereference`
+    pub dereference: bool,
+    /// `-T`, `--no-target-dir`
+    pub no_target_dir: bool,
+    /// `-x`, `--one-file-system`
+    pub one_file_system: bool,
+    /// Specifies what to do with an existing destination
+    ///
+    /// Set by the following arguments:
+    ///  - `-i`, `--interactive`: [`OverwriteMode::Interactive`]
+    ///  - `-n`, `--no-clobber`: [`OverwriteMode::NoClobber`]
+    ///  - otherwise: [`OverwriteMode::Clobber`]
+    ///
+    /// The `Interactive` and `Clobber` variants have a [`ClobberMode`] argument,
+    /// set by the following arguments:
+    ///  - `-f`, `--force`: [`ClobberMode::Force`]
+    ///  - `--remove-destination`: [`ClobberMode::RemoveDestination`]
+    ///  - otherwise: [`ClobberMode::Standard`]
+    pub overwrite: OverwriteMode,
+    /// `--parents`
+    pub parents: bool,
+    /// `--sparse[=WHEN]`
+    pub sparse_mode: SparseMode,
+    /// `--strip-trailing-slashes`
+    pub strip_trailing_slashes: bool,
+    /// `--reflink[=WHEN]`
+    pub reflink_mode: ReflinkMode,
+    /// `--preserve=[=ATTRIBUTE_LIST]` and `--no-preserve=ATTRIBUTE_LIST`
+    pub attributes: Attributes,
+    /// `-R`, `-r`, `--recursive`
+    pub recursive: bool,
+    /// `-S`, `--suffix`
+    pub backup_suffix: String,
+    /// `-t`, `--target-directory`
+    pub target_dir: Option<PathBuf>,
+    /// `--update[=UPDATE]`
+    pub update: UpdateMode,
+    /// `--debug`
+    pub debug: bool,
+    /// `-v`, `--verbose`
+    pub verbose: bool,
+    /// `-g`, `--progress`
+    pub progress_bar: bool,
 }
 
 /// Enum representing various debug states of the offload and reflink actions.
@@ -1000,7 +1045,7 @@ impl TargetType {
     ///
     /// Treat target as a dir if we have multiple sources or the target
     /// exists and already is a directory
-    fn determine(sources: &[Source], target: &TargetSlice) -> Self {
+    fn determine(sources: &[PathBuf], target: &Path) -> Self {
         if sources.len() > 1 || target.is_dir() {
             Self::Directory
         } else {
@@ -1010,7 +1055,10 @@ impl TargetType {
 }
 
 /// Returns tuple of (Source paths, Target)
-fn parse_path_args(mut paths: Vec<Source>, options: &Options) -> CopyResult<(Vec<Source>, Target)> {
+fn parse_path_args(
+    mut paths: Vec<PathBuf>,
+    options: &Options,
+) -> CopyResult<(Vec<PathBuf>, PathBuf)> {
     if paths.is_empty() {
         // No files specified
         return Err("missing file operand".into());
@@ -1122,14 +1170,13 @@ fn show_error_if_needed(error: &Error) {
     }
 }
 
-/// Copy all `sources` to `target`.  Returns an
-/// `Err(Error::NotAllFilesCopied)` if at least one non-fatal error was
-/// encountered.
+/// Copy all `sources` to `target`.
 ///
-/// Behavior depends on path`options`, see [`Options`] for details.
+/// Returns an `Err(Error::NotAllFilesCopied)` if at least one non-fatal error
+/// was encountered.
 ///
-/// [`Options`]: ./struct.Options.html
-fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResult<()> {
+/// Behavior is determined by the `options` parameter, see [`Options`] for details.
+pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult<()> {
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, &target_type)?;
 
@@ -1192,7 +1239,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
 
 fn construct_dest_path(
     source_path: &Path,
-    target: &TargetSlice,
+    target: &Path,
     target_type: &TargetType,
     options: &Options,
 ) -> CopyResult<PathBuf> {
@@ -1223,8 +1270,8 @@ fn construct_dest_path(
 
 fn copy_source(
     progress_bar: &Option<ProgressBar>,
-    source: &SourceSlice,
-    target: &TargetSlice,
+    source: &Path,
+    target: &Path,
     target_type: &TargetType,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
