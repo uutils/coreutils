@@ -60,6 +60,29 @@ pub struct FmtOptions {
     goal: usize,
     tabwidth: usize,
 }
+
+impl Default for FmtOptions {
+    fn default() -> Self {
+        Self {
+            crown: false,
+            tagged: false,
+            mail: false,
+            uniform: false,
+            quick: false,
+            split_only: false,
+            use_prefix: false,
+            prefix: String::new(),
+            xprefix: false,
+            use_anti_prefix: false,
+            anti_prefix: String::new(),
+            xanti_prefix: false,
+            width: 75,
+            goal: 70,
+            tabwidth: 8,
+        }
+    }
+}
+
 /// Parse the command line arguments and return the list of files and formatting options.
 ///
 /// # Arguments
@@ -70,7 +93,11 @@ pub struct FmtOptions {
 ///
 /// A tuple containing a vector of file names and a `FmtOptions` struct.
 #[allow(clippy::cognitive_complexity)]
+#[allow(clippy::field_reassign_with_default)]
 fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)> {
+    // by default, goal is 93% of width
+    const DEFAULT_GOAL_TO_WIDTH_RATIO: usize = 93;
+
     let matches = uu_app().try_get_matches_from(args)?;
 
     let mut files: Vec<String> = matches
@@ -78,23 +105,7 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let mut fmt_opts = FmtOptions {
-        crown: false,
-        tagged: false,
-        mail: false,
-        uniform: false,
-        quick: false,
-        split_only: false,
-        use_prefix: false,
-        prefix: String::new(),
-        xprefix: false,
-        use_anti_prefix: false,
-        anti_prefix: String::new(),
-        xanti_prefix: false,
-        width: 79,
-        goal: 74,
-        tabwidth: 8,
-    };
+    let mut fmt_opts = FmtOptions::default();
 
     fmt_opts.tagged = matches.get_flag(OPT_TAGGED_PARAGRAPH);
     if matches.get_flag(OPT_CROWN_MARGIN) {
@@ -141,7 +152,10 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
                 ),
             ));
         }
-        fmt_opts.goal = cmp::min(fmt_opts.width * 94 / 100, fmt_opts.width - 3);
+        fmt_opts.goal = cmp::min(
+            fmt_opts.width * DEFAULT_GOAL_TO_WIDTH_RATIO / 100,
+            fmt_opts.width - 3,
+        );
     };
 
     if let Some(s) = matches.get_one::<String>(OPT_GOAL) {
@@ -155,7 +169,10 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
             }
         };
         if !matches.get_flag(OPT_WIDTH) {
-            fmt_opts.width = cmp::max(fmt_opts.goal * 100 / 94, fmt_opts.goal + 3);
+            fmt_opts.width = cmp::max(
+                fmt_opts.goal * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO,
+                fmt_opts.goal + 3,
+            );
         } else if fmt_opts.goal > fmt_opts.width {
             return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
         }
@@ -356,14 +373,14 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_WIDTH)
                 .short('w')
                 .long("width")
-                .help("Fill output lines up to a maximum of WIDTH columns, default 79.")
+                .help("Fill output lines up to a maximum of WIDTH columns, default 75.")
                 .value_name("WIDTH"),
         )
         .arg(
             Arg::new(OPT_GOAL)
                 .short('g')
                 .long("goal")
-                .help("Goal width, default ~0.94*WIDTH. Must be less than WIDTH.")
+                .help("Goal width, default of 93% of WIDTH. Must be less than WIDTH.")
                 .value_name("GOAL"),
         )
         .arg(
