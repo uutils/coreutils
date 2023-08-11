@@ -62,6 +62,9 @@ skip = [
   { name = "rustix", version = "0.36.15" },
   # rustix
   { name = "linux-raw-sys", version = "0.1.4" },
+  { name = "linux-raw-sys", version = "0.3.8" },
+  # tempfile
+  { name = "rustix", version = "0.37.23" },
   # various crates
   { name = "windows-sys", version = "0.45.0" },
   # windows-sys
