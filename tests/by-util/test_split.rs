@@ -375,11 +375,6 @@ fn file_read(at: &AtPath, filename: &str) -> String {
     s
 }
 
-// TODO Use char::from_digit() in Rust v1.51.0 or later.
-fn char_from_digit(n: usize) -> char {
-    (b'a' + n as u8) as char
-}
-
 /// Test for the default suffix length behavior: dynamically increasing size.
 #[test]
 fn test_alphabetic_dynamic_suffix_length() {
@@ -396,9 +391,9 @@ fn test_alphabetic_dynamic_suffix_length() {
     //
     ucmd.args(&["-b", "1", "sixhundredfiftyonebytes.txt"])
         .succeeds();
-    for i in 0..25 {
-        for j in 0..26 {
-            let filename = format!("x{}{}", char_from_digit(i), char_from_digit(j),);
+    for i in b'a'..=b'y' {
+        for j in b'a'..=b'z' {
+            let filename = format!("x{}{}", i as char, j as char);
             let contents = file_read(&at, &filename);
             assert_eq!(contents, "a");
         }
