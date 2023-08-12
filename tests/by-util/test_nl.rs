@@ -77,7 +77,11 @@ fn test_sections_and_styles() {
 #[test]
 fn test_no_renumber() {
     for arg in ["-p", "--no-renumber"] {
-        new_ucmd!().arg(arg).succeeds();
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\\:\\:\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n\n     2\tb\n");
     }
 }
 
