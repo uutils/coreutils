@@ -297,7 +297,9 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
 
         if let Some(new_style) = new_numbering_style {
             current_numbering_style = new_style;
-            line_no = settings.starting_line_number;
+            if settings.renumber {
+                line_no = settings.starting_line_number;
+            }
             println!();
         } else {
             let is_line_numbered = match current_numbering_style {
