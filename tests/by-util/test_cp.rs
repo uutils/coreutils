@@ -7,7 +7,7 @@ use std::fs::set_permissions;
 #[cfg(not(windows))]
 use std::os::unix::fs;
 
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(all(unix))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(all(unix, not(target_os = "freebsd")))]
 use std::os::unix::fs::PermissionsExt;
