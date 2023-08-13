@@ -1612,7 +1612,6 @@ fn copy_file(
         return Ok(());
     }
 
-    // issue 5031
     if options.preserve_hard_links() {
         // if we encounter a matching device/inode pair in the source tree
         // we can arrange to create a hard link between the corresponding names

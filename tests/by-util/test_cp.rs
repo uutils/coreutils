@@ -7,7 +7,7 @@ use std::fs::set_permissions;
 #[cfg(not(windows))]
 use std::os::unix::fs;
 
-#[cfg(all(unix))]
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(all(unix, not(target_os = "freebsd")))]
 use std::os::unix::fs::PermissionsExt;
@@ -1350,6 +1350,8 @@ fn test_cp_preserve_xattr_fails_on_android() {
 }
 
 #[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_1() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1363,7 +1365,7 @@ fn test_cp_preserve_links_case_1() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    #[cfg(all(unix))]
+    #[cfg(unix)]
     {
         let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
         let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
@@ -1373,6 +1375,8 @@ fn test_cp_preserve_links_case_1() {
 }
 
 #[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_2() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1392,7 +1396,7 @@ fn test_cp_preserve_links_case_2() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    #[cfg(all(unix))]
+    #[cfg(unix)]
     {
         let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
         let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
@@ -1402,6 +1406,8 @@ fn test_cp_preserve_links_case_2() {
 }
 
 #[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_3() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1420,7 +1426,7 @@ fn test_cp_preserve_links_case_3() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    #[cfg(all(unix))]
+    #[cfg(unix)]
     {
         let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
         let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
@@ -1430,6 +1436,8 @@ fn test_cp_preserve_links_case_3() {
 }
 
 #[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_4() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1448,7 +1456,7 @@ fn test_cp_preserve_links_case_4() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    #[cfg(all(unix))]
+    #[cfg(unix)]
     {
         let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
         let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
@@ -1458,6 +1466,8 @@ fn test_cp_preserve_links_case_4() {
 }
 
 #[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_5() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1475,7 +1485,7 @@ fn test_cp_preserve_links_case_5() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    #[cfg(all(unix))]
+    #[cfg(unix)]
     {
         let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
         let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
@@ -1485,6 +1495,8 @@ fn test_cp_preserve_links_case_5() {
 }
 
 #[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
 fn test_cp_preserve_links_case_6() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1498,7 +1510,7 @@ fn test_cp_preserve_links_case_6() {
     assert!(at.plus("c").join("a").exists());
     assert!(at.plus("c").join("b").exists());
 
-    #[cfg(all(unix))]
+    #[cfg(unix)]
     {
         let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
         let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
