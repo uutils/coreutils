@@ -23,7 +23,7 @@ pub struct Settings {
     body_numbering: NumberingStyle,
     footer_numbering: NumberingStyle,
     // The variable corresponding to -d
-    section_delimiter: [char; 2],
+    section_delimiter: String,
     // The variables corresponding to the options -v, -i, -l, -w.
     starting_line_number: i64,
     line_increment: i64,
@@ -43,7 +43,7 @@ impl Default for Settings {
             header_numbering: NumberingStyle::None,
             body_numbering: NumberingStyle::NonEmpty,
             footer_numbering: NumberingStyle::None,
-            section_delimiter: ['\\', ':'],
+            section_delimiter: String::from("\\:"),
             starting_line_number: 1,
             line_increment: 1,
             join_blank_lines: 1,
@@ -116,6 +116,32 @@ impl NumberFormat {
             Self::Right => format!("{number:>min_width$}"),
             Self::RightZero if number < 0 => format!("-{0:0>1$}", number.abs(), min_width - 1),
             Self::RightZero => format!("{number:0>min_width$}"),
+        }
+    }
+}
+
+enum SectionDelimiter {
+    Header,
+    Body,
+    Footer,
+}
+
+impl SectionDelimiter {
+    // A valid section delimiter contains the pattern one to three times,
+    // and nothing else.
+    fn parse(s: &str, pattern: &str) -> Option<Self> {
+        if s.is_empty() || pattern.is_empty() {
+            return None;
+        }
+
+        let pattern_count = s.matches(pattern).count();
+        let is_length_ok = pattern_count * pattern.len() == s.len();
+
+        match (pattern_count, is_length_ok) {
+            (3, true) => Some(Self::Header),
+            (2, true) => Some(Self::Body),
+            (1, true) => Some(Self::Footer),
+            _ => None,
         }
     }
 }
@@ -299,14 +325,12 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
             consecutive_empty_lines = 0;
         };
 
-        // FIXME section delimiters are hardcoded and settings.section_delimiter is ignored
-        // because --section-delimiter is not correctly implemented yet
-        let _ = settings.section_delimiter; // XXX suppress "field never read" warning
-        let new_numbering_style = match line.as_str() {
-            "\\:\\:\\:" => Some(&settings.header_numbering),
-            "\\:\\:" => Some(&settings.body_numbering),
-            "\\:" => Some(&settings.footer_numbering),
-            _ => None,
+        let new_numbering_style = match SectionDelimiter::parse(&line, &settings.section_delimiter)
+        {
+            Some(SectionDelimiter::Header) => Some(&settings.header_numbering),
+            Some(SectionDelimiter::Body) => Some(&settings.body_numbering),
+            Some(SectionDelimiter::Footer) => Some(&settings.footer_numbering),
+            None => None,
         };
 
         if let Some(new_style) = new_numbering_style {
