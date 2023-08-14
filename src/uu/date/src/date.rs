@@ -227,6 +227,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             DateSource::Human(relative_time) => {
                 // Get the current DateTime<FixedOffset> for things like "1 year ago"
                 let current_time = DateTime::<FixedOffset>::from(Local::now());
+                // double check the result is overflow or not of the current_time + relative_time
+                // it may cause a panic of <chrono::datetime::DateTime<Tz> as core::ops::arith::Add<chrono::oldtime::Duration>>::add
+                if let None = current_time.checked_add_signed(relative_time) {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("invalid date {:?}", relative_time),
+                    ));
+                }
                 let iter = std::iter::once(Ok(current_time + relative_time));
                 Box::new(iter)
             }
