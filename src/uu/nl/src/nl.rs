@@ -344,7 +344,10 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
                     line
                 );
                 // update line number for the potential next line
-                line_no += settings.line_increment;
+                match line_no.checked_add(settings.line_increment) {
+                    Some(new_line_no) => line_no = new_line_no,
+                    None => return Err(USimpleError::new(1, "line number overflow")),
+                }
             } else {
                 let spaces = " ".repeat(settings.number_width + 1);
                 println!("{spaces}{line}");
