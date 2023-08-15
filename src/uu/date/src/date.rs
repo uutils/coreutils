@@ -9,7 +9,9 @@
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, Duration, FixedOffset, Local, Offset, Utc};
+use chrono::{DateTime, Duration, FixedOffset, Local, Offset, Utc, TimeZone};
+use chrono_tz::{OffsetName, Tz};
+use iana_time_zone::get_timezone;
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
@@ -255,8 +257,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for date in dates {
             match date {
                 Ok(date) => {
+                    let tz_str = get_timezone().unwrap_or_default();
+                    let tz: Tz = tz_str.parse().unwrap();
+                    let offset = tz.offset_from_utc_date(&Utc::now().date_naive());
+                    let tz_abbreviation = offset.abbreviation();
                     // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
-                    let format_string = &format_string.replace("%N", "%f");
+                    let format_string = &format_string.replace("%N", "%f").replace("%Z", tz_abbreviation);
                     // Refuse to pass this string to chrono as it is crashing in this crate
                     if format_string.contains("%#z") {
                         return Err(USimpleError::new(
@@ -386,7 +392,7 @@ fn make_format_string(settings: &Settings) -> &str {
             Rfc3339Format::Ns => "%F %T.%f%:z",
         },
         Format::Custom(ref fmt) => fmt,
-        Format::Default => "%c",
+        Format::Default => "%a %b %-d %X %Z %Y",
     }
 }
 
