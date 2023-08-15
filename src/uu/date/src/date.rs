@@ -9,12 +9,12 @@
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, Duration, FixedOffset, Local, Offset, Utc, TimeZone};
-use chrono_tz::{OffsetName, Tz};
-use iana_time_zone::get_timezone;
+use chrono::{DateTime, Duration, FixedOffset, Local, Offset, TimeZone, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
+use chrono_tz::{OffsetName, Tz};
 use clap::{crate_version, Arg, ArgAction, Command};
+use iana_time_zone::get_timezone;
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
@@ -262,7 +262,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     let offset = tz.offset_from_utc_date(&Utc::now().date_naive());
                     let tz_abbreviation = offset.abbreviation();
                     // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
-                    let format_string = &format_string.replace("%N", "%f").replace("%Z", tz_abbreviation);
+                    let format_string = &format_string
+                        .replace("%N", "%f")
+                        .replace("%Z", tz_abbreviation);
                     // Refuse to pass this string to chrono as it is crashing in this crate
                     if format_string.contains("%#z") {
                         return Err(USimpleError::new(
