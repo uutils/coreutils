@@ -229,14 +229,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let current_time = DateTime::<FixedOffset>::from(Local::now());
                 // double check the result is overflow or not of the current_time + relative_time
                 // it may cause a panic of chrono::datetime::DateTime add
-                if current_time.checked_add_signed(relative_time).is_none() {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid date {:?}", relative_time),
-                    ));
+                match current_time.checked_add_signed(relative_time) {
+                    Some(date) => {
+                        let iter = std::iter::once(Ok(date));
+                        Box::new(iter)
+                    }
+                    None => {
+                        return Err(USimpleError::new(
+                            1,
+                            format!("invalid date {:?}", relative_time),
+                        ));
+                    }
                 }
-                let iter = std::iter::once(Ok(current_time + relative_time));
-                Box::new(iter)
             }
             DateSource::File(ref path) => {
                 if path.is_dir() {
