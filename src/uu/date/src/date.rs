@@ -228,7 +228,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 // Get the current DateTime<FixedOffset> for things like "1 year ago"
                 let current_time = DateTime::<FixedOffset>::from(Local::now());
                 // double check the result is overflow or not of the current_time + relative_time
-                // it may cause a panic of <chrono::datetime::DateTime<Tz> as core::ops::arith::Add<chrono::oldtime::Duration>>::add
+                // it may cause a panic of chrono::datetime::DateTime add
                 if current_time.checked_add_signed(relative_time).is_none() {
                     return Err(USimpleError::new(
                         1,
