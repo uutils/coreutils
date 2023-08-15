@@ -168,7 +168,7 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
                 ));
             }
         };
-        if !matches.get_flag(OPT_WIDTH) {
+        if !matches.contains_id(OPT_WIDTH) {
             fmt_opts.width = cmp::max(
                 fmt_opts.goal * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO,
                 fmt_opts.goal + 3,
