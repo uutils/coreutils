@@ -13,6 +13,7 @@
 
 use quick_error::quick_error;
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::env;
 #[cfg(not(windows))]
@@ -161,49 +162,53 @@ pub enum CopyMode {
 }
 
 /// Preservation settings for various attributes
+///
+/// It should be derived from options as follows:
+///
+///  - if there is a list of attributes to preserve (i.e. `--preserve=ATTR_LIST`) parse that list with [`Attributes::parse_iter`],
+///  - if `-p` or `--preserve` is given without arguments, use [`Attributes::DEFAULT`],
+///  - if `-a`/`--archive` is passed, use [`Attributes::ALL`],
+///  - if `-d` is passed use [`Attributes::LINKS`],
+///  - otherwise, use [`Attributes::NONE`].
+///
+/// For full compatibility with GNU, these options should also combine. We
+/// currently only do a best effort imitation of that behavior, because it is
+/// difficult to achieve in clap, especially with `--no-preserve`.
 #[derive(Debug)]
 pub struct Attributes {
     #[cfg(unix)]
-    ownership: Preserve,
-    mode: Preserve,
-    timestamps: Preserve,
-    context: Preserve,
-    links: Preserve,
-    xattr: Preserve,
+    pub ownership: Preserve,
+    pub mode: Preserve,
+    pub timestamps: Preserve,
+    pub context: Preserve,
+    pub links: Preserve,
+    pub xattr: Preserve,
 }
 
-impl Attributes {
-    pub(crate) fn max(&mut self, other: Self) {
-        #[cfg(unix)]
-        {
-            self.ownership = self.ownership.max(other.ownership);
-        }
-        self.mode = self.mode.max(other.mode);
-        self.timestamps = self.timestamps.max(other.timestamps);
-        self.context = self.context.max(other.context);
-        self.links = self.links.max(other.links);
-        self.xattr = self.xattr.max(other.xattr);
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Preserve {
     No,
     Yes { required: bool },
 }
 
-impl Preserve {
-    /// Preservation level should only increase, with no preservation being the lowest option,
-    /// preserve but don't require - middle, and preserve and require - top.
-    pub(crate) fn max(&self, other: Self) -> Self {
+impl PartialOrd for Preserve {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Preserve {
+    fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Self::Yes { required: true }, _) | (_, Self::Yes { required: true }) => {
-                Self::Yes { required: true }
-            }
-            (Self::Yes { required: false }, _) | (_, Self::Yes { required: false }) => {
-                Self::Yes { required: false }
-            }
-            _ => Self::No,
+            (Self::No, Self::No) => Ordering::Equal,
+            (Self::Yes { .. }, Self::No) => Ordering::Greater,
+            (Self::No, Self::Yes { .. }) => Ordering::Less,
+            (
+                Self::Yes { required: req_self },
+                Self::Yes {
+                    required: req_other,
+                },
+            ) => req_self.cmp(req_other),
         }
     }
 }
@@ -786,67 +791,90 @@ impl CopyMode {
 }
 
 impl Attributes {
+    pub const ALL: Self = Self {
+        #[cfg(unix)]
+        ownership: Preserve::Yes { required: true },
+        mode: Preserve::Yes { required: true },
+        timestamps: Preserve::Yes { required: true },
+        context: {
+            #[cfg(feature = "feat_selinux")]
+            {
+                Preserve::Yes { required: false }
+            }
+            #[cfg(not(feature = "feat_selinux"))]
+            {
+                Preserve::No
+            }
+        },
+        links: Preserve::Yes { required: true },
+        xattr: Preserve::Yes { required: false },
+    };
+
+    pub const NONE: Self = Self {
+        #[cfg(unix)]
+        ownership: Preserve::No,
+        mode: Preserve::No,
+        timestamps: Preserve::No,
+        context: Preserve::No,
+        links: Preserve::No,
+        xattr: Preserve::No,
+    };
+
     // TODO: ownership is required if the user is root, for non-root users it's not required.
-    // See: https://github.com/coreutils/coreutils/blob/master/src/copy.c#L3181
+    pub const DEFAULT: Self = Self {
+        #[cfg(unix)]
+        ownership: Preserve::Yes { required: true },
+        mode: Preserve::Yes { required: true },
+        timestamps: Preserve::Yes { required: true },
+        ..Self::NONE
+    };
 
-    fn all() -> Self {
+    pub const LINKS: Self = Self {
+        links: Preserve::Yes { required: true },
+        ..Self::NONE
+    };
+
+    pub fn union(self, other: &Self) -> Self {
         Self {
             #[cfg(unix)]
-            ownership: Preserve::Yes { required: true },
-            mode: Preserve::Yes { required: true },
-            timestamps: Preserve::Yes { required: true },
-            context: {
-                #[cfg(feature = "feat_selinux")]
-                {
-                    Preserve::Yes { required: false }
-                }
-                #[cfg(not(feature = "feat_selinux"))]
-                {
-                    Preserve::No
-                }
-            },
-            links: Preserve::Yes { required: true },
-            xattr: Preserve::Yes { required: false },
+            ownership: self.ownership.max(other.ownership),
+            context: self.context.max(other.context),
+            timestamps: self.timestamps.max(other.timestamps),
+            mode: self.mode.max(other.mode),
+            links: self.links.max(other.links),
+            xattr: self.xattr.max(other.xattr),
         }
     }
 
-    fn default() -> Self {
-        Self {
-            #[cfg(unix)]
-            ownership: Preserve::Yes { required: true },
-            mode: Preserve::Yes { required: true },
-            timestamps: Preserve::Yes { required: true },
-            context: Preserve::No,
-            links: Preserve::No,
-            xattr: Preserve::No,
+    pub fn parse_iter<T>(values: impl Iterator<Item = T>) -> Result<Self, Error>
+    where
+        T: AsRef<str>,
+    {
+        let mut new = Self::NONE;
+        for value in values {
+            new = new.union(&Self::parse_single_string(value.as_ref())?);
         }
-    }
-
-    fn none() -> Self {
-        Self {
-            #[cfg(unix)]
-            ownership: Preserve::No,
-            mode: Preserve::No,
-            timestamps: Preserve::No,
-            context: Preserve::No,
-            links: Preserve::No,
-            xattr: Preserve::No,
-        }
+        Ok(new)
     }
 
     /// Tries to match string containing a parameter to preserve with the corresponding entry in the
     /// Attributes struct.
-    fn try_set_from_string(&mut self, value: &str) -> Result<(), Error> {
-        let preserve_yes_required = Preserve::Yes { required: true };
+    fn parse_single_string(value: &str) -> Result<Self, Error> {
+        let value = value.to_lowercase();
 
-        match &*value.to_lowercase() {
-            "mode" => self.mode = preserve_yes_required,
+        if value == "all" {
+            return Ok(Self::ALL);
+        }
+
+        let mut new = Self::NONE;
+        let attribute = match value.as_ref() {
+            "mode" => &mut new.mode,
             #[cfg(unix)]
-            "ownership" => self.ownership = preserve_yes_required,
-            "timestamps" => self.timestamps = preserve_yes_required,
-            "context" => self.context = preserve_yes_required,
-            "link" | "links" => self.links = preserve_yes_required,
-            "xattr" => self.xattr = preserve_yes_required,
+            "ownership" => &mut new.ownership,
+            "timestamps" => &mut new.timestamps,
+            "context" => &mut new.context,
+            "link" | "links" => &mut new.links,
+            "xattr" => &mut new.xattr,
             _ => {
                 return Err(Error::InvalidArgument(format!(
                     "invalid attribute {}",
@@ -854,7 +882,10 @@ impl Attributes {
                 )));
             }
         };
-        Ok(())
+
+        *attribute = Preserve::Yes { required: true };
+
+        Ok(new)
     }
 }
 
@@ -903,39 +934,22 @@ impl Options {
         };
 
         // Parse attributes to preserve
-        let attributes: Attributes = if matches.contains_id(options::PRESERVE) {
-            match matches.get_many::<String>(options::PRESERVE) {
-                None => Attributes::default(),
-                Some(attribute_strs) => {
-                    let mut attributes: Attributes = Attributes::none();
-                    let mut attributes_empty = true;
-                    for attribute_str in attribute_strs {
-                        attributes_empty = false;
-                        if attribute_str == "all" {
-                            attributes.max(Attributes::all());
-                        } else {
-                            attributes.try_set_from_string(attribute_str)?;
-                        }
-                    }
-                    // `--preserve` case, use the defaults
-                    if attributes_empty {
-                        Attributes::default()
-                    } else {
-                        attributes
-                    }
-                }
+        let attributes = if let Some(attribute_strs) = matches.get_many::<String>(options::PRESERVE)
+        {
+            if attribute_strs.len() == 0 {
+                Attributes::DEFAULT
+            } else {
+                Attributes::parse_iter(attribute_strs)?
             }
         } else if matches.get_flag(options::ARCHIVE) {
             // --archive is used. Same as --preserve=all
-            Attributes::all()
+            Attributes::ALL
         } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
-            let mut attributes = Attributes::none();
-            attributes.links = Preserve::Yes { required: true };
-            attributes
+            Attributes::LINKS
         } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
-            Attributes::default()
+            Attributes::DEFAULT
         } else {
-            Attributes::none()
+            Attributes::NONE
         };
 
         #[cfg(not(feature = "feat_selinux"))]
