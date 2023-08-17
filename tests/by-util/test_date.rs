@@ -397,7 +397,7 @@ fn test_invalid_date_string() {
 }
 
 #[test]
-fn test_issue_5149() {
+fn test_datetime_overflow() {
     new_ucmd!()
         .arg("-d68888888888888sms")
         .fails()
