@@ -183,7 +183,7 @@ fn show(path: &Path, line_ending: Option<LineEnding>) -> std::io::Result<()> {
     let path = path.to_str().unwrap();
     print!("{path}");
     if let Some(line_ending) = line_ending {
-        print!("{line_ending}")
+        print!("{line_ending}");
     }
     stdout().flush()
 }
