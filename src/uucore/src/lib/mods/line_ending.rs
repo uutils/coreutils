@@ -1,9 +1,18 @@
-//! Provides consistent newline/zero terminator handling
+//! Provides consistent newline/zero terminator handling for `-z`/`--zero` flags.
+//!
+//! See the [`LineEnding`] struct for more information.
 use std::fmt::Display;
 
+/// Line ending of either `\n` or `\0`
+///
+/// Used by various utilities that have the option to separate lines by nul
+/// characters instead of `\n`. Usually, this is specified with the `-z` or
+/// `--zero` flag.
+///
+/// The [`Display`] implementation writes the character corresponding to the
+/// variant to the formatter.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-/// Line terminator used for printing and parsing
 pub enum LineEnding {
     #[default]
     Newline = b'\n',
@@ -26,6 +35,10 @@ impl From<LineEnding> for u8 {
 }
 
 impl LineEnding {
+    /// Create a [`LineEnding`] from a `-z`/`--zero` flag
+    ///
+    /// If `is_zero_terminated` is true, [`LineEnding::Nul`] is returned,
+    /// otherwise [`LineEnding::Newline`].
     pub fn from_zero_flag(is_zero_terminated: bool) -> Self {
         if is_zero_terminated {
             Self::Nul
