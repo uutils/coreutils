@@ -1,10 +1,10 @@
-//  * This file is part of the uutils coreutils package.
-//  *
 //  * (c) Akira Hayakawa <ruby.wktk@gmail.com>
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
+//  *
 
+//  * This file is part of the uutils coreutils package.
 // spell-checker:ignore nbbbb ncccc
 
 mod filenames;
@@ -14,6 +14,7 @@ mod platform;
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
 use clap::ArgAction;
+use clap::error::Result;
 use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
 use std::env;
 use std::fmt;
@@ -21,6 +22,7 @@ use std::fs::{metadata, File};
 use std::io;
 use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::path::Path;
+use std::u64;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
@@ -30,6 +32,7 @@ use uucore::{format_usage, help_about, help_section, help_usage};
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
 static OPT_LINES: &str = "lines";
+static OPT_LINES_SHORTHAND: &str = "lines-shorthand";
 static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
 static OPT_FILTER: &str = "filter";
 static OPT_NUMBER: &str = "number";
@@ -91,6 +94,18 @@ pub fn uu_app() -> Command {
                 .value_name("NUMBER")
                 .default_value("1000")
                 .help("put NUMBER lines/records per output file"),
+        )
+        // special shorthand case for specifying lines as `split -22 file` instead of `split -l 22 file` following GNU `split` behavior
+        // cannot be used simultaneously with OPT_LINES
+        .arg(
+            Arg::new(OPT_LINES_SHORTHAND)
+            .conflicts_with(OPT_LINES)
+            .allow_negative_numbers(true)
+            .value_parser(|value: &str| -> Result<String,clap::Error> {
+                let mut chars = value.chars();
+                chars.next(); // strip leading '-'
+                Ok(chars.as_str().to_string())
+            })
         )
         .arg(
             Arg::new(OPT_NUMBER)
@@ -382,24 +397,28 @@ impl Strategy {
         // as "defined".
         match (
             matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine),
+            matches.value_source(OPT_LINES_SHORTHAND) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_BYTES) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_LINE_BYTES) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
         ) {
-            (false, false, false, false) => Ok(Self::Lines(1000)),
-            (true, false, false, false) => {
+            (false, false, false, false, false) => Ok(Self::Lines(1000)),
+            (true, false, false, false, false) => {
                 get_and_parse(matches, OPT_LINES, Self::Lines, StrategyError::Lines)
             }
-            (false, true, false, false) => {
+            (false, true, false, false, false) => {
+                get_and_parse(matches, OPT_LINES_SHORTHAND, Self::Lines, StrategyError::Lines)
+            }
+            (false, false, true, false, false) => {
                 get_and_parse(matches, OPT_BYTES, Self::Bytes, StrategyError::Bytes)
             }
-            (false, false, true, false) => get_and_parse(
+            (false, false, false, true, false) => get_and_parse(
                 matches,
                 OPT_LINE_BYTES,
                 Self::LineBytes,
                 StrategyError::Bytes,
             ),
-            (false, false, false, true) => {
+            (false, false, false, false, true) => {
                 let s = matches.get_one::<String>(OPT_NUMBER).unwrap();
                 let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
                 Ok(Self::Number(number_type))
