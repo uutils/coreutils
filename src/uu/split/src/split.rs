@@ -1,10 +1,10 @@
+//  * This file is part of the uutils coreutils package.
+//  *
 //  * (c) Akira Hayakawa <ruby.wktk@gmail.com>
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-//  *
 
-//  * This file is part of the uutils coreutils package.
 // spell-checker:ignore nbbbb ncccc
 
 mod filenames;
@@ -13,8 +13,8 @@ mod platform;
 
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
-use clap::ArgAction;
 use clap::error::Result;
+use clap::ArgAction;
 use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
 use std::env;
 use std::fmt;
@@ -406,9 +406,12 @@ impl Strategy {
             (true, false, false, false, false) => {
                 get_and_parse(matches, OPT_LINES, Self::Lines, StrategyError::Lines)
             }
-            (false, true, false, false, false) => {
-                get_and_parse(matches, OPT_LINES_SHORTHAND, Self::Lines, StrategyError::Lines)
-            }
+            (false, true, false, false, false) => get_and_parse(
+                matches,
+                OPT_LINES_SHORTHAND,
+                Self::Lines,
+                StrategyError::Lines,
+            ),
             (false, false, true, false, false) => {
                 get_and_parse(matches, OPT_BYTES, Self::Bytes, StrategyError::Bytes)
             }
