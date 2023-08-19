@@ -13,7 +13,6 @@ mod platform;
 
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
-use clap::error::Result;
 use clap::ArgAction;
 use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
 use std::env;
@@ -22,7 +21,6 @@ use std::fs::{metadata, File};
 use std::io;
 use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::path::Path;
-use std::u64;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
@@ -32,7 +30,6 @@ use uucore::{format_usage, help_about, help_section, help_usage};
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
 static OPT_LINES: &str = "lines";
-static OPT_LINES_SHORTHAND: &str = "lines-shorthand";
 static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
 static OPT_FILTER: &str = "filter";
 static OPT_NUMBER: &str = "number";
@@ -56,12 +53,31 @@ const AFTER_HELP: &str = help_section!("after help", "split.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args = args.collect_lossy();
+
+    let (args, obs_lines) = handle_obsolete(&args[..]);
+    println!("{:#?}",args);
+
     let matches = uu_app().try_get_matches_from(args)?;
-    match Settings::from(&matches) {
+
+    match Settings::from(&matches, &obs_lines) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
         Err(e) => Err(USimpleError::new(1, format!("{e}"))),
     }
+}
+
+/// Extract obsolete shorthand (if any) for specifying lines as `split -22 file` instead of `split -l 22 file` following GNU `split` behavior
+fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
+    for (i, arg) in args.iter().enumerate() {
+        let slice = &arg;
+        if slice.starts_with('-') && slice.chars().nth(1).map_or(false, |c| c.is_ascii_digit()) {
+            let mut v = args.to_vec();
+            v.remove(i);
+            return (v, Some(slice[1..].to_owned()));
+        }
+    }
+    (args.to_vec(), None)
 }
 
 pub fn uu_app() -> Command {
@@ -94,18 +110,6 @@ pub fn uu_app() -> Command {
                 .value_name("NUMBER")
                 .default_value("1000")
                 .help("put NUMBER lines/records per output file"),
-        )
-        // special shorthand case for specifying lines as `split -22 file` instead of `split -l 22 file` following GNU `split` behavior
-        // cannot be used simultaneously with OPT_LINES
-        .arg(
-            Arg::new(OPT_LINES_SHORTHAND)
-            .conflicts_with(OPT_LINES)
-            .allow_negative_numbers(true)
-            .value_parser(|value: &str| -> Result<String,clap::Error> {
-                let mut chars = value.chars();
-                chars.next(); // strip leading '-'
-                Ok(chars.as_str().to_string())
-            })
         )
         .arg(
             Arg::new(OPT_NUMBER)
@@ -374,6 +378,17 @@ impl fmt::Display for StrategyError {
 }
 
 impl Strategy {
+    /// Parse a strategy from obsolete line option value
+    fn from_obs(obs_value: &str) -> Result<Self, StrategyError> {
+        let n = parse_size(obs_value).map_err(StrategyError::Lines)?;
+        if n > 0 {
+            Ok(Strategy::Lines(n))
+        } else {
+            Err(StrategyError::Lines(ParseSizeError::ParseFailure(
+                obs_value.to_string(),
+            )))
+        }
+    }
     /// Parse a strategy from the command-line arguments.
     fn from(matches: &ArgMatches) -> Result<Self, StrategyError> {
         fn get_and_parse(
@@ -397,31 +412,24 @@ impl Strategy {
         // as "defined".
         match (
             matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine),
-            matches.value_source(OPT_LINES_SHORTHAND) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_BYTES) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_LINE_BYTES) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
         ) {
-            (false, false, false, false, false) => Ok(Self::Lines(1000)),
-            (true, false, false, false, false) => {
+            (false, false, false, false) => Ok(Self::Lines(1000)),
+            (true, false, false, false) => {
                 get_and_parse(matches, OPT_LINES, Self::Lines, StrategyError::Lines)
             }
-            (false, true, false, false, false) => get_and_parse(
-                matches,
-                OPT_LINES_SHORTHAND,
-                Self::Lines,
-                StrategyError::Lines,
-            ),
-            (false, false, true, false, false) => {
+            (false, true, false, false) => {
                 get_and_parse(matches, OPT_BYTES, Self::Bytes, StrategyError::Bytes)
             }
-            (false, false, false, true, false) => get_and_parse(
+            (false, false, true, false) => get_and_parse(
                 matches,
                 OPT_LINE_BYTES,
                 Self::LineBytes,
                 StrategyError::Bytes,
             ),
-            (false, false, false, false, true) => {
+            (false, false, false, true) => {
                 let s = matches.get_one::<String>(OPT_NUMBER).unwrap();
                 let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
                 Ok(Self::Number(number_type))
@@ -530,7 +538,7 @@ impl fmt::Display for SettingsError {
 
 impl Settings {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches) -> Result<Self, SettingsError> {
+    fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, SettingsError> {
         let additional_suffix = matches
             .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
             .unwrap()
@@ -538,7 +546,19 @@ impl Settings {
         if additional_suffix.contains('/') {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
-        let strategy = Strategy::from(matches).map_err(SettingsError::Strategy)?;
+
+        // obsolete lines option cannot be used simultaneously with OPT_LINES
+        let strategy = match obs_lines {
+            Some(obs_value) => {
+                if matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine) {
+                    return Err(SettingsError::Strategy(StrategyError::MultipleWays));
+                } else {
+                    Strategy::from_obs(&obs_value).map_err(SettingsError::Strategy)?
+                }
+            }
+            None => Strategy::from(matches).map_err(SettingsError::Strategy)?,
+        };
+
         let (suffix_type, suffix_start) = suffix_type_from(matches)?;
         let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap();
         let suffix_length: usize = suffix_length_str
