@@ -257,7 +257,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for date in dates {
             match date {
                 Ok(date) => {
-                    let tz_str = get_timezone().unwrap_or_default();
+                    // TODO - Revisit when chrono 0.5 is released. https://github.com/chronotope/chrono/issues/970
+                    let tz_str = get_timezone().unwrap_or("Etc/UTC".to_string());
                     let tz: Tz = tz_str.parse().unwrap();
                     let offset = tz.offset_from_utc_date(&Utc::now().date_naive());
                     let tz_abbreviation = offset.abbreviation();

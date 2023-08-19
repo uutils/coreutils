@@ -267,6 +267,8 @@ chrono = { version = "^0.4.26", default-features = false, features = [
   "alloc",
   "clock",
 ] }
+chrono-tz = "0.8.3"
+iana-time-zone = "0.1.57"
 clap = { version = "4.3", features = ["wrap_help", "cargo"] }
 clap_complete = "4.3"
 clap_mangen = "0.2"
