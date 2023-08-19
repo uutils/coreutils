@@ -464,3 +464,21 @@ fn test_invalid_regex_numbering() {
             .stderr_contains("invalid regular expression");
     }
 }
+
+#[test]
+fn test_line_number_overflow() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MAX))
+        .pipe_in("a\nb")
+        .fails()
+        .stdout_is(format!("{}\ta\n", i64::MAX))
+        .stderr_is("nl: line number overflow\n");
+
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .arg("--line-increment=-1")
+        .pipe_in("a\nb")
+        .fails()
+        .stdout_is(format!("{}\ta\n", i64::MIN))
+        .stderr_is("nl: line number overflow\n");
+}
