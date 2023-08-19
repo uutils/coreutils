@@ -1,4 +1,4 @@
-// spell-checker:ignore iinvalid linvalid ninvalid vinvalid winvalid
+// spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid ninvalid vinvalid winvalid
 use crate::common::util::TestScenario;
 
 #[test]
@@ -424,5 +424,43 @@ fn test_numbering_matched_lines() {
                 .succeeds()
                 .stdout_is("\n     1\ta\n       b\n     2\tc\n");
         }
+    }
+}
+
+#[test]
+fn test_invalid_numbering() {
+    let invalid_args = [
+        "-hinvalid",
+        "--header-numbering=invalid",
+        "-binvalid",
+        "--body-numbering=invalid",
+        "-finvalid",
+        "--footer-numbering=invalid",
+    ];
+
+    for invalid_arg in invalid_args {
+        new_ucmd!()
+            .arg(invalid_arg)
+            .fails()
+            .stderr_contains("invalid numbering style: 'invalid'");
+    }
+}
+
+#[test]
+fn test_invalid_regex_numbering() {
+    let invalid_args = [
+        "-hp[",
+        "--header-numbering=p[",
+        "-bp[",
+        "--body-numbering=p[",
+        "-fp[",
+        "--footer-numbering=p[",
+    ];
+
+    for invalid_arg in invalid_args {
+        new_ucmd!()
+            .arg(invalid_arg)
+            .fails()
+            .stderr_contains("invalid regular expression");
     }
 }
