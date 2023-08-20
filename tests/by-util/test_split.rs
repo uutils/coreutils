@@ -321,6 +321,50 @@ fn test_split_lines_number() {
 }
 
 #[test]
+fn test_split_obs_lines_number() {
+    // Test if stdout/stderr for obsolete lines option '-100' is correct
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .args(&["-2", "file"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    scene
+        .ucmd()
+        .args(&["-2fb", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: invalid number of lines: '2fb'\n");
+}
+
+#[test]
+fn test_split_both_lines_and_obs_lines_number() {
+    // This test will ensure that if both lines option '-l' or '--lines'
+    // and obsolete lines option '-100' are used
+    // it fails
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .args(&["-l", "2", "-2", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: cannot split in more than one way\n");
+    scene
+        .ucmd()
+        .args(&["--lines", "2", "-2", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: cannot split in more than one way\n");
+}
+
+#[test]
 fn test_split_invalid_bytes_size() {
     new_ucmd!()
         .args(&["-b", "1024R"])

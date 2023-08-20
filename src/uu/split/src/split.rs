@@ -56,7 +56,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
     let (args, obs_lines) = handle_obsolete(&args[..]);
-    println!("{:#?}",args);
 
     let matches = uu_app().try_get_matches_from(args)?;
 
