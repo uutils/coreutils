@@ -169,11 +169,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
                 &request_receiver,
                 &mut reader_files,
                 &settings,
-                if settings.zero_terminated {
-                    b'\0'
-                } else {
-                    b'\n'
-                },
+                settings.line_ending.into(),
             )
         }
     });

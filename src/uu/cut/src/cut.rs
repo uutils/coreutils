@@ -15,6 +15,7 @@ use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::line_ending::LineEnding;
 
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
@@ -30,7 +31,7 @@ const AFTER_HELP: &str = help_section!("after help", "cut.md");
 
 struct Options {
     out_delim: Option<String>,
-    zero_terminated: bool,
+    line_ending: LineEnding,
 }
 
 enum Delimiter {
@@ -42,7 +43,7 @@ struct FieldOptions {
     delimiter: Delimiter,
     out_delimiter: Option<String>,
     only_delimited: bool,
-    zero_terminated: bool,
+    line_ending: LineEnding,
 }
 
 enum Mode {
@@ -68,7 +69,7 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
 }
 
 fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
-    let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
+    let newline_char = opts.line_ending.into();
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
     let delim = opts
@@ -259,7 +260,7 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
 }
 
 fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> UResult<()> {
-    let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
+    let newline_char = opts.line_ending.into();
     match opts.delimiter {
         Delimiter::String(ref delim) => {
             let matcher = ExactMatcher::new(delim.as_bytes());
@@ -376,7 +377,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             .unwrap_or_default()
                             .to_owned(),
                     ),
-                    zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
+                    line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED)),
                 },
             )
         }),
@@ -391,7 +392,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             .unwrap_or_default()
                             .to_owned(),
                     ),
-                    zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
+                    line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED)),
                 },
             )
         }),
@@ -411,6 +412,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
                 let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
                 let zero_terminated = matches.get_flag(options::ZERO_TERMINATED);
+                let line_ending = LineEnding::from_zero_flag(zero_terminated);
 
                 match matches.get_one::<String>(options::DELIMITER).map(|s| s.as_str()) {
                     Some(_) if whitespace_delimited => {
@@ -441,7 +443,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                                     delimiter: Delimiter::String(delim),
                                     out_delimiter: out_delim,
                                     only_delimited,
-                                    zero_terminated,
+                                    line_ending,
                                 },
                             ))
                         }
@@ -455,7 +457,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             },
                             out_delimiter: out_delim,
                             only_delimited,
-                            zero_terminated,
+                            line_ending,
                         },
                     )),
                 }

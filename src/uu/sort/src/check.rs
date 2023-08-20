@@ -115,11 +115,7 @@ fn reader(
             &mut carry_over,
             &mut file,
             &mut iter::empty(),
-            if settings.zero_terminated {
-                b'\0'
-            } else {
-                b'\n'
-            },
+            settings.line_ending.into(),
             settings,
         )?;
         if !should_continue {
