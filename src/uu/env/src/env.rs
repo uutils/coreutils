@@ -23,6 +23,7 @@ use std::os::unix::process::ExitStatusExt;
 use std::process;
 use uucore::display::Quotable;
 use uucore::error::{UClapError, UResult, USimpleError, UUsageError};
+use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 
 const ABOUT: &str = help_about!("env.md");
@@ -31,7 +32,7 @@ const AFTER_HELP: &str = help_section!("after help", "env.md");
 
 struct Options<'a> {
     ignore_env: bool,
-    null: bool,
+    line_ending: LineEnding,
     running_directory: Option<&'a str>,
     files: Vec<&'a str>,
     unsets: Vec<&'a str>,
@@ -41,11 +42,11 @@ struct Options<'a> {
 
 // print name=value env pairs on screen
 // if null is true, separate pairs with a \0, \n otherwise
-fn print_env(null: bool) {
+fn print_env(line_ending: LineEnding) {
     let stdout_raw = io::stdout();
     let mut stdout = stdout_raw.lock();
     for (n, v) in env::vars() {
-        write!(stdout, "{}={}{}", n, v, if null { '\0' } else { '\n' }).unwrap();
+        write!(stdout, "{}={}{}", n, v, line_ending).unwrap();
     }
 }
 
@@ -64,7 +65,7 @@ fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> UResult<boo
 }
 
 fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> UResult<()> {
-    if opts.null {
+    if opts.line_ending == LineEnding::Nul {
         Err(UUsageError::new(
             125,
             "cannot specify --null (-0) with command".to_string(),
@@ -181,7 +182,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
     let matches = app.try_get_matches_from(args).with_exit_code(125)?;
 
     let ignore_env = matches.get_flag("ignore-environment");
-    let null = matches.get_flag("null");
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
     let running_directory = matches.get_one::<String>("chdir").map(|s| s.as_str());
     let files = match matches.get_many::<String>("file") {
         Some(v) => v.map(|s| s.as_str()).collect(),
@@ -194,7 +195,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
 
     let mut opts = Options {
         ignore_env,
-        null,
+        line_ending,
         running_directory,
         files,
         unsets,
@@ -302,7 +303,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
 
     if opts.program.is_empty() {
         // no program provided, so just dump all env vars to stdout
-        print_env(opts.null);
+        print_env(opts.line_ending);
     } else {
         // we need to execute a command
         let (prog, args) = build_command(&mut opts.program);

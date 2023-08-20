@@ -84,11 +84,7 @@ fn reader_writer<
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    let separator = if settings.zero_terminated {
-        b'\0'
-    } else {
-        b'\n'
-    };
+    let separator = settings.line_ending.into();
 
     // Heuristically chosen: Dividing by 10 seems to keep our memory usage roughly
     // around settings.buffer_size as a whole.

@@ -8,11 +8,11 @@
 // spell-checker:ignore (ToDO) delim mkdelim
 
 use std::cmp::Ordering;
-use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
 use uucore::error::{FromIo, UResult};
+use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_usage};
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
@@ -37,38 +37,6 @@ fn column_width(col: &str, opts: &ArgMatches) -> usize {
         0
     } else {
         1
-    }
-}
-
-#[repr(u8)]
-#[derive(Clone, Copy)]
-enum LineEnding {
-    Newline = b'\n',
-    Nul = 0,
-}
-
-impl From<LineEnding> for u8 {
-    fn from(line_ending: LineEnding) -> Self {
-        line_ending as Self
-    }
-}
-
-impl From<bool> for LineEnding {
-    fn from(is_zero_terminated: bool) -> Self {
-        if is_zero_terminated {
-            Self::Nul
-        } else {
-            Self::Newline
-        }
-    }
-}
-
-impl Display for LineEnding {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Newline => writeln!(f),
-            Self::Nul => write!(f, "\0"),
-        }
     }
 }
 
@@ -168,7 +136,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
     }
 
     if opts.get_flag(options::TOTAL) {
-        let line_ending = LineEnding::from(opts.get_flag(options::ZERO_TERMINATED));
+        let line_ending = LineEnding::from_zero_flag(opts.get_flag(options::ZERO_TERMINATED));
         print!("{total_col_1}{delim}{total_col_2}{delim}{total_col_3}{delim}total{line_ending}");
     }
 }
@@ -190,7 +158,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
     let matches = uu_app().try_get_matches_from(args)?;
-    let line_ending = LineEnding::from(matches.get_flag(options::ZERO_TERMINATED));
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let filename1 = matches.get_one::<String>(options::FILE_1).unwrap();
     let filename2 = matches.get_one::<String>(options::FILE_2).unwrap();
     let mut f1 = open_file(filename1, line_ending).map_err_context(|| filename1.to_string())?;
