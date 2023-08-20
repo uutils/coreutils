@@ -2,6 +2,9 @@
   "project": {
     "name": "uutils coreutils"
   },
+  "build": {
+    "path_prefix": "coreutils"
+  },
   "components": {
     "changelog": true
   },
