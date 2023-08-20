@@ -71,6 +71,23 @@ enum NumberingStyle {
     Regex(Box<regex::Regex>),
 }
 
+impl TryFrom<&str> for NumberingStyle {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "a" => Ok(Self::All),
+            "t" => Ok(Self::NonEmpty),
+            "n" => Ok(Self::None),
+            _ if s.starts_with('p') => match regex::Regex::new(&s[1..]) {
+                Ok(re) => Ok(Self::Regex(Box::new(re))),
+                Err(_) => Err(String::from("invalid regular expression")),
+            },
+            _ => Err(format!("invalid numbering style: '{s}'")),
+        }
+    }
+}
+
 // NumberFormat specifies how line numbers are output within their allocated
 // space. They are justified to the left or right, in the latter case with
 // the option of having all unused space to its left turned into leading zeroes.
@@ -327,7 +344,10 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
                     line
                 );
                 // update line number for the potential next line
-                line_no += settings.line_increment;
+                match line_no.checked_add(settings.line_increment) {
+                    Some(new_line_no) => line_no = new_line_no,
+                    None => return Err(USimpleError::new(1, "line number overflow")),
+                }
             } else {
                 let spaces = " ".repeat(settings.number_width + 1);
                 println!("{spaces}{line}");
