@@ -395,3 +395,12 @@ fn test_invalid_date_string() {
         .no_stdout()
         .stderr_contains("invalid date");
 }
+
+#[test]
+fn test_date_overflow() {
+    new_ucmd!()
+        .arg("-d68888888888888sms")
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid date");
+}
