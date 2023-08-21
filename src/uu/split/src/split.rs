@@ -381,7 +381,7 @@ impl Strategy {
     fn from_obs(obs_value: &str) -> Result<Self, StrategyError> {
         let n = parse_size(obs_value).map_err(StrategyError::Lines)?;
         if n > 0 {
-            Ok(Strategy::Lines(n))
+            Ok(Self::Lines(n))
         } else {
             Err(StrategyError::Lines(ParseSizeError::ParseFailure(
                 obs_value.to_string(),
@@ -552,7 +552,7 @@ impl Settings {
                 if matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine) {
                     return Err(SettingsError::Strategy(StrategyError::MultipleWays));
                 } else {
-                    Strategy::from_obs(&obs_value).map_err(SettingsError::Strategy)?
+                    Strategy::from_obs(obs_value).map_err(SettingsError::Strategy)?
                 }
             }
             None => Strategy::from(matches).map_err(SettingsError::Strategy)?,
