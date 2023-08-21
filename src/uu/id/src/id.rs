@@ -305,7 +305,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         if default_format {
-            id_print(&mut state, &groups);
+            id_print(&state, &groups);
         }
         print!("{line_ending}");
 
