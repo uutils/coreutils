@@ -1,10 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Jordi Boggiano <j.boggiano@seld.be>
-// (c) Evgeniy Klyuchikov <evgeniy.klyuchikov@gmail.com>
-// (c) Joshua S. Miller <jsmiller@uchicago.edu>
-// (c) Árni Dagur <arni@dagur.eu>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 

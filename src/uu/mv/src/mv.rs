@@ -1,8 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Orvar Segerström <orvarsegerstrom@gmail.com>
-// (c) Sokovikov Evgeniy  <skv-headless@yandex.ru>
-//
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
