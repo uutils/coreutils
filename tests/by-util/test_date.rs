@@ -368,7 +368,7 @@ fn test_unsupported_format() {
 }
 
 #[test]
-fn test_date_string_human() {
+fn test_date_string_human_relative_time() {
     let date_formats = vec![
         "1 year ago",
         "1 year",
@@ -378,6 +378,43 @@ fn test_date_string_human() {
         "5 hours ago",
         "30 minutes ago",
         "10 seconds",
+    ];
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}\n$").unwrap();
+    for date_format in date_formats {
+        new_ucmd!()
+            .arg("-d")
+            .arg(date_format)
+            .arg("+%Y-%m-%d %S:%M")
+            .succeeds()
+            .stdout_matches(&re);
+    }
+}
+
+#[test]
+fn test_date_string_human_date_time() {
+    let date_formats = vec![
+        // unix timestamp format
+        "@0",
+        "@2",
+        "@10",
+        "@100",
+        "@2000",
+        "@1234400000",
+        "@1334400000",
+        "@1692582913",
+        "@2092582910",
+        // format YYYY-MM-DD
+        "2012-01-01",
+        "1999-01-12",
+        "2012-01-12",
+        // format YYYY-MM-DD HH:mm
+        "1970-01-01 00:00",
+        "2000-02-29 12:34",
+        "2100-02-28 23:59",
+        "2012-12-31 05:30",
+        "1800-01-01 18:45",
+        "9999-12-31 11:11",
+        "2023-08-21 14:55", //
     ];
     let re = Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}\n$").unwrap();
     for date_format in date_formats {
