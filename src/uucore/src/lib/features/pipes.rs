@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 /// Thin pipe-related wrappers around functions from the `nix` crate.
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]

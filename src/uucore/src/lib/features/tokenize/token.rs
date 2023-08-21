@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 //! Traits and enums dealing with Tokenization of printf Format String
 use std::io::Write;
 use std::iter::Peekable;
