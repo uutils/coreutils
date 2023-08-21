@@ -547,7 +547,7 @@ fn auditid() {
     println!("asid={}", auditinfo.ai_asid);
 }
 
-fn id_print(state: &mut State, groups: &[u32]) {
+fn id_print(state: &State, groups: &[u32]) {
     let uid = state.ids.as_ref().unwrap().uid;
     let gid = state.ids.as_ref().unwrap().gid;
     let euid = state.ids.as_ref().unwrap().euid;

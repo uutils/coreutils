@@ -1282,7 +1282,7 @@ fn test_mv_verbose() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
-#[cfg(features = "mkdir")]
+#[cfg(feature = "mkdir")]
 fn test_mv_permission_error() {
     let scene = TestScenario::new("mkdir");
     let folder1 = "bar";

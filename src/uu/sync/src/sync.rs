@@ -173,7 +173,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let path = Path::new(&f);
             if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
                 if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    return e.map_err_context(|| format!("error opening {}", f.quote()))?;
+                    e.map_err_context(|| format!("error opening {}", f.quote()))?;
                 }
             }
         }
