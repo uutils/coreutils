@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore bigdecimal extendedbigdecimal extendedbigint
 //! An arbitrary precision float that can also represent infinity, NaN, etc.
 //!

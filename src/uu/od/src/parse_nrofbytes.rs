@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use uucore::parse_size::{parse_size, ParseSizeError};
 
 pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
