@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use array_init::array_init;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use uu_factor::{table::*, Factors};

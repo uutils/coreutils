@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 //! Primitives used by num_format and sub_modules.
 //! never dealt with above (e.g. Sub Tokenizer never uses these)
 
