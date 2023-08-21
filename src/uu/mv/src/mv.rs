@@ -364,7 +364,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         None
     };
 
-    for sourcepath in files.iter() {
+    for sourcepath in files {
         if let Some(ref pb) = count_progress {
             pb.set_message(sourcepath.to_string_lossy().to_string());
         }

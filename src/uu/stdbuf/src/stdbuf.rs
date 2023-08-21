@@ -130,7 +130,7 @@ fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_typ
     }
 }
 
-fn get_preload_env(tmp_dir: &mut TempDir) -> io::Result<(String, PathBuf)> {
+fn get_preload_env(tmp_dir: &TempDir) -> io::Result<(String, PathBuf)> {
     let (preload, extension) = preload_strings();
     let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
 

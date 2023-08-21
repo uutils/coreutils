@@ -192,7 +192,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         NumberingMode::None
     };
 
-    let show_nonprint = vec![
+    let show_nonprint = [
         options::SHOW_ALL.to_owned(),
         options::SHOW_NONPRINTING_ENDS.to_owned(),
         options::SHOW_NONPRINTING_TABS.to_owned(),
@@ -201,7 +201,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     .iter()
     .any(|v| matches.get_flag(v));
 
-    let show_ends = vec![
+    let show_ends = [
         options::SHOW_ENDS.to_owned(),
         options::SHOW_ALL.to_owned(),
         options::SHOW_NONPRINTING_ENDS.to_owned(),
@@ -209,7 +209,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     .iter()
     .any(|v| matches.get_flag(v));
 
-    let show_tabs = vec![
+    let show_tabs = [
         options::SHOW_ALL.to_owned(),
         options::SHOW_TABS.to_owned(),
         options::SHOW_NONPRINTING_TABS.to_owned(),

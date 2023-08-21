@@ -71,7 +71,7 @@ fn test_echo() {
 #[test]
 fn test_head_count() {
     let repeat_limit = 5;
-    let input_seq = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let input_seq = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let input = input_seq
         .iter()
         .map(ToString::to_string)
@@ -102,7 +102,7 @@ fn test_head_count() {
 #[test]
 fn test_repeat() {
     let repeat_limit = 15000;
-    let input_seq = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let input_seq = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let input = input_seq
         .iter()
         .map(ToString::to_string)

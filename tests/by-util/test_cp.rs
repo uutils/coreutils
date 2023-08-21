@@ -2022,12 +2022,12 @@ fn test_cp_reflink_always_override() {
     const USERDIR: &str = "dir/";
     const MOUNTPOINT: &str = "mountpoint/";
 
-    let src1_path: &str = &vec![MOUNTPOINT, USERDIR, "src1"].concat();
-    let src2_path: &str = &vec![MOUNTPOINT, USERDIR, "src2"].concat();
-    let dst_path: &str = &vec![MOUNTPOINT, USERDIR, "dst"].concat();
+    let src1_path: &str = &[MOUNTPOINT, USERDIR, "src1"].concat();
+    let src2_path: &str = &[MOUNTPOINT, USERDIR, "src2"].concat();
+    let dst_path: &str = &[MOUNTPOINT, USERDIR, "dst"].concat();
 
     scene.fixtures.mkdir(ROOTDIR);
-    scene.fixtures.mkdir(vec![ROOTDIR, USERDIR].concat());
+    scene.fixtures.mkdir([ROOTDIR, USERDIR].concat());
 
     // Setup:
     // Because neither `mkfs.btrfs` not btrfs `mount` options allow us to have a mountpoint owned

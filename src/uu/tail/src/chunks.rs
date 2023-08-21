@@ -495,7 +495,7 @@ impl LinesChunk {
     fn calculate_bytes_offset_from(&self, offset: usize) -> usize {
         let mut lines_offset = offset;
         let mut bytes_offset = 0;
-        for byte in self.get_buffer().iter() {
+        for byte in self.get_buffer() {
             if lines_offset == 0 {
                 break;
             }

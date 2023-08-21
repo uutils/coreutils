@@ -58,7 +58,7 @@ fn test_link_one_argument() {
 #[test]
 fn test_link_three_arguments() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let arguments = vec![
+    let arguments = [
         "test_link_argument1",
         "test_link_argument2",
         "test_link_argument3",

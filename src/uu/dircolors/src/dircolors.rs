@@ -168,9 +168,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             println!("{s}");
             Ok(())
         }
-        Err(s) => {
-            return Err(USimpleError::new(1, s));
-        }
+        Err(s) => Err(USimpleError::new(1, s)),
     }
 }
 

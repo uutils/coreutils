@@ -82,7 +82,7 @@ pub fn format_ascii_dump(bytes: &[u8]) -> String {
     let mut result = String::new();
 
     result.push('>');
-    for c in bytes.iter() {
+    for c in bytes {
         if *c >= 0x20 && *c <= 0x7e {
             result.push_str(C_CHARS[*c as usize]);
         } else {
