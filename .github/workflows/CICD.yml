@@ -142,6 +142,13 @@ jobs:
         ## Run it
         cd fuzz
         cargo +nightly fuzz run fuzz_date -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_test for XX seconds
+      continue-on-error: true
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_test -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
     - name: Run fuzz_parse_glob for XX seconds
       shell: bash
       run: |
