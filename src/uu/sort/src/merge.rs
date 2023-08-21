@@ -215,7 +215,7 @@ fn reader(
     settings: &GlobalSettings,
     separator: u8,
 ) -> UResult<()> {
-    for (file_idx, recycled_chunk) in recycled_receiver.iter() {
+    for (file_idx, recycled_chunk) in recycled_receiver {
         if let Some(ReaderFile {
             file,
             sender,

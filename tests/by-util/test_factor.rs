@@ -171,7 +171,6 @@ fn test_random() {
                     break;
                 }
             }
-            let factor = factor;
 
             match product.checked_mul(factor) {
                 Some(p) => {
@@ -315,7 +314,7 @@ fn run(input_string: &[u8], output_string: &[u8]) {
 fn test_primes_with_exponents() {
     let mut input_string = String::new();
     let mut output_string = String::new();
-    for primes in PRIMES_BY_BITS.iter() {
+    for primes in PRIMES_BY_BITS {
         for &prime in *primes {
             input_string.push_str(&(format!("{prime} "))[..]);
             output_string.push_str(&(format!("{prime}: {prime}\n"))[..]);

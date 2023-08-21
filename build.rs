@@ -40,6 +40,7 @@ pub fn main() {
     mf.write_all(
         "type UtilityMap<T> = phf::OrderedMap<&'static str, (fn(T) -> i32, fn() -> Command)>;\n\
          \n\
+         #[allow(clippy::too_many_lines)]
          fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n"
             .as_bytes(),
     )

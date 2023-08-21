@@ -54,7 +54,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
 
     let mut prev_chunk: Option<Chunk> = None;
     let mut line_idx = 0;
-    for chunk in loaded_receiver.iter() {
+    for chunk in loaded_receiver {
         line_idx += 1;
         if let Some(prev_chunk) = prev_chunk.take() {
             // Check if the first element of the new chunk is greater than the last
@@ -107,7 +107,7 @@ fn reader(
     settings: &GlobalSettings,
 ) -> UResult<()> {
     let mut carry_over = vec![];
-    for recycled_chunk in receiver.iter() {
+    for recycled_chunk in receiver {
         let should_continue = chunks::read(
             sender,
             recycled_chunk,
