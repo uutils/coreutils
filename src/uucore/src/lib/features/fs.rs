@@ -857,7 +857,7 @@ mod tests {
         let path1 = temp_file1.path();
         let path2 = temp_file2.path();
 
-        assert!(are_hardlinks_to_same_file(&path1, &path2));
+        assert!(!are_hardlinks_to_same_file(&path1, &path2));
     }
 
     #[cfg(unix)]
