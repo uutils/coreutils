@@ -33,20 +33,28 @@ hyperfine --prepare "cp -r $test_dir tmp_d"  "rm -rf tmp_d" "target/release/core
 - Another thing to look at would be system calls count using strace (on linux) or equivalent on other operating systems.
 - Example: `strace -c target/release/coreutils rm -rf tree`
 
-## Cargo Flamegraph
+## Flamegraphs
+
+### Samply
+
+Samply is one option for simply creating flamegraphs. It isues the Firefox profiler as a UI.
+
+To install:
+```bash
+cargo install samply
+```
+
+To run:
+
+```bash
+samply record target/release/coreutils rm -rf ../linux
+```
+
+### Cargo Flamegraph
 
 With Cargo Flamegraph you can easily make a flamegraph of `rm`:
 
 ```shell
 cargo flamegraph --cmd coreutils -- rm [additional parameters]
-```
-
-However, if the `-r` option is given, the output becomes pretty much useless due to recursion. We can fix this by merging all the direct recursive calls with `uniq`, below is a `bash` script that does this.
-
-```shell
-#!/bin/bash
-cargo build --release --no-default-features --features rm
-perf record target/release/coreutils rm "$@"
-perf script | uniq | inferno-collapse-perf | inferno-flamegraph > flamegraph.svg
 ```
 
