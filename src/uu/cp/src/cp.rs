@@ -1903,10 +1903,7 @@ fn copy_file(
     copy_attributes(source, dest, &options.attributes)?;
 
     copied_files.insert(
-        FileInformation::from_path(
-            source.to_path_buf(),
-            options.dereference(source_in_command_line),
-        )?,
+        FileInformation::from_path(source, options.dereference(source_in_command_line))?,
         dest.to_path_buf(),
     );
 
