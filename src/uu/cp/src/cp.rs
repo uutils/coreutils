@@ -1250,10 +1250,6 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                     show_error_if_needed(&error);
                     non_fatal_errors = true;
                 }
-                copied_files.insert(
-                    FileInformation::from_path(source, options.dereference(true))?,
-                    dest,
-                );
             }
             seen_sources.insert(source);
         }
@@ -1905,6 +1901,14 @@ fn copy_file(
     }
 
     copy_attributes(source, dest, &options.attributes)?;
+
+    copied_files.insert(
+        FileInformation::from_path(
+            source.to_path_buf(),
+            options.dereference(source_in_command_line),
+        )?,
+        dest.to_path_buf(),
+    );
 
     if let Some(progress_bar) = progress_bar {
         progress_bar.inc(fs::metadata(source)?.len());

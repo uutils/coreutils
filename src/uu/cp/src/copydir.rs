@@ -253,16 +253,7 @@ fn copy_direntry(
                     copied_files,
                     false,
                 ) {
-                    Ok(_) => {
-                        copied_files.insert(
-                            FileInformation::from_path(
-                                &source_absolute,
-                                options.dereference(false),
-                            )?,
-                            dest,
-                        );
-                        Ok(())
-                    }
+                    Ok(_) => Ok(()),
                     Err(err) => {
                         if source_absolute.is_symlink() {
                             // silent the error with a symlink
@@ -291,12 +282,7 @@ fn copy_direntry(
                 copied_files,
                 false,
             ) {
-                Ok(_) => {
-                    copied_files.insert(
-                        FileInformation::from_path(&source_absolute, options.dereference(false))?,
-                        dest,
-                    );
-                }
+                Ok(_) => {}
                 Err(Error::IoErrContext(e, _))
                     if e.kind() == std::io::ErrorKind::PermissionDenied =>
                 {
