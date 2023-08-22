@@ -82,7 +82,16 @@ else
     ./bootstrap --skip-po
     ./configure --quiet --disable-gcc-warnings
     #Add timeout to to protect against hangs
-    sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
+    # On MacOS there is no system /usr/bin/timeout 
+    # and trying to add it to /usr/bin (with symlink of copy binary) will fail unless system integrity protection is disabled (not ideal)
+    # ref: https://support.apple.com/en-us/102149
+    # On MacOS the Homebrew coreutils could be installed and then "sudo ln -s /opt/homebrew/bin/timeout /usr/local/bin/timeout"
+    # Set to /usr/local/timeout instead if /usr/bin/timeout is not found
+    if [ -x /usr/bin/timeout ] ; then
+        sed -i 's|^"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
+    else 
+        sed -i 's|^"\$@|/usr/local/bin/timeout 600 "\$@|' build-aux/test-driver
+    fi
     # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
     sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
     sed -i 's| tr | /usr/bin/tr |' tests/init.sh
@@ -153,13 +162,28 @@ sed -i 's|touch |/usr/bin/touch |' tests/cp/reflink-perm.sh tests/ls/block-size.
 sed -i 's|ln -|/usr/bin/ln -|' tests/cp/link-deref.sh
 sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
 sed -i 's|paste |/usr/bin/paste |' tests/misc/od-endian.sh
-sed -i 's|timeout |/usr/bin/timeout |' tests/tail-2/follow-stdin.sh
+# On MacOS there is no system /usr/bin/timeout 
+# and trying to add it to /usr/bin (with symlink of copy binary) will fail unless system integrity protection is disabled (not ideal)
+# ref: https://support.apple.com/en-us/102149
+# On MacOS the Homebrew coreutils could be installed and then "sudo ln -s /opt/homebrew/bin/timeout /usr/local/bin/timeout"
+# Set to /usr/local/timeout instead if /usr/bin/timeout is not found
+if [ -x /usr/bin/timeout ] ; then
+        sed -i 's|timeout |/usr/bin/timeout |' tests/tail-2/follow-stdin.sh
+else 
+        sed -i 's|timeout |/usr/local/bin/timeout |' tests/tail-2/follow-stdin.sh
+fi
+
 
 # Add specific timeout to tests that currently hang to limit time spent waiting
-sed -i 's|\(^\s*\)seq \$|\1/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
+if [ -x /usr/bin/timeout ] ; then
+    sed -i 's|\(^\s*\)seq \$|\1/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
+else
+    sed -i 's|\(^\s*\)seq \$|\1/usr/local/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
+fi
 
-# Remove dup of /usr/bin/ when executed several times
+# Remove dup of /usr/bin/ (and /usr/local/bin) when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
+grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/local/bin/\s?/usr/local/bin/|/usr/local/bin/|g'
 
 #### Adjust tests to make them work with Rust/coreutils
 # in some cases, what we are doing in rust/coreutils is good (or better)
