@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (ToDO) arrnum arr_num mult basenum bufferval refd vals arrfloat conv intermed addl
 
 pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Vec<u8> {

@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use crate::common::util::TestScenario;
 // spell-checker:ignore checkfile, nonames, testf, ntestf
 macro_rules! get_hash(

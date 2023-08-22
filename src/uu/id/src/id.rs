@@ -1,8 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Alan Andrade <alan.andradec@gmail.com>
-// (c) Jian Zeng <anonymousknight96 AT gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -44,6 +41,7 @@ use uucore::error::UResult;
 use uucore::error::{set_exit_code, USimpleError};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
+use uucore::line_ending::LineEnding;
 use uucore::process::{getegid, geteuid, getgid, getuid};
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
@@ -174,13 +172,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             " ".to_string()
         }
     };
-    let line_ending = {
-        if state.zflag {
-            '\0'
-        } else {
-            '\n'
-        }
-    };
+    let line_ending = LineEnding::from_zero_flag(state.zflag);
 
     if state.cflag {
         if state.selinux_supported {
@@ -313,7 +305,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         if default_format {
-            id_print(&mut state, &groups);
+            id_print(&state, &groups);
         }
         print!("{line_ending}");
 
@@ -555,7 +547,7 @@ fn auditid() {
     println!("asid={}", auditinfo.ai_asid);
 }
 
-fn id_print(state: &mut State, groups: &[u32]) {
+fn id_print(state: &State, groups: &[u32]) {
     let uid = state.ids.as_ref().unwrap().uid;
     let gid = state.ids.as_ref().unwrap().gid;
     let euid = state.ids.as_ref().unwrap().euid;

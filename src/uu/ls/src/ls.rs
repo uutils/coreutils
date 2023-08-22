@@ -1,7 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Jeremiah Peschka <jeremiah.peschka@gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
@@ -54,6 +52,7 @@ use unicode_width::UnicodeWidthStr;
 use uucore::libc::{dev_t, major, minor};
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
+use uucore::line_ending::LineEnding;
 use uucore::quoting_style::{escape_name, QuotingStyle};
 use uucore::{
     display::Quotable,
@@ -408,7 +407,7 @@ pub struct Config {
     context: bool,
     selinux_supported: bool,
     group_directories_first: bool,
-    eol: char,
+    line_ending: LineEnding,
 }
 
 // Fields that can be removed or added to the long format
@@ -1005,11 +1004,7 @@ impl Config {
                 }
             },
             group_directories_first: options.get_flag(options::GROUP_DIRECTORIES_FIRST),
-            eol: if options.get_flag(options::ZERO) {
-                '\0'
-            } else {
-                '\n'
-            },
+            line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
         })
     }
 }
@@ -2173,7 +2168,7 @@ fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         out,
         "total {}{}",
         display_size(total_size, config),
-        config.eol
+        config.line_ending
     )?;
     Ok(())
 }
@@ -2285,12 +2280,12 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
                 if current_col > 0 {
-                    write!(out, "{}", config.eol)?;
+                    write!(out, "{}", config.line_ending)?;
                 }
             }
             _ => {
                 for name in names {
-                    write!(out, "{}{}", name.contents, config.eol)?;
+                    write!(out, "{}{}", name.contents, config.line_ending)?;
                 }
             }
         };
@@ -2491,7 +2486,13 @@ fn display_item_long(
 
         let dfn = display_file_name(item, config, None, String::new(), out).contents;
 
-        write!(out, " {} {}{}", display_date(md, config), dfn, config.eol)?;
+        write!(
+            out,
+            " {} {}{}",
+            display_date(md, config),
+            dfn,
+            config.line_ending
+        )?;
     } else {
         #[cfg(unix)]
         let leading_char = {

@@ -152,6 +152,7 @@ feat_os_unix = [
   "feat_require_crate_cpp",
   "feat_require_unix",
   "feat_require_unix_utmpx",
+  "feat_require_unix_hostid",
 ]
 # "feat_os_windows" == set of utilities which can be built/run on modern/usual windows platforms
 feat_os_windows = [

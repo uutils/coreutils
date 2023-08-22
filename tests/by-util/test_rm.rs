@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use std::process::Stdio;
 
 use crate::common::util::TestScenario;
@@ -478,7 +482,7 @@ fn test_rm_prompts() {
     // Needed for talking with stdin on platforms where CRLF or LF matters
     const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 
-    let mut answers = vec![
+    let mut answers = [
         "rm: descend into directory 'a'?",
         "rm: remove write-protected regular empty file 'a/empty-no-write'?",
         "rm: remove symbolic link 'a/slink'?",

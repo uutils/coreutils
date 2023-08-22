@@ -619,7 +619,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
     if !target_dir.is_dir() {
         return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
-    for sourcepath in files.iter() {
+    for sourcepath in files {
         if let Err(err) = sourcepath
             .metadata()
             .map_err_context(|| format!("cannot stat {}", sourcepath.quote()))

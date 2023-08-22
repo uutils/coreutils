@@ -1,7 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) kwantam <kwantam@gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 #![allow(clippy::unreadable_literal)]
@@ -165,15 +163,12 @@ fn test_random() {
         let mut factors = Vec::new();
         while product < min {
             // log distribution---higher probability for lower numbers
-            let factor;
-            loop {
+            let factor = loop {
                 let next = rng.gen_range(0_f64..log_num_primes).exp2().floor() as usize;
                 if next < NUM_PRIMES {
-                    factor = primes[next];
-                    break;
+                    break primes[next];
                 }
-            }
-            let factor = factor;
+            };
 
             match product.checked_mul(factor) {
                 Some(p) => {
@@ -317,7 +312,7 @@ fn run(input_string: &[u8], output_string: &[u8]) {
 fn test_primes_with_exponents() {
     let mut input_string = String::new();
     let mut output_string = String::new();
-    for primes in PRIMES_BY_BITS.iter() {
+    for primes in PRIMES_BY_BITS {
         for &prime in *primes {
             input_string.push_str(&(format!("{prime} "))[..]);
             output_string.push_str(&(format!("{prime}: {prime}\n"))[..]);

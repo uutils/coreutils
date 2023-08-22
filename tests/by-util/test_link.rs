@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use crate::common::util::TestScenario;
 
 #[test]
@@ -58,7 +62,7 @@ fn test_link_one_argument() {
 #[test]
 fn test_link_three_arguments() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let arguments = vec![
+    let arguments = [
         "test_link_argument1",
         "test_link_argument2",
         "test_link_argument3",

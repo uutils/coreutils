@@ -686,7 +686,7 @@ fn compute_number_width(inputs: &Inputs, settings: &Settings) -> usize {
 
             let mut minimum_width = 1;
             let mut total: u64 = 0;
-            for input in inputs.iter() {
+            for input in inputs {
                 match input {
                     Input::Stdin(_) => minimum_width = MINIMUM_WIDTH,
                     Input::Path(path) => {

@@ -1,10 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Jordi Boggiano <j.boggiano@seld.be>
-// (c) Evgeniy Klyuchikov <evgeniy.klyuchikov@gmail.com>
-// (c) Joshua S. Miller <jsmiller@uchicago.edu>
-// (c) Árni Dagur <arni@dagur.eu>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -192,7 +187,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         NumberingMode::None
     };
 
-    let show_nonprint = vec![
+    let show_nonprint = [
         options::SHOW_ALL.to_owned(),
         options::SHOW_NONPRINTING_ENDS.to_owned(),
         options::SHOW_NONPRINTING_TABS.to_owned(),
@@ -201,7 +196,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     .iter()
     .any(|v| matches.get_flag(v));
 
-    let show_ends = vec![
+    let show_ends = [
         options::SHOW_ENDS.to_owned(),
         options::SHOW_ALL.to_owned(),
         options::SHOW_NONPRINTING_ENDS.to_owned(),
@@ -209,7 +204,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     .iter()
     .any(|v| matches.get_flag(v));
 
-    let show_tabs = vec![
+    let show_tabs = [
         options::SHOW_ALL.to_owned(),
         options::SHOW_TABS.to_owned(),
         options::SHOW_NONPRINTING_TABS.to_owned(),
