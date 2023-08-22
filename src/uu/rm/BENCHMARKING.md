@@ -35,9 +35,9 @@ hyperfine --prepare "cp -r $test_dir tmp_d"  "rm -rf tmp_d" "target/release/core
 
 ## Flamegraphs
 
-### Samply
+### samply
 
-Samply is one option for simply creating flamegraphs. It isues the Firefox profiler as a UI.
+[samply](https://github.com/mstange/samply) is one option for simply creating flamegraphs. It isues the Firefox profiler as a UI.
 
 To install:
 ```bash
