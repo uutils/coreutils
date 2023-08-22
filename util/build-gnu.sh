@@ -153,7 +153,7 @@ sed -i '/INT_OFLOW/ D' tests/misc/printf.sh
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 # TODO : tests/tail-2/ does not appear to exist 
 # and have been moved to just tests/tail/ location
-# Might need to update the section bvelow to reflect that
+# Might need to update the section below to reflect that
 sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh
 sed -i 's|ls -|/usr/bin/ls -|' tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh
 sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/tail-2/tail-n0f.sh tests/cp/fail-perm.sh tests/mv/i-2.sh tests/misc/shuf.sh
@@ -180,7 +180,7 @@ fi
 # Add specific timeout to tests that currently hang to limit time spent waiting
 # TODO : tests/misc/seq-precision.sh tests/misc/seq-long-double.sh do not appear to exist 
 # and have been moved to tests/seq/ location
-# Might need to update the section bvelow to reflect that
+# Might need to update the section below to reflect that
 if [ -x /usr/bin/timeout ] ; then
     sed -i 's|\(^\s*\)seq \$|\1/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
 else
@@ -213,7 +213,7 @@ sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel':
 # however there's a bug because `---dis` is an alias for: `---disable-inotify`
 # TODO : tests/tail-2/ does not appear to exist 
 # and have been moved to just tests/tail/ location
-# Might need to update the section bvelow to reflect that
+# Might need to update the section below to reflect that
 sed -i -e "s|---dis ||g" tests/tail-2/overlay-headers.sh
 
 test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
