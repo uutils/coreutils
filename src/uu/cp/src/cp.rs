@@ -1231,8 +1231,8 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
         } else {
-            let dest = construct_dest_path(source, target, &target_type, options)?;
             let found_hard_link = if preserve_hard_links && !source.is_dir() {
+                let dest = construct_dest_path(source, target, &target_type, options)?;
                 preserve_hardlinks(&mut hard_links, source, &dest)?
             } else {
                 false
