@@ -44,7 +44,6 @@ fn test_fmt_width_too_big() {
     }
 }
 
-#[ignore]
 #[test]
 fn test_fmt_goal() {
     for param in ["-g", "--goal"] {
