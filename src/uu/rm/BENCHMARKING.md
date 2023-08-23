@@ -33,11 +33,11 @@ hyperfine --prepare "cp -r $test_dir tmp_d"  "rm -rf tmp_d" "target/release/core
 - Another thing to look at would be system calls count using strace (on linux) or equivalent on other operating systems.
 - Example: `strace -c target/release/coreutils rm -rf tree`
 
-## Flamegraphs
+## Flamegraph
 
 ### samply
 
-[samply](https://github.com/mstange/samply) is one option for simply creating flamegraphs. It isues the Firefox profiler as a UI.
+[samply](https://github.com/mstange/samply) is one option for simply creating flamegraphs. It uses the Firefox profiler as a UI.
 
 To install:
 ```bash
