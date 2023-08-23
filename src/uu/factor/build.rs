@@ -1,7 +1,5 @@
 // * This file is part of the uutils coreutils package.
 // *
-// * (c) kwantam <kwantam@gmail.com>
-// *
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
@@ -91,8 +89,6 @@ fn test_generator_10001() {
 const MAX_WIDTH: usize = 102;
 const PREAMBLE: &str = r##"/*
 * This file is part of the uutils coreutils package.
-*
-* (c) kwantam <kwantam@gmail.com>
 *
 * For the full copyright and license information, please view the LICENSE file
 * that was distributed with this source code.
