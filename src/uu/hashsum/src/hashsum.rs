@@ -1,9 +1,5 @@
 //  * This file is part of the uutils coreutils package.
 //  *
-//  * (c) Alex Lyon <arcterus@mail.com>
-//  * (c) Vsevolod Velichko <torkvemada@sorokdva.net>
-//  * (c) Gil Cottle <gcottle@redtown.org>
-//  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
