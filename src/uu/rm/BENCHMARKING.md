@@ -1,3 +1,4 @@
+<!-- spell-checker:ignore samply flamegraph flamegraphs -->
 # Benchmarking rm
 
 Run `cargo build --release` before benchmarking after you make a change!
