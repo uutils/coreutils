@@ -13,8 +13,7 @@ mod platform;
 
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
-use clap::ArgAction;
-use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
+use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use std::env;
 use std::fmt;
 use std::fs::{metadata, File};
@@ -131,7 +130,7 @@ pub fn uu_app() -> Command {
                 .require_equals(true)
                 .default_missing_value("0")
                 .num_args(0..=1)
-                .overrides_with(OPT_NUMERIC_SUFFIXES)
+                .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
                 .help("use numeric suffixes instead of alphabetic"),
         )
         .arg(
@@ -141,7 +140,7 @@ pub fn uu_app() -> Command {
                 .value_parser(|_: &str| -> Result<String,clap::Error> {
                     Ok("0".to_string()) // force value to "0"
                 })
-                .overrides_with(OPT_NUMERIC_SUFFIXES_SHORT)
+                .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
                 .help("use numeric suffixes instead of alphabetic"),
         )
         .arg(
@@ -150,7 +149,7 @@ pub fn uu_app() -> Command {
                 .default_missing_value("0")
                 .require_equals(true)
                 .num_args(0..=1)
-                .overrides_with(OPT_HEX_SUFFIXES)
+                .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
                 .help("use hex suffixes instead of alphabetic"),
         )
         .arg(
@@ -160,7 +159,7 @@ pub fn uu_app() -> Command {
                 .value_parser(|_: &str| -> Result<String,clap::Error> {
                     Ok("0".to_string()) // force value to "0"
                 })
-                .overrides_with(OPT_HEX_SUFFIXES_SHORT)
+                .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
                 .help("use hex suffixes instead of alphabetic"),
         )
         .arg(
@@ -435,55 +434,46 @@ impl Strategy {
 
 /// Parse the suffix type from the command-line arguments.
 fn suffix_type_from(matches: &ArgMatches) -> Result<(SuffixType, usize), SettingsError> {
-    // Collect provided suffixes (if any)
-    // Any combination is allowed
-    let mut suffixes = vec![];
-    for suffix_id in [
-        OPT_NUMERIC_SUFFIXES,
-        OPT_NUMERIC_SUFFIXES_SHORT,
-        OPT_HEX_SUFFIXES,
-        OPT_HEX_SUFFIXES_SHORT,
-    ]
-    .into_iter()
-    {
-        if matches.value_source(suffix_id) == Some(ValueSource::CommandLine) {
-            suffixes.push((matches.index_of(suffix_id), suffix_id));
-        }
-    }
-    // Compare suffixes by the order specified in command line
-    // last one (highest index) is effective, all others are ignored
-    let mut effective_suffix_index = 0;
-    let mut effective_suffix_id = "";
-    for suffix in suffixes.into_iter() {
-        let (suffix_index, suffix_id) = suffix;
-        if let Some(i) = suffix_index {
-            if i >= effective_suffix_index {
-                effective_suffix_index = i;
-                effective_suffix_id = suffix_id;
-            };
-        }
-    }
-
-    if effective_suffix_id == OPT_NUMERIC_SUFFIXES
-        || effective_suffix_id == OPT_NUMERIC_SUFFIXES_SHORT
-    {
-        let suffix_start = matches.get_one::<String>(effective_suffix_id);
+    fn parse_num_suffix(
+        matches: &ArgMatches,
+        suffix_id: &str,
+    ) -> Result<(SuffixType, usize), SettingsError> {
+        let suffix_start = matches.get_one::<String>(suffix_id);
         let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
         let suffix_start = suffix_start
             .parse::<usize>()
             .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
         Ok((SuffixType::Decimal, suffix_start))
-    } else if effective_suffix_id == OPT_HEX_SUFFIXES
-        || effective_suffix_id == OPT_HEX_SUFFIXES_SHORT
-    {
-        let suffix_start = matches.get_one::<String>(effective_suffix_id);
+    }
+    fn parse_hex_suffix(
+        matches: &ArgMatches,
+        suffix_id: &str,
+    ) -> Result<(SuffixType, usize), SettingsError> {
+        let suffix_start = matches.get_one::<String>(suffix_id);
         let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
         let suffix_start = usize::from_str_radix(suffix_start, 16)
             .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
         Ok((SuffixType::Hexadecimal, suffix_start))
-    } else {
-        // no numeric/hex suffix
-        Ok((SuffixType::Alphabetic, 0))
+    }
+    // Check if the user is specifying one or more than one suffix
+    // Any combination of suffixes is allowed
+    // Since all suffixes are setup with 'overrides_with_all()' against themselves and each other,
+    // last one wins, all others are ignored and will not match Some(ValueSource::CommandLine)
+    //
+    // Note: right now, this exact behavior cannot be handled by
+    // `ArgGroup` since `ArgGroup` considers a default value `Arg`
+    // as "defined".
+    match (
+        matches.value_source(OPT_NUMERIC_SUFFIXES) == Some(ValueSource::CommandLine),
+        matches.value_source(OPT_NUMERIC_SUFFIXES_SHORT) == Some(ValueSource::CommandLine),
+        matches.value_source(OPT_HEX_SUFFIXES) == Some(ValueSource::CommandLine),
+        matches.value_source(OPT_HEX_SUFFIXES_SHORT) == Some(ValueSource::CommandLine),
+    ) {
+        (true, false, false, false) => parse_num_suffix(matches, OPT_NUMERIC_SUFFIXES),
+        (false, true, false, false) => parse_num_suffix(matches, OPT_NUMERIC_SUFFIXES_SHORT),
+        (false, false, true, false) => parse_hex_suffix(matches, OPT_HEX_SUFFIXES),
+        (false, false, false, true) => parse_hex_suffix(matches, OPT_HEX_SUFFIXES_SHORT),
+        _ => Ok((SuffixType::Alphabetic, 0)), // no numeric/hex suffix, using default alphabetic
     }
 }
 
