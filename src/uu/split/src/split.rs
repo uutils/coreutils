@@ -128,9 +128,6 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
                 .short('d')
                 .action(clap::ArgAction::SetTrue)
-                .value_parser(|_: &str| -> Result<String,clap::Error> {
-                    Ok("0".to_string()) // force value to "0"
-                })
                 .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
                 .help("use numeric suffixes starting at 0, not alphabetic"),
         )
@@ -147,9 +144,6 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_HEX_SUFFIXES_SHORT)
                 .short('x')
                 .action(clap::ArgAction::SetTrue)
-                .value_parser(|_: &str| -> Result<String,clap::Error> {
-                    Ok("0".to_string()) // force value to "0"
-                })
                 .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
                 .help("use hex suffixes starting at 0, not alphabetic"),
         )
@@ -434,27 +428,6 @@ impl Strategy {
 
 /// Parse the suffix type from the command-line arguments.
 fn suffix_type_from(matches: &ArgMatches) -> Result<(SuffixType, usize), SettingsError> {
-    fn parse_num_suffix(
-        matches: &ArgMatches,
-        suffix_id: &str,
-    ) -> Result<(SuffixType, usize), SettingsError> {
-        let suffix_start = matches.get_one::<String>(suffix_id);
-        let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
-        let suffix_start = suffix_start
-            .parse::<usize>()
-            .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
-        Ok((SuffixType::Decimal, suffix_start))
-    }
-    fn parse_hex_suffix(
-        matches: &ArgMatches,
-        suffix_id: &str,
-    ) -> Result<(SuffixType, usize), SettingsError> {
-        let suffix_start = matches.get_one::<String>(suffix_id);
-        let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
-        let suffix_start = usize::from_str_radix(suffix_start, 16)
-            .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
-        Ok((SuffixType::Hexadecimal, suffix_start))
-    }
     // Check if the user is specifying one or more than one suffix
     // Any combination of suffixes is allowed
     // Since all suffixes are setup with 'overrides_with_all()' against themselves and each other,
@@ -469,10 +442,25 @@ fn suffix_type_from(matches: &ArgMatches) -> Result<(SuffixType, usize), Setting
         matches.value_source(OPT_HEX_SUFFIXES) == Some(ValueSource::CommandLine),
         matches.value_source(OPT_HEX_SUFFIXES_SHORT) == Some(ValueSource::CommandLine),
     ) {
-        (true, false, false, false) => parse_num_suffix(matches, OPT_NUMERIC_SUFFIXES),
-        (false, true, false, false) => parse_num_suffix(matches, OPT_NUMERIC_SUFFIXES_SHORT),
-        (false, false, true, false) => parse_hex_suffix(matches, OPT_HEX_SUFFIXES),
-        (false, false, false, true) => parse_hex_suffix(matches, OPT_HEX_SUFFIXES_SHORT),
+        (true, false, false, false) => {
+            let suffix_start = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES);
+            let suffix_start =
+                suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
+            let suffix_start = suffix_start
+                .parse::<usize>()
+                .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
+            Ok((SuffixType::Decimal, suffix_start))
+        }
+        (false, true, false, false) => Ok((SuffixType::Decimal, 0)), // short numeric suffix '-d', default start 0
+        (false, false, true, false) => {
+            let suffix_start = matches.get_one::<String>(OPT_HEX_SUFFIXES);
+            let suffix_start =
+                suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
+            let suffix_start = usize::from_str_radix(suffix_start, 16)
+                .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
+            Ok((SuffixType::Hexadecimal, suffix_start))
+        }
+        (false, false, false, true) => Ok((SuffixType::Hexadecimal, 0)), // short hex suffix '-x', default start 0
         _ => Ok((SuffixType::Alphabetic, 0)), // no numeric/hex suffix, using default alphabetic
     }
 }
