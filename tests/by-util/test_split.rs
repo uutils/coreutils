@@ -2,7 +2,7 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes onehundredlines nbbbb
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen
 
 use crate::common::util::{AtPath, TestScenario};
 use rand::{thread_rng, Rng, SeedableRng};
@@ -715,7 +715,7 @@ fn test_multiple_of_input_chunk() {
 #[test]
 fn test_numeric_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-n", "4", "--numeric-suffixes", "9", "threebytes.txt"])
+    ucmd.args(&["-n", "4", "--numeric-suffixes=9", "threebytes.txt"])
         .succeeds()
         .no_stdout()
         .no_stderr();
@@ -728,10 +728,162 @@ fn test_numeric_suffix() {
 #[test]
 fn test_hex_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-n", "4", "--hex-suffixes", "9", "threebytes.txt"])
+    ucmd.args(&["-n", "4", "--hex-suffixes=9", "threebytes.txt"])
         .succeeds()
         .no_stdout()
         .no_stderr();
+    assert_eq!(at.read("x09"), "a");
+    assert_eq!(at.read("x0a"), "b");
+    assert_eq!(at.read("x0b"), "c");
+    assert_eq!(at.read("x0c"), "");
+}
+
+#[test]
+fn test_numeric_suffix_no_equal() {
+    new_ucmd!()
+        .args(&["-n", "4", "--numeric-suffixes", "9", "threebytes.txt"])
+        .fails()
+        .stderr_contains("split: cannot open '9' for reading: No such file or directory");
+}
+
+#[test]
+fn test_hex_suffix_no_equal() {
+    new_ucmd!()
+        .args(&["-n", "4", "--hex-suffixes", "9", "threebytes.txt"])
+        .fails()
+        .stderr_contains("split: cannot open '9' for reading: No such file or directory");
+}
+
+/// Test for short numeric suffix not having any value
+#[test]
+fn test_short_numeric_suffix_no_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "4", "-d", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("x00"), "a");
+    assert_eq!(at.read("x01"), "b");
+    assert_eq!(at.read("x02"), "c");
+    assert_eq!(at.read("x03"), "");
+}
+
+/// Test for long numeric suffix not having any value
+#[test]
+fn test_numeric_suffix_no_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "4", "--numeric-suffixes", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("x00"), "a");
+    assert_eq!(at.read("x01"), "b");
+    assert_eq!(at.read("x02"), "c");
+    assert_eq!(at.read("x03"), "");
+}
+
+/// Test for short hex suffix not having any value
+#[test]
+fn test_short_hex_suffix_no_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "4", "-x", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("x00"), "a");
+    assert_eq!(at.read("x01"), "b");
+    assert_eq!(at.read("x02"), "c");
+    assert_eq!(at.read("x03"), "");
+}
+
+/// Test for long hex suffix not having any value
+#[test]
+fn test_hex_suffix_no_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "4", "--hex-suffixes", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("x00"), "a");
+    assert_eq!(at.read("x01"), "b");
+    assert_eq!(at.read("x02"), "c");
+    assert_eq!(at.read("x03"), "");
+}
+
+/// Test for short numeric suffix having value provided after space - should fail
+#[test]
+fn test_short_numeric_suffix_with_value_spaced() {
+    new_ucmd!()
+        .args(&["-n", "4", "-d", "9", "threebytes.txt"])
+        .fails()
+        .stderr_contains("split: cannot open '9' for reading: No such file or directory");
+}
+
+/// Test for short numeric suffix having value provided after space - should fail
+#[test]
+fn test_short_hex_suffix_with_value_spaced() {
+    new_ucmd!()
+        .args(&["-n", "4", "-x", "9", "threebytes.txt"])
+        .fails()
+        .stderr_contains("split: cannot open '9' for reading: No such file or directory");
+}
+
+/// Test for some combined short options
+#[test]
+fn test_short_combination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-dxen", "4", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("x00"), "a");
+    assert_eq!(at.read("x01"), "b");
+    assert_eq!(at.read("x02"), "c");
+    assert_eq!(at.file_exists("x03"), false);
+}
+
+/// Test for the last effective suffix, ignoring all others - numeric long last
+/// Any combination of short and long (as well as duplicates) should be allowed
+#[test]
+fn test_effective_suffix_numeric_last() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "-n",
+        "4",
+        "--numeric-suffixes=7",
+        "--hex-suffixes=4",
+        "-d",
+        "-x",
+        "--numeric-suffixes=9",
+        "threebytes.txt",
+    ])
+    .succeeds()
+    .no_stdout()
+    .no_stderr();
+    assert_eq!(at.read("x09"), "a");
+    assert_eq!(at.read("x10"), "b");
+    assert_eq!(at.read("x11"), "c");
+    assert_eq!(at.read("x12"), "");
+}
+
+/// Test for the last effective suffix, ignoring all others - hex long last
+/// Any combination of short and long (as well as duplicates) should be allowed
+#[test]
+fn test_effective_suffix_hex_last() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "-n",
+        "4",
+        "--hex-suffixes=7",
+        "--numeric-suffixes=4",
+        "-x",
+        "-d",
+        "--hex-suffixes=9",
+        "threebytes.txt",
+    ])
+    .succeeds()
+    .no_stdout()
+    .no_stderr();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x0a"), "b");
     assert_eq!(at.read("x0b"), "c");

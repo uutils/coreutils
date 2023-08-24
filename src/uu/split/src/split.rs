@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore nbbbb ncccc
+// spell-checker:ignore nbbbb ncccc hexdigit
 
 mod filenames;
 mod number;
@@ -34,7 +34,9 @@ static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
 static OPT_FILTER: &str = "filter";
 static OPT_NUMBER: &str = "number";
 static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
+static OPT_NUMERIC_SUFFIXES_SHORT: &str = "-d";
 static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
+static OPT_HEX_SUFFIXES_SHORT: &str = "-x";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
 static OPT_VERBOSE: &str = "verbose";
@@ -125,11 +127,41 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
-                .short('d')
                 .long(OPT_NUMERIC_SUFFIXES)
+                .require_equals(true)
                 .default_missing_value("0")
                 .num_args(0..=1)
+                .overrides_with(OPT_NUMERIC_SUFFIXES)
                 .help("use numeric suffixes instead of alphabetic"),
+        )
+        .arg(
+            Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
+                .short('d')
+                .action(clap::ArgAction::SetTrue)
+                .value_parser(|_: &str| -> Result<String,clap::Error> {
+                    Ok("0".to_string()) // force value to "0"
+                })
+                .overrides_with(OPT_NUMERIC_SUFFIXES_SHORT)
+                .help("use numeric suffixes instead of alphabetic"),
+        )
+        .arg(
+            Arg::new(OPT_HEX_SUFFIXES)
+                .long(OPT_HEX_SUFFIXES)
+                .default_missing_value("0")
+                .require_equals(true)
+                .num_args(0..=1)
+                .overrides_with(OPT_HEX_SUFFIXES)
+                .help("use hex suffixes instead of alphabetic"),
+        )
+        .arg(
+            Arg::new(OPT_HEX_SUFFIXES_SHORT)
+                .short('x')
+                .action(clap::ArgAction::SetTrue)
+                .value_parser(|_: &str| -> Result<String,clap::Error> {
+                    Ok("0".to_string()) // force value to "0"
+                })
+                .overrides_with(OPT_HEX_SUFFIXES_SHORT)
+                .help("use hex suffixes instead of alphabetic"),
         )
         .arg(
             Arg::new(OPT_SUFFIX_LENGTH)
@@ -138,14 +170,6 @@ pub fn uu_app() -> Command {
                 .value_name("N")
                 .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
                 .help("use suffixes of fixed length N. 0 implies dynamic length."),
-        )
-        .arg(
-            Arg::new(OPT_HEX_SUFFIXES)
-                .short('x')
-                .long(OPT_HEX_SUFFIXES)
-                .default_missing_value("0")
-                .num_args(0..=1)
-                .help("use hex suffixes instead of alphabetic"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
@@ -411,15 +435,48 @@ impl Strategy {
 
 /// Parse the suffix type from the command-line arguments.
 fn suffix_type_from(matches: &ArgMatches) -> Result<(SuffixType, usize), SettingsError> {
-    if matches.value_source(OPT_NUMERIC_SUFFIXES) == Some(ValueSource::CommandLine) {
-        let suffix_start = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES);
+    // Collect provided suffixes (if any)
+    // Any combination is allowed
+    let mut suffixes = vec![];
+    for suffix_id in [
+        OPT_NUMERIC_SUFFIXES,
+        OPT_NUMERIC_SUFFIXES_SHORT,
+        OPT_HEX_SUFFIXES,
+        OPT_HEX_SUFFIXES_SHORT,
+    ]
+    .into_iter()
+    {
+        if matches.value_source(suffix_id) == Some(ValueSource::CommandLine) {
+            suffixes.push((matches.index_of(suffix_id), suffix_id));
+        }
+    }
+    // Compare suffixes by the order specified in command line
+    // last one (highest index) is effective, all others are ignored
+    let mut effective_suffix_index = 0;
+    let mut effective_suffix_id = "";
+    for suffix in suffixes.into_iter() {
+        let (suffix_index, suffix_id) = suffix;
+        if let Some(i) = suffix_index {
+            if i >= effective_suffix_index {
+                effective_suffix_index = i;
+                effective_suffix_id = suffix_id;
+            };
+        }
+    }
+
+    if effective_suffix_id == OPT_NUMERIC_SUFFIXES
+        || effective_suffix_id == OPT_NUMERIC_SUFFIXES_SHORT
+    {
+        let suffix_start = matches.get_one::<String>(effective_suffix_id);
         let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
         let suffix_start = suffix_start
-            .parse()
+            .parse::<usize>()
             .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
         Ok((SuffixType::Decimal, suffix_start))
-    } else if matches.value_source(OPT_HEX_SUFFIXES) == Some(ValueSource::CommandLine) {
-        let suffix_start = matches.get_one::<String>(OPT_HEX_SUFFIXES);
+    } else if effective_suffix_id == OPT_HEX_SUFFIXES
+        || effective_suffix_id == OPT_HEX_SUFFIXES_SHORT
+    {
+        let suffix_start = matches.get_one::<String>(effective_suffix_id);
         let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
         let suffix_start = usize::from_str_radix(suffix_start, 16)
             .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
