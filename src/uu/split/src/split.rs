@@ -125,15 +125,6 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_NUMERIC_SUFFIXES)
-                .long(OPT_NUMERIC_SUFFIXES)
-                .require_equals(true)
-                .default_missing_value("0")
-                .num_args(0..=1)
-                .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
-                .help("use numeric suffixes instead of alphabetic"),
-        )
-        .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
                 .short('d')
                 .action(clap::ArgAction::SetTrue)
@@ -141,16 +132,16 @@ pub fn uu_app() -> Command {
                     Ok("0".to_string()) // force value to "0"
                 })
                 .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
-                .help("use numeric suffixes instead of alphabetic"),
+                .help("use numeric suffixes starting at 0, not alphabetic"),
         )
         .arg(
-            Arg::new(OPT_HEX_SUFFIXES)
-                .long(OPT_HEX_SUFFIXES)
-                .default_missing_value("0")
+            Arg::new(OPT_NUMERIC_SUFFIXES)
+                .long(OPT_NUMERIC_SUFFIXES)
                 .require_equals(true)
+                .default_missing_value("0")
                 .num_args(0..=1)
                 .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
-                .help("use hex suffixes instead of alphabetic"),
+                .help("same as -d, but allow setting the start value"),
         )
         .arg(
             Arg::new(OPT_HEX_SUFFIXES_SHORT)
@@ -160,7 +151,16 @@ pub fn uu_app() -> Command {
                     Ok("0".to_string()) // force value to "0"
                 })
                 .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
-                .help("use hex suffixes instead of alphabetic"),
+                .help("use hex suffixes starting at 0, not alphabetic"),
+        )
+        .arg(
+            Arg::new(OPT_HEX_SUFFIXES)
+                .long(OPT_HEX_SUFFIXES)
+                .default_missing_value("0")
+                .require_equals(true)
+                .num_args(0..=1)
+                .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
+                .help("same as -x, but allow setting the start value"),
         )
         .arg(
             Arg::new(OPT_SUFFIX_LENGTH)
