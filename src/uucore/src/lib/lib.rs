@@ -4,9 +4,6 @@
 // file that was distributed with this source code.
 // library ~ (core/bundler file)
 
-// Copyright (C) ~ Alex Lyon <arcterus@mail.com>
-// Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
-
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
 pub extern crate libc;
