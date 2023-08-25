@@ -273,6 +273,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
         next_active_breaks.clear();
         // go through each active break, extending it and possibly adding a new active
         // break if we are above the minimum required length
+        #[allow(clippy::explicit_iter_loop)]
         for &i in active_breaks.iter() {
             let active = &mut linebreaks[i];
             // normalize demerits to avoid overflow, and record if this is the least

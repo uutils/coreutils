@@ -61,7 +61,7 @@ pub(crate) fn test<A: Arithmetic + Basis>(m: A) -> Result {
     let one = m.one();
     let minus_one = m.minus_one();
 
-    'witness: for _a in A::BASIS.iter() {
+    'witness: for _a in A::BASIS {
         let _a = _a % n;
         if _a == 0 {
             continue;

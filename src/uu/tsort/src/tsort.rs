@@ -154,6 +154,7 @@ impl Graph {
             self.result.push(n.clone());
 
             let n_out_edges = self.out_edges.get_mut(&n).unwrap();
+            #[allow(clippy::explicit_iter_loop)]
             for m in n_out_edges.iter() {
                 let m_in_edges = self.in_edges.get_mut(m).unwrap();
                 m_in_edges.remove(&n);

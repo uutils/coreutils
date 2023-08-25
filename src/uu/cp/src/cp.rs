@@ -1133,6 +1133,7 @@ fn preserve_hardlinks(
     let inode = get_inode(&info);
     let nlinks = info.number_of_links();
     let mut found_hard_link = false;
+    #[allow(clippy::explicit_iter_loop)]
     for (link, link_inode) in hard_links.iter() {
         if *link_inode == inode {
             // Consider the following files:
@@ -1212,7 +1213,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
         None
     };
 
-    for source in sources.iter() {
+    for source in sources {
         if seen_sources.contains(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());

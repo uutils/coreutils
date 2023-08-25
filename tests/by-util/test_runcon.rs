@@ -137,7 +137,7 @@ fn custom_context() {
 }
 
 fn get_sestatus_context(output: &[u8]) -> &str {
-    let re = regex::bytes::Regex::new(r#"Current context:\s*(\S+)\s*"#)
+    let re = regex::bytes::Regex::new(r"Current context:\s*(\S+)\s*")
         .expect("Invalid regular expression");
 
     output

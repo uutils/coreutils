@@ -633,7 +633,7 @@ impl Stater {
                 Ok(meta) => {
                     let tokens = &self.default_tokens;
 
-                    for t in tokens.iter() {
+                    for t in tokens {
                         match *t {
                             Token::Char(c) => print!("{c}"),
                             Token::Directive {
@@ -701,7 +701,7 @@ impl Stater {
                         &self.default_dev_tokens
                     };
 
-                    for t in tokens.iter() {
+                    for t in tokens {
                         match *t {
                             Token::Char(c) => print!("{c}"),
                             Token::Directive {
