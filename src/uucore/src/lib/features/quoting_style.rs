@@ -4,12 +4,14 @@
 // file that was distributed with this source code.
 use std::char::from_digit;
 use std::ffi::OsStr;
+use std::fmt;
 
 // These are characters with special meaning in the shell (e.g. bash).
 // The first const contains characters that only have a special meaning when they appear at the beginning of a name.
 const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
 const SPECIAL_SHELL_CHARS: &str = "`$&*()|[]{};\\'\"<>?! ";
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QuotingStyle {
     Shell {
         escape: bool,
@@ -24,7 +26,7 @@ pub enum QuotingStyle {
     },
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Quotes {
     None,
     Single,
@@ -312,6 +314,42 @@ pub fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
                 (true, Quotes::Double) => format!("\"{escaped_str}\""),
                 _ => escaped_str,
             }
+        }
+    }
+}
+
+impl fmt::Display for QuotingStyle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::Shell {
+                escape,
+                always_quote,
+                show_control,
+            } => {
+                let mut style = "shell".to_string();
+                if escape {
+                    style.push_str("-escape");
+                }
+                if always_quote {
+                    style.push_str("-always-quote");
+                }
+                if show_control {
+                    style.push_str("-show-control");
+                }
+                f.write_str(&style)
+            }
+            Self::C { .. } => f.write_str("C"),
+            Self::Literal { .. } => f.write_str("literal"),
+        }
+    }
+}
+
+impl fmt::Display for Quotes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Self::None => f.write_str("None"),
+            Self::Single => f.write_str("Single"),
+            Self::Double => f.write_str("Double"),
         }
     }
 }
@@ -731,5 +769,51 @@ mod tests {
                 ("'can'\\''\\t'", "shell-escape-always"),
             ],
         );
+    }
+
+    #[test]
+    fn test_quoting_style_display() {
+        let style = QuotingStyle::Shell {
+            escape: true,
+            always_quote: false,
+            show_control: false,
+        };
+        assert_eq!(format!("{}", style), "shell-escape");
+
+        let style = QuotingStyle::Shell {
+            escape: false,
+            always_quote: true,
+            show_control: false,
+        };
+        assert_eq!(format!("{}", style), "shell-always-quote");
+
+        let style = QuotingStyle::Shell {
+            escape: false,
+            always_quote: false,
+            show_control: true,
+        };
+        assert_eq!(format!("{}", style), "shell-show-control");
+
+        let style = QuotingStyle::C {
+            quotes: Quotes::Double,
+        };
+        assert_eq!(format!("{}", style), "C");
+
+        let style = QuotingStyle::Literal {
+            show_control: false,
+        };
+        assert_eq!(format!("{}", style), "literal");
+    }
+
+    #[test]
+    fn test_quotes_display() {
+        let q = Quotes::None;
+        assert_eq!(format!("{}", q), "None");
+
+        let q = Quotes::Single;
+        assert_eq!(format!("{}", q), "Single");
+
+        let q = Quotes::Double;
+        assert_eq!(format!("{}", q), "Double");
     }
 }

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired
+// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired subdired dired
 
 use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
@@ -53,6 +53,7 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
 use uucore::quoting_style::{escape_name, QuotingStyle};
 use uucore::{
+    crash,
     display::Quotable,
     error::{set_exit_code, UError, UResult},
     format_usage,
@@ -61,7 +62,8 @@ use uucore::{
     version_cmp::version_cmp,
 };
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
-
+mod dired;
+use dired::DiredOutput;
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
@@ -167,6 +169,7 @@ enum LsError {
     IOError(std::io::Error),
     IOErrorContext(std::io::Error, PathBuf, bool),
     BlockSizeParseError(String),
+    ConflictingArgumentDired(),
     AlreadyListedError(PathBuf),
     TimeStyleParseError(String, Vec<String>),
 }
@@ -179,6 +182,7 @@ impl UError for LsError {
             Self::IOErrorContext(_, _, false) => 1,
             Self::IOErrorContext(_, _, true) => 2,
             Self::BlockSizeParseError(_) => 1,
+            Self::ConflictingArgumentDired() => 0,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_, _) => 1,
         }
@@ -193,6 +197,10 @@ impl Display for LsError {
             Self::BlockSizeParseError(s) => {
                 write!(f, "invalid --block-size argument {}", s.quote())
             }
+            Self::ConflictingArgumentDired() => {
+                write!(f, "--dired requires --format=long")
+            }
+
             Self::TimeStyleParseError(s, possible_time_styles) => {
                 write!(
                     f,
@@ -406,6 +414,7 @@ pub struct Config {
     selinux_supported: bool,
     group_directories_first: bool,
     line_ending: LineEnding,
+    dired: bool,
 }
 
 // Fields that can be removed or added to the long format
@@ -610,6 +619,8 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
         QuotingStyle::C {
             quotes: quoting_style::Quotes::Double,
         }
+    } else if options.get_flag(options::DIRED) {
+        QuotingStyle::Literal { show_control }
     } else {
         // TODO: use environment variable if available
         QuotingStyle::Shell {
@@ -954,6 +965,11 @@ impl Config {
             None
         };
 
+        let dired = options.get_flag(options::DIRED);
+        if dired && format != Format::Long {
+            crash!(1, "{}", LsError::ConflictingArgumentDired());
+        }
+
         let dereference = if options.get_flag(options::dereference::ALL) {
             Dereference::All
         } else if options.get_flag(options::dereference::ARGS) {
@@ -1003,6 +1019,7 @@ impl Config {
             },
             group_directories_first: options.get_flag(options::GROUP_DIRECTORIES_FIRST),
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
+            dired,
         })
     }
 }
@@ -1135,7 +1152,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::DIRED)
                 .long(options::DIRED)
                 .short('D')
-                .hide(true)
+                .help("generate output designed for Emacs' dired (Directory Editor) mode")
                 .action(ArgAction::SetTrue),
         )
         // The next four arguments do not override with the other format
@@ -1844,6 +1861,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
     let mut out = BufWriter::new(stdout());
+    let mut dired = DiredOutput::default();
     let initial_locs_len = locs.len();
 
     for loc in locs {
@@ -1877,7 +1895,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     sort_entries(&mut files, config, &mut out);
     sort_entries(&mut dirs, config, &mut out);
 
-    display_items(&files, config, &mut out)?;
+    display_items(&files, config, &mut out, &mut dired)?;
 
     for (pos, path_data) in dirs.iter().enumerate() {
         // Do read_dir call here to match GNU semantics by printing
@@ -1899,7 +1917,13 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Print dir heading - name... 'total' comes after error display
         if initial_locs_len > 1 || config.recursive {
             if pos.eq(&0usize) && files.is_empty() {
+                if config.dired {
+                    dired::indent(&mut out)?;
+                }
                 writeln!(out, "{}:", path_data.p_buf.display())?;
+                if config.dired {
+                    dired::calculate_offset_and_push(&mut dired, path_data.display_name.len());
+                }
             } else {
                 writeln!(out, "\n{}:", path_data.p_buf.display())?;
             }
@@ -1909,9 +1933,18 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             &path_data.p_buf,
             path_data.must_dereference,
         )?);
-        enter_directory(path_data, read_dir, config, &mut out, &mut listed_ancestors)?;
+        enter_directory(
+            path_data,
+            read_dir,
+            config,
+            &mut out,
+            &mut listed_ancestors,
+            &mut dired,
+        )?;
     }
-
+    if config.dired {
+        dired::print_dired_output(config, &dired, &mut out)?;
+    }
     Ok(())
 }
 
@@ -2022,6 +2055,7 @@ fn enter_directory(
     config: &Config,
     out: &mut BufWriter<Stdout>,
     listed_ancestors: &mut HashSet<FileInformation>,
+    dired: &mut DiredOutput,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
@@ -2067,10 +2101,14 @@ fn enter_directory(
 
     // Print total after any error display
     if config.format == Format::Long || config.alloc_size {
-        display_total(&entries, config, out)?;
+        let total = return_total(&entries, config, out)?;
+        write!(out, "{}", total.as_str())?;
+        if config.dired {
+            dired::add_total(total.len(), dired);
+        }
     }
 
-    display_items(&entries, config, out)?;
+    display_items(&entries, config, out, dired)?;
 
     if config.recursive {
         for e in entries
@@ -2095,7 +2133,7 @@ fn enter_directory(
                         .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
                     {
                         writeln!(out, "\n{}:", e.p_buf.display())?;
-                        enter_directory(e, rd, config, out, listed_ancestors)?;
+                        enter_directory(e, rd, config, out, listed_ancestors, dired)?;
                         listed_ancestors
                             .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
                     } else {
@@ -2154,7 +2192,11 @@ fn pad_right(string: &str, count: usize) -> String {
     format!("{string:<count$}")
 }
 
-fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) -> UResult<()> {
+fn return_total(
+    items: &[PathData],
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) -> UResult<String> {
     let mut total_size = 0;
     for item in items {
         total_size += item
@@ -2162,13 +2204,14 @@ fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
-    write!(
-        out,
+    if config.dired {
+        dired::indent(out)?;
+    }
+    Ok(format!(
         "total {}{}",
         display_size(total_size, config),
         config.line_ending
-    )?;
-    Ok(())
+    ))
 }
 
 fn display_additional_leading_info(
@@ -2207,7 +2250,12 @@ fn display_additional_leading_info(
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) -> UResult<()> {
+fn display_items(
+    items: &[PathData],
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+    dired: &mut DiredOutput,
+) -> UResult<()> {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
@@ -2220,6 +2268,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             if config.inode || config.alloc_size {
                 let more_info =
                     display_additional_leading_info(item, &padding_collection, config, out)?;
+
                 write!(out, "{more_info}")?;
             }
             #[cfg(not(unix))]
@@ -2228,7 +2277,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                     display_additional_leading_info(item, &padding_collection, config, out)?;
                 write!(out, "{more_info}")?;
             }
-            display_item_long(item, &padding_collection, config, out)?;
+            display_item_long(item, &padding_collection, config, out, dired)?;
         }
     } else {
         let mut longest_context_len = 1;
@@ -2402,10 +2451,14 @@ fn display_item_long(
     padding: &PaddingCollection,
     config: &Config,
     out: &mut BufWriter<Stdout>,
+    dired: &mut DiredOutput,
 ) -> UResult<()> {
+    let mut output_display: String = String::new();
+    if config.dired {
+        write!(out, "{}", "  ")?;
+    }
     if let Some(md) = item.md(out) {
-        write!(
-            out,
+        output_display += &format!(
             "{}{} {}",
             display_permissions(md, true),
             if item.security_context.len() > 1 {
@@ -2416,49 +2469,32 @@ fn display_item_long(
                 ""
             },
             pad_left(&display_symlink_count(md), padding.link_count)
-        )?;
+        );
 
         if config.long.owner {
-            write!(
-                out,
-                " {}",
-                pad_right(&display_uname(md, config), padding.uname)
-            )?;
+            output_display += &format!(" {}", pad_right(&display_uname(md, config), padding.uname));
         }
 
         if config.long.group {
-            write!(
-                out,
-                " {}",
-                pad_right(&display_group(md, config), padding.group)
-            )?;
+            output_display += &format!(" {}", pad_right(&display_group(md, config), padding.group));
         }
 
         if config.context {
-            write!(
-                out,
-                " {}",
-                pad_right(&item.security_context, padding.context)
-            )?;
+            output_display += &format!(" {}", pad_right(&item.security_context, padding.context));
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            write!(
-                out,
-                " {}",
-                pad_right(&display_uname(md, config), padding.uname)
-            )?;
+            output_display += &format!(" {}", pad_right(&display_uname(md, config), padding.uname));
         }
 
         match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Size(size) => {
-                write!(out, " {}", pad_left(&size, padding.size))?;
+                output_display += &format!(" {}", pad_left(&size, padding.size));
             }
             SizeOrDeviceId::Device(major, minor) => {
-                write!(
-                    out,
+                output_display += &format!(
                     " {}, {}",
                     pad_left(
                         &major,
@@ -2478,19 +2514,22 @@ fn display_item_long(
                         #[cfg(unix)]
                         padding.minor,
                     ),
-                )?;
+                );
             }
         };
 
-        let dfn = display_file_name(item, config, None, String::new(), out).contents;
+        output_display += &format!(" {} ", display_date(md, config));
 
-        write!(
-            out,
-            " {} {}{}",
-            display_date(md, config),
-            dfn,
-            config.line_ending
-        )?;
+        let dfn = display_file_name(item, config, None, String::new(), out).contents;
+        if config.dired {
+            let (start, end) = dired::calculate_dired_byte_positions(
+                output_display.len(),
+                dfn.len(),
+                &dired.dired_positions,
+            );
+            dired::update_positions(start, end, dired, false);
+        }
+        output_display += &format!("{}{}", dfn, config.line_ending);
     } else {
         #[cfg(unix)]
         let leading_char = {
@@ -2525,8 +2564,7 @@ fn display_item_long(
             }
         };
 
-        write!(
-            out,
+        output_display += &format!(
             "{}{} {}",
             format_args!("{leading_char}?????????"),
             if item.security_context.len() > 1 {
@@ -2537,41 +2575,41 @@ fn display_item_long(
                 ""
             },
             pad_left("?", padding.link_count)
-        )?;
+        );
 
         if config.long.owner {
-            write!(out, " {}", pad_right("?", padding.uname))?;
+            output_display += &format!(" {}", pad_right("?", padding.uname));
         }
 
         if config.long.group {
-            write!(out, " {}", pad_right("?", padding.group))?;
+            output_display += &format!(" {}", pad_right("?", padding.group));
         }
 
         if config.context {
-            write!(
-                out,
-                " {}",
-                pad_right(&item.security_context, padding.context)
-            )?;
+            output_display += &format!(" {}", pad_right(&item.security_context, padding.context));
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            write!(out, " {}", pad_right("?", padding.uname))?;
+            output_display += &format!(" {}", pad_right("?", padding.uname));
         }
 
         let dfn = display_file_name(item, config, None, String::new(), out).contents;
         let date_len = 12;
 
-        writeln!(
-            out,
-            " {} {} {}",
+        output_display += &format!(
+            " {} {} ",
             pad_left("?", padding.size),
             pad_left("?", date_len),
-            dfn,
-        )?;
+        );
+
+        if config.dired {
+            dired::calculate_and_update_positions(output_display.len(), dfn.trim().len(), dired);
+        }
+        output_display += &format!("{}{}", dfn, config.line_ending);
     }
+    write!(out, "{}", output_display)?;
 
     Ok(())
 }
