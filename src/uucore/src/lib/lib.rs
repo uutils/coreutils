@@ -130,8 +130,8 @@ pub fn set_utility_is_second_arg() {
 static ARGV: Lazy<Vec<OsString>> = Lazy::new(|| wild::args_os().collect());
 
 static UTIL_NAME: Lazy<String> = Lazy::new(|| {
-    let base_index = if get_utility_is_second_arg() { 1 } else { 0 };
-    let is_man = if ARGV[base_index].eq("manpage") { 1 } else { 0 };
+    let base_index = usize::from(get_utility_is_second_arg());
+    let is_man = usize::from(ARGV[base_index].eq("manpage"));
     let argv_index = base_index + is_man;
 
     ARGV[argv_index].to_string_lossy().into_owned()
