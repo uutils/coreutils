@@ -152,37 +152,37 @@ sed -i -e '/tests\/misc\/invalid-opt.pl/ D' \
 sed -i -e '/tests\/misc\/seq-precision.sh/ D' \
     Makefile
 
+# TODO: many files and some directories modified with 'sed' in the sections below either no longer exist or have been moved
+# TODO: Might need to review and updated sections below
+# TODO: As a result this script will fail when executed normally as 'bash util/build-gnu.hs' due to the 'set -e' set at the beginning 
+# TODO: The rest of the 'sed' commands after first failure in this scenario will not be executed as bash will exit on first error
+# TODO: However, the behaviour might be different when running it via GitHub actions (GnuTests)
+# TODO: For now, when running in local a workaround would be to comment out the 'set -e' at the beginning of the file
+
 # printf doesn't limit the values used in its arg, so this produced ~2GB of output
-# Looks like tests/misc/printf.sh does not exist anymore - comment it out for now
-#sed -i '/INT_OFLOW/ D' tests/misc/printf.sh
+# TODO: this is the first one to likely fail as tests/misc/printf.sh does not exist/have been moved
+sed -i '/INT_OFLOW/ D' tests/misc/printf.sh
+# TODO: all commands below might not be executed
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
-# TODO : tests/tail-2/ does not appear to exist 
-# and have been moved to just tests/tail/ location
-# Might need to update the section below to reflect that
-# Also looks like tests/misc/sort-compress-proc.sh and tests/tail-2/tail-n0f.sh and tests/misc/shuf.sh and many others do not exist anymore or moved - comment it out for now
-sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh #tests/misc/sort-compress-proc.sh
+sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh
 sed -i 's|ls -|/usr/bin/ls -|' tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh
-sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh  tests/cp/fail-perm.sh tests/mv/i-2.sh #tests/misc/shuf.sh #tests/tail-2/tail-n0f.sh
-sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh #tests/misc/test-N.sh
-#sed -i 's|split |/usr/bin/split |' tests/misc/factor-parallel.sh
-#sed -i 's|id -|/usr/bin/id -|' tests/misc/runcon-no-reorder.sh
+sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/tail-2/tail-n0f.sh tests/cp/fail-perm.sh tests/mv/i-2.sh tests/misc/shuf.sh
+sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh tests/misc/test-N.sh
+sed -i 's|split |/usr/bin/split |' tests/misc/factor-parallel.sh
+sed -i 's|id -|/usr/bin/id -|' tests/misc/runcon-no-reorder.sh
 # tests/ls/abmon-align.sh - https://github.com/uutils/coreutils/issues/3505
-sed -i 's|touch |/usr/bin/touch |' tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/mv/update.sh  tests/misc/time-style.sh  tests/ls/abmon-align.sh #tests/misc/ls-time.sh tests/misc/stat-nanoseconds.sh tests/misc/test-N.sh
+sed -i 's|touch |/usr/bin/touch |' tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/mv/update.sh tests/misc/ls-time.sh tests/misc/stat-nanoseconds.sh tests/misc/time-style.sh tests/misc/test-N.sh tests/ls/abmon-align.sh
 sed -i 's|ln -|/usr/bin/ln -|' tests/cp/link-deref.sh
 sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
-#sed -i 's|paste |/usr/bin/paste |' tests/misc/od-endian.sh
-#sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail-2/follow-stdin.sh
+sed -i 's|paste |/usr/bin/paste |' tests/misc/od-endian.sh
+sed -i 's|timeout |/usr/bin/timeout |' tests/tail-2/follow-stdin.sh
 
 # Add specific timeout to tests that currently hang to limit time spent waiting
-# TODO : tests/misc/seq-precision.sh tests/misc/seq-long-double.sh do not appear to exist 
-# and have been moved to tests/seq/ location
-# Might need to update the section below to reflect that, but comment it out for now
-#sed -i 's|\(^\s*\)seq \$|\1'"${SYSTEM_TIMEOUT}"' 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
+sed -i 's|\(^\s*\)seq \$|\1/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
 
-# Remove dup of /usr/bin/ (and /usr/local/bin) when executed several times
+# Remove dup of /usr/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
-grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/local/bin/\s?/usr/local/bin/|/usr/local/bin/|g'
 
 #### Adjust tests to make them work with Rust/coreutils
 # in some cases, what we are doing in rust/coreutils is good (or better)
@@ -204,10 +204,7 @@ sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel':
 
 # overlay-headers.sh test intends to check for inotify events,
 # however there's a bug because `---dis` is an alias for: `---disable-inotify`
-# TODO : tests/tail-2/ does not appear to exist 
-# and have been moved to just tests/tail/ location
-# Might need to update the section below to reflect that
-#sed -i -e "s|---dis ||g" tests/tail-2/overlay-headers.sh
+sed -i -e "s|---dis ||g" tests/tail-2/overlay-headers.sh
 
 test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
@@ -264,13 +261,11 @@ sed -i -e "s/Try 'mv --help' for more information/For more information, try '--h
 
 # GNU doesn't support width > INT_MAX
 # disable these test cases
-# TODO: moved or deleted tests/misc/printf-cov.pl
-#sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/misc/printf-cov.pl
+sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/misc/printf-cov.pl
 
 sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du: option requires an argument/error: a value is required for '--threshold <SIZE>' but none was supplied/" -e "/Try 'du --help' for more information./d" tests/du/threshold.sh
 
 # disable two kind of tests:
 # "hostid BEFORE --help" doesn't fail for GNU. we fail. we are probably doing better
 # "hostid BEFORE --help AFTER " same for this
-# TODO moved or deleted tests/misc/help-version-getopt.sh
-#sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/misc/help-version-getopt.sh
+sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/misc/help-version-getopt.sh
