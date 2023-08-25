@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Joseph Crail <jbcrail@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
@@ -299,7 +297,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     }
 
     let mut all_successful = true;
-    for srcpath in files.iter() {
+    for srcpath in files {
         let targetpath =
             if settings.no_dereference && matches!(settings.overwrite, OverwriteMode::Force) {
                 // In that case, we don't want to do link resolution

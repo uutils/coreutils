@@ -1,7 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
@@ -633,7 +633,7 @@ impl Stater {
                 Ok(meta) => {
                     let tokens = &self.default_tokens;
 
-                    for t in tokens.iter() {
+                    for t in tokens {
                         match *t {
                             Token::Char(c) => print!("{c}"),
                             Token::Directive {
@@ -701,7 +701,7 @@ impl Stater {
                         &self.default_dev_tokens
                     };
 
-                    for t in tokens.iter() {
+                    for t in tokens {
                         match *t {
                             Token::Char(c) => print!("{c}"),
                             Token::Directive {
