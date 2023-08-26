@@ -51,12 +51,64 @@ const AFTER_HELP: &str = help_section!("after help", "split.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args = args.collect_lossy();
+
+    let (args, obs_lines) = handle_obsolete(&args[..]);
+
     let matches = uu_app().try_get_matches_from(args)?;
-    match Settings::from(&matches) {
+
+    match Settings::from(&matches, &obs_lines) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
         Err(e) => Err(USimpleError::new(1, format!("{e}"))),
     }
+}
+
+/// Extract obsolete shorthand (if any) for specifying lines in following scenarios (and similar)
+/// `split -22 file` would mean `split -l 22 file`
+/// `split -2de file` would mean `split -l 2 -d -e file`
+/// `split -x300e file` would mean `split -x -l 300 -e file`
+/// `split -x300e -22 file` would mean `split -x -e -l 22 file` (last obsolete lines option wins)
+/// following GNU `split` behavior
+fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
+    let mut v: Vec<String> = vec![];
+    let mut obs_lines = None;
+    for arg in args.iter() {
+        let slice = &arg;
+        if slice.starts_with('-') && !slice.starts_with("--") {
+            // start of the short option string
+            // extract numeric part and filter it out
+            let mut obs_lines_extracted: Vec<char> = vec![];
+            let filtered_slice: Vec<char> = slice
+                .chars()
+                .filter(|c| {
+                    if c.is_ascii_digit() {
+                        obs_lines_extracted.push(*c);
+                        false
+                    } else {
+                        true
+                    }
+                })
+                .collect();
+
+            if filtered_slice.get(1).is_some() {
+                // there were some short options in front of obsolete lines number
+                // i.e. '-xd100' or similar
+                // preserve it
+                v.push(filtered_slice.iter().collect())
+            }
+            if !obs_lines_extracted.is_empty() {
+                // obsolete lines value was extracted
+                obs_lines = Some(obs_lines_extracted.iter().collect());
+            }
+        } else {
+            // not a short option
+            // preserve it
+            v.push(arg.to_owned());
+        }
+    }
+    println!("{:#?}",v);
+    (v, obs_lines)
 }
 
 pub fn uu_app() -> Command {
@@ -357,6 +409,17 @@ impl fmt::Display for StrategyError {
 }
 
 impl Strategy {
+    /// Parse a strategy from obsolete line option value
+    fn from_obs(obs_value: &str) -> Result<Self, StrategyError> {
+        let n = parse_size(obs_value).map_err(StrategyError::Lines)?;
+        if n > 0 {
+            Ok(Self::Lines(n))
+        } else {
+            Err(StrategyError::Lines(ParseSizeError::ParseFailure(
+                obs_value.to_string(),
+            )))
+        }
+    }
     /// Parse a strategy from the command-line arguments.
     fn from(matches: &ArgMatches) -> Result<Self, StrategyError> {
         fn get_and_parse(
@@ -506,7 +569,7 @@ impl fmt::Display for SettingsError {
 
 impl Settings {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches) -> Result<Self, SettingsError> {
+    fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, SettingsError> {
         let additional_suffix = matches
             .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
             .unwrap()
@@ -514,7 +577,19 @@ impl Settings {
         if additional_suffix.contains('/') {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
-        let strategy = Strategy::from(matches).map_err(SettingsError::Strategy)?;
+
+        // obsolete lines option cannot be used simultaneously with OPT_LINES
+        let strategy = match obs_lines {
+            Some(obs_value) => {
+                if matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine) {
+                    return Err(SettingsError::Strategy(StrategyError::MultipleWays));
+                } else {
+                    Strategy::from_obs(obs_value).map_err(SettingsError::Strategy)?
+                }
+            }
+            None => Strategy::from(matches).map_err(SettingsError::Strategy)?,
+        };
+
         let (suffix_type, suffix_start) = suffix_type_from(matches)?;
         let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap();
         let suffix_length: usize = suffix_length_str

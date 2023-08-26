@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes onehundredlines nbbbb
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen
 
 use crate::common::util::{AtPath, TestScenario};
 use rand::{thread_rng, Rng, SeedableRng};
@@ -318,6 +318,156 @@ fn test_split_lines_number() {
         .fails()
         .code_is(1)
         .stderr_only("split: invalid number of lines: '2fb'\n");
+}
+
+/// Test for obsolete lines option standalone
+#[test]
+fn test_split_obs_lines_standalone() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "obs-lines-standalone";
+    RandomFile::new(&at, name).add_lines(4);
+    ucmd.args(&["-2", name]).succeeds().no_stderr().no_stdout();
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 2);
+    assert_eq!(glob.collate(), at.read_bytes(name));
+}
+
+/// Test for invalid obsolete lines option
+#[test]
+fn test_split_invalid_obs_lines_standalone() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .args(&["-2fb", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_only("error: unexpected argument '-f' found\n");
+}
+
+/// Test for obsolete lines option as part of combined short options
+#[test]
+fn test_split_obs_lines_within_combined_shorts() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let name = "obs-lines-within-shorts";
+    RandomFile::new(&at, name).add_lines(400);
+
+    scene
+        .ucmd()
+        .args(&["-d200xe", name])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 2);
+    assert_eq!(glob.collate(), at.read_bytes(name))
+}
+
+/// Test for obsolete lines option starts as part of combined short options
+#[test]
+fn test_split_obs_lines_starts_combined_shorts() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let name = "obs-lines-starts-shorts";
+    RandomFile::new(&at, name).add_lines(400);
+
+    scene
+        .ucmd()
+        .args(&["-x200d", name])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 2);
+    assert_eq!(glob.collate(), at.read_bytes(name))
+}
+
+/// Test for using both obsolete lines (standalone) option and short/long lines option simultaneously
+#[test]
+fn test_split_both_lines_and_obs_lines_standalone() {
+    // This test will ensure that if both lines option '-l' or '--lines'
+    // and obsolete lines option '-100' are used
+    // it fails
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .args(&["-l", "2", "-2", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: cannot split in more than one way\n");
+    scene
+        .ucmd()
+        .args(&["--lines", "2", "-2", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: cannot split in more than one way\n");
+}
+
+/// Test for using more than one obsolete lines option (standalone)
+/// last one wins
+#[test]
+fn test_split_multiple_obs_lines_standalone() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let name = "multiple-obs-lines";
+    RandomFile::new(&at, name).add_lines(400);
+
+    scene
+        .ucmd()
+        .args(&["-3000", "-200", name])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 2);
+    assert_eq!(glob.collate(), at.read_bytes(name))
+}
+
+/// Test for using more than one obsolete lines option within combined shorts
+/// last one wins
+#[test]
+fn test_split_multiple_obs_lines_within_combined() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let name = "multiple-obs-lines";
+    RandomFile::new(&at, name).add_lines(400);
+
+    scene
+        .ucmd()
+        .args(&["-x5000d -e200x", name])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 2);
+    assert_eq!(glob.collate(), at.read_bytes(name))
+}
+
+/// Test for using both obsolete lines option within combined shorts with conflicting -n option simultaneously
+#[test]
+fn test_split_obs_lines_within_combined_with_number() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .args(&["-3dxen", "4", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: cannot split in more than one way\n");
+    scene
+        .ucmd()
+        .args(&["-dxe30n", "4", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: cannot split in more than one way\n");
 }
 
 #[test]
