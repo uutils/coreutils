@@ -245,29 +245,29 @@ impl Parser {
             None => return Err(ParseError::UnrecognizedOperand(operand.to_string())),
             Some((k, v)) => match k {
                 "bs" => {
-                    let bs = self.parse_bytes(k, v)?;
+                    let bs = Self::parse_bytes(k, v)?;
                     self.ibs = bs;
                     self.obs = bs;
                 }
-                "cbs" => self.cbs = Some(self.parse_bytes(k, v)?),
+                "cbs" => self.cbs = Some(Self::parse_bytes(k, v)?),
                 "conv" => self.parse_conv_flags(v)?,
-                "count" => self.count = Some(self.parse_n(v)?),
-                "ibs" => self.ibs = self.parse_bytes(k, v)?,
+                "count" => self.count = Some(Self::parse_n(v)?),
+                "ibs" => self.ibs = Self::parse_bytes(k, v)?,
                 "if" => self.infile = Some(v.to_string()),
                 "iflag" => self.parse_input_flags(v)?,
-                "obs" => self.obs = self.parse_bytes(k, v)?,
+                "obs" => self.obs = Self::parse_bytes(k, v)?,
                 "of" => self.outfile = Some(v.to_string()),
                 "oflag" => self.parse_output_flags(v)?,
-                "seek" | "oseek" => self.seek = self.parse_n(v)?,
-                "skip" | "iseek" => self.skip = self.parse_n(v)?,
-                "status" => self.status = Some(self.parse_status_level(v)?),
+                "seek" | "oseek" => self.seek = Self::parse_n(v)?,
+                "skip" | "iseek" => self.skip = Self::parse_n(v)?,
+                "status" => self.status = Some(Self::parse_status_level(v)?),
                 _ => return Err(ParseError::UnrecognizedOperand(operand.to_string())),
             },
         }
         Ok(())
     }
 
-    fn parse_n(&self, val: &str) -> Result<Num, ParseError> {
+    fn parse_n(val: &str) -> Result<Num, ParseError> {
         let n = parse_bytes_with_opt_multiplier(val)?;
         Ok(if val.ends_with('B') {
             Num::Bytes(n)
@@ -276,13 +276,13 @@ impl Parser {
         })
     }
 
-    fn parse_bytes(&self, arg: &str, val: &str) -> Result<usize, ParseError> {
+    fn parse_bytes(arg: &str, val: &str) -> Result<usize, ParseError> {
         parse_bytes_with_opt_multiplier(val)?
             .try_into()
             .map_err(|_| ParseError::BsOutOfRange(arg.to_string()))
     }
 
-    fn parse_status_level(&self, val: &str) -> Result<StatusLevel, ParseError> {
+    fn parse_status_level(val: &str) -> Result<StatusLevel, ParseError> {
         match val {
             "none" => Ok(StatusLevel::None),
             "noxfer" => Ok(StatusLevel::Noxfer),
