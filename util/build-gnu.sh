@@ -41,7 +41,7 @@ if test ! -d "${path_GNU}"; then
     echo "After downloading GNU coreutils to \"${path_GNU}\" run the following commands to cheout latest release tag"
     echo "cd \"${path_GNU}\""
     echo "git fetch --all --tags"
-    echo "git checkout tags/\"${release_tag_GNU}\""
+    echo "git checkout tags/${release_tag_GNU}"
     exit 1
 fi
 
