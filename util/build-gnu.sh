@@ -178,7 +178,7 @@ sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail-2/follow-stdin.sh
 # Add specific timeout to tests that currently hang to limit time spent waiting
 sed -i 's|\(^\s*\)seq \$|\1'"${SYSTEM_TIMEOUT}"' 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
 
-# Remove dup of /usr/bin/ when executed several times
+# Remove dup of /usr/bin/ and /usr/local/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
 grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/local/bin/\s?/usr/local/bin/|/usr/local/bin/|g'
 
