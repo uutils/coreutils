@@ -32,10 +32,16 @@ fi
 
 ###
 
+release_tag_GNU="v9.3"
+
 if test ! -d "${path_GNU}"; then
     echo "Could not find GNU coreutils (expected at '${path_GNU}')"
     echo "Run the following to download into the expected path:"
     echo "git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
+    echo "After downloading GNU coreutils to \"${path_GNU}\" run the following commands to cheout latest release tag"
+    echo "cd \"${path_GNU}\""
+    echo "git fetch --all --tags"
+    echo "git checkout tags/\"${release_tag_GNU}\""
     exit 1
 fi
 
@@ -152,17 +158,8 @@ sed -i -e '/tests\/misc\/invalid-opt.pl/ D' \
 sed -i -e '/tests\/misc\/seq-precision.sh/ D' \
     Makefile
 
-# TODO: many files and some directories modified with 'sed' in the sections below either no longer exist or have been moved
-# TODO: Might need to review and updated sections below
-# TODO: As a result this script will fail when executed normally as 'bash util/build-gnu.hs' due to the 'set -e' set at the beginning 
-# TODO: The rest of the 'sed' commands after first failure in this scenario will not be executed as bash will exit on first error
-# TODO: However, the behaviour might be different when running it via GitHub actions (GnuTests)
-# TODO: For now, when running in local a workaround would be to comment out the 'set -e' at the beginning of the file
-
 # printf doesn't limit the values used in its arg, so this produced ~2GB of output
-# TODO: this is the first one to likely fail as tests/misc/printf.sh does not exist/have been moved
 sed -i '/INT_OFLOW/ D' tests/misc/printf.sh
-# TODO: all commands below might not be executed
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh
