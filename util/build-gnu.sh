@@ -180,6 +180,7 @@ sed -i 's|\(^\s*\)seq \$|\1'"${SYSTEM_TIMEOUT}"' 0.1 seq \$|' tests/misc/seq-pre
 
 # Remove dup of /usr/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
+grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/local/bin/\s?/usr/local/bin/|/usr/local/bin/|g'
 
 #### Adjust tests to make them work with Rust/coreutils
 # in some cases, what we are doing in rust/coreutils is good (or better)
