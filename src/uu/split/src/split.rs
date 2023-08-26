@@ -469,8 +469,8 @@ fn suffix_type_from(matches: &ArgMatches) -> Result<(SuffixType, usize), Setting
                 .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
             Ok((SuffixType::Hexadecimal, suffix_start))
         }
-        (_, _, true, _) => Ok((SuffixType::Decimal, 0)),        // short numeric suffix '-d', default start 0
-        (_, _, _, true) => Ok((SuffixType::Hexadecimal, 0)),    // short hex suffix '-x', default start 0
+        (_, _, true, _) => Ok((SuffixType::Decimal, 0)), // short numeric suffix '-d', default start 0
+        (_, _, _, true) => Ok((SuffixType::Hexadecimal, 0)), // short hex suffix '-x', default start 0
         _ => Ok((SuffixType::Alphabetic, 0)), // no numeric/hex suffix, using default alphabetic
     }
 }
