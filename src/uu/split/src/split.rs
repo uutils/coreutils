@@ -126,7 +126,12 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
                 .short('d')
                 .action(clap::ArgAction::SetTrue)
-                .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
+                .overrides_with_all([
+                    OPT_NUMERIC_SUFFIXES,
+                    OPT_NUMERIC_SUFFIXES_SHORT,
+                    OPT_HEX_SUFFIXES,
+                    OPT_HEX_SUFFIXES_SHORT
+                ])
                 .help("use numeric suffixes starting at 0, not alphabetic"),
         )
         .arg(
@@ -135,14 +140,24 @@ pub fn uu_app() -> Command {
                 .require_equals(true)
                 .default_missing_value("0")
                 .num_args(0..=1)
-                .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
+                .overrides_with_all([
+                    OPT_NUMERIC_SUFFIXES,
+                    OPT_NUMERIC_SUFFIXES_SHORT,
+                    OPT_HEX_SUFFIXES,
+                    OPT_HEX_SUFFIXES_SHORT
+                ])
                 .help("same as -d, but allow setting the start value"),
         )
         .arg(
             Arg::new(OPT_HEX_SUFFIXES_SHORT)
                 .short('x')
                 .action(clap::ArgAction::SetTrue)
-                .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
+                .overrides_with_all([
+                    OPT_NUMERIC_SUFFIXES,
+                    OPT_NUMERIC_SUFFIXES_SHORT,
+                    OPT_HEX_SUFFIXES,
+                    OPT_HEX_SUFFIXES_SHORT
+                ])
                 .help("use hex suffixes starting at 0, not alphabetic"),
         )
         .arg(
@@ -151,7 +166,12 @@ pub fn uu_app() -> Command {
                 .default_missing_value("0")
                 .require_equals(true)
                 .num_args(0..=1)
-                .overrides_with_all([OPT_NUMERIC_SUFFIXES,OPT_NUMERIC_SUFFIXES_SHORT,OPT_HEX_SUFFIXES,OPT_HEX_SUFFIXES_SHORT])
+                .overrides_with_all([
+                    OPT_NUMERIC_SUFFIXES,
+                    OPT_NUMERIC_SUFFIXES_SHORT,
+                    OPT_HEX_SUFFIXES,
+                    OPT_HEX_SUFFIXES_SHORT
+                ])
                 .help("same as -x, but allow setting the start value"),
         )
         .arg(
@@ -429,36 +449,28 @@ fn suffix_type_from(matches: &ArgMatches) -> Result<(SuffixType, usize), Setting
     // Check if the user is specifying one or more than one suffix
     // Any combination of suffixes is allowed
     // Since all suffixes are setup with 'overrides_with_all()' against themselves and each other,
-    // last one wins, all others are ignored and will not match Some(ValueSource::CommandLine)
-    //
-    // Note: right now, this exact behavior cannot be handled by
-    // `ArgGroup` since `ArgGroup` considers a default value `Arg`
-    // as "defined".
+    // last one wins, all others are ignored
     match (
-        matches.value_source(OPT_NUMERIC_SUFFIXES) == Some(ValueSource::CommandLine),
-        matches.value_source(OPT_NUMERIC_SUFFIXES_SHORT) == Some(ValueSource::CommandLine),
-        matches.value_source(OPT_HEX_SUFFIXES) == Some(ValueSource::CommandLine),
-        matches.value_source(OPT_HEX_SUFFIXES_SHORT) == Some(ValueSource::CommandLine),
+        matches.get_one::<String>(OPT_NUMERIC_SUFFIXES),
+        matches.get_one::<String>(OPT_HEX_SUFFIXES),
+        matches.get_flag(OPT_NUMERIC_SUFFIXES_SHORT),
+        matches.get_flag(OPT_HEX_SUFFIXES_SHORT),
     ) {
-        (true, false, false, false) => {
-            let suffix_start = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES);
-            let suffix_start =
-                suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
+        (Some(v), _, _, _) => {
+            let suffix_start = v;
             let suffix_start = suffix_start
                 .parse::<usize>()
                 .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
             Ok((SuffixType::Decimal, suffix_start))
         }
-        (false, true, false, false) => Ok((SuffixType::Decimal, 0)), // short numeric suffix '-d', default start 0
-        (false, false, true, false) => {
-            let suffix_start = matches.get_one::<String>(OPT_HEX_SUFFIXES);
-            let suffix_start =
-                suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
+        (_, Some(v), _, _) => {
+            let suffix_start = v;
             let suffix_start = usize::from_str_radix(suffix_start, 16)
                 .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
             Ok((SuffixType::Hexadecimal, suffix_start))
         }
-        (false, false, false, true) => Ok((SuffixType::Hexadecimal, 0)), // short hex suffix '-x', default start 0
+        (_, _, true, _) => Ok((SuffixType::Decimal, 0)),        // short numeric suffix '-d', default start 0
+        (_, _, _, true) => Ok((SuffixType::Hexadecimal, 0)),    // short hex suffix '-x', default start 0
         _ => Ok((SuffixType::Alphabetic, 0)), // no numeric/hex suffix, using default alphabetic
     }
 }

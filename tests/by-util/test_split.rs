@@ -758,56 +758,88 @@ fn test_hex_suffix_no_equal() {
 #[test]
 fn test_short_numeric_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-n", "4", "-d", "threebytes.txt"])
+    ucmd.args(&["-l", "9", "-d", "onehundredlines.txt"])
         .succeeds()
         .no_stdout()
         .no_stderr();
-    assert_eq!(at.read("x00"), "a");
-    assert_eq!(at.read("x01"), "b");
-    assert_eq!(at.read("x02"), "c");
-    assert_eq!(at.read("x03"), "");
+    assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
+    assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
+    assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
+    assert_eq!(at.read("x03"), "27\n28\n29\n30\n31\n32\n33\n34\n35\n");
+    assert_eq!(at.read("x04"), "36\n37\n38\n39\n40\n41\n42\n43\n44\n");
+    assert_eq!(at.read("x05"), "45\n46\n47\n48\n49\n50\n51\n52\n53\n");
+    assert_eq!(at.read("x06"), "54\n55\n56\n57\n58\n59\n60\n61\n62\n");
+    assert_eq!(at.read("x07"), "63\n64\n65\n66\n67\n68\n69\n70\n71\n");
+    assert_eq!(at.read("x08"), "72\n73\n74\n75\n76\n77\n78\n79\n80\n");
+    assert_eq!(at.read("x09"), "81\n82\n83\n84\n85\n86\n87\n88\n89\n");
+    assert_eq!(at.read("x10"), "90\n91\n92\n93\n94\n95\n96\n97\n98\n");
+    assert_eq!(at.read("x11"), "99\n");
 }
 
 /// Test for long numeric suffix not having any value
 #[test]
 fn test_numeric_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-n", "4", "--numeric-suffixes", "threebytes.txt"])
+    ucmd.args(&["-l", "9", "--numeric-suffixes", "onehundredlines.txt"])
         .succeeds()
         .no_stdout()
         .no_stderr();
-    assert_eq!(at.read("x00"), "a");
-    assert_eq!(at.read("x01"), "b");
-    assert_eq!(at.read("x02"), "c");
-    assert_eq!(at.read("x03"), "");
+    assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
+    assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
+    assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
+    assert_eq!(at.read("x03"), "27\n28\n29\n30\n31\n32\n33\n34\n35\n");
+    assert_eq!(at.read("x04"), "36\n37\n38\n39\n40\n41\n42\n43\n44\n");
+    assert_eq!(at.read("x05"), "45\n46\n47\n48\n49\n50\n51\n52\n53\n");
+    assert_eq!(at.read("x06"), "54\n55\n56\n57\n58\n59\n60\n61\n62\n");
+    assert_eq!(at.read("x07"), "63\n64\n65\n66\n67\n68\n69\n70\n71\n");
+    assert_eq!(at.read("x08"), "72\n73\n74\n75\n76\n77\n78\n79\n80\n");
+    assert_eq!(at.read("x09"), "81\n82\n83\n84\n85\n86\n87\n88\n89\n");
+    assert_eq!(at.read("x10"), "90\n91\n92\n93\n94\n95\n96\n97\n98\n");
+    assert_eq!(at.read("x11"), "99\n");
 }
 
 /// Test for short hex suffix not having any value
 #[test]
 fn test_short_hex_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-n", "4", "-x", "threebytes.txt"])
+    ucmd.args(&["-l", "9", "-x", "onehundredlines.txt"])
         .succeeds()
         .no_stdout()
         .no_stderr();
-    assert_eq!(at.read("x00"), "a");
-    assert_eq!(at.read("x01"), "b");
-    assert_eq!(at.read("x02"), "c");
-    assert_eq!(at.read("x03"), "");
+    assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
+    assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
+    assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
+    assert_eq!(at.read("x03"), "27\n28\n29\n30\n31\n32\n33\n34\n35\n");
+    assert_eq!(at.read("x04"), "36\n37\n38\n39\n40\n41\n42\n43\n44\n");
+    assert_eq!(at.read("x05"), "45\n46\n47\n48\n49\n50\n51\n52\n53\n");
+    assert_eq!(at.read("x06"), "54\n55\n56\n57\n58\n59\n60\n61\n62\n");
+    assert_eq!(at.read("x07"), "63\n64\n65\n66\n67\n68\n69\n70\n71\n");
+    assert_eq!(at.read("x08"), "72\n73\n74\n75\n76\n77\n78\n79\n80\n");
+    assert_eq!(at.read("x09"), "81\n82\n83\n84\n85\n86\n87\n88\n89\n");
+    assert_eq!(at.read("x0a"), "90\n91\n92\n93\n94\n95\n96\n97\n98\n");
+    assert_eq!(at.read("x0b"), "99\n");
 }
 
 /// Test for long hex suffix not having any value
 #[test]
 fn test_hex_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-n", "4", "--hex-suffixes", "threebytes.txt"])
+    ucmd.args(&["-l", "9", "--hex-suffixes", "onehundredlines.txt"])
         .succeeds()
         .no_stdout()
         .no_stderr();
-    assert_eq!(at.read("x00"), "a");
-    assert_eq!(at.read("x01"), "b");
-    assert_eq!(at.read("x02"), "c");
-    assert_eq!(at.read("x03"), "");
+    assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
+    assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
+    assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
+    assert_eq!(at.read("x03"), "27\n28\n29\n30\n31\n32\n33\n34\n35\n");
+    assert_eq!(at.read("x04"), "36\n37\n38\n39\n40\n41\n42\n43\n44\n");
+    assert_eq!(at.read("x05"), "45\n46\n47\n48\n49\n50\n51\n52\n53\n");
+    assert_eq!(at.read("x06"), "54\n55\n56\n57\n58\n59\n60\n61\n62\n");
+    assert_eq!(at.read("x07"), "63\n64\n65\n66\n67\n68\n69\n70\n71\n");
+    assert_eq!(at.read("x08"), "72\n73\n74\n75\n76\n77\n78\n79\n80\n");
+    assert_eq!(at.read("x09"), "81\n82\n83\n84\n85\n86\n87\n88\n89\n");
+    assert_eq!(at.read("x0a"), "90\n91\n92\n93\n94\n95\n96\n97\n98\n");
+    assert_eq!(at.read("x0b"), "99\n");
 }
 
 /// Test for short numeric suffix having value provided after space - should fail
