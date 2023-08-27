@@ -32,14 +32,16 @@ use libc::mkfifo;
 use quick_error::ResultExt;
 
 use platform::copy_on_write;
-use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
     canonicalize, is_symlink_loop, paths_refer_to_same_file, FileInformation, MissingHandling,
     ResolveMode,
 };
-use uucore::update_control::{self, UpdateMode};
+use uucore::{backup_control, update_control};
+// These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
+// requires these enum.
+pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
     crash, format_usage, help_about, help_section, help_usage, prompt_yes, show_error,
     show_warning, util_name,
