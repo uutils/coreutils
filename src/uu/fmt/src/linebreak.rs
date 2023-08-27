@@ -1,9 +1,7 @@
-//  * This file is part of `fmt` from the uutils coreutils package.
-//  *
-//  * (c) kwantam <kwantam@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) INFTY MULT accum breakwords linebreak linebreaking linebreaks linelen maxlength minlength nchars ostream overlen parasplit plass posn powf punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen
 
@@ -275,6 +273,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
         next_active_breaks.clear();
         // go through each active break, extending it and possibly adding a new active
         // break if we are above the minimum required length
+        #[allow(clippy::explicit_iter_loop)]
         for &i in active_breaks.iter() {
             let active = &mut linebreaks[i];
             // normalize demerits to avoid overflow, and record if this is the least
