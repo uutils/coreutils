@@ -1,12 +1,10 @@
-#![allow(clippy::missing_safety_doc)]
-#![allow(clippy::extra_unused_lifetimes)]
-
 // This file is part of the uutils coreutils package.
 //
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
-
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell
+#![allow(clippy::missing_safety_doc)]
+#![allow(clippy::extra_unused_lifetimes)]
 
 use quick_error::quick_error;
 use std::borrow::Cow;
@@ -1159,7 +1157,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
         None
     };
 
-    for source in sources.iter() {
+    for source in sources {
         if seen_sources.contains(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());

@@ -1,10 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Tobias Bohumir Schottdorf <tobias.schottdorf@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
-//  *
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;

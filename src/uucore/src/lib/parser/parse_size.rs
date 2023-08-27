@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) hdsf ghead gtail ACDBK hexdigit
 
@@ -75,7 +75,7 @@ impl<'parser> Parser<'parser> {
             return Err(ParseSizeError::parse_failure(size));
         }
 
-        let number_system: NumberSystem = self.determine_number_system(size);
+        let number_system = Self::determine_number_system(size);
 
         // Split the size argument into numeric and unit parts
         // For example, if the argument is "123K", the numeric part is "123", and
@@ -156,16 +156,16 @@ impl<'parser> Parser<'parser> {
                 if numeric_string.is_empty() {
                     1
                 } else {
-                    self.parse_number(&numeric_string, 10, size)?
+                    Self::parse_number(&numeric_string, 10, size)?
                 }
             }
             NumberSystem::Octal => {
                 let trimmed_string = numeric_string.trim_start_matches('0');
-                self.parse_number(trimmed_string, 8, size)?
+                Self::parse_number(trimmed_string, 8, size)?
             }
             NumberSystem::Hexadecimal => {
                 let trimmed_string = numeric_string.trim_start_matches("0x");
-                self.parse_number(trimmed_string, 16, size)?
+                Self::parse_number(trimmed_string, 16, size)?
             }
         };
 
@@ -174,7 +174,7 @@ impl<'parser> Parser<'parser> {
             .ok_or_else(|| ParseSizeError::size_too_big(size))
     }
 
-    fn determine_number_system(&self, size: &str) -> NumberSystem {
+    fn determine_number_system(size: &str) -> NumberSystem {
         if size.len() <= 1 {
             return NumberSystem::Decimal;
         }
@@ -197,7 +197,6 @@ impl<'parser> Parser<'parser> {
     }
 
     fn parse_number(
-        &self,
         numeric_string: &str,
         radix: u32,
         original_size: &str,

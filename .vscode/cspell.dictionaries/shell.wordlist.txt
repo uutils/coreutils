@@ -83,6 +83,8 @@ codespell
 commitlint
 dprint
 dtrace
+flamegraph
+flamegraphs
 gcov
 gmake
 grcov
@@ -90,6 +92,7 @@ grep
 markdownlint
 rerast
 rollup
+samply
 sed
 selinuxenabled
 sestatus
