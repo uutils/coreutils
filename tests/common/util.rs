@@ -541,7 +541,7 @@ impl CmdResult {
         let contents = String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
         let possible_values = template_vars.iter().map(|vars| {
             let mut contents = contents.clone();
-            for kv in vars.iter() {
+            for kv in vars {
                 contents = contents.replace(&kv.0, &kv.1);
             }
             contents
@@ -2211,12 +2211,12 @@ impl UChild {
         let join_handle = thread::spawn(move || {
             let mut writer = BufWriter::new(stdin);
 
-            match writer.write_all(&content).and_then(|_| writer.flush()) {
+            match writer.write_all(&content).and_then(|()| writer.flush()) {
                 Err(error) if !ignore_stdin_write_error => Err(io::Error::new(
                     io::ErrorKind::Other,
                     format!("failed to write to stdin of child: {error}"),
                 )),
-                Ok(_) | Err(_) => Ok(()),
+                Ok(()) | Err(_) => Ok(()),
             }
         });
 
@@ -2263,12 +2263,12 @@ impl UChild {
     pub fn try_write_in<T: Into<Vec<u8>>>(&mut self, data: T) -> io::Result<()> {
         let stdin = self.raw.stdin.as_mut().unwrap();
 
-        match stdin.write_all(&data.into()).and_then(|_| stdin.flush()) {
+        match stdin.write_all(&data.into()).and_then(|()| stdin.flush()) {
             Err(error) if !self.ignore_stdin_write_error => Err(io::Error::new(
                 io::ErrorKind::Other,
                 format!("failed to write to stdin of child: {error}"),
             )),
-            Ok(_) | Err(_) => Ok(()),
+            Ok(()) | Err(_) => Ok(()),
         }
     }
 
@@ -2505,11 +2505,11 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
 
 /// This is a convenience wrapper to run a ucmd with root permissions.
 /// It can be used to test programs when being root is needed
-/// This runs 'sudo -E --non-interactive target/debug/coreutils util_name args`
+/// This runs `sudo -E --non-interactive target/debug/coreutils util_name args`
 /// This is primarily designed to run in an environment where whoami is in $path
 /// and where non-interactive sudo is possible.
 /// To check if i) non-interactive sudo is possible and ii) if sudo works, this runs:
-/// 'sudo -E --non-interactive whoami' first.
+/// `sudo -E --non-interactive whoami` first.
 ///
 /// This return an `Err()` if run inside CICD because there's no 'sudo'.
 ///
@@ -3279,7 +3279,7 @@ mod tests {
                 std::assert_eq!(error.to_string(), "kill: Timeout of '0s' reached");
             }
             Err(error) => panic!("Assertion failed: Expected error with timeout but was: {error}"),
-            Ok(_) => panic!("Assertion failed: Expected timeout of `try_kill`."),
+            Ok(()) => panic!("Assertion failed: Expected timeout of `try_kill`."),
         }
     }
 

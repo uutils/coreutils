@@ -130,7 +130,7 @@ fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_typ
     }
 }
 
-fn get_preload_env(tmp_dir: &mut TempDir) -> io::Result<(String, PathBuf)> {
+fn get_preload_env(tmp_dir: &TempDir) -> io::Result<(String, PathBuf)> {
     let (preload, extension) = preload_strings();
     let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
 
@@ -152,8 +152,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut command = process::Command::new(command_values.next().unwrap());
     let command_params: Vec<&str> = command_values.map(|s| s.as_ref()).collect();
 
-    let mut tmp_dir = tempdir().unwrap();
-    let (preload_env, libstdbuf) = get_preload_env(&mut tmp_dir).map_err_context(String::new)?;
+    let tmp_dir = tempdir().unwrap();
+    let (preload_env, libstdbuf) = get_preload_env(&tmp_dir).map_err_context(String::new)?;
     command.env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", &options.stdin);
     set_command_env(&mut command, "_STDBUF_O", &options.stdout);
