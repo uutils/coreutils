@@ -24,8 +24,8 @@ use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, preserve_hardlinks,
-    CopyResult, Error, Options,
+    aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, CopyResult, Error,
+    Options,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -200,7 +200,6 @@ fn copy_direntry(
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
     preserve_hard_links: bool,
-    hard_links: &mut Vec<(String, u64)>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let Entry {
@@ -241,31 +240,27 @@ fn copy_direntry(
     // If the source is not a directory, then we need to copy the file.
     if !source_absolute.is_dir() {
         if preserve_hard_links {
-            let dest = local_to_target.as_path().to_path_buf();
-            let found_hard_link = preserve_hardlinks(hard_links, &source_absolute, &dest)?;
-            if !found_hard_link {
-                match copy_file(
-                    progress_bar,
-                    &source_absolute,
-                    local_to_target.as_path(),
-                    options,
-                    symlinked_files,
-                    copied_files,
-                    false,
-                ) {
-                    Ok(_) => Ok(()),
-                    Err(err) => {
-                        if source_absolute.is_symlink() {
-                            // silent the error with a symlink
-                            // In case we do --archive, we might copy the symlink
-                            // before the file itself
-                            Ok(())
-                        } else {
-                            Err(err)
-                        }
+            match copy_file(
+                progress_bar,
+                &source_absolute,
+                local_to_target.as_path(),
+                options,
+                symlinked_files,
+                copied_files,
+                false,
+            ) {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    if source_absolute.is_symlink() {
+                        // silent the error with a symlink
+                        // In case we do --archive, we might copy the symlink
+                        // before the file itself
+                        Ok(())
+                    } else {
+                        Err(err)
                     }
-                }?;
-            }
+                }
+            }?;
         } else {
             // At this point, `path` is just a plain old file.
             // Terminate this function immediately if there is any
@@ -377,7 +372,6 @@ pub(crate) fn copy_directory(
     };
     let target = tmp.as_path();
 
-    let mut hard_links: Vec<(String, u64)> = vec![];
     let preserve_hard_links = options.preserve_hard_links();
 
     // Collect some paths here that are invariant during the traversal
@@ -402,7 +396,6 @@ pub(crate) fn copy_directory(
                     options,
                     symlinked_files,
                     preserve_hard_links,
-                    &mut hard_links,
                     copied_files,
                 )?;
             }
