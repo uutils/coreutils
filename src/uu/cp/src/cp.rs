@@ -1163,19 +1163,17 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
         if seen_sources.contains(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
-        } else {
-            if let Err(error) = copy_source(
-                &progress_bar,
-                source,
-                target,
-                &target_type,
-                options,
-                &mut symlinked_files,
-                &mut copied_files,
-            ) {
-                show_error_if_needed(&error);
-                non_fatal_errors = true;
-            }
+        } else if let Err(error) = copy_source(
+            &progress_bar,
+            source,
+            target,
+            &target_type,
+            options,
+            &mut symlinked_files,
+            &mut copied_files,
+        ) {
+            show_error_if_needed(&error);
+            non_fatal_errors = true;
         }
         seen_sources.insert(source);
     }
