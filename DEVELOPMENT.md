@@ -6,10 +6,11 @@ For contributing rules and best practices please refer to [CONTRIBUTING.md](CONT
 
 ## Before you start
 
-For this guide we assume that you already have GitHub account and have `git` and your favorite code editor or IDE installed and configured to work with GitHub.
+For this guide we assume that you already have GitHub account and have `git` and your favorite code editor or IDE installed and configured.
 Before you start working on coreutils, please follow these steps:
 
-1. Fork [coreutils repository](https://github.com/uutils/coreutils) to your GitHub account [ref:](https://docs.github.com/en/get-started/quickstart/fork-a-repo)
+1. Fork the [coreutils repository](https://github.com/uutils/coreutils) to your GitHub account.
+***Tip:*** See [this GitHub guide](https://docs.github.com/en/get-started/quickstart/fork-a-repo) for more information on this step
 2. Clone that fork to your local development environment:
 ```shell
 git clone https://github.com/YOUR-GITHUB-ACCOUNT/coreutils
@@ -29,16 +30,16 @@ Install [Rust](https://www.rust-lang.org/tools/install)
 
 If you're using rustup to install and manage your Rust toolchains, `cargo`, `clippy` and `rustfmt` are usually already installed. 
 You might also need to add 'llvm-tools':
-`rustup component add llvm-tools-preview` 
+```
+rustup component add llvm-tools-preview
+``` 
 
-**Tip:On MacOS** you will need to install C compiler & linker:
-`xcode-select --install`
+**On MacOS** you'll need to install C compiler & linker:
+```
+xcode-select --install
+```
 
-**Tip:On Windows** On Windows you'll need the MSVC build tools for Visual Studio 2013 or later.
-To acquire the build tools, you’ll need to install Visual Studio 2022. When asked which workloads to install, include:
-- Desktop Development with C++
-- The Windows 10 or 11 SDK
-- The English language pack component, along with any other language pack of your choosing
+**On Windows** you'll need the MSVC build tools for Visual Studio 2013 or later.
 
 ### GNU utils and prerequisites
 If you are developing on Linux, most likely you already have all/most GNU utilities and prerequisites installed. 
@@ -60,7 +61,7 @@ brew install bison
 brew install pre-commit
 brew install findutils
 ```
-After installing these Homebrew formulas, please make sure to add the following lines to your `zsh` or `bash` rc file (i.e. ~/.profile or ~/.zshrc or ~/.bashrc ...)
+After installing these Homebrew formulas, please make sure to add the following lines to your `zsh` or `bash` rc file, i.e. `~/.profile` or `~/.zshrc` or `~/.bashrc` ...
 (assuming Homebrew is installed at default location `/opt/homebrew`):
 ```
 eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -69,10 +70,12 @@ export PATH="/opt/homebrew/opt/bison/bin:$PATH"
 export PATH="/opt/homebrew/opt/findutils/libexec/gnubin:$PATH"
 ```
 Last step is to link Homebrew coreutils version of `timeout` to /usr/local/bin (as admin user):
-`sudo ln -s /opt/homebrew/bin/timeout /usr/local/bin/timeout`
+```
+sudo ln -s /opt/homebrew/bin/timeout /usr/local/bin/timeout
+```
 Do not forget to either source updated rc file or restart you shell session to update environment variables.
 
-**Tip:On Windows**  <TODO>
+**On Windows**  <TODO>
 
 ### pre-commit hooks
 
@@ -89,7 +92,7 @@ Your git commits will then automatically be checked. If a check fails, an error
 message will explain why, and your commit will be canceled. You can then make
 the suggested changes, and run `git commit ...` again.
 
-**Tip:On MacOS** the pre-commit hooks are currently broken. There are workarounds involving switching to unstable nightly Rust and components. 
+**NOTE: On MacOS** the pre-commit hooks are currently broken. There are workarounds involving switching to unstable nightly Rust and components. 
 If you are so inclined, please go ahead, but please use caution.
 
 ### clippy
@@ -263,7 +266,9 @@ bash util/run-gnu-test.sh tests/touch/not-owner.sh tests/rm/no-give-up.sh # for 
 DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
 ```
 
-Note that it relies on individual utilities (not the multicall binary).
+***Tip:*** First time you run `bash util/build-gnu.sh` command, it will provide instructions on how to checkout GNU coreutils repository at the correct release tag. Please follow those instructions and when done, run `bash util/build-gnu.sh` command again.
+
+Note that GNU test suite relies on individual utilities (not the multicall binary).
 
 ### Improving the GNU compatibility
 
