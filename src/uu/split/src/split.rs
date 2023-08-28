@@ -108,7 +108,6 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
             v.push(arg.to_owned());
         }
     }
-    // println!("{:#?} , {:#?}", v, obs_lines);
     (v, obs_lines)
 }
 
@@ -465,8 +464,7 @@ impl Strategy {
         // Check that the user is not specifying more than one strategy.
         //
         // Note: right now, this exact behavior cannot be handled by
-        // `ArgGroup` since `ArgGroup` considers a default value `Arg`
-        // as "defined".
+        // overrides_with_all() due to obsolete lines value option
         match (
             obs_lines,
             matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine),
