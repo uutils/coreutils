@@ -6,7 +6,9 @@
     "path_prefix": "coreutils"
   },
   "components": {
-    "changelog": true
+    "changelog": {
+      "read_changelog_file": false
+    }
   },
   "styles": {
     "theme": "light",
