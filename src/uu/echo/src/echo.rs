@@ -21,73 +21,72 @@ mod options {
     pub const DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
 }
 
-fn parse_code(
-    input: &mut Peekable<Chars>,
-    base: u32,
-    max_digits: u32,
-    bits_per_digit: u32,
-) -> Option<char> {
-    let mut ret = 0x8000_0000;
-    for _ in 0..max_digits {
-        match input.peek().and_then(|c| c.to_digit(base)) {
-            Some(n) => ret = (ret << bits_per_digit) | n,
+/// Parse the numeric part of the `\xHHH` and `\0NNN` escape sequences
+fn parse_code(input: &mut Peekable<Chars>, base: u8, max_digits: u32) -> Option<char> {
+    // All arithmetic on `ret` needs to be wrapping, because octal input can
+    // take 3 digits, which is 9 bits, and therefore more than what fits in a
+    // `u8`. GNU just seems to wrap these values.
+    // Note that if we instead make `ret` a `u32` and use `char::from_u32` will
+    // yield incorrect results because it will interpret values larger than
+    // `u8::MAX` as unicode.
+    let mut ret = input.peek().and_then(|c| c.to_digit(base as u32))? as u8;
+
+    // We can safely ifgnore the None case because we just peeked it.
+    let _ = input.next();
+
+    for _ in 1..max_digits {
+        match input.peek().and_then(|c| c.to_digit(base as u32)) {
+            Some(n) => ret = ret.wrapping_mul(base).wrapping_add(n as u8),
             None => break,
         }
-        input.next();
+        // We can safely ifgnore the None case because we just peeked it.
+        let _ = input.next();
     }
-    std::char::from_u32(ret)
+
+    Some(ret.into())
 }
 
 fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
-    let mut should_stop = false;
-
-    let mut buffer = ['\\'; 2];
-
-    // TODO `cargo +nightly clippy` complains that `.peek()` is never
-    // called on `iter`. However, `peek()` is called inside the
-    // `parse_code()` function that borrows `iter`.
     let mut iter = input.chars().peekable();
-    while let Some(mut c) = iter.next() {
-        let mut start = 1;
-
-        if c == '\\' {
-            if let Some(next) = iter.next() {
-                c = match next {
-                    '\\' => '\\',
-                    'a' => '\x07',
-                    'b' => '\x08',
-                    'c' => {
-                        should_stop = true;
-                        break;
-                    }
-                    'e' => '\x1b',
-                    'f' => '\x0c',
-                    'n' => '\n',
-                    'r' => '\r',
-                    't' => '\t',
-                    'v' => '\x0b',
-                    'x' => parse_code(&mut iter, 16, 2, 4).unwrap_or_else(|| {
-                        start = 0;
-                        next
-                    }),
-                    '0' => parse_code(&mut iter, 8, 3, 3).unwrap_or('\0'),
-                    _ => {
-                        start = 0;
-                        next
-                    }
-                };
-            }
+    while let Some(c) = iter.next() {
+        if c != '\\' {
+            write!(output, "{c}")?;
+            continue;
         }
 
-        buffer[1] = c;
-
-        // because printing char slices is apparently not available in the standard library
-        for ch in &buffer[start..] {
-            write!(output, "{ch}")?;
+        if let Some(next) = iter.next() {
+            let unescaped = match next {
+                '\\' => '\\',
+                'a' => '\x07',
+                'b' => '\x08',
+                'c' => return Ok(true),
+                'e' => '\x1b',
+                'f' => '\x0c',
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                'v' => '\x0b',
+                'x' => {
+                    if let Some(c) = parse_code(&mut iter, 16, 2) {
+                        c
+                    } else {
+                        write!(output, "\\")?;
+                        'x'
+                    }
+                }
+                '0' => parse_code(&mut iter, 8, 3).unwrap_or('\0'),
+                c => {
+                    write!(output, "\\")?;
+                    c
+                }
+            };
+            write!(output, "{unescaped}")?;
+        } else {
+            write!(output, "\\")?;
         }
     }
 
-    Ok(should_stop)
+    Ok(false)
 }
 
 #[uucore::main]

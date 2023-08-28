@@ -236,3 +236,20 @@ fn test_hyphen_values_between() {
         .success()
         .stdout_is("dumdum  dum dum dum -e dum\n");
 }
+
+#[test]
+fn wrapping_octal() {
+    // Some odd behavior of GNU. Values of \0400 and greater do not fit in the
+    // u8 that we write to stdout. So we test that it wraps:
+    //
+    // We give it this input:
+    //     \o501 = 1_0100_0001 (yes, **9** bits)
+    // This should be wrapped into:
+    //     \o101 = 'A' = 0100_0001,
+    // because we only write a single character
+    new_ucmd!()
+        .arg("-e")
+        .arg("\\0501")
+        .succeeds()
+        .stdout_is("A\n");
+}
