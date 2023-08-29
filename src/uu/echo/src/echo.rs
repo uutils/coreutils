@@ -54,6 +54,16 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
             continue;
         }
 
+        // This is for the \NNN syntax for octal sequences.
+        // Note that '0' is intentionally omitted because that
+        // would be the \0NNN syntax.
+        if let Some('1'..='8') = iter.peek() {
+            if let Some(parsed) = parse_code(&mut iter, 8, 3) {
+                write!(output, "{parsed}")?;
+                continue;
+            }
+        }
+
         if let Some(next) = iter.next() {
             let unescaped = match next {
                 '\\' => '\\',

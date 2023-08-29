@@ -253,3 +253,30 @@ fn wrapping_octal() {
         .succeeds()
         .stdout_is("A\n");
 }
+
+#[test]
+fn old_octal_syntax() {
+    new_ucmd!()
+        .arg("-e")
+        .arg("\\1foo")
+        .succeeds()
+        .stdout_is("\x01foo\n");
+
+    new_ucmd!()
+        .arg("-e")
+        .arg("\\43foo")
+        .succeeds()
+        .stdout_is("#foo\n");
+
+    new_ucmd!()
+        .arg("-e")
+        .arg("\\101foo")
+        .succeeds()
+        .stdout_is("Afoo\n");
+
+    new_ucmd!()
+        .arg("-e")
+        .arg("\\1011")
+        .succeeds()
+        .stdout_is("A1\n");
+}
