@@ -88,13 +88,20 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
                 // that can have obsolete lines option value in it
                 // extract numeric part and filter it out
                 let mut obs_lines_extracted: Vec<char> = vec![];
+                let mut obs_lines_end_reached = false;
                 let filtered_slice: Vec<char> = slice
                     .chars()
                     .filter(|c| {
-                        if c.is_ascii_digit() {
+                        // To correctly process scenario like '-x200a4'
+                        // we need to stop extracting digits once alphabetic character is encountered
+                        // after we already have something in obs_lines_extracted
+                        if c.is_ascii_digit() && !obs_lines_end_reached {
                             obs_lines_extracted.push(*c);
                             false
                         } else {
+                            if !obs_lines_extracted.is_empty() {
+                                obs_lines_end_reached = true;
+                            }
                             true
                         }
                     })

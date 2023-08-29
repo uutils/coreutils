@@ -170,7 +170,7 @@ fn test_split_str_prefixed_chunks_by_bytes() {
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
-// Test short bytes option concatenated with value
+/// Test short bytes option concatenated with value
 #[test]
 fn test_split_by_bytes_short_concatenated_with_value() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -342,7 +342,7 @@ fn test_split_lines_number() {
         .stderr_only("split: invalid number of lines: 'file'\n");
 }
 
-// Test short lines option with value concatenated
+/// Test short lines option with value concatenated
 #[test]
 fn test_split_lines_short_concatenated_with_value() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -399,6 +399,19 @@ fn test_split_obs_lines_within_combined_shorts() {
     let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name))
+}
+
+/// Test for obsolete lines option as part of combined short options with tailing suffix length with value
+#[test]
+fn test_split_obs_lines_within_combined_shorts_tailing_suffix_length() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "obs-lines-combined-shorts-tailing-suffix-length";
+    RandomFile::new(&at, name).add_lines(1000);
+    ucmd.args(&["-d200a4", name]).succeeds();
+
+    let glob = Glob::new(&at, ".", r"x\d\d\d\d$");
+    assert_eq!(glob.count(), 5);
+    assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
 /// Test for obsolete lines option starts as part of combined short options
@@ -721,7 +734,7 @@ fn test_invalid_suffix_length() {
         .stderr_contains("invalid suffix length: 'xyz'");
 }
 
-// Test short suffix length option with value concatenated
+/// Test short suffix length option with value concatenated
 #[test]
 fn test_split_suffix_length_short_concatenated_with_value() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -752,7 +765,7 @@ fn test_include_newlines() {
     assert_eq!(s, "5\n");
 }
 
-// Test short number of chunks option concatenated with value
+/// Test short number of chunks option concatenated with value
 #[test]
 fn test_split_number_chunks_short_concatenated_with_value() {
     let (at, mut ucmd) = at_and_ucmd!();
