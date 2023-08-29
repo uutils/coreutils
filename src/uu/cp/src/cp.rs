@@ -1506,6 +1506,24 @@ fn handle_existing_dest(
         OverwriteMode::Clobber(ClobberMode::RemoveDestination) => {
             fs::remove_file(dest)?;
         }
+        OverwriteMode::Clobber(ClobberMode::Standard) => {
+            // Consider the following files:
+            //
+            // * `src/f` - a regular file
+            // * `src/link` - a hard link to `src/f`
+            // * `dest/src/f` - a different regular file
+            //
+            // In this scenario, if we do `cp -a src/ dest/`, it is
+            // possible that the order of traversal causes `src/link`
+            // to get copied first (to `dest/src/link`). In that case,
+            // in order to make sure `dest/src/link` is a hard link to
+            // `dest/src/f` and `dest/src/f` has the contents of
+            // `src/f`, we delete the existing file to allow the hard
+            // linking.
+            if !source_in_command_line {
+                fs::remove_file(dest)?;
+            }
+        }
         _ => (),
     };
 
@@ -1590,35 +1608,6 @@ fn copy_file(
         return Ok(());
     }
 
-    if options.preserve_hard_links() {
-        // if we encounter a matching device/inode pair in the source tree
-        // we can arrange to create a hard link between the corresponding names
-        // in the destination tree.
-        if let Some(new_source) = copied_files.get(
-            &FileInformation::from_path(source, options.dereference(source_in_command_line))
-                .context(format!("cannot stat {}", source.quote()))?,
-        ) {
-            // Consider the following files:
-            //
-            // * `src/f` - a regular file
-            // * `src/link` - a hard link to `src/f`
-            // * `dest/src/f` - a different regular file
-            //
-            // In this scenario, if we do `cp -a src/ dest/`, it is
-            // possible that the order of traversal causes `src/link`
-            // to get copied first (to `dest/src/link`). In that case,
-            // in order to make sure `dest/src/link` is a hard link to
-            // `dest/src/f` and `dest/src/f` has the contents of
-            // `src/f`, we delete the existing file to allow the hard
-            // linking.
-            if file_or_link_exists(dest) && file_or_link_exists(Path::new(new_source)) {
-                std::fs::remove_file(dest)?;
-            }
-            std::fs::hard_link(new_source, dest)?;
-            return Ok(());
-        };
-    }
-
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest.is_symlink() {
         if FileInformation::from_path(dest, false)
@@ -1650,6 +1639,19 @@ fn copy_file(
 
     if file_or_link_exists(dest) {
         handle_existing_dest(source, dest, options, source_in_command_line)?;
+    }
+
+    if options.preserve_hard_links() {
+        // if we encounter a matching device/inode pair in the source tree
+        // we can arrange to create a hard link between the corresponding names
+        // in the destination tree.
+        if let Some(new_source) = copied_files.get(
+            &FileInformation::from_path(source, options.dereference(source_in_command_line))
+                .context(format!("cannot stat {}", source.quote()))?,
+        ) {
+            std::fs::hard_link(new_source, dest)?;
+            return Ok(());
+        };
     }
 
     if options.verbose {

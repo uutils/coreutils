@@ -1524,6 +1524,33 @@ fn test_cp_preserve_links_case_6() {
 }
 
 #[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_7() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("src");
+    at.touch("src/f");
+    at.hard_link("src/f", "src/g");
+
+    at.mkdir("dest");
+    at.touch("dest/g");
+
+    ucmd.arg("-n")
+        .arg("--preserve=links")
+        .arg("src/f")
+        .arg("src/g")
+        .arg("dest")
+        .fails()
+        .stderr_contains("not replacing 'dest/g");
+    ();
+
+    assert!(at.dir_exists("dest"));
+    assert!(at.plus("dest").join("f").exists());
+    assert!(at.plus("dest").join("g").exists());
+}
+
+#[test]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
