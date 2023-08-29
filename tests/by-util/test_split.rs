@@ -170,6 +170,22 @@ fn test_split_str_prefixed_chunks_by_bytes() {
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
+// Test short bytes option concatenated with value
+#[test]
+fn test_split_by_bytes_short_concatenated_with_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "split_by_bytes_short_concatenated_with_value";
+    RandomFile::new(&at, name).add_bytes(10000);
+    ucmd.args(&["-b1000", name]).succeeds();
+
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 10);
+    for filename in glob.collect() {
+        assert_eq!(glob.directory.metadata(&filename).len(), 1000);
+    }
+    assert_eq!(glob.collate(), at.read_bytes(name));
+}
+
 // This is designed to test what happens when the desired part size is not a
 // multiple of the buffer size and we hopefully don't overshoot the desired part
 // size.
@@ -324,6 +340,19 @@ fn test_split_lines_number() {
         .fails()
         .code_is(1)
         .stderr_only("split: invalid number of lines: 'file'\n");
+}
+
+// Test short lines option with value concatenated
+#[test]
+fn test_split_lines_short_concatenated_with_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "split_num_prefixed_chunks_by_lines";
+    RandomFile::new(&at, name).add_lines(10000);
+    ucmd.args(&["-l1000", name]).succeeds();
+
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 10);
+    assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
 /// Test for obsolete lines option standalone
@@ -692,6 +721,19 @@ fn test_invalid_suffix_length() {
         .stderr_contains("invalid suffix length: 'xyz'");
 }
 
+// Test short suffix length option with value concatenated
+#[test]
+fn test_split_suffix_length_short_concatenated_with_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "split_num_prefixed_chunks_by_lines";
+    RandomFile::new(&at, name).add_lines(10000);
+    ucmd.args(&["-a4", name]).succeeds();
+
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]][[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 10);
+    assert_eq!(glob.collate(), at.read_bytes(name));
+}
+
 #[test]
 fn test_include_newlines() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -708,6 +750,19 @@ fn test_include_newlines() {
     let mut s = String::new();
     at.open("xac").read_to_string(&mut s).unwrap();
     assert_eq!(s, "5\n");
+}
+
+// Test short number of chunks option concatenated with value
+#[test]
+fn test_split_number_chunks_short_concatenated_with_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n3", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("xaa"), "a");
+    assert_eq!(at.read("xab"), "b");
+    assert_eq!(at.read("xac"), "c");
 }
 
 #[test]
@@ -778,6 +833,16 @@ fn test_lines_kth() {
 fn test_line_bytes() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-C", "8", "letters.txt"]).succeeds();
+    assert_eq!(at.read("xaa"), "aaaaaaaa");
+    assert_eq!(at.read("xab"), "a\nbbbb\n");
+    assert_eq!(at.read("xac"), "cccc\ndd\n");
+    assert_eq!(at.read("xad"), "ee\n");
+}
+
+#[test]
+fn test_line_bytes_concatenated_with_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-C8", "letters.txt"]).succeeds();
     assert_eq!(at.read("xaa"), "aaaaaaaa");
     assert_eq!(at.read("xab"), "a\nbbbb\n");
     assert_eq!(at.read("xac"), "cccc\ndd\n");

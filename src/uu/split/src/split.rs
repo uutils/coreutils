@@ -76,8 +76,16 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     let filtered_args = args
         .iter()
         .filter_map(|slice| {
-            if slice.starts_with('-') && !slice.starts_with("--") {
+            if slice.starts_with('-')
+                && !slice.starts_with("--")
+                && !slice.starts_with("-a")
+                && !slice.starts_with("-b")
+                && !slice.starts_with("-C")
+                && !slice.starts_with("-l")
+                && !slice.starts_with("-n")
+            {
                 // start of the short option string
+                // that can have obsolete lines option value in it
                 // extract numeric part and filter it out
                 let mut obs_lines_extracted: Vec<char> = vec![];
                 let filtered_slice: Vec<char> = slice
@@ -102,15 +110,14 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
                         // there were some short options in front of or after obsolete lines value
                         // i.e. '-xd100' or '-100de' or similar, which after extraction of obsolete lines value
                         // would look like '-xd' or '-de' or similar
-                        // preserve it
                         Some(filtered_slice.iter().collect())
                     } else {
                         None
                     }
                 }
             } else {
-                // not a short option
-                // preserve it
+                // either not a short option
+                // or a short option that cannot have obsolete lines value in it
                 Some(slice.to_owned())
             }
         })
