@@ -72,43 +72,50 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 /// `split -x300e -22 file` would mean `split -x -e -l 22 file` (last obsolete lines option wins)
 /// following GNU `split` behavior
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
-    let mut v: Vec<String> = vec![];
     let mut obs_lines = None;
-    for arg in args.iter() {
-        let slice = &arg;
-        if slice.starts_with('-') && !slice.starts_with("--") {
-            // start of the short option string
-            // extract numeric part and filter it out
-            let mut obs_lines_extracted: Vec<char> = vec![];
-            let filtered_slice: Vec<char> = slice
-                .chars()
-                .filter(|c| {
-                    if c.is_ascii_digit() {
-                        obs_lines_extracted.push(*c);
-                        false
-                    } else {
-                        true
-                    }
-                })
-                .collect();
+    let filtered_args = args
+        .iter()
+        .filter_map(|slice| {
+            if slice.starts_with('-') && !slice.starts_with("--") {
+                // start of the short option string
+                // extract numeric part and filter it out
+                let mut obs_lines_extracted: Vec<char> = vec![];
+                let filtered_slice: Vec<char> = slice
+                    .chars()
+                    .filter(|c| {
+                        if c.is_ascii_digit() {
+                            obs_lines_extracted.push(*c);
+                            false
+                        } else {
+                            true
+                        }
+                    })
+                    .collect();
 
-            if filtered_slice.get(1).is_some() {
-                // there were some short options in front of obsolete lines number
-                // i.e. '-xd100' or similar
+                if obs_lines_extracted.is_empty() {
+                    // no obsolete lines value found/extracted
+                    Some(slice.to_owned())
+                } else {
+                    // obsolete lines value was extracted
+                    obs_lines = Some(obs_lines_extracted.iter().collect());
+                    if filtered_slice.get(1).is_some() {
+                        // there were some short options in front of or after obsolete lines value
+                        // i.e. '-xd100' or '-100de' or similar, which after extraction of obsolete lines value
+                        // would look like '-xd' or '-de' or similar
+                        // preserve it
+                        Some(filtered_slice.iter().collect())
+                    } else {
+                        None
+                    }
+                }
+            } else {
+                // not a short option
                 // preserve it
-                v.push(filtered_slice.iter().collect());
+                Some(slice.to_owned())
             }
-            if !obs_lines_extracted.is_empty() {
-                // obsolete lines value was extracted
-                obs_lines = Some(obs_lines_extracted.iter().collect());
-            }
-        } else {
-            // not a short option
-            // preserve it
-            v.push(arg.to_owned());
-        }
-    }
-    (v, obs_lines)
+        })
+        .collect();
+    (filtered_args, obs_lines)
 }
 
 pub fn uu_app() -> Command {
