@@ -32,7 +32,7 @@ fi
 
 ###
 
-release_tag_GNU="v9.3"
+release_tag_GNU="v9.4"
 
 if test ! -d "${path_GNU}"; then
     echo "Could not find GNU coreutils (expected at '${path_GNU}')"
