@@ -254,6 +254,18 @@ fn test_additional_suffix_no_slash() {
         .usage_error("invalid suffix 'a/b', contains directory separator");
 }
 
+#[test]
+fn test_split_additional_suffix_hyphen_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "split_additional_suffix";
+    RandomFile::new(&at, name).add_lines(2000);
+    ucmd.args(&["--additional-suffix", "-300", name]).succeeds();
+
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]-300$");
+    assert_eq!(glob.count(), 2);
+    assert_eq!(glob.collate(), at.read_bytes(name));
+}
+
 // note: the test_filter* tests below are unix-only
 // windows support has been waived for now because of the difficulty of getting
 // the `cmd` call right
@@ -436,9 +448,9 @@ fn test_split_obs_lines_starts_combined_shorts() {
 /// Test for using both obsolete lines (standalone) option and short/long lines option simultaneously
 #[test]
 fn test_split_both_lines_and_obs_lines_standalone() {
-    // This test will ensure that if both lines option '-l' or '--lines'
-    // and obsolete lines option '-100' are used
-    // it fails
+    // This test will ensure that:
+    // if both lines option '-l' or '--lines' (with value) and obsolete lines option '-100' are used - it fails
+    // if standalone lines option is used incorrectly and treated as a hyphen prefixed value of other option - it fails
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("file");
@@ -455,18 +467,77 @@ fn test_split_both_lines_and_obs_lines_standalone() {
         .fails()
         .code_is(1)
         .stderr_contains("split: cannot split in more than one way\n");
+}
+
+/// Test for using obsolete lines option incorrectly, so it is treated as a hyphen prefixed value of other option
+#[test]
+fn test_split_obs_lines_as_other_option_value() {
+    // This test will ensure that:
+    // if obsolete lines option is used incorrectly and treated as a hyphen prefixed value of other option - it fails
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
     scene
         .ucmd()
         .args(&["--lines", "-200", "file"])
         .fails()
         .code_is(1)
-        .stderr_contains("split: cannot split in more than one way\n");
+        .stderr_contains("split: invalid number of lines: '-200'\n");
     scene
         .ucmd()
         .args(&["-l", "-200", "file"])
         .fails()
         .code_is(1)
-        .stderr_contains("split: cannot split in more than one way\n");
+        .stderr_contains("split: invalid number of lines: '-200'\n");
+    scene
+        .ucmd()
+        .args(&["-a", "-200", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: invalid suffix length: '-200'\n");
+    scene
+        .ucmd()
+        .args(&["--suffix-length", "-d200e", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: invalid suffix length: '-d200e'\n");
+    scene
+        .ucmd()
+        .args(&["-C", "-200", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: invalid number of bytes: '-200'\n");
+    scene
+        .ucmd()
+        .args(&["--line-bytes", "-x200a4", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: invalid number of bytes: '-x200a4'\n");
+    scene
+        .ucmd()
+        .args(&["-b", "-200", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: invalid number of bytes: '-200'\n");
+    scene
+        .ucmd()
+        .args(&["--bytes", "-200xd", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: invalid number of bytes: '-200xd'\n");
+    scene
+        .ucmd()
+        .args(&["-n", "-200", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: invalid number of chunks: -200\n");
+    scene
+        .ucmd()
+        .args(&["--number", "-e200", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("split: invalid number of chunks: -e200\n");
 }
 
 /// Test for using more than one obsolete lines option (standalone)

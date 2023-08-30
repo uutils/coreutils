@@ -73,11 +73,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 /// following GNU `split` behavior
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     let mut obs_lines = None;
+    let mut preceding_long_opt_req_value = false;
+    let mut preceding_short_opt_req_value = false;
     let filtered_args = args
         .iter()
         .filter_map(|slice| {
+            let filter: Option<String>;
+            // check if the slice is a true short option (and not hyphen prefixed value of an option)
+            // and if so, a short option that can contain obsolete lines value
             if slice.starts_with('-')
                 && !slice.starts_with("--")
+                && !preceding_long_opt_req_value
+                && !preceding_short_opt_req_value
                 && !slice.starts_with("-a")
                 && !slice.starts_with("-b")
                 && !slice.starts_with("-C")
@@ -109,7 +116,7 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
 
                 if obs_lines_extracted.is_empty() {
                     // no obsolete lines value found/extracted
-                    Some(slice.to_owned())
+                    filter = Some(slice.to_owned());
                 } else {
                     // obsolete lines value was extracted
                     obs_lines = Some(obs_lines_extracted.iter().collect());
@@ -117,16 +124,41 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
                         // there were some short options in front of or after obsolete lines value
                         // i.e. '-xd100' or '-100de' or similar, which after extraction of obsolete lines value
                         // would look like '-xd' or '-de' or similar
-                        Some(filtered_slice.iter().collect())
+                        filter = Some(filtered_slice.iter().collect());
                     } else {
-                        None
+                        filter = None;
                     }
                 }
             } else {
                 // either not a short option
                 // or a short option that cannot have obsolete lines value in it
-                Some(slice.to_owned())
+                filter = Some(slice.to_owned());
             }
+            // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
+            // following slice should be treaded as value for this option
+            // even if it starts with '-' (which would be treated as hyphen prefixed value)
+            if slice.starts_with("--") {
+                preceding_long_opt_req_value = &slice[2..] == OPT_BYTES
+                    || &slice[2..] == OPT_LINE_BYTES
+                    || &slice[2..] == OPT_LINES
+                    || &slice[2..] == OPT_ADDITIONAL_SUFFIX
+                    || &slice[2..] == OPT_FILTER
+                    || &slice[2..] == OPT_NUMBER
+                    || &slice[2..] == OPT_SUFFIX_LENGTH;
+            }
+            // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
+            // following slice should be treaded as value for this option
+            // even if it starts with '-' (which would be treated as hyphen prefixed value)
+            preceding_short_opt_req_value =
+                slice == "-b" || slice == "-C" || slice == "-l" || slice == "-n" || slice == "-a";
+            // slice is a value
+            // reset preceding option flags
+            if !slice.starts_with('-') {
+                preceding_short_opt_req_value = false;
+                preceding_long_opt_req_value = false;
+            }
+            // return filter
+            filter
         })
         .collect();
     (filtered_args, obs_lines)
@@ -144,6 +176,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_BYTES)
                 .short('b')
                 .long(OPT_BYTES)
+                .allow_hyphen_values(true)
                 .value_name("SIZE")
                 .help("put SIZE bytes per output file"),
         )
@@ -151,14 +184,15 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_LINE_BYTES)
                 .short('C')
                 .long(OPT_LINE_BYTES)
+                .allow_hyphen_values(true)
                 .value_name("SIZE")
-                .default_value("2")
                 .help("put at most SIZE bytes of lines per output file"),
         )
         .arg(
             Arg::new(OPT_LINES)
                 .short('l')
                 .long(OPT_LINES)
+                .allow_hyphen_values(true)
                 .value_name("NUMBER")
                 .default_value("1000")
                 .help("put NUMBER lines/records per output file"),
@@ -167,6 +201,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_NUMBER)
                 .short('n')
                 .long(OPT_NUMBER)
+                .allow_hyphen_values(true)
                 .value_name("CHUNKS")
                 .help("generate CHUNKS output files; see explanation below"),
         )
@@ -174,6 +209,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_ADDITIONAL_SUFFIX)
                 .long(OPT_ADDITIONAL_SUFFIX)
+                .allow_hyphen_values(true)
                 .value_name("SUFFIX")
                 .default_value("")
                 .help("additional SUFFIX to append to output file names"),
@@ -181,6 +217,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_FILTER)
                 .long(OPT_FILTER)
+                .allow_hyphen_values(true)
                 .value_name("COMMAND")
                 .value_hint(clap::ValueHint::CommandName)
                 .help(
@@ -250,9 +287,10 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_SUFFIX_LENGTH)
                 .short('a')
                 .long(OPT_SUFFIX_LENGTH)
+                .allow_hyphen_values(true)
                 .value_name("N")
                 .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
-                .help("use suffixes of fixed length N. 0 implies dynamic length."),
+                .help("use suffixes of fixed length N. 0 implies dynamic length, starting with 2"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
