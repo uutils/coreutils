@@ -26,6 +26,7 @@ mod options {
     pub const FILE: &str = "file";
     pub const IGNORE_PIPE_ERRORS: &str = "ignore-pipe-errors";
     pub const OUTPUT_ERROR: &str = "output-error";
+    pub const NO_STDOUT: &str = "no-stdout";
 }
 
 #[allow(dead_code)]
@@ -34,6 +35,7 @@ struct Options {
     ignore_interrupts: bool,
     files: Vec<String>,
     output_error: Option<OutputErrorMode>,
+    no_stdout: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -74,6 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 None
             }
         },
+        no_stdout: matches.get_flag(options::NO_STDOUT),
     };
 
     match tee(&options) {
@@ -131,6 +134,12 @@ pub fn uu_app() -> Command {
                 .help("set write error behavior")
                 .conflicts_with(options::IGNORE_PIPE_ERRORS),
         )
+        .arg(
+            Arg::new(options::NO_STDOUT)
+                .long(options::NO_STDOUT)
+                .help("do not write to standard output")
+                .action(ArgAction::SetTrue),
+        )
 }
 
 fn tee(options: &Options) -> Result<()> {
@@ -158,13 +167,15 @@ fn tee(options: &Options) -> Result<()> {
         })
         .collect::<Result<Vec<NamedWriter>>>()?;
 
-    writers.insert(
-        0,
-        NamedWriter {
-            name: "'standard output'".to_owned(),
-            inner: Box::new(stdout()),
-        },
-    );
+    if !options.no_stdout {
+        writers.insert(
+            0,
+            NamedWriter {
+                name: "'standard output'".to_owned(),
+                inner: Box::new(stdout()),
+            },
+        );
+    };
 
     let mut output = MultiWriter::new(writers, options.output_error.clone());
     let input = &mut NamedReader {
