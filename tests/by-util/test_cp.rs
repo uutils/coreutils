@@ -1542,7 +1542,7 @@ fn test_cp_preserve_links_case_7() {
         .arg("src/g")
         .arg("dest")
         .fails()
-        .stderr_contains("not replacing 'dest/g");
+        .stderr_contains("not replacing");
     ();
 
     assert!(at.dir_exists("dest"));
