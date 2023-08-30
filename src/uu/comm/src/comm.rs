@@ -30,14 +30,6 @@ mod options {
     pub const ZERO_TERMINATED: &str = "zero-terminated";
 }
 
-fn column_width(col: &str, opts: &ArgMatches) -> usize {
-    if opts.get_flag(col) {
-        0
-    } else {
-        1
-    }
-}
-
 enum Input {
     Stdin(Stdin),
     FileIn(BufReader<File>),
@@ -75,8 +67,8 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &ArgMatches) {
         delim => delim,
     };
 
-    let width_col_1 = column_width(options::COLUMN_1, opts);
-    let width_col_2 = column_width(options::COLUMN_2, opts);
+    let width_col_1 = usize::from(!opts.get_flag(options::COLUMN_1));
+    let width_col_2 = usize::from(!opts.get_flag(options::COLUMN_2));
 
     let delim_col_2 = delim.repeat(width_col_1);
     let delim_col_3 = delim.repeat(width_col_1 + width_col_2);
