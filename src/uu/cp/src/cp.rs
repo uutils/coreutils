@@ -1520,7 +1520,7 @@ fn handle_existing_dest(
             // `dest/src/f` and `dest/src/f` has the contents of
             // `src/f`, we delete the existing file to allow the hard
             // linking.
-            if !source_in_command_line {
+            if options.preserve_hard_links() {
                 fs::remove_file(dest)?;
             }
         }
