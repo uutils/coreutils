@@ -131,7 +131,7 @@ grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 # Not really interesting for us and logs are too big
 sed -i -e '/tests\/misc\/invalid-opt.pl/ D' \
     -e '/tests\/help\/help-version.sh/ D' \
-    -e '/tests\/test\/help-version-getopt.sh/ D' \
+    -e '/tests\/help\/help-version-getopt.sh/ D' \
     Makefile
 
 # logs are clotted because of this test
