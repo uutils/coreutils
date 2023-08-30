@@ -130,33 +130,33 @@ grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 # Remove tests checking for --version & --help
 # Not really interesting for us and logs are too big
 sed -i -e '/tests\/misc\/invalid-opt.pl/ D' \
-    -e '/tests\/misc\/help-version.sh/ D' \
-    -e '/tests\/misc\/help-version-getopt.sh/ D' \
+    -e '/tests\/help\/help-version.sh/ D' \
+    -e '/tests\/help\/help-version-getopt.sh/ D' \
     Makefile
 
 # logs are clotted because of this test
-sed -i -e '/tests\/misc\/seq-precision.sh/ D' \
+sed -i -e '/tests\/seq\/seq-precision.sh/ D' \
     Makefile
 
 # printf doesn't limit the values used in its arg, so this produced ~2GB of output
-sed -i '/INT_OFLOW/ D' tests/misc/printf.sh
+sed -i '/INT_OFLOW/ D' tests/printf/printf.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
-sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh
+sed -i 's|stat|/usr/bin/stat|' tests/touch/60-seconds.sh tests/sort/sort-compress-proc.sh
 sed -i 's|ls -|/usr/bin/ls -|' tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh
-sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/tail-2/tail-n0f.sh tests/cp/fail-perm.sh tests/mv/i-2.sh tests/misc/shuf.sh
-sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh tests/misc/test-N.sh
-sed -i 's|split |/usr/bin/split |' tests/misc/factor-parallel.sh
-sed -i 's|id -|/usr/bin/id -|' tests/misc/runcon-no-reorder.sh
+sed -i 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/tail/tail-n0f.sh tests/cp/fail-perm.sh tests/mv/i-2.sh tests/shuf/shuf.sh
+sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh tests/test/test-N.sh
+sed -i 's|split |/usr/bin/split |' tests/factor/factor-parallel.sh
+sed -i 's|id -|/usr/bin/id -|' tests/runcon/runcon-no-reorder.sh
 # tests/ls/abmon-align.sh - https://github.com/uutils/coreutils/issues/3505
-sed -i 's|touch |/usr/bin/touch |' tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/mv/update.sh tests/misc/ls-time.sh tests/misc/stat-nanoseconds.sh tests/misc/time-style.sh tests/misc/test-N.sh tests/ls/abmon-align.sh
+sed -i 's|touch |/usr/bin/touch |' tests/cp/reflink-perm.sh tests/ls/block-size.sh tests/mv/update.sh tests/ls/ls-time.sh tests/stat/stat-nanoseconds.sh tests/misc/time-style.sh tests/test/test-N.sh tests/ls/abmon-align.sh
 sed -i 's|ln -|/usr/bin/ln -|' tests/cp/link-deref.sh
 sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
-sed -i 's|paste |/usr/bin/paste |' tests/misc/od-endian.sh
-sed -i 's|timeout |/usr/bin/timeout |' tests/tail-2/follow-stdin.sh
+sed -i 's|paste |/usr/bin/paste |' tests/od/od-endian.sh
+sed -i 's|timeout |/usr/bin/timeout |' tests/tail/follow-stdin.sh
 
 # Add specific timeout to tests that currently hang to limit time spent waiting
-sed -i 's|\(^\s*\)seq \$|\1/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
+sed -i 's|\(^\s*\)seq \$|\1/usr/bin/timeout 0.1 seq \$|' tests/seq/seq-precision.sh tests/seq/seq-long-double.sh
 
 # Remove dup of /usr/bin/ when executed several times
 grep -rlE '/usr/bin/\s?/usr/bin' init.cfg tests/* | xargs --no-run-if-empty sed -Ei 's|/usr/bin/\s?/usr/bin/|/usr/bin/|g'
@@ -181,7 +181,7 @@ sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel':
 
 # overlay-headers.sh test intends to check for inotify events,
 # however there's a bug because `---dis` is an alias for: `---disable-inotify`
-sed -i -e "s|---dis ||g" tests/tail-2/overlay-headers.sh
+sed -i -e "s|---dis ||g" tests/tail/overlay-headers.sh
 
 test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 
@@ -238,11 +238,11 @@ sed -i -e "s/Try 'mv --help' for more information/For more information, try '--h
 
 # GNU doesn't support width > INT_MAX
 # disable these test cases
-sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/misc/printf-cov.pl
+sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/printf/printf-cov.pl
 
 sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du: option requires an argument/error: a value is required for '--threshold <SIZE>' but none was supplied/" -e "/Try 'du --help' for more information./d" tests/du/threshold.sh
 
 # disable two kind of tests:
 # "hostid BEFORE --help" doesn't fail for GNU. we fail. we are probably doing better
 # "hostid BEFORE --help AFTER " same for this
-sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/misc/help-version-getopt.sh
+sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/help/help-version-getopt.sh
