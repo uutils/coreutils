@@ -9,6 +9,7 @@ use rand::{thread_rng, Rng, SeedableRng};
 use regex::Regex;
 #[cfg(not(windows))]
 use std::env;
+use std::ffi::OsStr;
 use std::path::Path;
 use std::{
     fs::{read_dir, File},
@@ -1286,4 +1287,48 @@ fn test_split_invalid_input() {
         .fails()
         .no_stdout()
         .stderr_contains("split: invalid number of chunks: 0");
+}
+
+/// Test if there are invalid (non UTF-8) in the arguments - unix
+/// clap is expected to fail/panic
+#[cfg(unix)]
+#[test]
+fn test_split_non_utf8_argument_unix() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "test_split_non_utf8_argument";
+    let opt = OsStr::from_bytes("--additional-suffix".as_bytes());
+    RandomFile::new(&at, name).add_lines(2000);
+    // Here, the values 0x66 and 0x6f correspond to 'f' and 'o'
+    // respectively. The value 0x80 is a lone continuation byte, invalid
+    // in a UTF-8 sequence.
+    let opt_value = [0x66, 0x6f, 0x80, 0x6f];
+    let opt_value = OsStr::from_bytes(&opt_value[..]);
+    let name = OsStr::from_bytes(name.as_bytes());
+    ucmd.args(&[opt, opt_value, name])
+        .fails()
+        .stderr_contains("error: invalid UTF-8 was detected in one or more arguments");
+}
+
+/// Test if there are invalid (non UTF-8) in the arguments - windows
+/// clap is expected to fail/panic
+#[cfg(windows)]
+#[test]
+fn test_split_non_utf8_argument_windows() {
+    use std::os::windows::prelude::*;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "test_split_non_utf8_argument";
+    let opt = OsStr::from_bytes("--additional-suffix".as_bytes());
+    RandomFile::new(&at, name).add_lines(2000);
+    // Here the values 0x0066 and 0x006f correspond to 'f' and 'o'
+    // respectively. The value 0xD800 is a lone surrogate half, invalid
+    // in a UTF-16 sequence.
+    let opt_value = [0x0066, 0x006f, 0xD800, 0x006f];
+    let opt_value = OsString::from_wide(&opt_value[..]);
+    let name = OsStr::from_bytes(name.as_bytes());
+    ucmd.args(&[opt, opt_value, name])
+        .fails()
+        .stderr_contains("error: invalid UTF-8 was detected in one or more arguments");
 }

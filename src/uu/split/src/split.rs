@@ -13,6 +13,7 @@ use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
 use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use std::env;
+use std::ffi::OsString;
 use std::fmt;
 use std::fs::{metadata, File};
 use std::io;
@@ -52,9 +53,8 @@ const AFTER_HELP: &str = help_section!("after help", "split.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
-    let (args, obs_lines) = handle_obsolete(&args[..]);
+    
+    let (args, obs_lines) = handle_obsolete(args);
 
     let matches = uu_app().try_get_matches_from(args)?;
 
@@ -71,91 +71,102 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 /// `split -x300e file` would mean `split -x -l 300 -e file`
 /// `split -x300e -22 file` would mean `split -x -e -l 22 file` (last obsolete lines option wins)
 /// following GNU `split` behavior
-fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
+fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<String>) {
     let mut obs_lines = None;
     let mut preceding_long_opt_req_value = false;
     let mut preceding_short_opt_req_value = false;
     let filtered_args = args
-        .iter()
-        .filter_map(|slice| {
-            let filter: Option<String>;
-            // check if the slice is a true short option (and not hyphen prefixed value of an option)
-            // and if so, a short option that can contain obsolete lines value
-            if slice.starts_with('-')
-                && !slice.starts_with("--")
-                && !preceding_long_opt_req_value
-                && !preceding_short_opt_req_value
-                && !slice.starts_with("-a")
-                && !slice.starts_with("-b")
-                && !slice.starts_with("-C")
-                && !slice.starts_with("-l")
-                && !slice.starts_with("-n")
-            {
-                // start of the short option string
-                // that can have obsolete lines option value in it
-                // extract numeric part and filter it out
-                let mut obs_lines_extracted: Vec<char> = vec![];
-                let mut obs_lines_end_reached = false;
-                let filtered_slice: Vec<char> = slice
-                    .chars()
-                    .filter(|c| {
-                        // To correctly process scenario like '-x200a4'
-                        // we need to stop extracting digits once alphabetic character is encountered
-                        // after we already have something in obs_lines_extracted
-                        if c.is_ascii_digit() && !obs_lines_end_reached {
-                            obs_lines_extracted.push(*c);
-                            false
-                        } else {
-                            if !obs_lines_extracted.is_empty() {
-                                obs_lines_end_reached = true;
+        .filter_map(|os_slice| {
+            let filter: Option<OsString>;
+            if let Some(slice) = os_slice.to_str() {
+                // check if the slice is a true short option (and not hyphen prefixed value of an option)
+                // and if so, a short option that can contain obsolete lines value
+                if slice.starts_with('-')
+                    && !slice.starts_with("--")
+                    && !preceding_long_opt_req_value
+                    && !preceding_short_opt_req_value
+                    && !slice.starts_with("-a")
+                    && !slice.starts_with("-b")
+                    && !slice.starts_with("-C")
+                    && !slice.starts_with("-l")
+                    && !slice.starts_with("-n")
+                {
+                    // start of the short option string
+                    // that can have obsolete lines option value in it
+                    // extract numeric part and filter it out
+                    let mut obs_lines_extracted: Vec<char> = vec![];
+                    let mut obs_lines_end_reached = false;
+                    let filtered_slice: Vec<char> = slice
+                        .chars()
+                        .filter(|c| {
+                            // To correctly process scenario like '-x200a4'
+                            // we need to stop extracting digits once alphabetic character is encountered
+                            // after we already have something in obs_lines_extracted
+                            if c.is_ascii_digit() && !obs_lines_end_reached {
+                                obs_lines_extracted.push(*c);
+                                false
+                            } else {
+                                if !obs_lines_extracted.is_empty() {
+                                    obs_lines_end_reached = true;
+                                }
+                                true
                             }
-                            true
-                        }
-                    })
-                    .collect();
+                        })
+                        .collect();
 
-                if obs_lines_extracted.is_empty() {
-                    // no obsolete lines value found/extracted
-                    filter = Some(slice.to_owned());
-                } else {
-                    // obsolete lines value was extracted
-                    obs_lines = Some(obs_lines_extracted.iter().collect());
-                    if filtered_slice.get(1).is_some() {
-                        // there were some short options in front of or after obsolete lines value
-                        // i.e. '-xd100' or '-100de' or similar, which after extraction of obsolete lines value
-                        // would look like '-xd' or '-de' or similar
-                        filter = Some(filtered_slice.iter().collect());
+                    if obs_lines_extracted.is_empty() {
+                        // no obsolete lines value found/extracted
+                        filter = Some(OsString::from(slice));
                     } else {
-                        filter = None;
+                        // obsolete lines value was extracted
+                        obs_lines = Some(obs_lines_extracted.iter().collect());
+                        if filtered_slice.get(1).is_some() {
+                            // there were some short options in front of or after obsolete lines value
+                            // i.e. '-xd100' or '-100de' or similar, which after extraction of obsolete lines value
+                            // would look like '-xd' or '-de' or similar
+                            let filtered_slice: String = filtered_slice.iter().collect();
+                            filter = Some(OsString::from(filtered_slice));
+                        } else {
+                            filter = None;
+                        }
                     }
+                } else {
+                    // either not a short option
+                    // or a short option that cannot have obsolete lines value in it
+                    filter = Some(OsString::from(slice));
+                }
+                // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
+                // following slice should be treaded as value for this option
+                // even if it starts with '-' (which would be treated as hyphen prefixed value)
+                if slice.starts_with("--") {
+                    preceding_long_opt_req_value = &slice[2..] == OPT_BYTES
+                        || &slice[2..] == OPT_LINE_BYTES
+                        || &slice[2..] == OPT_LINES
+                        || &slice[2..] == OPT_ADDITIONAL_SUFFIX
+                        || &slice[2..] == OPT_FILTER
+                        || &slice[2..] == OPT_NUMBER
+                        || &slice[2..] == OPT_SUFFIX_LENGTH;
+                }
+                // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
+                // following slice should be treaded as value for this option
+                // even if it starts with '-' (which would be treated as hyphen prefixed value)
+                preceding_short_opt_req_value = slice == "-b"
+                    || slice == "-C"
+                    || slice == "-l"
+                    || slice == "-n"
+                    || slice == "-a";
+                // slice is a value
+                // reset preceding option flags
+                if !slice.starts_with('-') {
+                    preceding_short_opt_req_value = false;
+                    preceding_long_opt_req_value = false;
                 }
             } else {
-                // either not a short option
-                // or a short option that cannot have obsolete lines value in it
-                filter = Some(slice.to_owned());
-            }
-            // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
-            // following slice should be treaded as value for this option
-            // even if it starts with '-' (which would be treated as hyphen prefixed value)
-            if slice.starts_with("--") {
-                preceding_long_opt_req_value = &slice[2..] == OPT_BYTES
-                    || &slice[2..] == OPT_LINE_BYTES
-                    || &slice[2..] == OPT_LINES
-                    || &slice[2..] == OPT_ADDITIONAL_SUFFIX
-                    || &slice[2..] == OPT_FILTER
-                    || &slice[2..] == OPT_NUMBER
-                    || &slice[2..] == OPT_SUFFIX_LENGTH;
-            }
-            // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
-            // following slice should be treaded as value for this option
-            // even if it starts with '-' (which would be treated as hyphen prefixed value)
-            preceding_short_opt_req_value =
-                slice == "-b" || slice == "-C" || slice == "-l" || slice == "-n" || slice == "-a";
-            // slice is a value
-            // reset preceding option flags
-            if !slice.starts_with('-') {
-                preceding_short_opt_req_value = false;
-                preceding_long_opt_req_value = false;
+                // Cannot cleanly convert os_slice to UTF-8
+                // Do not process and return as-is
+                // This will cause failure later on, but we should not handle it here
+                // and let clap panic on invalid UTF-8 argument
+                filter = Some(os_slice);
             }
             // return filter
             filter
