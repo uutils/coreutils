@@ -53,7 +53,6 @@ const AFTER_HELP: &str = help_section!("after help", "split.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    
     let (args, obs_lines) = handle_obsolete(args);
 
     let matches = uu_app().try_get_matches_from(args)?;
