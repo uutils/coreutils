@@ -38,7 +38,7 @@ if test ! -d "${path_GNU}"; then
     echo "Could not find GNU coreutils (expected at '${path_GNU}')"
     echo "Run the following to download into the expected path:"
     echo "git clone --recurse-submodules https://github.com/coreutils/coreutils.git \"${path_GNU}\""
-    echo "After downloading GNU coreutils to \"${path_GNU}\" run the following commands to cheout latest release tag"
+    echo "After downloading GNU coreutils to \"${path_GNU}\" run the following commands to checkout latest release tag"
     echo "cd \"${path_GNU}\""
     echo "git fetch --all --tags"
     echo "git checkout tags/${release_tag_GNU}"
