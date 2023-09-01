@@ -71,6 +71,7 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
 [features]
 default = []
 # * non-default features
+backup-control = []
 encoding = ["data-encoding", "data-encoding-macro", "z85", "thiserror"]
 entries = ["libc"]
 fs = ["libc", "winapi-util", "windows-sys"]
