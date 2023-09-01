@@ -20,7 +20,6 @@ mod parser; // string parsing modules
 pub use uucore_procs::*;
 
 // * cross-platform modules
-pub use crate::mods::backup_control;
 pub use crate::mods::display;
 pub use crate::mods::error;
 pub use crate::mods::line_ending;
@@ -38,6 +37,8 @@ pub use crate::parser::parse_time;
 pub use crate::parser::shortcut_value_parser;
 
 // * feature-gated modules
+#[cfg(feature = "backup-control")]
+pub use crate::features::backup_control;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
 #[cfg(feature = "fs")]

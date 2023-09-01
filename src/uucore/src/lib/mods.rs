@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 // mods ~ cross-platforms modules (core/bundler file)
 
-pub mod backup_control;
 pub mod display;
 pub mod error;
 pub mod line_ending;

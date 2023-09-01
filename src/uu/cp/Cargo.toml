@@ -24,7 +24,13 @@ filetime = { workspace = true }
 libc = { workspace = true }
 quick-error = { workspace = true }
 selinux = { workspace = true, optional = true }
-uucore = { workspace = true, features = ["entries", "fs", "perms", "mode"] }
+uucore = { workspace = true, features = [
+  "backup-control",
+  "entries",
+  "fs",
+  "perms",
+  "mode",
+] }
 walkdir = { workspace = true }
 indicatif = { workspace = true }
 
