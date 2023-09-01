@@ -218,7 +218,7 @@ impl Passwd {
         let mut ngroups: c_int = 8;
         let mut ngroups_old: c_int;
         let mut groups = vec![0; ngroups.try_into().unwrap()];
-        let name = CString::new(self.name.clone()).unwrap();
+        let name = CString::new(self.name.as_bytes()).unwrap();
         loop {
             ngroups_old = ngroups;
             if unsafe { getgrouplist(name.as_ptr(), self.gid, groups.as_mut_ptr(), &mut ngroups) }
