@@ -21,7 +21,7 @@ path = "src/lib/lib.rs"
 clap = { workspace = true }
 uucore_procs = { workspace = true }
 dns-lookup = { version = "2.0.2", optional = true }
-dunce = "1.0.4"
+dunce = { version = "1.0.4", optional = true }
 wild = "2.1"
 glob = { workspace = true }
 # * optional
@@ -73,7 +73,7 @@ default = []
 # * non-default features
 encoding = ["data-encoding", "data-encoding-macro", "z85", "thiserror"]
 entries = ["libc"]
-fs = ["libc", "winapi-util", "windows-sys"]
+fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "time", "windows-sys"]
 lines = []
 memo = ["itertools"]
