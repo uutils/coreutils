@@ -337,6 +337,37 @@ fn test_primes_with_exponents() {
         .stdout_is(String::from_utf8(output_string.as_bytes().to_owned()).unwrap());
 }
 
+#[test]
+fn fails_on_invalid_number() {
+    new_ucmd!().arg("not-a-valid-number").fails();
+    new_ucmd!()
+        .arg("not-a-valid-number")
+        .arg("12")
+        .fails()
+        .stdout_contains("12: 2 2 3");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn short_circuit_write_error() {
+    use std::fs::OpenOptions;
+
+    // Check that the error is printed exactly once and factor does not move on
+    // to the next number when a write error happens.
+    //
+    // Note: Technically, GNU prints the error twice, not because it does not
+    // short circuit the error, but because it always prints the error twice,
+    // for any number of inputs. That's silly behavior and printing once is
+    // clearly better.
+    let f = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .arg("12")
+        .arg("10")
+        .set_stdout(f)
+        .fails()
+        .stderr_is("factor: write error: No space left on device\n");
+}
+
 const PRIMES_BY_BITS: &[&[u64]] = &[
     PRIMES14, PRIMES15, PRIMES16, PRIMES17, PRIMES18, PRIMES19, PRIMES20, PRIMES21, PRIMES22,
     PRIMES23, PRIMES24, PRIMES25, PRIMES26, PRIMES27, PRIMES28, PRIMES29, PRIMES30, PRIMES31,
