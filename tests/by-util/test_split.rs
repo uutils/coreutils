@@ -1290,8 +1290,8 @@ fn test_split_invalid_input() {
 
 /// Test if there are invalid (non UTF-8) in the arguments - unix
 /// clap is expected to fail/panic
-#[cfg(unix)]
 #[test]
+#[cfg(unix)]
 fn test_split_non_utf8_argument_unix() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1311,26 +1311,25 @@ fn test_split_non_utf8_argument_unix() {
         .stderr_contains("error: invalid UTF-8 was detected in one or more arguments");
 }
 
-// Test if there are invalid (non UTF-8) in the arguments - windows
-// clap is expected to fail/panic
-// comment it out for now
-// #[cfg(windows)]
-// #[test]
-// fn test_split_non_utf8_argument_windows() {
-//     use std::ffi::OsString;
-//     use std::os::windows::prelude::*;
+/// Test if there are invalid (non UTF-8) in the arguments - windows
+/// clap is expected to fail/panic
+#[test]
+#[cfg(windows)]
+fn test_split_non_utf8_argument_windows() {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
 
-//     let (at, mut ucmd) = at_and_ucmd!();
-//     let name = "test_split_non_utf8_argument";
-//     let opt = OsStr::from_bytes("--additional-suffix".as_bytes());
-//     RandomFile::new(&at, name).add_lines(2000);
-//     // Here the values 0x0066 and 0x006f correspond to 'f' and 'o'
-//     // respectively. The value 0xD800 is a lone surrogate half, invalid
-//     // in a UTF-16 sequence.
-//     let opt_value = [0x0066, 0x006f, 0xD800, 0x006f];
-//     let opt_value = OsString::from_wide(&opt_value[..]);
-//     let name = OsStr::from_bytes(name.as_bytes());
-//     ucmd.args(&[opt, opt_value, name])
-//         .fails()
-//         .stderr_contains("error: invalid UTF-8 was detected in one or more arguments");
-// }
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "test_split_non_utf8_argument";
+    let opt = OsString::from("--additional-suffix");
+    RandomFile::new(&at, name).add_lines(2000);
+    // Here the values 0x0066 and 0x006f correspond to 'f' and 'o'
+    // respectively. The value 0xD800 is a lone surrogate half, invalid
+    // in a UTF-16 sequence.
+    let opt_value = [0x0066, 0x006f, 0xD800, 0x006f];
+    let opt_value = OsString::from_wide(&opt_value[..]);
+    let name = OsString::from(name);
+    ucmd.args(&[opt, opt_value, name])
+        .fails()
+        .stderr_contains("error: invalid UTF-8 was detected in one or more arguments");
+}
