@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore reimplementing toybox RUNTEST CARGOFLAGS nextest -->
+<!-- spell-checker:ignore reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin -->
 
 # Setting up local development environment
 
@@ -12,6 +12,7 @@ Before you start working on coreutils, please follow these steps:
 1. Fork the [coreutils repository](https://github.com/uutils/coreutils) to your GitHub account.
 ***Tip:*** See [this GitHub guide](https://docs.github.com/en/get-started/quickstart/fork-a-repo) for more information on this step
 2. Clone that fork to your local development environment:
+
 ```shell
 git clone https://github.com/YOUR-GITHUB-ACCOUNT/coreutils
 cd coreutils
@@ -21,61 +22,30 @@ cd coreutils
 
 You will need the tools mentioned in this section to build and test your code changes locally.
 This section will explain how to install and configure these tools.
-We also have an extensive CI that uses these tools and will check your code before it can be merged. 
-The next section [Testing](##Testing) will explain how to run those checks locally to avoid waiting for the CI.
+We also have an extensive CI that uses these tools and will check your code before it can be merged.
+The next section [Testing](#testing) will explain how to run those checks locally to avoid waiting for the CI.
 
-### Rust and friends
+### Rust toolchain
 
-Install [Rust](https://www.rust-lang.org/tools/install)
+[Install Rust](https://www.rust-lang.org/tools/install)
 
-If you're using rustup to install and manage your Rust toolchains, `cargo`, `clippy` and `rustfmt` are usually already installed. 
-You might also need to add 'llvm-tools':
-```
+If you're using rustup to install and manage your Rust toolchains, `clippy` and `rustfmt` are usually already installed. If you are using one of the alternative methods, please make sure to install them manually. See following sub-sections for their usage: [clippy](#clippy) [rustfmt](#rustfmt)
+
+***Tip*** You might also need to add 'llvm-tools':
+
+```shell
 rustup component add llvm-tools-preview
-``` 
-
-**On MacOS** you'll need to install C compiler & linker:
 ```
-xcode-select --install
-```
-
-**On Windows** you'll need the MSVC build tools for Visual Studio 2013 or later.
 
 ### GNU utils and prerequisites
-If you are developing on Linux, most likely you already have all/most GNU utilities and prerequisites installed. 
+
+If you are developing on Linux, most likely you already have all/most GNU utilities and prerequisites installed
+
 To make sure, please check GNU coreutils [README-prereq](https://github.com/coreutils/coreutils/blob/master/README-prereq)
 
-**Tip:On MacOS** you will need to install [Homebrew](https://docs.brew.sh/Installation) and use it to install the following formulas:
-```
-brew install coreutils
-brew install autoconf
-brew install autopoint
-brew install gettext
-brew install wget
-brew install texinfo
-brew install xz
-brew install automake
-brew install gnu-sed
-brew install m4
-brew install bison
-brew install pre-commit
-brew install findutils
-```
-After installing these Homebrew formulas, please make sure to add the following lines to your `zsh` or `bash` rc file, i.e. `~/.profile` or `~/.zshrc` or `~/.bashrc` ...
-(assuming Homebrew is installed at default location `/opt/homebrew`):
-```
-eval "$(/opt/homebrew/bin/brew shellenv)"
-export PATH="/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH"
-export PATH="/opt/homebrew/opt/bison/bin:$PATH"
-export PATH="/opt/homebrew/opt/findutils/libexec/gnubin:$PATH"
-```
-Last step is to link Homebrew coreutils version of `timeout` to /usr/local/bin (as admin user):
-```
-sudo ln -s /opt/homebrew/bin/timeout /usr/local/bin/timeout
-```
-Do not forget to either source updated rc file or restart you shell session to update environment variables.
+You will need these to [run uutils against the GNU test suite locally](#comparing-with-gnu)
 
-**On Windows**  <TODO>
+For MacOS and Windows platform specific setup please check [MacOS GNU utils](#macos-gnu-utils) and [Windows GNU utils](#windows-gnu-utils) sections respectfully
 
 ### pre-commit hooks
 
@@ -92,7 +62,7 @@ Your git commits will then automatically be checked. If a check fails, an error
 message will explain why, and your commit will be canceled. You can then make
 the suggested changes, and run `git commit ...` again.
 
-**NOTE: On MacOS** the pre-commit hooks are currently broken. There are workarounds involving switching to unstable nightly Rust and components. 
+**NOTE: On MacOS** the pre-commit hooks are currently broken. There are workarounds involving switching to unstable nightly Rust and components
 
 ### clippy
 
@@ -116,7 +86,7 @@ This project uses [cargo-deny](https://github.com/EmbarkStudios/cargo-deny/) to
 detect duplicate dependencies, checks licenses, etc. To run it locally, first
 install it and then run with:
 
-```
+```shell
 cargo deny --all-features check all
 ```
 
@@ -269,32 +239,7 @@ DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
 
 Note that GNU test suite relies on individual utilities (not the multicall binary).
 
-### Improving the GNU compatibility
-
-The Python script `./util/remaining-gnu-error.py` shows the list of failing
-tests in the CI.
-
-To improve the GNU compatibility, the following process is recommended:
-
-1. Identify a test (the smaller, the better) on a program that you understand or
-   is easy to understand. You can use the `./util/remaining-gnu-error.py` script
-   to help with this decision.
-1. Build both the GNU and Rust coreutils using: `bash util/build-gnu.sh`
-1. Run the test with `bash util/run-gnu-test.sh <your test>`
-1. Start to modify `<your test>` to understand what is wrong. Examples:
-   1. Add `set -v` to have the bash verbose mode
-   1. Add `echo $?` where needed
-   1. When the variable `fail` is used in the test, `echo $fail` to see when the
-      test started to fail
-   1. Bump the content of the output (ex: `cat err`)
-   1. ...
-1. Or, if the test is simple, extract the relevant information to create a new
-   test case running both GNU & Rust implementation
-1. Start to modify the Rust implementation to match the expected behavior
-1. Add a test to make sure that we don't regress (our test suite is super quick)
-
-
-## Code coverage
+## Code coverage report
 
 <!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic -->
 
@@ -320,3 +265,67 @@ if changes are not reflected in the report then run `cargo clean` and run the ab
 
 If you are using stable version of Rust that doesn't enable code coverage instrumentation by default
 then add `-Z-Zinstrument-coverage` flag to `RUSTFLAGS` env variable specified above.
+
+## Tips for setting up on Mac
+
+### C Compiler and linker
+
+On MacOS you'll need to install C compiler & linker:
+
+```shell
+xcode-select --install
+```
+
+### MacOS GNU utils
+
+On MacOS you will need to install [Homebrew](https://docs.brew.sh/Installation) and use it to install the following Homebrew formulas:
+
+```shell
+brew install coreutils
+brew install autoconf
+brew install autopoint
+brew install gettext
+brew install wget
+brew install texinfo
+brew install xz
+brew install automake
+brew install gnu-sed
+brew install m4
+brew install bison
+brew install pre-commit
+brew install findutils
+```
+
+After installing these Homebrew formulas, please make sure to add the following lines to your `zsh` or `bash` rc file, i.e. `~/.profile` or `~/.zshrc` or `~/.bashrc` ...
+(assuming Homebrew is installed at default location `/opt/homebrew`):
+
+```shell
+eval "$(/opt/homebrew/bin/brew shellenv)"
+export PATH="/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH"
+export PATH="/opt/homebrew/opt/bison/bin:$PATH"
+export PATH="/opt/homebrew/opt/findutils/libexec/gnubin:$PATH"
+```
+
+Last step is to link Homebrew coreutils version of `timeout` to `/usr/local/bin` (as admin user):
+
+```shell
+sudo ln -s /opt/homebrew/bin/timeout /usr/local/bin/timeout
+```
+
+Do not forget to either source updated rc file or restart you terminal session to update environment variables.
+
+## Tips for setting up on Windows
+
+### MSVC build tools
+
+On Windows you'll need the MSVC build tools for Visual Studio 2013 or later
+
+If you are using `rustup-init.exe` to install Rust toolchain, it will guide you through the process of downloading and installing these prerequisites
+
+Otherwise please follow [this guide](https://learn.microsoft.com/en-us/windows/dev-environment/rust/setup)
+
+### Windows GNU utils
+
+If you have used [Git for Windows](https://gitforwindows.org) to install `git` on you Windows system you might already have some GNU core utilities installed as part of "GNU Bash" included in Git for Windows package, but it is not a complete package. [This article](https://gist.github.com/evanwill/0207876c3243bbb6863e65ec5dc3f058) provides instruction on how to add more to it.
+
+Alternatively you can install [Cygwin](https://www.cygwin.com) and/or use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/compare-versions#whats-new-in-wsl-2) to get access to GNU core utilities on Windows

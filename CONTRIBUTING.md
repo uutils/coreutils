@@ -38,199 +38,15 @@ CI. However, you can use `#[cfg(...)]` attributes to create platform dependent f
 VirtualBox and Parallels) for development:
 <https://developer.microsoft.com/windows/downloads/virtual-machines/>
 
-## Tools
+## Setting up your development environment
 
-We have an extensive CI that will check your code before it can be merged. This
-section explains how to run those checks locally to avoid waiting for the CI.
+To setup your local development environment for this project please follow [DEVELOPMENT.md guide](DEVELOPMENT.md)
 
-### pre-commit hooks
+It covers [installation of necessary tools and prerequisites](DEVELOPMENT.md#tools) as well as using those tools to [test your code changes locally](DEVELOPMENT.md#testing)
 
-A configuration for `pre-commit` is provided in the repository. It allows
-automatically checking every git commit you make to ensure it compiles, and
-passes `clippy` and `rustfmt` without warnings.
+## Improving the GNU compatibility
 
-To use the provided hook:
-
-1. [Install `pre-commit`](https://pre-commit.com/#install)
-1. Run `pre-commit install` while in the repository directory
-
-Your git commits will then automatically be checked. If a check fails, an error
-message will explain why, and your commit will be canceled. You can then make
-the suggested changes, and run `git commit ...` again.
-
-### clippy
-
-```shell
-cargo clippy --all-targets --all-features
-```
-
-The `msrv` key in the clippy configuration file `clippy.toml` is used to disable
-lints pertaining to newer features by specifying the minimum supported Rust
-version (MSRV).
-
-### rustfmt
-
-```shell
-cargo fmt --all
-```
-
-### cargo-deny
-
-This project uses [cargo-deny](https://github.com/EmbarkStudios/cargo-deny/) to
-detect duplicate dependencies, checks licenses, etc. To run it locally, first
-install it and then run with:
-
-```
-cargo deny --all-features check all
-```
-
-### Markdown linter
-
-We use [markdownlint](https://github.com/DavidAnson/markdownlint) to lint the
-Markdown files in the repository.
-
-### Spell checker
-
-We use `cspell` as spell checker for all files in the project. If you are using
-VS Code, you can install the
-[code spell checker](https://marketplace.visualstudio.com/items?itemName=streetsidesoftware.code-spell-checker)
-extension to enable spell checking within your editor. Otherwise, you can
-install [cspell](https://cspell.org/) separately.
-
-If you want to make the spell checker ignore a word, you can add
-
-```rust
-// spell-checker:ignore word_to_ignore
-```
-
-at the top of the file.
-
-## Testing
-
-Testing can be done using either Cargo or `make`.
-
-### Testing with Cargo
-
-Just like with building, we follow the standard procedure for testing using
-Cargo:
-
-```shell
-cargo test
-```
-
-By default, `cargo test` only runs the common programs. To run also platform
-specific tests, run:
-
-```shell
-cargo test --features unix
-```
-
-If you would prefer to test a select few utilities:
-
-```shell
-cargo test --features "chmod mv tail" --no-default-features
-```
-
-If you also want to test the core utilities:
-
-```shell
-cargo test  -p uucore -p coreutils
-```
-
-Running the complete test suite might take a while. We use [nextest](https://nexte.st/index.html) in
-the CI and you might want to try it out locally. It can speed up the execution time of the whole
-test run significantly if the cpu has multiple cores.
-
-```shell
-cargo nextest run --features unix --no-fail-fast
-```
-
-To debug:
-
-```shell
-gdb --args target/debug/coreutils ls
-(gdb) b ls.rs:79
-(gdb) run
-```
-
-### Testing with GNU Make
-
-To simply test all available utilities:
-
-```shell
-make test
-```
-
-To test all but a few of the available utilities:
-
-```shell
-make SKIP_UTILS='UTILITY_1 UTILITY_2' test
-```
-
-To test only a few of the available utilities:
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' test
-```
-
-To include tests for unimplemented behavior:
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
-```
-
-To run tests with `nextest` just use the nextest target. Note you'll need to
-[install](https://nexte.st/book/installation.html) `nextest` first. The `nextest` target accepts the
-same arguments like the default `test` target, so it's possible to pass arguments to `nextest run`
-via `CARGOFLAGS`:
-
-```shell
-make CARGOFLAGS='--no-fail-fast' UTILS='UTILITY_1 UTILITY_2' nextest
-```
-
-### Run Busybox Tests
-
-This testing functionality is only available on *nix operating systems and
-requires `make`.
-
-To run busybox tests for all utilities for which busybox has tests
-
-```shell
-make busytest
-```
-
-To run busybox tests for a few of the available utilities
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' busytest
-```
-
-To pass an argument like "-v" to the busybox test runtime
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
-```
-
-### Comparing with GNU
-
-To run uutils against the GNU test suite locally, run the following commands:
-
-```shell
-bash util/build-gnu.sh
-# Build uutils without release optimizations
-UU_MAKE_PROFILE=debug bash util/build-gnu.sh
-bash util/run-gnu-test.sh
-# To run a single test:
-bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
-# To run several tests:
-bash util/run-gnu-test.sh tests/touch/not-owner.sh tests/rm/no-give-up.sh # for example
-# If this is a perl (.pl) test, to run in debug:
-DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
-```
-
-Note that it relies on individual utilities (not the multicall binary).
-
-### Improving the GNU compatibility
+Please make sure you have installed [GNU utils and prerequisites](DEVELOPMENT.md#gnu-utils-and-prerequisites) and can execute commands described in [Comparing with GNU](DEVELOPMENT.md#comparing-with-gnu) section of [DEVELOPMENT.md](DEVELOPMENT.md)
 
 The Python script `./util/remaining-gnu-error.py` shows the list of failing
 tests in the CI.
@@ -318,32 +134,14 @@ uutils: add new utility
 gitignore: add temporary files
 ```
 
+## TODO : Any guidelines for branching, PRs, etc?
+
 ## Code coverage
 
-<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic -->
+To generate code coverage report locally please follow [Code coverage report](DEVELOPMENT.md#code-coverage-report) section of [DEVELOPMENT.md](DEVELOPMENT.md)
 
-Code coverage report can be generated using [grcov](https://github.com/mozilla/grcov).
-
-### Using Nightly Rust
-
-To generate [gcov-based](https://github.com/mozilla/grcov#example-how-to-generate-gcda-files-for-a-rust-project) coverage report
-
-```shell
-export CARGO_INCREMENTAL=0
-export RUSTFLAGS="-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
-export RUSTDOCFLAGS="-Cpanic=abort"
-cargo build <options...> # e.g., --features feat_os_unix
-cargo test <options...> # e.g., --features feat_os_unix test_pathchk
-grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existing --ignore build.rs --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?\#\[derive\()" -o ./target/debug/coverage/
-# open target/debug/coverage/index.html in browser
-```
-
-if changes are not reflected in the report then run `cargo clean` and run the above commands.
-
-### Using Stable Rust
-
-If you are using stable version of Rust that doesn't enable code coverage instrumentation by default
-then add `-Z-Zinstrument-coverage` flag to `RUSTFLAGS` env variable specified above.
+***TODO*** The technical details on how to generate report locally are offloaded to DEVELOPMENT.md
+So, for this document - Should we instead spell out code coverage requirements/targets/%thresholds per pool request, total, etc?
 
 ## Other implementations
 
