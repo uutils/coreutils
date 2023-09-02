@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin -->
+<!-- spell-checker:ignore reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains -->
 
 # Setting up local development environment
 
