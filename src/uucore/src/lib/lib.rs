@@ -27,7 +27,6 @@ pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::quoting_style;
 pub use crate::mods::ranges;
-pub use crate::mods::update_control;
 pub use crate::mods::version_cmp;
 
 // * string parsing modules
@@ -53,6 +52,8 @@ pub use crate::features::memo;
 pub use crate::features::ringbuffer;
 #[cfg(feature = "sum")]
 pub use crate::features::sum;
+#[cfg(feature = "update-control")]
+pub use crate::features::update_control;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)

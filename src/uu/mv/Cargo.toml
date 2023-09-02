@@ -18,7 +18,11 @@ path = "src/mv.rs"
 clap = { workspace = true }
 fs_extra = { workspace = true }
 indicatif = { workspace = true }
-uucore = { workspace = true, features = ["backup-control", "fs"] }
+uucore = { workspace = true, features = [
+  "backup-control",
+  "fs",
+  "update-control",
+] }
 
 [[bin]]
 name = "mv"
