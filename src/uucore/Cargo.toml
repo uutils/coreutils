@@ -80,13 +80,10 @@ lines = []
 memo = ["itertools"]
 mode = ["libc"]
 perms = ["libc", "walkdir"]
+pipes = []
 process = ["libc"]
 ringbuffer = []
 signals = []
-utf8 = []
-utmpx = ["time", "time/macros", "libc", "dns-lookup"]
-wide = []
-pipes = []
 sum = [
   "digest",
   "hex",
@@ -99,3 +96,7 @@ sum = [
   "blake3",
   "sm3",
 ]
+update-control = []
+utf8 = []
+utmpx = ["time", "time/macros", "libc", "dns-lookup"]
+wide = []

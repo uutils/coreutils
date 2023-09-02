@@ -22,6 +22,8 @@ pub mod ringbuffer;
 pub mod sum;
 #[cfg(feature = "memo")]
 mod tokenize;
+#[cfg(feature = "update-control")]
+pub mod update_control;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)
