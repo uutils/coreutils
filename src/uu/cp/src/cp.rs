@@ -1242,6 +1242,11 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             seen_sources.insert(source);
         }
     }
+
+    if let Some(pb) = progress_bar {
+        pb.finish();
+    }
+
     if non_fatal_errors {
         Err(Error::NotAllFilesCopied)
     } else {
