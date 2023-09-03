@@ -82,6 +82,7 @@ mode = ["libc"]
 perms = ["libc", "walkdir"]
 pipes = []
 process = ["libc"]
+ranges = []
 ringbuffer = []
 signals = []
 sum = [

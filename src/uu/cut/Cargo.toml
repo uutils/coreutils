@@ -16,7 +16,7 @@ path = "src/cut.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["ranges"] }
 memchr = { workspace = true }
 bstr = { workspace = true }
 is-terminal = { workspace = true }

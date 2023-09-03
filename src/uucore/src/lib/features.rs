@@ -16,6 +16,8 @@ pub mod fsext;
 pub mod lines;
 #[cfg(feature = "memo")]
 pub mod memo;
+#[cfg(feature = "ranges")]
+pub mod ranges;
 #[cfg(feature = "ringbuffer")]
 pub mod ringbuffer;
 #[cfg(feature = "sum")]
