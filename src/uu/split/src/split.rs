@@ -21,7 +21,7 @@ use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::parse_size::{parse_size_max, ParseSizeError};
 use uucore::uio_error;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
@@ -419,8 +419,7 @@ impl NumberType {
         let parts: Vec<&str> = s.split('/').collect();
         match &parts[..] {
             [n_str] => {
-                let num_chunks = n_str
-                    .parse()
+                let num_chunks = parse_size_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 if num_chunks > 0 {
                     Ok(Self::Bytes(num_chunks))
@@ -429,32 +428,26 @@ impl NumberType {
                 }
             }
             ["l", n_str] => {
-                let num_chunks = n_str
-                    .parse()
+                let num_chunks = parse_size_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::Lines(num_chunks))
             }
             ["l", k_str, n_str] => {
-                let num_chunks = n_str
-                    .parse()
+                let num_chunks = parse_size_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = k_str
-                    .parse()
+                let chunk_number = parse_size_max(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
                 Ok(Self::KthLines(chunk_number, num_chunks))
             }
             ["r", n_str] => {
-                let num_chunks = n_str
-                    .parse()
+                let num_chunks = parse_size_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::RoundRobin(num_chunks))
             }
             ["r", k_str, n_str] => {
-                let num_chunks = n_str
-                    .parse()
+                let num_chunks = parse_size_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = k_str
-                    .parse()
+                let chunk_number = parse_size_max(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
                 Ok(Self::KthRoundRobin(chunk_number, num_chunks))
             }
@@ -523,7 +516,7 @@ impl Strategy {
             error: fn(ParseSizeError) -> StrategyError,
         ) -> Result<Strategy, StrategyError> {
             let s = matches.get_one::<String>(option).unwrap();
-            let n = parse_size(s).map_err(error)?;
+            let n = parse_size_max(s).map_err(error)?;
             if n > 0 {
                 Ok(strategy(n))
             } else {
@@ -542,7 +535,7 @@ impl Strategy {
             matches.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
         ) {
             (Some(v), false, false, false, false) => {
-                let v = parse_size(v).map_err(|_| {
+                let v = parse_size_max(v).map_err(|_| {
                     StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
                 })?;
                 Ok(Self::Lines(v))
@@ -687,7 +680,6 @@ impl Settings {
         if additional_suffix.contains('/') {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
-
         let strategy = Strategy::from(matches, obs_lines).map_err(SettingsError::Strategy)?;
         let (suffix_type, suffix_start) = suffix_type_from(matches)?;
         let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap();
