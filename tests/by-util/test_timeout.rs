@@ -143,18 +143,31 @@ fn test_kill_after_long() {
         .no_stderr();
 }
 
+/// Test that a command that is executed in a sub-shell is killed/terminated.
 #[test]
-fn test_kill_subprocess() {
+fn test_kill_subshell() {
     new_ucmd!()
         .args(&[
-            // Make sure the CI can spawn the subprocess.
-            "10",
+            // Has to be long enough for sub-shell to finish executing
+            // `trap` command.
+            "5",
+            // Spawn command in sub-shell.
             "sh",
             "-c",
-            "sh -c \"trap 'echo xyz' TERM; sleep 30\"",
+            // Set a trap to print 'xyz' when the sub-shell receives a
+            // TERM signal.
+            "trap 'echo xyz' TERM; sleep infinity",
         ])
+        // We require failing only in order to check the exit code.
         .fails()
         .code_is(124)
-        .stdout_contains("xyz")
-        .stderr_contains("Terminated");
+        .stdout_contains("xyz");
+
+    // Verify that the behavior is consistent when executed directly as a
+    // subprocess, without the added layer of a sub-shell.
+    new_ucmd!()
+        .args(&["5", "sleep", "infinity"])
+        .fails()
+        .code_is(124)
+        .no_stdout();
 }
