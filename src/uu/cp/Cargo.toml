@@ -1,6 +1,6 @@
 [package]
 name = "uu_cp"
-version = "0.0.20"
+version = "0.0.21"
 authors = [
   "Jordy Dickinson <jordy.dickinson@gmail.com>",
   "Joshua S. Miller <jsmiller@uchicago.edu>",
@@ -24,7 +24,14 @@ filetime = { workspace = true }
 libc = { workspace = true }
 quick-error = { workspace = true }
 selinux = { workspace = true, optional = true }
-uucore = { workspace = true, features = ["entries", "fs", "perms", "mode"] }
+uucore = { workspace = true, features = [
+  "backup-control",
+  "entries",
+  "fs",
+  "perms",
+  "mode",
+  "update-control",
+] }
 walkdir = { workspace = true }
 indicatif = { workspace = true }
 
