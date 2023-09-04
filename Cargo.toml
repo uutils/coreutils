@@ -269,7 +269,7 @@ chrono = { version = "^0.4.28", default-features = false, features = [
   "clock",
 ] }
 clap = { version = "4.3", features = ["wrap_help", "cargo"] }
-clap_complete = "4.3"
+clap_complete = "4.4"
 clap_mangen = "0.2"
 compare = "0.1.0"
 coz = { version = "0.1.3" }
