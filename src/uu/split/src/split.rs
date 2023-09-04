@@ -13,6 +13,7 @@ use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
 use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use std::env;
+use std::ffi::OsString;
 use std::fmt;
 use std::fs::{metadata, File};
 use std::io;
@@ -52,12 +53,125 @@ const AFTER_HELP: &str = help_section!("after help", "split.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let (args, obs_lines) = handle_obsolete(args);
+
     let matches = uu_app().try_get_matches_from(args)?;
-    match Settings::from(&matches) {
+
+    match Settings::from(&matches, &obs_lines) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
         Err(e) => Err(USimpleError::new(1, format!("{e}"))),
     }
+}
+
+/// Extract obsolete shorthand (if any) for specifying lines in following scenarios (and similar)
+/// `split -22 file` would mean `split -l 22 file`
+/// `split -2de file` would mean `split -l 2 -d -e file`
+/// `split -x300e file` would mean `split -x -l 300 -e file`
+/// `split -x300e -22 file` would mean `split -x -e -l 22 file` (last obsolete lines option wins)
+/// following GNU `split` behavior
+fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<String>) {
+    let mut obs_lines = None;
+    let mut preceding_long_opt_req_value = false;
+    let mut preceding_short_opt_req_value = false;
+    let filtered_args = args
+        .filter_map(|os_slice| {
+            let filter: Option<OsString>;
+            if let Some(slice) = os_slice.to_str() {
+                // check if the slice is a true short option (and not hyphen prefixed value of an option)
+                // and if so, a short option that can contain obsolete lines value
+                if slice.starts_with('-')
+                    && !slice.starts_with("--")
+                    && !preceding_long_opt_req_value
+                    && !preceding_short_opt_req_value
+                    && !slice.starts_with("-a")
+                    && !slice.starts_with("-b")
+                    && !slice.starts_with("-C")
+                    && !slice.starts_with("-l")
+                    && !slice.starts_with("-n")
+                {
+                    // start of the short option string
+                    // that can have obsolete lines option value in it
+                    // extract numeric part and filter it out
+                    let mut obs_lines_extracted: Vec<char> = vec![];
+                    let mut obs_lines_end_reached = false;
+                    let filtered_slice: Vec<char> = slice
+                        .chars()
+                        .filter(|c| {
+                            // To correctly process scenario like '-x200a4'
+                            // we need to stop extracting digits once alphabetic character is encountered
+                            // after we already have something in obs_lines_extracted
+                            if c.is_ascii_digit() && !obs_lines_end_reached {
+                                obs_lines_extracted.push(*c);
+                                false
+                            } else {
+                                if !obs_lines_extracted.is_empty() {
+                                    obs_lines_end_reached = true;
+                                }
+                                true
+                            }
+                        })
+                        .collect();
+
+                    if obs_lines_extracted.is_empty() {
+                        // no obsolete lines value found/extracted
+                        filter = Some(OsString::from(slice));
+                    } else {
+                        // obsolete lines value was extracted
+                        obs_lines = Some(obs_lines_extracted.iter().collect());
+                        if filtered_slice.get(1).is_some() {
+                            // there were some short options in front of or after obsolete lines value
+                            // i.e. '-xd100' or '-100de' or similar, which after extraction of obsolete lines value
+                            // would look like '-xd' or '-de' or similar
+                            let filtered_slice: String = filtered_slice.iter().collect();
+                            filter = Some(OsString::from(filtered_slice));
+                        } else {
+                            filter = None;
+                        }
+                    }
+                } else {
+                    // either not a short option
+                    // or a short option that cannot have obsolete lines value in it
+                    filter = Some(OsString::from(slice));
+                }
+                // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
+                // following slice should be treaded as value for this option
+                // even if it starts with '-' (which would be treated as hyphen prefixed value)
+                if slice.starts_with("--") {
+                    preceding_long_opt_req_value = &slice[2..] == OPT_BYTES
+                        || &slice[2..] == OPT_LINE_BYTES
+                        || &slice[2..] == OPT_LINES
+                        || &slice[2..] == OPT_ADDITIONAL_SUFFIX
+                        || &slice[2..] == OPT_FILTER
+                        || &slice[2..] == OPT_NUMBER
+                        || &slice[2..] == OPT_SUFFIX_LENGTH;
+                }
+                // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
+                // following slice should be treaded as value for this option
+                // even if it starts with '-' (which would be treated as hyphen prefixed value)
+                preceding_short_opt_req_value = slice == "-b"
+                    || slice == "-C"
+                    || slice == "-l"
+                    || slice == "-n"
+                    || slice == "-a";
+                // slice is a value
+                // reset preceding option flags
+                if !slice.starts_with('-') {
+                    preceding_short_opt_req_value = false;
+                    preceding_long_opt_req_value = false;
+                }
+            } else {
+                // Cannot cleanly convert os_slice to UTF-8
+                // Do not process and return as-is
+                // This will cause failure later on, but we should not handle it here
+                // and let clap panic on invalid UTF-8 argument
+                filter = Some(os_slice);
+            }
+            // return filter
+            filter
+        })
+        .collect();
+    (filtered_args, obs_lines)
 }
 
 pub fn uu_app() -> Command {
@@ -72,6 +186,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_BYTES)
                 .short('b')
                 .long(OPT_BYTES)
+                .allow_hyphen_values(true)
                 .value_name("SIZE")
                 .help("put SIZE bytes per output file"),
         )
@@ -79,14 +194,15 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_LINE_BYTES)
                 .short('C')
                 .long(OPT_LINE_BYTES)
+                .allow_hyphen_values(true)
                 .value_name("SIZE")
-                .default_value("2")
                 .help("put at most SIZE bytes of lines per output file"),
         )
         .arg(
             Arg::new(OPT_LINES)
                 .short('l')
                 .long(OPT_LINES)
+                .allow_hyphen_values(true)
                 .value_name("NUMBER")
                 .default_value("1000")
                 .help("put NUMBER lines/records per output file"),
@@ -95,6 +211,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_NUMBER)
                 .short('n')
                 .long(OPT_NUMBER)
+                .allow_hyphen_values(true)
                 .value_name("CHUNKS")
                 .help("generate CHUNKS output files; see explanation below"),
         )
@@ -102,6 +219,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_ADDITIONAL_SUFFIX)
                 .long(OPT_ADDITIONAL_SUFFIX)
+                .allow_hyphen_values(true)
                 .value_name("SUFFIX")
                 .default_value("")
                 .help("additional SUFFIX to append to output file names"),
@@ -109,6 +227,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_FILTER)
                 .long(OPT_FILTER)
+                .allow_hyphen_values(true)
                 .value_name("COMMAND")
                 .value_hint(clap::ValueHint::CommandName)
                 .help(
@@ -178,9 +297,10 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_SUFFIX_LENGTH)
                 .short('a')
                 .long(OPT_SUFFIX_LENGTH)
+                .allow_hyphen_values(true)
                 .value_name("N")
                 .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
-                .help("use suffixes of fixed length N. 0 implies dynamic length."),
+                .help("use suffixes of fixed length N. 0 implies dynamic length, starting with 2"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
@@ -395,7 +515,7 @@ impl fmt::Display for StrategyError {
 
 impl Strategy {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches) -> Result<Self, StrategyError> {
+    fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, StrategyError> {
         fn get_and_parse(
             matches: &ArgMatches,
             option: &str,
@@ -413,28 +533,34 @@ impl Strategy {
         // Check that the user is not specifying more than one strategy.
         //
         // Note: right now, this exact behavior cannot be handled by
-        // `ArgGroup` since `ArgGroup` considers a default value `Arg`
-        // as "defined".
+        // overrides_with_all() due to obsolete lines value option
         match (
+            obs_lines,
             matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_BYTES) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_LINE_BYTES) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
         ) {
-            (false, false, false, false) => Ok(Self::Lines(1000)),
-            (true, false, false, false) => {
+            (Some(v), false, false, false, false) => {
+                let v = parse_size(v).map_err(|_| {
+                    StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
+                })?;
+                Ok(Self::Lines(v))
+            }
+            (None, false, false, false, false) => Ok(Self::Lines(1000)),
+            (None, true, false, false, false) => {
                 get_and_parse(matches, OPT_LINES, Self::Lines, StrategyError::Lines)
             }
-            (false, true, false, false) => {
+            (None, false, true, false, false) => {
                 get_and_parse(matches, OPT_BYTES, Self::Bytes, StrategyError::Bytes)
             }
-            (false, false, true, false) => get_and_parse(
+            (None, false, false, true, false) => get_and_parse(
                 matches,
                 OPT_LINE_BYTES,
                 Self::LineBytes,
                 StrategyError::Bytes,
             ),
-            (false, false, false, true) => {
+            (None, false, false, false, true) => {
                 let s = matches.get_one::<String>(OPT_NUMBER).unwrap();
                 let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
                 Ok(Self::Number(number_type))
@@ -553,7 +679,7 @@ impl fmt::Display for SettingsError {
 
 impl Settings {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches) -> Result<Self, SettingsError> {
+    fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, SettingsError> {
         let additional_suffix = matches
             .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
             .unwrap()
@@ -561,7 +687,8 @@ impl Settings {
         if additional_suffix.contains('/') {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
-        let strategy = Strategy::from(matches).map_err(SettingsError::Strategy)?;
+
+        let strategy = Strategy::from(matches, obs_lines).map_err(SettingsError::Strategy)?;
         let (suffix_type, suffix_start) = suffix_type_from(matches)?;
         let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap();
         let suffix_length: usize = suffix_length_str
