@@ -19,7 +19,6 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["ranges"] }
 memchr = { workspace = true }
 bstr = { workspace = true }
-is-terminal = { workspace = true }
 
 [[bin]]
 name = "cut"

@@ -286,7 +286,6 @@ gcd = "2.3"
 glob = "0.3.1"
 half = "2.2"
 indicatif = "0.17"
-is-terminal = "0.4.9"
 itertools = "0.11.0"
 libc = "0.2.147"
 lscolors = { version = "0.15.0", default-features = false, features = [
@@ -491,7 +490,6 @@ time = { workspace = true, features = ["local-offset"] }
 unindent = "0.2"
 uucore = { workspace = true, features = ["entries", "process", "signals"] }
 walkdir = { workspace = true }
-is-terminal = { workspace = true }
 hex-literal = "0.4.1"
 rstest = { workspace = true }
 

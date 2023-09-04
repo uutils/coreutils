@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use crate::common::util::TestScenario;
-use is_terminal::IsTerminal;
+use std::io::IsTerminal;
 
 #[test]
 fn test_more_no_arg() {

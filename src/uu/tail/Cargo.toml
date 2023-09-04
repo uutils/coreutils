@@ -22,7 +22,6 @@ memchr = { workspace = true }
 notify = { workspace = true }
 uucore = { workspace = true }
 same-file = { workspace = true }
-is-terminal = { workspace = true }
 fundu = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]

@@ -389,7 +389,6 @@ dependencies = [
  "filetime",
  "glob",
  "hex-literal",
- "is-terminal",
  "libc",
  "nix",
  "once_cell",
@@ -2311,7 +2310,6 @@ name = "uu_cat"
 version = "0.0.21"
 dependencies = [
  "clap",
- "is-terminal",
  "nix",
  "thiserror",
  "uucore",
@@ -2411,7 +2409,6 @@ version = "0.0.21"
 dependencies = [
  "bstr",
  "clap",
- "is-terminal",
  "memchr",
  "uucore",
 ]
@@ -2679,7 +2676,6 @@ dependencies = [
  "chrono",
  "clap",
  "glob",
- "is-terminal",
  "lscolors",
  "number_prefix",
  "once_cell",
@@ -2732,7 +2728,6 @@ version = "0.0.21"
 dependencies = [
  "clap",
  "crossterm",
- "is-terminal",
  "nix",
  "unicode-segmentation",
  "unicode-width",
@@ -2773,7 +2768,6 @@ name = "uu_nohup"
 version = "0.0.21"
 dependencies = [
  "clap",
- "is-terminal",
  "libc",
  "uucore",
 ]
@@ -3072,7 +3066,6 @@ version = "0.0.21"
 dependencies = [
  "clap",
  "fundu",
- "is-terminal",
  "libc",
  "memchr",
  "notify",
@@ -3162,7 +3155,6 @@ name = "uu_tty"
 version = "0.0.21"
 dependencies = [
  "clap",
- "is-terminal",
  "nix",
  "uucore",
 ]
