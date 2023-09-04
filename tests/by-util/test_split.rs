@@ -871,7 +871,7 @@ fn test_short_combination() {
     assert_eq!(at.read("x00"), "a");
     assert_eq!(at.read("x01"), "b");
     assert_eq!(at.read("x02"), "c");
-    assert_eq!(at.file_exists("x03"), false);
+    assert!(!at.file_exists("x03"));
 }
 
 /// Test for the last effective suffix, ignoring all others - numeric long last
