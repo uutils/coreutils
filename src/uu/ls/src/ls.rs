@@ -10,12 +10,11 @@ use clap::{
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
-use is_terminal::IsTerminal;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
-use std::collections::HashSet;
 use std::num::IntErrorKind;
+use std::{collections::HashSet, io::IsTerminal};
 
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;

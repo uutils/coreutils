@@ -18,7 +18,6 @@ path = "src/more.rs"
 clap = { workspace = true }
 uucore = { workspace = true }
 crossterm = { workspace = true }
-is-terminal = { workspace = true }
 unicode-width = { workspace = true }
 unicode-segmentation = { workspace = true }
 
