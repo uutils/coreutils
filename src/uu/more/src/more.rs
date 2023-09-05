@@ -7,7 +7,7 @@
 
 use std::{
     fs::File,
-    io::{stdin, stdout, BufReader, Read, Stdout, Write},
+    io::{stdin, stdout, BufReader, IsTerminal, Read, Stdout, Write},
     path::Path,
     time::Duration,
 };
@@ -22,7 +22,6 @@ use crossterm::{
     terminal::{self, Clear, ClearType},
 };
 
-use is_terminal::IsTerminal;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;

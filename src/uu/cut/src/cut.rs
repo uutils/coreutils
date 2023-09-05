@@ -7,9 +7,8 @@
 
 use bstr::io::BufReadExt;
 use clap::{crate_version, Arg, ArgAction, Command};
-use is_terminal::IsTerminal;
 use std::fs::File;
-use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
+use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};

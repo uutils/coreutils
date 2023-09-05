@@ -17,7 +17,6 @@ path = "src/tty.rs"
 [dependencies]
 clap = { workspace = true }
 nix = { workspace = true, features = ["term"] }
-is-terminal = { workspace = true }
 uucore = { workspace = true, features = ["fs"] }
 
 [[bin]]

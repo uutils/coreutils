@@ -7,9 +7,8 @@
 
 // last synced with: cat (GNU coreutils) 8.13
 use clap::{crate_version, Arg, ArgAction, Command};
-use is_terminal::IsTerminal;
 use std::fs::{metadata, File};
-use std::io::{self, Read, Write};
+use std::io::{self, IsTerminal, Read, Write};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UResult;

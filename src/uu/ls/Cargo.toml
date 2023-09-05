@@ -25,7 +25,6 @@ glob = { workspace = true }
 lscolors = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs"] }
 once_cell = { workspace = true }
-is-terminal = { workspace = true }
 selinux = { workspace = true, optional = true }
 
 [[bin]]
