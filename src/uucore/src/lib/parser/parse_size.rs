@@ -236,7 +236,7 @@ pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
 }
 
 /// Same as `parse_size()`, except returns `u64::MAX` on overflow
-/// GNU lib/coreutils include similar functionality 
+/// GNU lib/coreutils include similar functionality
 /// and GNU test suite checks this behavior for some utils
 pub fn parse_size_max(size: &str) -> Result<u64, ParseSizeError> {
     let result = Parser::default().parse(size);

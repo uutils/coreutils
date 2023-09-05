@@ -19,9 +19,10 @@ use std::fs::{metadata, File};
 use std::io;
 use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::path::Path;
+use std::u64;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
-use uucore::parse_size::{parse_size_max, ParseSizeError};
+use uucore::parse_size::{parse_size, parse_size_max, ParseSizeError};
 use uucore::uio_error;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
@@ -337,6 +338,10 @@ enum NumberType {
     /// Split into a specific number of chunks by byte.
     Bytes(u64),
 
+    /// Split into a specific number of chunks by byte
+    /// but output only the *k*th chunk.
+    KthBytes(u64, u64),
+
     /// Split into a specific number of chunks by line (approximately).
     Lines(u64),
 
@@ -349,7 +354,7 @@ enum NumberType {
 
     /// Assign lines via round-robin to the specified number of output
     /// chunks, but output only the *k*th chunk.
-    KthRoundRobin(u64, u64),
+    KthRoundRobin(u64, u64), // not yet implemented?
 }
 
 impl NumberType {
@@ -357,6 +362,7 @@ impl NumberType {
     fn num_chunks(&self) -> u64 {
         match self {
             Self::Bytes(n) => *n,
+            Self::KthBytes(_, n) => *n,
             Self::Lines(n) => *n,
             Self::KthLines(_, n) => *n,
             Self::RoundRobin(n) => *n,
@@ -375,6 +381,7 @@ enum NumberTypeError {
     ///
     /// ```ignore
     /// -n N
+    /// -n K/N
     /// -n l/N
     /// -n l/K/N
     /// -n r/N
@@ -385,9 +392,12 @@ enum NumberTypeError {
     /// The chunk number was invalid.
     ///
     /// This can happen if the value of `K` in any of the following
-    /// command-line options is not a positive integer:
+    /// command-line options is not a positive integer
+    /// or if `K` is 0
+    /// or if `K` is greater than `N`:
     ///
     /// ```ignore
+    /// -n K/N
     /// -n l/K/N
     /// -n r/K/N
     /// ```
@@ -401,6 +411,7 @@ impl NumberType {
     ///
     /// ```ignore
     /// "N"
+    /// "K/N"
     /// "l/N"
     /// "l/K/N"
     /// "r/N"
@@ -412,14 +423,17 @@ impl NumberType {
     ///
     /// # Errors
     ///
-    /// If the string is not one of the valid number types, if `K` is
-    /// not a nonnegative integer, or if `N` is not a positive
-    /// integer, then this function returns [`NumberTypeError`].
+    /// If the string is not one of the valid number types,
+    /// if `K` is not a nonnegative integer,
+    /// or if `K` is 0,
+    /// or if `N` is not a positive integer,
+    /// or if `K` is greater than `N`
+    /// then this function returns [`NumberTypeError`].
     fn from(s: &str) -> Result<Self, NumberTypeError> {
         let parts: Vec<&str> = s.split('/').collect();
         match &parts[..] {
             [n_str] => {
-                let num_chunks = parse_size_max(n_str)
+                let num_chunks = parse_size(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 if num_chunks > 0 {
                     Ok(Self::Bytes(num_chunks))
@@ -427,28 +441,44 @@ impl NumberType {
                     Err(NumberTypeError::NumberOfChunks(s.to_string()))
                 }
             }
+            [k_str, n_str] if !k_str.starts_with('l') && !k_str.starts_with('r') => {
+                let num_chunks = parse_size(n_str)
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                let chunk_number = parse_size(k_str)
+                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
+                if chunk_number > num_chunks || chunk_number == 0 {
+                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
+                }
+                Ok(Self::KthBytes(chunk_number, num_chunks))
+            }
             ["l", n_str] => {
-                let num_chunks = parse_size_max(n_str)
+                let num_chunks = parse_size(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::Lines(num_chunks))
             }
             ["l", k_str, n_str] => {
-                let num_chunks = parse_size_max(n_str)
+                let num_chunks = parse_size(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size_max(k_str)
+                let chunk_number = parse_size(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
+                if chunk_number > num_chunks || chunk_number == 0 {
+                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
+                }
                 Ok(Self::KthLines(chunk_number, num_chunks))
             }
             ["r", n_str] => {
-                let num_chunks = parse_size_max(n_str)
+                let num_chunks = parse_size(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::RoundRobin(num_chunks))
             }
             ["r", k_str, n_str] => {
-                let num_chunks = parse_size_max(n_str)
+                let num_chunks = parse_size(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size_max(k_str)
+                let chunk_number = parse_size(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
+                if chunk_number > num_chunks || chunk_number == 0 {
+                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
+                }
                 Ok(Self::KthRoundRobin(chunk_number, num_chunks))
             }
             _ => Err(NumberTypeError::NumberOfChunks(s.to_string())),
@@ -538,7 +568,13 @@ impl Strategy {
                 let v = parse_size_max(v).map_err(|_| {
                     StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
                 })?;
-                Ok(Self::Lines(v))
+                if v > 0 {
+                    Ok(Self::Lines(v))
+                } else {
+                    Err(StrategyError::Lines(ParseSizeError::ParseFailure(
+                        v.to_string(),
+                    )))
+                }
             }
             (None, false, false, false, false) => Ok(Self::Lines(1000)),
             (None, true, false, false, false) => {
@@ -1263,6 +1299,93 @@ where
     }
 }
 
+/// Print the k-th chunk of a file to stdout, splitting by byte.
+///
+/// This function is like [`split_into_n_chunks_by_byte`], but instead
+/// of writing each chunk to its own file, it only writes to stdout
+/// the contents of the chunk identified by `chunk_number`
+///
+/// # Errors
+///
+/// This function returns an error if there is a problem reading from
+/// `reader` or writing to stdout.
+fn kth_chunks_by_byte<R>(
+    settings: &Settings,
+    reader: &mut R,
+    chunk_number: u64,
+    num_chunks: u64,
+) -> UResult<()>
+where
+    R: BufRead,
+{
+    // Get the size of the input file in bytes and compute the number
+    // of bytes per chunk.
+    //
+    // If the requested number of chunks exceeds the number of bytes
+    // in the file - just write empty byte string to stdout
+    // NOTE: the `elide_empty_files` parameter is ignored here
+    // as we do not generate any files
+    // and instead writing to stdout
+    let metadata = metadata(&settings.input).map_err(|_| {
+        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
+    })?;
+
+    let num_bytes = metadata.len();
+    // If input file is empty and we would have written zero chunks of output,
+    // then terminate immediately.
+    // This happens on `split -e -n 3 /dev/null`, for example.
+    if num_bytes == 0 {
+        return Ok(());
+    }
+
+    // Write to stdout instead of to a file.
+    let stdout = std::io::stdout();
+    let mut writer = stdout.lock();
+
+    let chunk_size = (num_bytes / (num_chunks)).max(1);
+    let mut num_bytes: usize = num_bytes.try_into().unwrap();
+
+    let mut i = 1;
+    loop {
+        let buf: &mut Vec<u8> = &mut vec![];
+        if num_bytes > 0 {
+            // Read `chunk_size` bytes from the reader into `buf`
+            // except the last.
+            //
+            // The last chunk gets all remaining bytes so that if the number
+            // of bytes in the input file was not evenly divisible by
+            // `num_chunks`, we don't leave any bytes behind.
+            let limit = {
+                if i == num_chunks {
+                    num_bytes.try_into().unwrap()
+                } else {
+                    chunk_size
+                }
+            };
+            let n_bytes_read = reader.by_ref().take(limit).read_to_end(buf);
+            match n_bytes_read {
+                Ok(n_bytes) => {
+                    num_bytes -= n_bytes;
+                }
+                Err(error) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("{}: cannot read from input : {}", settings.input, error),
+                    ));
+                }
+            }
+            if i == chunk_number {
+                writer.write_all(buf)?;
+                break;
+            }
+            i += 1;
+        } else {
+            break;
+        }
+    }
+    Ok(())
+}
+
 /// Split a file into a specific number of chunks by line.
 ///
 /// This function always creates one output file for each chunk, even
@@ -1438,6 +1561,50 @@ where
     Ok(())
 }
 
+/// Print the k-th chunk of a file, splitting by line, but
+/// assign lines via round-robin to the specified number of output
+/// chunks, but output only the *k*th chunk.
+///
+/// This function is like [`kth_chunk_by_line`], as it only writes to stdout and
+/// prints out only *k*th chunk
+/// It is also like [`split_into_n_chunks_by_line_round_robin`], as it is assigning chunks
+/// using round robin distribution
+///
+/// # Errors
+///
+/// This function returns an error if there is a problem reading from
+/// `reader` or writing to one of the output files.
+///
+/// # See also
+///
+/// * [`split_into_n_chunks_by_line_round_robin`], which splits its input in the
+///   same way, but writes each chunk to its own file.
+fn kth_chunk_by_line_round_robin<R>(
+    _settings: &Settings,
+    reader: &mut R,
+    chunk_number: u64,
+    num_chunks: u64,
+) -> UResult<()>
+where
+    R: BufRead,
+{
+    // Write to stdout instead of to a file.
+    let stdout = std::io::stdout();
+    let mut writer = stdout.lock();
+
+    let num_chunks: usize = num_chunks.try_into().unwrap();
+    let chunk_number: usize = chunk_number.try_into().unwrap();
+    for (i, line_result) in reader.lines().enumerate() {
+        let line = line_result?;
+        let bytes = line.as_bytes();
+        if (i % num_chunks) == chunk_number {
+            writer.write_all(bytes)?;
+            writer.write_all(b"\n")?;
+        }
+    }
+    Ok(())
+}
+
 fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
@@ -1455,6 +1622,9 @@ fn split(settings: &Settings) -> UResult<()> {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
             split_into_n_chunks_by_byte(settings, &mut reader, num_chunks)
         }
+        Strategy::Number(NumberType::KthBytes(chunk_number, num_chunks)) => {
+            kth_chunks_by_byte(settings, &mut reader, chunk_number, num_chunks)
+        }
         Strategy::Number(NumberType::Lines(num_chunks)) => {
             split_into_n_chunks_by_line(settings, &mut reader, num_chunks)
         }
@@ -1467,7 +1637,12 @@ fn split(settings: &Settings) -> UResult<()> {
         Strategy::Number(NumberType::RoundRobin(num_chunks)) => {
             split_into_n_chunks_by_line_round_robin(settings, &mut reader, num_chunks)
         }
-        Strategy::Number(_) => Err(USimpleError::new(1, "-n mode not yet fully implemented")),
+        Strategy::Number(NumberType::KthRoundRobin(chunk_number, num_chunks)) => {
+            // The chunk number is given as a 1-indexed number, but it
+            // is a little easier to deal with a 0-indexed number.
+            let chunk_number = chunk_number - 1;
+            kth_chunk_by_line_round_robin(settings, &mut reader, chunk_number, num_chunks)
+        }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
             match std::io::copy(&mut reader, &mut writer) {
@@ -1570,6 +1745,18 @@ mod tests {
             NumberType::from("l/abc/456").unwrap_err(),
             NumberTypeError::ChunkNumber("abc".to_string())
         );
+        assert_eq!(
+            NumberType::from("l/456/123").unwrap_err(),
+            NumberTypeError::ChunkNumber("456".to_string())
+        );
+        assert_eq!(
+            NumberType::from("r/456/123").unwrap_err(),
+            NumberTypeError::ChunkNumber("456".to_string())
+        );
+        assert_eq!(
+            NumberType::from("456/123").unwrap_err(),
+            NumberTypeError::ChunkNumber("456".to_string())
+        );
         // In GNU split, the number of chunks get precedence:
         //
         //     $ split -n l/abc/xyz
@@ -1605,6 +1792,7 @@ mod tests {
     #[test]
     fn test_number_type_num_chunks() {
         assert_eq!(NumberType::from("123").unwrap().num_chunks(), 123);
+        assert_eq!(NumberType::from("123/456").unwrap().num_chunks(), 456);
         assert_eq!(NumberType::from("l/123").unwrap().num_chunks(), 123);
         assert_eq!(NumberType::from("l/123/456").unwrap().num_chunks(), 456);
         assert_eq!(NumberType::from("r/123").unwrap().num_chunks(), 123);
