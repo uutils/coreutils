@@ -608,14 +608,6 @@ fn test_split_invalid_bytes_size() {
         .fails()
         .code_is(1)
         .stderr_only("split: invalid number of bytes: '1024R'\n");
-    #[cfg(not(target_pointer_width = "128"))]
-    new_ucmd!()
-        .args(&["-b", "1Y"])
-        .fails()
-        .code_is(1)
-        .stderr_only(
-            "split: invalid number of bytes: '1Y': Value too large for defined data type\n",
-        );
     #[cfg(target_pointer_width = "32")]
     {
         let sizes = ["1000G", "10T"];
@@ -623,6 +615,18 @@ fn test_split_invalid_bytes_size() {
             new_ucmd!().args(&["-b", size]).succeeds();
         }
     }
+}
+
+#[test]
+fn test_split_overflow_bytes_size() {
+    #[cfg(not(target_pointer_width = "128"))]
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "test_split_overflow_bytes_size";
+    RandomFile::new(&at, name).add_bytes(1000);
+    ucmd.args(&["-b", "1Y", name]).succeeds();
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 1);
+    assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
 #[test]
