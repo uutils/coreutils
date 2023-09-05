@@ -1073,6 +1073,9 @@ fn parse_path_args(
     if paths.is_empty() {
         // No files specified
         return Err("missing file operand".into());
+    } else if paths.len() == 1 && options.target_dir.is_none() {
+        // Only one file specified
+        return Err(format!("missing destination file operand after {:?}", paths[0]).into());
     }
 
     // Return an error if the user requested to copy more than one
