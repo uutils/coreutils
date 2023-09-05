@@ -388,7 +388,7 @@ dependencies = [
  "glob",
  "hex-literal",
  "libc",
- "nix",
+ "nix 0.27.1",
  "once_cell",
  "phf",
  "phf_codegen",
@@ -682,7 +682,7 @@ version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a011bbe2c35ce9c1f143b7af6f94f29a167beb4cd1d29e6740ce836f723120e"
 dependencies = [
- "nix",
+ "nix 0.26.2",
  "windows-sys 0.48.0",
 ]
 
@@ -1137,17 +1137,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "is-terminal"
-version = "0.4.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb0889898416213fab133e1d33a0e5858a48177452750691bde3666d0fdbaf8b"
-dependencies = [
- "hermit-abi",
- "rustix 0.38.8",
- "windows-sys 0.48.0",
-]
-
-[[package]]
 name = "itertools"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1356,6 +1345,17 @@ dependencies = [
  "cfg-if",
  "libc",
  "static_assertions",
+]
+
+[[package]]
+name = "nix"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
+dependencies = [
+ "bitflags 2.3.3",
+ "cfg-if",
+ "libc",
 ]
 
 [[package]]
@@ -2309,7 +2309,7 @@ name = "uu_cat"
 version = "0.0.21"
 dependencies = [
  "clap",
- "nix",
+ "nix 0.27.1",
  "thiserror",
  "uucore",
 ]
@@ -2431,7 +2431,7 @@ dependencies = [
  "clap",
  "gcd",
  "libc",
- "nix",
+ "nix 0.27.1",
  "signal-hook",
  "uucore",
 ]
@@ -2495,7 +2495,7 @@ name = "uu_env"
 version = "0.0.21"
 dependencies = [
  "clap",
- "nix",
+ "nix 0.27.1",
  "rust-ini",
  "uucore",
 ]
@@ -2639,7 +2639,7 @@ name = "uu_kill"
 version = "0.0.21"
 dependencies = [
  "clap",
- "nix",
+ "nix 0.27.1",
  "uucore",
 ]
 
@@ -2727,7 +2727,7 @@ version = "0.0.21"
 dependencies = [
  "clap",
  "crossterm",
- "nix",
+ "nix 0.27.1",
  "unicode-segmentation",
  "unicode-width",
  "uucore",
@@ -2749,7 +2749,7 @@ version = "0.0.21"
 dependencies = [
  "clap",
  "libc",
- "nix",
+ "nix 0.27.1",
  "uucore",
 ]
 
@@ -3025,7 +3025,7 @@ name = "uu_stty"
 version = "0.0.21"
 dependencies = [
  "clap",
- "nix",
+ "nix 0.27.1",
  "uucore",
 ]
 
@@ -3043,7 +3043,7 @@ version = "0.0.21"
 dependencies = [
  "clap",
  "libc",
- "nix",
+ "nix 0.27.1",
  "uucore",
  "windows-sys 0.48.0",
 ]
@@ -3100,7 +3100,7 @@ version = "0.0.21"
 dependencies = [
  "clap",
  "libc",
- "nix",
+ "nix 0.27.1",
  "uucore",
 ]
 
@@ -3154,7 +3154,7 @@ name = "uu_tty"
 version = "0.0.21"
 dependencies = [
  "clap",
- "nix",
+ "nix 0.27.1",
  "uucore",
 ]
 
@@ -3225,7 +3225,7 @@ dependencies = [
  "bytecount",
  "clap",
  "libc",
- "nix",
+ "nix 0.27.1",
  "thiserror",
  "unicode-width",
  "uucore",
@@ -3255,7 +3255,7 @@ version = "0.0.21"
 dependencies = [
  "clap",
  "itertools",
- "nix",
+ "nix 0.27.1",
  "uucore",
 ]
 
@@ -3277,7 +3277,7 @@ dependencies = [
  "libc",
  "md-5",
  "memchr",
- "nix",
+ "nix 0.27.1",
  "once_cell",
  "os_display",
  "sha1",
