@@ -19,7 +19,6 @@ path_GNU="$(readlink -fm -- "${path_GNU:-${path_UUTILS}/../gnu}")"
 ###
 
 # On MacOS there is no system /usr/bin/timeout
-
 # and trying to add it to /usr/bin (with symlink of copy binary) will fail unless system integrity protection is disabled (not ideal)
 # ref: https://support.apple.com/en-us/102149
 # On MacOS the Homebrew coreutils could be installed and then "sudo ln -s /opt/homebrew/bin/timeout /usr/local/bin/timeout"
