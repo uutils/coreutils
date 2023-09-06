@@ -377,13 +377,6 @@ fn test_split_obs_lines_standalone() {
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
-    ucmd.args(&["-99999999999999999991", name])
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
-    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
-    assert_eq!(glob.count(), 2);
-    assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
 /// Test for obsolete lines option standalone overflow
