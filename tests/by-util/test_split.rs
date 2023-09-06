@@ -377,6 +377,22 @@ fn test_split_obs_lines_standalone() {
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
+    ucmd.args(&["-99999999999999999991", name]).succeeds().no_stderr().no_stdout();
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 2);
+    assert_eq!(glob.collate(), at.read_bytes(name));
+}
+
+/// Test for obsolete lines option standalone overflow
+#[test]
+fn test_split_obs_lines_standalone_overflow() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "obs-lines-standalone";
+    RandomFile::new(&at, name).add_lines(4);
+    ucmd.args(&["-99999999999999999991", name]).succeeds().no_stderr().no_stdout();
+    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    assert_eq!(glob.count(), 1);
+    assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
 /// Test for obsolete lines option as part of invalid combined short options
@@ -756,7 +772,7 @@ creating file 'xaf'
 }
 
 #[test]
-fn test_number() {
+fn test_number_n() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_read = |f| {
         let mut s = String::new();
@@ -769,6 +785,80 @@ fn test_number() {
     assert_eq!(file_read("xac"), "klmno");
     assert_eq!(file_read("xad"), "pqrst");
     assert_eq!(file_read("xae"), "uvwxyz\n");
+}
+
+#[test]
+fn test_number_kth_of_n() {
+    new_ucmd!()
+        .args(&["--number=3/5", "asciilowercase.txt"])
+        .succeeds()
+        .stdout_only("klmno");
+    new_ucmd!()
+        .args(&["-e", "--number=99/100", "asciilowercase.txt"])
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&[
+            "--number=r/9223372036854775807/18446744073709551615",
+            "asciilowercase.txt",
+        ])
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&["--number=0/5", "asciilowercase.txt"])
+        .fails()
+        .stderr_contains("split: invalid chunk number: 0");
+    new_ucmd!()
+        .args(&["--number=10/5", "asciilowercase.txt"])
+        .fails()
+        .stderr_contains("split: invalid chunk number: 10");
+    new_ucmd!()
+        .args(&[
+            "--number=9223372036854775807/18446744073709551616",
+            "asciilowercase.txt",
+        ])
+        .fails()
+        .stderr_contains("split: invalid number of chunks: 18446744073709551616");
+}
+
+#[test]
+fn test_number_kth_of_n_round_robin() {
+    new_ucmd!()
+        .args(&["--number", "r/2/3", "fivelines.txt"])
+        .succeeds()
+        .stdout_only("2\n5\n");
+    new_ucmd!()
+        .args(&["--number", "r/1/4", "fivelines.txt"])
+        .succeeds()
+        .stdout_only("1\n5\n");
+    new_ucmd!()
+        .args(&["-e", "--number", "r/7/7", "fivelines.txt"])
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&[
+            "--number",
+            "r/9223372036854775807/18446744073709551615",
+            "fivelines.txt",
+        ])
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&[
+            "--number",
+            "r/9223372036854775807/18446744073709551616",
+            "fivelines.txt",
+        ])
+        .fails()
+        .stderr_contains("split: invalid number of chunks: 18446744073709551616");
+    new_ucmd!()
+        .args(&["--number", "r/0/3", "fivelines.txt"])
+        .fails()
+        .stderr_contains("split: invalid chunk number: 0");
+    new_ucmd!()
+        .args(&["--number", "r/10/3", "fivelines.txt"])
+        .fails()
+        .stderr_contains("split: invalid chunk number: 10");
 }
 
 #[test]
@@ -925,6 +1015,13 @@ fn test_line_bytes() {
     assert_eq!(at.read("xab"), "a\nbbbb\n");
     assert_eq!(at.read("xac"), "cccc\ndd\n");
     assert_eq!(at.read("xad"), "ee\n");
+}
+
+#[test]
+fn test_line_bytes_overflow() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-C", "18446744073709551616", "letters.txt"]).succeeds();
+    assert_eq!(at.read("xaa"), "aaaaaaaaa\nbbbb\ncccc\ndd\nee\n");
 }
 
 #[test]
