@@ -354,7 +354,7 @@ enum NumberType {
 
     /// Assign lines via round-robin to the specified number of output
     /// chunks, but output only the *k*th chunk.
-    KthRoundRobin(u64, u64), // not yet implemented?
+    KthRoundRobin(u64, u64),
 }
 
 impl NumberType {
