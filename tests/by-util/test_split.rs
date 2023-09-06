@@ -342,6 +342,18 @@ fn test_split_lines_number() {
         .no_stdout();
     scene
         .ucmd()
+        .args(&["--lines", "0", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: invalid number of lines: 0\n");
+    scene
+        .ucmd()
+        .args(&["-0", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: invalid number of lines: 0\n");
+    scene
+        .ucmd()
         .args(&["--lines", "2fb", "file"])
         .fails()
         .code_is(1)
@@ -669,6 +681,15 @@ fn test_split_stdin_num_chunks() {
         .stderr_only("split: -: cannot determine file size\n");
 }
 
+#[test]
+fn test_split_stdin_num_kth_chunk() {
+    new_ucmd!()
+        .args(&["--number=1/2"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: -: cannot determine file size\n");
+}
+
 fn file_read(at: &AtPath, filename: &str) -> String {
     let mut s = String::new();
     at.open(filename).read_to_string(&mut s).unwrap();
@@ -784,6 +805,10 @@ fn test_number_n() {
     assert_eq!(file_read("xac"), "klmno");
     assert_eq!(file_read("xad"), "pqrst");
     assert_eq!(file_read("xae"), "uvwxyz\n");
+    new_ucmd!()
+        .args(&["--number=100", "/dev/null"])
+        .succeeds()
+        .stdout_only("");
 }
 
 #[test]
@@ -793,7 +818,15 @@ fn test_number_kth_of_n() {
         .succeeds()
         .stdout_only("klmno");
     new_ucmd!()
+        .args(&["--number=5/5", "asciilowercase.txt"])
+        .succeeds()
+        .stdout_only("uvwxyz\n");
+    new_ucmd!()
         .args(&["-e", "--number=99/100", "asciilowercase.txt"])
+        .succeeds()
+        .stdout_only("");
+    new_ucmd!()
+        .args(&["--number=3/10", "/dev/null"])
         .succeeds()
         .stdout_only("");
     #[cfg(target_pointer_width = "64")]

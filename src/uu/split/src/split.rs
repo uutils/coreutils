@@ -1295,7 +1295,7 @@ where
     // If we would have written zero chunks of output, then terminate
     // immediately. This happens on `split -e -n 3 /dev/null`, for
     // example.
-    if num_chunks == 0 {
+    if num_chunks == 0 || num_bytes == 0 {
         return Ok(());
     }
 
