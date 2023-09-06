@@ -26,6 +26,8 @@ pub mod sum;
 mod tokenize;
 #[cfg(feature = "update-control")]
 pub mod update_control;
+#[cfg(feature = "version-cmp")]
+pub mod version_cmp;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)
