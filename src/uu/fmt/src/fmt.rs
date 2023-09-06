@@ -8,7 +8,6 @@
 // spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use std::cmp;
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
 use std::io::{BufReader, BufWriter, Read, Stdout};
@@ -95,9 +94,6 @@ impl Default for FmtOptions {
 #[allow(clippy::cognitive_complexity)]
 #[allow(clippy::field_reassign_with_default)]
 fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)> {
-    // by default, goal is 93% of width
-    const DEFAULT_GOAL_TO_WIDTH_RATIO: usize = 93;
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     let mut files: Vec<String> = matches
@@ -143,20 +139,39 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
                 ));
             }
         };
-        if fmt_opts.width > MAX_WIDTH {
-            return Err(USimpleError::new(
-                1,
-                format!(
-                    "invalid width: '{}': Numerical result out of range",
-                    fmt_opts.width,
-                ),
-            ));
-        }
-        fmt_opts.goal = cmp::min(
-            fmt_opts.width * DEFAULT_GOAL_TO_WIDTH_RATIO / 100,
-            fmt_opts.width - 3,
-        );
     };
+
+    match matches.get_one::<String>(OPT_GOAL) {
+        Some(s) => {
+            fmt_opts.goal = match s.parse::<usize>() {
+                Ok(t) => t,
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("Invalid GOAL specification: {}: {}", s.quote(), e),
+                    ));
+                }
+            };
+            if !matches.contains_id(OPT_WIDTH) {
+                // GNU fmt.c:407
+                fmt_opts.width = fmt_opts.goal + 10;
+            }
+        }
+        // GNU fmt.c:411 equals to 0.935 = 93.5%
+        None => fmt_opts.goal = fmt_opts.width * (2 * (100 - 7) + 1) / 200,
+    }
+    if fmt_opts.goal > fmt_opts.width {
+        return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
+    }
+    if fmt_opts.width > MAX_WIDTH {
+        return Err(USimpleError::new(
+            1,
+            format!(
+                "invalid width: '{}': Numerical result out of range",
+                fmt_opts.width,
+            ),
+        ));
+    }
 
     if let Some(s) = matches.get_one::<String>(OPT_GOAL) {
         fmt_opts.goal = match s.parse::<usize>() {
@@ -168,14 +183,18 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
                 ));
             }
         };
+
         if !matches.contains_id(OPT_WIDTH) {
-            fmt_opts.width = cmp::max(
-                fmt_opts.goal * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO,
-                fmt_opts.goal + 3,
-            );
+            fmt_opts.width = fmt_opts.goal + 10;
+            // fmt_opts.width = cmp::max(
+            //     fmt_opts.goal * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO,
+            //     fmt_opts.goal + 3,
+            // );
         } else if fmt_opts.goal > fmt_opts.width {
             return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
         }
+    } else {
+        fmt_opts.goal = fmt_opts.width * (2 * (100 - 7) + 1) / 200;
     };
 
     if let Some(s) = matches.get_one::<String>(OPT_TAB_WIDTH) {
