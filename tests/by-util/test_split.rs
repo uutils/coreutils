@@ -1021,8 +1021,8 @@ fn test_line_bytes() {
 }
 
 #[test]
+#[cfg(target_pointer_width = "64")]
 fn test_line_bytes_overflow() {
-    #[cfg(target_pointer_width = "64")]
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-C", "18446744073709551616", "letters.txt"])
         .succeeds();
