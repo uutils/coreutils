@@ -75,104 +75,152 @@ fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<String>) {
     let mut obs_lines = None;
     let mut preceding_long_opt_req_value = false;
     let mut preceding_short_opt_req_value = false;
+
     let filtered_args = args
         .filter_map(|os_slice| {
-            let filter: Option<OsString>;
-            if let Some(slice) = os_slice.to_str() {
-                // check if the slice is a true short option (and not hyphen prefixed value of an option)
-                // and if so, a short option that can contain obsolete lines value
-                if slice.starts_with('-')
-                    && !slice.starts_with("--")
-                    && !preceding_long_opt_req_value
-                    && !preceding_short_opt_req_value
-                    && !slice.starts_with("-a")
-                    && !slice.starts_with("-b")
-                    && !slice.starts_with("-C")
-                    && !slice.starts_with("-l")
-                    && !slice.starts_with("-n")
-                {
-                    // start of the short option string
-                    // that can have obsolete lines option value in it
-                    // extract numeric part and filter it out
-                    let mut obs_lines_extracted: Vec<char> = vec![];
-                    let mut obs_lines_end_reached = false;
-                    let filtered_slice: Vec<char> = slice
-                        .chars()
-                        .filter(|c| {
-                            // To correctly process scenario like '-x200a4'
-                            // we need to stop extracting digits once alphabetic character is encountered
-                            // after we already have something in obs_lines_extracted
-                            if c.is_ascii_digit() && !obs_lines_end_reached {
-                                obs_lines_extracted.push(*c);
-                                false
-                            } else {
-                                if !obs_lines_extracted.is_empty() {
-                                    obs_lines_end_reached = true;
-                                }
-                                true
-                            }
-                        })
-                        .collect();
-
-                    if obs_lines_extracted.is_empty() {
-                        // no obsolete lines value found/extracted
-                        filter = Some(OsString::from(slice));
-                    } else {
-                        // obsolete lines value was extracted
-                        obs_lines = Some(obs_lines_extracted.iter().collect());
-                        if filtered_slice.get(1).is_some() {
-                            // there were some short options in front of or after obsolete lines value
-                            // i.e. '-xd100' or '-100de' or similar, which after extraction of obsolete lines value
-                            // would look like '-xd' or '-de' or similar
-                            let filtered_slice: String = filtered_slice.iter().collect();
-                            filter = Some(OsString::from(filtered_slice));
-                        } else {
-                            filter = None;
-                        }
-                    }
-                } else {
-                    // either not a short option
-                    // or a short option that cannot have obsolete lines value in it
-                    filter = Some(OsString::from(slice));
-                }
-                // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
-                // following slice should be treaded as value for this option
-                // even if it starts with '-' (which would be treated as hyphen prefixed value)
-                if slice.starts_with("--") {
-                    preceding_long_opt_req_value = &slice[2..] == OPT_BYTES
-                        || &slice[2..] == OPT_LINE_BYTES
-                        || &slice[2..] == OPT_LINES
-                        || &slice[2..] == OPT_ADDITIONAL_SUFFIX
-                        || &slice[2..] == OPT_FILTER
-                        || &slice[2..] == OPT_NUMBER
-                        || &slice[2..] == OPT_SUFFIX_LENGTH;
-                }
-                // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
-                // following slice should be treaded as value for this option
-                // even if it starts with '-' (which would be treated as hyphen prefixed value)
-                preceding_short_opt_req_value = slice == "-b"
-                    || slice == "-C"
-                    || slice == "-l"
-                    || slice == "-n"
-                    || slice == "-a";
-                // slice is a value
-                // reset preceding option flags
-                if !slice.starts_with('-') {
-                    preceding_short_opt_req_value = false;
-                    preceding_long_opt_req_value = false;
-                }
-            } else {
-                // Cannot cleanly convert os_slice to UTF-8
-                // Do not process and return as-is
-                // This will cause failure later on, but we should not handle it here
-                // and let clap panic on invalid UTF-8 argument
-                filter = Some(os_slice);
-            }
-            // return filter
-            filter
+            filter_args(
+                os_slice,
+                &mut obs_lines,
+                &mut preceding_long_opt_req_value,
+                &mut preceding_short_opt_req_value,
+            )
         })
         .collect();
+
     (filtered_args, obs_lines)
+}
+
+/// Helper function to [`handle_obsolete`]
+/// Filters out obsolete lines option from args
+fn filter_args(
+    os_slice: OsString,
+    obs_lines: &mut Option<String>,
+    preceding_long_opt_req_value: &mut bool,
+    preceding_short_opt_req_value: &mut bool,
+) -> Option<OsString> {
+    let filter: Option<OsString>;
+    if let Some(slice) = os_slice.to_str() {
+        if should_extract_obs_lines(
+            slice,
+            preceding_long_opt_req_value,
+            preceding_short_opt_req_value,
+        ) {
+            // start of the short option string
+            // that can have obsolete lines option value in it
+            filter = handle_extract_obs_lines(slice, obs_lines);
+        } else {
+            // either not a short option
+            // or a short option that cannot have obsolete lines value in it
+            filter = Some(OsString::from(slice));
+        }
+        handle_preceding_options(
+            slice,
+            preceding_long_opt_req_value,
+            preceding_short_opt_req_value,
+        );
+    } else {
+        // Cannot cleanly convert os_slice to UTF-8
+        // Do not process and return as-is
+        // This will cause failure later on, but we should not handle it here
+        // and let clap panic on invalid UTF-8 argument
+        filter = Some(os_slice);
+    }
+    filter
+}
+
+/// Helper function to [`filter_args`]
+/// Checks if the slice is a true short option (and not hyphen prefixed value of an option)
+/// and if so, a short option that can contain obsolete lines value
+fn should_extract_obs_lines(
+    slice: &str,
+    preceding_long_opt_req_value: &bool,
+    preceding_short_opt_req_value: &bool,
+) -> bool {
+    slice.starts_with('-')
+        && !slice.starts_with("--")
+        && !preceding_long_opt_req_value
+        && !preceding_short_opt_req_value
+        && !slice.starts_with("-a")
+        && !slice.starts_with("-b")
+        && !slice.starts_with("-C")
+        && !slice.starts_with("-l")
+        && !slice.starts_with("-n")
+}
+
+/// Helper function to [`filter_args`]
+/// Extracts obsolete lines numeric part from argument slice
+/// and filters it out
+fn handle_extract_obs_lines(slice: &str, obs_lines: &mut Option<String>) -> Option<OsString> {
+    let mut obs_lines_extracted: Vec<char> = vec![];
+    let mut obs_lines_end_reached = false;
+    let filtered_slice: Vec<char> = slice
+        .chars()
+        .filter(|c| {
+            // To correctly process scenario like '-x200a4'
+            // we need to stop extracting digits once alphabetic character is encountered
+            // after we already have something in obs_lines_extracted
+            if c.is_ascii_digit() && !obs_lines_end_reached {
+                obs_lines_extracted.push(*c);
+                false
+            } else {
+                if !obs_lines_extracted.is_empty() {
+                    obs_lines_end_reached = true;
+                }
+                true
+            }
+        })
+        .collect();
+
+    if obs_lines_extracted.is_empty() {
+        // no obsolete lines value found/extracted
+        Some(OsString::from(slice))
+    } else {
+        // obsolete lines value was extracted
+        let extracted: String = obs_lines_extracted.iter().collect();
+        *obs_lines = Some(extracted);
+        if filtered_slice.get(1).is_some() {
+            // there were some short options in front of or after obsolete lines value
+            // i.e. '-xd100' or '-100de' or similar, which after extraction of obsolete lines value
+            // would look like '-xd' or '-de' or similar
+            let filtered_slice: String = filtered_slice.iter().collect();
+            Some(OsString::from(filtered_slice))
+        } else {
+            None
+        }
+    }
+}
+
+/// Helper function to [`handle_extract_obs_lines`]
+/// Captures if current slice is a preceding option
+/// that requires value
+fn handle_preceding_options(
+    slice: &str,
+    preceding_long_opt_req_value: &mut bool,
+    preceding_short_opt_req_value: &mut bool,
+) {
+    // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
+    // following slice should be treaded as value for this option
+    // even if it starts with '-' (which would be treated as hyphen prefixed value)
+    if slice.starts_with("--") {
+        *preceding_long_opt_req_value = &slice[2..] == OPT_BYTES
+            || &slice[2..] == OPT_LINE_BYTES
+            || &slice[2..] == OPT_LINES
+            || &slice[2..] == OPT_ADDITIONAL_SUFFIX
+            || &slice[2..] == OPT_FILTER
+            || &slice[2..] == OPT_NUMBER
+            || &slice[2..] == OPT_SUFFIX_LENGTH;
+    }
+    // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
+    // following slice should be treaded as value for this option
+    // even if it starts with '-' (which would be treated as hyphen prefixed value)
+    *preceding_short_opt_req_value =
+        slice == "-b" || slice == "-C" || slice == "-l" || slice == "-n" || slice == "-a";
+    // slice is a value
+    // reset preceding option flags
+    if !slice.starts_with('-') {
+        *preceding_short_opt_req_value = false;
+        *preceding_long_opt_req_value = false;
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -430,6 +478,9 @@ impl NumberType {
     /// or if `K` is greater than `N`
     /// then this function returns [`NumberTypeError`].
     fn from(s: &str) -> Result<Self, NumberTypeError> {
+        fn is_invalid_chunk(chunk_number: u64, num_chunks: u64) -> bool {
+            chunk_number > num_chunks || chunk_number == 0
+        }
         let parts: Vec<&str> = s.split('/').collect();
         match &parts[..] {
             [n_str] => {
@@ -446,7 +497,7 @@ impl NumberType {
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
-                if chunk_number > num_chunks || chunk_number == 0 {
+                if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
                 }
                 Ok(Self::KthBytes(chunk_number, num_chunks))
@@ -461,7 +512,7 @@ impl NumberType {
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
-                if chunk_number > num_chunks || chunk_number == 0 {
+                if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
                 }
                 Ok(Self::KthLines(chunk_number, num_chunks))
@@ -476,7 +527,7 @@ impl NumberType {
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
-                if chunk_number > num_chunks || chunk_number == 0 {
+                if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
                 }
                 Ok(Self::KthRoundRobin(chunk_number, num_chunks))
