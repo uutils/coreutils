@@ -1282,7 +1282,7 @@ fn split_into_n_chunks_by_line_round_robin<R>(
     settings: &Settings,
     reader: &mut R,
     num_chunks: u64,
-) -> UResult<()>
+) -> std::io::Result<()>
 where
     R: BufRead,
 {
@@ -1293,7 +1293,7 @@ where
         settings.suffix_length,
         settings.suffix_type,
         settings.suffix_start,
-    )?;
+    ).map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
 
     // Create one writer for each chunk. This will create each
     // of the underlying files (if not in `--filter` mode).
@@ -1301,7 +1301,7 @@ where
     for _ in 0..num_chunks {
         let filename = filename_iterator
             .next()
-            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            .ok_or_else(|| io::Error::new(ErrorKind::Other, "output file suffixes exhausted"))?;
         let writer = settings.instantiate_current_writer(filename.as_str())?;
         writers.push(writer);
     }
@@ -1346,7 +1346,13 @@ fn split(settings: &Settings) -> UResult<()> {
             kth_chunk_by_line(settings, &mut reader, chunk_number, num_chunks)
         }
         Strategy::Number(NumberType::RoundRobin(num_chunks)) => {
-            split_into_n_chunks_by_line_round_robin(settings, &mut reader, num_chunks)
+            match split_into_n_chunks_by_line_round_robin(settings, &mut reader, num_chunks) {
+                Ok(_) => Ok(()),
+                Err(e) => match e.kind() {
+                    ErrorKind::BrokenPipe => Ok(()),
+                    _ => Err(USimpleError::new(1, format!("{e}"))),
+                },
+            }
         }
         Strategy::Number(_) => Err(USimpleError::new(1, "-n mode not yet fully implemented")),
         Strategy::Lines(chunk_size) => {
