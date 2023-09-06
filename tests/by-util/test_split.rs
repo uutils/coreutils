@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc
 
 use crate::common::util::{AtPath, TestScenario};
 use rand::{thread_rng, Rng, SeedableRng};
@@ -796,6 +796,7 @@ fn test_number_kth_of_n() {
         .args(&["-e", "--number=99/100", "asciilowercase.txt"])
         .succeeds()
         .stdout_only("");
+    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number=r/9223372036854775807/18446744073709551615",
@@ -811,6 +812,7 @@ fn test_number_kth_of_n() {
         .args(&["--number=10/5", "asciilowercase.txt"])
         .fails()
         .stderr_contains("split: invalid chunk number: 10");
+    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number=9223372036854775807/18446744073709551616",
@@ -834,6 +836,7 @@ fn test_number_kth_of_n_round_robin() {
         .args(&["-e", "--number", "r/7/7", "fivelines.txt"])
         .succeeds()
         .stdout_only("");
+    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number",
@@ -842,6 +845,7 @@ fn test_number_kth_of_n_round_robin() {
         ])
         .succeeds()
         .stdout_only("");
+    #[cfg(target_pointer_width = "64")]
     new_ucmd!()
         .args(&[
             "--number",
@@ -1018,6 +1022,7 @@ fn test_line_bytes() {
 
 #[test]
 fn test_line_bytes_overflow() {
+    #[cfg(target_pointer_width = "64")]
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-C", "18446744073709551616", "letters.txt"])
         .succeeds();
