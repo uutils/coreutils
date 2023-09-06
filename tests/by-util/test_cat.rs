@@ -529,6 +529,22 @@ fn test_dev_full_show_all() {
     proc.kill();
 }
 
+/// For some reason splice() on first of those files fails, resulting in
+/// fallback inside `write_fast`, the other splice succeeds, in effect
+/// without additional flush output gets reversed.
+#[test]
+#[cfg(any(target_os = "linux"))]
+fn test_write_fast_fallthrough_uses_flush() {
+    const PROC_INIT_CMDLINE: &str = "/proc/1/cmdline";
+    const PROC_VERSION: &str = "/proc/version";
+
+    new_ucmd!()
+        .set_stdout(Stdio::piped())
+        .args(&[PROC_INIT_CMDLINE, PROC_VERSION])
+        .succeeds()
+        .stdout_matches(&regex::Regex::new("init.*Linux").unwrap());
+}
+
 #[test]
 #[cfg(unix)]
 #[ignore]
