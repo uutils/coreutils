@@ -14,7 +14,7 @@
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
-![MSRV](https://img.shields.io/badge/MSRV-1.64.0-brightgreen)
+![MSRV](https://img.shields.io/badge/MSRV-1.70.0-brightgreen)
 
 </div>
 
@@ -71,7 +71,7 @@ the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and
-nightly. The current Minimum Supported Rust Version (MSRV) is `1.64.0`.
+nightly. The current Minimum Supported Rust Version (MSRV) is `1.70.0`.
 
 ## Building
 

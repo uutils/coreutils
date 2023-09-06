@@ -744,7 +744,7 @@ where
             )
             .map_err_context(|| "failed to read input".to_string())?;
             if options.tag {
-                println!("{} ({:?}) = {}", options.algoname, filename.display(), sum);
+                println!("{} ({}) = {}", options.algoname, filename.display(), sum);
             } else if options.nonames {
                 println!("{sum}");
             } else if options.zero {

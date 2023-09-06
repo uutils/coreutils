@@ -3428,3 +3428,15 @@ fn test_cp_debug_sparse_always_reflink_auto() {
         panic!("Failure: stdout was \n{stdout_str}");
     }
 }
+
+#[test]
+fn test_cp_only_source_no_target() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts.ucmd().arg("a").fails();
+    let stderr_str = result.stderr_str();
+    if !stderr_str.contains("missing destination file operand after \"a\"") {
+        panic!("Failure: stderr was \n{stderr_str}");
+    }
+}

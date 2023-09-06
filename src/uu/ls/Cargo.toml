@@ -1,6 +1,6 @@
 [package]
 name = "uu_ls"
-version = "0.0.20"
+version = "0.0.21"
 authors = ["uutils developers"]
 license = "MIT"
 description = "ls ~ (uutils) display directory contents"
@@ -25,7 +25,6 @@ glob = { workspace = true }
 lscolors = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs"] }
 once_cell = { workspace = true }
-is-terminal = { workspace = true }
 selinux = { workspace = true, optional = true }
 
 [[bin]]

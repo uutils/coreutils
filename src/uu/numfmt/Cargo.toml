@@ -1,6 +1,6 @@
 [package]
 name = "uu_numfmt"
-version = "0.0.20"
+version = "0.0.21"
 authors = ["uutils developers"]
 license = "MIT"
 description = "numfmt ~ (uutils) reformat NUMBER"
@@ -16,7 +16,7 @@ path = "src/numfmt.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["ranges"] }
 
 [[bin]]
 name = "numfmt"

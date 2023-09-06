@@ -58,10 +58,7 @@ fn args_into_buffer<'a>(
     buf: &mut Vec<u8>,
     i: Option<impl Iterator<Item = &'a OsString>>,
 ) -> Result<(), Box<dyn Error>> {
-    // TODO: this should be replaced with let/else once available in the MSRV.
-    let i = if let Some(i) = i {
-        i
-    } else {
+    let Some(i) = i else {
         buf.extend_from_slice(b"y\n");
         return Ok(());
     };

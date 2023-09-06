@@ -20,15 +20,12 @@ mod parser; // string parsing modules
 pub use uucore_procs::*;
 
 // * cross-platform modules
-pub use crate::mods::backup_control;
 pub use crate::mods::display;
 pub use crate::mods::error;
 pub use crate::mods::line_ending;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::quoting_style;
-pub use crate::mods::ranges;
-pub use crate::mods::update_control;
 pub use crate::mods::version_cmp;
 
 // * string parsing modules
@@ -38,6 +35,8 @@ pub use crate::parser::parse_time;
 pub use crate::parser::shortcut_value_parser;
 
 // * feature-gated modules
+#[cfg(feature = "backup-control")]
+pub use crate::features::backup_control;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
 #[cfg(feature = "fs")]
@@ -48,10 +47,14 @@ pub use crate::features::fsext;
 pub use crate::features::lines;
 #[cfg(feature = "memo")]
 pub use crate::features::memo;
+#[cfg(feature = "ranges")]
+pub use crate::features::ranges;
 #[cfg(feature = "ringbuffer")]
 pub use crate::features::ringbuffer;
 #[cfg(feature = "sum")]
 pub use crate::features::sum;
+#[cfg(feature = "update-control")]
+pub use crate::features::update_control;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)

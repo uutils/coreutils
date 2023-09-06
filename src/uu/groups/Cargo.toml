@@ -1,6 +1,6 @@
 [package]
 name = "uu_groups"
-version = "0.0.20"
+version = "0.0.21"
 authors = ["uutils developers"]
 license = "MIT"
 description = "groups ~ (uutils) display group memberships for USERNAME"

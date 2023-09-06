@@ -355,3 +355,19 @@ fn test_check_md5sum_mixed_format() {
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
 }
+
+#[test]
+fn test_tag() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("foobar", "foo bar\n");
+    scene
+        .ccmd("sha256sum")
+        .arg("--tag")
+        .arg("foobar")
+        .succeeds()
+        .stdout_is(
+            "SHA256 (foobar) = 1f2ec52b774368781bed1d1fb140a92e0eb6348090619c9291f9a5a3c8e8d151\n",
+        );
+}

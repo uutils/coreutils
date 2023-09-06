@@ -1,7 +1,7 @@
 # spell-checker:ignore (libs) kqueue fundu
 [package]
 name = "uu_tail"
-version = "0.0.20"
+version = "0.0.21"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tail ~ (uutils) display the last lines of input"
@@ -22,7 +22,6 @@ memchr = { workspace = true }
 notify = { workspace = true }
 uucore = { workspace = true }
 same-file = { workspace = true }
-is-terminal = { workspace = true }
 fundu = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
