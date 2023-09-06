@@ -377,7 +377,10 @@ fn test_split_obs_lines_standalone() {
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
-    ucmd.args(&["-99999999999999999991", name]).succeeds().no_stderr().no_stdout();
+    ucmd.args(&["-99999999999999999991", name])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
@@ -389,7 +392,10 @@ fn test_split_obs_lines_standalone_overflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "obs-lines-standalone";
     RandomFile::new(&at, name).add_lines(4);
-    ucmd.args(&["-99999999999999999991", name]).succeeds().no_stderr().no_stdout();
+    ucmd.args(&["-99999999999999999991", name])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 1);
     assert_eq!(glob.collate(), at.read_bytes(name));
@@ -1020,7 +1026,8 @@ fn test_line_bytes() {
 #[test]
 fn test_line_bytes_overflow() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-C", "18446744073709551616", "letters.txt"]).succeeds();
+    ucmd.args(&["-C", "18446744073709551616", "letters.txt"])
+        .succeeds();
     assert_eq!(at.read("xaa"), "aaaaaaaaa\nbbbb\ncccc\ndd\nee\n");
 }
 
