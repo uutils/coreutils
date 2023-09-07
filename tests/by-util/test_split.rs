@@ -805,6 +805,7 @@ fn test_number_n() {
     assert_eq!(file_read("xac"), "klmno");
     assert_eq!(file_read("xad"), "pqrst");
     assert_eq!(file_read("xae"), "uvwxyz\n");
+    #[cfg(unix)]
     new_ucmd!()
         .args(&["--number=100", "/dev/null"])
         .succeeds()
@@ -825,6 +826,7 @@ fn test_number_kth_of_n() {
         .args(&["-e", "--number=99/100", "asciilowercase.txt"])
         .succeeds()
         .stdout_only("");
+    #[cfg(unix)]
     new_ucmd!()
         .args(&["--number=3/10", "/dev/null"])
         .succeeds()
