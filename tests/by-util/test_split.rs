@@ -657,19 +657,17 @@ fn test_split_overflow_bytes_size() {
 }
 
 #[test]
+#[cfg(target_pointer_width = "32")]
 fn test_split_chunks_num_chunks_oversized_32() {
-    #[cfg(target_pointer_width = "32")]
-    {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
-        at.touch("file");
-        scene
-            .ucmd()
-            .args(&["--number", "5000000000", "file"])
-            .fails()
-            .code_is(1)
-            .stderr_only("split: Number of chunks too big\n");
-    }
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene
+        .ucmd()
+        .args(&["--number", "5000000000", "sixhundredfiftyonebytes.txt"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: Number of chunks too big\n");
 }
 
 #[test]
