@@ -63,8 +63,23 @@ pub(crate) fn copy_on_write(
             {
                 // clonefile(2) fails if the destination exists.  Remove it and try again.  Do not
                 // bother to check if removal worked because we're going to try to clone again.
-                let _ = fs::remove_file(dest);
-                error = pfn(src.as_ptr(), dst.as_ptr(), 0);
+                // first lets make sure the dest file isnt read only
+                match fs::metadata(dest) {
+                    Ok(md) => {
+                        if md.permissions().readonly() {
+                            return Err(format!(
+                                "failed to clone {source:?} from {dest:?}: permission denied"
+                            )
+                            .into());
+                        } else {
+                            let _ = fs::remove_file(dest);
+                            error = pfn(src.as_ptr(), dst.as_ptr(), 0);
+                        }
+                    }
+                    Err(e) => {
+                        return Err(format!("failed to clone {source:?} from {dest:?}: {e}").into());
+                    }
+                }
             }
         }
     }
