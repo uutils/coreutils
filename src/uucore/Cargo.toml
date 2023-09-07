@@ -100,4 +100,5 @@ sum = [
 update-control = []
 utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
+version-cmp = []
 wide = []

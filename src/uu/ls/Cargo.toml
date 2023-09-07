@@ -23,7 +23,7 @@ term_grid = { workspace = true }
 terminal_size = { workspace = true }
 glob = { workspace = true }
 lscolors = { workspace = true }
-uucore = { workspace = true, features = ["entries", "fs"] }
+uucore = { workspace = true, features = ["entries", "fs", "version-cmp"] }
 once_cell = { workspace = true }
 selinux = { workspace = true, optional = true }
 
