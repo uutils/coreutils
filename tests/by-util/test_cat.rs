@@ -536,13 +536,11 @@ fn test_dev_full_show_all() {
 #[cfg(any(target_os = "linux"))]
 fn test_write_fast_fallthrough_uses_flush() {
     const PROC_INIT_CMDLINE: &str = "/proc/1/cmdline";
-    const PROC_VERSION: &str = "/proc/version";
 
     new_ucmd!()
-        .set_stdout(Stdio::piped())
-        .args(&[PROC_INIT_CMDLINE, PROC_VERSION])
+        .args(&[PROC_INIT_CMDLINE, "alpha.txt"])
         .succeeds()
-        .stdout_matches(&regex::Regex::new("init.*Linux").unwrap());
+        .stdout_only("/sbin/init\0abcde\nfghij\nklmno\npqrst\nuvwxyz\n");
 }
 
 #[test]
