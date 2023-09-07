@@ -1,7 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired
 
@@ -10,12 +10,11 @@ use clap::{
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
-use is_terminal::IsTerminal;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
-use std::collections::HashSet;
 use std::num::IntErrorKind;
+use std::{collections::HashSet, io::IsTerminal};
 
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;

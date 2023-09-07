@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // features ~ feature-gated modules (core/bundler file)
 
+#[cfg(feature = "backup-control")]
+pub mod backup_control;
 #[cfg(feature = "encoding")]
 pub mod encoding;
 #[cfg(feature = "fs")]
@@ -14,12 +16,18 @@ pub mod fsext;
 pub mod lines;
 #[cfg(feature = "memo")]
 pub mod memo;
+#[cfg(feature = "ranges")]
+pub mod ranges;
 #[cfg(feature = "ringbuffer")]
 pub mod ringbuffer;
 #[cfg(feature = "sum")]
 pub mod sum;
 #[cfg(feature = "memo")]
 mod tokenize;
+#[cfg(feature = "update-control")]
+pub mod update_control;
+#[cfg(feature = "version-cmp")]
+pub mod version_cmp;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)

@@ -1,6 +1,6 @@
 [package]
 name = "uu_sort"
-version = "0.0.20"
+version = "0.0.21"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sort ~ (uutils) sort input lines"
@@ -27,7 +27,7 @@ rayon = { workspace = true }
 self_cell = { workspace = true }
 tempfile = { workspace = true }
 unicode-width = { workspace = true }
-uucore = { workspace = true, features = ["fs"] }
+uucore = { workspace = true, features = ["fs", "version-cmp"] }
 
 [[bin]]
 name = "sort"

@@ -195,7 +195,7 @@ pub fn str_to_arrnum(src: &str, radix_def_src: &dyn RadixDef) -> Vec<u8> {
 
 pub fn arrnum_to_str(src: &[u8], radix_def_dest: &dyn RadixDef) -> String {
     let mut str_out = String::new();
-    for u in src.iter() {
+    for u in src {
         #[allow(clippy::single_match)]
         match radix_def_dest.format_u8(*u) {
             Some(c) => {

@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Jordi Boggiano <j.boggiano@seld.be>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 /* last synced with: yes (GNU coreutils) 8.13 */
 
@@ -60,10 +58,7 @@ fn args_into_buffer<'a>(
     buf: &mut Vec<u8>,
     i: Option<impl Iterator<Item = &'a OsString>>,
 ) -> Result<(), Box<dyn Error>> {
-    // TODO: this should be replaced with let/else once available in the MSRV.
-    let i = if let Some(i) = i {
-        i
-    } else {
+    let Some(i) = i else {
         buf.extend_from_slice(b"y\n");
         return Ok(());
     };
