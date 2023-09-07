@@ -102,7 +102,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     if files.is_empty() {
-        return Err(UUsageError::new(1, "missing file operand"));
+        Err(UUsageError::new(1, "missing file operand"))
     } else {
         let io_blocks = matches.get_flag(options::IO_BLOCKS);
         let no_create = matches.get_flag(options::NO_CREATE);
