@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore NOFILE nonewline
+// spell-checker:ignore NOFILE nonewline cmdline
 
 #[cfg(not(windows))]
 use crate::common::util::vec_of_size;
