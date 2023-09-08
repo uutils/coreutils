@@ -309,7 +309,7 @@ quick-error = "2.0.1"
 rand = { version = "0.8", features = ["small_rng"] }
 rand_core = "0.6"
 rayon = "1.7"
-redox_syscall = "0.3"
+redox_syscall = "0.4"
 regex = "1.9.5"
 rstest = "0.18.2"
 rust-ini = "0.19.0"
