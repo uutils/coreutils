@@ -101,7 +101,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 
 #[cfg(not(windows))]
 #[allow(clippy::ptr_arg)]
-fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b str]) {
+fn build_command<'a, 'b>(args: &'a Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b str]) {
     let progname = Cow::from(args[0]);
     (progname, &args[1..])
 }
@@ -303,7 +303,10 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
         print_env(opts.line_ending);
     } else {
         // we need to execute a command
+        #[cfg(windows)]
         let (prog, args) = build_command(&mut opts.program);
+        #[cfg(not(windows))]
+        let (prog, args) = build_command(&opts.program);
 
         /*
          * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp

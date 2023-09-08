@@ -21,7 +21,7 @@ const BUF_SIZE: usize = 1024 * 16;
 /// copying or not. False means we don't have to.
 #[inline]
 pub(super) fn write_fast_using_splice<R: FdReadable>(
-    handle: &mut InputHandle<R>,
+    handle: &InputHandle<R>,
     write_fd: &impl AsRawFd,
 ) -> CatResult<bool> {
     let (pipe_rd, pipe_wr) = pipe()?;
