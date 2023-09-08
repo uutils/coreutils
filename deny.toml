@@ -89,6 +89,8 @@ skip = [
   { name = "bitflags", version = "1.3.2" },
   # blake2b_simd
   { name = "constant_time_eq", version = "0.2.6" },
+  # various crates
+  { name = "redox_syscall", version = "0.3.5" },
 ]
 # spell-checker: enable
 
