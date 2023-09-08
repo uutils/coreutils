@@ -63,7 +63,7 @@ pub(crate) fn copy_on_write(
             {
                 // clonefile(2) fails if the destination exists.  Remove it and try again.  Do not
                 // bother to check if removal worked because we're going to try to clone again.
-                // first lets make sure the dest file isnt read only
+                // first lets make sure the dest file is not read only
                 match fs::metadata(dest) {
                     Ok(md) => {
                         if md.permissions().readonly() {
