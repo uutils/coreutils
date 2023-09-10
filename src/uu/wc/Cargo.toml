@@ -16,7 +16,7 @@ path = "src/wc.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["pipes"] }
+uucore = { workspace = true, features = ["pipes", "quoting-style"] }
 bytecount = { workspace = true }
 thiserror = { workspace = true }
 unicode-width = { workspace = true }
