@@ -16,6 +16,8 @@ pub mod fsext;
 pub mod lines;
 #[cfg(feature = "memo")]
 pub mod memo;
+#[cfg(feature = "quoting-style")]
+pub mod quoting_style;
 #[cfg(feature = "ranges")]
 pub mod ranges;
 #[cfg(feature = "ringbuffer")]
