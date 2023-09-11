@@ -68,7 +68,7 @@ pub(crate) fn copy_on_write(
                     // remove and copy again
                     // TODO: rewrite this to better match linux behavior
                     // linux first opens the source file and destination file then uses the file
-                    // descriptiors to do the clone.
+                    // descriptors to do the clone.
                     let _ = fs::remove_file(dest);
                     error = pfn(src.as_ptr(), dst.as_ptr(), 0);
                 }
