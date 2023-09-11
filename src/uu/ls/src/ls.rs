@@ -12,8 +12,7 @@ use clap::{
 use glob::{MatchOptions, Pattern};
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
-use once_cell::unsync::OnceCell;
-use std::num::IntErrorKind;
+use std::{cell::OnceCell, num::IntErrorKind};
 use std::{collections::HashSet, io::IsTerminal};
 
 #[cfg(windows)]
