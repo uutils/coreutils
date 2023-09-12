@@ -3,10 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME subsecond datelike timelike
+// spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME datelike timelike
 // spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
 
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
+use chrono::{
+    DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime,
+    TimeZone, Timelike,
+};
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, ArgGroup, Command};
 use filetime::{set_file_times, set_symlink_file_times, FileTime};
@@ -348,8 +351,8 @@ fn parse_date(s: &str) -> UResult<FileTime> {
     // Tue Dec  3 ...
     // ("%c", POSIX_LOCALE_FORMAT),
     //
-    if let Ok(parsed) = Local.datetime_from_str(s, format::POSIX_LOCALE) {
-        return Ok(datetime_to_filetime(&parsed));
+    if let Ok(parsed) = NaiveDateTime::parse_from_str(s, format::POSIX_LOCALE) {
+        return Ok(datetime_to_filetime(&parsed.and_utc()));
     }
 
     // Also support other formats found in the GNU tests like
@@ -361,8 +364,8 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         format::YYYY_MM_DD_HH_MM,
         format::YYYYMMDDHHMM_OFFSET,
     ] {
-        if let Ok(parsed) = Utc.datetime_from_str(s, fmt) {
-            return Ok(datetime_to_filetime(&parsed));
+        if let Ok(parsed) = NaiveDateTime::parse_from_str(s, fmt) {
+            return Ok(datetime_to_filetime(&parsed.and_utc()));
         }
     }
 
@@ -411,9 +414,17 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         }
     };
 
-    let mut local = chrono::Local
-        .datetime_from_str(&ts, format)
+    let local = NaiveDateTime::parse_from_str(&ts, format)
         .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
+    let mut local = match chrono::Local.from_local_datetime(&local) {
+        LocalResult::Single(dt) => dt,
+        _ => {
+            return Err(USimpleError::new(
+                1,
+                format!("invalid date ts format {}", ts.quote()),
+            ))
+        }
+    };
 
     // Chrono caps seconds at 59, but 60 is valid. It might be a leap second
     // or wrap to the next minute. But that doesn't really matter, because we
