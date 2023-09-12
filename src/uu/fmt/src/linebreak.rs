@@ -244,8 +244,6 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     let active_breaks = &mut vec![0];
     let next_active_breaks = &mut vec![];
 
-    let stretch = (args.opts.width - args.opts.goal) as isize;
-    let minlength = args.opts.goal - stretch as usize;
     let mut new_linebreaks = vec![];
     let mut is_sentence_start = false;
     let mut least_demerits = 0;
@@ -299,16 +297,16 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
                 active.fresh = false;
                 active.length = tlen;
 
-                // if we're above the minlength, we can also consider breaking here
-                if tlen >= minlength {
+                // if we're above the goal, we can also consider breaking here
+                if tlen >= args.opts.goal {
                     let (new_demerits, new_ratio) = if is_last_word {
                         // there is no penalty for the final line's length
                         (0, 0.0)
                     } else {
                         compute_demerits(
                             args.opts.goal as isize - tlen as isize,
-                            stretch,
-                            w.word_nchars as isize,
+                            args.opts.width as isize,
+                            active.length as isize,
                             active.prev_rat,
                         )
                     };
@@ -325,7 +323,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
                             prev: i,
                             linebreak: Some(w),
                             break_before: false,
-                            demerits: total_demerits,
+                            demerits: new_demerits,
                             prev_rat: new_ratio,
                             length: args.indent_len,
                             fresh: true,
@@ -349,7 +347,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
         if next_active_breaks.is_empty() {
             // every potential linebreak is too long! choose the linebreak with the least demerits, ld_idx
             let new_break =
-                restart_active_breaks(args, &linebreaks[ld_idx], ld_idx, w, slen, minlength);
+                restart_active_breaks(args, &linebreaks[ld_idx], ld_idx, w, slen, args.opts.width);
             next_active_breaks.push(linebreaks.len());
             linebreaks.push(new_break);
             least_demerits = 0;
