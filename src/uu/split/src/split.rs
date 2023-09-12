@@ -1,11 +1,9 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Akira Hayakawa <ruby.wktk@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-// spell-checker:ignore nbbbb ncccc
+// spell-checker:ignore nbbbb ncccc hexdigit
 
 mod filenames;
 mod number;
@@ -13,17 +11,18 @@ mod platform;
 
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
-use clap::ArgAction;
-use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
+use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
 use std::env;
+use std::ffi::OsString;
 use std::fmt;
 use std::fs::{metadata, File};
 use std::io;
 use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::path::Path;
+use std::u64;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::parse_size::{parse_size, parse_size_max, ParseSizeError};
 use uucore::uio_error;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
@@ -34,7 +33,9 @@ static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
 static OPT_FILTER: &str = "filter";
 static OPT_NUMBER: &str = "number";
 static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
+static OPT_NUMERIC_SUFFIXES_SHORT: &str = "-d";
 static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
+static OPT_HEX_SUFFIXES_SHORT: &str = "-x";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
 static OPT_VERBOSE: &str = "verbose";
@@ -53,11 +54,172 @@ const AFTER_HELP: &str = help_section!("after help", "split.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let (args, obs_lines) = handle_obsolete(args);
+
     let matches = uu_app().try_get_matches_from(args)?;
-    match Settings::from(&matches) {
+
+    match Settings::from(&matches, &obs_lines) {
         Ok(settings) => split(&settings),
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
         Err(e) => Err(USimpleError::new(1, format!("{e}"))),
+    }
+}
+
+/// Extract obsolete shorthand (if any) for specifying lines in following scenarios (and similar)
+/// `split -22 file` would mean `split -l 22 file`
+/// `split -2de file` would mean `split -l 2 -d -e file`
+/// `split -x300e file` would mean `split -x -l 300 -e file`
+/// `split -x300e -22 file` would mean `split -x -e -l 22 file` (last obsolete lines option wins)
+/// following GNU `split` behavior
+fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<String>) {
+    let mut obs_lines = None;
+    let mut preceding_long_opt_req_value = false;
+    let mut preceding_short_opt_req_value = false;
+
+    let filtered_args = args
+        .filter_map(|os_slice| {
+            filter_args(
+                os_slice,
+                &mut obs_lines,
+                &mut preceding_long_opt_req_value,
+                &mut preceding_short_opt_req_value,
+            )
+        })
+        .collect();
+
+    (filtered_args, obs_lines)
+}
+
+/// Helper function to [`handle_obsolete`]
+/// Filters out obsolete lines option from args
+fn filter_args(
+    os_slice: OsString,
+    obs_lines: &mut Option<String>,
+    preceding_long_opt_req_value: &mut bool,
+    preceding_short_opt_req_value: &mut bool,
+) -> Option<OsString> {
+    let filter: Option<OsString>;
+    if let Some(slice) = os_slice.to_str() {
+        if should_extract_obs_lines(
+            slice,
+            preceding_long_opt_req_value,
+            preceding_short_opt_req_value,
+        ) {
+            // start of the short option string
+            // that can have obsolete lines option value in it
+            filter = handle_extract_obs_lines(slice, obs_lines);
+        } else {
+            // either not a short option
+            // or a short option that cannot have obsolete lines value in it
+            filter = Some(OsString::from(slice));
+        }
+        handle_preceding_options(
+            slice,
+            preceding_long_opt_req_value,
+            preceding_short_opt_req_value,
+        );
+    } else {
+        // Cannot cleanly convert os_slice to UTF-8
+        // Do not process and return as-is
+        // This will cause failure later on, but we should not handle it here
+        // and let clap panic on invalid UTF-8 argument
+        filter = Some(os_slice);
+    }
+    filter
+}
+
+/// Helper function to [`filter_args`]
+/// Checks if the slice is a true short option (and not hyphen prefixed value of an option)
+/// and if so, a short option that can contain obsolete lines value
+fn should_extract_obs_lines(
+    slice: &str,
+    preceding_long_opt_req_value: &bool,
+    preceding_short_opt_req_value: &bool,
+) -> bool {
+    slice.starts_with('-')
+        && !slice.starts_with("--")
+        && !preceding_long_opt_req_value
+        && !preceding_short_opt_req_value
+        && !slice.starts_with("-a")
+        && !slice.starts_with("-b")
+        && !slice.starts_with("-C")
+        && !slice.starts_with("-l")
+        && !slice.starts_with("-n")
+}
+
+/// Helper function to [`filter_args`]
+/// Extracts obsolete lines numeric part from argument slice
+/// and filters it out
+fn handle_extract_obs_lines(slice: &str, obs_lines: &mut Option<String>) -> Option<OsString> {
+    let mut obs_lines_extracted: Vec<char> = vec![];
+    let mut obs_lines_end_reached = false;
+    let filtered_slice: Vec<char> = slice
+        .chars()
+        .filter(|c| {
+            // To correctly process scenario like '-x200a4'
+            // we need to stop extracting digits once alphabetic character is encountered
+            // after we already have something in obs_lines_extracted
+            if c.is_ascii_digit() && !obs_lines_end_reached {
+                obs_lines_extracted.push(*c);
+                false
+            } else {
+                if !obs_lines_extracted.is_empty() {
+                    obs_lines_end_reached = true;
+                }
+                true
+            }
+        })
+        .collect();
+
+    if obs_lines_extracted.is_empty() {
+        // no obsolete lines value found/extracted
+        Some(OsString::from(slice))
+    } else {
+        // obsolete lines value was extracted
+        let extracted: String = obs_lines_extracted.iter().collect();
+        *obs_lines = Some(extracted);
+        if filtered_slice.get(1).is_some() {
+            // there were some short options in front of or after obsolete lines value
+            // i.e. '-xd100' or '-100de' or similar, which after extraction of obsolete lines value
+            // would look like '-xd' or '-de' or similar
+            let filtered_slice: String = filtered_slice.iter().collect();
+            Some(OsString::from(filtered_slice))
+        } else {
+            None
+        }
+    }
+}
+
+/// Helper function to [`handle_extract_obs_lines`]
+/// Captures if current slice is a preceding option
+/// that requires value
+fn handle_preceding_options(
+    slice: &str,
+    preceding_long_opt_req_value: &mut bool,
+    preceding_short_opt_req_value: &mut bool,
+) {
+    // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
+    // following slice should be treaded as value for this option
+    // even if it starts with '-' (which would be treated as hyphen prefixed value)
+    if slice.starts_with("--") {
+        *preceding_long_opt_req_value = &slice[2..] == OPT_BYTES
+            || &slice[2..] == OPT_LINE_BYTES
+            || &slice[2..] == OPT_LINES
+            || &slice[2..] == OPT_ADDITIONAL_SUFFIX
+            || &slice[2..] == OPT_FILTER
+            || &slice[2..] == OPT_NUMBER
+            || &slice[2..] == OPT_SUFFIX_LENGTH;
+    }
+    // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
+    // following slice should be treaded as value for this option
+    // even if it starts with '-' (which would be treated as hyphen prefixed value)
+    *preceding_short_opt_req_value =
+        slice == "-b" || slice == "-C" || slice == "-l" || slice == "-n" || slice == "-a";
+    // slice is a value
+    // reset preceding option flags
+    if !slice.starts_with('-') {
+        *preceding_short_opt_req_value = false;
+        *preceding_long_opt_req_value = false;
     }
 }
 
@@ -73,6 +235,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_BYTES)
                 .short('b')
                 .long(OPT_BYTES)
+                .allow_hyphen_values(true)
                 .value_name("SIZE")
                 .help("put SIZE bytes per output file"),
         )
@@ -80,14 +243,15 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_LINE_BYTES)
                 .short('C')
                 .long(OPT_LINE_BYTES)
+                .allow_hyphen_values(true)
                 .value_name("SIZE")
-                .default_value("2")
                 .help("put at most SIZE bytes of lines per output file"),
         )
         .arg(
             Arg::new(OPT_LINES)
                 .short('l')
                 .long(OPT_LINES)
+                .allow_hyphen_values(true)
                 .value_name("NUMBER")
                 .default_value("1000")
                 .help("put NUMBER lines/records per output file"),
@@ -96,6 +260,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_NUMBER)
                 .short('n')
                 .long(OPT_NUMBER)
+                .allow_hyphen_values(true)
                 .value_name("CHUNKS")
                 .help("generate CHUNKS output files; see explanation below"),
         )
@@ -103,6 +268,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_ADDITIONAL_SUFFIX)
                 .long(OPT_ADDITIONAL_SUFFIX)
+                .allow_hyphen_values(true)
                 .value_name("SUFFIX")
                 .default_value("")
                 .help("additional SUFFIX to append to output file names"),
@@ -110,6 +276,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_FILTER)
                 .long(OPT_FILTER)
+                .allow_hyphen_values(true)
                 .value_name("COMMAND")
                 .value_hint(clap::ValueHint::CommandName)
                 .help(
@@ -124,28 +291,65 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_NUMERIC_SUFFIXES)
+            Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
                 .short('d')
+                .action(clap::ArgAction::SetTrue)
+                .overrides_with_all([
+                    OPT_NUMERIC_SUFFIXES,
+                    OPT_NUMERIC_SUFFIXES_SHORT,
+                    OPT_HEX_SUFFIXES,
+                    OPT_HEX_SUFFIXES_SHORT
+                ])
+                .help("use numeric suffixes starting at 0, not alphabetic"),
+        )
+        .arg(
+            Arg::new(OPT_NUMERIC_SUFFIXES)
                 .long(OPT_NUMERIC_SUFFIXES)
+                .require_equals(true)
                 .default_missing_value("0")
                 .num_args(0..=1)
-                .help("use numeric suffixes instead of alphabetic"),
+                .overrides_with_all([
+                    OPT_NUMERIC_SUFFIXES,
+                    OPT_NUMERIC_SUFFIXES_SHORT,
+                    OPT_HEX_SUFFIXES,
+                    OPT_HEX_SUFFIXES_SHORT
+                ])
+                .help("same as -d, but allow setting the start value"),
+        )
+        .arg(
+            Arg::new(OPT_HEX_SUFFIXES_SHORT)
+                .short('x')
+                .action(clap::ArgAction::SetTrue)
+                .overrides_with_all([
+                    OPT_NUMERIC_SUFFIXES,
+                    OPT_NUMERIC_SUFFIXES_SHORT,
+                    OPT_HEX_SUFFIXES,
+                    OPT_HEX_SUFFIXES_SHORT
+                ])
+                .help("use hex suffixes starting at 0, not alphabetic"),
+        )
+        .arg(
+            Arg::new(OPT_HEX_SUFFIXES)
+                .long(OPT_HEX_SUFFIXES)
+                .default_missing_value("0")
+                .require_equals(true)
+                .num_args(0..=1)
+                .overrides_with_all([
+                    OPT_NUMERIC_SUFFIXES,
+                    OPT_NUMERIC_SUFFIXES_SHORT,
+                    OPT_HEX_SUFFIXES,
+                    OPT_HEX_SUFFIXES_SHORT
+                ])
+                .help("same as -x, but allow setting the start value"),
         )
         .arg(
             Arg::new(OPT_SUFFIX_LENGTH)
                 .short('a')
                 .long(OPT_SUFFIX_LENGTH)
+                .allow_hyphen_values(true)
                 .value_name("N")
                 .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
-                .help("use suffixes of fixed length N. 0 implies dynamic length."),
-        )
-        .arg(
-            Arg::new(OPT_HEX_SUFFIXES)
-                .short('x')
-                .long(OPT_HEX_SUFFIXES)
-                .default_missing_value("0")
-                .num_args(0..=1)
-                .help("use hex suffixes instead of alphabetic"),
+                .help("use suffixes of fixed length N. 0 implies dynamic length, starting with 2"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
@@ -182,6 +386,10 @@ enum NumberType {
     /// Split into a specific number of chunks by byte.
     Bytes(u64),
 
+    /// Split into a specific number of chunks by byte
+    /// but output only the *k*th chunk.
+    KthBytes(u64, u64),
+
     /// Split into a specific number of chunks by line (approximately).
     Lines(u64),
 
@@ -202,6 +410,7 @@ impl NumberType {
     fn num_chunks(&self) -> u64 {
         match self {
             Self::Bytes(n) => *n,
+            Self::KthBytes(_, n) => *n,
             Self::Lines(n) => *n,
             Self::KthLines(_, n) => *n,
             Self::RoundRobin(n) => *n,
@@ -220,6 +429,7 @@ enum NumberTypeError {
     ///
     /// ```ignore
     /// -n N
+    /// -n K/N
     /// -n l/N
     /// -n l/K/N
     /// -n r/N
@@ -230,9 +440,12 @@ enum NumberTypeError {
     /// The chunk number was invalid.
     ///
     /// This can happen if the value of `K` in any of the following
-    /// command-line options is not a positive integer:
+    /// command-line options is not a positive integer
+    /// or if `K` is 0
+    /// or if `K` is greater than `N`:
     ///
     /// ```ignore
+    /// -n K/N
     /// -n l/K/N
     /// -n r/K/N
     /// ```
@@ -246,6 +459,7 @@ impl NumberType {
     ///
     /// ```ignore
     /// "N"
+    /// "K/N"
     /// "l/N"
     /// "l/K/N"
     /// "r/N"
@@ -257,15 +471,20 @@ impl NumberType {
     ///
     /// # Errors
     ///
-    /// If the string is not one of the valid number types, if `K` is
-    /// not a nonnegative integer, or if `N` is not a positive
-    /// integer, then this function returns [`NumberTypeError`].
+    /// If the string is not one of the valid number types,
+    /// if `K` is not a nonnegative integer,
+    /// or if `K` is 0,
+    /// or if `N` is not a positive integer,
+    /// or if `K` is greater than `N`
+    /// then this function returns [`NumberTypeError`].
     fn from(s: &str) -> Result<Self, NumberTypeError> {
+        fn is_invalid_chunk(chunk_number: u64, num_chunks: u64) -> bool {
+            chunk_number > num_chunks || chunk_number == 0
+        }
         let parts: Vec<&str> = s.split('/').collect();
         match &parts[..] {
             [n_str] => {
-                let num_chunks = n_str
-                    .parse()
+                let num_chunks = parse_size(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 if num_chunks > 0 {
                     Ok(Self::Bytes(num_chunks))
@@ -273,34 +492,44 @@ impl NumberType {
                     Err(NumberTypeError::NumberOfChunks(s.to_string()))
                 }
             }
+            [k_str, n_str] if !k_str.starts_with('l') && !k_str.starts_with('r') => {
+                let num_chunks = parse_size(n_str)
+                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                let chunk_number = parse_size(k_str)
+                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
+                if is_invalid_chunk(chunk_number, num_chunks) {
+                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
+                }
+                Ok(Self::KthBytes(chunk_number, num_chunks))
+            }
             ["l", n_str] => {
-                let num_chunks = n_str
-                    .parse()
+                let num_chunks = parse_size(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::Lines(num_chunks))
             }
             ["l", k_str, n_str] => {
-                let num_chunks = n_str
-                    .parse()
+                let num_chunks = parse_size(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = k_str
-                    .parse()
+                let chunk_number = parse_size(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
+                if is_invalid_chunk(chunk_number, num_chunks) {
+                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
+                }
                 Ok(Self::KthLines(chunk_number, num_chunks))
             }
             ["r", n_str] => {
-                let num_chunks = n_str
-                    .parse()
+                let num_chunks = parse_size(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::RoundRobin(num_chunks))
             }
             ["r", k_str, n_str] => {
-                let num_chunks = n_str
-                    .parse()
+                let num_chunks = parse_size(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = k_str
-                    .parse()
+                let chunk_number = parse_size(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
+                if is_invalid_chunk(chunk_number, num_chunks) {
+                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
+                }
                 Ok(Self::KthRoundRobin(chunk_number, num_chunks))
             }
             _ => Err(NumberTypeError::NumberOfChunks(s.to_string())),
@@ -360,7 +589,7 @@ impl fmt::Display for StrategyError {
 
 impl Strategy {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches) -> Result<Self, StrategyError> {
+    fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, StrategyError> {
         fn get_and_parse(
             matches: &ArgMatches,
             option: &str,
@@ -368,7 +597,7 @@ impl Strategy {
             error: fn(ParseSizeError) -> StrategyError,
         ) -> Result<Strategy, StrategyError> {
             let s = matches.get_one::<String>(option).unwrap();
-            let n = parse_size(s).map_err(error)?;
+            let n = parse_size_max(s).map_err(error)?;
             if n > 0 {
                 Ok(strategy(n))
             } else {
@@ -378,28 +607,40 @@ impl Strategy {
         // Check that the user is not specifying more than one strategy.
         //
         // Note: right now, this exact behavior cannot be handled by
-        // `ArgGroup` since `ArgGroup` considers a default value `Arg`
-        // as "defined".
+        // overrides_with_all() due to obsolete lines value option
         match (
+            obs_lines,
             matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_BYTES) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_LINE_BYTES) == Some(ValueSource::CommandLine),
             matches.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
         ) {
-            (false, false, false, false) => Ok(Self::Lines(1000)),
-            (true, false, false, false) => {
+            (Some(v), false, false, false, false) => {
+                let v = parse_size_max(v).map_err(|_| {
+                    StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
+                })?;
+                if v > 0 {
+                    Ok(Self::Lines(v))
+                } else {
+                    Err(StrategyError::Lines(ParseSizeError::ParseFailure(
+                        v.to_string(),
+                    )))
+                }
+            }
+            (None, false, false, false, false) => Ok(Self::Lines(1000)),
+            (None, true, false, false, false) => {
                 get_and_parse(matches, OPT_LINES, Self::Lines, StrategyError::Lines)
             }
-            (false, true, false, false) => {
+            (None, false, true, false, false) => {
                 get_and_parse(matches, OPT_BYTES, Self::Bytes, StrategyError::Bytes)
             }
-            (false, false, true, false) => get_and_parse(
+            (None, false, false, true, false) => get_and_parse(
                 matches,
                 OPT_LINE_BYTES,
                 Self::LineBytes,
                 StrategyError::Bytes,
             ),
-            (false, false, false, true) => {
+            (None, false, false, false, true) => {
                 let s = matches.get_one::<String>(OPT_NUMBER).unwrap();
                 let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
                 Ok(Self::Number(number_type))
@@ -411,22 +652,32 @@ impl Strategy {
 
 /// Parse the suffix type from the command-line arguments.
 fn suffix_type_from(matches: &ArgMatches) -> Result<(SuffixType, usize), SettingsError> {
-    if matches.value_source(OPT_NUMERIC_SUFFIXES) == Some(ValueSource::CommandLine) {
-        let suffix_start = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES);
-        let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
-        let suffix_start = suffix_start
-            .parse()
-            .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
-        Ok((SuffixType::Decimal, suffix_start))
-    } else if matches.value_source(OPT_HEX_SUFFIXES) == Some(ValueSource::CommandLine) {
-        let suffix_start = matches.get_one::<String>(OPT_HEX_SUFFIXES);
-        let suffix_start = suffix_start.ok_or(SettingsError::SuffixNotParsable(String::new()))?;
-        let suffix_start = usize::from_str_radix(suffix_start, 16)
-            .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
-        Ok((SuffixType::Hexadecimal, suffix_start))
-    } else {
-        // no numeric/hex suffix
-        Ok((SuffixType::Alphabetic, 0))
+    // Check if the user is specifying one or more than one suffix
+    // Any combination of suffixes is allowed
+    // Since all suffixes are setup with 'overrides_with_all()' against themselves and each other,
+    // last one wins, all others are ignored
+    match (
+        matches.get_one::<String>(OPT_NUMERIC_SUFFIXES),
+        matches.get_one::<String>(OPT_HEX_SUFFIXES),
+        matches.get_flag(OPT_NUMERIC_SUFFIXES_SHORT),
+        matches.get_flag(OPT_HEX_SUFFIXES_SHORT),
+    ) {
+        (Some(v), _, _, _) => {
+            let suffix_start = v;
+            let suffix_start = suffix_start
+                .parse::<usize>()
+                .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
+            Ok((SuffixType::Decimal, suffix_start))
+        }
+        (_, Some(v), _, _) => {
+            let suffix_start = v;
+            let suffix_start = usize::from_str_radix(suffix_start, 16)
+                .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
+            Ok((SuffixType::Hexadecimal, suffix_start))
+        }
+        (_, _, true, _) => Ok((SuffixType::Decimal, 0)), // short numeric suffix '-d', default start 0
+        (_, _, _, true) => Ok((SuffixType::Hexadecimal, 0)), // short hex suffix '-x', default start 0
+        _ => Ok((SuffixType::Alphabetic, 0)), // no numeric/hex suffix, using default alphabetic
     }
 }
 
@@ -508,7 +759,7 @@ impl fmt::Display for SettingsError {
 
 impl Settings {
     /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches) -> Result<Self, SettingsError> {
+    fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, SettingsError> {
         let additional_suffix = matches
             .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
             .unwrap()
@@ -516,7 +767,7 @@ impl Settings {
         if additional_suffix.contains('/') {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
-        let strategy = Strategy::from(matches).map_err(SettingsError::Strategy)?;
+        let strategy = Strategy::from(matches, obs_lines).map_err(SettingsError::Strategy)?;
         let (suffix_type, suffix_start) = suffix_type_from(matches)?;
         let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap();
         let suffix_length: usize = suffix_length_str
@@ -1044,7 +1295,7 @@ where
     // If we would have written zero chunks of output, then terminate
     // immediately. This happens on `split -e -n 3 /dev/null`, for
     // example.
-    if num_chunks == 0 {
+    if num_chunks == 0 || num_bytes == 0 {
         return Ok(());
     }
 
@@ -1097,6 +1348,93 @@ where
         Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok(()),
         Err(e) => Err(uio_error!(e, "input/output error")),
     }
+}
+
+/// Print the k-th chunk of a file to stdout, splitting by byte.
+///
+/// This function is like [`split_into_n_chunks_by_byte`], but instead
+/// of writing each chunk to its own file, it only writes to stdout
+/// the contents of the chunk identified by `chunk_number`
+///
+/// # Errors
+///
+/// This function returns an error if there is a problem reading from
+/// `reader` or writing to stdout.
+fn kth_chunks_by_byte<R>(
+    settings: &Settings,
+    reader: &mut R,
+    chunk_number: u64,
+    num_chunks: u64,
+) -> UResult<()>
+where
+    R: BufRead,
+{
+    // Get the size of the input file in bytes and compute the number
+    // of bytes per chunk.
+    //
+    // If the requested number of chunks exceeds the number of bytes
+    // in the file - just write empty byte string to stdout
+    // NOTE: the `elide_empty_files` parameter is ignored here
+    // as we do not generate any files
+    // and instead writing to stdout
+    let metadata = metadata(&settings.input).map_err(|_| {
+        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
+    })?;
+
+    let num_bytes = metadata.len();
+    // If input file is empty and we would have written zero chunks of output,
+    // then terminate immediately.
+    // This happens on `split -e -n 3 /dev/null`, for example.
+    if num_bytes == 0 {
+        return Ok(());
+    }
+
+    // Write to stdout instead of to a file.
+    let stdout = std::io::stdout();
+    let mut writer = stdout.lock();
+
+    let chunk_size = (num_bytes / (num_chunks)).max(1);
+    let mut num_bytes: usize = num_bytes.try_into().unwrap();
+
+    let mut i = 1;
+    loop {
+        let buf: &mut Vec<u8> = &mut vec![];
+        if num_bytes > 0 {
+            // Read `chunk_size` bytes from the reader into `buf`
+            // except the last.
+            //
+            // The last chunk gets all remaining bytes so that if the number
+            // of bytes in the input file was not evenly divisible by
+            // `num_chunks`, we don't leave any bytes behind.
+            let limit = {
+                if i == num_chunks {
+                    num_bytes.try_into().unwrap()
+                } else {
+                    chunk_size
+                }
+            };
+            let n_bytes_read = reader.by_ref().take(limit).read_to_end(buf);
+            match n_bytes_read {
+                Ok(n_bytes) => {
+                    num_bytes -= n_bytes;
+                }
+                Err(error) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("{}: cannot read from input : {}", settings.input, error),
+                    ));
+                }
+            }
+            if i == chunk_number {
+                writer.write_all(buf)?;
+                break;
+            }
+            i += 1;
+        } else {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// Split a file into a specific number of chunks by line.
@@ -1274,6 +1612,50 @@ where
     Ok(())
 }
 
+/// Print the k-th chunk of a file, splitting by line, but
+/// assign lines via round-robin to the specified number of output
+/// chunks, but output only the *k*th chunk.
+///
+/// This function is like [`kth_chunk_by_line`], as it only writes to stdout and
+/// prints out only *k*th chunk
+/// It is also like [`split_into_n_chunks_by_line_round_robin`], as it is assigning chunks
+/// using round robin distribution
+///
+/// # Errors
+///
+/// This function returns an error if there is a problem reading from
+/// `reader` or writing to one of the output files.
+///
+/// # See also
+///
+/// * [`split_into_n_chunks_by_line_round_robin`], which splits its input in the
+///   same way, but writes each chunk to its own file.
+fn kth_chunk_by_line_round_robin<R>(
+    _settings: &Settings,
+    reader: &mut R,
+    chunk_number: u64,
+    num_chunks: u64,
+) -> UResult<()>
+where
+    R: BufRead,
+{
+    // Write to stdout instead of to a file.
+    let stdout = std::io::stdout();
+    let mut writer = stdout.lock();
+
+    let num_chunks: usize = num_chunks.try_into().unwrap();
+    let chunk_number: usize = chunk_number.try_into().unwrap();
+    for (i, line_result) in reader.lines().enumerate() {
+        let line = line_result?;
+        let bytes = line.as_bytes();
+        if (i % num_chunks) == chunk_number {
+            writer.write_all(bytes)?;
+            writer.write_all(b"\n")?;
+        }
+    }
+    Ok(())
+}
+
 fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
@@ -1291,6 +1673,9 @@ fn split(settings: &Settings) -> UResult<()> {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
             split_into_n_chunks_by_byte(settings, &mut reader, num_chunks)
         }
+        Strategy::Number(NumberType::KthBytes(chunk_number, num_chunks)) => {
+            kth_chunks_by_byte(settings, &mut reader, chunk_number, num_chunks)
+        }
         Strategy::Number(NumberType::Lines(num_chunks)) => {
             split_into_n_chunks_by_line(settings, &mut reader, num_chunks)
         }
@@ -1303,7 +1688,12 @@ fn split(settings: &Settings) -> UResult<()> {
         Strategy::Number(NumberType::RoundRobin(num_chunks)) => {
             split_into_n_chunks_by_line_round_robin(settings, &mut reader, num_chunks)
         }
-        Strategy::Number(_) => Err(USimpleError::new(1, "-n mode not yet fully implemented")),
+        Strategy::Number(NumberType::KthRoundRobin(chunk_number, num_chunks)) => {
+            // The chunk number is given as a 1-indexed number, but it
+            // is a little easier to deal with a 0-indexed number.
+            let chunk_number = chunk_number - 1;
+            kth_chunk_by_line_round_robin(settings, &mut reader, chunk_number, num_chunks)
+        }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
             match std::io::copy(&mut reader, &mut writer) {
@@ -1406,6 +1796,18 @@ mod tests {
             NumberType::from("l/abc/456").unwrap_err(),
             NumberTypeError::ChunkNumber("abc".to_string())
         );
+        assert_eq!(
+            NumberType::from("l/456/123").unwrap_err(),
+            NumberTypeError::ChunkNumber("456".to_string())
+        );
+        assert_eq!(
+            NumberType::from("r/456/123").unwrap_err(),
+            NumberTypeError::ChunkNumber("456".to_string())
+        );
+        assert_eq!(
+            NumberType::from("456/123").unwrap_err(),
+            NumberTypeError::ChunkNumber("456".to_string())
+        );
         // In GNU split, the number of chunks get precedence:
         //
         //     $ split -n l/abc/xyz
@@ -1441,6 +1843,7 @@ mod tests {
     #[test]
     fn test_number_type_num_chunks() {
         assert_eq!(NumberType::from("123").unwrap().num_chunks(), 123);
+        assert_eq!(NumberType::from("123/456").unwrap().num_chunks(), 456);
         assert_eq!(NumberType::from("l/123").unwrap().num_chunks(), 123);
         assert_eq!(NumberType::from("l/123/456").unwrap().num_chunks(), 456);
         assert_eq!(NumberType::from("r/123").unwrap().num_chunks(), 123);

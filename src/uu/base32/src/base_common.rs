@@ -1,11 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Jordy Dickinson <jordy.dickinson@gmail.com>
-// (c) Jian Zeng <anonymousknight96@gmail.com>
-// (c) Alex Lyon <arcterus@mail.com>
-//
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use std::io::{stdout, Read, Write};
 

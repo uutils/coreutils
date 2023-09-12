@@ -1,7 +1,7 @@
-// * This file is part of the uutils coreutils package.
-// *
-// * For the full copyright and license information, please view the LICENSE file
-// * that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime
 
@@ -14,10 +14,12 @@ use nix::sys::termios::{
     OutputFlags, SpecialCharacterIndices, Termios,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
-use std::io::{self, stdout};
+use std::fs::File;
+use std::io::{self, stdout, Stdout};
 use std::ops::ControlFlow;
+use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
+use std::os::unix::io::{AsRawFd, RawFd};
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage};
 
@@ -91,8 +93,31 @@ mod options {
 struct Options<'a> {
     all: bool,
     save: bool,
-    file: RawFd,
+    file: Device,
     settings: Option<Vec<&'a str>>,
+}
+
+enum Device {
+    File(File),
+    Stdout(Stdout),
+}
+
+impl AsFd for Device {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        match self {
+            Self::File(f) => f.as_fd(),
+            Self::Stdout(stdout) => stdout.as_fd(),
+        }
+    }
+}
+
+impl AsRawFd for Device {
+    fn as_raw_fd(&self) -> RawFd {
+        match self {
+            Self::File(f) => f.as_raw_fd(),
+            Self::Stdout(stdout) => stdout.as_raw_fd(),
+        }
+    }
 }
 
 impl<'a> Options<'a> {
@@ -110,12 +135,13 @@ impl<'a> Options<'a> {
                 //    will clean up the FD for us on exit, so it doesn't
                 //    matter. The alternative would be to have an enum of
                 //    BorrowedFd/OwnedFd to handle both cases.
-                Some(f) => std::fs::OpenOptions::new()
-                    .read(true)
-                    .custom_flags(O_NONBLOCK)
-                    .open(f)?
-                    .into_raw_fd(),
-                None => stdout().as_raw_fd(),
+                Some(f) => Device::File(
+                    std::fs::OpenOptions::new()
+                        .read(true)
+                        .custom_flags(O_NONBLOCK)
+                        .open(f)?,
+                ),
+                None => Device::Stdout(stdout()),
             },
             settings: matches
                 .get_many::<String>(options::SETTINGS)
@@ -175,7 +201,7 @@ fn stty(opts: &Options) -> UResult<()> {
     }
 
     // TODO: Figure out the right error message for when tcgetattr fails
-    let mut termios = tcgetattr(opts.file).expect("Could not get terminal attributes");
+    let mut termios = tcgetattr(opts.file.as_fd()).expect("Could not get terminal attributes");
 
     if let Some(settings) = &opts.settings {
         for setting in settings {
@@ -187,8 +213,12 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
 
-        tcsetattr(opts.file, nix::sys::termios::SetArg::TCSANOW, &termios)
-            .expect("Could not write terminal attributes");
+        tcsetattr(
+            opts.file.as_fd(),
+            nix::sys::termios::SetArg::TCSANOW,
+            &termios,
+        )
+        .expect("Could not write terminal attributes");
     } else {
         print_settings(&termios, opts).expect("TODO: make proper error here from nix error");
     }
@@ -228,7 +258,7 @@ fn print_terminal_size(termios: &Termios, opts: &Options) -> nix::Result<()> {
 
     if opts.all {
         let mut size = TermSize::default();
-        unsafe { tiocgwinsz(opts.file, &mut size as *mut _)? };
+        unsafe { tiocgwinsz(opts.file.as_raw_fd(), &mut size as *mut _)? };
         print!("rows {}; columns {}; ", size.rows, size.columns);
     }
 

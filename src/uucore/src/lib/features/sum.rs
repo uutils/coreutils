@@ -1,9 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Yuan YangHao <yuanyanghau@gmail.com>
-//
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore memmem algo
 
@@ -178,7 +176,7 @@ impl Digest for CRC {
     }
 
     fn hash_update(&mut self, input: &[u8]) {
-        for &elt in input.iter() {
+        for &elt in input {
             self.update(elt);
         }
         self.size += input.len();
@@ -225,7 +223,7 @@ impl Digest for BSD {
     }
 
     fn hash_update(&mut self, input: &[u8]) {
-        for &byte in input.iter() {
+        for &byte in input {
             self.state = (self.state >> 1) + ((self.state & 1) << 15);
             self.state = self.state.wrapping_add(u16::from(byte));
         }
@@ -259,7 +257,7 @@ impl Digest for SYSV {
     }
 
     fn hash_update(&mut self, input: &[u8]) {
-        for &byte in input.iter() {
+        for &byte in input {
             self.state = self.state.wrapping_add(u32::from(byte));
         }
     }

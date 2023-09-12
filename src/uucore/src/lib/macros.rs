@@ -1,3 +1,8 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
 // TODO fix broken links
 #![allow(rustdoc::broken_intra_doc_links)]
 //! Macros for the uucore utilities.
@@ -35,8 +40,6 @@
 use std::sync::atomic::AtomicBool;
 
 // This file is part of the uutils coreutils package.
-//
-// (c) Alex Lyon <arcterus@mail.com>
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.

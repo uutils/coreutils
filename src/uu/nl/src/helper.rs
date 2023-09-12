@@ -1,25 +1,10 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (ToDO) conv
 
 use crate::options;
-
-// parse_style parses a style string into a NumberingStyle.
-fn parse_style(chars: &[char]) -> Result<crate::NumberingStyle, String> {
-    if chars.len() == 1 && chars[0] == 'a' {
-        Ok(crate::NumberingStyle::All)
-    } else if chars.len() == 1 && chars[0] == 't' {
-        Ok(crate::NumberingStyle::NonEmpty)
-    } else if chars.len() == 1 && chars[0] == 'n' {
-        Ok(crate::NumberingStyle::None)
-    } else if chars.len() > 1 && chars[0] == 'p' {
-        let s: String = chars[1..].iter().cloned().collect();
-        match regex::Regex::new(&s) {
-            Ok(re) => Ok(crate::NumberingStyle::Regex(Box::new(re))),
-            Err(_) => Err(String::from("Illegal regular expression")),
-        }
-    } else {
-        Err(String::from("Illegal style encountered"))
-    }
-}
 
 // parse_options loads the options into the settings, returning an array of
 // error messages.
@@ -35,47 +20,32 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
         .get_one::<String>(options::NUMBER_FORMAT)
         .map(Into::into)
         .unwrap_or_default();
-    match opts.get_one::<String>(options::BODY_NUMBERING) {
+    match opts
+        .get_one::<String>(options::HEADER_NUMBERING)
+        .map(String::as_str)
+        .map(TryInto::try_into)
+    {
         None => {}
-        Some(val) => {
-            let chars: Vec<char> = val.chars().collect();
-            match parse_style(&chars) {
-                Ok(s) => {
-                    settings.body_numbering = s;
-                }
-                Err(message) => {
-                    errs.push(message);
-                }
-            }
-        }
+        Some(Ok(style)) => settings.header_numbering = style,
+        Some(Err(message)) => errs.push(message.to_string()),
     }
-    match opts.get_one::<String>(options::FOOTER_NUMBERING) {
+    match opts
+        .get_one::<String>(options::BODY_NUMBERING)
+        .map(String::as_str)
+        .map(TryInto::try_into)
+    {
         None => {}
-        Some(val) => {
-            let chars: Vec<char> = val.chars().collect();
-            match parse_style(&chars) {
-                Ok(s) => {
-                    settings.footer_numbering = s;
-                }
-                Err(message) => {
-                    errs.push(message);
-                }
-            }
-        }
+        Some(Ok(style)) => settings.body_numbering = style,
+        Some(Err(message)) => errs.push(message.to_string()),
     }
-    match opts.get_one::<String>(options::HEADER_NUMBERING) {
+    match opts
+        .get_one::<String>(options::FOOTER_NUMBERING)
+        .map(String::as_str)
+        .map(TryInto::try_into)
+    {
         None => {}
-        Some(val) => {
-            let chars: Vec<char> = val.chars().collect();
-            match parse_style(&chars) {
-                Ok(s) => {
-                    settings.header_numbering = s;
-                }
-                Err(message) => {
-                    errs.push(message);
-                }
-            }
-        }
+        Some(Ok(style)) => settings.footer_numbering = style,
+        Some(Err(message)) => errs.push(message.to_string()),
     }
     match opts.get_one::<usize>(options::NUMBER_WIDTH) {
         None => {}

@@ -1,8 +1,6 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Michael Gehring <mg@ebfe.org>
-//
-//  For the full copyright and license information, please view the LICENSE
+// For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) fname, algo
@@ -209,8 +207,7 @@ fn digest_read<T: Read>(
         Ok((digest.result_str(), output_size))
     } else {
         // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
-        let mut bytes = Vec::new();
-        bytes.resize((output_bits + 7) / 8, 0);
+        let mut bytes = vec![0; (output_bits + 7) / 8];
         digest.hash_finalize(&mut bytes);
         Ok((encode(bytes), output_size))
     }

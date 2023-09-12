@@ -1,6 +1,6 @@
 [package]
 name = "uu_pr"
-version = "0.0.20"
+version = "0.0.21"
 authors = ["uutils developers"]
 license = "MIT"
 description = "pr ~ (uutils) convert text files for printing"

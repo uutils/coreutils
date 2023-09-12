@@ -1,4 +1,8 @@
-// spell-checker:ignore iinvalid linvalid ninvalid vinvalid winvalid
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+// spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid ninvalid vinvalid winvalid
 use crate::common::util::TestScenario;
 
 #[test]
@@ -425,4 +429,60 @@ fn test_numbering_matched_lines() {
                 .stdout_is("\n     1\ta\n       b\n     2\tc\n");
         }
     }
+}
+
+#[test]
+fn test_invalid_numbering() {
+    let invalid_args = [
+        "-hinvalid",
+        "--header-numbering=invalid",
+        "-binvalid",
+        "--body-numbering=invalid",
+        "-finvalid",
+        "--footer-numbering=invalid",
+    ];
+
+    for invalid_arg in invalid_args {
+        new_ucmd!()
+            .arg(invalid_arg)
+            .fails()
+            .stderr_contains("invalid numbering style: 'invalid'");
+    }
+}
+
+#[test]
+fn test_invalid_regex_numbering() {
+    let invalid_args = [
+        "-hp[",
+        "--header-numbering=p[",
+        "-bp[",
+        "--body-numbering=p[",
+        "-fp[",
+        "--footer-numbering=p[",
+    ];
+
+    for invalid_arg in invalid_args {
+        new_ucmd!()
+            .arg(invalid_arg)
+            .fails()
+            .stderr_contains("invalid regular expression");
+    }
+}
+
+#[test]
+fn test_line_number_overflow() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MAX))
+        .pipe_in("a\nb")
+        .fails()
+        .stdout_is(format!("{}\ta\n", i64::MAX))
+        .stderr_is("nl: line number overflow\n");
+
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .arg("--line-increment=-1")
+        .pipe_in("a\nb")
+        .fails()
+        .stdout_is(format!("{}\ta\n", i64::MIN))
+        .stderr_is("nl: line number overflow\n");
 }

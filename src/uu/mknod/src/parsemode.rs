@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (path) osrelease
 
 use libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
@@ -39,7 +43,7 @@ mod test {
         assert_eq!(super::parse_mode("u+x").unwrap(), 0o766);
         assert_eq!(
             super::parse_mode("+x").unwrap(),
-            if !is_wsl() { 0o777 } else { 0o776 }
+            if is_wsl() { 0o776 } else { 0o777 }
         );
         assert_eq!(super::parse_mode("a-w").unwrap(), 0o444);
         assert_eq!(super::parse_mode("g-r").unwrap(), 0o626);

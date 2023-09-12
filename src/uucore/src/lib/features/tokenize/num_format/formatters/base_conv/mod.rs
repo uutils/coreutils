@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (ToDO) arrnum arr_num mult basenum bufferval refd vals arrfloat conv intermed addl
 
 pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Vec<u8> {
@@ -191,7 +195,7 @@ pub fn str_to_arrnum(src: &str, radix_def_src: &dyn RadixDef) -> Vec<u8> {
 
 pub fn arrnum_to_str(src: &[u8], radix_def_dest: &dyn RadixDef) -> String {
     let mut str_out = String::new();
-    for u in src.iter() {
+    for u in src {
         #[allow(clippy::single_match)]
         match radix_def_dest.format_u8(*u) {
             Some(c) => {

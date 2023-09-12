@@ -1,8 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Joseph Crail <jbcrail@gmail.com>
-// (c) Jian Zeng <anonymousknight96 AT gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -845,7 +842,7 @@ mod tests {
         let path1 = temp_file.path();
         let path2 = temp_file.path();
 
-        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), true);
+        assert!(are_hardlinks_to_same_file(&path1, &path2));
     }
 
     #[cfg(unix)]
@@ -860,7 +857,7 @@ mod tests {
         let path1 = temp_file1.path();
         let path2 = temp_file2.path();
 
-        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), false);
+        assert!(!are_hardlinks_to_same_file(&path1, &path2));
     }
 
     #[cfg(unix)]
@@ -873,6 +870,6 @@ mod tests {
         let path2 = temp_file.path().with_extension("hardlink");
         fs::hard_link(&path1, &path2).unwrap();
 
-        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), true);
+        assert!(are_hardlinks_to_same_file(&path1, &path2));
     }
 }

@@ -1,10 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Tobias Bohumir Schottdorf <tobias.schottdorf@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
-//  *
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
@@ -69,6 +66,23 @@ enum NumberingStyle {
     NonEmpty,
     None,
     Regex(Box<regex::Regex>),
+}
+
+impl TryFrom<&str> for NumberingStyle {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "a" => Ok(Self::All),
+            "t" => Ok(Self::NonEmpty),
+            "n" => Ok(Self::None),
+            _ if s.starts_with('p') => match regex::Regex::new(&s[1..]) {
+                Ok(re) => Ok(Self::Regex(Box::new(re))),
+                Err(_) => Err(String::from("invalid regular expression")),
+            },
+            _ => Err(format!("invalid numbering style: '{s}'")),
+        }
+    }
 }
 
 // NumberFormat specifies how line numbers are output within their allocated
@@ -327,7 +341,10 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
                     line
                 );
                 // update line number for the potential next line
-                line_no += settings.line_increment;
+                match line_no.checked_add(settings.line_increment) {
+                    Some(new_line_no) => line_no = new_line_no,
+                    None => return Err(USimpleError::new(1, "line number overflow")),
+                }
             } else {
                 let spaces = " ".repeat(settings.number_width + 1);
                 println!("{spaces}{line}");

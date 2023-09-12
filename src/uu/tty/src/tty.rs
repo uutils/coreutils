@@ -1,17 +1,14 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Jordi Boggiano <j.boggiano@seld.be>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 //  *
 //  * Synced with http://lingrok.org/xref/coreutils/src/tty.c
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use is_terminal::IsTerminal;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::os::unix::io::AsRawFd;
 use uucore::error::{set_exit_code, UResult};
 use uucore::{format_usage, help_about, help_usage};

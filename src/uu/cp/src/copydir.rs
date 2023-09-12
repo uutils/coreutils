@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore TODO canonicalizes direntry pathbuf symlinked
 //! Recursively copy the contents of a directory.
 //!
@@ -25,7 +25,7 @@ use walkdir::{DirEntry, WalkDir};
 
 use crate::{
     aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, preserve_hardlinks,
-    CopyResult, Error, Options, TargetSlice,
+    CopyResult, Error, Options,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -33,8 +33,8 @@ use crate::{
 fn adjust_canonicalization(p: &Path) -> Cow<Path> {
     // In some cases, \\? can be missing on some Windows paths.  Add it at the
     // beginning unless the path is prefixed with a device namespace.
-    const VERBATIM_PREFIX: &str = r#"\\?"#;
-    const DEVICE_NS_PREFIX: &str = r#"\\."#;
+    const VERBATIM_PREFIX: &str = r"\\?";
+    const DEVICE_NS_PREFIX: &str = r"\\.";
 
     let has_prefix = p
         .components()
@@ -307,7 +307,7 @@ fn copy_direntry(
 pub(crate) fn copy_directory(
     progress_bar: &Option<ProgressBar>,
     root: &Path,
-    target: &TargetSlice,
+    target: &Path,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,

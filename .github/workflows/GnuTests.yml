@@ -42,7 +42,7 @@ jobs:
         outputs path_GNU path_GNU_tests path_reference path_UUTILS
         #
         repo_default_branch="${{ github.event.repository.default_branch }}"
-        repo_GNU_ref="v9.3"
+        repo_GNU_ref="v9.4"
         repo_reference_branch="${{ github.event.repository.default_branch }}"
         outputs repo_default_branch repo_GNU_ref repo_reference_branch
         #
@@ -55,7 +55,7 @@ jobs:
         TEST_FULL_SUMMARY_FILE='gnu-full-result.json'
         outputs SUITE_LOG_FILE ROOT_SUITE_LOG_FILE TEST_FILESET_PREFIX TEST_FILESET_SUFFIX TEST_LOGS_GLOB TEST_SUMMARY_FILE TEST_FULL_SUMMARY_FILE
     - name: Checkout code (uutil)
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         path: '${{ steps.vars.outputs.path_UUTILS }}'
     - uses: dtolnay/rust-toolchain@master
@@ -66,7 +66,7 @@ jobs:
       with:
         workspaces: "./${{ steps.vars.outputs.path_UUTILS }} -> target"
     - name: Checkout code (GNU coreutils)
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: 'coreutils/coreutils'
         path: '${{ steps.vars.outputs.path_GNU }}'
@@ -307,15 +307,15 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout code uutil
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         path: 'uutils'
     - name: Checkout GNU coreutils
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
-        ref: 'v9.3'
+        ref: 'v9.4'
         submodules: recursive
     - uses: dtolnay/rust-toolchain@master
       with:

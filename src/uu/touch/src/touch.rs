@@ -1,10 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Nick Platt <platt.nicholas@gmail.com>
-// (c) Jian Zeng <anonymousknight96 AT gmail.com>
-//
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME subsecond datelike timelike
 // spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
