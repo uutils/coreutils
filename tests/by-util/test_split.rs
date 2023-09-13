@@ -306,8 +306,7 @@ fn test_filter_broken_pipe() {
     let name = "filter-big-input";
 
     RandomFile::new(&at, name).add_lines(1024 * 10);
-    ucmd
-        .args(&["--filter=head -c1 > /dev/null", "-n", "r/1", name])
+    ucmd.args(&["--filter=head -c1 > /dev/null", "-n", "r/1", name])
         .succeeds();
 }
 

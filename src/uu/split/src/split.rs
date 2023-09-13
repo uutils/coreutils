@@ -1293,7 +1293,8 @@ where
         settings.suffix_length,
         settings.suffix_type,
         settings.suffix_start,
-    ).map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
+    )
+    .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
 
     // Create one writer for each chunk. This will create each
     // of the underlying files (if not in `--filter` mode).
