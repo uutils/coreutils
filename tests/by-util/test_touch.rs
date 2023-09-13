@@ -5,7 +5,6 @@
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
 
 use crate::common::util::{AtPath, TestScenario};
-use chrono::TimeZone;
 use filetime::{self, FileTime};
 use std::fs::remove_file;
 use std::path::PathBuf;
@@ -32,7 +31,7 @@ fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
 }
 
 fn str_to_filetime(format: &str, s: &str) -> FileTime {
-    let tm = chrono::Utc.datetime_from_str(s, format).unwrap();
+    let tm = chrono::NaiveDateTime::parse_from_str(s, format).unwrap();
     FileTime::from_unix_time(tm.timestamp(), tm.timestamp_subsec_nanos())
 }
 
