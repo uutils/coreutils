@@ -9,6 +9,3 @@ pub mod error;
 pub mod line_ending;
 pub mod os;
 pub mod panic;
-pub mod version_cmp;
-// dir and vdir also need access to the quoting_style module
-pub mod quoting_style;

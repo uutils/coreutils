@@ -7,6 +7,7 @@
 
 use std::error::Error;
 use std::fmt;
+use std::num::IntErrorKind;
 
 use crate::display::Quotable;
 
@@ -201,8 +202,10 @@ impl<'parser> Parser<'parser> {
         radix: u32,
         original_size: &str,
     ) -> Result<u64, ParseSizeError> {
-        u64::from_str_radix(numeric_string, radix)
-            .map_err(|_| ParseSizeError::ParseFailure(original_size.to_string()))
+        u64::from_str_radix(numeric_string, radix).map_err(|e| match e.kind() {
+            IntErrorKind::PosOverflow => ParseSizeError::size_too_big(original_size),
+            _ => ParseSizeError::ParseFailure(original_size.to_string()),
+        })
     }
 }
 
@@ -230,6 +233,23 @@ impl<'parser> Parser<'parser> {
 /// ```
 pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
     Parser::default().parse(size)
+}
+
+/// Same as `parse_size()`, except returns `u64::MAX` on overflow
+/// GNU lib/coreutils include similar functionality
+/// and GNU test suite checks this behavior for some utils
+pub fn parse_size_max(size: &str) -> Result<u64, ParseSizeError> {
+    let result = Parser::default().parse(size);
+    match result {
+        Ok(_) => result,
+        Err(error) => {
+            if let ParseSizeError::SizeTooBig(_) = error {
+                Ok(u64::MAX)
+            } else {
+                Err(error)
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -390,6 +410,14 @@ mod tests {
             ParseSizeError::SizeTooBig("'1Y': Value too large for defined data type".to_string()),
             parse_size("1Y").unwrap_err()
         );
+    }
+
+    #[test]
+    #[cfg(not(target_pointer_width = "128"))]
+    fn overflow_to_max_x64() {
+        assert_eq!(Ok(u64::MAX), parse_size_max("18446744073709551616"));
+        assert_eq!(Ok(u64::MAX), parse_size_max("10000000000000000000000"));
+        assert_eq!(Ok(u64::MAX), parse_size_max("1Y"));
     }
 
     #[test]

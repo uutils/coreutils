@@ -25,8 +25,6 @@ pub use crate::mods::error;
 pub use crate::mods::line_ending;
 pub use crate::mods::os;
 pub use crate::mods::panic;
-pub use crate::mods::quoting_style;
-pub use crate::mods::version_cmp;
 
 // * string parsing modules
 pub use crate::parser::parse_glob;
@@ -47,6 +45,8 @@ pub use crate::features::fsext;
 pub use crate::features::lines;
 #[cfg(feature = "memo")]
 pub use crate::features::memo;
+#[cfg(feature = "quoting-style")]
+pub use crate::features::quoting_style;
 #[cfg(feature = "ranges")]
 pub use crate::features::ranges;
 #[cfg(feature = "ringbuffer")]
@@ -55,6 +55,8 @@ pub use crate::features::ringbuffer;
 pub use crate::features::sum;
 #[cfg(feature = "update-control")]
 pub use crate::features::update_control;
+#[cfg(feature = "version-cmp")]
+pub use crate::features::version_cmp;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)

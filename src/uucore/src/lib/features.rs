@@ -16,6 +16,8 @@ pub mod fsext;
 pub mod lines;
 #[cfg(feature = "memo")]
 pub mod memo;
+#[cfg(feature = "quoting-style")]
+pub mod quoting_style;
 #[cfg(feature = "ranges")]
 pub mod ranges;
 #[cfg(feature = "ringbuffer")]
@@ -26,6 +28,8 @@ pub mod sum;
 mod tokenize;
 #[cfg(feature = "update-control")]
 pub mod update_control;
+#[cfg(feature = "version-cmp")]
+pub mod version_cmp;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows (i.e. Unix + Fuchsia)
