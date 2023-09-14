@@ -151,11 +151,9 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
                 }
             };
             if !matches.contains_id(OPT_WIDTH) {
-                // GNU fmt.c:407
                 fmt_opts.width = fmt_opts.goal + 10;
             }
         }
-        // GNU fmt.c:411 equals to 0.935 = 93.5%
         None => fmt_opts.goal = fmt_opts.width * (2 * (100 - 7) + 1) / 200,
     }
     if fmt_opts.goal > fmt_opts.width {
@@ -170,26 +168,6 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
             ),
         ));
     }
-
-    if let Some(s) = matches.get_one::<String>(OPT_GOAL) {
-        fmt_opts.goal = match s.parse::<usize>() {
-            Ok(t) => t,
-            Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("Invalid GOAL specification: {}: {}", s.quote(), e),
-                ));
-            }
-        };
-
-        if !matches.contains_id(OPT_WIDTH) {
-            fmt_opts.width = fmt_opts.goal + 10;
-        } else if fmt_opts.goal > fmt_opts.width {
-            return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
-        }
-    } else {
-        fmt_opts.goal = fmt_opts.width * (2 * (100 - 7) + 1) / 200;
-    };
 
     if let Some(s) = matches.get_one::<String>(OPT_TAB_WIDTH) {
         fmt_opts.tabwidth = match s.parse::<usize>() {
