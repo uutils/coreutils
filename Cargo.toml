@@ -301,7 +301,7 @@ num-traits = "0.2.16"
 number_prefix = "0.4"
 once_cell = "1.18.0"
 onig = { version = "~6.4", default-features = false }
-parse_datetime = "0.4.0"
+parse_datetime = "0.5.0"
 phf = "0.11.2"
 phf_codegen = "0.11.2"
 platform-info = "2.0.2"
