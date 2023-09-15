@@ -3503,3 +3503,22 @@ fn test_invalid_utf8() {
     at.touch(filename);
     ucmd.succeeds();
 }
+
+#[cfg(all(unix, feature = "chmod"))]
+#[test]
+fn test_ls_perm_io_errors() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("d");
+    at.symlink_file("/", "d/s");
+
+    scene.ccmd("chmod").arg("600").arg("d").succeeds();
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("d")
+        .fails()
+        .code_is(1)
+        .stderr_contains("Permission denied");
+}
