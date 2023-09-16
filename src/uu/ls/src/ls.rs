@@ -2908,55 +2908,64 @@ fn display_file_name(
         && path.file_type(out).unwrap().is_symlink()
         && !path.must_dereference
     {
-        if let Ok(target) = path.p_buf.read_link() {
-            name.push_str(" -> ");
+        match path.p_buf.read_link() {
+            Ok(target) => {
+                name.push_str(" -> ");
 
-            // We might as well color the symlink output after the arrow.
-            // This makes extra system calls, but provides important information that
-            // people run `ls -l --color` are very interested in.
-            if let Some(ls_colors) = &config.color {
-                // We get the absolute path to be able to construct PathData with valid Metadata.
-                // This is because relative symlinks will fail to get_metadata.
-                let mut absolute_target = target.clone();
-                if target.is_relative() {
-                    if let Some(parent) = path.p_buf.parent() {
-                        absolute_target = parent.join(absolute_target);
+                // We might as well color the symlink output after the arrow.
+                // This makes extra system calls, but provides important information that
+                // people run `ls -l --color` are very interested in.
+                if let Some(ls_colors) = &config.color {
+                    // We get the absolute path to be able to construct PathData with valid Metadata.
+                    // This is because relative symlinks will fail to get_metadata.
+                    let mut absolute_target = target.clone();
+                    if target.is_relative() {
+                        if let Some(parent) = path.p_buf.parent() {
+                            absolute_target = parent.join(absolute_target);
+                        }
                     }
-                }
 
-                let target_data = PathData::new(absolute_target, None, None, config, false);
+                    let target_data = PathData::new(absolute_target, None, None, config, false);
 
-                // If we have a symlink to a valid file, we use the metadata of said file.
-                // Because we use an absolute path, we can assume this is guaranteed to exist.
-                // Otherwise, we use path.md(), which will guarantee we color to the same
-                // color of non-existent symlinks according to style_for_path_with_metadata.
-                if path.md(out).is_none()
-                    && get_metadata(target_data.p_buf.as_path(), target_data.must_dereference)
-                        .is_err()
-                {
-                    name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
+                    // If we have a symlink to a valid file, we use the metadata of said file.
+                    // Because we use an absolute path, we can assume this is guaranteed to exist.
+                    // Otherwise, we use path.md(), which will guarantee we color to the same
+                    // color of non-existent symlinks according to style_for_path_with_metadata.
+                    if path.md(out).is_none()
+                        && get_metadata(target_data.p_buf.as_path(), target_data.must_dereference)
+                            .is_err()
+                    {
+                        name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
+                    } else {
+                        // Use fn get_metadata instead of md() here and above because ls
+                        // should not exit with an err, if we are unable to obtain the target_metadata
+                        let target_metadata = match get_metadata(
+                            target_data.p_buf.as_path(),
+                            target_data.must_dereference,
+                        ) {
+                            Ok(md) => md,
+                            Err(_) => path.md(out).unwrap().to_owned(),
+                        };
+
+                        name.push_str(&color_name(
+                            escape_name(target.as_os_str(), &config.quoting_style),
+                            &target_data.p_buf,
+                            Some(&target_metadata),
+                            ls_colors,
+                        ));
+                    }
                 } else {
-                    // Use fn get_metadata instead of md() here and above because ls
-                    // should not exit with an err, if we are unable to obtain the target_metadata
-                    let target_metadata = match get_metadata(
-                        target_data.p_buf.as_path(),
-                        target_data.must_dereference,
-                    ) {
-                        Ok(md) => md,
-                        Err(_) => path.md(out).unwrap().to_owned(),
-                    };
-
-                    name.push_str(&color_name(
-                        escape_name(target.as_os_str(), &config.quoting_style),
-                        &target_data.p_buf,
-                        Some(&target_metadata),
-                        ls_colors,
-                    ));
+                    // If no coloring is required, we just use target as is.
+                    // Apply the right quoting
+                    name.push_str(&escape_name(target.as_os_str(), &config.quoting_style));
                 }
-            } else {
-                // If no coloring is required, we just use target as is.
-                // Apply the right quoting
-                name.push_str(&escape_name(target.as_os_str(), &config.quoting_style));
+            }
+            Err(err) => {
+                show!(LsError::IOErrorContext(
+                    err,
+                    path.p_buf.to_path_buf(),
+                    false
+                ));
             }
         }
     }
