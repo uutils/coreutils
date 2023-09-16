@@ -49,12 +49,82 @@ fn test_fmt_width_too_big() {
 }
 
 #[test]
-fn test_fmt_goal() {
+fn test_fmt_goal_input_7() {
     for param in ["-g", "--goal"] {
         new_ucmd!()
             .args(&["one-word-per-line.txt", param, "7"])
             .succeeds()
             .stdout_is("this is a\nfile with one\nword per line\n");
+    }
+}
+
+#[test]
+fn test_fmt_goal_input_6() {
+    for param in ["-g", "--goal"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "6"])
+            .succeeds()
+            .stdout_is("this is\na file\nwith one\nword per line\n");
+    }
+}
+
+#[test]
+fn test_fmt_goal_input_8() {
+    for param in ["-g", "--goal"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "8"])
+            .succeeds()
+            .stdout_is("this is a\nfile with\none word per line\n");
+    }
+}
+
+#[test]
+fn test_fmt_goal_input_9() {
+    for param in ["-g", "--goal"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "9"])
+            .succeeds()
+            .stdout_is("this is a\nfile with\none word per line\n");
+    }
+}
+
+#[test]
+fn test_fmt_goal_input_5() {
+    for param in ["-g", "--goal"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "5"])
+            .succeeds()
+            .stdout_is("this is\na file\nwith one\nword per line\n");
+    }
+}
+
+#[test]
+fn test_fmt_goal_input_4() {
+    for param in ["-g", "--goal"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "4"])
+            .succeeds()
+            .stdout_is("this is\na file\nwith one\nword per line\n");
+    }
+}
+
+#[test]
+fn test_fmt_goal_input_3() {
+    for param in ["-g", "--goal"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "3"])
+            .succeeds()
+            .stdout_is("this is a\nfile with\none word\nper line\n");
+    }
+}
+
+#[test]
+fn test_fmt_goal_input_2() {
+    for param in ["-g", "--goal"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "2"])
+            .succeeds()
+            .stdout_is("this is a\nfile with\none word\nper line\n");
     }
 }
 

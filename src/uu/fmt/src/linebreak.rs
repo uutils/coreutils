@@ -297,38 +297,39 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
                 active.length = tlen;
 
                 // if we're above the goal, we can also consider breaking here
-                if tlen >= args.opts.goal {
-                    let (new_demerits, new_ratio) = if is_last_word {
-                        // there is no penalty for the final line's length
-                        (0, 0.0)
-                    } else {
-                        compute_demerits(
-                            args.opts.goal as isize - tlen as isize,
-                            args.opts.width as isize,
-                            active.length as isize,
-                            active.prev_rat,
-                        )
-                    };
+                // if tlen >= args.opts.goal {
+                let (new_demerits, new_ratio) = if is_last_word {
+                    // there is no penalty for the final line's length
+                    (0, 0.0)
+                } else {
+                    compute_demerits(
+                        tlen as isize - args.opts.goal as isize,
+                        // args.opts.goal as isize - tlen as isize,
+                        args.opts.width as isize,
+                        (active.length + w.word_nchars) as isize,
+                        active.prev_rat,
+                    )
+                };
 
-                    // do not even consider adding a line that has too many demerits
-                    // also, try to detect overflow by checking signum
-                    let total_demerits = new_demerits + active.demerits;
-                    if new_demerits < BAD_INFTY_SQ
-                        && total_demerits < ld_new
-                        && active.demerits.signum() <= new_demerits.signum()
-                    {
-                        ld_new = total_demerits;
-                        new_linebreaks.push(LineBreak {
-                            prev: i,
-                            linebreak: Some(w),
-                            break_before: false,
-                            demerits: new_demerits,
-                            prev_rat: new_ratio,
-                            length: args.indent_len,
-                            fresh: true,
-                        });
-                    }
+                // do not even consider adding a line that has too many demerits
+                // also, try to detect overflow by checking signum
+                let total_demerits = new_demerits + active.demerits;
+                if new_demerits < BAD_INFTY_SQ
+                    && total_demerits < ld_new
+                    && active.demerits.signum() <= new_demerits.signum()
+                {
+                    ld_new = total_demerits;
+                    new_linebreaks.push(LineBreak {
+                        prev: i,
+                        linebreak: Some(w),
+                        break_before: false,
+                        demerits: new_demerits,
+                        prev_rat: new_ratio,
+                        length: args.indent_len,
+                        fresh: true,
+                    });
                 }
+                // }
             }
         }
 
@@ -394,11 +395,13 @@ fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a Wo
 const BAD_INFTY: i64 = 10_000_000;
 const BAD_INFTY_SQ: i64 = BAD_INFTY * BAD_INFTY;
 // badness = BAD_MULT * abs(r) ^ 3
-const BAD_MULT: f32 = 100.0;
+// const BAD_MULT: f32 = 100.0;
+const BAD_MULT: f32 = 80.0;
 // DR_MULT is multiplier for delta-R between lines
-const DR_MULT: f32 = 600.0;
+const DR_MULT: f32 = 1.0;
 // DL_MULT is penalty multiplier for short words at end of line
-const DL_MULT: f32 = 300.0;
+// const DL_MULT: f32 = 300.0;
+const DL_MULT: f32 = 70.0;
 
 fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32) -> (i64, f32) {
     // how much stretch are we using?
@@ -412,7 +415,8 @@ fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32
     let bad_linelen = if ratio.abs() > 1.0f32 {
         BAD_INFTY
     } else {
-        (BAD_MULT * ratio.powi(3).abs()) as i64
+        (BAD_MULT * ratio.powi(2).abs()) as i64
+        // (BAD_MULT * ratio.powi(3).abs()) as i64
     };
 
     // we penalize lines ending in really short words
@@ -421,12 +425,20 @@ fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32
     } else {
         (DL_MULT
             * ((stretch - wlen) as f32 / (stretch - 1) as f32)
-                .powi(3)
+                .powi(2)
                 .abs()) as i64
+
+        // (DL_MULT
+        //     * ((stretch - wlen) as f32 / (stretch - 1) as f32)
+        //         .powi(3)
+        //         .abs()) as i64
     };
 
     // we penalize lines that have very different ratios from previous lines
-    let bad_delta_r = (DR_MULT * (((ratio - prev_rat) / 2.0).powi(3)).abs()) as i64;
+    let bad_delta_r = (DR_MULT * (((ratio - prev_rat) / 3.0).powi(3)).abs()) as i64;
+    // let bad_delta_r = (DR_MULT * (((ratio - prev_rat) / 3.0).powi(2)).abs()) as i64;
+    // let bad_delta_r = (DR_MULT * (ratio - prev_rat).abs()) as i64;
+    // let bad_delta_r = 0;
 
     let demerits = i64::pow(1 + bad_linelen + bad_wordlen + bad_delta_r, 2);
 
