@@ -137,6 +137,12 @@ If you also want to test the core utilities:
 cargo test  -p uucore -p coreutils
 ```
 
+Or to test the pure Rust tests in the utility itself:
+
+```shell
+cargo test -p uu_ls --lib
+```
+
 Running the complete test suite might take a while. We use [nextest](https://nexte.st/index.html) in
 the CI and you might want to try it out locally. It can speed up the execution time of the whole
 test run significantly if the cpu has multiple cores.
