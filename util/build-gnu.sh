@@ -263,7 +263,7 @@ sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/printf/printf-cov.pl
 
 
 # with ls --dired, in case of error, we have a slightly different error position
-sed  -i -e "s|44 45|45 46|" tests/ls/stat-failed.sh
+sed  -i -e "s|44 45|47 48|" tests/ls/stat-failed.sh
 
 sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du: option requires an argument/error: a value is required for '--threshold <SIZE>' but none was supplied/" -e "/Try 'du --help' for more information./d" tests/du/threshold.sh
 

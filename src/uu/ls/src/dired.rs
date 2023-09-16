@@ -13,7 +13,6 @@ use uucore::error::UResult;
 pub struct BytePosition {
     pub start: usize,
     pub end: usize,
-    pub is_total: Option<bool>,
 }
 
 /// Represents the output structure for DIRED, containing positions for both DIRED and SUBDIRED.
@@ -21,6 +20,7 @@ pub struct BytePosition {
 pub struct DiredOutput {
     pub dired_positions: Vec<BytePosition>,
     pub subdired_positions: Vec<BytePosition>,
+    pub just_printed_total: bool,
 }
 
 impl fmt::Display for BytePosition {
@@ -44,7 +44,7 @@ pub fn calculate_dired_byte_positions(
         0
     };
 
-    let start = output_display_len + offset_from_previous_line + DIRED_TRAILING_OFFSET;
+    let start = output_display_len + offset_from_previous_line;
     let end = start + dfn_len;
     (start, end)
 }
@@ -63,7 +63,6 @@ pub fn calculate_offset_and_push(dired: &mut DiredOutput, path_len: usize) {
     dired.subdired_positions.push(BytePosition {
         start: offset,
         end: path_len + offset,
-        is_total: None,
     });
 }
 
@@ -76,9 +75,7 @@ pub fn print_dired_output(
     out.flush()?;
     if config.recursive {
         print_positions("//SUBDIRED//", &dired.subdired_positions);
-    } else if dired.dired_positions.last().map_or(false, |last_position| {
-        !last_position.is_total.unwrap_or(false)
-    }) {
+    } else if dired.just_printed_total == false {
         print_positions("//DIRED//", &dired.dired_positions);
     }
     println!("//DIRED-OPTIONS// --quoting-style={}", config.quoting_style);
@@ -95,12 +92,12 @@ fn print_positions(prefix: &str, positions: &Vec<BytePosition>) {
 }
 
 pub fn add_total(total_len: usize, dired: &mut DiredOutput) {
+    dired.just_printed_total = true;
     dired.dired_positions.push(BytePosition {
         start: 0,
         // the 2 is from the trailing spaces
         // the 1 is from the line ending (\n)
         end: total_len + DIRED_TRAILING_OFFSET - 1,
-        is_total: Some(true),
     });
 }
 
@@ -125,26 +122,20 @@ pub fn calculate_and_update_positions(
 /// update when it is the first element in the list (to manage "total X"
 /// insert when it isn't the about total
 pub fn update_positions(start: usize, end: usize, dired: &mut DiredOutput, adjust: bool) {
-    if let Some(last_position) = dired.dired_positions.last() {
-        if last_position.is_total.unwrap_or(false) {
-            if let Some(last_position) = dired.dired_positions.last_mut() {
-                *last_position = BytePosition {
-                    start: if adjust {
-                        start + last_position.end
-                    } else {
-                        start
-                    },
-                    end: if adjust { end + last_position.end } else { end },
-                    is_total: Some(false),
-                };
-            }
-        } else {
-            dired.dired_positions.push(BytePosition {
-                start,
-                end,
-                is_total: None,
-            });
+    if dired.just_printed_total {
+        if let Some(last_position) = dired.dired_positions.last_mut() {
+            *last_position = BytePosition {
+                start: if adjust {
+                    start + last_position.end
+                } else {
+                    start
+                },
+                end: if adjust { end + last_position.end } else { end },
+            };
+            dired.just_printed_total = false;
         }
+    } else {
+        dired.dired_positions.push(BytePosition { start, end });
     }
 }
 

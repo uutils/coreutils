@@ -53,7 +53,6 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::line_ending::LineEnding;
 use uucore::quoting_style::{escape_name, QuotingStyle};
 use uucore::{
-    crash,
     display::Quotable,
     error::{set_exit_code, UError, UResult},
     format_usage,
@@ -182,7 +181,7 @@ impl UError for LsError {
             Self::IOErrorContext(_, _, false) => 1,
             Self::IOErrorContext(_, _, true) => 2,
             Self::BlockSizeParseError(_) => 1,
-            Self::ConflictingArgumentDired() => 0,
+            Self::ConflictingArgumentDired() => 1,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_, _) => 1,
         }
@@ -967,7 +966,7 @@ impl Config {
 
         let dired = options.get_flag(options::DIRED);
         if dired && format != Format::Long {
-            crash!(1, "{}", LsError::ConflictingArgumentDired());
+            return Err(Box::new(LsError::ConflictingArgumentDired()));
         }
 
         let dereference = if options.get_flag(options::dereference::ALL) {
@@ -2455,7 +2454,7 @@ fn display_item_long(
 ) -> UResult<()> {
     let mut output_display: String = String::new();
     if config.dired {
-        write!(out, "{}", "  ")?;
+        output_display += &format!("{}", "  ");
     }
     if let Some(md) = item.md(out) {
         output_display += &format!(
