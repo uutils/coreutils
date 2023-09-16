@@ -75,7 +75,7 @@ pub fn print_dired_output(
     out.flush()?;
     if config.recursive {
         print_positions("//SUBDIRED//", &dired.subdired_positions);
-    } else if dired.just_printed_total == false {
+    } else if !dired.just_printed_total {
         print_positions("//DIRED//", &dired.dired_positions);
     }
     println!("//DIRED-OPTIONS// --quoting-style={}", config.quoting_style);
@@ -150,13 +150,12 @@ mod tests {
         let dired_positions = vec![BytePosition {
             start: 5,
             end: 10,
-            is_total: None,
         }];
         let (start, end) =
             calculate_dired_byte_positions(output_display.len(), dfn.len(), &dired_positions);
 
-        assert_eq!(start, 26);
-        assert_eq!(end, 37);
+        assert_eq!(start, 24);
+        assert_eq!(end, 35);
     }
 
     #[test]
@@ -165,9 +164,9 @@ mod tests {
             dired_positions: vec![BytePosition {
                 start: 5,
                 end: 10,
-                is_total: Some(true),
             }],
             subdired_positions: vec![],
+            just_printed_total: true,
         };
 
         // Test with adjust = true
@@ -175,13 +174,11 @@ mod tests {
         let last_position = dired.dired_positions.last().unwrap();
         assert_eq!(last_position.start, 25); // 15 + 10 (end of the previous position)
         assert_eq!(last_position.end, 30); // 20 + 10 (end of the previous position)
-        assert_eq!(last_position.is_total, Some(false));
 
         // Test with adjust = false
         update_positions(30, 35, &mut dired, false);
         let last_position = dired.dired_positions.last().unwrap();
         assert_eq!(last_position.start, 30);
         assert_eq!(last_position.end, 35);
-        assert_eq!(last_position.is_total, None);
     }
 }

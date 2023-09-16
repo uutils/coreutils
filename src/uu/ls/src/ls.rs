@@ -2454,7 +2454,7 @@ fn display_item_long(
 ) -> UResult<()> {
     let mut output_display: String = String::new();
     if config.dired {
-        output_display += &format!("{}", "  ");
+        output_display += "  ";
     }
     if let Some(md) = item.md(out) {
         output_display += &format!(
