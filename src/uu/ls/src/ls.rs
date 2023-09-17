@@ -2457,7 +2457,8 @@ fn display_item_long(
         output_display += "  ";
     }
     if let Some(md) = item.md(out) {
-        output_display += &format!(
+        write!(
+            output_display,
             "{}{} {}",
             display_permissions(md, true),
             if item.security_context.len() > 1 {
@@ -2468,32 +2469,54 @@ fn display_item_long(
                 ""
             },
             pad_left(&display_symlink_count(md), padding.link_count)
-        );
+        )
+        .unwrap();
 
         if config.long.owner {
-            output_display += &format!(" {}", pad_right(&display_uname(md, config), padding.uname));
+            write!(
+                output_display,
+                " {}",
+                pad_right(&display_uname(md, config), padding.uname)
+            )
+            .unwrap();
         }
 
         if config.long.group {
-            output_display += &format!(" {}", pad_right(&display_group(md, config), padding.group));
+            write!(
+                output_display,
+                " {}",
+                pad_right(&display_group(md, config), padding.group)
+            )
+            .unwrap();
         }
 
         if config.context {
-            output_display += &format!(" {}", pad_right(&item.security_context, padding.context));
+            write!(
+                output_display,
+                " {}",
+                pad_right(&item.security_context, padding.context)
+            )
+            .unwrap();
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            output_display += &format!(" {}", pad_right(&display_uname(md, config), padding.uname));
+            write!(
+                output_display,
+                " {}",
+                pad_right(&display_uname(md, config), padding.uname)
+            )
+            .unwrap();
         }
 
         match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Size(size) => {
-                output_display += &format!(" {}", pad_left(&size, padding.size));
+                write!(output_display, " {}", pad_left(&size, padding.size)).unwrap();
             }
             SizeOrDeviceId::Device(major, minor) => {
-                output_display += &format!(
+                write!(
+                    output_display,
                     " {}, {}",
                     pad_left(
                         &major,
@@ -2513,11 +2536,12 @@ fn display_item_long(
                         #[cfg(unix)]
                         padding.minor,
                     ),
-                );
+                )
+                .unwrap();
             }
         };
 
-        output_display += &format!(" {} ", display_date(md, config));
+        write!(output_display, " {} ", display_date(md, config)).unwrap();
 
         let dfn = display_file_name(item, config, None, String::new(), out).contents;
         if config.dired {
@@ -2528,7 +2552,7 @@ fn display_item_long(
             );
             dired::update_positions(start, end, dired, false);
         }
-        output_display += &format!("{}{}", dfn, config.line_ending);
+        write!(output_display, "{}{}", dfn, config.line_ending).unwrap();
     } else {
         #[cfg(unix)]
         let leading_char = {
@@ -2563,7 +2587,8 @@ fn display_item_long(
             }
         };
 
-        output_display += &format!(
+        write!(
+            output_display,
             "{}{} {}",
             format_args!("{leading_char}?????????"),
             if item.security_context.len() > 1 {
@@ -2574,39 +2599,47 @@ fn display_item_long(
                 ""
             },
             pad_left("?", padding.link_count)
-        );
+        )
+        .unwrap();
 
         if config.long.owner {
-            output_display += &format!(" {}", pad_right("?", padding.uname));
+            write!(output_display, " {}", pad_right("?", padding.uname)).unwrap();
         }
 
         if config.long.group {
-            output_display += &format!(" {}", pad_right("?", padding.group));
+            write!(output_display, " {}", pad_right("?", padding.group)).unwrap();
         }
 
         if config.context {
-            output_display += &format!(" {}", pad_right(&item.security_context, padding.context));
+            write!(
+                output_display,
+                " {}",
+                pad_right(&item.security_context, padding.context)
+            )
+            .unwrap();
         }
 
         // Author is only different from owner on GNU/Hurd, so we reuse
         // the owner, since GNU/Hurd is not currently supported by Rust.
         if config.long.author {
-            output_display += &format!(" {}", pad_right("?", padding.uname));
+            write!(output_display, " {}", pad_right("?", padding.uname)).unwrap();
         }
 
         let dfn = display_file_name(item, config, None, String::new(), out).contents;
         let date_len = 12;
 
-        output_display += &format!(
+        write!(
+            output_display,
             " {} {} ",
             pad_left("?", padding.size),
             pad_left("?", date_len),
-        );
+        )
+        .unwrap();
 
         if config.dired {
             dired::calculate_and_update_positions(output_display.len(), dfn.trim().len(), dired);
         }
-        output_display += &format!("{}{}", dfn, config.line_ending);
+        write!(output_display, "{}{}", dfn, config.line_ending).unwrap();
     }
     write!(out, "{}", output_display)?;
 

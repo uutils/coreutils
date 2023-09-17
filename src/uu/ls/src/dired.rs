@@ -147,10 +147,7 @@ mod tests {
     fn test_calculate_dired_byte_positions() {
         let output_display = "sample_output".to_string();
         let dfn = "sample_file".to_string();
-        let dired_positions = vec![BytePosition {
-            start: 5,
-            end: 10,
-        }];
+        let dired_positions = vec![BytePosition { start: 5, end: 10 }];
         let (start, end) =
             calculate_dired_byte_positions(output_display.len(), dfn.len(), &dired_positions);
 
@@ -161,10 +158,7 @@ mod tests {
     #[test]
     fn test_dired_update_positions() {
         let mut dired = DiredOutput {
-            dired_positions: vec![BytePosition {
-                start: 5,
-                end: 10,
-            }],
+            dired_positions: vec![BytePosition { start: 5, end: 10 }],
             subdired_positions: vec![],
             just_printed_total: true,
         };
