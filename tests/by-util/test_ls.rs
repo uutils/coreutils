@@ -3588,9 +3588,9 @@ fn test_ls_dired_simple() {
 
     // Extract the filename using the positions
     let filename =
-        String::from_utf8(result.stdout_str().as_bytes()[start_pos..=end_pos].to_vec()).unwrap();
+        String::from_utf8(result.stdout_str().as_bytes()[start_pos..end_pos].to_vec()).unwrap();
 
-    assert_eq!(filename, "a1\n");
+    assert_eq!(filename, "a1");
 }
 
 #[test]
