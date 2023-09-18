@@ -2543,17 +2543,18 @@ fn display_item_long(
 
         write!(output_display, " {} ", display_date(md, config)).unwrap();
 
-        let dfn = display_file_name(item, config, None, String::new(), out).contents;
+        let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
         if config.dired {
             let (start, end) = dired::calculate_dired_byte_positions(
                 output_display.len(),
-                dfn.len(),
+                displayed_file.len(),
                 &dired.dired_positions,
             );
             dired::update_positions(start, end, dired, false);
         }
-        write!(output_display, "{}{}", dfn, config.line_ending).unwrap();
-    } else {
+        write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
+
+  } else {
         #[cfg(unix)]
         let leading_char = {
             if let Some(Some(ft)) = item.ft.get() {
@@ -2625,7 +2626,7 @@ fn display_item_long(
             write!(output_display, " {}", pad_right("?", padding.uname)).unwrap();
         }
 
-        let dfn = display_file_name(item, config, None, String::new(), out).contents;
+        let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
         let date_len = 12;
 
         write!(
@@ -2637,9 +2638,9 @@ fn display_item_long(
         .unwrap();
 
         if config.dired {
-            dired::calculate_and_update_positions(output_display.len(), dfn.trim().len(), dired);
+            dired::calculate_and_update_positions(output_display.len(), displayed_file.trim().len(), dired);
         }
-        write!(output_display, "{}{}", dfn, config.line_ending).unwrap();
+        write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
     }
     write!(out, "{}", output_display)?;
 
