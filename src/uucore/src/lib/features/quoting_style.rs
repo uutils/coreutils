@@ -807,13 +807,8 @@ mod tests {
 
     #[test]
     fn test_quotes_display() {
-        let q = Quotes::None;
-        assert_eq!(format!("{}", q), "None");
-
-        let q = Quotes::Single;
-        assert_eq!(format!("{}", q), "Single");
-
-        let q = Quotes::Double;
-        assert_eq!(format!("{}", q), "Double");
+        assert_eq!(format!("{}", Quotes::None), "None");
+        assert_eq!(format!("{}", Quotes::Single), "Single");
+        assert_eq!(format!("{}", Quotes::Double), "Double");
     }
 }
