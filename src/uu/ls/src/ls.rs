@@ -2482,13 +2482,13 @@ fn display_item_long(
             }
         };
 
-        let dfn = display_file_name(item, config, None, String::new(), out).contents;
+        let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
 
         write!(
             out,
             " {} {}{}",
             display_date(md, config),
-            dfn,
+            displayed_file,
             config.line_ending
         )?;
     } else {
@@ -2561,7 +2561,7 @@ fn display_item_long(
             write!(out, " {}", pad_right("?", padding.uname))?;
         }
 
-        let dfn = display_file_name(item, config, None, String::new(), out).contents;
+        let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
         let date_len = 12;
 
         writeln!(
@@ -2569,7 +2569,7 @@ fn display_item_long(
             " {} {} {}",
             pad_left("?", padding.size),
             pad_left("?", date_len),
-            dfn,
+            displayed_file,
         )?;
     }
 
