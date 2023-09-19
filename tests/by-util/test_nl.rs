@@ -312,6 +312,19 @@ fn test_default_body_numbering() {
 }
 
 #[test]
+fn test_default_body_numbering_multiple_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("a.txt", "a");
+    at.write("b.txt", "b");
+    at.write("c.txt", "c");
+
+    ucmd.args(&["a.txt", "b.txt", "c.txt"])
+        .succeeds()
+        .stdout_is("     1\ta\n     2\tb\n     3\tc\n");
+}
+
+#[test]
 fn test_body_numbering_all_lines_without_delimiter() {
     for arg in ["-ba", "--body-numbering=a"] {
         new_ucmd!()

@@ -55,6 +55,20 @@ impl Default for Settings {
     }
 }
 
+struct Stats {
+    line_number: i64,
+    consecutive_empty_lines: u64,
+}
+
+impl Stats {
+    fn new(starting_line_number: i64) -> Self {
+        Self {
+            line_number: starting_line_number,
+            consecutive_empty_lines: 0,
+        }
+    }
+}
+
 // NumberingStyle stores which lines are to be numbered.
 // The possible options are:
 // 1. Number all lines
@@ -160,6 +174,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec!["-".to_owned()],
     };
 
+    let mut stats = Stats::new(settings.starting_line_number);
+
     for file in &files {
         if file == "-" {
             // If both file names and '-' are specified, we choose to treat first all
@@ -170,12 +186,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let path = Path::new(file);
         let reader = File::open(path).map_err_context(|| file.to_string())?;
         let mut buffer = BufReader::new(reader);
-        nl(&mut buffer, &settings)?;
+        nl(&mut buffer, &mut stats, &settings)?;
     }
 
     if read_stdin {
         let mut buffer = BufReader::new(stdin());
-        nl(&mut buffer, &settings)?;
+        nl(&mut buffer, &mut stats, &settings)?;
     }
     Ok(())
 }
@@ -285,10 +301,9 @@ pub fn uu_app() -> Command {
 }
 
 // nl implements the main functionality for an individual buffer.
-fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
+fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
     let mut current_numbering_style = &settings.body_numbering;
-    let mut line_no = settings.starting_line_number;
-    let mut consecutive_empty_lines = 0;
+    let mut consecutive_empty_lines = stats.consecutive_empty_lines;
 
     for line in reader.lines() {
         let line = line.map_err_context(|| "could not read line".to_string())?;
@@ -312,7 +327,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
         if let Some(new_style) = new_numbering_style {
             current_numbering_style = new_style;
             if settings.renumber {
-                line_no = settings.starting_line_number;
+                stats.line_number = settings.starting_line_number;
             }
             println!();
         } else {
@@ -336,13 +351,13 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
                     "{}{}{}",
                     settings
                         .number_format
-                        .format(line_no, settings.number_width),
+                        .format(stats.line_number, settings.number_width),
                     settings.number_separator,
                     line
                 );
                 // update line number for the potential next line
-                match line_no.checked_add(settings.line_increment) {
-                    Some(new_line_no) => line_no = new_line_no,
+                match stats.line_number.checked_add(settings.line_increment) {
+                    Some(new_line_number) => stats.line_number = new_line_number,
                     None => return Err(USimpleError::new(1, "line number overflow")),
                 }
             } else {
