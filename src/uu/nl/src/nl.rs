@@ -303,15 +303,14 @@ pub fn uu_app() -> Command {
 // nl implements the main functionality for an individual buffer.
 fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
     let mut current_numbering_style = &settings.body_numbering;
-    let mut consecutive_empty_lines = stats.consecutive_empty_lines;
 
     for line in reader.lines() {
         let line = line.map_err_context(|| "could not read line".to_string())?;
 
         if line.is_empty() {
-            consecutive_empty_lines += 1;
+            stats.consecutive_empty_lines += 1;
         } else {
-            consecutive_empty_lines = 0;
+            stats.consecutive_empty_lines = 0;
         };
 
         // FIXME section delimiters are hardcoded and settings.section_delimiter is ignored
@@ -336,7 +335,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 // for numbering, and only number the last one
                 NumberingStyle::All
                     if line.is_empty()
-                        && consecutive_empty_lines % settings.join_blank_lines != 0 =>
+                        && stats.consecutive_empty_lines % settings.join_blank_lines != 0 =>
                 {
                     false
                 }

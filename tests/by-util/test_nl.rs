@@ -285,6 +285,31 @@ fn test_join_blank_lines() {
 }
 
 #[test]
+fn test_join_blank_lines_multiple_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a.txt", "\n\n");
+    at.write("b.txt", "\n\n");
+    at.write("c.txt", "\n\n");
+
+    for arg in ["-l3", "--join-blank-lines=3"] {
+        scene
+            .ucmd()
+            .args(&[arg, "--body-numbering=a", "a.txt", "b.txt", "c.txt"])
+            .succeeds()
+            .stdout_is(concat!(
+                "       \n",
+                "       \n",
+                "     1\t\n",
+                "       \n",
+                "       \n",
+                "     2\t\n",
+            ));
+    }
+}
+
+#[test]
 fn test_join_blank_lines_zero() {
     for arg in ["-l0", "--join-blank-lines=0"] {
         new_ucmd!().arg(arg).fails().stderr_contains(
