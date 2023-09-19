@@ -2553,8 +2553,7 @@ fn display_item_long(
             dired::update_positions(start, end, dired, false);
         }
         write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
-
-  } else {
+    } else {
         #[cfg(unix)]
         let leading_char = {
             if let Some(Some(ft)) = item.ft.get() {
@@ -2638,7 +2637,11 @@ fn display_item_long(
         .unwrap();
 
         if config.dired {
-            dired::calculate_and_update_positions(output_display.len(), displayed_file.trim().len(), dired);
+            dired::calculate_and_update_positions(
+                output_display.len(),
+                displayed_file.trim().len(),
+                dired,
+            );
         }
         write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
     }
