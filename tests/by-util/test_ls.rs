@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -3521,4 +3521,127 @@ fn test_ls_perm_io_errors() {
         .fails()
         .code_is(1)
         .stderr_contains("Permission denied");
+}
+
+#[test]
+fn test_ls_dired_incompatible() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--dired")
+        .fails()
+        .code_is(1)
+        .stderr_contains("--dired requires --format=long");
+}
+
+#[test]
+fn test_ls_dired_recursive() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .arg("-R")
+        .succeeds()
+        .stdout_does_not_contain("//DIRED//")
+        .stdout_contains("  total 0")
+        .stdout_contains("//SUBDIRED// 2 3")
+        .stdout_contains("//DIRED-OPTIONS// --quoting-style");
+}
+
+#[test]
+fn test_ls_dired_simple() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .succeeds()
+        .stdout_contains("  total 0");
+
+    at.mkdir("d");
+    at.touch("d/a1");
+    let mut cmd = scene.ucmd();
+    cmd.arg("--dired").arg("-l").arg("d");
+    let result = cmd.succeeds();
+    result.stdout_contains("  total 0");
+    println!("    result.stdout = {:#?}", result.stdout_str());
+
+    let dired_line = result
+        .stdout_str()
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+
+    assert_eq!(positions.len(), 2);
+
+    let start_pos = positions[0];
+    let end_pos = positions[1];
+
+    // Extract the filename using the positions
+    let filename =
+        String::from_utf8(result.stdout_str().as_bytes()[start_pos..end_pos].to_vec()).unwrap();
+
+    assert_eq!(filename, "a1");
+}
+
+#[test]
+fn test_ls_dired_complex() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.mkdir("d/d");
+    at.touch("d/a1");
+    at.touch("d/a22");
+    at.touch("d/a333");
+    at.touch("d/a4444");
+
+    let mut cmd = scene.ucmd();
+    cmd.arg("--dired").arg("-l").arg("d");
+    let result = cmd.succeeds();
+    // Number of blocks
+    #[cfg(target_os = "linux")]
+    result.stdout_contains("  total 4");
+
+    let output = result.stdout_str().to_string();
+    println!("Output:\n{}", output);
+
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+    println!("{:?}", positions);
+    println!("Parsed byte positions: {:?}", positions);
+    assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
+
+    let filenames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
+                .unwrap()
+                .trim()
+                .to_string();
+            println!("Extracted filename: {}", filename);
+            filename
+        })
+        .collect();
+
+    println!("Extracted filenames: {:?}", filenames);
+    assert_eq!(filenames, vec!["a1", "a22", "a333", "a4444", "d"]);
 }
