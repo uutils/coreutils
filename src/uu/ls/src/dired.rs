@@ -33,7 +33,7 @@ impl fmt::Display for BytePosition {
 static DIRED_TRAILING_OFFSET: usize = 2;
 
 /// Calculates the byte positions for DIRED
-pub fn calculate_dired_byte_positions(
+pub fn calculate_dired(
     output_display_len: usize,
     dfn_len: usize,
     dired_positions: &[BytePosition],
@@ -143,12 +143,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_calculate_dired_byte_positions() {
+    fn test_calculate_dired() {
         let output_display = "sample_output".to_string();
         let dfn = "sample_file".to_string();
         let dired_positions = vec![BytePosition { start: 5, end: 10 }];
-        let (start, end) =
-            calculate_dired_byte_positions(output_display.len(), dfn.len(), &dired_positions);
+        let (start, end) = calculate_dired(output_display.len(), dfn.len(), &dired_positions);
 
         assert_eq!(start, 24);
         assert_eq!(end, 35);

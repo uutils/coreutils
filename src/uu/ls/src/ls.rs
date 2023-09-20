@@ -2545,7 +2545,7 @@ fn display_item_long(
 
         let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
         if config.dired {
-            let (start, end) = dired::calculate_dired_byte_positions(
+            let (start, end) = dired::calculate_dired(
                 output_display.len(),
                 displayed_file.len(),
                 &dired.dired_positions,
