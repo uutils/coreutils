@@ -139,9 +139,16 @@ impl FileInformation {
 
     #[cfg(unix)]
     pub fn inode(&self) -> u64 {
-        #[cfg(all(not(any(target_os = "freebsd", target_os = "netbsd")), target_pointer_width = "64"))]
+        #[cfg(all(
+            not(any(target_os = "freebsd", target_os = "netbsd")),
+            target_pointer_width = "64"
+        ))]
         return self.0.st_ino;
-        #[cfg(any(target_os = "freebsd", target_os = "netbsd", not(target_pointer_width = "64")))]
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "netbsd",
+            not(target_pointer_width = "64")
+        ))]
         return self.0.st_ino.into();
     }
 }
