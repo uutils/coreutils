@@ -54,7 +54,7 @@ pub fn indent(out: &mut BufWriter<Stdout>) -> UResult<()> {
     Ok(())
 }
 
-pub fn calculate_offset_and_push(dired: &mut DiredOutput, path_len: usize) {
+pub fn calculate_subdired(dired: &mut DiredOutput, path_len: usize) {
     let offset = if dired.subdired_positions.is_empty() {
         DIRED_TRAILING_OFFSET
     } else {

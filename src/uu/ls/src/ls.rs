@@ -1921,7 +1921,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 }
                 writeln!(out, "{}:", path_data.p_buf.display())?;
                 if config.dired {
-                    dired::calculate_offset_and_push(&mut dired, path_data.display_name.len());
+                    dired::calculate_subdired(&mut dired, path_data.display_name.len());
                 }
             } else {
                 writeln!(out, "\n{}:", path_data.p_buf.display())?;
