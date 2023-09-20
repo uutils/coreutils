@@ -95,7 +95,6 @@ pub fn add_total(total_len: usize, dired: &mut DiredOutput) {
     dired.just_printed_total = true;
     dired.dired_positions.push(BytePosition {
         start: 0,
-        // the 2 is from the trailing spaces
         // the 1 is from the line ending (\n)
         end: total_len + DIRED_TRAILING_OFFSET - 1,
     });
