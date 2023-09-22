@@ -1921,7 +1921,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 }
                 writeln!(out, "{}:", path_data.p_buf.display())?;
                 if config.dired {
-                    dired::calculate_offset_and_push(&mut dired, path_data.display_name.len());
+                    dired::calculate_subdired(&mut dired, path_data.display_name.len());
                 }
             } else {
                 writeln!(out, "\n{}:", path_data.p_buf.display())?;
@@ -2545,7 +2545,7 @@ fn display_item_long(
 
         let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
         if config.dired {
-            let (start, end) = dired::calculate_dired_byte_positions(
+            let (start, end) = dired::calculate_dired(
                 output_display.len(),
                 displayed_file.len(),
                 &dired.dired_positions,
