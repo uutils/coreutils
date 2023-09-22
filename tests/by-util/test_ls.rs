@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -3608,9 +3608,13 @@ fn test_ls_dired_complex() {
     let mut cmd = scene.ucmd();
     cmd.arg("--dired").arg("-l").arg("d");
     let result = cmd.succeeds();
-    // Number of blocks
+
+    // Number of blocks. We run this test only if the default size of a newly created directory is
+    // 4096 bytes to prevent it from failing where this is not the case (e.g. using tmpfs for /tmp).
     #[cfg(target_os = "linux")]
-    result.stdout_contains("  total 4");
+    if at.metadata("d/d").len() == 4096 {
+        result.stdout_contains("  total 4");
+    }
 
     let output = result.stdout_str().to_string();
     println!("Output:\n{}", output);
