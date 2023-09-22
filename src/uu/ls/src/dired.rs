@@ -20,7 +20,7 @@ pub struct BytePosition {
 pub struct DiredOutput {
     pub dired_positions: Vec<BytePosition>,
     pub subdired_positions: Vec<BytePosition>,
-    pub just_printed_total: bool,
+    pub padding: usize,
 }
 
 impl fmt::Display for BytePosition {
@@ -75,7 +75,7 @@ pub fn print_dired_output(
     out.flush()?;
     if config.recursive {
         print_positions("//SUBDIRED//", &dired.subdired_positions);
-    } else if !dired.just_printed_total {
+    } else if dired.padding == 0 {
         print_positions("//DIRED//", &dired.dired_positions);
     }
     println!("//DIRED-OPTIONS// --quoting-style={}", config.quoting_style);
@@ -92,12 +92,9 @@ fn print_positions(prefix: &str, positions: &Vec<BytePosition>) {
 }
 
 pub fn add_total(total_len: usize, dired: &mut DiredOutput) {
-    dired.just_printed_total = true;
-    dired.dired_positions.push(BytePosition {
-        start: 0,
-        // the 1 is from the line ending (\n)
-        end: total_len + DIRED_TRAILING_OFFSET - 1,
-    });
+    // when dealing with "  total: xx", it isn't part of the //DIRED//
+    // so, we just keep the size line to add it to the position of the next file
+    dired.padding = total_len + DIRED_TRAILING_OFFSET;
 }
 
 /// Calculates byte positions and updates the dired structure.
@@ -114,28 +111,20 @@ pub fn calculate_and_update_positions(
         });
     let start = output_display_len + offset + DIRED_TRAILING_OFFSET;
     let end = start + dfn_len;
-    update_positions(start, end, dired, true);
+    update_positions(start, end, dired);
 }
 
 /// Updates the dired positions based on the given start and end positions.
-/// update when it is the first element in the list (to manage "total X"
+/// update when it is the first element in the list (to manage "total X")
 /// insert when it isn't the about total
-pub fn update_positions(start: usize, end: usize, dired: &mut DiredOutput, adjust: bool) {
-    if dired.just_printed_total {
-        if let Some(last_position) = dired.dired_positions.last_mut() {
-            *last_position = BytePosition {
-                start: if adjust {
-                    start + last_position.end
-                } else {
-                    start
-                },
-                end: if adjust { end + last_position.end } else { end },
-            };
-            dired.just_printed_total = false;
-        }
-    } else {
-        dired.dired_positions.push(BytePosition { start, end });
-    }
+pub fn update_positions(start: usize, end: usize, dired: &mut DiredOutput) {
+    // padding can be 0 but as it doesn't matter<
+    dired.dired_positions.push(BytePosition {
+        start: start + dired.padding,
+        end: end + dired.padding,
+    });
+    // Remove the previous padding
+    dired.padding = 0;
 }
 
 #[cfg(test)]
@@ -158,17 +147,17 @@ mod tests {
         let mut dired = DiredOutput {
             dired_positions: vec![BytePosition { start: 5, end: 10 }],
             subdired_positions: vec![],
-            just_printed_total: true,
+            padding: 10,
         };
 
         // Test with adjust = true
-        update_positions(15, 20, &mut dired, true);
+        update_positions(15, 20, &mut dired);
         let last_position = dired.dired_positions.last().unwrap();
         assert_eq!(last_position.start, 25); // 15 + 10 (end of the previous position)
         assert_eq!(last_position.end, 30); // 20 + 10 (end of the previous position)
 
         // Test with adjust = false
-        update_positions(30, 35, &mut dired, false);
+        update_positions(30, 35, &mut dired);
         let last_position = dired.dired_positions.last().unwrap();
         assert_eq!(last_position.start, 30);
         assert_eq!(last_position.end, 35);

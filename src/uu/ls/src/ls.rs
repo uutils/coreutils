@@ -2550,7 +2550,7 @@ fn display_item_long(
                 displayed_file.len(),
                 &dired.dired_positions,
             );
-            dired::update_positions(start, end, dired, false);
+            dired::update_positions(start, end, dired);
         }
         write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
     } else {
