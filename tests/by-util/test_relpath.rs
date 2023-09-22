@@ -180,3 +180,10 @@ fn test_relpath_no_from_with_d() {
         assert!(Path::new(&result_stdout).is_absolute());
     }
 }
+
+#[test]
+fn test_relpath_no_to() {
+    new_ucmd!()
+        .fails()
+        .stderr_contains("required arguments were not provided");
+}
