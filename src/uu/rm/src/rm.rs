@@ -18,22 +18,52 @@ use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, sho
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
-enum InteractiveMode {
+/// Enum, determining when the `rm` will prompt the user about the file deletion
+pub enum InteractiveMode {
+    /// Never prompt
     Never,
+    /// Prompt once before removing more than three files, or when removing
+    /// recursively.
     Once,
+    /// Prompt before every removal
     Always,
+    /// TODO clarify what this option does
     PromptProtected,
 }
 
-struct Options {
-    force: bool,
-    interactive: InteractiveMode,
+/// Options for the `rm` command
+///
+/// All options are public so that the options can be programmatically
+/// constructed by other crates, such as Nushell. That means that this struct
+/// is part of our public API. It should therefore not be changed without good
+/// reason.
+///
+/// The fields are documented with the arguments that determine their value.
+pub struct Options {
+    /// `-f`, `--force`
+    pub force: bool,
+    /// Iterative mode, determines when the command will prompt.
+    ///
+    /// Set by the following arguments:
+    /// - `-i`: [`InteractiveMode::Always`]
+    /// - `-I`: [`InteractiveMode::Once`]
+    /// - `--interactive`: sets one of the above or [`InteractiveMode::Never`]
+    /// - `-f`: implicitly sets [`InteractiveMode::Never`]
+    ///
+    /// If no other option sets this mode, [`InteractiveMode::PromptProtected`]
+    /// is used
+    pub interactive: InteractiveMode,
     #[allow(dead_code)]
-    one_fs: bool,
-    preserve_root: bool,
-    recursive: bool,
-    dir: bool,
-    verbose: bool,
+    /// `--one-file-system`
+    pub one_fs: bool,
+    /// `--preserve-root`/`--no-preserve-root`
+    pub preserve_root: bool,
+    /// `-r`, `--recursive`
+    pub recursive: bool,
+    /// `-d`, `--dir`
+    pub dir: bool,
+    /// `-v`, `--verbose`
+    pub verbose: bool,
 }
 
 const ABOUT: &str = help_about!("rm.md");
@@ -268,7 +298,7 @@ fn remove(files: &[&OsStr], options: &Options) -> bool {
                 // TODO: actually print out the specific error
                 // TODO: When the error is not about missing files
                 // (e.g., permission), even rm -f should fail with
-                // outputting the error, but there's no easy eay.
+                // outputting the error, but there's no easy way.
                 if options.force {
                     false
                 } else {
