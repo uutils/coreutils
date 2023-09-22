@@ -279,7 +279,13 @@ pub fn uu_app() -> Command {
 }
 
 // TODO: implement one-file-system (this may get partially implemented in walkdir)
-fn remove(files: &[&OsStr], options: &Options) -> bool {
+/// Remove (or unlink) the given files
+///
+/// Returns true if it has encountered an error.
+///
+/// Behavior is determined by the `options` parameter, see [`Options`] for
+/// details.
+pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     let mut had_err = false;
 
     for filename in files {
