@@ -134,14 +134,9 @@ uutils: add new utility
 gitignore: add temporary files
 ```
 
-## TODO : Any guidelines for branching, PRs, etc?
-
 ## Code coverage
 
 To generate code coverage report locally please follow [Code coverage report](DEVELOPMENT.md#code-coverage-report) section of [DEVELOPMENT.md](DEVELOPMENT.md)
-
-***TODO*** The technical details on how to generate report locally are offloaded to DEVELOPMENT.md
-So, for this document - Should we instead spell out code coverage requirements/targets/%thresholds per pool request, total, etc?
 
 ## Other implementations
 

@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains -->
+<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains -->
 
 # Setting up local development environment
 
@@ -240,8 +240,6 @@ DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
 Note that GNU test suite relies on individual utilities (not the multicall binary).
 
 ## Code coverage report
-
-<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic -->
 
 Code coverage report can be generated using [grcov](https://github.com/mozilla/grcov).
 
