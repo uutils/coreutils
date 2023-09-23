@@ -27,7 +27,7 @@ pub enum InteractiveMode {
     Once,
     /// Prompt before every removal
     Always,
-    /// TODO clarify what this option does
+    /// Prompt only on write-protected files
     PromptProtected,
 }
 
