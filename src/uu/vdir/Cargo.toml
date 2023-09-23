@@ -16,7 +16,7 @@ path = "src/vdir.rs"
 
 [dependencies]
 clap = { workspace = true, features = ["env"] }
-uucore = { workspace = true, features = ["entries", "fs"] }
+uucore = { workspace = true, features = ["entries", "fs", "quoting-style"] }
 uu_ls = { workspace = true }
 
 [[bin]]

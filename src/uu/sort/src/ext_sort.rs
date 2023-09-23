@@ -224,7 +224,7 @@ fn read_write_loop<I: WriteableTmpFile>(
     let mut sender_option = Some(sender);
     let mut tmp_files = vec![];
     loop {
-        let mut chunk = match receiver.recv() {
+        let chunk = match receiver.recv() {
             Ok(it) => it,
             _ => {
                 return Ok(ReadResult::WroteChunksToFile { tmp_files });
@@ -232,7 +232,7 @@ fn read_write_loop<I: WriteableTmpFile>(
         };
 
         let tmp_file = write::<I>(
-            &mut chunk,
+            &chunk,
             tmp_dir.next_file()?,
             settings.compress_prog.as_deref(),
             separator,
@@ -262,7 +262,7 @@ fn read_write_loop<I: WriteableTmpFile>(
 /// Write the lines in `chunk` to `file`, separated by `separator`.
 /// `compress_prog` is used to optionally compress file contents.
 fn write<I: WriteableTmpFile>(
-    chunk: &mut Chunk,
+    chunk: &Chunk,
     file: (File, PathBuf),
     compress_prog: Option<&str>,
     separator: u8,

@@ -328,6 +328,17 @@ fn test_filter_command_fails() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_filter_broken_pipe() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = "filter-big-input";
+
+    RandomFile::new(&at, name).add_lines(1024 * 10);
+    ucmd.args(&["--filter=head -c1 > /dev/null", "-n", "r/1", name])
+        .succeeds();
+}
+
+#[test]
 fn test_split_lines_number() {
     // Test if stdout/stderr for '--lines' option is correct
     let scene = TestScenario::new(util_name!());
