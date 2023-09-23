@@ -285,6 +285,31 @@ fn test_join_blank_lines() {
 }
 
 #[test]
+fn test_join_blank_lines_multiple_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a.txt", "\n\n");
+    at.write("b.txt", "\n\n");
+    at.write("c.txt", "\n\n");
+
+    for arg in ["-l3", "--join-blank-lines=3"] {
+        scene
+            .ucmd()
+            .args(&[arg, "--body-numbering=a", "a.txt", "b.txt", "c.txt"])
+            .succeeds()
+            .stdout_is(concat!(
+                "       \n",
+                "       \n",
+                "     1\t\n",
+                "       \n",
+                "       \n",
+                "     2\t\n",
+            ));
+    }
+}
+
+#[test]
 fn test_join_blank_lines_zero() {
     for arg in ["-l0", "--join-blank-lines=0"] {
         new_ucmd!().arg(arg).fails().stderr_contains(
@@ -309,6 +334,19 @@ fn test_default_body_numbering() {
         .pipe_in("a\n\nb")
         .succeeds()
         .stdout_is("     1\ta\n       \n     2\tb\n");
+}
+
+#[test]
+fn test_default_body_numbering_multiple_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("a.txt", "a");
+    at.write("b.txt", "b");
+    at.write("c.txt", "c");
+
+    ucmd.args(&["a.txt", "b.txt", "c.txt"])
+        .succeeds()
+        .stdout_is("     1\ta\n     2\tb\n     3\tc\n");
 }
 
 #[test]
