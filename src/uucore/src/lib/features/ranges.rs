@@ -38,6 +38,8 @@ impl FromStr for Range {
         fn parse(s: &str) -> Result<usize, &'static str> {
             match s.parse::<usize>() {
                 Ok(0) => Err("fields and positions are numbered from 1"),
+                // GNU fails when we are at the limit. Match their behavior
+                Ok(n) if n == usize::MAX => Err("byte/character offset is too large"),
                 Ok(n) => Ok(n),
                 Err(_) => Err("failed to parse range"),
             }
