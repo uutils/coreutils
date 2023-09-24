@@ -399,17 +399,26 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         match rename(sourcepath, &targetpath, b, multi_progress.as_ref()) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
-                let e = e.map_err_context(|| {
-                    format!(
-                        "cannot move {} to {}",
-                        sourcepath.quote(),
-                        targetpath.quote()
-                    )
-                });
-                match multi_progress {
-                    Some(ref pb) => pb.suspend(|| show!(e)),
-                    None => show!(e),
-                };
+                if e.to_string().as_str() == "Directory not empty" {
+                    let e =
+                        e.map_err_context(|| format!("cannot overwrite {}", targetpath.quote()));
+                    match multi_progress {
+                        Some(ref pb) => pb.suspend(|| show!(e)),
+                        None => show!(e),
+                    };
+                } else {
+                    let e = e.map_err_context(|| {
+                        format!(
+                            "cannot move {} to {}",
+                            sourcepath.quote(),
+                            targetpath.quote()
+                        )
+                    });
+                    match multi_progress {
+                        Some(ref pb) => pb.suspend(|| show!(e)),
+                        None => show!(e),
+                    };
+                }
             }
             Ok(()) => (),
         }
@@ -480,10 +489,7 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "A directory with the same name exists at destination",
-                ));
+                return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
             }
         }
     }

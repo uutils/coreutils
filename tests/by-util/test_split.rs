@@ -595,7 +595,7 @@ fn test_split_multiple_obs_lines_standalone() {
         .no_stdout();
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
-    assert_eq!(glob.collate(), at.read_bytes(name))
+    assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
 /// Test for using more than one obsolete lines option within combined shorts
