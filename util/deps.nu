@@ -20,11 +20,11 @@
 #  - `normal_dep`: whether the crate is a normal dependency.
 #  - `build_dep`: whether the crate is a build dependency.
 #  - `dev_dep`: whether the crate is a dev dependency.
-#  - `organisation`: the GitHub/GitLab organisation or user of the repository of the crate.
+#  - `organization`: the GitHub/GitLab organization or user of the repository of the crate.
 #  - `repository_name`: the name of the repository the crate is in. The format is "{owner}/{repo}".
 #  - `dependencies`: direct dependencies of the crate (in the format of Cargo.lock).
 #
-# To use this script, start nushell (tested only on version 0.82.0), import the library and
+# To use this script, start Nushell (tested only on version 0.82.0), import the library and
 # call `all_dep_info`:
 #
 # ```
@@ -33,19 +33,19 @@
 # > let dep = (deps all_dep_info)
 # ```
 #
-# Then you can perform analysis. For example, to group the dependencies by organisation:
+# Then you can perform analysis. For example, to group the dependencies by organization:
 #
 # ```
-# > $dep | group-by organisation   
+# > $dep | group-by organization
 # ```
 #
 # Or to find all crates with multiple versions (like cargo deny):
 # ```
-# > $dep | where num_versions > 1   
+# > $dep | where num_versions > 1
 # ```
 #
 # Ideas to expand this:
-# 
+#
 #  - Figure out the whole dependency graph
 #  - Figure out which platforms and which features enable which crates
 #  - Figure out which utils require which crates
@@ -58,61 +58,37 @@
 #  - Check the number of owners/contributors
 #  - Make a webpage to more easily explore the data
 
-# Read the packages a Cargo.lock file
-def read_lockfile [name: path] {
-    open $name | from toml | get package
-}
-
 # Read the names output by cargo tree
-export def read_tree_names [edges: string, features: string] {
-    cargo tree -e $edges --features $features
-    | rg "[a-zA-Z0-9_-]+ v[0-9.]+" -o
-    | lines
-    | each {|x| parse_name_and_version $x }
-}
-
-def parse_name_and_version [s: string] {
-    let s = ($s | split row " ")
-
-    let name = $s.0
-    let version = if ($s | length) > 1 {
-        $s.1 | str substring 1..
-    } else {
-        ""
-    }
-
-    {name: $name, version: $version}
+export def read_tree_names [edge_kind: string, features: list<string>]: any -> table<> {
+    cargo tree --edges $edge_kind --features ($features | str join ",")
+        | parse -r "(?P<name>[a-zA-Z0-9_-]+) v(?P<version>[0-9.]+)"
 }
 
 # Read the crates.io info for a list of crates names
-def read_crates_io [names: list<string>] {
-    let total = ($names | length)
-    $names | enumerate | par-each {|el|
-        let key = $el.index
-        let name = $el.item
-        print $"($key)/($total): ($name)"
-        http get $"https://crates.io/api/v1/crates/($name)" | get crate
+def read_crates_io [names: list<string>] -> any -> table<> {
+    let total = $names | length
+    $names | enumerate | par-each {|name|
+        print $"($name.index)/($total): ($name.item)"
+        http get $"https://crates.io/api/v1/crates/($name.item)" | get crate
     }
 }
 
-def in_table [col_name, table] {
-    insert $col_name {|el|
-        $table
-        | any {|table_el|
-            $table_el.name == $el.name and $table_el.version == $el.version }
-        }
-}
-
 # Add column for a dependency type
-def add_dep_type [dep_type: string, features: string] {
-    in_table $"($dep_type)_dep" (read_tree_names $dep_type $features)
+def add_dep_type [dep_type: string, features: list<string>]: table<> -> table<> {
+    let input_table = $in
+    let table = read_tree_names $dep_type $features
+    $input_table | insert $"($dep_type)_dep" {|outer|
+        $table | any {|inner|
+            $inner.name == $outer.name and $inner.version == $outer.version
+        }
+    }
 }
 
 export def all_dep_info [] {
-    let features = unix,feat_selinux
+    let features = [unix, feat_selinux]
 
-    let lock = (read_lockfile Cargo.lock)
-
+    let lock = open Cargo.lock | from toml | get package
+    
     $lock
     # Add number of versions
     | join ($lock | group-by name | transpose | update column1 { length } | rename name num_versions) name
@@ -124,10 +100,10 @@ export def all_dep_info [] {
     # Add crates.io info
     | join (read_crates_io ($lock.name | uniq)) name
     # Add GH org or user info
-    # The organisation is an indicator that crates should be treated as one dependency.
-    # However, there are also unrelated projects by a single organisation, so it's not
+    # The organization is an indicator that crates should be treated as one dependency.
+    # However, there are also unrelated projects by a single organization, so it's not
     # clear.
-    | insert organisation {|x|
+    | insert organization {|x|
         let repository = $x.repository?
         if ($repository == null) { "" } else {
             $repository | url parse | get path | path split | get 1
@@ -152,4 +128,3 @@ export def all_dep_info [] {
         }
     }
 }
-
