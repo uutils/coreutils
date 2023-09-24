@@ -68,6 +68,10 @@ fn datetime_to_filetime<T: TimeZone>(dt: &DateTime<T>) -> FileTime {
     FileTime::from_unix_time(dt.timestamp(), dt.timestamp_subsec_nanos())
 }
 
+fn filetime_to_datetime(ft: &FileTime) -> Option<DateTime<Local>> {
+    Some(DateTime::from_timestamp(ft.seconds(), ft.nanoseconds())?.into())
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -88,35 +92,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     ) {
         (Some(reference), Some(date)) => {
             let (atime, mtime) = stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?;
-            if let Ok(offset) = parse_datetime::from_str(date) {
-                let seconds = offset.num_seconds();
-                let nanos = offset.num_nanoseconds().unwrap_or(0) % 1_000_000_000;
-
-                let ref_atime_secs = atime.unix_seconds();
-                let ref_atime_nanos = atime.nanoseconds();
-                let atime = FileTime::from_unix_time(
-                    ref_atime_secs + seconds,
-                    ref_atime_nanos + nanos as u32,
-                );
-
-                let ref_mtime_secs = mtime.unix_seconds();
-                let ref_mtime_nanos = mtime.nanoseconds();
-                let mtime = FileTime::from_unix_time(
-                    ref_mtime_secs + seconds,
-                    ref_mtime_nanos + nanos as u32,
-                );
-
-                (atime, mtime)
-            } else {
-                let timestamp = parse_date(date)?;
-                (timestamp, timestamp)
-            }
+            let atime = filetime_to_datetime(&atime)
+                .ok_or_else(|| USimpleError::new(1, format!("failed to convert atime")))?;
+            let mtime = filetime_to_datetime(&mtime)
+                .ok_or_else(|| USimpleError::new(1, format!("failed to convert mtime")))?;
+            (parse_date(atime, date)?, parse_date(mtime, date)?)
         }
         (Some(reference), None) => {
             stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?
         }
         (None, Some(date)) => {
-            let timestamp = parse_date(date)?;
+            let timestamp = parse_date(Local::now(), date)?;
             (timestamp, timestamp)
         }
         (None, None) => {
@@ -336,7 +322,7 @@ fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
     ))
 }
 
-fn parse_date(s: &str) -> UResult<FileTime> {
+fn parse_date(ref_time: DateTime<Local>, s: &str) -> UResult<FileTime> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
@@ -385,8 +371,7 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         }
     }
 
-    if let Ok(duration) = parse_datetime::from_str(s) {
-        let dt = Local::now() + duration;
+    if let Ok(dt) = parse_datetime::parse_datetime_at_date(ref_time, s) {
         return Ok(datetime_to_filetime(&dt));
     }
 
