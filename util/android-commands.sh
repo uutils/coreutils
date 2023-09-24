@@ -202,7 +202,7 @@ snapshot() {
 
     echo "Prepare and install system packages"
     probe='/sdcard/pkg.probe'
-    command="'mkdir -vp ~/.cargo/bin; yes | pkg install rust binutils openssl tar -y; echo \$? > $probe'"
+    command="'mkdir -vp ~/.cargo/bin; yes | pkg update; pkg install rust binutils openssl tar -y; echo \$? > $probe'"
     run_termux_command "$command" "$probe" || return
 
     echo "Installing cargo-nextest"
