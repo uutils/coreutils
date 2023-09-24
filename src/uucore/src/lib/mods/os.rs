@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 /// Test if the program is running under WSL
 // ref: <https://github.com/microsoft/WSL/issues/4555> @@ <https://archive.is/dP0bz>
 

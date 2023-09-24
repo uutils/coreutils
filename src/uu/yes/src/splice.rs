@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 //! On Linux we can use vmsplice() to write data more efficiently.
 //!
 //! This does not always work. We're not allowed to splice to some targets,

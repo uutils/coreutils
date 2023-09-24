@@ -1,9 +1,7 @@
-//  * This file is part of `fmt` from the uutils coreutils package.
-//  *
-//  * (c) kwantam <kwantam@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) INFTY MULT PSKIP accum aftertab beforetab breakwords fmt's formatline linebreak linebreaking linebreaks linelen maxlength minlength nchars noformat noformatline ostream overlen parasplit pfxind plass pmatch poffset posn powf prefixindent punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen wordsplits xanti xprefix
 
@@ -598,7 +596,7 @@ impl<'a> Iterator for WordSplit<'a> {
             self.prev_punct && (before_tab.is_some() || word_start_relative > 1);
 
         // now record whether this word ends in punctuation
-        self.prev_punct = match self.string[..self.position].chars().rev().next() {
+        self.prev_punct = match self.string[..self.position].chars().next_back() {
             Some(ch) => WordSplit::is_punctuation(ch),
             _ => panic!("fatal: expected word not to be empty"),
         };

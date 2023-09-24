@@ -1,12 +1,14 @@
-// * This file is part of the uutils coreutils package.
-// *
-// * For the full copyright and license information, please view the LICENSE file
-// * that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore parenb parodd cmspar hupcl cstopb cread clocal crtscts CSIZE
 // spell-checker:ignore ignbrk brkint ignpar parmrk inpck istrip inlcr igncr icrnl ixoff ixon iuclc ixany imaxbel iutf
 // spell-checker:ignore opost olcuc ocrnl onlcr onocr onlret ofill ofdel nldly crdly tabdly bsdly vtdly ffdly
 // spell-checker:ignore isig icanon iexten echoe crterase echok echonl noflsh xcase tostop echoprt prterase echoctl ctlecho echoke crtkill flusho extproc
+// spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
+// spell-checker:ignore sigquit sigtstp
 
 use crate::Flag;
 
@@ -19,7 +21,10 @@ use crate::Flag;
     target_os = "openbsd"
 )))]
 use nix::sys::termios::BaudRate;
-use nix::sys::termios::{ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O};
+use nix::sys::termios::{
+    ControlFlags as C, InputFlags as I, LocalFlags as L, OutputFlags as O,
+    SpecialCharacterIndices as S,
+};
 
 pub const CONTROL_FLAGS: &[Flag<C>] = &[
     Flag::new("parenb", C::PARENB),
@@ -312,4 +317,41 @@ pub const BAUD_RATES: &[(&str, BaudRate)] = &[
         all(target_os = "linux", not(target_arch = "sparc64"))
     ))]
     ("4000000", BaudRate::B4000000),
+];
+/// Control characters for the stty command.
+///
+/// This constant provides a mapping between the names of control characters
+/// and their corresponding values in the `S` enum.
+pub const CONTROL_CHARS: &[(&str, S)] = &[
+    // Sends an interrupt signal (SIGINT).
+    ("intr", S::VINTR),
+    // Sends a quit signal (SIGQUIT).
+    ("quit", S::VQUIT),
+    // Deletes the last typed character.
+    ("erase", S::VERASE),
+    // Deletes the current line.
+    ("kill", S::VKILL),
+    // Signals the end of input.
+    ("eof", S::VEOF),
+    // Signals the end of line.
+    ("eol", S::VEOL),
+    // Alternate end-of-line character.
+    ("eol2", S::VEOL2),
+    // Switch character (only on Linux).
+    #[cfg(target_os = "linux")]
+    ("swtch", S::VSWTC),
+    // Starts output after it has been stopped.
+    ("start", S::VSTART),
+    // Stops output.
+    ("stop", S::VSTOP),
+    // Sends a suspend signal (SIGTSTP).
+    ("susp", S::VSUSP),
+    // Reprints the current line.
+    ("rprnt", S::VREPRINT),
+    // Deletes the last word typed.
+    ("werase", S::VWERASE),
+    // Enters literal mode (next character is taken literally).
+    ("lnext", S::VLNEXT),
+    // Discards the current line.
+    ("discard", S::VDISCARD),
 ];

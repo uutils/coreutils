@@ -1,10 +1,7 @@
-// * This file is part of the uutils coreutils package.
-// *
-// * (c) 2015 Wiktor Kuropatwa <wiktor.kuropatwa@gmail.com>
-// * (c) 2020 nicoo <nicoo@debian.org>
-// *
-// * For the full copyright and license information, please view the LICENSE file
-// * that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::SmallRng;

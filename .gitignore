@@ -5,6 +5,7 @@ target/
 /busybox/
 /.vscode/
 /.vs/
+/public/
 *~
 .*.swp
 .*.swo

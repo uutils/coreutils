@@ -1,11 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Michael Yin <mikeyin@mikeyin.org>
-//  * (c) Robert Swinford <robert.swinford..AT..gmail.com>
-//  * (c) Michael Debertol <michael.debertol..AT..gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // Although these links don't always seem to describe reality, check out the POSIX and GNU specs:
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
@@ -45,6 +41,7 @@ use std::str::Utf8Error;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
+use uucore::line_ending::LineEnding;
 use uucore::parse_size::{ParseSizeError, Parser};
 use uucore::version_cmp::version_cmp;
 use uucore::{format_usage, help_about, help_section, help_usage};
@@ -306,7 +303,7 @@ pub struct GlobalSettings {
     selectors: Vec<FieldSelector>,
     separator: Option<char>,
     threads: String,
-    zero_terminated: bool,
+    line_ending: LineEnding,
     buffer_size: usize,
     compress_prog: Option<String>,
     merge_batch_size: usize,
@@ -383,7 +380,7 @@ impl Default for GlobalSettings {
             selectors: vec![],
             separator: None,
             threads: String::new(),
-            zero_terminated: false,
+            line_ending: LineEnding::Newline,
             buffer_size: DEFAULT_BUF_SIZE,
             compress_prog: None,
             merge_batch_size: 32,
@@ -526,14 +523,11 @@ impl<'a> Line<'a> {
     }
 
     fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) {
-        if settings.zero_terminated && !settings.debug {
-            writer.write_all(self.line.as_bytes()).unwrap();
-            writer.write_all(b"\0").unwrap();
-        } else if !settings.debug {
-            writer.write_all(self.line.as_bytes()).unwrap();
-            writer.write_all(b"\n").unwrap();
-        } else {
+        if settings.debug {
             self.print_debug(settings, writer).unwrap();
+        } else {
+            writer.write_all(self.line.as_bytes()).unwrap();
+            writer.write_all(&[settings.line_ending.into()]).unwrap();
         }
     }
 
@@ -1169,7 +1163,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         })?;
     }
 
-    settings.zero_terminated = matches.get_flag(options::ZERO_TERMINATED);
+    settings.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     settings.merge = matches.get_flag(options::MERGE);
 
     settings.check = matches.contains_id(options::check::CHECK);

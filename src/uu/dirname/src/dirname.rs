@@ -1,7 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Derek Chiang <derekchiang93@gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -9,6 +7,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::path::Path;
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
+use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("dirname.md");
@@ -26,11 +25,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
-    let separator = if matches.get_flag(options::ZERO) {
-        "\0"
-    } else {
-        "\n"
-    };
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
     let dirnames: Vec<String> = matches
         .get_many::<String>(options::DIR)
@@ -59,7 +54,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                 }
             }
-            print!("{separator}");
+            print!("{line_ending}");
         }
     }
 

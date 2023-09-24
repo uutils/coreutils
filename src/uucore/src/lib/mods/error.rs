@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // TODO fix broken links
 #![allow(rustdoc::broken_intra_doc_links)]
 //! All utils return exit with an exit code. Usually, the following scheme is used:
@@ -396,7 +400,7 @@ impl Display for UIoError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         use std::io::ErrorKind::*;
 
-        let mut message;
+        let message;
         let message = if self.inner.raw_os_error().is_some() {
             // These are errors that come directly from the OS.
             // We want to normalize their messages across systems,
@@ -424,7 +428,6 @@ impl Display for UIoError {
                     // (https://github.com/rust-lang/rust/issues/86442)
                     // are stabilized, we should add them to the match statement.
                     message = strip_errno(&self.inner);
-                    capitalize(&mut message);
                     &message
                 }
             }
@@ -435,7 +438,6 @@ impl Display for UIoError {
             // a file that was not found.
             // There are also errors with entirely custom messages.
             message = self.inner.to_string();
-            capitalize(&mut message);
             &message
         };
         if let Some(ctx) = &self.context {
@@ -443,13 +445,6 @@ impl Display for UIoError {
         } else {
             write!(f, "{message}")
         }
-    }
-}
-
-/// Capitalize the first character of an ASCII string.
-fn capitalize(text: &mut str) {
-    if let Some(first) = text.get_mut(..1) {
-        first.make_ascii_uppercase();
     }
 }
 
