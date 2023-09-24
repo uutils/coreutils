@@ -844,3 +844,13 @@ fn test_touch_dash() {
 
     ucmd.args(&["-h", "-"]).succeeds().no_stderr().no_stdout();
 }
+
+#[test]
+fn test_touch_invalid_date_format() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_invalid_date_format";
+
+    ucmd.args(&["-m", "-t", "+1000000000000 years", file])
+        .fails()
+        .stderr_contains("touch: invalid date format ‘+1000000000000 years’");
+}
