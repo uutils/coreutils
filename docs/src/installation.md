@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva -->
+<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda -->
 
 # Installation
 
@@ -37,7 +37,7 @@ apk update uutils-coreutils
 
 ### Arch
 
-[![Arch package](https://repology.org/badge/version-for-repo/arch/uutils-coreutils.svg)](https://archlinux.org/packages/community/x86_64/uutils-coreutils/)
+[![Arch package](https://repology.org/badge/version-for-repo/arch/uutils-coreutils.svg)](https://archlinux.org/packages/extra/x86_64/uutils-coreutils/)
 
 ```shell
 pacman -S uutils-coreutils
@@ -137,6 +137,16 @@ pkg install rust-coreutils
 
 ```shell
 scoop install uutils-coreutils
+```
+
+## Alternative installers
+
+### Conda
+
+[Conda package](https://anaconda.org/conda-forge/uutils-coreutils)
+
+```
+conda install -c conda-forge uutils-coreutils 
 ```
 
 ## Non-standard packages

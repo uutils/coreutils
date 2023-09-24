@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use rstest::rstest;
 
 // spell-checker:ignore dont
@@ -10,7 +14,7 @@ fn test_invalid_time_interval() {
     new_ucmd!()
         .arg("xyz")
         .fails()
-        .usage_error("invalid time interval 'xyz': Invalid input: 'xyz' at position 1");
+        .usage_error("invalid time interval 'xyz': Invalid input: xyz");
     new_ucmd!()
         .args(&["--", "-1"])
         .fails()
@@ -211,7 +215,7 @@ fn test_sleep_when_input_has_only_whitespace_then_error(#[case] input: &str) {
 
 #[test]
 fn test_sleep_when_multiple_input_some_with_error_then_shows_all_errors() {
-    let expected = "invalid time interval 'abc': Invalid input: 'abc' at position 1\n\
+    let expected = "invalid time interval 'abc': Invalid input: abc\n\
         sleep: invalid time interval '1years': Invalid time unit: 'years' at position 2\n\
         sleep: invalid time interval ' ': Found only whitespace in input";
 

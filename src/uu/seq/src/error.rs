@@ -1,8 +1,8 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
-// spell-checker:ignore numberparse argtype
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+// spell-checker:ignore numberparse
 //! Errors returned by seq.
 use std::error::Error;
 use std::fmt::Display;
@@ -25,29 +25,11 @@ pub enum SeqError {
     /// The parameter is the increment argument as a [`String`] as read
     /// from the command line.
     ZeroIncrement(String),
+
+    /// No arguments were passed to this function, 1 or more is required
+    NoArguments,
 }
 
-impl SeqError {
-    /// The [`String`] argument as read from the command-line.
-    fn arg(&self) -> &str {
-        match self {
-            Self::ParseError(s, _) => s,
-            Self::ZeroIncrement(s) => s,
-        }
-    }
-
-    /// The type of argument that is causing the error.
-    fn argtype(&self) -> &str {
-        match self {
-            Self::ParseError(_, e) => match e {
-                ParseNumberError::Float => "floating point argument",
-                ParseNumberError::Nan => "'not-a-number' argument",
-                ParseNumberError::Hex => "hexadecimal argument",
-            },
-            Self::ZeroIncrement(_) => "Zero increment value",
-        }
-    }
-}
 impl UError for SeqError {
     /// Always return 1.
     fn code(&self) -> i32 {
@@ -63,6 +45,17 @@ impl Error for SeqError {}
 
 impl Display for SeqError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid {}: {}", self.argtype(), self.arg().quote())
+        match self {
+            Self::ParseError(s, e) => {
+                let error_type = match e {
+                    ParseNumberError::Float => "floating point",
+                    ParseNumberError::Nan => "'not-a-number'",
+                    ParseNumberError::Hex => "hexadecimal",
+                };
+                write!(f, "invalid {error_type} argument: {}", s.quote())
+            }
+            Self::ZeroIncrement(s) => write!(f, "invalid Zero increment value: {}", s.quote()),
+            Self::NoArguments => write!(f, "missing operand"),
+        }
     }
 }

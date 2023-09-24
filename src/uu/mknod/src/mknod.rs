@@ -1,7 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Jian Zeng <anonymousknight96@gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -101,12 +99,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             matches.get_one::<u64>("major"),
             matches.get_one::<u64>("minor"),
         ) {
-            (_, None) | (None, _) => {
-                return Err(UUsageError::new(
-                    1,
-                    "Special files require major and minor device numbers.",
-                ));
-            }
+            (_, None) | (None, _) => Err(UUsageError::new(
+                1,
+                "Special files require major and minor device numbers.",
+            )),
             (Some(&major), Some(&minor)) => {
                 let dev = makedev(major, minor);
                 let exit_code = match file_type {

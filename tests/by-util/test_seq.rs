@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore lmnop xlmnop
 use crate::common::util::TestScenario;
 use std::process::Stdio;
@@ -5,6 +9,14 @@ use std::process::Stdio;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
+fn test_no_args() {
+    new_ucmd!()
+        .fails()
+        .code_is(1)
+        .stderr_contains("missing operand");
 }
 
 #[test]
@@ -208,10 +220,13 @@ fn test_separator_and_terminator() {
 
 #[test]
 fn test_equalize_widths() {
-    new_ucmd!()
-        .args(&["-w", "5", "10"])
-        .run()
-        .stdout_is("05\n06\n07\n08\n09\n10\n");
+    let args = ["-w", "--equal-width"];
+    for arg in args {
+        new_ucmd!()
+            .args(&[arg, "5", "10"])
+            .run()
+            .stdout_is("05\n06\n07\n08\n09\n10\n");
+    }
 }
 
 #[test]
