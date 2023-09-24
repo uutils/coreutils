@@ -161,6 +161,7 @@ pub fn contain(ranges: &[Range], n: usize) -> bool {
 #[cfg(test)]
 mod test {
     use super::{complement, Range};
+    use std::str::FromStr;
 
     fn m(a: Vec<Range>, b: &[Range]) {
         assert_eq!(Range::merge(a), b);
@@ -230,5 +231,34 @@ mod test {
 
         // With start and end
         assert_eq!(complement(&[r(1, 4), r(6, usize::MAX - 1)]), vec![r(5, 5)]);
+    }
+
+    #[test]
+    fn test_from_str() {
+        assert_eq!(Range::from_str("5"), Ok(Range { low: 5, high: 5 }));
+        assert_eq!(Range::from_str("3-5"), Ok(Range { low: 3, high: 5 }));
+        assert_eq!(
+            Range::from_str("5-3"),
+            Err("high end of range less than low end")
+        );
+        assert_eq!(Range::from_str("-"), Err("invalid range with no endpoint"));
+        assert_eq!(
+            Range::from_str("3-"),
+            Ok(Range {
+                low: 3,
+                high: usize::MAX - 1
+            })
+        );
+        assert_eq!(Range::from_str("-5"), Ok(Range { low: 1, high: 5 }));
+        assert_eq!(
+            Range::from_str("0"),
+            Err("fields and positions are numbered from 1")
+        );
+
+        let max_value = format!("{}", usize::MAX);
+        assert_eq!(
+            Range::from_str(&max_value),
+            Err("byte/character offset is too large")
+        );
     }
 }
