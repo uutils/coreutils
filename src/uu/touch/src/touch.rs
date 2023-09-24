@@ -92,10 +92,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     ) {
         (Some(reference), Some(date)) => {
             let (atime, mtime) = stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?;
-            let atime = filetime_to_datetime(&atime)
-                .ok_or_else(|| USimpleError::new(1, "failed to convert atime"))?;
-            let mtime = filetime_to_datetime(&mtime)
-                .ok_or_else(|| USimpleError::new(1, "failed to convert mtime"))?;
+            let atime = filetime_to_datetime(&atime).ok_or_else(|| {
+                USimpleError::new(1, "Could not process the reference access time")
+            })?;
+            let mtime = filetime_to_datetime(&mtime).ok_or_else(|| {
+                USimpleError::new(1, "Could not process the reference modification time")
+            })?;
             (parse_date(atime, date)?, parse_date(mtime, date)?)
         }
         (Some(reference), None) => {
