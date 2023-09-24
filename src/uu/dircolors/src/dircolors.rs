@@ -1,8 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Jian Zeng <anonymousknight96@gmail.com>
-// (c) Mitchell Mebane <mitchell.mebane@gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -168,9 +165,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             println!("{s}");
             Ok(())
         }
-        Err(s) => {
-            return Err(USimpleError::new(1, s));
-        }
+        Err(s) => Err(USimpleError::new(1, s)),
     }
 }
 

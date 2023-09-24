@@ -1,8 +1,9 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
 // spell-checker:ignore abcdefghijklmnopqrstuvwxyz
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
 
 use crate::common::util::TestScenario;
 use std::env;
@@ -622,6 +623,35 @@ fn test_skip_bytes() {
         .stdout_is(unindent(
             "
             0000005   f   g   h   i   j   k   l   m   n   o   p   q
+            0000021
+            ",
+        ));
+}
+
+#[test]
+fn test_skip_bytes_hex() {
+    let input = "abcdefghijklmnopq"; // spell-checker:disable-line
+    new_ucmd!()
+        .arg("-c")
+        .arg("--skip-bytes=0xB")
+        .run_piped_stdin(input.as_bytes())
+        .no_stderr()
+        .success()
+        .stdout_is(unindent(
+            "
+            0000013   l   m   n   o   p   q
+            0000021
+            ",
+        ));
+    new_ucmd!()
+        .arg("-c")
+        .arg("--skip-bytes=0xE")
+        .run_piped_stdin(input.as_bytes())
+        .no_stderr()
+        .success()
+        .stdout_is(unindent(
+            "
+            0000016   o   p   q
             0000021
             ",
         ));

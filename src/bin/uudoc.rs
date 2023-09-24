@@ -42,6 +42,7 @@ fn main() -> io::Result<()> {
         [Introduction](index.md)\n\
         * [Installation](installation.md)\n\
         * [Build from source](build.md)\n\
+        * [Platform support](platforms.md)\n\
         * [Contributing](contributing.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
         * [Extensions](extensions.md)\n\
@@ -53,7 +54,7 @@ fn main() -> io::Result<()> {
     println!("Gathering utils per platform");
     let utils_per_platform = {
         let mut map = HashMap::new();
-        for platform in ["unix", "macos", "windows"] {
+        for platform in ["unix", "macos", "windows", "unix_android"] {
             let platform_utils: Vec<String> = String::from_utf8(
                 std::process::Command::new("./util/show-utils.sh")
                     .arg(format!("--features=feat_os_{}", platform))
@@ -61,6 +62,7 @@ fn main() -> io::Result<()> {
                     .stdout,
             )
             .unwrap()
+            .trim()
             .split(' ')
             .map(ToString::to_string)
             .collect();
@@ -75,6 +77,7 @@ fn main() -> io::Result<()> {
                 .stdout,
         )
         .unwrap()
+        .trim()
         .split(' ')
         .map(ToString::to_string)
         .collect();
@@ -83,9 +86,47 @@ fn main() -> io::Result<()> {
         map
     };
 
-    println!("Writing to utils");
     let mut utils = utils.entries().collect::<Vec<_>>();
     utils.sort();
+
+    println!("Writing util per platform table");
+    {
+        let mut platform_table_file = File::create("docs/src/platform_table.md").unwrap();
+
+        // sum, cksum, b2sum, etc. are all available on all platforms, but not in the data structure
+        // otherwise, we check the map for the util name.
+        let check_supported = |name: &str, platform: &str| {
+            if name.ends_with("sum") || utils_per_platform[platform].iter().any(|u| u == name) {
+                "✓"
+            } else {
+                " "
+            }
+        };
+        writeln!(
+            platform_table_file,
+            "| util             | Linux | macOS | Windows | FreeBSD | Android |\n\
+             | ---------------- | ----- | ----- | ------- | ------- | ------- |"
+        )?;
+        for (&name, _) in &utils {
+            if name == "[" {
+                continue;
+            }
+            // The alignment is not necessary, but makes the output a bit more
+            // pretty when viewed as plain markdown.
+            writeln!(
+                platform_table_file,
+                "| {:<16} | {:<5} | {:<5} | {:<7} | {:<7} | {:<7} |",
+                format!("**{name}**"),
+                check_supported(name, "linux"),
+                check_supported(name, "macos"),
+                check_supported(name, "windows"),
+                check_supported(name, "unix"),
+                check_supported(name, "unix_android"),
+            )?;
+        }
+    }
+
+    println!("Writing to utils");
     for (&name, (_, command)) in utils {
         if name == "[" {
             continue;

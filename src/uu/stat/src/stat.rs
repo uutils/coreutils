@@ -1,9 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Jian Zeng <anonymousknight96@gmail.com>
-//
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
@@ -614,6 +612,10 @@ impl Stater {
     fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> i32 {
         let display_name = file.to_string_lossy();
         let file = if cfg!(unix) && display_name == "-" {
+            if self.show_fs {
+                show_error!("using '-' to denote standard input does not work in file system mode");
+                return 1;
+            }
             if let Ok(p) = Path::new("/dev/stdin").canonicalize() {
                 p.into_os_string()
             } else {
@@ -622,7 +624,6 @@ impl Stater {
         } else {
             OsString::from(file)
         };
-
         if self.show_fs {
             #[cfg(unix)]
             let p = file.as_bytes();
@@ -632,7 +633,7 @@ impl Stater {
                 Ok(meta) => {
                     let tokens = &self.default_tokens;
 
-                    for t in tokens.iter() {
+                    for t in tokens {
                         match *t {
                             Token::Char(c) => print!("{c}"),
                             Token::Directive {
@@ -700,7 +701,7 @@ impl Stater {
                         &self.default_dev_tokens
                     };
 
-                    for t in tokens.iter() {
+                    for t in tokens {
                         match *t {
                             Token::Char(c) => print!("{c}"),
                             Token::Directive {

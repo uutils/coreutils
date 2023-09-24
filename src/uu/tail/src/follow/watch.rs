@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tailable untailable stdlib kqueue Uncategorized unwatch
 
@@ -10,7 +10,6 @@ use crate::follow::files::{FileHandling, PathData};
 use crate::paths::{Input, InputKind, MetadataExtTail, PathExtTail};
 use crate::{platform, text};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher, WatcherKind};
-use std::collections::VecDeque;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, channel, Receiver};
@@ -270,7 +269,7 @@ impl Observer {
         self.follow_name() && self.retry
     }
 
-    fn init_files(&mut self, inputs: &VecDeque<Input>) -> UResult<()> {
+    fn init_files(&mut self, inputs: &Vec<Input>) -> UResult<()> {
         if let Some(watcher_rx) = &mut self.watcher_rx {
             for input in inputs {
                 match input.kind() {

@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 //! Provides a summary representation of a filesystem.
 //!
 //! A [`Filesystem`] struct represents a device containing a
@@ -158,12 +158,12 @@ mod tests {
         // Create a fake `MountInfo` with the given directory name.
         fn mount_info(mount_dir: &str) -> MountInfo {
             MountInfo {
-                dev_id: Default::default(),
-                dev_name: Default::default(),
-                fs_type: Default::default(),
+                dev_id: String::default(),
+                dev_name: String::default(),
+                fs_type: String::default(),
                 mount_dir: String::from(mount_dir),
-                mount_option: Default::default(),
-                mount_root: Default::default(),
+                mount_option: String::default(),
+                mount_root: String::default(),
                 remote: Default::default(),
                 dummy: Default::default(),
             }

@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use crate::common::util::TestScenario;
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -391,6 +395,15 @@ fn test_invalid_date_string() {
     new_ucmd!()
         .arg("-d")
         .arg("foo")
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_date_overflow() {
+    new_ucmd!()
+        .arg("-d68888888888888sms")
         .fails()
         .no_stdout()
         .stderr_contains("invalid date");

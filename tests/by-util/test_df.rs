@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore udev pcent iuse itotal iused ipcent
 use std::collections::HashSet;
 
@@ -258,7 +262,7 @@ fn test_type_option() {
 }
 
 #[test]
-#[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
+#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
 fn test_type_option_with_file() {
     let fs_type = new_ucmd!()
         .args(&["--output=fstype", "."])
@@ -806,7 +810,7 @@ fn test_output_file_all_filesystems() {
 }
 
 #[test]
-#[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
+#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
 fn test_output_file_specific_files() {
     // Create three files.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -825,7 +829,7 @@ fn test_output_file_specific_files() {
 }
 
 #[test]
-#[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
+#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
 fn test_file_column_width_if_filename_contains_unicode_chars() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("äöü.txt");
@@ -848,7 +852,7 @@ fn test_output_field_no_more_than_once() {
 }
 
 #[test]
-#[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
+#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
 fn test_nonexistent_file() {
     new_ucmd!()
         .arg("does-not-exist")

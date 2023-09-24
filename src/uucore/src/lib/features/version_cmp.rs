@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use std::cmp::Ordering;
 
 /// Compares the non-digit parts of a version.
@@ -106,7 +110,7 @@ pub fn version_cmp(mut a: &str, mut b: &str) -> Ordering {
     // 1. Compare leading non-numerical part
     // 2. Compare leading numerical part
     // 3. Repeat
-    loop {
+    while !a.is_empty() || !b.is_empty() {
         let a_numerical_start = a.find(|c: char| c.is_ascii_digit()).unwrap_or(a.len());
         let b_numerical_start = b.find(|c: char| c.is_ascii_digit()).unwrap_or(b.len());
 
@@ -139,12 +143,9 @@ pub fn version_cmp(mut a: &str, mut b: &str) -> Ordering {
 
         a = &a[a_numerical_end..];
         b = &b[b_numerical_end..];
-
-        if a.is_empty() && b.is_empty() {
-            // Default to the lexical comparison.
-            return str_cmp;
-        }
     }
+
+    Ordering::Equal
 }
 
 #[cfg(test)]
@@ -229,14 +230,14 @@ mod tests {
         // Leading zeroes
         assert_eq!(
             version_cmp("012", "12"),
-            Ordering::Less,
-            "A single leading zero can make a difference"
+            Ordering::Equal,
+            "A single leading zero does not make a difference"
         );
 
         assert_eq!(
             version_cmp("000800", "0000800"),
-            Ordering::Greater,
-            "Leading number of zeroes is used even if both non-zero number of zeros"
+            Ordering::Equal,
+            "Multiple leading zeros do not make a difference"
         );
 
         // Numbers and other characters combined
@@ -280,14 +281,8 @@ mod tests {
 
         assert_eq!(
             version_cmp("aa10aa0022", "aa010aa022"),
-            Ordering::Greater,
-            "The leading zeroes of the first number has priority."
-        );
-
-        assert_eq!(
-            version_cmp("aa10aa0022", "aa10aa022"),
-            Ordering::Less,
-            "The leading zeroes of other numbers than the first are used."
+            Ordering::Equal,
+            "Test multiple numeric values with leading zeros"
         );
 
         assert_eq!(
@@ -307,7 +302,7 @@ mod tests {
 
         assert_eq!(
             version_cmp("aa2000000000000000000000bb", "aa002000000000000000000000bb"),
-            Ordering::Greater,
+            Ordering::Equal,
             "Leading zeroes for numbers larger than u64::MAX are \
             handled correctly without crashing"
         );

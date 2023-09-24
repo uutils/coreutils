@@ -19,6 +19,7 @@
   // files to ignore (globs supported)
   "ignorePaths": [
     "Cargo.lock",
+    "oranda.json",
     "target/**",
     "tests/**/fixtures/**",
     "src/uu/dd/test-resources/**",

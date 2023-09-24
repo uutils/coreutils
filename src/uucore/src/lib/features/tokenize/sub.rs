@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 
 //! Sub is a token that represents a
@@ -184,11 +188,11 @@ impl SubParser {
         // though, as we want to mimic the original behavior of printing
         // the field as interpreted up until the error in the field.
 
-        let mut legal_fields = vec![
+        let mut legal_fields = [
             // 'a', 'A', //c99 hex float implementation not yet complete
             'b', 'c', 'd', 'e', 'E', 'f', 'F', 'g', 'G', 'i', 'o', 's', 'u', 'x', 'X',
         ];
-        let mut specifiers = vec!['h', 'j', 'l', 'L', 't', 'z'];
+        let mut specifiers = ['h', 'j', 'l', 'L', 't', 'z'];
         legal_fields.sort_unstable();
         specifiers.sort_unstable();
 

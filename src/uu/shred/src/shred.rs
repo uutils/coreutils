@@ -1,10 +1,7 @@
-// * This file is part of the uutils coreutils package.
-// *
-// * (c) Michael Rosenberg <42micro@gmail.com>
-// * (c) Fort <forticulous@gmail.com>
-// *
-// * For the full copyright and license information, please view the LICENSE
-// * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (words) wipesync prefill
 
@@ -532,7 +529,9 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                     }
 
                     // Sync every file rename
-                    let new_file = File::open(new_path.clone())
+                    let new_file = OpenOptions::new()
+                        .write(true)
+                        .open(new_path.clone())
                         .expect("Failed to open renamed file for syncing");
                     new_file.sync_all().expect("Failed to sync renamed file");
 

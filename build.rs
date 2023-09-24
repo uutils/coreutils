@@ -1,3 +1,8 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
 // spell-checker:ignore (vars) krate
 
 use std::env;
@@ -38,14 +43,15 @@ pub fn main() {
     let mut mf = File::create(Path::new(&out_dir).join("uutils_map.rs")).unwrap();
 
     mf.write_all(
-        "type UtilityMap<T> = phf::Map<&'static str, (fn(T) -> i32, fn() -> Command)>;\n\
+        "type UtilityMap<T> = phf::OrderedMap<&'static str, (fn(T) -> i32, fn() -> Command)>;\n\
          \n\
+         #[allow(clippy::too_many_lines)]
          fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n"
             .as_bytes(),
     )
     .unwrap();
 
-    let mut phf_map = phf_codegen::Map::<&str>::new();
+    let mut phf_map = phf_codegen::OrderedMap::<&str>::new();
     for krate in &crates {
         let map_value = format!("({krate}::uumain, {krate}::uu_app)");
         match krate.as_ref() {

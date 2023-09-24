@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Michael Debertol <michael.debertol..AT..gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 //! Utilities for reading files as chunks.
 
@@ -16,21 +14,22 @@ use std::{
 };
 
 use memchr::memchr_iter;
-use ouroboros::self_referencing;
+use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError};
 
 use crate::{numeric_str_cmp::NumInfo, GeneralF64ParseResult, GlobalSettings, Line, SortError};
 
-/// The chunk that is passed around between threads.
-/// `lines` consist of slices into `buffer`.
-#[self_referencing(pub_extras)]
-#[derive(Debug)]
-pub struct Chunk {
-    pub buffer: Vec<u8>,
-    #[borrows(buffer)]
-    #[covariant]
-    pub contents: ChunkContents<'this>,
-}
+self_cell!(
+    /// The chunk that is passed around between threads.
+    pub struct Chunk {
+        owner: Vec<u8>,
+
+        #[covariant]
+        dependent: ChunkContents,
+    }
+
+    impl {Debug}
+);
 
 #[derive(Debug)]
 pub struct ChunkContents<'a> {
@@ -48,7 +47,7 @@ pub struct LineData<'a> {
 impl Chunk {
     /// Destroy this chunk and return its components to be reused.
     pub fn recycle(mut self) -> RecycledChunk {
-        let recycled_contents = self.with_contents_mut(|contents| {
+        let recycled_contents = self.with_dependent_mut(|_, contents| {
             contents.lines.clear();
             contents.line_data.selections.clear();
             contents.line_data.num_infos.clear();
@@ -81,15 +80,15 @@ impl Chunk {
             selections: recycled_contents.1,
             num_infos: recycled_contents.2,
             parsed_floats: recycled_contents.3,
-            buffer: self.into_heads().buffer,
+            buffer: self.into_owner(),
         }
     }
 
     pub fn lines(&self) -> &Vec<Line> {
-        &self.borrow_contents().lines
+        &self.borrow_dependent().lines
     }
     pub fn line_data(&self) -> &LineData {
-        &self.borrow_contents().line_data
+        &self.borrow_dependent().line_data
     }
 }
 
