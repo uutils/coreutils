@@ -479,8 +479,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
 
     let mut process = platform::ProcessChecker::new(observer.pid);
 
-    let mut _event_counter = 0;
-    let mut _timeout_counter = 0;
+    let mut timeout_counter = 0;
 
     // main follow loop
     loop {
@@ -529,8 +528,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             .receiver
             .recv_timeout(settings.sleep_sec);
         if rx_result.is_ok() {
-            _event_counter += 1;
-            _timeout_counter = 0;
+            timeout_counter = 0;
         }
 
         let mut paths = vec![]; // Paths worth checking for new content to print
@@ -569,7 +567,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             }
             Ok(Err(e)) => return Err(USimpleError::new(1, format!("NotifyError: {e}"))),
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                _timeout_counter += 1;
+                timeout_counter += 1;
             }
             Err(e) => return Err(USimpleError::new(1, format!("RecvTimeoutError: {e}"))),
         }
@@ -586,7 +584,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             _read_some = observer.files.tail_file(path, settings.verbose)?;
         }
 
-        if _timeout_counter == settings.max_unchanged_stats {
+        if timeout_counter == settings.max_unchanged_stats {
             /*
             TODO: [2021-10; jhscheer] implement timeout_counter for each file.
             ‘--max-unchanged-stats=n’
