@@ -23,6 +23,7 @@ use uucore::backup_control::{self, source_is_target_backup, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::fs::{are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file};
+use uucore::libc::ENOTEMPTY;
 use uucore::update_control::{self, UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
@@ -399,30 +400,34 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         match rename(sourcepath, &targetpath, b, multi_progress.as_ref()) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
-                if e.to_string().as_str() == "Directory not empty" {
-                    let e =
-                        e.map_err_context(|| format!("cannot overwrite {}", targetpath.quote()));
-                    match multi_progress {
-                        Some(ref pb) => pb.suspend(|| show!(e)),
-                        None => show!(e),
-                    };
-                } else {
-                    let e = e.map_err_context(|| {
-                        format!(
-                            "cannot move {} to {}",
-                            sourcepath.quote(),
-                            targetpath.quote()
-                        )
-                    });
-                    match multi_progress {
-                        Some(ref pb) => pb.suspend(|| show!(e)),
-                        None => show!(e),
-                    };
+                match e.raw_os_error() {
+                    Some(ENOTEMPTY) => {
+                        // The error message was changed to match GNU's decision
+                        // when an issue was filed. These will match when merged upstream.
+                        let e = e
+                            .map_err_context(|| format!("cannot overwrite {}", targetpath.quote()));
+                        match multi_progress {
+                            Some(ref pb) => pb.suspend(|| show!(e)),
+                            None => show!(e),
+                        };
+                    }
+                    _ => {
+                        let e = e.map_err_context(|| {
+                            format!(
+                                "cannot move {} to {}",
+                                sourcepath.quote(),
+                                targetpath.quote()
+                            )
+                        });
+                        match multi_progress {
+                            Some(ref pb) => pb.suspend(|| show!(e)),
+                            None => show!(e),
+                        };
+                    }
                 }
             }
             Ok(()) => (),
         }
-
         if let Some(ref pb) = count_progress {
             pb.inc(1);
         }
@@ -489,7 +494,8 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
+                // TODO: change when 'io::Error::DirectoryNotEmpty' is stabilized.
+                return Err(io::Error::from_raw_os_error(ENOTEMPTY));
             }
         }
     }

@@ -1196,7 +1196,8 @@ fn test_mv_nonempty_directory_exists() {
 
     // Not same error as GNU; the error message is custom.
     // GNU: "mv: Couldn't move (Directory not empty; from=a; to=b)
-    // Current: "mv: Couldn't move {} to {}: A directory exists with the same name at destination"
+    // Current: "mv: cannot overwrite {}: Directory not empty""
+
     ucmd.arg(dir_a)
         .arg(test_dir)
         .fails()

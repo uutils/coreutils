@@ -193,6 +193,7 @@ sed -i -e "s|rm: cannot remove 'a/b/file'|rm: cannot remove 'a'|g" tests/rm/cycl
 
 sed -i -e "s|rm: cannot remove directory 'b/a/p'|rm: cannot remove 'b'|g" tests/rm/rm1.sh
 
+# TODO: when GNU's output is changed to match this error, this can be removed.
 sed -i -e "s|mv: cannot move 'b/t' to 'a/t'|mv: cannot overwrite 'b/t'|g" tests/mv/dir2dir.sh
 
 sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
