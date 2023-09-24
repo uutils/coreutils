@@ -2533,6 +2533,16 @@ pub fn run_ucmd_as_root(
     ts: &TestScenario,
     args: &[&str],
 ) -> std::result::Result<CmdResult, String> {
+    run_ucmd_as_root_with_stdin_stdout(ts, args, None, None)
+}
+
+#[cfg(unix)]
+pub fn run_ucmd_as_root_with_stdin_stdout(
+    ts: &TestScenario,
+    args: &[&str],
+    stdin: Option<&str>,
+    stdout: Option<&str>,
+) -> std::result::Result<CmdResult, String> {
     if is_ci() {
         Err(format!("{UUTILS_INFO}: {}", "cannot run inside CI"))
     } else {
@@ -2546,16 +2556,21 @@ pub fn run_ucmd_as_root(
             Ok(output) if String::from_utf8_lossy(&output.stdout).eq("root\n") => {
                 // we can run sudo and we're root
                 // run ucmd as root:
-                Ok(ts
-                    .cmd("sudo")
-                    .env("PATH", PATH)
+                let mut cmd = ts.cmd("sudo");
+                cmd.env("PATH", PATH)
                     .envs(DEFAULT_ENV)
                     .arg("-E")
                     .arg("--non-interactive")
                     .arg(&ts.bin_path)
                     .arg(&ts.util_name)
-                    .args(args)
-                    .run())
+                    .args(args);
+                if let Some(stdin) = stdin {
+                    cmd.set_stdin(File::open(stdin).unwrap());
+                }
+                if let Some(stdout) = stdout {
+                    cmd.set_stdout(File::open(stdout).unwrap());
+                }
+                Ok(cmd.run())
             }
             Ok(output)
                 if String::from_utf8_lossy(&output.stderr).eq("sudo: a password is required\n") =>
