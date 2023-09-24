@@ -33,7 +33,17 @@ if test $# -ge 1; then
     # if set, run only the tests passed
     SPECIFIC_TESTS=""
     for t in "$@"; do
-        SPECIFIC_TESTS="$SPECIFIC_TESTS $t"
+
+        # Construct the full path
+        full_path="$path_GNU/$t"
+
+        # Check if the file exists with .sh, .pl extension or without any extension in the $path_GNU directory
+        if [ -f "$full_path" ] || [ -f "$full_path.sh" ] || [ -f "$full_path.pl" ]; then
+            SPECIFIC_TESTS="$SPECIFIC_TESTS $t"
+        else
+            echo "Error: Test file $full_path, $full_path.sh, or $full_path.pl does not exist!"
+            exit 1
+        fi
     done
     # trim it
     SPECIFIC_TESTS=$(echo $SPECIFIC_TESTS | xargs)
