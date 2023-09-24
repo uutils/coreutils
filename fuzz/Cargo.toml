@@ -9,12 +9,13 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+libc = "0.2"
+rand = { version = "0.8", features = ["small_rng"] }
 
-[dependencies.uucore]
-path = "../src/uucore/"
+uucore = { path = "../src/uucore/" }
+uu_date = { path = "../src/uu/date/" }
+uu_test = { path = "../src/uu/test/" }
 
-[dependencies.uu_date]
-path = "../src/uu/date/"
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -23,6 +24,12 @@ members = ["."]
 [[bin]]
 name = "fuzz_date"
 path = "fuzz_targets/fuzz_date.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_test"
+path = "fuzz_targets/fuzz_test.rs"
 test = false
 doc = false
 

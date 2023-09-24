@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Alex Lyon <arcterus@mail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use std::thread;
 use std::time::Duration;
@@ -14,7 +12,7 @@ use uucore::{
 };
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use fundu::{self, DurationParser, ParseError};
+use fundu::{self, DurationParser, ParseError, SaturatingInto};
 
 static ABOUT: &str = help_about!("sleep.md");
 const USAGE: &str = help_usage!("sleep.md");
@@ -63,7 +61,7 @@ pub fn uu_app() -> Command {
 fn sleep(args: &[&str]) -> UResult<()> {
     let mut arg_error = false;
 
-    use fundu::TimeUnit::*;
+    use fundu::TimeUnit::{Day, Hour, Minute, Second};
     let parser = DurationParser::with_time_units(&[Second, Minute, Hour, Day]);
 
     let sleep_dur = args
@@ -91,7 +89,9 @@ fn sleep(args: &[&str]) -> UResult<()> {
                 None
             }
         })
-        .fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
+        .fold(Duration::ZERO, |acc, n| {
+            acc.saturating_add(SaturatingInto::<std::time::Duration>::saturating_into(n))
+        });
 
     if arg_error {
         return Err(UUsageError::new(1, ""));

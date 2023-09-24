@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use crate::common::util::TestScenario;
 use std::borrow::Cow;
 use std::path::Path;
@@ -175,4 +179,11 @@ fn test_relpath_no_from_with_d() {
             .stdout_move_str();
         assert!(Path::new(&result_stdout).is_absolute());
     }
+}
+
+#[test]
+fn test_relpath_no_to() {
+    new_ucmd!()
+        .fails()
+        .stderr_contains("required arguments were not provided");
 }

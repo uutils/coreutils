@@ -1,8 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Joseph Crail <jbcrail@gmail.com>
-// (c) Jian Zeng <anonymousknight96 AT gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -31,6 +28,9 @@ use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
 
+/// Used to check if the `mode` has its `perm` bit set.
+///
+/// This macro expands to `mode & perm != 0`.
 #[cfg(unix)]
 #[macro_export]
 macro_rules! has {
@@ -114,6 +114,7 @@ impl FileInformation {
             not(target_vendor = "apple"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_os = "netbsd"),
             not(target_arch = "aarch64"),
             not(target_arch = "riscv64"),
             target_pointer_width = "64"
@@ -125,6 +126,7 @@ impl FileInformation {
                 target_vendor = "apple",
                 target_os = "android",
                 target_os = "freebsd",
+                target_os = "netbsd",
                 target_arch = "aarch64",
                 target_arch = "riscv64",
                 not(target_pointer_width = "64")
@@ -137,9 +139,16 @@ impl FileInformation {
 
     #[cfg(unix)]
     pub fn inode(&self) -> u64 {
-        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+        #[cfg(all(
+            not(any(target_os = "freebsd", target_os = "netbsd")),
+            target_pointer_width = "64"
+        ))]
         return self.0.st_ino;
-        #[cfg(any(target_os = "freebsd", not(target_pointer_width = "64")))]
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "netbsd",
+            not(target_pointer_width = "64")
+        ))]
         return self.0.st_ino.into();
     }
 }
@@ -635,12 +644,42 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
+    let source_metadata = match fs::symlink_metadata(source) {
+        Ok(metadata) => metadata,
+        Err(_) => return false,
+    };
+
+    let target_metadata = match fs::symlink_metadata(target) {
+        Ok(metadata) => metadata,
+        Err(_) => return false,
+    };
+
+    source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+}
+
+#[cfg(not(unix))]
+pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &Path) -> bool {
+    false
+}
+
+/// Checks if either two paths are hard links to the same file or if the source path is a symbolic link which when fully resolved points to target path
+///
+/// # Arguments
+///
+/// * `source` - A reference to a `Path` representing the source path.
+/// * `target` - A reference to a `Path` representing the target path.
+///
+/// # Returns
+///
+/// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
+#[cfg(unix)]
+pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
     let source_metadata = match fs::metadata(source) {
         Ok(metadata) => metadata,
         Err(_) => return false,
     };
 
-    let target_metadata = match fs::metadata(target) {
+    let target_metadata = match fs::symlink_metadata(target) {
         Ok(metadata) => metadata,
         Err(_) => return false,
     };
@@ -812,7 +851,7 @@ mod tests {
         let path1 = temp_file.path();
         let path2 = temp_file.path();
 
-        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), true);
+        assert!(are_hardlinks_to_same_file(&path1, &path2));
     }
 
     #[cfg(unix)]
@@ -827,7 +866,7 @@ mod tests {
         let path1 = temp_file1.path();
         let path2 = temp_file2.path();
 
-        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), false);
+        assert!(!are_hardlinks_to_same_file(&path1, &path2));
     }
 
     #[cfg(unix)]
@@ -840,6 +879,6 @@ mod tests {
         let path2 = temp_file.path().with_extension("hardlink");
         fs::hard_link(&path1, &path2).unwrap();
 
-        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), true);
+        assert!(are_hardlinks_to_same_file(&path1, &path2));
     }
 }

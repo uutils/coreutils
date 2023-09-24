@@ -1,6 +1,7 @@
 <!-- markdownlint-disable MD033 MD041 MD002 -->
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda -->
+<div class="oranda-hide">
 <div align="center">
 
 ![uutils logo](docs/src/logo.svg)
@@ -13,16 +14,19 @@
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
-![MSRV](https://img.shields.io/badge/MSRV-1.64.0-brightgreen)
+![MSRV](https://img.shields.io/badge/MSRV-1.70.0-brightgreen)
 
 </div>
 
 ---
 
+</div>
 
 uutils coreutils is a cross-platform reimplementation of the GNU coreutils in
 [Rust](http://www.rust-lang.org). While all programs have been implemented, some
 options might be missing or different behavior might be experienced.
+
+<div class="oranda-hide">
 
 To install it:
 
@@ -30,6 +34,8 @@ To install it:
 cargo install coreutils
 ~/.cargo/bin/coreutils
 ```
+
+</div>
 
 <!-- markdownlint-disable-next-line MD026 -->
 
@@ -42,15 +48,18 @@ uutils aims to work on as many platforms as possible, to be able to use the same
 utils on Linux, Mac, Windows and other platforms. This ensures, for example,
 that scripts can be easily transferred between platforms.
 
+<div class="oranda-hide">
+
 ## Documentation
 
 uutils has both user and developer documentation available:
 
-- [User Manual](https://uutils.github.io/user/)
-- [Developer Documentation](https://uutils.github.io/dev/coreutils/)
+- [User Manual](https://uutils.github.io/coreutils/book/)
+- [Developer Documentation](https://uutils.github.io/dev/coreutils/) (currently offline, you can use docs.rs in the meantime)
 
 Both can also be generated locally, the instructions for that can be found in
 the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
+
 
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
 
@@ -62,7 +71,7 @@ the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and
-nightly. The current Minimum Supported Rust Version (MSRV) is `1.64.0`.
+nightly. The current Minimum Supported Rust Version (MSRV) is `1.70.0`.
 
 ## Building
 
@@ -294,12 +303,14 @@ make PREFIX=/my/path uninstall
 
 Below is the evolution of how many GNU tests uutils passes. A more detailed
 breakdown of the GNU test results of the main branch can be found
-[in the user manual](https://uutils.github.io/user/test_coverage.html).
+[in the user manual](https://uutils.github.io/coreutils/book/test_coverage.html).
 
 See <https://github.com/uutils/coreutils/issues/3336> for the main meta bugs
 (many are missing).
 
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
+
+</div> <!-- close oranda-hide div -->
 
 ## Contributing
 

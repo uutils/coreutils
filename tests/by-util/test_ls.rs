@@ -1,4 +1,8 @@
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff colorterm
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs colorterm
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -22,7 +26,6 @@ use std::time::Duration;
 const LONG_ARGS: &[&str] = &[
     "-l",
     "--long",
-    "--l",
     "--format=long",
     "--for=long",
     "--format=verbose",
@@ -671,6 +674,23 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
 
+    for option in [
+        "-w 100000000000000",
+        "-w=100000000000000",
+        "--width=100000000000000",
+        "--width 100000000000000",
+        "-w 07777777777777777777",
+        "-w=07777777777777777777",
+        "--width=07777777777777777777",
+        "--width 07777777777777777777",
+    ] {
+        scene
+            .ucmd()
+            .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
+            .succeeds()
+            .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
+    }
     scene
         .ucmd()
         .arg("-w=bad")
@@ -2436,6 +2456,7 @@ fn test_ls_quoting_style() {
             ("--quoting-style=literal", "one?two"),
             ("-N", "one?two"),
             ("--literal", "one?two"),
+            ("--l", "one?two"),
             ("--quoting-style=c", "\"one\\ntwo\""),
             ("-Q", "\"one\\ntwo\""),
             ("--quote-name", "\"one\\ntwo\""),
@@ -2460,6 +2481,7 @@ fn test_ls_quoting_style() {
             ("--quoting-style=literal", "one\ntwo"),
             ("-N", "one\ntwo"),
             ("--literal", "one\ntwo"),
+            ("--l", "one\ntwo"),
             ("--quoting-style=shell", "one\ntwo"), // FIXME: GNU ls quotes this case
             ("--quoting-style=shell-always", "'one\ntwo'"),
         ] {
@@ -2521,6 +2543,7 @@ fn test_ls_quoting_style() {
         ("--quoting-style=literal", "one two"),
         ("-N", "one two"),
         ("--literal", "one two"),
+        ("--l", "one two"),
         ("--quoting-style=c", "\"one two\""),
         ("-Q", "\"one two\""),
         ("--quote-name", "\"one two\""),
@@ -3164,6 +3187,16 @@ fn test_ls_dangling_symlinks() {
 
     scene
         .ucmd()
+        .arg("-LZ")
+        .arg("temp_dir")
+        .fails()
+        .code_is(1)
+        .stderr_contains("cannot access")
+        .stderr_contains("No such file or directory")
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+
+    scene
+        .ucmd()
         .arg("-Ll")
         .arg("temp_dir")
         .fails()
@@ -3503,4 +3536,150 @@ fn test_invalid_utf8() {
     let filename = OsStr::from_bytes(b"-\xE0-foo");
     at.touch(filename);
     ucmd.succeeds();
+}
+
+#[cfg(all(unix, feature = "chmod"))]
+#[test]
+fn test_ls_perm_io_errors() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("d");
+    at.symlink_file("/", "d/s");
+
+    scene.ccmd("chmod").arg("600").arg("d").succeeds();
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("d")
+        .fails()
+        .code_is(1)
+        .stderr_contains("Permission denied");
+}
+
+#[test]
+fn test_ls_dired_incompatible() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--dired")
+        .fails()
+        .code_is(1)
+        .stderr_contains("--dired requires --format=long");
+}
+
+#[test]
+fn test_ls_dired_recursive() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .arg("-R")
+        .succeeds()
+        .stdout_does_not_contain("//DIRED//")
+        .stdout_contains("  total 0")
+        .stdout_contains("//SUBDIRED// 2 3")
+        .stdout_contains("//DIRED-OPTIONS// --quoting-style");
+}
+
+#[test]
+fn test_ls_dired_simple() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .succeeds()
+        .stdout_contains("  total 0");
+
+    at.mkdir("d");
+    at.touch("d/a1");
+    let mut cmd = scene.ucmd();
+    cmd.arg("--dired").arg("-l").arg("d");
+    let result = cmd.succeeds();
+    result.stdout_contains("  total 0");
+    println!("    result.stdout = {:#?}", result.stdout_str());
+
+    let dired_line = result
+        .stdout_str()
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+
+    assert_eq!(positions.len(), 2);
+
+    let start_pos = positions[0];
+    let end_pos = positions[1];
+
+    // Extract the filename using the positions
+    let filename =
+        String::from_utf8(result.stdout_str().as_bytes()[start_pos..end_pos].to_vec()).unwrap();
+
+    assert_eq!(filename, "a1");
+}
+
+#[test]
+fn test_ls_dired_complex() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.mkdir("d/d");
+    at.touch("d/a1");
+    at.touch("d/a22");
+    at.touch("d/a333");
+    at.touch("d/a4444");
+
+    let mut cmd = scene.ucmd();
+    cmd.arg("--dired").arg("-l").arg("d");
+    let result = cmd.succeeds();
+
+    // Number of blocks. We run this test only if the default size of a newly created directory is
+    // 4096 bytes to prevent it from failing where this is not the case (e.g. using tmpfs for /tmp).
+    #[cfg(target_os = "linux")]
+    if at.metadata("d/d").len() == 4096 {
+        result.stdout_contains("  total 4");
+    }
+
+    let output = result.stdout_str().to_string();
+    println!("Output:\n{}", output);
+
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+    println!("{:?}", positions);
+    println!("Parsed byte positions: {:?}", positions);
+    assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
+
+    let filenames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
+                .unwrap()
+                .trim()
+                .to_string();
+            println!("Extracted filename: {}", filename);
+            filename
+        })
+        .collect();
+
+    println!("Extracted filenames: {:?}", filenames);
+    assert_eq!(filenames, vec!["a1", "a22", "a333", "a4444", "d"]);
 }

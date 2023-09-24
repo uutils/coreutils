@@ -137,6 +137,12 @@ If you also want to test the core utilities:
 cargo test  -p uucore -p coreutils
 ```
 
+Or to test the pure Rust tests in the utility itself:
+
+```shell
+cargo test -p uu_ls --lib
+```
+
 Running the complete test suite might take a while. We use [nextest](https://nexte.st/index.html) in
 the CI and you might want to try it out locally. It can speed up the execution time of the whole
 test run significantly if the cpu has multiple cores.
@@ -356,6 +362,7 @@ The Coreutils have different implementations, with different levels of completio
 * [V lang](https://github.com/vlang/coreutils)
 * [SerenityOS](https://github.com/SerenityOS/serenity/tree/master/Userland/Utilities)
 * [Initial Unix](https://github.com/dspinellis/unix-history-repo)
+* [Perl Power Tools](https://metacpan.org/pod/PerlPowerTools)
 
 However, when reimplementing the tools/options in Rust, don't read their source codes
 when they are using reciprocal licenses (ex: GNU GPL, GNU LGPL, etc).

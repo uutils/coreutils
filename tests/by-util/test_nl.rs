@@ -1,3 +1,8 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+// spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid ninvalid vinvalid winvalid
 use crate::common::util::TestScenario;
 
 #[test]
@@ -12,6 +17,7 @@ fn test_stdin_no_newline() {
         .run()
         .stdout_is("     1\tNo Newline\n");
 }
+
 #[test]
 fn test_stdin_newline() {
     new_ucmd!()
@@ -50,15 +56,15 @@ fn test_sections_and_styles() {
     for (fixture, output) in [
         (
             "section.txt",
-            "\nHEADER1\nHEADER2\n\n1  |BODY1\n2  \
-             |BODY2\n\nFOOTER1\nFOOTER2\n\nNEXTHEADER1\nNEXTHEADER2\n\n1  \
-             |NEXTBODY1\n2  |NEXTBODY2\n\nNEXTFOOTER1\nNEXTFOOTER2\n",
+            "\n    HEADER1\n    HEADER2\n\n1  |BODY1\n2  \
+             |BODY2\n\n    FOOTER1\n    FOOTER2\n\n    NEXTHEADER1\n    NEXTHEADER2\n\n1  \
+             |NEXTBODY1\n2  |NEXTBODY2\n\n    NEXTFOOTER1\n    NEXTFOOTER2\n",
         ),
         (
             "joinblanklines.txt",
-            "1  |Nonempty\n2  |Nonempty\n3  |Followed by 10x empty\n\n\n\n\n4  \
-             |\n\n\n\n\n5  |\n6  |Followed by 5x empty\n\n\n\n\n7  |\n8  \
-             |Followed by 4x empty\n\n\n\n\n9  |Nonempty\n10 |Nonempty\n11 \
+            "1  |Nonempty\n2  |Nonempty\n3  |Followed by 10x empty\n    \n    \n    \n    \n4  \
+             |\n    \n    \n    \n    \n5  |\n6  |Followed by 5x empty\n    \n    \n    \n    \n7  |\n8  \
+             |Followed by 4x empty\n    \n    \n    \n    \n9  |Nonempty\n10 |Nonempty\n11 \
              |Nonempty.\n",
         ),
     ] {
@@ -70,4 +76,451 @@ fn test_sections_and_styles() {
             .stdout_is(output);
     }
     // spell-checker:enable
+}
+
+#[test]
+fn test_no_renumber() {
+    for arg in ["-p", "--no-renumber"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\\:\\:\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n\n     2\tb\n");
+    }
+}
+
+#[test]
+fn test_number_format_ln() {
+    for arg in ["-nln", "--number-format=ln"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("1     \ttest\n");
+    }
+}
+
+#[test]
+fn test_number_format_rn() {
+    for arg in ["-nrn", "--number-format=rn"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("     1\ttest\n");
+    }
+}
+
+#[test]
+fn test_number_format_rz() {
+    for arg in ["-nrz", "--number-format=rz"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("000001\ttest\n");
+    }
+}
+
+#[test]
+fn test_number_format_rz_with_negative_line_number() {
+    for arg in ["-nrz", "--number-format=rz"] {
+        new_ucmd!()
+            .arg(arg)
+            .arg("-v-12")
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("-00012\ttest\n");
+    }
+}
+
+#[test]
+fn test_invalid_number_format() {
+    for arg in ["-ninvalid", "--number-format=invalid"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("invalid value 'invalid'");
+    }
+}
+
+#[test]
+fn test_number_width() {
+    for width in 1..10 {
+        for arg in [format!("-w{width}"), format!("--number-width={width}")] {
+            let spaces = " ".repeat(width - 1);
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in("test")
+                .succeeds()
+                .stdout_is(format!("{spaces}1\ttest\n"));
+        }
+    }
+}
+
+#[test]
+fn test_number_width_zero() {
+    for arg in ["-w0", "--number-width=0"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("Invalid line number field width: ‘0’: Numerical result out of range");
+    }
+}
+
+#[test]
+fn test_invalid_number_width() {
+    for arg in ["-winvalid", "--number-width=invalid"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("invalid value 'invalid'");
+    }
+}
+
+#[test]
+fn test_number_separator() {
+    for arg in ["-s:-:", "--number-separator=:-:"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("     1:-:test\n");
+    }
+}
+
+#[test]
+fn test_starting_line_number() {
+    for arg in ["-v10", "--starting-line-number=10"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("    10\ttest\n");
+    }
+}
+
+#[test]
+fn test_negative_starting_line_number() {
+    for arg in ["-v-10", "--starting-line-number=-10"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("test")
+            .succeeds()
+            .stdout_is("   -10\ttest\n");
+    }
+}
+
+#[test]
+fn test_invalid_starting_line_number() {
+    for arg in ["-vinvalid", "--starting-line-number=invalid"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("invalid value 'invalid'");
+    }
+}
+
+#[test]
+fn test_line_increment() {
+    for arg in ["-i10", "--line-increment=10"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n    11\tb\n");
+    }
+}
+
+#[test]
+fn test_line_increment_from_negative_starting_line() {
+    for arg in ["-i10", "--line-increment=10"] {
+        new_ucmd!()
+            .arg(arg)
+            .arg("-v-19")
+            .pipe_in("a\nb\nc")
+            .succeeds()
+            .stdout_is("   -19\ta\n    -9\tb\n     1\tc\n");
+    }
+}
+
+#[test]
+fn test_negative_line_increment() {
+    for arg in ["-i-10", "--line-increment=-10"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nb\nc")
+            .succeeds()
+            .stdout_is("     1\ta\n    -9\tb\n   -19\tc\n");
+    }
+}
+
+#[test]
+fn test_invalid_line_increment() {
+    for arg in ["-iinvalid", "--line-increment=invalid"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("invalid value 'invalid'");
+    }
+}
+
+#[test]
+fn test_join_blank_lines() {
+    for arg in ["-l3", "--join-blank-lines=3"] {
+        new_ucmd!()
+            .arg(arg)
+            .arg("--body-numbering=a")
+            .pipe_in("\n\n\n\n\n\n")
+            .succeeds()
+            .stdout_is(concat!(
+                "       \n",
+                "       \n",
+                "     1\t\n",
+                "       \n",
+                "       \n",
+                "     2\t\n",
+            ));
+    }
+}
+
+#[test]
+fn test_join_blank_lines_multiple_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a.txt", "\n\n");
+    at.write("b.txt", "\n\n");
+    at.write("c.txt", "\n\n");
+
+    for arg in ["-l3", "--join-blank-lines=3"] {
+        scene
+            .ucmd()
+            .args(&[arg, "--body-numbering=a", "a.txt", "b.txt", "c.txt"])
+            .succeeds()
+            .stdout_is(concat!(
+                "       \n",
+                "       \n",
+                "     1\t\n",
+                "       \n",
+                "       \n",
+                "     2\t\n",
+            ));
+    }
+}
+
+#[test]
+fn test_join_blank_lines_zero() {
+    for arg in ["-l0", "--join-blank-lines=0"] {
+        new_ucmd!().arg(arg).fails().stderr_contains(
+            "Invalid line number of blank lines: ‘0’: Numerical result out of range",
+        );
+    }
+}
+
+#[test]
+fn test_invalid_join_blank_lines() {
+    for arg in ["-linvalid", "--join-blank-lines=invalid"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails()
+            .stderr_contains("invalid value 'invalid'");
+    }
+}
+
+#[test]
+fn test_default_body_numbering() {
+    new_ucmd!()
+        .pipe_in("a\n\nb")
+        .succeeds()
+        .stdout_is("     1\ta\n       \n     2\tb\n");
+}
+
+#[test]
+fn test_default_body_numbering_multiple_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("a.txt", "a");
+    at.write("b.txt", "b");
+    at.write("c.txt", "c");
+
+    ucmd.args(&["a.txt", "b.txt", "c.txt"])
+        .succeeds()
+        .stdout_is("     1\ta\n     2\tb\n     3\tc\n");
+}
+
+#[test]
+fn test_body_numbering_all_lines_without_delimiter() {
+    for arg in ["-ba", "--body-numbering=a"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n     2\t\n     3\tb\n");
+    }
+}
+
+#[test]
+fn test_body_numbering_no_lines_without_delimiter() {
+    for arg in ["-bn", "--body-numbering=n"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\nb")
+            .succeeds()
+            .stdout_is("       a\n       \n       b\n");
+    }
+}
+
+#[test]
+fn test_body_numbering_non_empty_lines_without_delimiter() {
+    for arg in ["-bt", "--body-numbering=t"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n       \n     2\tb\n");
+    }
+}
+
+#[test]
+fn test_body_numbering_matched_lines_without_delimiter() {
+    for arg in ["-bp^[ac]", "--body-numbering=p^[ac]"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nb\nc")
+            .succeeds()
+            .stdout_is("     1\ta\n       b\n     2\tc\n");
+    }
+}
+
+#[test]
+fn test_numbering_all_lines() {
+    let delimiters_and_args = [
+        ("\\:\\:\\:\n", ["-ha", "--header-numbering=a"]),
+        ("\\:\\:\n", ["-ba", "--body-numbering=a"]),
+        ("\\:\n", ["-fa", "--footer-numbering=a"]),
+    ];
+
+    for (delimiter, args) in delimiters_and_args {
+        for arg in args {
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in(format!("{delimiter}a\n\nb"))
+                .succeeds()
+                .stdout_is("\n     1\ta\n     2\t\n     3\tb\n");
+        }
+    }
+}
+
+#[test]
+fn test_numbering_no_lines() {
+    let delimiters_and_args = [
+        ("\\:\\:\\:\n", ["-hn", "--header-numbering=n"]),
+        ("\\:\\:\n", ["-bn", "--body-numbering=n"]),
+        ("\\:\n", ["-fn", "--footer-numbering=n"]),
+    ];
+
+    for (delimiter, args) in delimiters_and_args {
+        for arg in args {
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in(format!("{delimiter}a\n\nb"))
+                .succeeds()
+                .stdout_is("\n       a\n       \n       b\n");
+        }
+    }
+}
+
+#[test]
+fn test_numbering_non_empty_lines() {
+    let delimiters_and_args = [
+        ("\\:\\:\\:\n", ["-ht", "--header-numbering=t"]),
+        ("\\:\\:\n", ["-bt", "--body-numbering=t"]),
+        ("\\:\n", ["-ft", "--footer-numbering=t"]),
+    ];
+
+    for (delimiter, args) in delimiters_and_args {
+        for arg in args {
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in(format!("{delimiter}a\n\nb"))
+                .succeeds()
+                .stdout_is("\n     1\ta\n       \n     2\tb\n");
+        }
+    }
+}
+
+#[test]
+fn test_numbering_matched_lines() {
+    let delimiters_and_args = [
+        ("\\:\\:\\:\n", ["-hp^[ac]", "--header-numbering=p^[ac]"]),
+        ("\\:\\:\n", ["-bp^[ac]", "--body-numbering=p^[ac]"]),
+        ("\\:\n", ["-fp^[ac]", "--footer-numbering=p^[ac]"]),
+    ];
+
+    for (delimiter, args) in delimiters_and_args {
+        for arg in args {
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in(format!("{delimiter}a\nb\nc"))
+                .succeeds()
+                .stdout_is("\n     1\ta\n       b\n     2\tc\n");
+        }
+    }
+}
+
+#[test]
+fn test_invalid_numbering() {
+    let invalid_args = [
+        "-hinvalid",
+        "--header-numbering=invalid",
+        "-binvalid",
+        "--body-numbering=invalid",
+        "-finvalid",
+        "--footer-numbering=invalid",
+    ];
+
+    for invalid_arg in invalid_args {
+        new_ucmd!()
+            .arg(invalid_arg)
+            .fails()
+            .stderr_contains("invalid numbering style: 'invalid'");
+    }
+}
+
+#[test]
+fn test_invalid_regex_numbering() {
+    let invalid_args = [
+        "-hp[",
+        "--header-numbering=p[",
+        "-bp[",
+        "--body-numbering=p[",
+        "-fp[",
+        "--footer-numbering=p[",
+    ];
+
+    for invalid_arg in invalid_args {
+        new_ucmd!()
+            .arg(invalid_arg)
+            .fails()
+            .stderr_contains("invalid regular expression");
+    }
+}
+
+#[test]
+fn test_line_number_overflow() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MAX))
+        .pipe_in("a\nb")
+        .fails()
+        .stdout_is(format!("{}\ta\n", i64::MAX))
+        .stderr_is("nl: line number overflow\n");
+
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .arg("--line-increment=-1")
+        .pipe_in("a\nb")
+        .fails()
+        .stdout_is(format!("{}\ta\n", i64::MIN))
+        .stderr_is("nl: line number overflow\n");
 }

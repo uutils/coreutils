@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Alex Lyon <arcterus@mail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) ENOTDIR
 
@@ -100,7 +98,7 @@ fn remove(mut path: &Path, opts: Opts) -> Result<(), Error<'_>> {
     if opts.parents {
         while let Some(new) = path.parent() {
             path = new;
-            if path.as_os_str() == "" {
+            if path.as_os_str().is_empty() {
                 break;
             }
             remove_single(path, opts)?;

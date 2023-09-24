@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # spell-checker:ignore xpass XPASS testsuite
 set -e
 
@@ -67,9 +67,13 @@ function get_error {
     echo $((NON_ROOT + AS_ROOT))
 }
 
-export TOTAL=$(get_total)
-export PASS=$(get_pass)
-export SKIP=$(get_skip)
-export FAIL=$(get_fail)
-export XPASS=$(get_xpass)
-export ERROR=$(get_error)
+# we don't need the return codes indeed, ignore them
+# shellcheck disable=SC2155
+{
+    export TOTAL=$(get_total)
+    export PASS=$(get_pass)
+    export SKIP=$(get_skip)
+    export FAIL=$(get_fail)
+    export XPASS=$(get_xpass)
+    export ERROR=$(get_error)
+}
