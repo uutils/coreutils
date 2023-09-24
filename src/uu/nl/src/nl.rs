@@ -168,7 +168,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let mut read_stdin = false;
     let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),
         None => vec!["-".to_owned()],
@@ -178,21 +177,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     for file in &files {
         if file == "-" {
-            // If both file names and '-' are specified, we choose to treat first all
-            // regular files, and then read from stdin last.
-            read_stdin = true;
-            continue;
+            let mut buffer = BufReader::new(stdin());
+            nl(&mut buffer, &mut stats, &settings)?;
+        } else {
+            let path = Path::new(file);
+            let reader = File::open(path).map_err_context(|| file.to_string())?;
+            let mut buffer = BufReader::new(reader);
+            nl(&mut buffer, &mut stats, &settings)?;
         }
-        let path = Path::new(file);
-        let reader = File::open(path).map_err_context(|| file.to_string())?;
-        let mut buffer = BufReader::new(reader);
-        nl(&mut buffer, &mut stats, &settings)?;
     }
 
-    if read_stdin {
-        let mut buffer = BufReader::new(stdin());
-        nl(&mut buffer, &mut stats, &settings)?;
-    }
     Ok(())
 }
 
