@@ -1,10 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Orvar Segerström <orvarsegerstrom@gmail.com>
-// (c) Sokovikov Evgeniy  <skv-headless@yandex.ru>
-//
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) sourcepath targetpath
 
@@ -364,7 +361,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         None
     };
 
-    for sourcepath in files.iter() {
+    for sourcepath in files {
         if let Some(ref pb) = count_progress {
             pb.set_message(sourcepath.to_string_lossy().to_string());
         }
@@ -400,7 +397,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         }
 
         match rename(sourcepath, &targetpath, b, multi_progress.as_ref()) {
-            Err(e) if e.to_string() == "" => set_exit_code(1),
+            Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 let e = e.map_err_context(|| {
                     format!(
@@ -433,9 +430,7 @@ fn rename(
     let mut backup_path = None;
 
     if to.exists() {
-        if (b.update == UpdateMode::ReplaceIfOlder || b.update == UpdateMode::ReplaceNone)
-            && b.overwrite == OverwriteMode::Interactive
-        {
+        if b.update == UpdateMode::ReplaceIfOlder && b.overwrite == OverwriteMode::Interactive {
             // `mv -i --update old new` when `new` exists doesn't move anything
             // and exit with 0
             return Ok(());

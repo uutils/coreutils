@@ -1,22 +1,19 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Tobias Bohumir Schottdorf <tobias.schottdorf@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
-//  *
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
-use std::iter::repeat;
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage};
 
 mod helper;
 
 const ABOUT: &str = help_about!("nl.md");
+const AFTER_HELP: &str = help_section!("after help", "nl.md");
 const USAGE: &str = help_usage!("nl.md");
 
 // Settings store options used by nl to produce its output.
@@ -28,8 +25,8 @@ pub struct Settings {
     // The variable corresponding to -d
     section_delimiter: [char; 2],
     // The variables corresponding to the options -v, -i, -l, -w.
-    starting_line_number: u64,
-    line_increment: u64,
+    starting_line_number: i64,
+    line_increment: i64,
     join_blank_lines: u64,
     number_width: usize, // Used with String::from_char, hence usize.
     // The format of the number and the (default value for)
@@ -43,9 +40,9 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            header_numbering: NumberingStyle::NumberForNone,
-            body_numbering: NumberingStyle::NumberForAll,
-            footer_numbering: NumberingStyle::NumberForNone,
+            header_numbering: NumberingStyle::None,
+            body_numbering: NumberingStyle::NonEmpty,
+            footer_numbering: NumberingStyle::None,
             section_delimiter: ['\\', ':'],
             starting_line_number: 1,
             line_increment: 1,
@@ -58,27 +55,83 @@ impl Default for Settings {
     }
 }
 
+struct Stats {
+    line_number: i64,
+    consecutive_empty_lines: u64,
+}
+
+impl Stats {
+    fn new(starting_line_number: i64) -> Self {
+        Self {
+            line_number: starting_line_number,
+            consecutive_empty_lines: 0,
+        }
+    }
+}
+
 // NumberingStyle stores which lines are to be numbered.
 // The possible options are:
 // 1. Number all lines
 // 2. Number only nonempty lines
 // 3. Don't number any lines at all
 // 4. Number all lines that match a basic regular expression.
-#[allow(clippy::enum_variant_names)]
 enum NumberingStyle {
-    NumberForAll,
-    NumberForNonEmpty,
-    NumberForNone,
-    NumberForRegularExpression(Box<regex::Regex>),
+    All,
+    NonEmpty,
+    None,
+    Regex(Box<regex::Regex>),
+}
+
+impl TryFrom<&str> for NumberingStyle {
+    type Error = String;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s {
+            "a" => Ok(Self::All),
+            "t" => Ok(Self::NonEmpty),
+            "n" => Ok(Self::None),
+            _ if s.starts_with('p') => match regex::Regex::new(&s[1..]) {
+                Ok(re) => Ok(Self::Regex(Box::new(re))),
+                Err(_) => Err(String::from("invalid regular expression")),
+            },
+            _ => Err(format!("invalid numbering style: '{s}'")),
+        }
+    }
 }
 
 // NumberFormat specifies how line numbers are output within their allocated
 // space. They are justified to the left or right, in the latter case with
 // the option of having all unused space to its left turned into leading zeroes.
+#[derive(Default)]
 enum NumberFormat {
     Left,
+    #[default]
     Right,
     RightZero,
+}
+
+impl<T: AsRef<str>> From<T> for NumberFormat {
+    fn from(s: T) -> Self {
+        match s.as_ref() {
+            "ln" => Self::Left,
+            "rn" => Self::Right,
+            "rz" => Self::RightZero,
+            _ => unreachable!("Should have been caught by clap"),
+        }
+    }
+}
+
+impl NumberFormat {
+    // Turns a line number into a `String` with at least `min_width` chars,
+    // formatted according to the `NumberFormat`s variant.
+    fn format(&self, number: i64, min_width: usize) -> String {
+        match self {
+            Self::Left => format!("{number:<min_width$}"),
+            Self::Right => format!("{number:>min_width$}"),
+            Self::RightZero if number < 0 => format!("-{0:0>1$}", number.abs(), min_width - 1),
+            Self::RightZero => format!("{number:0>min_width$}"),
+        }
+    }
 }
 
 pub mod options {
@@ -121,6 +174,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec!["-".to_owned()],
     };
 
+    let mut stats = Stats::new(settings.starting_line_number);
+
     for file in &files {
         if file == "-" {
             // If both file names and '-' are specified, we choose to treat first all
@@ -131,12 +186,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let path = Path::new(file);
         let reader = File::open(path).map_err_context(|| file.to_string())?;
         let mut buffer = BufReader::new(reader);
-        nl(&mut buffer, &settings)?;
+        nl(&mut buffer, &mut stats, &settings)?;
     }
 
     if read_stdin {
         let mut buffer = BufReader::new(stdin());
-        nl(&mut buffer, &settings)?;
+        nl(&mut buffer, &mut stats, &settings)?;
     }
     Ok(())
 }
@@ -146,6 +201,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
+        .after_help(AFTER_HELP)
         .infer_long_args(true)
         .disable_help_flag(true)
         .arg(
@@ -165,7 +221,7 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::BODY_NUMBERING)
                 .help("use STYLE for numbering body lines")
-                .value_name("SYNTAX"),
+                .value_name("STYLE"),
         )
         .arg(
             Arg::new(options::SECTION_DELIMITER)
@@ -193,21 +249,24 @@ pub fn uu_app() -> Command {
                 .short('i')
                 .long(options::LINE_INCREMENT)
                 .help("line number increment at each line")
-                .value_name("NUMBER"),
+                .value_name("NUMBER")
+                .value_parser(clap::value_parser!(i64)),
         )
         .arg(
             Arg::new(options::JOIN_BLANK_LINES)
                 .short('l')
                 .long(options::JOIN_BLANK_LINES)
                 .help("group of NUMBER empty lines counted as one")
-                .value_name("NUMBER"),
+                .value_name("NUMBER")
+                .value_parser(clap::value_parser!(u64)),
         )
         .arg(
             Arg::new(options::NUMBER_FORMAT)
                 .short('n')
                 .long(options::NUMBER_FORMAT)
                 .help("insert line numbers according to FORMAT")
-                .value_name("FORMAT"),
+                .value_name("FORMAT")
+                .value_parser(["ln", "rn", "rz"]),
         )
         .arg(
             Arg::new(options::NO_RENUMBER)
@@ -228,180 +287,106 @@ pub fn uu_app() -> Command {
                 .short('v')
                 .long(options::STARTING_LINE_NUMBER)
                 .help("first line number on each logical page")
-                .value_name("NUMBER"),
+                .value_name("NUMBER")
+                .value_parser(clap::value_parser!(i64)),
         )
         .arg(
             Arg::new(options::NUMBER_WIDTH)
                 .short('w')
                 .long(options::NUMBER_WIDTH)
                 .help("use NUMBER columns for line numbers")
-                .value_name("NUMBER"),
+                .value_name("NUMBER")
+                .value_parser(clap::value_parser!(usize)),
         )
 }
 
 // nl implements the main functionality for an individual buffer.
-#[allow(clippy::cognitive_complexity)]
-fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
-    let regexp: regex::Regex = regex::Regex::new(r".?").unwrap();
-    let mut line_no = settings.starting_line_number;
-    // The current line number's width as a string. Using to_string is inefficient
-    // but since we only do it once, it should not hurt.
-    let mut line_no_width = line_no.to_string().len();
-    let line_no_width_initial = line_no_width;
-    // Stores the smallest integer with one more digit than line_no, so that
-    // when line_no >= line_no_threshold, we need to use one more digit.
-    let mut line_no_threshold = 10u64.pow(line_no_width as u32);
-    let mut empty_line_count: u64 = 0;
-    let fill_char = match settings.number_format {
-        NumberFormat::RightZero => '0',
-        _ => ' ',
-    };
-    // Initially, we use the body's line counting settings
-    let mut regex_filter = match settings.body_numbering {
-        NumberingStyle::NumberForRegularExpression(ref re) => re,
-        _ => &regexp,
-    };
-    let mut line_filter: fn(&str, &regex::Regex) -> bool = pass_regex;
-    for l in reader.lines() {
-        let mut l = l.map_err_context(|| "could not read line".to_string())?;
-        // Sanitize the string. We want to print the newline ourselves.
-        if l.ends_with('\n') {
-            l.pop();
-        }
-        // Next we iterate through the individual chars to see if this
-        // is one of the special lines starting a new "section" in the
-        // document.
-        let line = l;
-        let mut odd = false;
-        // matched_group counts how many copies of section_delimiter
-        // this string consists of (0 if there's anything else)
-        let mut matched_groups = 0u8;
-        for c in line.chars() {
-            // If this is a newline character, the loop should end.
-            if c == '\n' {
-                break;
-            }
-            // If we have already seen three groups (corresponding to
-            // a header) or the current char does not form part of
-            // a new group, then this line is not a segment indicator.
-            if matched_groups >= 3 || settings.section_delimiter[usize::from(odd)] != c {
-                matched_groups = 0;
-                break;
-            }
-            if odd {
-                // We have seen a new group and count it.
-                matched_groups += 1;
-            }
-            odd = !odd;
-        }
+fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings) -> UResult<()> {
+    let mut current_numbering_style = &settings.body_numbering;
 
-        // See how many groups we matched. That will tell us if this is
-        // a line starting a new segment, and the number of groups
-        // indicates what type of segment.
-        if matched_groups > 0 {
-            // The current line is a section delimiter, so we output
-            // a blank line.
-            println!();
-            // However the line does not count as a blank line, so we
-            // reset the counter used for --join-blank-lines.
-            empty_line_count = 0;
-            match *match matched_groups {
-                3 => {
-                    // This is a header, so we may need to reset the
-                    // line number and the line width
-                    if settings.renumber {
-                        line_no = settings.starting_line_number;
-                        line_no_width = line_no_width_initial;
-                        line_no_threshold = 10u64.pow(line_no_width as u32);
-                    }
-                    &settings.header_numbering
-                }
-                1 => &settings.footer_numbering,
-                // The only option left is 2, but rust wants
-                // a catch-all here.
-                _ => &settings.body_numbering,
-            } {
-                NumberingStyle::NumberForAll => {
-                    line_filter = pass_all;
-                }
-                NumberingStyle::NumberForNonEmpty => {
-                    line_filter = pass_nonempty;
-                }
-                NumberingStyle::NumberForNone => {
-                    line_filter = pass_none;
-                }
-                NumberingStyle::NumberForRegularExpression(ref re) => {
-                    line_filter = pass_regex;
-                    regex_filter = re;
-                }
-            }
-            continue;
-        }
-        // From this point on we format and print a "regular" line.
+    for line in reader.lines() {
+        let line = line.map_err_context(|| "could not read line".to_string())?;
+
         if line.is_empty() {
-            // The line is empty, which means that we have to care
-            // about the --join-blank-lines parameter.
-            empty_line_count += 1;
+            stats.consecutive_empty_lines += 1;
         } else {
-            // This saves us from having to check for an empty string
-            // in the next selector.
-            empty_line_count = 0;
-        }
-        if !line_filter(&line, regex_filter)
-            || (empty_line_count > 0 && empty_line_count < settings.join_blank_lines)
-        {
-            // No number is printed for this line. Either we did not
-            // want to print one in the first place, or it is a blank
-            // line but we are still collecting more blank lines via
-            // the option --join-blank-lines.
-            println!("{line}");
-            continue;
-        }
-        // If we make it here, then either we are printing a non-empty
-        // line or assigning a line number to an empty line. Either
-        // way, start counting empties from zero once more.
-        empty_line_count = 0;
-        // A line number is to be printed.
-        let w = if settings.number_width > line_no_width {
-            settings.number_width - line_no_width
-        } else {
-            0
+            stats.consecutive_empty_lines = 0;
         };
-        let fill: String = repeat(fill_char).take(w).collect();
-        match settings.number_format {
-            NumberFormat::Left => println!(
-                "{1}{0}{2}{3}",
-                fill, line_no, settings.number_separator, line
-            ),
-            _ => println!(
-                "{0}{1}{2}{3}",
-                fill, line_no, settings.number_separator, line
-            ),
-        }
-        // Now update the variables for the (potential) next
-        // line.
-        line_no += settings.line_increment;
-        while line_no >= line_no_threshold {
-            // The line number just got longer.
-            line_no_threshold *= 10;
-            line_no_width += 1;
+
+        // FIXME section delimiters are hardcoded and settings.section_delimiter is ignored
+        // because --section-delimiter is not correctly implemented yet
+        let _ = settings.section_delimiter; // XXX suppress "field never read" warning
+        let new_numbering_style = match line.as_str() {
+            "\\:\\:\\:" => Some(&settings.header_numbering),
+            "\\:\\:" => Some(&settings.body_numbering),
+            "\\:" => Some(&settings.footer_numbering),
+            _ => None,
+        };
+
+        if let Some(new_style) = new_numbering_style {
+            current_numbering_style = new_style;
+            if settings.renumber {
+                stats.line_number = settings.starting_line_number;
+            }
+            println!();
+        } else {
+            let is_line_numbered = match current_numbering_style {
+                // consider $join_blank_lines consecutive empty lines to be one logical line
+                // for numbering, and only number the last one
+                NumberingStyle::All
+                    if line.is_empty()
+                        && stats.consecutive_empty_lines % settings.join_blank_lines != 0 =>
+                {
+                    false
+                }
+                NumberingStyle::All => true,
+                NumberingStyle::NonEmpty => !line.is_empty(),
+                NumberingStyle::None => false,
+                NumberingStyle::Regex(re) => re.is_match(&line),
+            };
+
+            if is_line_numbered {
+                println!(
+                    "{}{}{}",
+                    settings
+                        .number_format
+                        .format(stats.line_number, settings.number_width),
+                    settings.number_separator,
+                    line
+                );
+                // update line number for the potential next line
+                match stats.line_number.checked_add(settings.line_increment) {
+                    Some(new_line_number) => stats.line_number = new_line_number,
+                    None => return Err(USimpleError::new(1, "line number overflow")),
+                }
+            } else {
+                let spaces = " ".repeat(settings.number_width + 1);
+                println!("{spaces}{line}");
+            }
         }
     }
     Ok(())
 }
 
-fn pass_regex(line: &str, re: &regex::Regex) -> bool {
-    re.is_match(line)
-}
+#[cfg(test)]
+mod test {
+    use super::*;
 
-fn pass_nonempty(line: &str, _: &regex::Regex) -> bool {
-    !line.is_empty()
-}
+    #[test]
+    fn test_format() {
+        assert_eq!(NumberFormat::Left.format(12, 1), "12");
+        assert_eq!(NumberFormat::Left.format(-12, 1), "-12");
+        assert_eq!(NumberFormat::Left.format(12, 4), "12  ");
+        assert_eq!(NumberFormat::Left.format(-12, 4), "-12 ");
 
-fn pass_none(_: &str, _: &regex::Regex) -> bool {
-    false
-}
+        assert_eq!(NumberFormat::Right.format(12, 1), "12");
+        assert_eq!(NumberFormat::Right.format(-12, 1), "-12");
+        assert_eq!(NumberFormat::Right.format(12, 4), "  12");
+        assert_eq!(NumberFormat::Right.format(-12, 4), " -12");
 
-fn pass_all(_: &str, _: &regex::Regex) -> bool {
-    true
+        assert_eq!(NumberFormat::RightZero.format(12, 1), "12");
+        assert_eq!(NumberFormat::RightZero.format(-12, 1), "-12");
+        assert_eq!(NumberFormat::RightZero.format(12, 4), "0012");
+        assert_eq!(NumberFormat::RightZero.format(-12, 4), "-012");
+    }
 }

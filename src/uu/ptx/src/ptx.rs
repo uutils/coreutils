@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Dorota Kapturkiewicz <dokaptur@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset CHARCLASS
 
@@ -323,7 +321,7 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
     let reg = Regex::new(&filter.word_regex).unwrap();
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
     let mut word_lines: Vec<String> = Vec::new();
-    for (file, lines) in file_map.iter() {
+    for (file, lines) in file_map {
         let mut count: usize = 0;
         let offs = lines.offset;
         for line in &lines.lines {
@@ -547,7 +545,15 @@ fn write_traditional_output(
 
     let context_reg = Regex::new(&config.context_regex).unwrap();
 
-    for word_ref in words.iter() {
+    for word_ref in words {
+        let file_map_value: &FileContent = file_map
+            .get(&(word_ref.filename))
+            .expect("Missing file in file map");
+        let FileContent {
+            ref lines,
+            ref chars_lines,
+            offset: _,
+        } = *(file_map_value);
         let reference = get_reference(
             config,
             word_ref,

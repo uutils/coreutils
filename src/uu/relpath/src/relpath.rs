@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) 2014 Vsevolod Velichko <torkvemada@sorokdva.net>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) subpath absto absfrom absbase
 
@@ -84,6 +82,10 @@ pub fn uu_app() -> Command {
         .arg(Arg::new(options::DIR).short('d').help(
             "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative",
         ))
-        .arg(Arg::new(options::TO).value_hint(clap::ValueHint::AnyPath))
+        .arg(
+            Arg::new(options::TO)
+                .value_hint(clap::ValueHint::AnyPath)
+                .required(true),
+        )
         .arg(Arg::new(options::FROM).value_hint(clap::ValueHint::AnyPath))
 }

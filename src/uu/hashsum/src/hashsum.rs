@@ -1,11 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Alex Lyon <arcterus@mail.com>
-//  * (c) Vsevolod Velichko <torkvemada@sorokdva.net>
-//  * (c) Gil Cottle <gcottle@redtown.org>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) algo, algoname, regexes, nread, nonames
 
@@ -748,7 +744,7 @@ where
             )
             .map_err_context(|| "failed to read input".to_string())?;
             if options.tag {
-                println!("{} ({:?}) = {}", options.algoname, filename.display(), sum);
+                println!("{} ({}) = {}", options.algoname, filename.display(), sum);
             } else if options.nonames {
                 println!("{sum}");
             } else if options.zero {
@@ -807,8 +803,7 @@ fn digest_reader<T: Read>(
         Ok(digest.result_str())
     } else {
         // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
-        let mut bytes = Vec::new();
-        bytes.resize((output_bits + 7) / 8, 0);
+        let mut bytes = vec![0; (output_bits + 7) / 8];
         digest.hash_finalize(&mut bytes);
         Ok(encode(bytes))
     }

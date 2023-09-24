@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 //! UnescapedText is a tokenizer impl
 //! for tokenizing character literals,
 //! and escaped character literals (of allowed escapes),

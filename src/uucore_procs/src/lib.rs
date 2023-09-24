@@ -1,4 +1,8 @@
-// Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+//
 // spell-checker:ignore backticks uuhelp
 
 use std::{fs::File, io::Read, path::PathBuf};

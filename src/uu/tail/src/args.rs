@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) kqueue Signum fundu
 
@@ -10,9 +10,9 @@ use crate::{parse, platform, Quotable};
 use clap::{crate_version, value_parser};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use fundu::{DurationParser, SaturatingInto};
-use is_terminal::IsTerminal;
 use same_file::Handle;
 use std::ffi::OsString;
+use std::io::IsTerminal;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
@@ -149,21 +149,21 @@ impl Default for Settings {
         Self {
             max_unchanged_stats: 5,
             sleep_sec: Duration::from_secs_f32(1.0),
-            follow: Default::default(),
-            mode: Default::default(),
+            follow: Option::default(),
+            mode: FilterMode::default(),
             pid: Default::default(),
             retry: Default::default(),
             use_polling: Default::default(),
             verbose: Default::default(),
             presume_input_pipe: Default::default(),
-            inputs: Default::default(),
+            inputs: Vec::default(),
         }
     }
 }
 
 impl Settings {
     pub fn from_obsolete_args(args: &parse::ObsoleteArgs, name: Option<&OsString>) -> Self {
-        let mut settings: Self = Default::default();
+        let mut settings = Self::default();
         if args.follow {
             settings.follow = if name.is_some() {
                 Some(FollowMode::Name)
