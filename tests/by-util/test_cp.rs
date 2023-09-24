@@ -11,7 +11,7 @@ use std::fs::set_permissions;
 #[cfg(not(windows))]
 use std::os::unix::fs;
 
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(all(unix, not(target_os = "freebsd")))]
 use std::os::unix::fs::PermissionsExt;
@@ -1351,6 +1351,203 @@ fn test_cp_preserve_xattr_fails_on_android() {
         .arg(TEST_HELLO_WORLD_DEST)
         .arg("--preserve=xattr")
         .fails();
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.hard_link("a", "b");
+    at.mkdir("c");
+
+    ucmd.arg("-d").arg("a").arg("b").arg("c").succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_2() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.symlink_file("a", "b");
+    at.mkdir("c");
+
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-H")
+        .arg("a")
+        .arg("b")
+        .arg("c")
+        .succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_3() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.touch("d/a");
+    at.symlink_file("d/a", "d/b");
+
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-L")
+        .arg("d")
+        .arg("c")
+        .succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_4() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.touch("d/a");
+    at.hard_link("d/a", "d/b");
+
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-L")
+        .arg("d")
+        .arg("c")
+        .succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_5() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.touch("d/a");
+    at.hard_link("d/a", "d/b");
+
+    ucmd.arg("-dR")
+        .arg("--no-preserve=links")
+        .arg("d")
+        .arg("c")
+        .succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_6() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.hard_link("a", "b");
+    at.mkdir("c");
+
+    ucmd.arg("-d").arg("a").arg("b").arg("c").succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_7() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("src");
+    at.touch("src/f");
+    at.hard_link("src/f", "src/g");
+
+    at.mkdir("dest");
+    at.touch("dest/g");
+
+    ucmd.arg("-n")
+        .arg("--preserve=links")
+        .arg("src/f")
+        .arg("src/g")
+        .arg("dest")
+        .fails()
+        .stderr_contains("not replacing");
+    ();
+
+    assert!(at.dir_exists("dest"));
+    assert!(at.plus("dest").join("f").exists());
+    assert!(at.plus("dest").join("g").exists());
 }
 
 #[test]

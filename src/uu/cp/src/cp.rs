@@ -9,7 +9,7 @@
 use quick_error::quick_error;
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
@@ -1106,67 +1106,6 @@ fn parse_path_args(
     Ok((paths, target))
 }
 
-/// Get the inode information for a file.
-fn get_inode(file_info: &FileInformation) -> u64 {
-    #[cfg(unix)]
-    let result = file_info.inode();
-    #[cfg(windows)]
-    let result = file_info.file_index();
-    result
-}
-
-#[cfg(target_os = "redox")]
-fn preserve_hardlinks(
-    hard_links: &mut Vec<(String, u64)>,
-    source: &std::path::Path,
-    dest: &std::path::Path,
-    found_hard_link: &mut bool,
-) -> CopyResult<()> {
-    // Redox does not currently support hard links
-    Ok(())
-}
-
-/// Hard link a pair of files if needed _and_ record if this pair is a new hard link.
-#[cfg(not(target_os = "redox"))]
-fn preserve_hardlinks(
-    hard_links: &mut Vec<(String, u64)>,
-    source: &std::path::Path,
-    dest: &std::path::Path,
-) -> CopyResult<bool> {
-    let info = FileInformation::from_path(source, false)
-        .context(format!("cannot stat {}", source.quote()))?;
-    let inode = get_inode(&info);
-    let nlinks = info.number_of_links();
-    let mut found_hard_link = false;
-    #[allow(clippy::explicit_iter_loop)]
-    for (link, link_inode) in hard_links.iter() {
-        if *link_inode == inode {
-            // Consider the following files:
-            //
-            // * `src/f` - a regular file
-            // * `src/link` - a hard link to `src/f`
-            // * `dest/src/f` - a different regular file
-            //
-            // In this scenario, if we do `cp -a src/ dest/`, it is
-            // possible that the order of traversal causes `src/link`
-            // to get copied first (to `dest/src/link`). In that case,
-            // in order to make sure `dest/src/link` is a hard link to
-            // `dest/src/f` and `dest/src/f` has the contents of
-            // `src/f`, we delete the existing file to allow the hard
-            // linking.
-            if file_or_link_exists(dest) && file_or_link_exists(Path::new(link)) {
-                std::fs::remove_file(dest)?;
-            }
-            std::fs::hard_link(link, dest).unwrap();
-            found_hard_link = true;
-        }
-    }
-    if !found_hard_link && nlinks > 1 {
-        hard_links.push((dest.to_str().unwrap().to_string(), inode));
-    }
-    Ok(found_hard_link)
-}
-
 /// When handling errors, we don't always want to show them to the user. This function handles that.
 fn show_error_if_needed(error: &Error) {
     match error {
@@ -1195,13 +1134,18 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, &target_type)?;
 
-    let preserve_hard_links = options.preserve_hard_links();
-
-    let mut hard_links: Vec<(String, u64)> = vec![];
-
     let mut non_fatal_errors = false;
     let mut seen_sources = HashSet::with_capacity(sources.len());
     let mut symlinked_files = HashSet::new();
+
+    // to remember the copied files for further usage.
+    // the FileInformation implemented the Hash trait by using
+    // 1. inode number
+    // 2. device number
+    // the combination of a file's inode number and device number is unique throughout all the file systems.
+    //
+    // key is the source file's information and the value is the destination filepath.
+    let mut copied_files: HashMap<FileInformation, PathBuf> = HashMap::with_capacity(sources.len());
 
     let progress_bar = if options.progress_bar {
         let pb = ProgressBar::new(disk_usage(sources, options.recursive)?)
@@ -1222,28 +1166,19 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
         if seen_sources.contains(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
-        } else {
-            let found_hard_link = if preserve_hard_links && !source.is_dir() {
-                let dest = construct_dest_path(source, target, &target_type, options)?;
-                preserve_hardlinks(&mut hard_links, source, &dest)?
-            } else {
-                false
-            };
-            if !found_hard_link {
-                if let Err(error) = copy_source(
-                    &progress_bar,
-                    source,
-                    target,
-                    &target_type,
-                    options,
-                    &mut symlinked_files,
-                ) {
-                    show_error_if_needed(&error);
-                    non_fatal_errors = true;
-                }
-            }
-            seen_sources.insert(source);
+        } else if let Err(error) = copy_source(
+            &progress_bar,
+            source,
+            target,
+            &target_type,
+            options,
+            &mut symlinked_files,
+            &mut copied_files,
+        ) {
+            show_error_if_needed(&error);
+            non_fatal_errors = true;
         }
+        seen_sources.insert(source);
     }
 
     if let Some(pb) = progress_bar {
@@ -1295,11 +1230,20 @@ fn copy_source(
     target_type: &TargetType,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
     if source_path.is_dir() {
         // Copy as directory
-        copy_directory(progress_bar, source, target, options, symlinked_files, true)
+        copy_directory(
+            progress_bar,
+            source,
+            target,
+            options,
+            symlinked_files,
+            copied_files,
+            true,
+        )
     } else {
         // Copy as file
         let dest = construct_dest_path(source_path, target, target_type, options)?;
@@ -1309,6 +1253,7 @@ fn copy_source(
             dest.as_path(),
             options,
             symlinked_files,
+            copied_files,
             true,
         );
         if options.parents {
@@ -1570,6 +1515,24 @@ fn handle_existing_dest(
         OverwriteMode::Clobber(ClobberMode::RemoveDestination) => {
             fs::remove_file(dest)?;
         }
+        OverwriteMode::Clobber(ClobberMode::Standard) => {
+            // Consider the following files:
+            //
+            // * `src/f` - a regular file
+            // * `src/link` - a hard link to `src/f`
+            // * `dest/src/f` - a different regular file
+            //
+            // In this scenario, if we do `cp -a src/ dest/`, it is
+            // possible that the order of traversal causes `src/link`
+            // to get copied first (to `dest/src/link`). In that case,
+            // in order to make sure `dest/src/link` is a hard link to
+            // `dest/src/f` and `dest/src/f` has the contents of
+            // `src/f`, we delete the existing file to allow the hard
+            // linking.
+            if options.preserve_hard_links() {
+                fs::remove_file(dest)?;
+            }
+        }
         _ => (),
     };
 
@@ -1643,6 +1606,7 @@ fn copy_file(
     dest: &Path,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     if (options.update == UpdateMode::ReplaceIfOlder || options.update == UpdateMode::ReplaceNone)
@@ -1684,6 +1648,19 @@ fn copy_file(
 
     if file_or_link_exists(dest) {
         handle_existing_dest(source, dest, options, source_in_command_line)?;
+    }
+
+    if options.preserve_hard_links() {
+        // if we encounter a matching device/inode pair in the source tree
+        // we can arrange to create a hard link between the corresponding names
+        // in the destination tree.
+        if let Some(new_source) = copied_files.get(
+            &FileInformation::from_path(source, options.dereference(source_in_command_line))
+                .context(format!("cannot stat {}", source.quote()))?,
+        ) {
+            std::fs::hard_link(new_source, dest)?;
+            return Ok(());
+        };
     }
 
     if options.verbose {
@@ -1872,6 +1849,11 @@ fn copy_file(
     }
 
     copy_attributes(source, dest, &options.attributes)?;
+
+    copied_files.insert(
+        FileInformation::from_path(source, options.dereference(source_in_command_line))?,
+        dest.to_path_buf(),
+    );
 
     if let Some(progress_bar) = progress_bar {
         progress_bar.inc(fs::metadata(source)?.len());
