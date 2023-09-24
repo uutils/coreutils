@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use crate::common::util::TestScenario;
 use filetime::FileTime;
 use std::thread::sleep;
@@ -419,6 +423,83 @@ fn test_mv_same_hardlink() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_same_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_same_file_a";
+    let file_b = "test_mv_same_file_b";
+    let file_c = "test_mv_same_file_c";
+
+    at.touch(file_a);
+
+    at.symlink_file(file_a, file_b);
+
+    ucmd.arg(file_b)
+        .arg(file_a)
+        .fails()
+        .stderr_is(format!("mv: '{file_b}' and '{file_a}' are the same file\n",));
+
+    let (at2, mut ucmd2) = at_and_ucmd!();
+    at2.touch(file_a);
+
+    at2.symlink_file(file_a, file_b);
+    ucmd2.arg(file_a).arg(file_b).succeeds();
+    assert!(at2.file_exists(file_b));
+    assert!(!at2.file_exists(file_a));
+
+    let (at3, mut ucmd3) = at_and_ucmd!();
+    at3.touch(file_a);
+
+    at3.symlink_file(file_a, file_b);
+    at3.symlink_file(file_b, file_c);
+
+    ucmd3.arg(file_c).arg(file_b).succeeds();
+    assert!(!at3.symlink_exists(file_c));
+    assert!(at3.symlink_exists(file_b));
+
+    let (at4, mut ucmd4) = at_and_ucmd!();
+    at4.touch(file_a);
+
+    at4.symlink_file(file_a, file_b);
+    at4.symlink_file(file_b, file_c);
+
+    ucmd4
+        .arg(file_c)
+        .arg(file_a)
+        .fails()
+        .stderr_is(format!("mv: '{file_c}' and '{file_a}' are the same file\n",));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_hardlink_to_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let symlink_file = "symlink";
+    let hardlink_to_symlink_file = "hardlink_to_symlink";
+
+    at.touch(file);
+    at.symlink_file(file, symlink_file);
+    at.hard_link(symlink_file, hardlink_to_symlink_file);
+
+    ucmd.arg(symlink_file).arg(hardlink_to_symlink_file).fails();
+
+    let (at2, mut ucmd2) = at_and_ucmd!();
+
+    at2.touch(file);
+    at2.symlink_file(file, symlink_file);
+    at2.hard_link(symlink_file, hardlink_to_symlink_file);
+
+    ucmd2
+        .arg("--backup")
+        .arg(symlink_file)
+        .arg(hardlink_to_symlink_file)
+        .succeeds();
+    assert!(!at2.symlink_exists(symlink_file));
+    assert!(at2.symlink_exists(&format!("{hardlink_to_symlink_file}~")));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_mv_same_hardlink_backup_simple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
@@ -431,6 +512,22 @@ fn test_mv_same_hardlink_backup_simple() {
         .arg(file_b)
         .arg("--backup=simple")
         .succeeds();
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_same_hardlink_backup_simple_destroy() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_same_file_a~";
+    let file_b = "test_mv_same_file_a";
+    at.touch(file_a);
+    at.touch(file_b);
+
+    ucmd.arg(file_a)
+        .arg(file_b)
+        .arg("--b=simple")
+        .fails()
+        .stderr_contains("backing up 'test_mv_same_file_a' might destroy source");
 }
 
 #[test]
@@ -1185,7 +1282,7 @@ fn test_mv_verbose() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
-#[cfg(features = "mkdir")]
+#[cfg(feature = "mkdir")]
 fn test_mv_permission_error() {
     let scene = TestScenario::new("mkdir");
     let folder1 = "bar";
@@ -1241,6 +1338,29 @@ fn test_mv_info_self() {
         .arg(dir2)
         .fails()
         .stderr_contains("mv: cannot move 'dir2' to a subdirectory of itself, 'dir2/dir2'");
+}
+
+#[test]
+fn test_mv_arg_interactive_skipped() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    ucmd.args(&["-vi", "a", "b"])
+        .pipe_in("N\n")
+        .ignore_stdin_write_error()
+        .fails()
+        .stderr_is("mv: overwrite 'b'? ")
+        .stdout_is("skipped 'b'\n");
+}
+
+#[test]
+fn test_mv_arg_interactive_skipped_vin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    ucmd.args(&["-vin", "a", "b"])
+        .fails()
+        .stdout_is("skipped 'b'\n");
 }
 
 #[test]

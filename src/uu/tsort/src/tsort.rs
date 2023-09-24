@@ -1,12 +1,9 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Ben Eggers <ben.eggers36@gmail.com>
-//  * (c) Akira Hayakawa <ruby.wktk@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use clap::{crate_version, Arg, Command};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
@@ -103,8 +100,8 @@ pub fn uu_app() -> Command {
 // but using integer may improve performance.
 #[derive(Default)]
 struct Graph {
-    in_edges: HashMap<String, HashSet<String>>,
-    out_edges: HashMap<String, Vec<String>>,
+    in_edges: BTreeMap<String, BTreeSet<String>>,
+    out_edges: BTreeMap<String, Vec<String>>,
     result: Vec<String>,
 }
 
@@ -122,7 +119,7 @@ impl Graph {
     }
 
     fn init_node(&mut self, n: &str) {
-        self.in_edges.insert(n.to_string(), HashSet::new());
+        self.in_edges.insert(n.to_string(), BTreeSet::new());
         self.out_edges.insert(n.to_string(), vec![]);
     }
 
@@ -157,6 +154,7 @@ impl Graph {
             self.result.push(n.clone());
 
             let n_out_edges = self.out_edges.get_mut(&n).unwrap();
+            #[allow(clippy::explicit_iter_loop)]
             for m in n_out_edges.iter() {
                 let m_in_edges = self.in_edges.get_mut(m).unwrap();
                 m_in_edges.remove(&n);
@@ -171,11 +169,6 @@ impl Graph {
     }
 
     fn is_acyclic(&self) -> bool {
-        for edges in self.out_edges.values() {
-            if !edges.is_empty() {
-                return false;
-            }
-        }
-        true
+        self.out_edges.values().all(|edge| edge.is_empty())
     }
 }

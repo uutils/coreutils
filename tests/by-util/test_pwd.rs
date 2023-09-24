@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (words) symdir somefakedir
 
 use std::path::PathBuf;
@@ -116,7 +120,7 @@ fn test_symlinked_default_posix_p() {
         .env("POSIXLY_CORRECT", "1")
         .arg("-P")
         .succeeds()
-        .stdout_is(env.symdir + "\n");
+        .stdout_is(env.subdir + "\n");
 }
 
 #[cfg(not(windows))]

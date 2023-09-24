@@ -1,12 +1,13 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) hdsf ghead gtail
+// spell-checker:ignore (ToDO) hdsf ghead gtail ACDBK hexdigit
 
 use std::error::Error;
 use std::fmt;
+use std::num::IntErrorKind;
 
 use crate::display::Quotable;
 
@@ -23,6 +24,12 @@ pub struct Parser<'parser> {
     pub allow_list: Option<&'parser [&'parser str]>,
     /// Default unit when no suffix is provided
     pub default_unit: Option<&'parser str>,
+}
+
+enum NumberSystem {
+    Decimal,
+    Octal,
+    Hexadecimal,
 }
 
 impl<'parser> Parser<'parser> {
@@ -62,31 +69,26 @@ impl<'parser> Parser<'parser> {
     /// assert_eq!(Ok(123), parse_size("123"));
     /// assert_eq!(Ok(9 * 1000), parse_size("9kB")); // kB is 1000
     /// assert_eq!(Ok(2 * 1024), parse_size("2K")); // K is 1024
+    /// assert_eq!(Ok(44251 * 1024), parse_size("0xACDBK"));
     /// ```
     pub fn parse(&self, size: &str) -> Result<u64, ParseSizeError> {
         if size.is_empty() {
             return Err(ParseSizeError::parse_failure(size));
         }
-        // Get the numeric part of the size argument. For example, if the
-        // argument is "123K", then the numeric part is "123".
-        let numeric_string: String = size.chars().take_while(|c| c.is_ascii_digit()).collect();
-        let number: u64 = if numeric_string.is_empty() {
-            1
-        } else {
-            match numeric_string.parse() {
-                Ok(n) => n,
-                Err(_) => return Err(ParseSizeError::parse_failure(size)),
-            }
-        };
 
-        // Get the alphabetic units part of the size argument and compute
-        // the factor it represents. For example, if the argument is "123K",
-        // then the unit part is "K" and the factor is 1024. This may be the
-        // empty string, in which case, the factor is 1.
-        //
-        // The lowercase "b" (used by `od`, `head`, `tail`, etc.) means
-        // "block" and the Posix block size is 512. The uppercase "B"
-        // means "byte".
+        let number_system = Self::determine_number_system(size);
+
+        // Split the size argument into numeric and unit parts
+        // For example, if the argument is "123K", the numeric part is "123", and
+        // the unit is "K"
+        let numeric_string: String = match number_system {
+            NumberSystem::Hexadecimal => size
+                .chars()
+                .take(2)
+                .chain(size.chars().skip(2).take_while(|c| c.is_ascii_hexdigit()))
+                .collect(),
+            _ => size.chars().take_while(|c| c.is_ascii_digit()).collect(),
+        };
         let mut unit: &str = &size[numeric_string.len()..];
 
         if let Some(default_unit) = self.default_unit {
@@ -115,6 +117,12 @@ impl<'parser> Parser<'parser> {
             }
         }
 
+        // Compute the factor the unit represents.
+        // empty string means the factor is 1.
+        //
+        // The lowercase "b" (used by `od`, `head`, `tail`, etc.) means
+        // "block" and the Posix block size is 512. The uppercase "B"
+        // means "byte".
         let (base, exponent): (u128, u32) = match unit {
             "" => (1, 0),
             "B" if self.capital_b_bytes => (1, 0),
@@ -142,9 +150,62 @@ impl<'parser> Parser<'parser> {
             Ok(n) => n,
             Err(_) => return Err(ParseSizeError::size_too_big(size)),
         };
+
+        // parse string into u64
+        let number: u64 = match number_system {
+            NumberSystem::Decimal => {
+                if numeric_string.is_empty() {
+                    1
+                } else {
+                    Self::parse_number(&numeric_string, 10, size)?
+                }
+            }
+            NumberSystem::Octal => {
+                let trimmed_string = numeric_string.trim_start_matches('0');
+                Self::parse_number(trimmed_string, 8, size)?
+            }
+            NumberSystem::Hexadecimal => {
+                let trimmed_string = numeric_string.trim_start_matches("0x");
+                Self::parse_number(trimmed_string, 16, size)?
+            }
+        };
+
         number
             .checked_mul(factor)
             .ok_or_else(|| ParseSizeError::size_too_big(size))
+    }
+
+    fn determine_number_system(size: &str) -> NumberSystem {
+        if size.len() <= 1 {
+            return NumberSystem::Decimal;
+        }
+
+        if size.starts_with("0x") {
+            return NumberSystem::Hexadecimal;
+        }
+
+        let num_digits: usize = size
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect::<String>()
+            .len();
+        let all_zeros = size.chars().all(|c| c == '0');
+        if size.starts_with('0') && num_digits > 1 && !all_zeros {
+            return NumberSystem::Octal;
+        }
+
+        NumberSystem::Decimal
+    }
+
+    fn parse_number(
+        numeric_string: &str,
+        radix: u32,
+        original_size: &str,
+    ) -> Result<u64, ParseSizeError> {
+        u64::from_str_radix(numeric_string, radix).map_err(|e| match e.kind() {
+            IntErrorKind::PosOverflow => ParseSizeError::size_too_big(original_size),
+            _ => ParseSizeError::ParseFailure(original_size.to_string()),
+        })
     }
 }
 
@@ -172,6 +233,23 @@ impl<'parser> Parser<'parser> {
 /// ```
 pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
     Parser::default().parse(size)
+}
+
+/// Same as `parse_size()`, except returns `u64::MAX` on overflow
+/// GNU lib/coreutils include similar functionality
+/// and GNU test suite checks this behavior for some utils
+pub fn parse_size_max(size: &str) -> Result<u64, ParseSizeError> {
+    let result = Parser::default().parse(size);
+    match result {
+        Ok(_) => result,
+        Err(error) => {
+            if let ParseSizeError::SizeTooBig(_) = error {
+                Ok(u64::MAX)
+            } else {
+                Err(error)
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -335,8 +413,16 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_pointer_width = "128"))]
+    fn overflow_to_max_x64() {
+        assert_eq!(Ok(u64::MAX), parse_size_max("18446744073709551616"));
+        assert_eq!(Ok(u64::MAX), parse_size_max("10000000000000000000000"));
+        assert_eq!(Ok(u64::MAX), parse_size_max("1Y"));
+    }
+
+    #[test]
     fn invalid_suffix() {
-        let test_strings = ["328hdsf3290", "5mib", "1e2", "1H", "1.2"];
+        let test_strings = ["5mib", "1eb", "1H"];
         for &test_string in &test_strings {
             assert_eq!(
                 parse_size(test_string).unwrap_err(),
@@ -449,5 +535,19 @@ mod tests {
         assert!(parser.parse("b").is_err());
         assert!(parser.parse("1B").is_err());
         assert!(parser.parse("B").is_err());
+    }
+
+    #[test]
+    fn parse_octal_size() {
+        assert_eq!(Ok(63), parse_size("077"));
+        assert_eq!(Ok(528), parse_size("01020"));
+        assert_eq!(Ok(668 * 1024), parse_size("01234K"));
+    }
+
+    #[test]
+    fn parse_hex_size() {
+        assert_eq!(Ok(10), parse_size("0xA"));
+        assert_eq!(Ok(94722), parse_size("0x17202"));
+        assert_eq!(Ok(44251 * 1024), parse_size("0xACDBK"));
     }
 }

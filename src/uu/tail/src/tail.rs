@@ -1,11 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Morten Olsen Lysgaard <morten@lysgaard.no>
-//  * (c) Alexander Batischev <eual.jp@gmail.com>
-//  * (c) Thomas Queiroz <thomasqueirozb@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch Uncategorized filehandle Signum
 // spell-checker:ignore (libs) kqueue

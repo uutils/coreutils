@@ -1,10 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Orvar Segerström <orvarsegerstrom@gmail.com>
-// (c) Sokovikov Evgeniy  <skv-headless@yandex.ru>
-//
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) sourcepath targetpath
 
@@ -22,10 +19,10 @@ use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
-use uucore::backup_control::{self, BackupMode};
+use uucore::backup_control::{self, source_is_target_backup, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
-use uucore::fs::are_hardlinks_to_same_file;
+use uucore::fs::{are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file};
 use uucore::update_control::{self, UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
@@ -251,12 +248,25 @@ fn parse_paths(files: &[OsString], b: &Behavior) -> Vec<PathBuf> {
 }
 
 fn handle_two_paths(source: &Path, target: &Path, b: &Behavior) -> UResult<()> {
+    if b.backup == BackupMode::SimpleBackup && source_is_target_backup(source, target, &b.suffix) {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!(
+                "backing up {} might destroy source;  {} not moved",
+                target.quote(),
+                source.quote()
+            ),
+        )
+        .into());
+    }
     if source.symlink_metadata().is_err() {
         return Err(MvError::NoSuchFile(source.quote().to_string()).into());
     }
 
-    if (source.eq(target) || are_hardlinks_to_same_file(source, target))
-        && b.backup != BackupMode::SimpleBackup
+    if (source.eq(target)
+        || are_hardlinks_to_same_file(source, target)
+        || are_hardlinks_or_one_way_symlink_to_same_file(source, target))
+        && b.backup == BackupMode::NoBackup
     {
         if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
             return Err(
@@ -351,7 +361,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         None
     };
 
-    for sourcepath in files.iter() {
+    for sourcepath in files {
         if let Some(ref pb) = count_progress {
             pb.set_message(sourcepath.to_string_lossy().to_string());
         }
@@ -387,7 +397,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         }
 
         match rename(sourcepath, &targetpath, b, multi_progress.as_ref()) {
-            Err(e) if e.to_string() == "" => set_exit_code(1),
+            Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 let e = e.map_err_context(|| {
                     format!(
@@ -420,9 +430,7 @@ fn rename(
     let mut backup_path = None;
 
     if to.exists() {
-        if (b.update == UpdateMode::ReplaceIfOlder || b.update == UpdateMode::ReplaceNone)
-            && b.overwrite == OverwriteMode::Interactive
-        {
+        if b.update == UpdateMode::ReplaceIfOlder && b.overwrite == OverwriteMode::Interactive {
             // `mv -i --update old new` when `new` exists doesn't move anything
             // and exit with 0
             return Ok(());
@@ -440,13 +448,19 @@ fn rename(
 
         match b.overwrite {
             OverwriteMode::NoClobber => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("not replacing {}", to.quote()),
-                ));
+                let err_msg = if b.verbose {
+                    println!("skipped {}", to.quote());
+                    String::new()
+                } else {
+                    format!("not replacing {}", to.quote())
+                };
+                return Err(io::Error::new(io::ErrorKind::Other, err_msg));
             }
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
+                    if b.verbose {
+                        println!("skipped {}", to.quote());
+                    }
                     return Err(io::Error::new(io::ErrorKind::Other, ""));
                 }
             }

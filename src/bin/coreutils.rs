@@ -1,7 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Michael Gehring <mg@ebfe.org>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -212,8 +210,15 @@ fn gen_manpage<T: uucore::Args>(
 
 fn gen_coreutils_app<T: uucore::Args>(util_map: &UtilityMap<T>) -> Command {
     let mut command = Command::new("coreutils");
-    for (_, (_, sub_app)) in util_map {
-        command = command.subcommand(sub_app());
+    for (name, (_, sub_app)) in util_map {
+        // Recreate a small subcommand with only the relevant info
+        // (name & short description)
+        let about = sub_app()
+            .get_about()
+            .expect("Could not get the 'about'")
+            .to_string();
+        let sub_app = Command::new(name).about(about);
+        command = command.subcommand(sub_app);
     }
     command
 }

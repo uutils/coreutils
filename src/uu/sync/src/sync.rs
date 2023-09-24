@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Alexander Fomin <xander.fomin@ya.ru>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 /* Last synced with: sync (GNU coreutils) 8.13 */
 
@@ -173,7 +171,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let path = Path::new(&f);
             if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
                 if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    return e.map_err_context(|| format!("cannot stat {}", f.quote()))?;
+                    e.map_err_context(|| format!("error opening {}", f.quote()))?;
                 }
             }
         }
@@ -183,7 +181,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if !Path::new(&f).exists() {
                 return Err(USimpleError::new(
                     1,
-                    format!("cannot stat {}: No such file or directory", f.quote()),
+                    format!("error opening {}: No such file or directory", f.quote()),
                 ));
             }
         }

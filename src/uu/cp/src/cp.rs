@@ -1,18 +1,14 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::extra_unused_lifetimes)]
 
-// This file is part of the uutils coreutils package.
-//
-// (c) Jordy Dickinson <jordy.dickinson@gmail.com>
-// (c) Joshua S. Miller <jsmiller@uchicago.edu>
-//
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
-
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv
-
 use quick_error::quick_error;
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::env;
 #[cfg(not(windows))]
@@ -34,22 +30,26 @@ use libc::mkfifo;
 use quick_error::ResultExt;
 
 use platform::copy_on_write;
-use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
     canonicalize, is_symlink_loop, paths_refer_to_same_file, FileInformation, MissingHandling,
     ResolveMode,
 };
-use uucore::update_control::{self, UpdateMode};
+use uucore::{backup_control, update_control};
+// These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
+// requires these enum.
+pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
-    crash, format_usage, help_about, help_section, help_usage, prompt_yes, show_error, show_warning,
+    crash, format_usage, help_about, help_section, help_usage, prompt_yes, show_error,
+    show_warning, util_name,
 };
 
 use crate::copydir::copy_directory;
 
 mod copydir;
 mod platform;
+
 quick_error! {
     #[derive(Debug)]
     pub enum Error {
@@ -107,12 +107,8 @@ impl UError for Error {
 }
 
 pub type CopyResult<T> = Result<T, Error>;
-pub type Source = PathBuf;
-pub type SourceSlice = Path;
-pub type Target = PathBuf;
-pub type TargetSlice = Path;
 
-/// Specifies whether when overwrite files
+/// Specifies how to overwrite files.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum ClobberMode {
     Force,
@@ -120,7 +116,7 @@ pub enum ClobberMode {
     Standard,
 }
 
-/// Specifies whether when overwrite files
+/// Specifies whether files should be overwritten.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum OverwriteMode {
     /// [Default] Always overwrite existing files
@@ -147,12 +143,13 @@ pub enum SparseMode {
     Never,
 }
 
-/// Specifies the expected file type of copy target
+/// The expected file type of copy target
 pub enum TargetType {
     Directory,
     File,
 }
 
+/// Copy action to perform
 pub enum CopyMode {
     Link,
     SymLink,
@@ -161,76 +158,196 @@ pub enum CopyMode {
     AttrOnly,
 }
 
+/// Preservation settings for various attributes
+///
+/// It should be derived from options as follows:
+///
+///  - if there is a list of attributes to preserve (i.e. `--preserve=ATTR_LIST`) parse that list with [`Attributes::parse_iter`],
+///  - if `-p` or `--preserve` is given without arguments, use [`Attributes::DEFAULT`],
+///  - if `-a`/`--archive` is passed, use [`Attributes::ALL`],
+///  - if `-d` is passed use [`Attributes::LINKS`],
+///  - otherwise, use [`Attributes::NONE`].
+///
+/// For full compatibility with GNU, these options should also combine. We
+/// currently only do a best effort imitation of that behavior, because it is
+/// difficult to achieve in clap, especially with `--no-preserve`.
 #[derive(Debug)]
 pub struct Attributes {
     #[cfg(unix)]
-    ownership: Preserve,
-    mode: Preserve,
-    timestamps: Preserve,
-    context: Preserve,
-    links: Preserve,
-    xattr: Preserve,
+    pub ownership: Preserve,
+    pub mode: Preserve,
+    pub timestamps: Preserve,
+    pub context: Preserve,
+    pub links: Preserve,
+    pub xattr: Preserve,
 }
 
-impl Attributes {
-    pub(crate) fn max(&mut self, other: Self) {
-        #[cfg(unix)]
-        {
-            self.ownership = self.ownership.max(other.ownership);
-        }
-        self.mode = self.mode.max(other.mode);
-        self.timestamps = self.timestamps.max(other.timestamps);
-        self.context = self.context.max(other.context);
-        self.links = self.links.max(other.links);
-        self.xattr = self.xattr.max(other.xattr);
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Preserve {
     No,
     Yes { required: bool },
 }
 
-impl Preserve {
-    /// Preservation level should only increase, with no preservation being the lowest option,
-    /// preserve but don't require - middle, and preserve and require - top.
-    pub(crate) fn max(&self, other: Self) -> Self {
+impl PartialOrd for Preserve {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Preserve {
+    fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Self::Yes { required: true }, _) | (_, Self::Yes { required: true }) => {
-                Self::Yes { required: true }
-            }
-            (Self::Yes { required: false }, _) | (_, Self::Yes { required: false }) => {
-                Self::Yes { required: false }
-            }
-            _ => Self::No,
+            (Self::No, Self::No) => Ordering::Equal,
+            (Self::Yes { .. }, Self::No) => Ordering::Greater,
+            (Self::No, Self::Yes { .. }) => Ordering::Less,
+            (
+                Self::Yes { required: req_self },
+                Self::Yes {
+                    required: req_other,
+                },
+            ) => req_self.cmp(req_other),
         }
     }
 }
 
-/// Re-usable, extensible copy options
+/// Options for the `cp` command
+///
+/// All options are public so that the options can be programmatically
+/// constructed by other crates, such as nushell. That means that this struct
+/// is part of our public API. It should therefore not be changed without good
+/// reason.
+///
+/// The fields are documented with the arguments that determine their value.
 #[allow(dead_code)]
 pub struct Options {
-    attributes_only: bool,
-    backup: BackupMode,
-    copy_contents: bool,
-    cli_dereference: bool,
-    copy_mode: CopyMode,
-    dereference: bool,
-    no_target_dir: bool,
-    one_file_system: bool,
-    overwrite: OverwriteMode,
-    parents: bool,
-    sparse_mode: SparseMode,
-    strip_trailing_slashes: bool,
-    reflink_mode: ReflinkMode,
-    attributes: Attributes,
-    recursive: bool,
-    backup_suffix: String,
-    target_dir: Option<PathBuf>,
-    update: UpdateMode,
-    verbose: bool,
-    progress_bar: bool,
+    /// `--attributes-only`
+    pub attributes_only: bool,
+    /// `--backup[=CONTROL]`, `-b`
+    pub backup: BackupMode,
+    /// `--copy-contents`
+    pub copy_contents: bool,
+    /// `-H`
+    pub cli_dereference: bool,
+    /// Determines the type of copying that should be done
+    ///
+    /// Set by the following arguments:
+    ///  - `-l`, `--link`: [`CopyMode::Link`]
+    ///  - `-s`, `--symbolic-link`: [`CopyMode::SymLink`]
+    ///  - `-u`, `--update[=WHEN]`: [`CopyMode::Update`]
+    ///  - `--attributes-only`: [`CopyMode::AttrOnly`]
+    ///  - otherwise: [`CopyMode::Copy`]
+    pub copy_mode: CopyMode,
+    /// `-L`, `--dereference`
+    pub dereference: bool,
+    /// `-T`, `--no-target-dir`
+    pub no_target_dir: bool,
+    /// `-x`, `--one-file-system`
+    pub one_file_system: bool,
+    /// Specifies what to do with an existing destination
+    ///
+    /// Set by the following arguments:
+    ///  - `-i`, `--interactive`: [`OverwriteMode::Interactive`]
+    ///  - `-n`, `--no-clobber`: [`OverwriteMode::NoClobber`]
+    ///  - otherwise: [`OverwriteMode::Clobber`]
+    ///
+    /// The `Interactive` and `Clobber` variants have a [`ClobberMode`] argument,
+    /// set by the following arguments:
+    ///  - `-f`, `--force`: [`ClobberMode::Force`]
+    ///  - `--remove-destination`: [`ClobberMode::RemoveDestination`]
+    ///  - otherwise: [`ClobberMode::Standard`]
+    pub overwrite: OverwriteMode,
+    /// `--parents`
+    pub parents: bool,
+    /// `--sparse[=WHEN]`
+    pub sparse_mode: SparseMode,
+    /// `--strip-trailing-slashes`
+    pub strip_trailing_slashes: bool,
+    /// `--reflink[=WHEN]`
+    pub reflink_mode: ReflinkMode,
+    /// `--preserve=[=ATTRIBUTE_LIST]` and `--no-preserve=ATTRIBUTE_LIST`
+    pub attributes: Attributes,
+    /// `-R`, `-r`, `--recursive`
+    pub recursive: bool,
+    /// `-S`, `--suffix`
+    pub backup_suffix: String,
+    /// `-t`, `--target-directory`
+    pub target_dir: Option<PathBuf>,
+    /// `--update[=UPDATE]`
+    pub update: UpdateMode,
+    /// `--debug`
+    pub debug: bool,
+    /// `-v`, `--verbose`
+    pub verbose: bool,
+    /// `-g`, `--progress`
+    pub progress_bar: bool,
+}
+
+/// Enum representing various debug states of the offload and reflink actions.
+#[derive(Debug)]
+#[allow(dead_code)] // All of them are used on Linux
+enum OffloadReflinkDebug {
+    Unknown,
+    No,
+    Yes,
+    Avoided,
+    Unsupported,
+}
+
+/// Enum representing various debug states of the sparse detection.
+#[derive(Debug)]
+#[allow(dead_code)] // silent for now until we use them
+enum SparseDebug {
+    Unknown,
+    No,
+    Zeros,
+    SeekHole,
+    SeekHoleZeros,
+    Unsupported,
+}
+
+/// Struct that contains the debug state for each action in a file copy operation.
+#[derive(Debug)]
+struct CopyDebug {
+    offload: OffloadReflinkDebug,
+    reflink: OffloadReflinkDebug,
+    sparse_detection: SparseDebug,
+}
+
+impl OffloadReflinkDebug {
+    fn to_string(&self) -> &'static str {
+        match self {
+            Self::No => "no",
+            Self::Yes => "yes",
+            Self::Avoided => "avoided",
+            Self::Unsupported => "unsupported",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl SparseDebug {
+    fn to_string(&self) -> &'static str {
+        match self {
+            Self::No => "no",
+            Self::Zeros => "zeros",
+            Self::SeekHole => "SEEK_HOLE",
+            Self::SeekHoleZeros => "SEEK_HOLE + zeros",
+            Self::Unsupported => "unsupported",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// This function prints the debug information of a file copy operation if
+/// no hard link or symbolic link is required, and data copy is required.
+/// It prints the debug information of the offload, reflink, and sparse detection actions.
+fn show_debug(copy_debug: &CopyDebug) {
+    println!(
+        "copy offload: {}, reflink: {}, sparse detection: {}",
+        copy_debug.offload.to_string(),
+        copy_debug.reflink.to_string(),
+        copy_debug.sparse_detection.to_string(),
+    );
 }
 
 const ABOUT: &str = help_about!("cp.md");
@@ -269,6 +386,7 @@ mod options {
     pub const STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
     pub const SYMBOLIC_LINK: &str = "symbolic-link";
     pub const TARGET_DIRECTORY: &str = "target-directory";
+    pub const DEBUG: &str = "debug";
     pub const VERBOSE: &str = "verbose";
 }
 
@@ -312,6 +430,7 @@ pub fn uu_app() -> Command {
             backup_control::BACKUP_CONTROL_LONG_HELP
         ))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::TARGET_DIRECTORY)
                 .short('t')
@@ -367,6 +486,12 @@ pub fn uu_app() -> Command {
             Arg::new(options::STRIP_TRAILING_SLASHES)
                 .long(options::STRIP_TRAILING_SLASHES)
                 .help("remove any trailing slashes from each SOURCE argument")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::DEBUG)
+                .long(options::DEBUG)
+                .help("explain how a file is copied. Implies -v")
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -438,6 +563,7 @@ pub fn uu_app() -> Command {
                     PRESERVABLE_ATTRIBUTES,
                 ))
                 .num_args(0..)
+                .require_equals(true)
                 .value_name("ATTR_LIST")
                 .overrides_with_all([
                     options::ARCHIVE,
@@ -662,67 +788,90 @@ impl CopyMode {
 }
 
 impl Attributes {
+    pub const ALL: Self = Self {
+        #[cfg(unix)]
+        ownership: Preserve::Yes { required: true },
+        mode: Preserve::Yes { required: true },
+        timestamps: Preserve::Yes { required: true },
+        context: {
+            #[cfg(feature = "feat_selinux")]
+            {
+                Preserve::Yes { required: false }
+            }
+            #[cfg(not(feature = "feat_selinux"))]
+            {
+                Preserve::No
+            }
+        },
+        links: Preserve::Yes { required: true },
+        xattr: Preserve::Yes { required: false },
+    };
+
+    pub const NONE: Self = Self {
+        #[cfg(unix)]
+        ownership: Preserve::No,
+        mode: Preserve::No,
+        timestamps: Preserve::No,
+        context: Preserve::No,
+        links: Preserve::No,
+        xattr: Preserve::No,
+    };
+
     // TODO: ownership is required if the user is root, for non-root users it's not required.
-    // See: https://github.com/coreutils/coreutils/blob/master/src/copy.c#L3181
+    pub const DEFAULT: Self = Self {
+        #[cfg(unix)]
+        ownership: Preserve::Yes { required: true },
+        mode: Preserve::Yes { required: true },
+        timestamps: Preserve::Yes { required: true },
+        ..Self::NONE
+    };
 
-    fn all() -> Self {
+    pub const LINKS: Self = Self {
+        links: Preserve::Yes { required: true },
+        ..Self::NONE
+    };
+
+    pub fn union(self, other: &Self) -> Self {
         Self {
             #[cfg(unix)]
-            ownership: Preserve::Yes { required: true },
-            mode: Preserve::Yes { required: true },
-            timestamps: Preserve::Yes { required: true },
-            context: {
-                #[cfg(feature = "feat_selinux")]
-                {
-                    Preserve::Yes { required: false }
-                }
-                #[cfg(not(feature = "feat_selinux"))]
-                {
-                    Preserve::No
-                }
-            },
-            links: Preserve::Yes { required: true },
-            xattr: Preserve::Yes { required: false },
+            ownership: self.ownership.max(other.ownership),
+            context: self.context.max(other.context),
+            timestamps: self.timestamps.max(other.timestamps),
+            mode: self.mode.max(other.mode),
+            links: self.links.max(other.links),
+            xattr: self.xattr.max(other.xattr),
         }
     }
 
-    fn default() -> Self {
-        Self {
-            #[cfg(unix)]
-            ownership: Preserve::Yes { required: true },
-            mode: Preserve::Yes { required: true },
-            timestamps: Preserve::Yes { required: true },
-            context: Preserve::No,
-            links: Preserve::No,
-            xattr: Preserve::No,
+    pub fn parse_iter<T>(values: impl Iterator<Item = T>) -> Result<Self, Error>
+    where
+        T: AsRef<str>,
+    {
+        let mut new = Self::NONE;
+        for value in values {
+            new = new.union(&Self::parse_single_string(value.as_ref())?);
         }
-    }
-
-    fn none() -> Self {
-        Self {
-            #[cfg(unix)]
-            ownership: Preserve::No,
-            mode: Preserve::No,
-            timestamps: Preserve::No,
-            context: Preserve::No,
-            links: Preserve::No,
-            xattr: Preserve::No,
-        }
+        Ok(new)
     }
 
     /// Tries to match string containing a parameter to preserve with the corresponding entry in the
     /// Attributes struct.
-    fn try_set_from_string(&mut self, value: &str) -> Result<(), Error> {
-        let preserve_yes_required = Preserve::Yes { required: true };
+    fn parse_single_string(value: &str) -> Result<Self, Error> {
+        let value = value.to_lowercase();
 
-        match &*value.to_lowercase() {
-            "mode" => self.mode = preserve_yes_required,
+        if value == "all" {
+            return Ok(Self::ALL);
+        }
+
+        let mut new = Self::NONE;
+        let attribute = match value.as_ref() {
+            "mode" => &mut new.mode,
             #[cfg(unix)]
-            "ownership" => self.ownership = preserve_yes_required,
-            "timestamps" => self.timestamps = preserve_yes_required,
-            "context" => self.context = preserve_yes_required,
-            "link" | "links" => self.links = preserve_yes_required,
-            "xattr" => self.xattr = preserve_yes_required,
+            "ownership" => &mut new.ownership,
+            "timestamps" => &mut new.timestamps,
+            "context" => &mut new.context,
+            "link" | "links" => &mut new.links,
+            "xattr" => &mut new.xattr,
             _ => {
                 return Err(Error::InvalidArgument(format!(
                     "invalid attribute {}",
@@ -730,7 +879,10 @@ impl Attributes {
                 )));
             }
         };
-        Ok(())
+
+        *attribute = Preserve::Yes { required: true };
+
+        Ok(new)
     }
 }
 
@@ -779,39 +931,22 @@ impl Options {
         };
 
         // Parse attributes to preserve
-        let attributes: Attributes = if matches.contains_id(options::PRESERVE) {
-            match matches.get_many::<String>(options::PRESERVE) {
-                None => Attributes::default(),
-                Some(attribute_strs) => {
-                    let mut attributes: Attributes = Attributes::none();
-                    let mut attributes_empty = true;
-                    for attribute_str in attribute_strs {
-                        attributes_empty = false;
-                        if attribute_str == "all" {
-                            attributes.max(Attributes::all());
-                        } else {
-                            attributes.try_set_from_string(attribute_str)?;
-                        }
-                    }
-                    // `--preserve` case, use the defaults
-                    if attributes_empty {
-                        Attributes::default()
-                    } else {
-                        attributes
-                    }
-                }
+        let attributes = if let Some(attribute_strs) = matches.get_many::<String>(options::PRESERVE)
+        {
+            if attribute_strs.len() == 0 {
+                Attributes::DEFAULT
+            } else {
+                Attributes::parse_iter(attribute_strs)?
             }
         } else if matches.get_flag(options::ARCHIVE) {
             // --archive is used. Same as --preserve=all
-            Attributes::all()
+            Attributes::ALL
         } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
-            let mut attributes = Attributes::none();
-            attributes.links = Preserve::Yes { required: true };
-            attributes
+            Attributes::LINKS
         } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
-            Attributes::default()
+            Attributes::DEFAULT
         } else {
-            Attributes::none()
+            Attributes::NONE
         };
 
         #[cfg(not(feature = "feat_selinux"))]
@@ -839,7 +974,8 @@ impl Options {
             one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
             parents: matches.get_flag(options::PARENTS),
             update: update_mode,
-            verbose: matches.get_flag(options::VERBOSE),
+            debug: matches.get_flag(options::DEBUG),
+            verbose: matches.get_flag(options::VERBOSE) || matches.get_flag(options::DEBUG),
             strip_trailing_slashes: matches.get_flag(options::STRIP_TRAILING_SLASHES),
             reflink_mode: {
                 if let Some(reflink) = matches.get_one::<String>(options::REFLINK) {
@@ -920,7 +1056,7 @@ impl TargetType {
     ///
     /// Treat target as a dir if we have multiple sources or the target
     /// exists and already is a directory
-    fn determine(sources: &[Source], target: &TargetSlice) -> Self {
+    fn determine(sources: &[PathBuf], target: &Path) -> Self {
         if sources.len() > 1 || target.is_dir() {
             Self::Directory
         } else {
@@ -930,10 +1066,16 @@ impl TargetType {
 }
 
 /// Returns tuple of (Source paths, Target)
-fn parse_path_args(mut paths: Vec<Source>, options: &Options) -> CopyResult<(Vec<Source>, Target)> {
+fn parse_path_args(
+    mut paths: Vec<PathBuf>,
+    options: &Options,
+) -> CopyResult<(Vec<PathBuf>, PathBuf)> {
     if paths.is_empty() {
         // No files specified
         return Err("missing file operand".into());
+    } else if paths.len() == 1 && options.target_dir.is_none() {
+        // Only one file specified
+        return Err(format!("missing destination file operand after {:?}", paths[0]).into());
     }
 
     // Return an error if the user requested to copy more than one
@@ -996,6 +1138,7 @@ fn preserve_hardlinks(
     let inode = get_inode(&info);
     let nlinks = info.number_of_links();
     let mut found_hard_link = false;
+    #[allow(clippy::explicit_iter_loop)]
     for (link, link_inode) in hard_links.iter() {
         if *link_inode == inode {
             // Consider the following files:
@@ -1025,33 +1168,30 @@ fn preserve_hardlinks(
 }
 
 /// When handling errors, we don't always want to show them to the user. This function handles that.
-/// If the error is printed, returns true, false otherwise.
-fn show_error_if_needed(error: &Error) -> bool {
+fn show_error_if_needed(error: &Error) {
     match error {
         // When using --no-clobber, we don't want to show
         // an error message
-        Error::NotAllFilesCopied => (),
+        Error::NotAllFilesCopied => {
+            // Need to return an error code
+        }
         Error::Skipped => {
             // touch a b && echo "n"|cp -i a b && echo $?
             // should return an error from GNU 9.2
-            return true;
         }
         _ => {
             show_error!("{}", error);
-            return true;
         }
     }
-    false
 }
 
-/// Copy all `sources` to `target`.  Returns an
-/// `Err(Error::NotAllFilesCopied)` if at least one non-fatal error was
-/// encountered.
+/// Copy all `sources` to `target`.
 ///
-/// Behavior depends on path`options`, see [`Options`] for details.
+/// Returns an `Err(Error::NotAllFilesCopied)` if at least one non-fatal error
+/// was encountered.
 ///
-/// [`Options`]: ./struct.Options.html
-fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResult<()> {
+/// Behavior is determined by the `options` parameter, see [`Options`] for details.
+pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult<()> {
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, &target_type)?;
 
@@ -1078,7 +1218,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
         None
     };
 
-    for source in sources.iter() {
+    for source in sources {
         if seen_sources.contains(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
@@ -1098,14 +1238,18 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
                     options,
                     &mut symlinked_files,
                 ) {
-                    if show_error_if_needed(&error) {
-                        non_fatal_errors = true;
-                    }
+                    show_error_if_needed(&error);
+                    non_fatal_errors = true;
                 }
             }
             seen_sources.insert(source);
         }
     }
+
+    if let Some(pb) = progress_bar {
+        pb.finish();
+    }
+
     if non_fatal_errors {
         Err(Error::NotAllFilesCopied)
     } else {
@@ -1115,7 +1259,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
 
 fn construct_dest_path(
     source_path: &Path,
-    target: &TargetSlice,
+    target: &Path,
     target_type: &TargetType,
     options: &Options,
 ) -> CopyResult<PathBuf> {
@@ -1146,8 +1290,8 @@ fn construct_dest_path(
 
 fn copy_source(
     progress_bar: &Option<ProgressBar>,
-    source: &SourceSlice,
-    target: &TargetSlice,
+    source: &Path,
+    target: &Path,
     target_type: &TargetType,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
@@ -1177,13 +1321,23 @@ fn copy_source(
 }
 
 impl OverwriteMode {
-    fn verify(&self, path: &Path) -> CopyResult<()> {
+    fn verify(&self, path: &Path, verbose: bool) -> CopyResult<()> {
         match *self {
-            Self::NoClobber => Err(Error::NotAllFilesCopied),
+            Self::NoClobber => {
+                if verbose {
+                    println!("skipped {}", path.quote());
+                } else {
+                    eprintln!("{}: not replacing {}", util_name(), path.quote());
+                }
+                Err(Error::NotAllFilesCopied)
+            }
             Self::Interactive(_) => {
                 if prompt_yes!("overwrite {}?", path.quote()) {
                     Ok(())
                 } else {
+                    if verbose {
+                        println!("skipped {}", path.quote());
+                    }
                     Err(Error::Skipped)
                 }
             }
@@ -1391,7 +1545,7 @@ fn handle_existing_dest(
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
-    options.overwrite.verify(dest)?;
+    options.overwrite.verify(dest, options.verbose)?;
 
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
@@ -1749,11 +1903,11 @@ fn copy_helper(
         File::create(dest).context(dest.display().to_string())?;
     } else if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
-        copy_fifo(dest, options.overwrite)?;
+        copy_fifo(dest, options.overwrite, options.verbose)?;
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else {
-        copy_on_write(
+        let copy_debug = copy_on_write(
             source,
             dest,
             options.reflink_mode,
@@ -1762,6 +1916,10 @@ fn copy_helper(
             #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
             source_is_fifo,
         )?;
+
+        if !options.attributes_only && options.debug {
+            show_debug(&copy_debug);
+        }
     }
 
     Ok(())
@@ -1770,9 +1928,9 @@ fn copy_helper(
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
 // built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
 #[cfg(unix)]
-fn copy_fifo(dest: &Path, overwrite: OverwriteMode) -> CopyResult<()> {
+fn copy_fifo(dest: &Path, overwrite: OverwriteMode, verbose: bool) -> CopyResult<()> {
     if dest.exists() {
-        overwrite.verify(dest)?;
+        overwrite.verify(dest, verbose)?;
         fs::remove_file(dest)?;
     }
 

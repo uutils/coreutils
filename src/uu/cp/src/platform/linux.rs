@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore ficlone reflink ftruncate pwrite fiemap
 use std::fs::{File, OpenOptions};
 use std::io::Read;
@@ -13,7 +13,7 @@ use quick_error::ResultExt;
 
 use uucore::mode::get_umask;
 
-use crate::{CopyResult, ReflinkMode, SparseMode};
+use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
 
 // From /usr/include/linux/fs.h:
 // #define FICLONE		_IOW(0x94, 9, int)
@@ -145,24 +145,51 @@ pub(crate) fn copy_on_write(
     sparse_mode: SparseMode,
     context: &str,
     source_is_fifo: bool,
-) -> CopyResult<()> {
+) -> CopyResult<CopyDebug> {
+    let mut copy_debug = CopyDebug {
+        offload: OffloadReflinkDebug::Unknown,
+        reflink: OffloadReflinkDebug::Unsupported,
+        sparse_detection: SparseDebug::No,
+    };
+
     let result = match (reflink_mode, sparse_mode) {
-        (ReflinkMode::Never, SparseMode::Always) => sparse_copy(source, dest),
-        (ReflinkMode::Never, _) => std::fs::copy(source, dest).map(|_| ()),
-        (ReflinkMode::Auto, SparseMode::Always) => sparse_copy(source, dest),
+        (ReflinkMode::Never, SparseMode::Always) => {
+            copy_debug.sparse_detection = SparseDebug::Zeros;
+            copy_debug.offload = OffloadReflinkDebug::Avoided;
+            copy_debug.reflink = OffloadReflinkDebug::No;
+            sparse_copy(source, dest)
+        }
+        (ReflinkMode::Never, _) => {
+            copy_debug.sparse_detection = SparseDebug::No;
+            copy_debug.reflink = OffloadReflinkDebug::No;
+            std::fs::copy(source, dest).map(|_| ())
+        }
+        (ReflinkMode::Auto, SparseMode::Always) => {
+            copy_debug.offload = OffloadReflinkDebug::Avoided;
+            copy_debug.sparse_detection = SparseDebug::Zeros;
+            copy_debug.reflink = OffloadReflinkDebug::Unsupported;
+            sparse_copy(source, dest)
+        }
 
         (ReflinkMode::Auto, _) => {
+            copy_debug.sparse_detection = SparseDebug::No;
+            copy_debug.reflink = OffloadReflinkDebug::Unsupported;
             if source_is_fifo {
                 copy_fifo_contents(source, dest).map(|_| ())
             } else {
                 clone(source, dest, CloneFallback::FSCopy)
             }
         }
-        (ReflinkMode::Always, SparseMode::Auto) => clone(source, dest, CloneFallback::Error),
+        (ReflinkMode::Always, SparseMode::Auto) => {
+            copy_debug.sparse_detection = SparseDebug::No;
+            copy_debug.reflink = OffloadReflinkDebug::Yes;
+
+            clone(source, dest, CloneFallback::Error)
+        }
         (ReflinkMode::Always, _) => {
             return Err("`--reflink=always` can be used only with --sparse=auto".into())
         }
     };
     result.context(context)?;
-    Ok(())
+    Ok(copy_debug)
 }

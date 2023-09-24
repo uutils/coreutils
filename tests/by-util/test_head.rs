@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 
@@ -187,6 +187,15 @@ fn test_no_such_file_or_directory() {
         .arg("no_such_file.toml")
         .fails()
         .stderr_contains("cannot open 'no_such_file.toml' for reading: No such file or directory");
+}
+
+#[test]
+fn test_lines_leading_zeros() {
+    new_ucmd!()
+        .arg("--lines=010")
+        .pipe_in("\n\n\n\n\n\n\n\n\n\n\n\n")
+        .succeeds()
+        .stdout_is("\n\n\n\n\n\n\n\n\n\n");
 }
 
 /// Test that each non-existent files gets its own error message printed.

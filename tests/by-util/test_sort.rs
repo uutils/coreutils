@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (words) ints
 
@@ -132,6 +132,25 @@ fn test_months_whitespace() {
 #[test]
 fn test_version_empty_lines() {
     test_helper("version-empty-lines", &["-V", "--version-sort"]);
+}
+
+#[test]
+fn test_version_sort_unstable() {
+    new_ucmd!()
+        .arg("--sort=version")
+        .pipe_in("0.1\n0.02\n0.2\n0.002\n0.3\n")
+        .succeeds()
+        .stdout_is("0.1\n0.002\n0.02\n0.2\n0.3\n");
+}
+
+#[test]
+fn test_version_sort_stable() {
+    new_ucmd!()
+        .arg("--stable")
+        .arg("--sort=version")
+        .pipe_in("0.1\n0.02\n0.2\n0.002\n0.3\n")
+        .succeeds()
+        .stdout_is("0.1\n0.02\n0.2\n0.002\n0.3\n");
 }
 
 #[test]

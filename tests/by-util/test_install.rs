@@ -1,13 +1,17 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (words) helloworld nodir objdump n'source
 
 use crate::common::util::{is_ci, TestScenario};
 use filetime::FileTime;
-use rust_users::{get_effective_gid, get_effective_uid};
 use std::os::unix::fs::PermissionsExt;
 #[cfg(not(any(windows, target_os = "freebsd")))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
+use uucore::process::{getegid, geteuid};
 
 #[test]
 fn test_invalid_arg() {
@@ -322,7 +326,7 @@ fn test_install_target_new_file_with_group() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
     let dir = "target_dir";
-    let gid = get_effective_gid();
+    let gid = getegid();
 
     at.touch(file);
     at.mkdir(dir);
@@ -349,7 +353,7 @@ fn test_install_target_new_file_with_owner() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
     let dir = "target_dir";
-    let uid = get_effective_uid();
+    let uid = geteuid();
 
     at.touch(file);
     at.mkdir(dir);

@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use crate::common::util::TestScenario;
 
 #[test]
@@ -18,6 +22,14 @@ fn test_sort_self_loop() {
         .pipe_in("first first\nfirst second second second")
         .succeeds()
         .stdout_only("first\nsecond\n");
+}
+
+#[test]
+fn test_sort_floating_nodes() {
+    new_ucmd!()
+        .pipe_in("d d\nc c\na a\nb b")
+        .succeeds()
+        .stdout_only("a\nb\nc\nd\n");
 }
 
 #[test]

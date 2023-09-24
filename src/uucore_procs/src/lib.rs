@@ -1,5 +1,9 @@
-// Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
-// spell-checker:ignore backticks
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+//
+// spell-checker:ignore backticks uuhelp
 
 use std::{fs::File, io::Read, path::PathBuf};
 
@@ -58,7 +62,7 @@ fn render_markdown(s: &str) -> String {
 pub fn help_about(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
-    let text: String = help_parser::parse_about(&read_help(&filename));
+    let text: String = uuhelp_parser::parse_about(&read_help(&filename));
     TokenTree::Literal(Literal::string(&text)).into()
 }
 
@@ -72,7 +76,7 @@ pub fn help_about(input: TokenStream) -> TokenStream {
 pub fn help_usage(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
-    let text: String = help_parser::parse_usage(&read_help(&filename));
+    let text: String = uuhelp_parser::parse_usage(&read_help(&filename));
     TokenTree::Literal(Literal::string(&text)).into()
 }
 
@@ -106,7 +110,7 @@ pub fn help_section(input: TokenStream) -> TokenStream {
     let section = get_argument(&input, 0, "section");
     let filename = get_argument(&input, 1, "filename");
 
-    if let Some(text) = help_parser::parse_section(&section, &read_help(&filename)) {
+    if let Some(text) = uuhelp_parser::parse_section(&section, &read_help(&filename)) {
         let rendered = render_markdown(&text);
         TokenTree::Literal(Literal::string(&rendered)).into()
     } else {

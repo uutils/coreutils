@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 // spell-checker:ignore (ToDO) arrnum
 
@@ -10,7 +14,7 @@ use super::float_common::{get_primitive_dec, primitive_to_str_common, FloatAnaly
 pub struct Floatf;
 impl Floatf {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 impl Formatter for Floatf {
