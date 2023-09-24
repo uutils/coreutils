@@ -69,7 +69,7 @@ fn datetime_to_filetime<T: TimeZone>(dt: &DateTime<T>) -> FileTime {
 }
 
 fn filetime_to_datetime(ft: &FileTime) -> Option<DateTime<Local>> {
-    Some(DateTime::from_timestamp(ft.seconds(), ft.nanoseconds())?.into())
+    Some(DateTime::from_timestamp(ft.unix_seconds(), ft.nanoseconds())?.into())
 }
 
 #[uucore::main]
