@@ -373,17 +373,8 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> UResult<FileTime> {
         }
     }
 
-    // Catch panics from the underlying library and return GNU touch's error message format
-    let hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let result = std::panic::catch_unwind(|| parse_datetime::parse_datetime_at_date(ref_time, s));
-    std::panic::set_hook(hook);
-    match result {
-        Ok(Ok(dt)) => {
-            return Ok(datetime_to_filetime(&dt));
-        }
-        Err(_e) => return Err(USimpleError::new(1, format!("invalid date format ‘{}’", s))),
-        _ => {}
+    if let Ok(dt) = parse_datetime::parse_datetime_at_date(ref_time, s) {
+        return Ok(datetime_to_filetime(&dt));
     }
 
     Err(USimpleError::new(1, format!("Unable to parse date: {s}")))

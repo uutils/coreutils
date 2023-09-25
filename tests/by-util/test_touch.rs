@@ -852,7 +852,5 @@ fn test_touch_invalid_date_format() {
 
     ucmd.args(&["-m", "-t", "+1000000000000 years", file])
         .fails()
-        // Made this test slightly easier to pass, the back ticks here are mangled somewhere by the test suite
-        // .stderr_contains("touch: invalid date format ‘+1000000000000 years’");
-        .stderr_contains("touch: invalid date format");
+        .stderr_contains("touch: invalid date format ‘+1000000000000 years’");
 }
