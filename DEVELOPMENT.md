@@ -1,6 +1,6 @@
 <!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains -->
 
-# Setting up local development environment
+# Setting up your local development environment
 
 For contributing rules and best practices please refer to [CONTRIBUTING.md](CONTRIBUTING.md)
 
