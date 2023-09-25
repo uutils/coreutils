@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell
 
 mod error;
 
@@ -23,6 +23,7 @@ use uucore::backup_control::{self, source_is_target_backup, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::fs::{are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file};
+use uucore::libc::ENOTEMPTY;
 use uucore::update_control::{self, UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
@@ -32,23 +33,56 @@ use fs_extra::dir::{
 };
 
 use crate::error::MvError;
+/// Options contains all the possible behaviors and flags for mv.
+///
+/// All options are public so that the options can be programmatically
+/// constructed by other crates, such as nushell. That means that this struct
+/// is part of our public API. It should therefore not be changed without good
+/// reason.
+/// The fields are documented with the arguments that determine their value.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Options {
+    /// specifies overwrite behavior
+    /// '-n' '--no-clobber'
+    /// '-i' '--interactive'
+    /// '-f' '--force'
+    pub overwrite: OverwriteMode,
 
-pub struct Behavior {
-    overwrite: OverwriteMode,
-    backup: BackupMode,
-    suffix: String,
-    update: UpdateMode,
-    target_dir: Option<OsString>,
-    no_target_dir: bool,
-    verbose: bool,
-    strip_slashes: bool,
-    progress_bar: bool,
+    /// `--backup[=CONTROL]`, `-b`
+    pub backup: BackupMode,
+
+    /// '-S' --suffix' backup suffix
+    pub suffix: String,
+
+    /// Available update mode "--update-mode=all|none|older"
+    pub update: UpdateMode,
+
+    /// Specifies target directory
+    /// '-t, --target-directory=DIRECTORY'
+    pub target_dir: Option<OsString>,
+
+    /// Treat destination as a normal file
+    /// '-T, --no-target-directory
+    pub no_target_dir: bool,
+
+    /// '-v, --verbose'
+    pub verbose: bool,
+
+    /// '--strip-trailing-slashes'
+    pub strip_slashes: bool,
+
+    /// '-g, --progress'
+    pub progress_bar: bool,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+/// specifies behavior of the overwrite flag
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OverwriteMode {
+    /// '-n' '--no-clobber'   do not overwrite
     NoClobber,
+    /// '-i' '--interactive'  prompt before overwrite
     Interactive,
+    ///'-f' '--force'         overwrite without prompt
     Force,
 }
 
@@ -116,7 +150,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let behavior = Behavior {
+    let opts = Options {
         overwrite: overwrite_mode,
         backup: backup_mode,
         suffix: backup_suffix,
@@ -128,7 +162,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         progress_bar: matches.get_flag(OPT_PROGRESS),
     };
 
-    exec(&files[..], &behavior)
+    exec_mv(&files[..], &opts)
 }
 
 pub fn uu_app() -> Command {
@@ -220,7 +254,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
+pub fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     // This does not exactly match the GNU implementation:
     // The GNU mv defaults to Force, but if more than one of the
     // overwrite options are supplied, only the last takes effect.
@@ -235,10 +269,10 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     }
 }
 
-fn parse_paths(files: &[OsString], b: &Behavior) -> Vec<PathBuf> {
+fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
     let paths = files.iter().map(Path::new);
 
-    if b.strip_slashes {
+    if opts.strip_slashes {
         paths
             .map(|p| p.components().as_path().to_owned())
             .collect::<Vec<PathBuf>>()
@@ -247,8 +281,10 @@ fn parse_paths(files: &[OsString], b: &Behavior) -> Vec<PathBuf> {
     }
 }
 
-fn handle_two_paths(source: &Path, target: &Path, b: &Behavior) -> UResult<()> {
-    if b.backup == BackupMode::SimpleBackup && source_is_target_backup(source, target, &b.suffix) {
+fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()> {
+    if opts.backup == BackupMode::SimpleBackup
+        && source_is_target_backup(source, target, &opts.suffix)
+    {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             format!(
@@ -266,7 +302,7 @@ fn handle_two_paths(source: &Path, target: &Path, b: &Behavior) -> UResult<()> {
     if (source.eq(target)
         || are_hardlinks_to_same_file(source, target)
         || are_hardlinks_or_one_way_symlink_to_same_file(source, target))
-        && b.backup == BackupMode::NoBackup
+        && opts.backup == BackupMode::NoBackup
     {
         if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
             return Err(
@@ -278,19 +314,19 @@ fn handle_two_paths(source: &Path, target: &Path, b: &Behavior) -> UResult<()> {
     }
 
     if target.is_dir() {
-        if b.no_target_dir {
+        if opts.no_target_dir {
             if source.is_dir() {
-                rename(source, target, b, None).map_err_context(|| {
+                rename(source, target, opts, None).map_err_context(|| {
                     format!("cannot move {} to {}", source.quote(), target.quote())
                 })
             } else {
                 Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
             }
         } else {
-            move_files_into_dir(&[source.to_path_buf()], target, b)
+            move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
     } else if target.exists() && source.is_dir() {
-        match b.overwrite {
+        match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}? ", target.quote()) {
@@ -305,12 +341,12 @@ fn handle_two_paths(source: &Path, target: &Path, b: &Behavior) -> UResult<()> {
         )
         .into())
     } else {
-        rename(source, target, b, None).map_err(|e| USimpleError::new(1, format!("{e}")))
+        rename(source, target, opts, None).map_err(|e| USimpleError::new(1, format!("{e}")))
     }
 }
 
-fn handle_multiple_paths(paths: &[PathBuf], b: &Behavior) -> UResult<()> {
-    if b.no_target_dir {
+fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
+    if opts.no_target_dir {
         return Err(UUsageError::new(
             1,
             format!("mv: extra operand {}", paths[2].quote()),
@@ -319,24 +355,29 @@ fn handle_multiple_paths(paths: &[PathBuf], b: &Behavior) -> UResult<()> {
     let target_dir = paths.last().unwrap();
     let sources = &paths[..paths.len() - 1];
 
-    move_files_into_dir(sources, target_dir, b)
+    move_files_into_dir(sources, target_dir, opts)
 }
 
-fn exec(files: &[OsString], b: &Behavior) -> UResult<()> {
-    let paths = parse_paths(files, b);
+/// Execute mv command, moving 'source' to 'target', where
+/// 'target' is a directory. If 'target' does not exist, and source is a single
+/// file or directory, then 'source' will be renamed to 'target'.
+///
+/// returns MvError | UError
+pub fn exec_mv(files: &[OsString], opts: &Options) -> UResult<()> {
+    let paths = parse_paths(files, opts);
 
-    if let Some(ref name) = b.target_dir {
-        return move_files_into_dir(&paths, &PathBuf::from(name), b);
+    if let Some(ref name) = opts.target_dir {
+        return move_files_into_dir(&paths, &PathBuf::from(name), opts);
     }
 
     match paths.len() {
-        2 => handle_two_paths(&paths[0], &paths[1], b),
-        _ => handle_multiple_paths(&paths, b),
+        2 => handle_two_paths(&paths[0], &paths[1], opts),
+        _ => handle_multiple_paths(&paths, opts),
     }
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
+fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> UResult<()> {
     if !target_dir.is_dir() {
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
@@ -345,7 +386,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         .canonicalize()
         .unwrap_or_else(|_| target_dir.to_path_buf());
 
-    let multi_progress = b.progress_bar.then(MultiProgress::new);
+    let multi_progress = opts.progress_bar.then(MultiProgress::new);
 
     let count_progress = if let Some(ref multi_progress) = multi_progress {
         if files.len() > 1 {
@@ -396,24 +437,37 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
             }
         }
 
-        match rename(sourcepath, &targetpath, b, multi_progress.as_ref()) {
+        match rename(sourcepath, &targetpath, opts, multi_progress.as_ref()) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
-                let e = e.map_err_context(|| {
-                    format!(
-                        "cannot move {} to {}",
-                        sourcepath.quote(),
-                        targetpath.quote()
-                    )
-                });
-                match multi_progress {
-                    Some(ref pb) => pb.suspend(|| show!(e)),
-                    None => show!(e),
-                };
+                match e.raw_os_error() {
+                    Some(ENOTEMPTY) => {
+                        // The error message was changed to match GNU's decision
+                        // when an issue was filed. These will match when merged upstream.
+                        let e = e
+                            .map_err_context(|| format!("cannot overwrite {}", targetpath.quote()));
+                        match multi_progress {
+                            Some(ref pb) => pb.suspend(|| show!(e)),
+                            None => show!(e),
+                        };
+                    }
+                    _ => {
+                        let e = e.map_err_context(|| {
+                            format!(
+                                "cannot move {} to {}",
+                                sourcepath.quote(),
+                                targetpath.quote()
+                            )
+                        });
+                        match multi_progress {
+                            Some(ref pb) => pb.suspend(|| show!(e)),
+                            None => show!(e),
+                        };
+                    }
+                }
             }
             Ok(()) => (),
         }
-
         if let Some(ref pb) = count_progress {
             pb.inc(1);
         }
@@ -424,29 +478,30 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
 fn rename(
     from: &Path,
     to: &Path,
-    b: &Behavior,
+    opts: &Options,
     multi_progress: Option<&MultiProgress>,
 ) -> io::Result<()> {
     let mut backup_path = None;
 
     if to.exists() {
-        if b.update == UpdateMode::ReplaceIfOlder && b.overwrite == OverwriteMode::Interactive {
+        if opts.update == UpdateMode::ReplaceIfOlder && opts.overwrite == OverwriteMode::Interactive
+        {
             // `mv -i --update old new` when `new` exists doesn't move anything
             // and exit with 0
             return Ok(());
         }
 
-        if b.update == UpdateMode::ReplaceNone {
+        if opts.update == UpdateMode::ReplaceNone {
             return Ok(());
         }
 
-        if (b.update == UpdateMode::ReplaceIfOlder)
+        if (opts.update == UpdateMode::ReplaceIfOlder)
             && fs::metadata(from)?.modified()? <= fs::metadata(to)?.modified()?
         {
             return Ok(());
         }
 
-        match b.overwrite {
+        match opts.overwrite {
             OverwriteMode::NoClobber => {
                 let err_msg = format!("not replacing {}", to.quote());
                 return Err(io::Error::new(io::ErrorKind::Other, err_msg));
@@ -459,7 +514,7 @@ fn rename(
             OverwriteMode::Force => {}
         };
 
-        backup_path = backup_control::get_backup_path(b.backup, to, &b.suffix);
+        backup_path = backup_control::get_backup_path(opts.backup, to, &opts.suffix);
         if let Some(ref backup_path) = backup_path {
             rename_with_fallback(to, backup_path, multi_progress)?;
         }
@@ -472,14 +527,14 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
+                return Err(io::Error::from_raw_os_error(ENOTEMPTY));
             }
         }
     }
 
     rename_with_fallback(from, to, multi_progress)?;
 
-    if b.verbose {
+    if opts.verbose {
         let message = match backup_path {
             Some(path) => format!(
                 "renamed {} -> {} (backup: {})",
