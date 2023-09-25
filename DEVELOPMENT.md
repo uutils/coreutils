@@ -10,7 +10,7 @@ For this guide we assume that you already have GitHub account and have `git` and
 Before you start working on coreutils, please follow these steps:
 
 1. Fork the [coreutils repository](https://github.com/uutils/coreutils) to your GitHub account.
-***Tip:*** See [this GitHub guide](https://docs.github.com/en/get-started/quickstart/fork-a-repo) for more information on this step
+***Tip:*** See [this GitHub guide](https://docs.github.com/en/get-started/quickstart/fork-a-repo) for more information on this step.
 2. Clone that fork to your local development environment:
 
 ```shell
@@ -29,9 +29,9 @@ The next section [Testing](#testing) will explain how to run those checks locall
 
 [Install Rust](https://www.rust-lang.org/tools/install)
 
-If you're using rustup to install and manage your Rust toolchains, `clippy` and `rustfmt` are usually already installed. If you are using one of the alternative methods, please make sure to install them manually. See following sub-sections for their usage: [clippy](#clippy) [rustfmt](#rustfmt)
+If you're using rustup to install and manage your Rust toolchains, `clippy` and `rustfmt` are usually already installed. If you are using one of the alternative methods, please make sure to install them manually. See following sub-sections for their usage: [clippy](#clippy) [rustfmt](#rustfmt).
 
-***Tip*** You might also need to add 'llvm-tools':
+***Tip*** You might also need to add 'llvm-tools' component if you are going to [generate code coverage reports locally](#code-coverage-report):
 
 ```shell
 rustup component add llvm-tools-preview
@@ -39,13 +39,13 @@ rustup component add llvm-tools-preview
 
 ### GNU utils and prerequisites
 
-If you are developing on Linux, most likely you already have all/most GNU utilities and prerequisites installed
+If you are developing on Linux, most likely you already have all/most GNU utilities and prerequisites installed.
 
-To make sure, please check GNU coreutils [README-prereq](https://github.com/coreutils/coreutils/blob/master/README-prereq)
+To make sure, please check GNU coreutils [README-prereq](https://github.com/coreutils/coreutils/blob/master/README-prereq).
 
-You will need these to [run uutils against the GNU test suite locally](#comparing-with-gnu)
+You will need these to [run uutils against the GNU test suite locally](#comparing-with-gnu).
 
-For MacOS and Windows platform specific setup please check [MacOS GNU utils](#macos-gnu-utils) and [Windows GNU utils](#windows-gnu-utils) sections respectfully
+For MacOS and Windows platform specific setup please check [MacOS GNU utils](#macos-gnu-utils) and [Windows GNU utils](#windows-gnu-utils) sections respectfully.
 
 ### pre-commit hooks
 
@@ -62,7 +62,7 @@ Your git commits will then automatically be checked. If a check fails, an error
 message will explain why, and your commit will be canceled. You can then make
 the suggested changes, and run `git commit ...` again.
 
-**NOTE: On MacOS** the pre-commit hooks are currently broken. There are workarounds involving switching to unstable nightly Rust and components
+**NOTE: On MacOS** the pre-commit hooks are currently broken. There are workarounds involving switching to unstable nightly Rust and components.
 
 ### clippy
 
@@ -316,14 +316,14 @@ Do not forget to either source updated rc file or restart you terminal session t
 
 ### MSVC build tools
 
-On Windows you'll need the MSVC build tools for Visual Studio 2013 or later
+On Windows you'll need the MSVC build tools for Visual Studio 2013 or later.
 
-If you are using `rustup-init.exe` to install Rust toolchain, it will guide you through the process of downloading and installing these prerequisites
+If you are using `rustup-init.exe` to install Rust toolchain, it will guide you through the process of downloading and installing these prerequisites.
 
-Otherwise please follow [this guide](https://learn.microsoft.com/en-us/windows/dev-environment/rust/setup)
+Otherwise please follow [this guide](https://learn.microsoft.com/en-us/windows/dev-environment/rust/setup).
 
 ### Windows GNU utils
 
 If you have used [Git for Windows](https://gitforwindows.org) to install `git` on you Windows system you might already have some GNU core utilities installed as part of "GNU Bash" included in Git for Windows package, but it is not a complete package. [This article](https://gist.github.com/evanwill/0207876c3243bbb6863e65ec5dc3f058) provides instruction on how to add more to it.
 
-Alternatively you can install [Cygwin](https://www.cygwin.com) and/or use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/compare-versions#whats-new-in-wsl-2) to get access to GNU core utilities on Windows
+Alternatively you can install [Cygwin](https://www.cygwin.com) and/or use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/compare-versions#whats-new-in-wsl-2) to get access to all GNU core utilities on Windows.
