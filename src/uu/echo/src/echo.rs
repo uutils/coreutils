@@ -21,8 +21,24 @@ mod options {
     pub const DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
 }
 
+#[repr(u8)]
+#[derive(Clone, Copy)]
+enum Base {
+    Oct = 8,
+    Hex = 16,
+}
+
+impl Base {
+    fn max_digits(&self) -> u8 {
+        match self {
+            Self::Oct => 3,
+            Self::Hex => 2,
+        }
+    }
+}
+
 /// Parse the numeric part of the `\xHHH` and `\0NNN` escape sequences
-fn parse_code(input: &mut Peekable<Chars>, base: u8, max_digits: u32) -> Option<char> {
+fn parse_code(input: &mut Peekable<Chars>, base: Base) -> Option<char> {
     // All arithmetic on `ret` needs to be wrapping, because octal input can
     // take 3 digits, which is 9 bits, and therefore more than what fits in a
     // `u8`. GNU just seems to wrap these values.
@@ -31,15 +47,15 @@ fn parse_code(input: &mut Peekable<Chars>, base: u8, max_digits: u32) -> Option<
     // `u8::MAX` as unicode.
     let mut ret = input.peek().and_then(|c| c.to_digit(base as u32))? as u8;
 
-    // We can safely ifgnore the None case because we just peeked it.
+    // We can safely ignore the None case because we just peeked it.
     let _ = input.next();
 
-    for _ in 1..max_digits {
+    for _ in 1..base.max_digits() {
         match input.peek().and_then(|c| c.to_digit(base as u32)) {
-            Some(n) => ret = ret.wrapping_mul(base).wrapping_add(n as u8),
+            Some(n) => ret = ret.wrapping_mul(base as u8).wrapping_add(n as u8),
             None => break,
         }
-        // We can safely ifgnore the None case because we just peeked it.
+        // We can safely ignore the None case because we just peeked it.
         let _ = input.next();
     }
 
@@ -58,7 +74,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
         // Note that '0' is intentionally omitted because that
         // would be the \0NNN syntax.
         if let Some('1'..='8') = iter.peek() {
-            if let Some(parsed) = parse_code(&mut iter, 8, 3) {
+            if let Some(parsed) = parse_code(&mut iter, Base::Oct) {
                 write!(output, "{parsed}")?;
                 continue;
             }
@@ -77,14 +93,14 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
                 't' => '\t',
                 'v' => '\x0b',
                 'x' => {
-                    if let Some(c) = parse_code(&mut iter, 16, 2) {
+                    if let Some(c) = parse_code(&mut iter, Base::Hex) {
                         c
                     } else {
                         write!(output, "\\")?;
                         'x'
                     }
                 }
-                '0' => parse_code(&mut iter, 8, 3).unwrap_or('\0'),
+                '0' => parse_code(&mut iter, Base::Oct).unwrap_or('\0'),
                 c => {
                     write!(output, "\\")?;
                     c

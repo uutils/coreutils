@@ -270,9 +270,9 @@ fn old_octal_syntax() {
 
     new_ucmd!()
         .arg("-e")
-        .arg("\\101foo")
+        .arg("\\101 foo")
         .succeeds()
-        .stdout_is("Afoo\n");
+        .stdout_is("A foo\n");
 
     new_ucmd!()
         .arg("-e")
