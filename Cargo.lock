@@ -149,9 +149,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.3.3"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "630be753d4e58660abd17930c71b647fe46c27ea6b63cc59e1e3851406972e42"
+checksum = "b4682ae6287fcf752ecaabbfcc7b6f9b72aa33933dc23a554d853aea8eea8635"
 
 [[package]]
 name = "blake2b_simd"
@@ -640,7 +640,7 @@ version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f476fe445d41c9e991fd07515a6f463074b782242ccf4a5b7b1d1012e70824df"
 dependencies = [
- "bitflags 2.3.3",
+ "bitflags 2.4.0",
  "crossterm_winapi",
  "libc",
  "mio",
@@ -805,11 +805,11 @@ dependencies = [
 
 [[package]]
 name = "exacl"
-version = "0.10.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cfeb22a59deb24c3262c43ffcafd1eb807180f371f9fcc99098d181b5d639be"
+checksum = "c695152c1c2777163ea93fff517edc6dd1f8fc226c14b0d60cdcde0beb316d9f"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.4.0",
  "log",
  "scopeguard",
  "uuid",
@@ -1340,7 +1340,7 @@ version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
 dependencies = [
- "bitflags 2.3.3",
+ "bitflags 2.4.0",
  "cfg-if",
  "libc",
 ]
@@ -1876,7 +1876,7 @@ version = "0.38.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19ed4fa021d81c8392ce04db050a3da9a60299050b7ae1cf482d862b54a7218f"
 dependencies = [
- "bitflags 2.3.3",
+ "bitflags 2.4.0",
  "errno",
  "libc",
  "linux-raw-sys 0.4.5",
