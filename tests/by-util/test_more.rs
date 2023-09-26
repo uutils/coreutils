@@ -115,6 +115,22 @@ fn test_more_invalid_file_perms() {
 }
 
 #[test]
+fn test_more_error_on_single_arg() {
+    if std::io::stdout().is_terminal() {
+        let ts = TestScenario::new("more");
+        ts.fixtures.mkdir_all("folder");
+        ts.ucmd()
+            .arg("folder")
+            .fails()
+            .stderr_contains("is a directory");
+        ts.ucmd()
+            .arg("file1")
+            .fails()
+            .stderr_contains("No such file or directory");
+    }
+}
+
+#[test]
 fn test_more_error_on_multiple_files() {
     if std::io::stdout().is_terminal() {
         let ts = TestScenario::new("more");
