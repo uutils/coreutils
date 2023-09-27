@@ -1494,7 +1494,7 @@ fn test_cp_preserve_links_case_5() {
         let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
         let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-        assert_eq!(metadata_a.ino(), metadata_b.ino());
+        assert_ne!(metadata_a.ino(), metadata_b.ino());
     }
 }
 

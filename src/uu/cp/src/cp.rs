@@ -931,23 +931,33 @@ impl Options {
         };
 
         // Parse attributes to preserve
-        let attributes = if let Some(attribute_strs) = matches.get_many::<String>(options::PRESERVE)
-        {
-            if attribute_strs.len() == 0 {
+        let mut attributes =
+            if let Some(attribute_strs) = matches.get_many::<String>(options::PRESERVE) {
+                if attribute_strs.len() == 0 {
+                    Attributes::DEFAULT
+                } else {
+                    Attributes::parse_iter(attribute_strs)?
+                }
+            } else if matches.get_flag(options::ARCHIVE) {
+                // --archive is used. Same as --preserve=all
+                Attributes::ALL
+            } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
+                Attributes::LINKS
+            } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
                 Attributes::DEFAULT
             } else {
-                Attributes::parse_iter(attribute_strs)?
+                Attributes::NONE
+            };
+
+        // handling no-preserve options and adjusting the attributes
+        if let Some(attribute_strs) = matches.get_many::<String>(options::NO_PRESERVE) {
+            if attribute_strs.len() > 0 {
+                let no_preserve_attributes = Attributes::parse_iter(attribute_strs)?;
+                if matches!(no_preserve_attributes.links, Preserve::Yes { .. }) {
+                    attributes.links = Preserve::No;
+                }
             }
-        } else if matches.get_flag(options::ARCHIVE) {
-            // --archive is used. Same as --preserve=all
-            Attributes::ALL
-        } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
-            Attributes::LINKS
-        } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
-            Attributes::DEFAULT
-        } else {
-            Attributes::NONE
-        };
+        }
 
         #[cfg(not(feature = "feat_selinux"))]
         if let Preserve::Yes { required } = attributes.context {
