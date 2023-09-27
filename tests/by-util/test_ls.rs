@@ -1582,6 +1582,18 @@ fn test_ls_sort_name() {
         .arg("-A")
         .succeeds()
         .stdout_is(".a\n.b\na\nb\n");
+
+    let scene_capitalization = TestScenario::new(util_name!());
+    let at = &scene_capitalization.fixtures;
+    at.touch("ctest");
+    at.touch("atest");
+    at.touch("Btest");
+
+    scene_capitalization
+        .ucmd()
+        .arg("--sort=name")
+        .succeeds()
+        .stdout_is("atest\nBtest\nctest\n");
 }
 
 #[test]
