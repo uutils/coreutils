@@ -141,21 +141,34 @@ pub fn uu_app() -> Command {
  */
 fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
     for dir in dirs {
-        // Special case to match GNU's behavior:
-        // mkdir -p foo/. should work and just create foo/
-        // std::fs::create_dir("foo/."); fails in pure Rust
-        let path = if recursive {
-            dir_strip_dot_for_creation(&PathBuf::from(dir))
-        } else {
-            // Normal case
-            PathBuf::from(dir)
-        };
-        show_if_err!(mkdir(path.as_path(), recursive, mode, verbose));
+        let path_buf = PathBuf::from(dir);
+        let path = path_buf.as_path();
+
+        show_if_err!(mkdir(path, recursive, mode, verbose));
     }
     Ok(())
 }
 
-fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+/// Create directory at a given `path`.
+///
+/// ## Options
+///
+/// * `recursive` --- create parent directories for the `path`, if they do not
+///     exist.
+/// * `mode` --- file mode for the directories (not implemented on windows).
+/// * `verbose` --- print a message for each printed directory.
+///
+/// ## Trailing dot
+///
+/// To match the GNU behavior, a path with the last directory being a single dot
+/// (like `some/path/to/.`) is created (with the dot stripped).
+pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+    // Special case to match GNU's behavior:
+    // mkdir -p foo/. should work and just create foo/
+    // std::fs::create_dir("foo/."); fails in pure Rust
+    let path_buf = dir_strip_dot_for_creation(path);
+    let path = path_buf.as_path();
+
     create_dir(path, recursive, verbose, false)?;
     chmod(path, mode)
 }
