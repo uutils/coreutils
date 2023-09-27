@@ -11,8 +11,6 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_default_mode() {
-    // test the default mode
-
     // accept some reasonable default
     new_ucmd!().args(&["dir/file"]).succeeds().no_stdout();
 
@@ -34,7 +32,8 @@ fn test_default_mode() {
     new_ucmd!()
         .args(&["dir".repeat(libc::PATH_MAX as usize + 1)])
         .fails()
-        .no_stdout();
+        .no_stdout()
+        .stderr_contains(format!("pathchk: limit {} exceeded", libc::PATH_MAX));
 
     // fail on long filename
     new_ucmd!()
@@ -43,13 +42,12 @@ fn test_default_mode() {
             "file".repeat(libc::FILENAME_MAX as usize + 1)
         )])
         .fails()
-        .no_stdout();
+        .no_stdout()
+        .stderr_contains(format!("pathchk: limit {} exceeded", libc::FILENAME_MAX));
 }
 
 #[test]
 fn test_posix_mode() {
-    // test the posix mode
-
     // accept some reasonable default
     new_ucmd!().args(&["-p", "dir/file"]).succeeds().no_stdout();
 
@@ -57,25 +55,26 @@ fn test_posix_mode() {
     new_ucmd!()
         .args(&["-p", "dir".repeat(libc::PATH_MAX as usize + 1).as_str()])
         .fails()
-        .no_stdout();
+        .no_stdout()
+        .stderr_contains("pathchk: limit 255 exceeded");
 
     // fail on long filename
     new_ucmd!()
-        .args(&[
-            "-p",
-            format!("dir/{}", "file".repeat(libc::FILENAME_MAX as usize + 1)).as_str(),
-        ])
+        .args(&["-p", "dir/123456789012345"])
         .fails()
-        .no_stdout();
+        .no_stdout()
+        .stderr_contains("pathchk: limit 14 exceeded by length 15");
 
     // fail on non-portable chars
-    new_ucmd!().args(&["-p", "dir#/$file"]).fails().no_stdout();
+    new_ucmd!()
+        .args(&["-p", "dir#/$file"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("pathchk: nonportable character '#'");
 }
 
 #[test]
 fn test_posix_special() {
-    // test the posix special mode
-
     // accept some reasonable default
     new_ucmd!().args(&["-P", "dir/file"]).succeeds().no_stdout();
 
@@ -95,7 +94,8 @@ fn test_posix_special() {
     new_ucmd!()
         .args(&["-P", "dir".repeat(libc::PATH_MAX as usize + 1).as_str()])
         .fails()
-        .no_stdout();
+        .no_stdout()
+        .stderr_contains(format!("pathchk: limit {} exceeded", libc::PATH_MAX));
 
     // fail on long filename
     new_ucmd!()
@@ -104,19 +104,26 @@ fn test_posix_special() {
             format!("dir/{}", "file".repeat(libc::FILENAME_MAX as usize + 1)).as_str(),
         ])
         .fails()
-        .no_stdout();
+        .no_stdout()
+        .stderr_contains(format!("pathchk: limit {} exceeded", libc::FILENAME_MAX));
 
     // fail on leading hyphen char
-    new_ucmd!().args(&["-P", "dir/-file"]).fails().no_stdout();
+    new_ucmd!()
+        .args(&["-P", "dir/-file"])
+        .fails()
+        .no_stdout()
+        .stderr_is("pathchk: leading '-' in a component of file name '-file'\n");
 
     // fail on empty path
-    new_ucmd!().args(&["-P", ""]).fails().no_stdout();
+    new_ucmd!()
+        .args(&["-P", ""])
+        .fails()
+        .no_stdout()
+        .stderr_is("pathchk: empty file name\n");
 }
 
 #[test]
 fn test_posix_all() {
-    // test the posix special mode
-
     // accept some reasonable default
     new_ucmd!()
         .args(&["-p", "-P", "dir/file"])
@@ -137,37 +144,45 @@ fn test_posix_all() {
             "dir".repeat(libc::PATH_MAX as usize + 1).as_str(),
         ])
         .fails()
-        .no_stdout();
+        .no_stdout()
+        .stderr_contains("pathchk: limit 255 exceeded");
 
     // fail on long filename
     new_ucmd!()
-        .args(&[
-            "-p",
-            "-P",
-            format!("dir/{}", "file".repeat(libc::FILENAME_MAX as usize + 1)).as_str(),
-        ])
+        .args(&["-p", "-P", "dir/123456789012345"])
         .fails()
-        .no_stdout();
+        .no_stdout()
+        .stderr_contains("pathchk: limit 14 exceeded by length 15");
 
     // fail on non-portable chars
     new_ucmd!()
         .args(&["-p", "-P", "dir#/$file"])
         .fails()
-        .no_stdout();
+        .no_stdout()
+        .stderr_is("pathchk: nonportable character '#' in file name 'dir#'\n");
 
     // fail on leading hyphen char
     new_ucmd!()
         .args(&["-p", "-P", "dir/-file"])
         .fails()
-        .no_stdout();
+        .no_stdout()
+        .stderr_is("pathchk: leading '-' in a component of file name '-file'\n");
 
     // fail on empty path
-    new_ucmd!().args(&["-p", "-P", ""]).fails().no_stdout();
+    new_ucmd!()
+        .args(&["-p", "-P", ""])
+        .fails()
+        .no_stdout()
+        .stderr_is("pathchk: empty file name\n");
 }
 
 #[test]
 fn test_args_parsing() {
     // fail on no args
     let empty_args: [String; 0] = [];
-    new_ucmd!().args(&empty_args).fails().no_stdout();
+    new_ucmd!()
+        .args(&empty_args)
+        .fails()
+        .no_stdout()
+        .stderr_contains("pathchk: missing operand");
 }
