@@ -69,28 +69,13 @@ fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberErr
         }
         Err(_) => {
             // Possibly "NaN" or "inf".
-            if let Ok(num) = f32::from_str(s) {
-                // pattern matching on floating point literal is not encouraged 'https://github.com/rust-lang/rust/issues/41620'
-                if num == f32::INFINITY {
-                    Ok(PreciseNumber::new(
-                        Number::Float(ExtendedBigDecimal::Infinity),
-                        0,
-                        0,
-                    ))
-                } else if num == f32::NEG_INFINITY {
-                    Ok(PreciseNumber::new(
-                        Number::Float(ExtendedBigDecimal::MinusInfinity),
-                        0,
-                        0,
-                    ))
-                } else if num.is_nan() {
-                    Err(ParseNumberError::Nan)
-                } else {
-                    Err(ParseNumberError::Float)
-                }
-            } else {
-                Err(ParseNumberError::Float)
-            }
+            let float_val = match s.to_ascii_lowercase().as_str() {
+                "inf" | "infinity" => ExtendedBigDecimal::Infinity,
+                "-inf" | "-infinity" => ExtendedBigDecimal::MinusInfinity,
+                "nan" | "-nan" => return Err(ParseNumberError::Nan),
+                _ => return Err(ParseNumberError::Float),
+            };
+            Ok(PreciseNumber::new(Number::Float(float_val), 0, 0))
         }
     }
 }
