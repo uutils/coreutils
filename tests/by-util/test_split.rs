@@ -1483,3 +1483,230 @@ fn test_split_non_utf8_argument_windows() {
         .fails()
         .stderr_contains("error: invalid UTF-8 was detected in one or more arguments");
 }
+
+// Test '--separator' / '-t' option following GNU tests example
+// test separators: '\n' , '\0' , ';'
+// test with '--lines=2' , '--line-bytes=4' , '--number=l/3' , '--number=r/3' , '--number=l/1/3' , '--number=r/1/3'
+#[test]
+fn test_split_separator_nl_lines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--lines=2", "-t", "\n"])
+        .pipe_in("1\n2\n3\n4\n5\n")
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1\n2\n");
+    assert_eq!(file_read(&at, "xab"), "3\n4\n");
+    assert_eq!(file_read(&at, "xac"), "5\n");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_nl_line_bytes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--line-bytes=4", "-t", "\n"])
+        .pipe_in("1\n2\n3\n4\n5\n")
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1\n2\n");
+    assert_eq!(file_read(&at, "xab"), "3\n4\n");
+    assert_eq!(file_read(&at, "xac"), "5\n");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_nl_number_l() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--number=l/3", "--separator=\n", "fivelines.txt"])
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1\n2\n");
+    assert_eq!(file_read(&at, "xab"), "3\n4\n");
+    assert_eq!(file_read(&at, "xac"), "5\n");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_nl_number_r() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--number=r/3", "--separator=\n", "fivelines.txt"])
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1\n4\n");
+    assert_eq!(file_read(&at, "xab"), "2\n5\n");
+    assert_eq!(file_read(&at, "xac"), "3\n");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_nul_lines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--lines=2", "-t", "\\0", "separator_nul.txt"])
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1\02\0");
+    assert_eq!(file_read(&at, "xab"), "3\04\0");
+    assert_eq!(file_read(&at, "xac"), "5\0");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_nul_line_bytes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--line-bytes=4", "-t", "\\0", "separator_nul.txt"])
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1\02\0");
+    assert_eq!(file_read(&at, "xab"), "3\04\0");
+    assert_eq!(file_read(&at, "xac"), "5\0");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_nul_number_l() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--number=l/3", "--separator=\\0", "separator_nul.txt"])
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1\02\0");
+    assert_eq!(file_read(&at, "xab"), "3\04\0");
+    assert_eq!(file_read(&at, "xac"), "5\0");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_nul_number_r() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--number=r/3", "--separator=\\0", "separator_nul.txt"])
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1\04\0");
+    assert_eq!(file_read(&at, "xab"), "2\05\0");
+    assert_eq!(file_read(&at, "xac"), "3\0");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_semicolon_lines() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--lines=2", "-t", ";", "separator_semicolon.txt"])
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1;2;");
+    assert_eq!(file_read(&at, "xab"), "3;4;");
+    assert_eq!(file_read(&at, "xac"), "5;");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_semicolon_line_bytes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--line-bytes=4", "-t", ";", "separator_semicolon.txt"])
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1;2;");
+    assert_eq!(file_read(&at, "xab"), "3;4;");
+    assert_eq!(file_read(&at, "xac"), "5;");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_semicolon_number_l() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--number=l/3", "--separator=;", "separator_semicolon.txt"])
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1;2;");
+    assert_eq!(file_read(&at, "xab"), "3;4;");
+    assert_eq!(file_read(&at, "xac"), "5;");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_semicolon_number_r() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--number=r/3", "--separator=;", "separator_semicolon.txt"])
+        .succeeds();
+
+    assert_eq!(file_read(&at, "xaa"), "1;4;");
+    assert_eq!(file_read(&at, "xab"), "2;5;");
+    assert_eq!(file_read(&at, "xac"), "3;");
+    assert!(!at.plus("xad").exists());
+}
+
+#[test]
+fn test_split_separator_semicolon_number_kth_l() {
+    new_ucmd!()
+        .args(&["--number=l/1/3", "--separator=;", "separator_semicolon.txt"])
+        .succeeds()
+        .stdout_only("1;2;");
+}
+
+#[test]
+fn test_split_separator_semicolon_number_kth_r() {
+    new_ucmd!()
+        .args(&["--number=r/1/3", "--separator=;", "separator_semicolon.txt"])
+        .succeeds()
+        .stdout_only("1;4;");
+}
+
+// Test error edge cases for separator option
+#[test]
+fn test_split_separator_invalid_usage() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["-t"])
+        .pipe_in("a\nb\nc")
+        .fails()
+        .no_stdout()
+        .stderr_contains(
+            "error: a value is required for '--separator <SEP>' but none was supplied",
+        );
+    scene
+        .ucmd()
+        .args(&["--separator=xx"])
+        .pipe_in("a\nb\nc")
+        .fails()
+        .no_stdout()
+        .stderr_contains("split: multi-character separator");
+    scene
+        .ucmd()
+        .args(&["-ta", "-tb"])
+        .pipe_in("a\nb\nc")
+        .fails()
+        .no_stdout()
+        .stderr_contains("error: the argument '--separator <SEP>' cannot be used multiple times");
+    scene
+        .ucmd()
+        .args(&["-t'\n'", "-tb"])
+        .pipe_in("a\nb\nc")
+        .fails()
+        .no_stdout()
+        .stderr_contains("error: the argument '--separator <SEP>' cannot be used multiple times");
+}
+
+// Test using same separator multiple times
+#[test]
+fn test_split_separator_same_multiple() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["--separator=:", "--separator=:"])
+        .pipe_in("a:b:c:d:")
+        .succeeds();
+    scene
+        .ucmd()
+        .args(&["-t:", "--separator=:"])
+        .pipe_in("a:b:c:d:")
+        .succeeds();
+    scene
+        .ucmd()
+        .args(&["-t", ":", "-t", ":"])
+        .pipe_in("a:b:c:d:")
+        .succeeds();
+    scene
+        .ucmd()
+        .args(&["-t:", "-t:", "-t,"])
+        .pipe_in("a:b:c:d:")
+        .fails();
+}
