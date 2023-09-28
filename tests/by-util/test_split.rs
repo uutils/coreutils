@@ -1691,22 +1691,18 @@ fn test_split_separator_same_multiple() {
     let scene = TestScenario::new(util_name!());
     scene
         .ucmd()
-        .args(&["--separator=:", "--separator=:"])
-        .pipe_in("a:b:c:d:")
+        .args(&["--separator=:", "--separator=:", "fivelines.txt"])
         .succeeds();
     scene
         .ucmd()
-        .args(&["-t:", "--separator=:"])
-        .pipe_in("a:b:c:d:")
+        .args(&["-t:", "--separator=:", "fivelines.txt"])
         .succeeds();
     scene
         .ucmd()
-        .args(&["-t", ":", "-t", ":"])
-        .pipe_in("a:b:c:d:")
+        .args(&["-t", ":", "-t", ":", "fivelines.txt"])
         .succeeds();
     scene
         .ucmd()
-        .args(&["-t:", "-t:", "-t,"])
-        .pipe_in("a:b:c:d:")
+        .args(&["-t:", "-t:", "-t,", "fivelines.txt"])
         .fails();
 }
