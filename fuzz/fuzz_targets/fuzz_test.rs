@@ -12,8 +12,10 @@ use rand::seq::SliceRandom;
 use rand::Rng;
 use std::ffi::OsString;
 
-use libc::{dup, dup2, STDOUT_FILENO};
 use std::process::Command;
+
+mod fuzz_common;
+use crate::fuzz_common::generate_and_run_uumain;
 
 #[derive(PartialEq, Debug, Clone)]
 enum ArgType {
@@ -26,8 +28,11 @@ enum ArgType {
     // Add any other types as needed
 }
 
+static CMD_PATH: &str = "/usr/bin/test";
+
 fn run_gnu_test(args: &[OsString]) -> Result<(String, i32), std::io::Error> {
-    let mut command = Command::new("test");
+    let mut command = Command::new(CMD_PATH);
+
     for arg in args {
         command.arg(arg);
     }
@@ -210,58 +215,12 @@ fuzz_target!(|_data: &[u8]| {
     let mut rng = rand::thread_rng();
     let max_args = rng.gen_range(1..=6);
     let mut args = vec![OsString::from("test")];
-    let uumain_exit_status;
 
     for _ in 0..max_args {
         args.push(OsString::from(generate_test_arg()));
     }
 
-    // Save the original stdout file descriptor
-    let original_stdout_fd = unsafe { dup(STDOUT_FILENO) };
-    println!("Running test {:?}", &args[1..]);
-    // Create a pipe to capture stdout
-    let mut pipe_fds = [-1; 2];
-    unsafe { libc::pipe(pipe_fds.as_mut_ptr()) };
-
-    {
-        // Redirect stdout to the write end of the pipe
-        unsafe { dup2(pipe_fds[1], STDOUT_FILENO) };
-
-        // Run uumain with the provided arguments
-        uumain_exit_status = uumain(args.clone().into_iter());
-
-        // Restore original stdout
-        unsafe { dup2(original_stdout_fd, STDOUT_FILENO) };
-        unsafe { libc::close(original_stdout_fd) };
-    }
-    // Close the write end of the pipe
-    unsafe { libc::close(pipe_fds[1]) };
-
-    // Read captured output from the read end of the pipe
-    let mut captured_output = Vec::new();
-    let mut read_buffer = [0; 1024];
-    loop {
-        let bytes_read = unsafe {
-            libc::read(
-                pipe_fds[0],
-                read_buffer.as_mut_ptr() as *mut libc::c_void,
-                read_buffer.len(),
-            )
-        };
-        if bytes_read <= 0 {
-            break;
-        }
-        captured_output.extend_from_slice(&read_buffer[..bytes_read as usize]);
-    }
-
-    // Close the read end of the pipe
-    unsafe { libc::close(pipe_fds[0]) };
-
-    // Convert captured output to a string
-    let my_output = String::from_utf8_lossy(&captured_output)
-        .to_string()
-        .trim()
-        .to_owned();
+    let (rust_output, uumain_exit_status) = generate_and_run_uumain(&mut args, uumain);
 
     // Run GNU test with the provided arguments and compare the output
     match run_gnu_test(&args[1..]) {
@@ -269,10 +228,10 @@ fuzz_target!(|_data: &[u8]| {
             let gnu_output = gnu_output.trim().to_owned();
             println!("gnu_exit_status {}", gnu_exit_status);
             println!("uumain_exit_status {}", uumain_exit_status);
-            if my_output != gnu_output || uumain_exit_status != gnu_exit_status {
+            if rust_output != gnu_output || uumain_exit_status != gnu_exit_status {
                 println!("Discrepancy detected!");
                 println!("Test: {:?}", &args[1..]);
-                println!("My output: {}", my_output);
+                println!("My output: {}", rust_output);
                 println!("GNU output: {}", gnu_output);
                 println!("My exit status: {}", uumain_exit_status);
                 println!("GNU exit status: {}", gnu_exit_status);
