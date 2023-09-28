@@ -28,7 +28,7 @@ enum ArgType {
     // Add any other types as needed
 }
 
-static CMD_PATH: &str = "/usr/bin/test";
+static CMD_PATH: &str = "test";
 
 fn run_gnu_test(args: &[OsString]) -> Result<(String, i32), std::io::Error> {
     let mut command = Command::new(CMD_PATH);
