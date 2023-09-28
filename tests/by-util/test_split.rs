@@ -1528,7 +1528,7 @@ fn test_split_separator_nl_number_l() {
 #[test]
 fn test_split_separator_nl_number_r() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["--number=r/3", "--separator=\n", "fivelines.txt"])
+    ucmd.args(&["--number=r/3", "--separator", "\\n", "fivelines.txt"])
         .succeeds();
 
     assert_eq!(file_read(&at, "xaa"), "1\n4\n");
@@ -1636,7 +1636,12 @@ fn test_split_separator_semicolon_number_r() {
 #[test]
 fn test_split_separator_semicolon_number_kth_l() {
     new_ucmd!()
-        .args(&["--number=l/1/3", "--separator=;", "separator_semicolon.txt"])
+        .args(&[
+            "--number=l/1/3",
+            "--separator",
+            ";",
+            "separator_semicolon.txt",
+        ])
         .succeeds()
         .stdout_only("1;2;");
 }
@@ -1644,7 +1649,12 @@ fn test_split_separator_semicolon_number_kth_l() {
 #[test]
 fn test_split_separator_semicolon_number_kth_r() {
     new_ucmd!()
-        .args(&["--number=r/1/3", "--separator=;", "separator_semicolon.txt"])
+        .args(&[
+            "--number=r/1/3",
+            "--separator",
+            ";",
+            "separator_semicolon.txt",
+        ])
         .succeeds()
         .stdout_only("1;4;");
 }
