@@ -1651,17 +1651,22 @@ fn test_split_separator_semicolon_number_kth_r() {
 
 // Test error edge cases for separator option
 #[test]
-fn test_split_separator_invalid_usage() {
+fn test_split_separator_no_value() {
     let scene = TestScenario::new(util_name!());
     scene
         .ucmd()
         .args(&["-t"])
-        .pipe_in("a\nb\nc\n")
+        .pipe_in("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         .fails()
         .no_stdout()
         .stderr_contains(
             "error: a value is required for '--separator <SEP>' but none was supplied",
         );
+}
+
+#[test]
+fn test_split_separator_invalid_usage() {
+    let scene = TestScenario::new(util_name!());
     scene
         .ucmd()
         .args(&["--separator=xx", "fivelines.txt"])
