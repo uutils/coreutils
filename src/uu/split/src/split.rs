@@ -78,12 +78,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 fn handle_multiple_separator_options(args: &[OsString]) -> Vec<OsString> {
     let mut separator_values: Vec<&str> = vec![];
     let mut preceding_sep_opt_req_value = false;
-    let mut i = -1;
-    let mut slices_to_remove: Vec<i32> = vec![];
+    let mut slices_to_remove: Vec<usize> = vec![];
 
     // collect slices to remove
-    for os_slice in args {
-        i += 1;
+    for (i, os_slice) in args.iter().enumerate() {
+        // i += 1;
         if let Some(slice) = os_slice.to_str() {
             let _val_start: usize;
             if slice.starts_with("-t") {
@@ -134,15 +133,16 @@ fn handle_multiple_separator_options(args: &[OsString]) -> Vec<OsString> {
     }
 
     // filter out duplicates of separator option with the same value
-    i = -1;
+    let mut i = 0;
     args.iter()
         .filter_map(|os_slice| {
-            i += 1;
-            if slices_to_remove.contains(&i) {
+            let filter = if slices_to_remove.contains(&i) {
                 None
             } else {
                 Some(os_slice.to_owned())
-            }
+            };
+            i += 1;
+            filter
         })
         .collect()
 }
@@ -890,22 +890,22 @@ impl Settings {
         }
 
         // Make sure that separator is only one UTF8 character (if specified)
-        let separator = match matches.get_one::<String>(OPT_SEPARATOR) {
-            Some(s) => {
-                if s.chars().count() == 1 {
-                    Some(s.as_bytes()[0])
-                } else {
-                    // handle special cases for '\n' and '\0'
-                    if s == "\\n" {
-                        Some(b'\n')
-                    } else if s == "\\0" {
-                        Some(b'\0')
-                    } else {
-                        return Err(SettingsError::MultiCharacterSeparator(s.to_owned()));
-                    }
+        let mut multi_char_sep = "";
+        let separator = matches
+            .get_one::<String>(OPT_SEPARATOR)
+            .and_then(|s| match s.as_str() {
+                "\\n" => Some(b'\n'),
+                "\\0" => Some(b'\0'),
+                _ if s.chars().count() == 1 => Some(s.as_bytes()[0]),
+                _ => {
+                    multi_char_sep = s;
+                    None
                 }
-            }
-            _ => None,
+            });
+        if multi_char_sep.len() > 1 {
+            return Err(SettingsError::MultiCharacterSeparator(
+                multi_char_sep.to_owned(),
+            ));
         };
 
         let result = Self {

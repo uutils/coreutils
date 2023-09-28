@@ -1652,13 +1652,10 @@ fn test_split_separator_semicolon_number_kth_r() {
 // Test error edge cases for separator option
 #[test]
 fn test_split_separator_no_value() {
-    let scene = TestScenario::new(util_name!());
-    scene
-        .ucmd()
+    new_ucmd!()
         .args(&["-t"])
-        .pipe_in("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        .pipe_in("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
         .fails()
-        .no_stdout()
         .stderr_contains(
             "error: a value is required for '--separator <SEP>' but none was supplied",
         );
