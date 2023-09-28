@@ -19,11 +19,11 @@ use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
-use uucore::backup_control::{self, source_is_target_backup, BackupMode};
+pub use uucore::backup_control::BackupMode;
+use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::fs::{are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file};
-use uucore::libc::ENOTEMPTY;
 use uucore::update_control::{self, UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
@@ -33,12 +33,13 @@ use fs_extra::dir::{
 };
 
 use crate::error::MvError;
+
 /// Options contains all the possible behaviors and flags for mv.
 ///
 /// All options are public so that the options can be programmatically
-/// constructed by other crates, such as nushell. That means that this struct
-/// is part of our public API. It should therefore not be changed without good
-/// reason.
+/// constructed by other crates, such as nushell. That means that this struct is
+/// part of our public API. It should therefore not be changed without good reason.
+///
 /// The fields are documented with the arguments that determine their value.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Options {
@@ -162,7 +163,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         progress_bar: matches.get_flag(OPT_PROGRESS),
     };
 
-    exec_mv(&files[..], &opts)
+    mv(&files[..], &opts)
 }
 
 pub fn uu_app() -> Command {
@@ -254,7 +255,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-pub fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
+fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     // This does not exactly match the GNU implementation:
     // The GNU mv defaults to Force, but if more than one of the
     // overwrite options are supplied, only the last takes effect.
@@ -358,12 +359,10 @@ fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
     move_files_into_dir(sources, target_dir, opts)
 }
 
-/// Execute mv command, moving 'source' to 'target', where
+/// Execute the mv command. This moves 'source' to 'target', where
 /// 'target' is a directory. If 'target' does not exist, and source is a single
 /// file or directory, then 'source' will be renamed to 'target'.
-///
-/// returns MvError | UError
-pub fn exec_mv(files: &[OsString], opts: &Options) -> UResult<()> {
+pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
     let paths = parse_paths(files, opts);
 
     if let Some(ref name) = opts.target_dir {
@@ -440,31 +439,17 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
         match rename(sourcepath, &targetpath, opts, multi_progress.as_ref()) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
-                match e.raw_os_error() {
-                    Some(ENOTEMPTY) => {
-                        // The error message was changed to match GNU's decision
-                        // when an issue was filed. These will match when merged upstream.
-                        let e = e
-                            .map_err_context(|| format!("cannot overwrite {}", targetpath.quote()));
-                        match multi_progress {
-                            Some(ref pb) => pb.suspend(|| show!(e)),
-                            None => show!(e),
-                        };
-                    }
-                    _ => {
-                        let e = e.map_err_context(|| {
-                            format!(
-                                "cannot move {} to {}",
-                                sourcepath.quote(),
-                                targetpath.quote()
-                            )
-                        });
-                        match multi_progress {
-                            Some(ref pb) => pb.suspend(|| show!(e)),
-                            None => show!(e),
-                        };
-                    }
-                }
+                let e = e.map_err_context(|| {
+                    format!(
+                        "cannot move {} to {}",
+                        sourcepath.quote(),
+                        targetpath.quote()
+                    )
+                });
+                match multi_progress {
+                    Some(ref pb) => pb.suspend(|| show!(e)),
+                    None => show!(e),
+                };
             }
             Ok(()) => (),
         }
@@ -527,7 +512,7 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::from_raw_os_error(ENOTEMPTY));
+                return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
             }
         }
     }
