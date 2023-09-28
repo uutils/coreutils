@@ -56,7 +56,7 @@ const AFTER_HELP: &str = help_section!("after help", "split.md");
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
-    let args = handle_multiple_separator_options(args);
+    let args = handle_multiple_separator_options(&args);
 
     let matches = uu_app().try_get_matches_from(args)?;
 
@@ -75,7 +75,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 /// i.e. `split -t: -t:` will become `split -t:`
 /// However it will leave other values untouched, so
 /// `split -t: -t: -t,` will become `split -t: -t,` and Clap will panic next as it should
-fn handle_multiple_separator_options(args: Vec<OsString>) -> Vec<OsString> {
+fn handle_multiple_separator_options(args: &[OsString]) -> Vec<OsString> {
     let mut separator_values: Vec<&str> = vec![];
     let mut preceding_sep_opt_req_value = false;
     let mut i = -1;
