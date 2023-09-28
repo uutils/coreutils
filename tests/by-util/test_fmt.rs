@@ -48,6 +48,17 @@ fn test_fmt_width_too_big() {
     }
 }
 
+#[test]
+fn test_fmt_invalid_width() {
+    for param in ["-w", "--width"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "invalid"])
+            .fails()
+            .code_is(1)
+            .stderr_contains("invalid value 'invalid'");
+    }
+}
+
 #[ignore]
 #[test]
 fn test_fmt_goal() {
@@ -67,6 +78,17 @@ fn test_fmt_goal_too_big() {
             .fails()
             .code_is(1)
             .stderr_is("fmt: GOAL cannot be greater than WIDTH.\n");
+    }
+}
+
+#[test]
+fn test_fmt_invalid_goal() {
+    for param in ["-g", "--goal"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "invalid"])
+            .fails()
+            .code_is(1)
+            .stderr_contains("invalid value 'invalid'");
     }
 }
 
