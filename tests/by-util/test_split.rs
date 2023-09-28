@@ -1664,7 +1664,8 @@ fn test_split_separator_semicolon_number_kth_r() {
 fn test_split_separator_no_value() {
     new_ucmd!()
         .args(&["-t"])
-        .pipe_in("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+        .ignore_stdin_write_error()
+        .pipe_in("a\n")
         .fails()
         .stderr_contains(
             "error: a value is required for '--separator <SEP>' but none was supplied",
@@ -1676,19 +1677,25 @@ fn test_split_separator_invalid_usage() {
     let scene = TestScenario::new(util_name!());
     scene
         .ucmd()
-        .args(&["--separator=xx", "fivelines.txt"])
+        .args(&["--separator=xx"])
+        .ignore_stdin_write_error()
+        .pipe_in("a\n")
         .fails()
         .no_stdout()
         .stderr_contains("split: multi-character separator");
     scene
         .ucmd()
-        .args(&["-ta", "-tb", "fivelines.txt"])
+        .args(&["-ta", "-tb"])
+        .ignore_stdin_write_error()
+        .pipe_in("a\n")
         .fails()
         .no_stdout()
         .stderr_contains("error: the argument '--separator <SEP>' cannot be used multiple times");
     scene
         .ucmd()
-        .args(&["-t'\n'", "-tb", "fivelines.txt"])
+        .args(&["-t'\n'", "-tb"])
+        .ignore_stdin_write_error()
+        .pipe_in("a\n")
         .fails()
         .no_stdout()
         .stderr_contains("error: the argument '--separator <SEP>' cannot be used multiple times");
