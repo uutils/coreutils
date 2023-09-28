@@ -29,6 +29,7 @@ uucore = { workspace = true, features = [
   "quoting-style",
   "version-cmp",
 ] }
+uu_dircolors = { workspace = true }
 once_cell = { workspace = true }
 selinux = { workspace = true, optional = true }
 

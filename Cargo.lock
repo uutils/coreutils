@@ -2664,6 +2664,7 @@ dependencies = [
  "term_grid",
  "terminal_size 0.3.0",
  "unicode-width",
+ "uu_dircolors",
  "uucore",
 ]
 

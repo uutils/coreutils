@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired subdired
+// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired subdired colorterm dircolor
 
 use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
@@ -14,6 +14,7 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use std::{cell::OnceCell, num::IntErrorKind};
 use std::{collections::HashSet, io::IsTerminal};
+use std::env::VarError;
 
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
@@ -33,8 +34,10 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
+use std::{collections::HashSet, env};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
+use uu_dircolors::DIRCOLORS_CONFIG_FILE;
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -546,19 +549,70 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
     }
 }
 
+/// check if the terminal used in TERM environment variable is part of the allowed list of
+/// terminals in DIRCOLOR config list
+///
+/// # Returns
+///
+/// Boolean
+fn check_if_term_is_allowed_in_dircolors_config_file(
+    dircolors_config: &str,
+    ls_colors_env_variable: Result<String, VarError>,
+    colorterm_env_variable: Result<String, VarError>,
+    term_env_variable: Result<String, VarError>,
+) -> bool {
+    // unset env variables behave like empty ones in LS
+    let ls_colors_missing_or_empty = ls_colors_env_variable.unwrap_or(String::new()).is_empty();
+    let colorterm_missing_or_empty = colorterm_env_variable.unwrap_or(String::new()).is_empty();
+    if ls_colors_missing_or_empty && colorterm_missing_or_empty {
+        let term = term_env_variable.unwrap_or(String::new());
+        let terminal_list = dircolors_config
+            .lines()
+            .filter(|x| x.starts_with("TERM "))
+            .map(|x| x.replace("TERM ", ""))
+            .collect::<Vec<String>>();
+        for allowed_terminal in terminal_list {
+            let glob = match parse_glob::from_str(&allowed_terminal) {
+                Ok(g) => g,
+                Err(_) => {
+                    show_warning!(
+                        "{} in DIRCOLOR terminal list could not be parsed, --color=none applied ",
+                        &allowed_terminal.quote()
+                    );
+                    return false;
+                }
+            };
+
+            if glob.matches(term.as_str()) {
+                return true;
+            }
+        }
+        false
+    } else {
+        true
+    }
+}
+
 /// Extracts the color option to use based on the options provided.
 ///
 /// # Returns
 ///
 /// A boolean representing whether or not to use color.
 fn extract_color(options: &clap::ArgMatches) -> bool {
-    match options.get_one::<String>(options::COLOR) {
-        None => options.contains_id(options::COLOR),
-        Some(val) => match val.as_str() {
-            "" | "always" | "yes" | "force" => true,
-            "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
-            /* "never" | "no" | "none" | */ _ => false,
-        },
+    let dircolors_allowed = check_if_term_is_allowed_in_dircolors_config_file(
+        DIRCOLORS_CONFIG_FILE,
+        env::var("LS_COLORS"),
+        env::var("COLORTERM"),
+        env::var("TERM"),
+    );
+    match options
+        .get_one::<String>(options::COLOR)
+        .unwrap_or(&String::new())
+        .as_str()
+    {
+        "" | "always" | "yes" | "force" => dircolors_allowed,
+        "auto" | "tty" | "if-tty" => dircolors_allowed && std::io::stdout().is_terminal(),
+        /* "never" | "no" | "none" | */ _ => false,
     }
 }
 
@@ -3064,9 +3118,20 @@ fn display_file_name(
     }
 }
 
+// sticky icky
+static FIRST_TIME_COLORING: OnceCell<bool> = OnceCell::new();
+
 fn color_name(name: String, path: &Path, md: Option<&Metadata>, ls_colors: &LsColors) -> String {
     match ls_colors.style_for_path_with_metadata(path, md) {
         Some(style) => {
+            if FIRST_TIME_COLORING.get().is_none() {
+                let _ = FIRST_TIME_COLORING.set(true);
+                return style
+                    .to_nu_ansi_term_style()
+                    .reset_before_style()
+                    .paint(name)
+                    .to_string();
+            }
             return style.to_nu_ansi_term_style().paint(name).to_string();
         }
         None => name,
@@ -3242,4 +3307,105 @@ fn calculate_padding_collection(
     }
 
     padding_collections
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    const ENV_EMPTY: Result<String, VarError> = Ok::<String, VarError>(String::new());
+    const ENV_UNSET: Result<String, VarError> = Err(VarError::NotPresent);
+
+    #[test]
+    fn test_env_against_dircolors_config_invalid_terminal() {
+        assert!(!check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_EMPTY,
+            ENV_EMPTY,
+            Ok("dummy".to_string())
+        ));
+        assert!(!check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_UNSET,
+            ENV_UNSET,
+            Ok("dummy".to_string())
+        ));
+    }
+
+    #[test]
+    fn test_env_against_dircolors_config_valid_terminal() {
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_EMPTY,
+            ENV_EMPTY,
+            Ok("xterm".to_string())
+        ));
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_UNSET,
+            ENV_UNSET,
+            Ok("xterm".to_string())
+        ));
+    }
+
+    #[test]
+    fn test_env_against_dircolors_config_ls_colors_set() {
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_EMPTY,
+            Ok("rs=0:di=01;34:".to_string()),
+            ENV_EMPTY
+        ));
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_UNSET,
+            Ok("rs=0:di=01;34:".to_string()),
+            ENV_UNSET
+        ));
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_UNSET,
+            Ok("rs=0:di=01;34:".to_string()),
+            Ok("xterm".to_string())
+        ));
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            Ok("something".to_string()),
+            Ok("rs=0:di=01;34:".to_string()),
+            Ok("xterm".to_string())
+        ));
+    }
+
+    #[test]
+    fn test_env_against_dircolors_config_colorterm_set() {
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            Ok("something".to_string()),
+            ENV_EMPTY,
+            ENV_EMPTY
+        ));
+        assert!(check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            Ok("something".to_string()),
+            ENV_UNSET,
+            ENV_UNSET
+        ));
+    }
+
+    #[test]
+    fn test_env_against_dircolors_config_nothing_set() {
+        assert!(!check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_EMPTY,
+            ENV_EMPTY,
+            ENV_EMPTY
+        ));
+        assert!(!check_if_term_is_allowed_in_dircolors_config_file(
+            DIRCOLORS_CONFIG_FILE,
+            ENV_UNSET,
+            ENV_UNSET,
+            ENV_UNSET
+        ));
+    }
 }

@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs colorterm
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -866,9 +866,11 @@ fn test_ls_zero() {
 
     scene
         .ucmd()
+        // ls requires either, TERM, LS_COLORS or COLORTERM env variable to be set
+        .env("TERM", "xterm")
         .args(&["--zero", "--color=always"])
         .succeeds()
-        .stdout_only("\x1b[1;34m0-test-zero\x1b[0m\x002-test-zero\x003-test-zero\x00");
+        .stdout_only("\x1b[0m\x1b[01;34m0-test-zero\x1b[0m\x002-test-zero\x003-test-zero\x00");
 
     scene
         .ucmd()
@@ -923,11 +925,11 @@ fn test_ls_zero() {
 
         scene
             .ucmd()
+            // ls requires either, TERM, LS_COLORS or COLORTERM env variable to be set
+            .env("TERM", "xterm")
             .args(&["--zero", "--color=always"])
             .succeeds()
-            .stdout_only(
-                "\x1b[1;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00",
-            );
+            .stdout_only("\x1b[0m\x1b[01;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00");
 
         scene
             .ucmd()
@@ -1087,7 +1089,14 @@ fn test_ls_long_symlink_color() {
     ];
 
     // We are only interested in lines or the ls output that are symlinks. These start with "lrwx".
-    let result = scene.ucmd().arg("-laR").arg("--color").arg(".").succeeds();
+    let result = scene
+        .ucmd()
+        // ls requires either, TERM, LS_COLORS or COLORTERM env variable to be set
+        .env("TERM", "xterm")
+        .arg("-laR")
+        .arg("--color")
+        .arg(".")
+        .succeeds();
     let mut result_lines = result
         .stdout_str()
         .lines()
@@ -1946,19 +1955,29 @@ fn test_ls_color() {
     at.touch(nested_file);
     at.touch("test-color");
 
-    let a_with_colors = "\x1b[1;34ma\x1b[0m";
-    let z_with_colors = "\x1b[1;34mz\x1b[0m";
-    let nested_dir_with_colors = "\x1b[1;34mnested_dir\x1b[0m"; // spell-checker:disable-line
+    let a_with_colors = "\x1b[01;34ma\x1b[0m";
+    let z_with_colors = "\x1b[01;34mz\x1b[0m";
+    let nested_dir_with_colors = "\x1b[01;34mnested_dir\x1b[0m"; // spell-checker:disable-line
 
-    // Color is disabled by default
+    // Color is disabled by default, only when neither TERM, LS_COLORS nor COLORTERM env variable are set
     let result = scene.ucmd().succeeds();
     assert!(!result.stdout_str().contains(a_with_colors));
     assert!(!result.stdout_str().contains(z_with_colors));
+
+    // Color is enabled by default, when either, TERM, LS_COLORS or COLORTERM env variable is set
+    scene
+        .ucmd()
+        .env("TERM", "xterm")
+        .succeeds()
+        .stdout_contains(a_with_colors)
+        .stdout_contains(z_with_colors);
 
     // Color should be enabled
     for param in ["--color", "--col", "--color=always", "--col=always"] {
         scene
             .ucmd()
+            // ls requires either, TERM, LS_COLORS or COLORTERM env variable to be set
+            .env("TERM", "xterm")
             .arg(param)
             .succeeds()
             .stdout_contains(a_with_colors)
@@ -1973,6 +1992,8 @@ fn test_ls_color() {
     // Nested dir should be shown and colored
     scene
         .ucmd()
+        // ls requires either, TERM, LS_COLORS or COLORTERM env variable to be set
+        .env("TERM", "xterm")
         .arg("--color")
         .arg("a")
         .succeeds()
@@ -1990,11 +2011,15 @@ fn test_ls_color() {
     at.touch("b");
     scene
         .ucmd()
+        // ls requires either, TERM, LS_COLORS or COLORTERM env variable to be set
+        .env("TERM", "xterm")
         .arg("--color")
         .arg("-w=15")
         .arg("-C")
         .succeeds()
-        .stdout_only(format!("{a_with_colors}  test-color\nb  {z_with_colors}\n"));
+        .stdout_only(format!(
+            "\x1b[0m{a_with_colors}  test-color\nb  {z_with_colors}\n"
+        ));
 }
 
 #[cfg(unix)]
@@ -3377,11 +3402,20 @@ fn test_ls_dereference_looped_symlinks_recursive() {
 fn test_dereference_dangling_color() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("wat", "nonexistent");
-    let out_exp = ucmd.args(&["--color"]).run().stdout_move_str();
+    let out_exp = ucmd
+        .args(&["--color"])
+        // ls requires either, TERM, LS_COLORS or COLORTERM env variable to be set
+        .env("TERM", "xterm")
+        .run()
+        .stdout_move_str();
+
+    println!("{:?}", out_exp);
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.relative_symlink_file("wat", "nonexistent");
     ucmd.args(&["-L", "--color"])
+        // ls requires either, TERM, LS_COLORS or COLORTERM env variable to be set
+        .env("TERM", "xterm")
         .fails()
         .code_is(1)
         .stderr_contains("No such file or directory")
