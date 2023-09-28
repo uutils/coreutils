@@ -98,9 +98,6 @@ fn handle_multiple_separator_options(args: &[OsString]) -> Vec<OsString> {
                 if slice.starts_with("--separator=") {
                     // concatenated value
                     _val_start = 12;
-                } else if slice.len() > 11 {
-                    // concatenated value
-                    _val_start = 11;
                 } else {
                     // value is in the next slice
                     preceding_sep_opt_req_value = true;
