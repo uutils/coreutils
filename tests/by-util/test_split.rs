@@ -1656,7 +1656,7 @@ fn test_split_separator_invalid_usage() {
     scene
         .ucmd()
         .args(&["-t"])
-        .pipe_in("a\nb\nc")
+        .pipe_in("a\nb\nc\n")
         .fails()
         .no_stdout()
         .stderr_contains(
@@ -1664,22 +1664,19 @@ fn test_split_separator_invalid_usage() {
         );
     scene
         .ucmd()
-        .args(&["--separator=xx"])
-        .pipe_in("a\nb\nc")
+        .args(&["--separator=xx", "fivelines.txt"])
         .fails()
         .no_stdout()
         .stderr_contains("split: multi-character separator");
     scene
         .ucmd()
-        .args(&["-ta", "-tb"])
-        .pipe_in("a\nb\nc")
+        .args(&["-ta", "-tb", "fivelines.txt"])
         .fails()
         .no_stdout()
         .stderr_contains("error: the argument '--separator <SEP>' cannot be used multiple times");
     scene
         .ucmd()
-        .args(&["-t'\n'", "-tb"])
-        .pipe_in("a\nb\nc")
+        .args(&["-t'\n'", "-tb", "fivelines.txt"])
         .fails()
         .no_stdout()
         .stderr_contains("error: the argument '--separator <SEP>' cannot be used multiple times");
