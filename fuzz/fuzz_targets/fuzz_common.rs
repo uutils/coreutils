@@ -5,6 +5,7 @@
 
 use libc::{dup, dup2, STDOUT_FILENO};
 use std::ffi::OsString;
+use std::io;
 use std::process::Command;
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicBool, Once};
@@ -74,4 +75,33 @@ where
         .to_owned();
 
     (my_output, uumain_exit_status)
+}
+
+pub fn run_gnu_cmd(
+    cmd_path: &str,
+    args: &[OsString],
+    check_gnu: bool,
+) -> Result<(String, i32), io::Error> {
+    if check_gnu {
+        is_gnu_cmd(cmd_path)?; // Check if it's a GNU implementation
+    }
+
+    let mut command = Command::new(cmd_path);
+    for arg in args {
+        command.arg(arg);
+    }
+
+    let output = command.output()?;
+    let exit_code = output.status.code().unwrap_or(-1);
+    if output.status.success() || !check_gnu {
+        Ok((
+            String::from_utf8_lossy(&output.stdout).to_string(),
+            exit_code,
+        ))
+    } else {
+        Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("GNU command execution failed with exit code {}", exit_code),
+        ))
+    }
 }

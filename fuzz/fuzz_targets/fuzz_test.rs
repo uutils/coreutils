@@ -12,10 +12,8 @@ use rand::seq::SliceRandom;
 use rand::Rng;
 use std::ffi::OsString;
 
-use std::process::Command;
-
 mod fuzz_common;
-use crate::fuzz_common::generate_and_run_uumain;
+use crate::fuzz_common::{generate_and_run_uumain, run_gnu_cmd};
 
 #[derive(PartialEq, Debug, Clone)]
 enum ArgType {
@@ -29,20 +27,6 @@ enum ArgType {
 }
 
 static CMD_PATH: &str = "test";
-
-fn run_gnu_test(args: &[OsString]) -> Result<(String, i32), std::io::Error> {
-    let mut command = Command::new(CMD_PATH);
-
-    for arg in args {
-        command.arg(arg);
-    }
-    let output = command.output()?;
-    let exit_status = output.status.code().unwrap_or(-1); // Capture the exit status code
-    Ok((
-        String::from_utf8_lossy(&output.stdout).to_string(),
-        exit_status,
-    ))
-}
 
 fn generate_random_string(max_length: usize) -> String {
     let mut rng = rand::thread_rng();
@@ -223,7 +207,7 @@ fuzz_target!(|_data: &[u8]| {
     let (rust_output, uumain_exit_status) = generate_and_run_uumain(&mut args, uumain);
 
     // Run GNU test with the provided arguments and compare the output
-    match run_gnu_test(&args[1..]) {
+    match run_gnu_cmd(CMD_PATH, &args[1..], false) {
         Ok((gnu_output, gnu_exit_status)) => {
             let gnu_output = gnu_output.trim().to_owned();
             println!("gnu_exit_status {}", gnu_exit_status);

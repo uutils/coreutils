@@ -12,34 +12,10 @@ use rand::seq::SliceRandom;
 use rand::Rng;
 use std::ffi::OsString;
 
-use std::process::Command;
 mod fuzz_common;
-use crate::fuzz_common::generate_and_run_uumain;
-use crate::fuzz_common::is_gnu_cmd;
+use crate::fuzz_common::{generate_and_run_uumain, run_gnu_cmd};
 
 static CMD_PATH: &str = "expr";
-
-fn run_gnu_expr(args: &[OsString]) -> Result<(String, i32), std::io::Error> {
-    is_gnu_cmd(CMD_PATH)?; // Check if it's a GNU implementation
-
-    let mut command = Command::new(CMD_PATH);
-    for arg in args {
-        command.arg(arg);
-    }
-    let output = command.output()?;
-    let exit_code = output.status.code().unwrap_or(-1);
-    if output.status.success() {
-        Ok((
-            String::from_utf8_lossy(&output.stdout).to_string(),
-            exit_code,
-        ))
-    } else {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("GNU expr execution failed with exit code {}", exit_code),
-        ))
-    }
-}
 
 fn generate_random_string(max_length: usize) -> String {
     let mut rng = rand::thread_rng();
@@ -111,7 +87,7 @@ fuzz_target!(|_data: &[u8]| {
     let (rust_output, uumain_exit_code) = generate_and_run_uumain(&mut args, uumain);
 
     // Run GNU expr with the provided arguments and compare the output
-    match run_gnu_expr(&args[1..]) {
+    match run_gnu_cmd(CMD_PATH, &args[1..], true) {
         Ok((gnu_output, gnu_exit_code)) => {
             let gnu_output = gnu_output.trim().to_owned();
             if uumain_exit_code != gnu_exit_code {
