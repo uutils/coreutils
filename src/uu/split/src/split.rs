@@ -82,7 +82,7 @@ fn handle_multiple_separator_options(args: &[OsString]) -> Vec<OsString> {
     let mut slices_to_remove: Vec<i32> = vec![];
 
     // collect slices to remove
-    for os_slice in args.iter() {
+    for os_slice in args {
         i += 1;
         if let Some(slice) = os_slice.to_str() {
             let _val_start: usize;
