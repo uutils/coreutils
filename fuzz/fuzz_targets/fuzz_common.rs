@@ -32,7 +32,7 @@ pub fn is_gnu_cmd(cmd_path: &str) -> Result<(), std::io::Error> {
     }
 }
 
-pub fn generate_and_run_uumain<F>(args: &mut Vec<OsString>, uumain_function: F) -> (String, i32)
+pub fn generate_and_run_uumain<F>(args: &[OsString], uumain_function: F) -> (String, i32)
 where
     F: FnOnce(std::vec::IntoIter<OsString>) -> i32,
 {
@@ -45,7 +45,7 @@ where
 
     {
         unsafe { dup2(pipe_fds[1], STDOUT_FILENO) };
-        uumain_exit_status = uumain_function(args.clone().into_iter());
+        uumain_exit_status = uumain_function(args.to_owned().into_iter());
         unsafe { dup2(original_stdout_fd, STDOUT_FILENO) };
         unsafe { libc::close(original_stdout_fd) };
     }

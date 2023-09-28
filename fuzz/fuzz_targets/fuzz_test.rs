@@ -142,7 +142,7 @@ fn generate_test_arg() -> String {
         0 => {
             arg.push_str(&rng.gen_range(-100..=100).to_string());
         }
-        1 | 2 | 3 => {
+        1..=3 => {
             let test_arg = test_args
                 .choose(&mut rng)
                 .expect("Failed to choose a random test argument");
@@ -204,7 +204,7 @@ fuzz_target!(|_data: &[u8]| {
         args.push(OsString::from(generate_test_arg()));
     }
 
-    let (rust_output, uumain_exit_status) = generate_and_run_uumain(&mut args, uumain);
+    let (rust_output, uumain_exit_status) = generate_and_run_uumain(&args, uumain);
 
     // Run GNU test with the provided arguments and compare the output
     match run_gnu_cmd(CMD_PATH, &args[1..], false) {

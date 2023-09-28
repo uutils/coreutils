@@ -84,7 +84,7 @@ fuzz_target!(|_data: &[u8]| {
     let mut args = vec![OsString::from("expr")];
     args.extend(expr.split_whitespace().map(OsString::from));
 
-    let (rust_output, uumain_exit_code) = generate_and_run_uumain(&mut args, uumain);
+    let (rust_output, uumain_exit_code) = generate_and_run_uumain(&args, uumain);
 
     // Run GNU expr with the provided arguments and compare the output
     match run_gnu_cmd(CMD_PATH, &args[1..], true) {
@@ -96,16 +96,16 @@ fuzz_target!(|_data: &[u8]| {
                 println!("GNU code: {}", gnu_exit_code);
                 panic!("Different error codes");
             }
-            if rust_output != gnu_output {
-                println!("Expression: {}", expr);
-                println!("Rust output: {}", rust_output);
-                println!("GNU output: {}", gnu_output);
-                panic!("Different output between Rust & GNU");
-            } else {
+            if rust_output == gnu_output {
                 println!(
                     "Outputs matched for expression: {} => Result: {}",
                     expr, rust_output
                 );
+            } else {
+                println!("Expression: {}", expr);
+                println!("Rust output: {}", rust_output);
+                println!("GNU output: {}", gnu_output);
+                panic!("Different output between Rust & GNU");
             }
         }
         Err(_) => {
