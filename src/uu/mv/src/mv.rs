@@ -23,7 +23,7 @@ use uucore::backup_control::{self, source_is_target_backup, BackupMode};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::fs::{are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file};
-use uucore::libc::ENOTEMPTY;
+use uucore::libc::{EDQUOT, EEXIST, EISDIR, EMLINK, ENOSPC, ENOTEMPTY, ETXTBSY};
 use uucore::update_control::{self, UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
@@ -401,7 +401,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 match e.raw_os_error() {
-                    Some(ENOTEMPTY) => {
+                    Some(ENOTEMPTY | EEXIST | EDQUOT | EISDIR | ENOSPC | EMLINK | ETXTBSY) => {
                         // The error message was changed to match GNU's decision
                         // when an issue was filed. These will match when merged upstream.
                         let e = e
