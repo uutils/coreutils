@@ -82,7 +82,6 @@ fn handle_multiple_separator_options(args: &[OsString]) -> Vec<OsString> {
 
     // collect slices to remove
     for (i, os_slice) in args.iter().enumerate() {
-        // i += 1;
         if let Some(slice) = os_slice.to_str() {
             let _val_start: usize;
             if slice.starts_with("-t") {
