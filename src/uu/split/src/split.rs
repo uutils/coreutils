@@ -11,7 +11,7 @@ mod platform;
 
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command, ValueHint};
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
@@ -56,8 +56,6 @@ const AFTER_HELP: &str = help_section!("after help", "split.md");
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
-    let args = handle_multiple_separator_options(&args);
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     match Settings::from(&matches, &obs_lines) {
@@ -65,82 +63,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
         Err(e) => Err(USimpleError::new(1, format!("{e}"))),
     }
-}
-
-/// If the same separator (with the same value) was used multiple times - `split` should NOT fail
-/// If the separator was used multiple times but with different values - `split` should fail
-/// Unfortunately Clap cannot support both conditions simultaneously, so it is setup to fail on the second condition
-/// For the first condition - this function will find if there are multiple separator options with the same value
-/// and remove duplicates, leaving only one
-/// i.e. `split -t: -t:` will become `split -t:`
-/// However it will leave other values untouched, so
-/// `split -t: -t: -t,` will become `split -t: -t,` and Clap will panic next as it should
-fn handle_multiple_separator_options(args: &[OsString]) -> Vec<OsString> {
-    let mut separator_values: Vec<&str> = vec![];
-    let mut preceding_sep_opt_req_value = false;
-    let mut slices_to_remove: Vec<usize> = vec![];
-
-    // collect slices to remove
-    for (i, os_slice) in args.iter().enumerate() {
-        if let Some(slice) = os_slice.to_str() {
-            let _val_start: usize;
-            if slice.starts_with("-t") {
-                if slice.len() > 2 {
-                    // concatenated value
-                    _val_start = 2;
-                } else {
-                    // value is in the next slice
-                    preceding_sep_opt_req_value = true;
-                    continue;
-                }
-            } else if slice.starts_with("--separator") {
-                if slice.starts_with("--separator=") {
-                    // concatenated value
-                    _val_start = 12;
-                } else {
-                    // value is in the next slice
-                    preceding_sep_opt_req_value = true;
-                    continue;
-                }
-            } else if preceding_sep_opt_req_value {
-                // value (white space between '-t' or '--separator' and value)
-                preceding_sep_opt_req_value = false;
-                if separator_values.contains(&slice) {
-                    // take out both preceding '-t' or '--separator' slice
-                    // and following value slice
-                    slices_to_remove.push(i - 1);
-                    slices_to_remove.push(i);
-                } else {
-                    separator_values.push(slice);
-                }
-                continue;
-            } else {
-                // not separator option related slice
-                continue;
-            }
-            // extract concatenated value
-            let _val = &slice[_val_start..];
-            if separator_values.contains(&_val) {
-                slices_to_remove.push(i);
-            } else {
-                separator_values.push(_val);
-            }
-        }
-    }
-
-    // filter out duplicates of separator option with the same value
-    let mut i = 0;
-    args.iter()
-        .filter_map(|os_slice| {
-            let filter = if slices_to_remove.contains(&i) {
-                None
-            } else {
-                Some(os_slice.to_owned())
-            };
-            i += 1;
-            filter
-        })
-        .collect()
 }
 
 /// Extract obsolete shorthand (if any) for specifying lines in following scenarios (and similar)
@@ -362,7 +284,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILTER)
                 .allow_hyphen_values(true)
                 .value_name("COMMAND")
-                .value_hint(clap::ValueHint::CommandName)
+                .value_hint(ValueHint::CommandName)
                 .help(
                     "write to shell COMMAND; file name is $FILE (Currently not implemented for Windows)",
                 ),
@@ -377,7 +299,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
                 .short('d')
-                .action(clap::ArgAction::SetTrue)
+                .action(ArgAction::SetTrue)
                 .overrides_with_all([
                     OPT_NUMERIC_SUFFIXES,
                     OPT_NUMERIC_SUFFIXES_SHORT,
@@ -404,7 +326,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_HEX_SUFFIXES_SHORT)
                 .short('x')
-                .action(clap::ArgAction::SetTrue)
+                .action(ArgAction::SetTrue)
                 .overrides_with_all([
                     OPT_NUMERIC_SUFFIXES,
                     OPT_NUMERIC_SUFFIXES_SHORT,
@@ -449,6 +371,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_SEPARATOR)
                 .allow_hyphen_values(true)
                 .value_name("SEP")
+                .action(ArgAction::Append)
                 .help("use SEP instead of newline as the record separator; '\0' (zero) specifies the NUL character"),
         )
         .arg(
@@ -466,7 +389,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(ARG_INPUT)
                 .default_value("-")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(ValueHint::FilePath),
         )
         .arg(
             Arg::new(ARG_PREFIX)
@@ -790,7 +713,7 @@ struct Settings {
     filter: Option<String>,
     strategy: Strategy,
     verbose: bool,
-    separator: Option<u8>,
+    separator: u8,
 
     /// Whether to *not* produce empty files when using `-n`.
     ///
@@ -886,22 +809,25 @@ impl Settings {
         }
 
         // Make sure that separator is only one UTF8 character (if specified)
-        let mut multi_char_sep = "";
-        let separator = matches
-            .get_one::<String>(OPT_SEPARATOR)
-            .and_then(|s| match s.as_str() {
-                "\\n" => Some(b'\n'),
-                "\\0" => Some(b'\0'),
-                _ if s.chars().count() == 1 => Some(s.as_bytes()[0]),
-                _ => {
-                    multi_char_sep = s;
-                    None
+        // defaults to '\n' - newline character
+        // If the same separator (the same value) was used multiple times - `split` should NOT fail
+        // If the separator was used multiple times but with different values (not all values are the same) - `split` should fail
+        let separator = match matches.get_many::<String>(OPT_SEPARATOR) {
+            Some(sep_values) => match sep_values.map(|s| s.to_string()).reduce(|cur, nxt| {
+                if cur == nxt {
+                    nxt
+                } else {
+                    cur + &nxt
                 }
-            });
-        if multi_char_sep.len() > 1 {
-            return Err(SettingsError::MultiCharacterSeparator(
-                multi_char_sep.to_owned(),
-            ));
+            }) {
+                Some(s) => match s.as_str() {
+                    "\\0" => b'\0',
+                    _ if s.as_bytes().len() == 1 => s.as_bytes()[0],
+                    _ => return Err(SettingsError::MultiCharacterSeparator(s.to_owned())),
+                },
+                None => b'\n',
+            },
+            None => b'\n',
         };
 
         let result = Self {
@@ -1141,10 +1067,7 @@ impl<'a> Write for LineChunkWriter<'a> {
         // corresponds to the current chunk number.
         let mut prev = 0;
         let mut total_bytes_written = 0;
-        let sep = match &self.settings.separator {
-            Some(s) => *s,
-            _ => b'\n',
-        };
+        let sep = self.settings.separator;
         for i in memchr::memchr_iter(sep, buf) {
             // If we have exceeded the number of lines to write in the
             // current chunk, then start a new chunk and its
@@ -1302,10 +1225,7 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
             }
 
             // Find the first separator (default - newline character) in the buffer.
-            let sep = match &self.settings.separator {
-                Some(s) => *s,
-                _ => b'\n',
-            };
+            let sep = self.settings.separator;
             match memchr::memchr(sep, buf) {
                 // If there is no separator character and the buffer is
                 // not empty, then write as many bytes as we can and
@@ -1619,10 +1539,7 @@ where
 
     let mut num_bytes_remaining_in_current_chunk = chunk_size;
     let mut i = 0;
-    let sep = match settings.separator {
-        Some(s) => s,
-        _ => b'\n',
-    };
+    let sep = settings.separator;
     for line_result in reader.split(sep) {
         let line = line_result.unwrap();
         let maybe_writer = writers.get_mut(i);
@@ -1680,10 +1597,7 @@ where
 
     let mut num_bytes_remaining_in_current_chunk = chunk_size;
     let mut i = 0;
-    let sep = match settings.separator {
-        Some(s) => s,
-        _ => b'\n',
-    };
+    let sep = settings.separator;
     for line_result in reader.split(sep) {
         let line = line_result?;
         let bytes = line.as_slice();
@@ -1739,10 +1653,7 @@ where
     }
 
     let num_chunks: usize = num_chunks.try_into().unwrap();
-    let sep = match settings.separator {
-        Some(s) => s,
-        _ => b'\n',
-    };
+    let sep = settings.separator;
     for (i, line_result) in reader.split(sep).enumerate() {
         let line = line_result.unwrap();
         let maybe_writer = writers.get_mut(i % num_chunks);
@@ -1774,7 +1685,7 @@ where
 /// * [`split_into_n_chunks_by_line_round_robin`], which splits its input in the
 ///   same way, but writes each chunk to its own file.
 fn kth_chunk_by_line_round_robin<R>(
-    _settings: &Settings,
+    settings: &Settings,
     reader: &mut R,
     chunk_number: u64,
     num_chunks: u64,
@@ -1788,10 +1699,7 @@ where
 
     let num_chunks: usize = num_chunks.try_into().unwrap();
     let chunk_number: usize = chunk_number.try_into().unwrap();
-    let sep = match _settings.separator {
-        Some(s) => s,
-        _ => b'\n',
-    };
+    let sep = settings.separator;
     for (i, line_result) in reader.split(sep).enumerate() {
         let line = line_result?;
         let bytes = line.as_slice();

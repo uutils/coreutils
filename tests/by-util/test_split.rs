@@ -1528,7 +1528,7 @@ fn test_split_separator_nl_number_l() {
 #[test]
 fn test_split_separator_nl_number_r() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["--number=r/3", "--separator", "\\n", "fivelines.txt"])
+    ucmd.args(&["--number=r/3", "--separator", "\n", "fivelines.txt"])
         .succeeds();
 
     assert_eq!(file_read(&at, "xaa"), "1\n4\n");
@@ -1690,7 +1690,7 @@ fn test_split_separator_invalid_usage() {
         .pipe_in("a\n")
         .fails()
         .no_stdout()
-        .stderr_contains("error: the argument '--separator <SEP>' cannot be used multiple times");
+        .stderr_contains("split: multi-character separator ''ab''");
     scene
         .ucmd()
         .args(&["-t'\n'", "-tb"])
@@ -1698,7 +1698,7 @@ fn test_split_separator_invalid_usage() {
         .pipe_in("a\n")
         .fails()
         .no_stdout()
-        .stderr_contains("error: the argument '--separator <SEP>' cannot be used multiple times");
+        .stderr_contains("split: multi-character separator");
 }
 
 // Test using same separator multiple times
