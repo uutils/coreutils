@@ -75,10 +75,12 @@ pub fn print_dired_output(
     out: &mut BufWriter<Stdout>,
 ) -> UResult<()> {
     out.flush()?;
+    // TODO manage when -R and the last doesn't have file
+    if dired.padding == 0 && dired.dired_positions.len() >= 1 {
+        print_positions("//DIRED//", &dired.dired_positions);
+    }
     if config.recursive {
         print_positions("//SUBDIRED//", &dired.subdired_positions);
-    } else if dired.padding == 0 {
-        print_positions("//DIRED//", &dired.dired_positions);
     }
     println!("//DIRED-OPTIONS// --quoting-style={}", config.quoting_style);
     Ok(())
