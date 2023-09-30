@@ -3591,6 +3591,7 @@ fn test_ls_dired_recursive_multiple() {
     at.touch("d/d2/a");
     at.touch("d/d2/c2");
     at.touch("d/d1/f1");
+    at.touch("d/d1/file-long");
     let mut cmd = scene.ucmd();
 
     cmd.arg("--dired").arg("-l").arg("-R").arg("d");
@@ -3628,14 +3629,7 @@ fn test_ls_dired_recursive_multiple() {
         .collect();
 
     println!("Extracted filenames: {:?}", filenames);
-    assert_eq!(filenames, vec!["d1", "d2", "f1", "a", "c2"]);
-
-    /*        .stdout_contains("  d/d1:")
-    .stdout_contains("  d/d2:")
-    .stdout_contains("  total 0")
-    .stdout_contains("//DIRED//")
-    .stdout_contains("//SUBDIRED// 2 3")
-    .stdout_contains("//DIRED-OPTIONS// --quoting-style");*/
+    assert_eq!(filenames, vec!["d1", "d2", "f1", "file-long", "a", "c2"]);
 }
 
 #[test]
@@ -3783,5 +3777,8 @@ fn test_ls_subdired_complex() {
         .collect();
 
     println!("Extracted dirnames: {:?}", dirnames);
+    #[cfg(unix)]
     assert_eq!(dirnames, vec!["dir1", "dir1/c2", "dir1/d"]);
+    #[cfg(windows)]
+    assert_eq!(dirnames, vec!["dir1", "dir1\\c2", "dir1\\d"]);
 }
