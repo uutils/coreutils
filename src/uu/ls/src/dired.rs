@@ -59,12 +59,18 @@ pub fn indent(out: &mut BufWriter<Stdout>) -> UResult<()> {
 }
 
 pub fn calculate_subdired(dired: &mut DiredOutput, path_len: usize) {
-    // if we have several directories:
     let offset_from_previous_line = get_offset_from_previous_line(&dired.dired_positions);
 
+    let additional_offset = if dired.subdired_positions.is_empty() {
+        0
+    } else {
+        // if we have several directories: \n\n
+        2
+    };
+
     dired.subdired_positions.push(BytePosition {
-        start: offset_from_previous_line + DIRED_TRAILING_OFFSET,
-        end: offset_from_previous_line + path_len + DIRED_TRAILING_OFFSET,
+        start: offset_from_previous_line + DIRED_TRAILING_OFFSET + additional_offset,
+        end: offset_from_previous_line + path_len + DIRED_TRAILING_OFFSET + additional_offset,
     });
 }
 

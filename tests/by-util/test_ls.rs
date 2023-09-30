@@ -3736,3 +3736,52 @@ fn test_ls_dired_complex() {
     println!("Extracted filenames: {:?}", filenames);
     assert_eq!(filenames, vec!["a1", "a22", "a333", "a4444", "d"]);
 }
+
+#[test]
+fn test_ls_subdired_complex() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir1/d");
+    at.mkdir("dir1/c2");
+    at.touch("dir1/a1");
+    at.touch("dir1/a22");
+    at.touch("dir1/a333");
+    at.touch("dir1/c2/a4444");
+
+    let mut cmd = scene.ucmd();
+    cmd.arg("--dired").arg("-l").arg("-R").arg("dir1");
+    let result = cmd.succeeds();
+
+    let output = result.stdout_str().to_string();
+    println!("Output:\n{}", output);
+
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//SUBDIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+    println!("{:?}", positions);
+    println!("Parsed byte positions: {:?}", positions);
+    assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
+
+    let dirnames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            let dirname =
+                String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec()).unwrap();
+            println!("Extracted dirname: {}", dirname);
+            dirname
+        })
+        .collect();
+
+    println!("Extracted dirnames: {:?}", dirnames);
+    assert_eq!(dirnames, vec!["dir1", "dir1/c2", "dir1/d"]);
+}

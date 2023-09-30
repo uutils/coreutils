@@ -2148,10 +2148,10 @@ fn enter_directory(
                         if config.dired {
                             // We already injected the first dir
                             // Continue with the others
-                            // 4= \n + \n "  "
-                            dired.padding = 4;
+                            // 2 = \n + \n
+                            dired.padding = 2;
                             dired::indent(out)?;
-                            let dir_name_size = e.display_name.len();
+                            let dir_name_size = e.p_buf.to_string_lossy().len();
                             dired::calculate_subdired(dired, dir_name_size);
                             // inject dir name
                             dired::add_dir_name(dir_name_size, dired);
