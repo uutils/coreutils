@@ -1551,6 +1551,32 @@ fn test_cp_preserve_links_case_7() {
 }
 
 #[test]
+#[cfg(all(unix, not(target_os = "freebsd")))]
+fn test_cp_no_preserve_mode_case() {
+    use libc::umask;
+    use uucore::fs as uufs;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.set_mode("a", 0o731);
+    unsafe { umask(0o077) };
+
+    ucmd.arg("-a")
+        .arg("--no-preserve=mode")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    assert!(at.file_exists("b"));
+
+    let metadata_b = std::fs::metadata(at.subdir.join("b")).unwrap();
+    let permission_b = uufs::display_permissions(&metadata_b, false);
+    assert_eq!(permission_b, "rw-------".to_string());
+
+    unsafe { umask(0o022) };
+}
+
+#[test]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
