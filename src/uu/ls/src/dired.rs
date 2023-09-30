@@ -32,17 +32,21 @@ impl fmt::Display for BytePosition {
 // When --dired is used, all lines starts with 2 spaces
 static DIRED_TRAILING_OFFSET: usize = 2;
 
+fn get_offset_from_previous_line(dired_positions: &[BytePosition]) -> usize {
+    if let Some(last_position) = dired_positions.last() {
+        last_position.end + 1
+    } else {
+        0
+    }
+}
+
 /// Calculates the byte positions for DIRED
 pub fn calculate_dired(
     output_display_len: usize,
     dfn_len: usize,
     dired_positions: &[BytePosition],
 ) -> (usize, usize) {
-    let offset_from_previous_line = if let Some(last_position) = dired_positions.last() {
-        last_position.end + 1
-    } else {
-        0
-    };
+    let offset_from_previous_line = get_offset_from_previous_line(dired_positions);
 
     let start = output_display_len + offset_from_previous_line;
     let end = start + dfn_len;
@@ -140,6 +144,16 @@ mod tests {
 
         assert_eq!(start, 24);
         assert_eq!(end, 35);
+    }
+
+    #[test]
+    fn test_get_offset_from_previous_line() {
+        let positions = vec![
+            BytePosition { start: 0, end: 3 },
+            BytePosition { start: 4, end: 7 },
+            BytePosition { start: 8, end: 11 },
+        ];
+        assert_eq!(get_offset_from_previous_line(&positions), 12);
     }
 
     #[test]
