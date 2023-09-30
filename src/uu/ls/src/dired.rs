@@ -16,7 +16,7 @@ pub struct BytePosition {
 }
 
 /// Represents the output structure for DIRED, containing positions for both DIRED and SUBDIRED.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct DiredOutput {
     pub dired_positions: Vec<BytePosition>,
     pub subdired_positions: Vec<BytePosition>,
@@ -76,7 +76,7 @@ pub fn print_dired_output(
 ) -> UResult<()> {
     out.flush()?;
     // TODO manage when -R and the last doesn't have file
-    if dired.padding == 0 && dired.dired_positions.len() >= 1 {
+    if dired.padding == 0 && !dired.dired_positions.is_empty() {
         print_positions("//DIRED//", &dired.dired_positions);
     }
     if config.recursive {
@@ -96,9 +96,23 @@ fn print_positions(prefix: &str, positions: &Vec<BytePosition>) {
 }
 
 pub fn add_total(total_len: usize, dired: &mut DiredOutput) {
-    // when dealing with "  total: xx", it isn't part of the //DIRED//
-    // so, we just keep the size line to add it to the position of the next file
-    dired.padding = total_len + DIRED_TRAILING_OFFSET;
+    if dired.padding == 0 {
+        let offset_from_previous_line = get_offset_from_previous_line(&dired.dired_positions);
+        // when dealing with "  total: xx", it isn't part of the //DIRED//
+        // so, we just keep the size line to add it to the position of the next file
+        dired.padding = total_len + offset_from_previous_line + DIRED_TRAILING_OFFSET;
+    } else {
+        // += because if we are in -R, we have "  dir:\n  total X". So, we need to take the
+        // previous padding too.
+        // and we already have the previous position in mind
+        dired.padding += total_len + DIRED_TRAILING_OFFSET;
+    }
+}
+
+// when using -R, we have the dirname. we need to add it to the padding
+pub fn add_dir_name(dir_len: usize, dired: &mut DiredOutput) {
+    // 1 for the ":" in "  dirname:"
+    dired.padding += dir_len + DIRED_TRAILING_OFFSET + 1;
 }
 
 /// Calculates byte positions and updates the dired structure.
@@ -122,7 +136,7 @@ pub fn calculate_and_update_positions(
 /// update when it is the first element in the list (to manage "total X")
 /// insert when it isn't the about total
 pub fn update_positions(start: usize, end: usize, dired: &mut DiredOutput) {
-    // padding can be 0 but as it doesn't matter<
+    // padding can be 0 but as it doesn't matter
     dired.dired_positions.push(BytePosition {
         start: start + dired.padding,
         end: end + dired.padding,
@@ -173,6 +187,79 @@ mod tests {
             vec![BytePosition { start: 14, end: 19 }],
         );
     }
+
+    #[test]
+    fn test_add_dir_name() {
+        let mut dired = DiredOutput {
+            dired_positions: vec![
+                BytePosition { start: 0, end: 3 },
+                BytePosition { start: 4, end: 7 },
+                BytePosition { start: 8, end: 11 },
+            ],
+            subdired_positions: vec![],
+            padding: 0,
+        };
+        let dir_len = 5;
+        add_dir_name(dir_len, &mut dired);
+        assert_eq!(
+            dired,
+            DiredOutput {
+                dired_positions: vec![
+                    BytePosition { start: 0, end: 3 },
+                    BytePosition { start: 4, end: 7 },
+                    BytePosition { start: 8, end: 11 },
+                ],
+                subdired_positions: vec![],
+                // 8 = 1 for the \n + 5 for dir_len + 2 for "  " + 1 for :
+                padding: 8
+            }
+        );
+    }
+
+    #[test]
+    fn test_add_total() {
+        let mut dired = DiredOutput {
+            dired_positions: vec![
+                BytePosition { start: 0, end: 3 },
+                BytePosition { start: 4, end: 7 },
+                BytePosition { start: 8, end: 11 },
+            ],
+            subdired_positions: vec![],
+            padding: 0,
+        };
+        // if we have "total: 2"
+        let total_len = 8;
+        add_total(total_len, &mut dired);
+        // 22 = 8 (len) + 2 (padding) + 11 (previous position) + 1 (\n)
+        assert_eq!(dired.padding, 22);
+    }
+
+    #[test]
+    fn test_add_dir_name_and_total() {
+        // test when we have
+        //   dirname:
+        //   total 0
+        //   -rw-r--r-- 1 sylvestre sylvestre 0 Sep 30 09:41 ab
+
+        let mut dired = DiredOutput {
+            dired_positions: vec![
+                BytePosition { start: 0, end: 3 },
+                BytePosition { start: 4, end: 7 },
+                BytePosition { start: 8, end: 11 },
+            ],
+            subdired_positions: vec![],
+            padding: 0,
+        };
+        let dir_len = 5;
+        add_dir_name(dir_len, &mut dired);
+        // 8 = 2 ("  ") + 1 (\n) + 5 + 1 (: of dirname)
+        assert_eq!(dired.padding, 8);
+
+        let total_len = 8;
+        add_total(total_len, &mut dired);
+        assert_eq!(dired.padding, 18);
+    }
+
     #[test]
     fn test_dired_update_positions() {
         let mut dired = DiredOutput {
@@ -192,5 +279,31 @@ mod tests {
         let last_position = dired.dired_positions.last().unwrap();
         assert_eq!(last_position.start, 30);
         assert_eq!(last_position.end, 35);
+    }
+
+    #[test]
+    fn test_calculate_and_update_positions() {
+        let mut dired = DiredOutput {
+            dired_positions: vec![
+                BytePosition { start: 0, end: 3 },
+                BytePosition { start: 4, end: 7 },
+                BytePosition { start: 8, end: 11 },
+            ],
+            subdired_positions: vec![],
+            padding: 5,
+        };
+        let output_display_len = 15;
+        let dfn_len = 5;
+        calculate_and_update_positions(output_display_len, dfn_len, &mut dired);
+        assert_eq!(
+            dired.dired_positions,
+            vec![
+                BytePosition { start: 0, end: 3 },
+                BytePosition { start: 4, end: 7 },
+                BytePosition { start: 8, end: 11 },
+                BytePosition { start: 32, end: 37 },
+            ]
+        );
+        assert_eq!(dired.padding, 0);
     }
 }

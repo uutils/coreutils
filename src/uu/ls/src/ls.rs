@@ -1856,6 +1856,10 @@ impl PathData {
     }
 }
 
+fn show_dir_name(dir: &Path, out: &mut BufWriter<Stdout>) {
+    write!(out, "{}:", dir.display()).unwrap();
+}
+
 pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
@@ -1921,10 +1925,17 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 }
                 writeln!(out, "{}:", path_data.p_buf.display())?;
                 if config.dired {
-                    dired::calculate_subdired(&mut dired, path_data.display_name.len());
+                    // Fist directory displayed
+                    let dir_len = path_data.display_name.len();
+                    // add the //SUBDIRED// coordinates
+                    dired::calculate_subdired(&mut dired, dir_len);
+                    // Add the padding for the dir name
+                    dired::add_dir_name(dir_len, &mut dired);
                 }
             } else {
-                writeln!(out, "\n{}:", path_data.p_buf.display())?;
+                writeln!(out).unwrap();
+                show_dir_name(&path_data.p_buf, &mut out);
+                writeln!(out).unwrap();
             }
         }
         let mut listed_ancestors = HashSet::new();
@@ -2131,7 +2142,23 @@ fn enter_directory(
                     if listed_ancestors
                         .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
                     {
-                        writeln!(out, "\n{}:", e.p_buf.display())?;
+                        // when listing several directories in recursive mode, we show
+                        // "dirname:" at the beginning of the file list
+                        writeln!(out)?;
+                        if config.dired {
+                            // We already injected the first dir
+                            // Continue with the others
+                            // 4= \n + \n "  "
+                            dired.padding = 4;
+                            dired::indent(out)?;
+                            let dir_name_size = e.display_name.len();
+                            dired::calculate_subdired(dired, dir_name_size);
+                            // inject dir name
+                            dired::add_dir_name(dir_name_size, dired);
+                        }
+
+                        show_dir_name(&e.p_buf, out);
+                        writeln!(out)?;
                         enter_directory(e, rd, config, out, listed_ancestors, dired)?;
                         listed_ancestors
                             .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);

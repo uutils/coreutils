@@ -3581,6 +3581,64 @@ fn test_ls_dired_recursive() {
 }
 
 #[test]
+fn test_ls_dired_recursive_multiple() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.mkdir("d/d1");
+    at.mkdir("d/d2");
+    at.touch("d/d2/a");
+    at.touch("d/d2/c2");
+    at.touch("d/d1/f1");
+    let mut cmd = scene.ucmd();
+
+    cmd.arg("--dired").arg("-l").arg("-R").arg("d");
+
+    let result = cmd.succeeds();
+
+    let output = result.stdout_str().to_string();
+    println!("Output:\n{}", output);
+    // TODO: Il manque le offset du direname
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+    println!("{:?}", positions);
+    println!("Parsed byte positions: {:?}", positions);
+    assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
+
+    let filenames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
+                .unwrap()
+                .trim()
+                .to_string();
+            println!("Extracted filename: {}", filename);
+            filename
+        })
+        .collect();
+
+    println!("Extracted filenames: {:?}", filenames);
+    assert_eq!(filenames, vec!["d1", "d2", "f1", "a", "c2"]);
+
+    /*        .stdout_contains("  d/d1:")
+    .stdout_contains("  d/d2:")
+    .stdout_contains("  total 0")
+    .stdout_contains("//DIRED//")
+    .stdout_contains("//SUBDIRED// 2 3")
+    .stdout_contains("//DIRED-OPTIONS// --quoting-style");*/
+}
+
+#[test]
 fn test_ls_dired_simple() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
