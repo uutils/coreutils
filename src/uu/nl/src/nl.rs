@@ -56,14 +56,14 @@ impl Default for Settings {
 }
 
 struct Stats {
-    line_number: i64,
+    line_number: Option<i64>,
     consecutive_empty_lines: u64,
 }
 
 impl Stats {
     fn new(starting_line_number: i64) -> Self {
         Self {
-            line_number: starting_line_number,
+            line_number: Some(starting_line_number),
             consecutive_empty_lines: 0,
         }
     }
@@ -344,7 +344,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
         if let Some(new_style) = new_numbering_style {
             current_numbering_style = new_style;
             if settings.renumber {
-                stats.line_number = settings.starting_line_number;
+                stats.line_number = Some(settings.starting_line_number);
             }
             println!();
         } else {
@@ -364,18 +364,21 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             };
 
             if is_line_numbered {
+                let Some(line_number) = stats.line_number else {
+                    return Err(USimpleError::new(1, "line number overflow"));
+                };
                 println!(
                     "{}{}{}",
                     settings
                         .number_format
-                        .format(stats.line_number, settings.number_width),
+                        .format(line_number, settings.number_width),
                     settings.number_separator,
                     line
                 );
                 // update line number for the potential next line
-                match stats.line_number.checked_add(settings.line_increment) {
-                    Some(new_line_number) => stats.line_number = new_line_number,
-                    None => return Err(USimpleError::new(1, "line number overflow")),
+                match line_number.checked_add(settings.line_increment) {
+                    Some(new_line_number) => stats.line_number = Some(new_line_number),
+                    None => stats.line_number = None, // overflow
                 }
             } else {
                 let spaces = " ".repeat(settings.number_width + 1);

@@ -540,6 +540,22 @@ fn test_line_number_overflow() {
 }
 
 #[test]
+fn test_line_number_no_overflow() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MAX))
+        .pipe_in("a\n\\:\\:\nb")
+        .succeeds()
+        .stdout_is(format!("{0}\ta\n\n{0}\tb\n", i64::MAX));
+
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .arg("--line-increment=-1")
+        .pipe_in("a\n\\:\\:\nb")
+        .succeeds()
+        .stdout_is(format!("{0}\ta\n\n{0}\tb\n", i64::MIN));
+}
+
+#[test]
 fn test_section_delimiter() {
     for arg in ["-dabc", "--section-delimiter=abc"] {
         new_ucmd!()
