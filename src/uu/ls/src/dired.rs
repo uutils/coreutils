@@ -9,7 +9,7 @@ use std::fmt;
 use std::io::{BufWriter, Stdout, Write};
 use uucore::error::UResult;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BytePosition {
     pub start: usize,
     pub end: usize,
@@ -59,14 +59,12 @@ pub fn indent(out: &mut BufWriter<Stdout>) -> UResult<()> {
 }
 
 pub fn calculate_subdired(dired: &mut DiredOutput, path_len: usize) {
-    let offset = if dired.subdired_positions.is_empty() {
-        DIRED_TRAILING_OFFSET
-    } else {
-        dired.subdired_positions[dired.subdired_positions.len() - 1].start + DIRED_TRAILING_OFFSET
-    };
+    // if we have several directories:
+    let offset_from_previous_line = get_offset_from_previous_line(&dired.dired_positions);
+
     dired.subdired_positions.push(BytePosition {
-        start: offset,
-        end: path_len + offset,
+        start: offset_from_previous_line + DIRED_TRAILING_OFFSET,
+        end: offset_from_previous_line + path_len + DIRED_TRAILING_OFFSET,
     });
 }
 
@@ -155,7 +153,24 @@ mod tests {
         ];
         assert_eq!(get_offset_from_previous_line(&positions), 12);
     }
-
+    #[test]
+    fn test_calculate_subdired() {
+        let mut dired = DiredOutput {
+            dired_positions: vec![
+                BytePosition { start: 0, end: 3 },
+                BytePosition { start: 4, end: 7 },
+                BytePosition { start: 8, end: 11 },
+            ],
+            subdired_positions: vec![],
+            padding: 0,
+        };
+        let path_len = 5;
+        calculate_subdired(&mut dired, path_len);
+        assert_eq!(
+            dired.subdired_positions,
+            vec![BytePosition { start: 14, end: 19 }],
+        );
+    }
     #[test]
     fn test_dired_update_positions() {
         let mut dired = DiredOutput {
