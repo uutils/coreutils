@@ -24,6 +24,15 @@ fn test_rm_one_file() {
 }
 
 #[test]
+fn test_rm_empty_name() {
+    new_ucmd!()
+        .arg("")
+        .fails()
+        .code_is(1)
+        .stderr_contains("cannot remove");
+}
+
+#[test]
 fn test_rm_failed() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_rm_one_file"; // Doesn't exist

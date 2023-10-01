@@ -6,6 +6,7 @@
 // spell-checker:ignore (path) eacces
 
 use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::fs::{self, File, Metadata, ReadDir};
 use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
@@ -85,8 +86,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
     let files: Vec<&Path> = matches
-        .get_many::<PathBuf>(ARG_FILES)
-        .map(|v| v.map(PathBuf::as_path).collect())
+        .get_many::<OsString>(ARG_FILES)
+        .map(|v| v.map(|s| Path::new(s)).collect())
         .unwrap_or_default();
 
     let force_flag = matches.get_flag(OPT_FORCE);
@@ -266,7 +267,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
-                .value_parser(ValueParser::path_buf())
+                .value_parser(ValueParser::os_string())
                 .num_args(1..)
                 .value_hint(clap::ValueHint::AnyPath),
         )
