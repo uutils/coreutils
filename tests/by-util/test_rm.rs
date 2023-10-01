@@ -58,6 +58,18 @@ fn test_rm_multiple_files() {
 }
 
 #[test]
+fn test_cycle() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("a/b");
+    at.touch("a/b/file");
+    ucmd.arg("-rf")
+        .arg("a")
+        .arg("a")
+        .fails()
+        .stderr_contains("cannot remove");
+}
+
+#[test]
 fn test_rm_interactive() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

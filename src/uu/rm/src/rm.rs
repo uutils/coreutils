@@ -405,12 +405,15 @@ impl RecursiveRemover {
                 remove_self: true,
             });
         } else {
-            // All parents of this directory shouldn't get removed
-            for s in &mut self.stack {
-                s.remove_self = false;
-            }
+            self.dont_remove_parents();
         }
         Ok(())
+    }
+
+    fn dont_remove_parents(&mut self) {
+        for s in &mut self.stack {
+            s.remove_self = false;
+        }
     }
 
     /// Only call when the stack is non-empty!
@@ -463,7 +466,11 @@ impl RecursiveRemover {
         if self.stack.is_empty() {
             None
         } else {
-            Some(self.remove_one_from_stack(options))
+            let res = self.remove_one_from_stack(options);
+            if res.is_err() {
+                self.dont_remove_parents();
+            }
+            Some(res)
         }
     }
 }
