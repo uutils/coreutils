@@ -1929,6 +1929,35 @@ fn test_ls_recursive() {
 }
 
 #[test]
+fn test_ls_recursive_1() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("x");
+    at.mkdir("y");
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.mkdir("a/1");
+    at.mkdir("a/2");
+    at.mkdir("a/3");
+    at.touch("f");
+    at.touch("a/1/I");
+    at.touch("a/1/II");
+    #[cfg(unix)]
+    let out = "a:\n1\n2\n3\n\na/1:\nI\nII\n\na/2:\n\na/3:\n\nb:\n\nc:\n";
+    #[cfg(windows)]
+    let out = "a:\n1\n2\n3\n\na\\1:\nI\nII\n\na\\2:\n\na\\3:\n\nb:\n\nc:\n";
+    scene
+        .ucmd()
+        .arg("-R1")
+        .arg("a")
+        .arg("b")
+        .arg("c")
+        .succeeds()
+        .stdout_is(out);
+}
+
+#[test]
 fn test_ls_color() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
