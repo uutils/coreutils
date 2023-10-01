@@ -6,16 +6,12 @@
 // spell-checker:ignore (path) eacces
 
 use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
-use std::collections::VecDeque;
-use std::ffi::{OsStr, OsString};
-use std::fs::{self, File, Metadata};
-use std::io::ErrorKind;
-use std::ops::BitOr;
+use std::fs::{self, File, Metadata, ReadDir};
+use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show_error};
-use walkdir::{DirEntry, WalkDir};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show, show_if_err};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 /// Enum, determining when the `rm` will prompt the user about the file deletion
@@ -88,9 +84,9 @@ static ARG_FILES: &str = "files";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
-    let files: Vec<&OsStr> = matches
-        .get_many::<OsString>(ARG_FILES)
-        .map(|v| v.map(OsString::as_os_str).collect())
+    let files: Vec<&Path> = matches
+        .get_many::<PathBuf>(ARG_FILES)
+        .map(|v| v.map(PathBuf::as_path).collect())
         .unwrap_or_default();
 
     let force_flag = matches.get_flag(OPT_FORCE);
@@ -162,9 +158,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        if remove(&files, &options) {
-            return Err(1.into());
-        }
+        remove(files, options);
     }
     Ok(())
 }
@@ -272,7 +266,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
+                .value_parser(ValueParser::path_buf())
                 .num_args(1..)
                 .value_hint(clap::ValueHint::AnyPath),
         )
@@ -285,190 +279,220 @@ pub fn uu_app() -> Command {
 ///
 /// Behavior is determined by the `options` parameter, see [`Options`] for
 /// details.
-pub fn remove(files: &[&OsStr], options: &Options) -> bool {
-    let mut had_err = false;
-
-    for filename in files {
-        let file = Path::new(filename);
-        had_err = match file.symlink_metadata() {
-            Ok(metadata) => {
-                if metadata.is_dir() {
-                    handle_dir(file, options)
-                } else if is_symlink_dir(&metadata) {
-                    remove_dir(file, options)
-                } else {
-                    remove_file(file, options)
-                }
-            }
-            Err(_e) => {
-                // TODO: actually print out the specific error
-                // TODO: When the error is not about missing files
-                // (e.g., permission), even rm -f should fail with
-                // outputting the error, but there's no easy way.
-                if options.force {
-                    false
-                } else {
-                    show_error!(
-                        "cannot remove {}: No such file or directory",
-                        filename.quote()
-                    );
-                    true
-                }
-            }
-        }
-        .bitor(had_err);
+pub fn remove(files: Vec<&Path>, options: Options) {
+    for result in remove_iter(files.into_iter(), options) {
+        show_if_err!(result);
     }
-
-    had_err
 }
 
-#[allow(clippy::cognitive_complexity)]
-fn handle_dir(path: &Path, options: &Options) -> bool {
-    let mut had_err = false;
+/// Remove (or unlink) the given files
+///
+/// The return type is an iterator of errors. Calling `next` triggers the
+/// removal of the next file. This allows callers to choose whether they
+/// want to
+///  - print errors,
+///  - stop execution on the first error,
+///  - or something else.
+///
+/// Behavior is determined by the `options` parameter, see [`Options`] for
+/// details.
+pub fn remove_iter<'a, I>(files: I, options: Options) -> Remover<'a, I>
+where
+    I: Iterator<Item = &'a Path>,
+{
+    Remover::new(files, options)
+}
 
-    let is_root = path.has_root() && path.parent().is_none();
-    if options.recursive && (!is_root || !options.preserve_root) {
-        if options.interactive != InteractiveMode::Always && !options.verbose {
-            if let Err(e) = fs::remove_dir_all(path) {
-                had_err = true;
-                if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    // GNU compatibility (rm/fail-eacces.sh)
-                    // here, GNU doesn't use some kind of remove_dir_all
-                    // It will show directory+file
-                    show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
-                } else {
-                    show_error!("cannot remove {}: {}", path.quote(), e);
-                }
+pub struct Remover<'a, I: Iterator<Item = &'a Path>> {
+    recursive_remover: Option<RecursiveRemover>,
+    items: I,
+    options: Options,
+}
+
+impl<'a, I: Iterator<Item = &'a Path>> Remover<'a, I> {
+    fn new(items: I, options: Options) -> Self {
+        Remover {
+            recursive_remover: None,
+            items,
+            options,
+        }
+    }
+
+    fn single_item(&mut self, path: &Path) -> UResult<()> {
+        let is_dir = path.symlink_metadata().map_or(false, |md| md.is_dir());
+
+        if is_dir {
+            let is_root = path.has_root() && path.parent().is_none();
+            if is_root && self.options.preserve_root {
+                return Err(USimpleError::new(
+                    1,
+                    "it is dangerous to operate recursively on '/'\n\
+                     use --no-preserve-root to override this failsafe",
+                ));
             }
+
+            // Maybe we'll start recursing, if the user decided not to descend
+            if self.options.recursive && !dir_is_empty(path)? {
+                let mut rec = RecursiveRemover::new();
+                rec.maybe_recurse(path, &self.options)
+                    .map_err_context(|| format!("cannot descend into {}", path.quote()))?;
+                // The remover was initialized with one element, so it must return one
+                let ret = rec.next(&self.options);
+                self.recursive_remover = Some(rec);
+                if let Some(ret) = ret {
+                    return ret;
+                } else {
+                    return Ok(());
+                }
+            } else if self.options.dir || self.options.recursive {
+                return remove_dir(path, &self.options);
+            }
+        }
+
+        if is_symlink_dir(path) {
+            remove_dir(path, &self.options)
         } else {
-            let mut dirs: VecDeque<DirEntry> = VecDeque::new();
-            // The Paths to not descend into. We need to this because WalkDir doesn't have a way, afaik, to not descend into a directory
-            // So we have to just ignore paths as they come up if they start with a path we aren't descending into
-            let mut not_descended: Vec<PathBuf> = Vec::new();
-
-            'outer: for entry in WalkDir::new(path) {
-                match entry {
-                    Ok(entry) => {
-                        if options.interactive == InteractiveMode::Always {
-                            for not_descend in &not_descended {
-                                if entry.path().starts_with(not_descend) {
-                                    // We don't need to continue the rest of code in this loop if we are in a directory we don't want to descend into
-                                    continue 'outer;
-                                }
-                            }
-                        }
-                        let file_type = entry.file_type();
-                        if file_type.is_dir() {
-                            // If we are in Interactive Mode Always and the directory isn't empty we ask if we should descend else we push this directory onto dirs vector
-                            if options.interactive == InteractiveMode::Always
-                                && fs::read_dir(entry.path()).unwrap().count() != 0
-                            {
-                                // If we don't descend we push this directory onto our not_descended vector else we push this directory onto dirs vector
-                                if prompt_descend(entry.path()) {
-                                    dirs.push_back(entry);
-                                } else {
-                                    not_descended.push(entry.path().to_path_buf());
-                                }
-                            } else {
-                                dirs.push_back(entry);
-                            }
-                        } else {
-                            had_err = remove_file(entry.path(), options).bitor(had_err);
-                        }
-                    }
-                    Err(e) => {
-                        had_err = true;
-                        show_error!("recursing in {}: {}", path.quote(), e);
-                    }
-                }
-            }
-
-            for dir in dirs.iter().rev() {
-                had_err = remove_dir(dir.path(), options).bitor(had_err);
-            }
+            remove_file(path, &self.options)
         }
-    } else if options.dir && (!is_root || !options.preserve_root) {
-        had_err = remove_dir(path, options).bitor(had_err);
-    } else if options.recursive {
-        show_error!("could not remove directory {}", path.quote());
-        had_err = true;
-    } else {
-        show_error!(
-            "cannot remove {}: Is a directory", // GNU's rm error message does not include help
-            path.quote()
-        );
-        had_err = true;
     }
-
-    had_err
 }
 
-fn remove_dir(path: &Path, options: &Options) -> bool {
-    if prompt_dir(path, options) {
-        if let Ok(mut read_dir) = fs::read_dir(path) {
-            if options.dir || options.recursive {
-                if read_dir.next().is_none() {
-                    match fs::remove_dir(path) {
-                        Ok(_) => {
-                            if options.verbose {
-                                println!("removed directory {}", normalize(path).quote());
-                            }
-                        }
-                        Err(e) => {
-                            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                // GNU compatibility (rm/fail-eacces.sh)
-                                show_error!(
-                                    "cannot remove {}: {}",
-                                    path.quote(),
-                                    "Permission denied"
-                                );
-                            } else {
-                                show_error!("cannot remove {}: {}", path.quote(), e);
-                            }
-                            return true;
-                        }
-                    }
-                } else {
-                    // directory can be read but is not empty
-                    show_error!("cannot remove {}: Directory not empty", path.quote());
-                    return true;
-                }
+fn dir_is_empty(path: &Path) -> io::Result<bool> {
+    Ok(fs::read_dir(path)?.next().is_none())
+}
+
+impl<'a, I: Iterator<Item = &'a Path>> Iterator for Remover<'a, I> {
+    type Item = UResult<()>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(r) = &mut self.recursive_remover {
+            if let Some(x) = r.next(&self.options) {
+                return Some(x);
             } else {
-                // called to remove a symlink_dir (windows) without "-r"/"-R" or "-d"
-                show_error!("cannot remove {}: Is a directory", path.quote());
-                return true;
+                self.recursive_remover = None;
             }
-        } else {
-            // GNU's rm shows this message if directory is empty but not readable
-            show_error!("cannot remove {}: Directory not empty", path.quote());
-            return true;
         }
-    }
 
-    false
+        if let Some(p) = self.items.next() {
+            return Some(self.single_item(p));
+        };
+
+        None
+    }
 }
 
-fn remove_file(path: &Path, options: &Options) -> bool {
-    if prompt_file(path, options) {
-        match fs::remove_file(path) {
-            Ok(_) => {
-                if options.verbose {
-                    println!("removed {}", normalize(path).quote());
-                }
+struct StackItem {
+    path: PathBuf,
+    read_dir: ReadDir,
+    remove_self: bool,
+}
+
+struct RecursiveRemover {
+    stack: Vec<StackItem>,
+}
+
+impl RecursiveRemover {
+    fn new() -> Self {
+        Self { stack: Vec::new() }
+    }
+
+    fn maybe_recurse(&mut self, path: &Path, options: &Options) -> io::Result<()> {
+        if prompt_descend(path, options) {
+            self.stack.push(StackItem {
+                read_dir: fs::read_dir(path)?,
+                path: path.into(),
+                remove_self: true,
+            });
+        } else {
+            // All parents of this directory shouldn't get removed
+            for s in &mut self.stack {
+                s.remove_self = false;
             }
-            Err(e) => {
-                if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    // GNU compatibility (rm/fail-eacces.sh)
-                    show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
-                } else {
-                    show_error!("cannot remove {}: {}", path.quote(), e);
+        }
+        Ok(())
+    }
+
+    /// Only call when the stack is non-empty!
+    fn remove_one_from_stack(&mut self, options: &Options) -> UResult<()> {
+        debug_assert!(!self.stack.is_empty());
+
+        loop {
+            match self.stack.last_mut().unwrap().read_dir.next() {
+                Some(item) => {
+                    // Bubble up any IO errors.
+                    let item = item?;
+                    let path = item.path();
+
+                    // We got an item so now we need to handle that:
+                    //  - If it's a directory, push it to the stack and recurse
+                    //  - If it's a file, remove it
+                    let ft = item.file_type()?;
+                    if ft.is_dir() {
+                        if fs::read_dir(&path)?.next().is_none() {
+                            return remove_dir(&path, options);
+                        }
+                        self.maybe_recurse(&path, options)
+                            .map_err_context(|| format!("cannot recurse {}", path.quote()))?;
+                        // We continue the loop, which will now use our new stack item
+                        // This is an explicit tail call kind of thing.
+                        continue;
+                    } else if is_symlink_dir(&path) {
+                        return remove_dir(&path, options);
+                    } else {
+                        return remove_file(&path, options);
+                    }
                 }
-                return true;
+                None => {
+                    // Unwrap is fine because `last_mut` succeeded.
+                    let stack_item = self.stack.pop().unwrap();
+                    if stack_item.remove_self {
+                        return remove_dir(&stack_item.path, options);
+                    } else {
+                        return Ok(());
+                    }
+                }
             }
         }
     }
 
-    false
+    fn next(&mut self, options: &Options) -> Option<UResult<()>> {
+        // We keep a stack of read dirs to keep track of where we are
+        // The last item of the stack is the current directory
+        // So get the next item from the last item on the stack
+        if self.stack.is_empty() {
+            None
+        } else {
+            Some(self.remove_one_from_stack(options))
+        }
+    }
+}
+
+fn remove_dir(path: &Path, options: &Options) -> UResult<()> {
+    if !prompt_dir(path, options) {
+        return Ok(());
+    }
+
+    fs::remove_dir(path).map_err_context(|| format!("cannot remove {}", path.quote()))?;
+
+    if options.verbose {
+        println!("removed directory {}", normalize(path).quote());
+    }
+
+    Ok(())
+}
+
+fn remove_file(path: &Path, options: &Options) -> UResult<()> {
+    if !prompt_file(path, options) {
+        return Ok(());
+    }
+
+    fs::remove_file(path).map_err_context(|| format!("cannot remove {}", path.quote()))?;
+
+    if options.verbose {
+        println!("removed {}", normalize(path).quote());
+    }
+
+    Ok(())
 }
 
 fn prompt_dir(path: &Path, options: &Options) -> bool {
@@ -589,8 +613,12 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
     }
 }
 
-fn prompt_descend(path: &Path) -> bool {
-    prompt_yes!("descend into directory {}?", path.quote())
+fn prompt_descend(path: &Path, options: &Options) -> bool {
+    if options.interactive == InteractiveMode::Always {
+        prompt_yes!("descend into directory {}?", path.quote())
+    } else {
+        true
+    }
 }
 
 fn normalize(path: &Path) -> PathBuf {
@@ -602,15 +630,17 @@ fn normalize(path: &Path) -> PathBuf {
 }
 
 #[cfg(not(windows))]
-fn is_symlink_dir(_metadata: &Metadata) -> bool {
+fn is_symlink_dir(_path: &Path) -> bool {
     false
 }
 
 #[cfg(windows)]
-fn is_symlink_dir(metadata: &Metadata) -> bool {
+fn is_symlink_dir(path: &Path) -> bool {
     use std::os::windows::prelude::MetadataExt;
     use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
 
-    metadata.file_type().is_symlink()
-        && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+    path.symlink_metadata().map_or(false, |metadata| {
+        metadata.file_type().is_symlink()
+            && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+    })
 }
