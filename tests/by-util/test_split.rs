@@ -1682,7 +1682,7 @@ fn test_split_separator_invalid_usage() {
         .pipe_in("a\n")
         .fails()
         .no_stdout()
-        .stderr_contains("split: multi-character separator");
+        .stderr_contains("split: multi-character separator 'xx'");
     scene
         .ucmd()
         .args(&["-ta", "-tb"])
@@ -1690,7 +1690,7 @@ fn test_split_separator_invalid_usage() {
         .pipe_in("a\n")
         .fails()
         .no_stdout()
-        .stderr_contains("split: multi-character separator 'ab'");
+        .stderr_contains("split: multiple separator characters specified");
     scene
         .ucmd()
         .args(&["-t'\n'", "-tb"])
@@ -1698,7 +1698,7 @@ fn test_split_separator_invalid_usage() {
         .pipe_in("a\n")
         .fails()
         .no_stdout()
-        .stderr_contains("split: multi-character separator");
+        .stderr_contains("split: multiple separator characters specified");
 }
 
 // Test using same separator multiple times
