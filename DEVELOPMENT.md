@@ -279,19 +279,19 @@ xcode-select --install
 On MacOS you will need to install [Homebrew](https://docs.brew.sh/Installation) and use it to install the following Homebrew formulas:
 
 ```shell
-brew install coreutils
-brew install autoconf
-brew install autopoint
-brew install gettext
-brew install wget
-brew install texinfo
-brew install xz
-brew install automake
-brew install gnu-sed
-brew install m4
-brew install bison
-brew install pre-commit
-brew install findutils
+brew install \
+  coreutils \
+  autoconf \
+  gettext \
+  wget \
+  texinfo \
+  xz \
+  automake \
+  gnu-sed \
+  m4 \
+  bison \
+  pre-commit \
+  findutils
 ```
 
 After installing these Homebrew formulas, please make sure to add the following lines to your `zsh` or `bash` rc file, i.e. `~/.profile` or `~/.zshrc` or `~/.bashrc` ...
