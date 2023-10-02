@@ -16,7 +16,7 @@ path = "src/stat.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["entries", "libc", "fs", "fsext"] }
+uucore = { workspace = true, features = ["entries", "fs", "fsext"] }
 
 [[bin]]
 name = "stat"

@@ -17,7 +17,7 @@ path = "src/tee.rs"
 [dependencies]
 clap = { workspace = true }
 libc = { workspace = true }
-uucore = { workspace = true, features = ["libc", "signals"] }
+uucore = { workspace = true, features = ["signals"] }
 
 [[bin]]
 name = "tee"

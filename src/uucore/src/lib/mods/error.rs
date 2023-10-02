@@ -56,6 +56,7 @@
 
 // spell-checker:ignore uioerror rustdoc
 
+use crate::libc;
 use clap;
 use std::{
     error::Error,
@@ -401,7 +402,7 @@ impl Display for UIoError {
         use std::io::ErrorKind::*;
 
         let message;
-        let message = if self.inner.raw_os_error().is_some() {
+        let message = if let Some(raw) = self.inner.raw_os_error() {
             // These are errors that come directly from the OS.
             // We want to normalize their messages across systems,
             // and we want to strip the "(os error X)" suffix.
@@ -426,9 +427,17 @@ impl Display for UIoError {
                 _ => {
                     // TODO: When the new error variants
                     // (https://github.com/rust-lang/rust/issues/86442)
-                    // are stabilized, we should add them to the match statement.
-                    message = strip_errno(&self.inner);
-                    &message
+                    // are stabilized, we should add them to the match expression
+                    // above instead.
+                    match raw {
+                        libc::ENOTEMPTY => "Directory not empty",
+                        libc::EISDIR => "Is a directory",
+                        libc::ENOTDIR => "Not a directory",
+                        _ => {
+                            message = strip_errno(&self.inner);
+                            &message
+                        }
+                    }
                 }
             }
         } else {

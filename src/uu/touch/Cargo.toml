@@ -20,7 +20,7 @@ filetime = { workspace = true }
 clap = { workspace = true }
 chrono = { workspace = true }
 parse_datetime = { workspace = true }
-uucore = { workspace = true, features = ["libc"] }
+uucore = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [
