@@ -54,7 +54,7 @@
 //! * Using [`ExitCode`] is not recommended but can be useful for converting utils to use
 //!   [`UResult`].
 
-// spell-checker:ignore uioerror rustdoc
+// spell-checker:ignore uioerror rustdoc EISDIR ENOTDIR ENOTEMPTY
 
 use crate::libc;
 use clap;
