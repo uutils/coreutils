@@ -87,7 +87,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let files: Vec<&Path> = matches
         .get_many::<OsString>(ARG_FILES)
-        .map(|v| v.map(|s| Path::new(s)).collect())
+        .map(|v| v.map(Path::new).collect())
         .unwrap_or_default();
 
     let force_flag = matches.get_flag(OPT_FORCE);
@@ -405,12 +405,12 @@ impl RecursiveRemover {
                 remove_self: true,
             });
         } else {
-            self.dont_remove_parents();
+            self.do_not_remove_parents();
         }
         Ok(())
     }
 
-    fn dont_remove_parents(&mut self) {
+    fn do_not_remove_parents(&mut self) {
         for s in &mut self.stack {
             s.remove_self = false;
         }
@@ -468,7 +468,7 @@ impl RecursiveRemover {
         } else {
             let res = self.remove_one_from_stack(options);
             if res.is_err() {
-                self.dont_remove_parents();
+                self.do_not_remove_parents();
             }
             Some(res)
         }
