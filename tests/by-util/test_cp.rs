@@ -483,7 +483,8 @@ fn test_cp_arg_interactive_verbose() {
     ucmd.args(&["-vi", "a", "b"])
         .pipe_in("N\n")
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("cp: overwrite 'b'? ")
+        .no_stdout();
 }
 
 #[test]
@@ -494,7 +495,8 @@ fn test_cp_arg_interactive_verbose_clobber() {
     at.touch("b");
     ucmd.args(&["-vin", "a", "b"])
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("cp: not replacing 'b'\n")
+        .no_stdout();
 }
 
 #[test]
