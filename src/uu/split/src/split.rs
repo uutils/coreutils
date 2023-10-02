@@ -765,7 +765,7 @@ impl fmt::Display for SettingsError {
             Self::SuffixNotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
             Self::SuffixTooSmall(i) => write!(f, "the suffix length needs to be at least {i}"),
             Self::MultiCharacterSeparator(s) => {
-                write!(f, "multi-character separator '{}'", s.quote())
+                write!(f, "multi-character separator {}", s.quote())
             }
             Self::SuffixContainsSeparator(s) => write!(
                 f,
@@ -813,19 +813,15 @@ impl Settings {
         // If the same separator (the same value) was used multiple times - `split` should NOT fail
         // If the separator was used multiple times but with different values (not all values are the same) - `split` should fail
         let separator = match matches.get_many::<String>(OPT_SEPARATOR) {
-            Some(sep_values) => match sep_values.map(|s| s.to_string()).reduce(|cur, nxt| {
-                if cur == nxt {
-                    nxt
-                } else {
-                    cur + &nxt
-                }
-            }) {
-                Some(s) => match s.as_str() {
-                    "\\0" => b'\0',
-                    _ if s.as_bytes().len() == 1 => s.as_bytes()[0],
-                    _ => return Err(SettingsError::MultiCharacterSeparator(s.to_owned())),
-                },
-                None => b'\n',
+            Some(sep_values) => match sep_values
+                .map(|s| s.to_string())
+                .reduce(|cur, nxt| if cur == nxt { nxt } else { cur + &nxt })
+                .unwrap() // it is safe to just unwrap here since Clap should not return empty ValuesRef<'_,String> in the option from get_many() call
+                .as_str()
+            {
+                "\\0" => b'\0',
+                s if s.as_bytes().len() == 1 => s.as_bytes()[0],
+                s => return Err(SettingsError::MultiCharacterSeparator(s.to_owned())),
             },
             None => b'\n',
         };

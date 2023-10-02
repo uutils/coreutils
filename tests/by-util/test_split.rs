@@ -1690,7 +1690,7 @@ fn test_split_separator_invalid_usage() {
         .pipe_in("a\n")
         .fails()
         .no_stdout()
-        .stderr_contains("split: multi-character separator ''ab''");
+        .stderr_contains("split: multi-character separator 'ab'");
     scene
         .ucmd()
         .args(&["-t'\n'", "-tb"])
