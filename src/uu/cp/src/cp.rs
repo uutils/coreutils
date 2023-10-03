@@ -1276,23 +1276,16 @@ fn copy_source(
 }
 
 impl OverwriteMode {
-    fn verify(&self, path: &Path, verbose: bool) -> CopyResult<()> {
+    fn verify(&self, path: &Path) -> CopyResult<()> {
         match *self {
             Self::NoClobber => {
-                if verbose {
-                    println!("skipped {}", path.quote());
-                } else {
-                    eprintln!("{}: not replacing {}", util_name(), path.quote());
-                }
+                eprintln!("{}: not replacing {}", util_name(), path.quote());
                 Err(Error::NotAllFilesCopied)
             }
             Self::Interactive(_) => {
                 if prompt_yes!("overwrite {}?", path.quote()) {
                     Ok(())
                 } else {
-                    if verbose {
-                        println!("skipped {}", path.quote());
-                    }
                     Err(Error::Skipped)
                 }
             }
@@ -1500,7 +1493,7 @@ fn handle_existing_dest(
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
-    options.overwrite.verify(dest, options.verbose)?;
+    options.overwrite.verify(dest)?;
 
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
@@ -1895,7 +1888,7 @@ fn copy_helper(
         File::create(dest).context(dest.display().to_string())?;
     } else if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
-        copy_fifo(dest, options.overwrite, options.verbose)?;
+        copy_fifo(dest, options.overwrite)?;
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else {
@@ -1920,9 +1913,9 @@ fn copy_helper(
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
 // built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
 #[cfg(unix)]
-fn copy_fifo(dest: &Path, overwrite: OverwriteMode, verbose: bool) -> CopyResult<()> {
+fn copy_fifo(dest: &Path, overwrite: OverwriteMode) -> CopyResult<()> {
     if dest.exists() {
-        overwrite.verify(dest, verbose)?;
+        overwrite.verify(dest)?;
         fs::remove_file(dest)?;
     }
 
