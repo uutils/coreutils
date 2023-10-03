@@ -1323,7 +1323,7 @@ fn test_mv_interactive_error() {
 }
 
 #[test]
-fn test_mv_info_self() {
+fn test_mv_into_self() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dir1 = "dir1";
