@@ -122,7 +122,7 @@ fn test_escape_no_further_output() {
     new_ucmd!()
         .args(&["-e", "a\\cb", "c"])
         .succeeds()
-        .stdout_only("a\n");
+        .stdout_only("a");
 }
 
 #[test]

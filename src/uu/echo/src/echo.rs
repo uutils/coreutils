@@ -175,7 +175,7 @@ fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
         }
         if escaped {
             if print_escaped(input, &mut output)?.is_break() {
-                break;
+                return Ok(());
             }
         } else {
             write!(output, "{input}")?;
