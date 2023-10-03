@@ -6,6 +6,7 @@
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::io::{self, Write};
 use std::iter::Peekable;
+use std::ops::ControlFlow;
 use std::str::Chars;
 use uucore::error::{FromIo, UResult};
 use uucore::{format_usage, help_about, help_section, help_usage};
@@ -62,7 +63,7 @@ fn parse_code(input: &mut Peekable<Chars>, base: Base) -> Option<char> {
     Some(ret.into())
 }
 
-fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
+fn print_escaped(input: &str, mut output: impl Write) -> io::Result<ControlFlow<()>> {
     let mut iter = input.chars().peekable();
     while let Some(c) = iter.next() {
         if c != '\\' {
@@ -85,7 +86,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
                 '\\' => '\\',
                 'a' => '\x07',
                 'b' => '\x08',
-                'c' => return Ok(true),
+                'c' => return Ok(ControlFlow::Break(())),
                 'e' => '\x1b',
                 'f' => '\x0c',
                 'n' => '\n',
@@ -112,7 +113,7 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
         }
     }
 
-    Ok(false)
+    Ok(ControlFlow::Continue(()))
 }
 
 #[uucore::main]
@@ -173,8 +174,7 @@ fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {
             write!(output, " ")?;
         }
         if escaped {
-            let should_stop = print_escaped(input, &mut output)?;
-            if should_stop {
+            if print_escaped(input, &mut output)?.is_break() {
                 break;
             }
         } else {
