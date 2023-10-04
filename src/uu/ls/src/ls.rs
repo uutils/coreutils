@@ -1925,17 +1925,17 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 }
                 writeln!(out, "{}:", path_data.p_buf.display())?;
                 if config.dired {
-                    // Fist directory displayed
+                    // First directory displayed
                     let dir_len = path_data.display_name.len();
                     // add the //SUBDIRED// coordinates
                     dired::calculate_subdired(&mut dired, dir_len);
                     // Add the padding for the dir name
-                    dired::add_dir_name(dir_len, &mut dired);
+                    dired::add_dir_name(&mut dired, dir_len);
                 }
             } else {
-                writeln!(out).unwrap();
+                writeln!(out)?;
                 show_dir_name(&path_data.p_buf, &mut out);
-                writeln!(out).unwrap();
+                writeln!(out)?;
             }
         }
         let mut listed_ancestors = HashSet::new();
@@ -2114,7 +2114,7 @@ fn enter_directory(
         let total = return_total(&entries, config, out)?;
         write!(out, "{}", total.as_str())?;
         if config.dired {
-            dired::add_total(total.len(), dired);
+            dired::add_total(dired, total.len());
         }
     }
 
@@ -2154,7 +2154,7 @@ fn enter_directory(
                             let dir_name_size = e.p_buf.to_string_lossy().len();
                             dired::calculate_subdired(dired, dir_name_size);
                             // inject dir name
-                            dired::add_dir_name(dir_name_size, dired);
+                            dired::add_dir_name(dired, dir_name_size);
                         }
 
                         show_dir_name(&e.p_buf, out);
@@ -2573,11 +2573,11 @@ fn display_item_long(
         let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
         if config.dired {
             let (start, end) = dired::calculate_dired(
+                &dired.dired_positions,
                 output_display.len(),
                 displayed_file.len(),
-                &dired.dired_positions,
             );
-            dired::update_positions(start, end, dired);
+            dired::update_positions(dired, start, end);
         }
         write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
     } else {
@@ -2665,9 +2665,9 @@ fn display_item_long(
 
         if config.dired {
             dired::calculate_and_update_positions(
+                dired,
                 output_display.len(),
                 displayed_file.trim().len(),
-                dired,
             );
         }
         write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();

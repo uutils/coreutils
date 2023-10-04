@@ -3592,15 +3592,15 @@ fn test_ls_dired_recursive_multiple() {
     at.touch("d/d2/c2");
     at.touch("d/d1/f1");
     at.touch("d/d1/file-long");
-    let mut cmd = scene.ucmd();
 
+    let mut cmd = scene.ucmd();
     cmd.arg("--dired").arg("-l").arg("-R").arg("d");
 
     let result = cmd.succeeds();
 
     let output = result.stdout_str().to_string();
     println!("Output:\n{}", output);
-    // TODO: Il manque le offset du direname
+
     let dired_line = output
         .lines()
         .find(|&line| line.starts_with("//DIRED//"))
@@ -3610,7 +3610,6 @@ fn test_ls_dired_recursive_multiple() {
         .skip(1)
         .map(|s| s.parse().unwrap())
         .collect();
-    println!("{:?}", positions);
     println!("Parsed byte positions: {:?}", positions);
     assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
 
@@ -3760,7 +3759,6 @@ fn test_ls_subdired_complex() {
         .skip(1)
         .map(|s| s.parse().unwrap())
         .collect();
-    println!("{:?}", positions);
     println!("Parsed byte positions: {:?}", positions);
     assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
 
