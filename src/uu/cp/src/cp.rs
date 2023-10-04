@@ -184,7 +184,7 @@ pub struct Attributes {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Preserve {
-    No,
+    No { explicit: bool },
     Yes { required: bool },
 }
 
@@ -197,9 +197,9 @@ impl PartialOrd for Preserve {
 impl Ord for Preserve {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Self::No, Self::No) => Ordering::Equal,
-            (Self::Yes { .. }, Self::No) => Ordering::Greater,
-            (Self::No, Self::Yes { .. }) => Ordering::Less,
+            (Self::No { .. }, Self::No { .. }) => Ordering::Equal,
+            (Self::Yes { .. }, Self::No { .. }) => Ordering::Greater,
+            (Self::No { .. }, Self::Yes { .. }) => Ordering::Less,
             (
                 Self::Yes { required: req_self },
                 Self::Yes {
@@ -800,7 +800,7 @@ impl Attributes {
             }
             #[cfg(not(feature = "feat_selinux"))]
             {
-                Preserve::No
+                Preserve::No { explicit: false }
             }
         },
         links: Preserve::Yes { required: true },
@@ -809,12 +809,12 @@ impl Attributes {
 
     pub const NONE: Self = Self {
         #[cfg(unix)]
-        ownership: Preserve::No,
-        mode: Preserve::No,
-        timestamps: Preserve::No,
-        context: Preserve::No,
-        links: Preserve::No,
-        xattr: Preserve::No,
+        ownership: Preserve::No { explicit: false },
+        mode: Preserve::No { explicit: false },
+        timestamps: Preserve::No { explicit: false },
+        context: Preserve::No { explicit: false },
+        links: Preserve::No { explicit: false },
+        xattr: Preserve::No { explicit: false },
     };
 
     // TODO: ownership is required if the user is root, for non-root users it's not required.
@@ -954,7 +954,9 @@ impl Options {
             if attribute_strs.len() > 0 {
                 let no_preserve_attributes = Attributes::parse_iter(attribute_strs)?;
                 if matches!(no_preserve_attributes.links, Preserve::Yes { .. }) {
-                    attributes.links = Preserve::No;
+                    attributes.links = Preserve::No { explicit: true };
+                } else if matches!(no_preserve_attributes.mode, Preserve::Yes { .. }) {
+                    attributes.mode = Preserve::No { explicit: true };
                 }
             }
         }
@@ -1050,8 +1052,18 @@ impl Options {
 
     fn preserve_hard_links(&self) -> bool {
         match self.attributes.links {
-            Preserve::No => false,
+            Preserve::No { .. } => false,
             Preserve::Yes { .. } => true,
+        }
+    }
+
+    fn preserve_mode(&self) -> (bool, bool) {
+        match self.attributes.mode {
+            Preserve::No { explicit } => match explicit {
+                true => (false, true),
+                false => (false, false),
+            },
+            Preserve::Yes { .. } => (true, false),
         }
     }
 
@@ -1306,7 +1318,7 @@ impl OverwriteMode {
 /// If it's required, then the error is thrown.
 fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<()> {
     match p {
-        Preserve::No => {}
+        Preserve::No { .. } => {}
         Preserve::Yes { required } => {
             let result = f();
             if *required {
@@ -1735,15 +1747,24 @@ fn copy_file(
         let mut permissions = source_metadata.permissions();
         #[cfg(unix)]
         {
-            use uucore::mode::get_umask;
-
             let mut mode = permissions.mode();
 
-            // remove sticky bit, suid and gid bit
-            const SPECIAL_PERMS_MASK: u32 = 0o7000;
-            mode &= !SPECIAL_PERMS_MASK;
+            let (is_preserve_mode, is_explicit_no_preserve_mode) = options.preserve_mode();
+            if !is_preserve_mode {
+                use libc::{
+                    S_IRGRP, S_IROTH, S_IRUSR, S_IRWXG, S_IRWXO, S_IRWXU, S_IWGRP, S_IWOTH, S_IWUSR,
+                };
+                const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+                const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
+
+                match is_explicit_no_preserve_mode {
+                    true => mode = MODE_RW_UGO,
+                    false => mode &= S_IRWXUGO,
+                }
+            }
 
             // apply umask
+            use uucore::mode::get_umask;
             mode &= !get_umask();
 
             permissions.set_mode(mode);
