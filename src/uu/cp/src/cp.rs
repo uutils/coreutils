@@ -1753,14 +1753,14 @@ fn copy_file(
                     target_os = "android",
                     target_os = "macos",
                     target_os = "macos-12",
-                    target_os = "freebds",
+                    target_os = "freebsd",
                 )))]
                 const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
                 #[cfg(not(any(
                     target_os = "android",
                     target_os = "macos",
                     target_os = "macos-12",
-                    target_os = "freebds",
+                    target_os = "freebsd",
                 )))]
                 const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
 
@@ -1768,7 +1768,7 @@ fn copy_file(
                     target_os = "android",
                     target_os = "macos",
                     target_os = "macos-12",
-                    target_os = "freebds",
+                    target_os = "freebsd",
                 ))]
                 const MODE_RW_UGO: u32 =
                     (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
@@ -1776,7 +1776,7 @@ fn copy_file(
                     target_os = "android",
                     target_os = "macos",
                     target_os = "macos-12",
-                    target_os = "freebds",
+                    target_os = "freebsd",
                 ))]
                 const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
 
