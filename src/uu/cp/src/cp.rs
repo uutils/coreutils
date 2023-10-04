@@ -1755,8 +1755,16 @@ fn copy_file(
                 use libc::{
                     S_IRGRP, S_IROTH, S_IRUSR, S_IRWXG, S_IRWXO, S_IRWXU, S_IWGRP, S_IWOTH, S_IWUSR,
                 };
+
+                #[cfg(not(macos))]
+                const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+                #[cfg(not(macos))]
+                const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
+
+                #[cfg(macos)]
                 const MODE_RW_UGO: u32 =
                     (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+                #[cfg(macos)]
                 const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
 
                 match is_explicit_no_preserve_mode {
