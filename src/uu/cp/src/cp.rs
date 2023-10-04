@@ -1749,15 +1749,23 @@ fn copy_file(
                     S_IRGRP, S_IROTH, S_IRUSR, S_IRWXG, S_IRWXO, S_IRWXU, S_IWGRP, S_IWOTH, S_IWUSR,
                 };
 
-                #[cfg(not(any(target_os = "android", target_os = "macos")))]
+                #[cfg(not(any(
+                    target_os = "android",
+                    target_os = "macos",
+                    target_os = "macos-12"
+                )))]
                 const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-                #[cfg(not(any(target_os = "android", target_os = "macos")))]
+                #[cfg(not(any(
+                    target_os = "android",
+                    target_os = "macos",
+                    target_os = "macos-12"
+                )))]
                 const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
 
-                #[cfg(any(target_os = "android", target_os = "macos"))]
+                #[cfg(any(target_os = "android", target_os = "macos", target_os = "macos-12"))]
                 const MODE_RW_UGO: u32 =
                     (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
-                #[cfg(any(target_os = "android", target_os = "macos"))]
+                #[cfg(any(target_os = "android", target_os = "macos", target_os = "macos-12"))]
                 const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
 
                 match is_explicit_no_preserve_mode {
