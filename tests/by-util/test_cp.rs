@@ -1553,7 +1553,7 @@ fn test_cp_preserve_links_case_7() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(all(unix))]
 fn test_cp_no_preserve_mode_case() {
     use libc::umask;
     use uucore::fs as uufs;
