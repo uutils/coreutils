@@ -1181,6 +1181,32 @@ fn test_mv_overwrite_nonempty_dir() {
 }
 
 #[test]
+fn test_mv_dir_to_nonempty_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "a/t";
+    let destination = "b";
+    let file = "b/t/file";
+
+    at.mkdir_all(source);
+    at.mkdir_all(&format!("{destination}/t"));
+    at.touch(file);
+
+    #[cfg(not(windows))]
+    let expected_msg = "mv: cannot overwrite 'b/t': Directory not empty\n";
+    #[cfg(windows)]
+    let expected_msg = "mv: cannot overwrite 'b\\t': Directory not empty\n";
+
+    ucmd.arg(source)
+        .arg(destination)
+        .fails()
+        .no_stdout()
+        .stderr_is(expected_msg);
+
+    assert!(at.dir_exists(source));
+    assert!(at.dir_exists(destination));
+}
+
+#[test]
 fn test_mv_backup_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir_a = "test_mv_backup_dir_dir_a";
