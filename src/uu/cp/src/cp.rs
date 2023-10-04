@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::extra_unused_lifetimes)]
 
@@ -1057,6 +1057,7 @@ impl Options {
         }
     }
 
+    #[cfg(unix)]
     fn preserve_mode(&self) -> (bool, bool) {
         match self.attributes.mode {
             Preserve::No { explicit } => match explicit {
@@ -1754,8 +1755,9 @@ fn copy_file(
                 use libc::{
                     S_IRGRP, S_IROTH, S_IRUSR, S_IRWXG, S_IRWXO, S_IRWXU, S_IWGRP, S_IWOTH, S_IWUSR,
                 };
-                const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-                const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
+                const MODE_RW_UGO: u32 =
+                    (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+                const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
 
                 match is_explicit_no_preserve_mode {
                     true => mode = MODE_RW_UGO,
