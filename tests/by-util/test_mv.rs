@@ -1323,7 +1323,7 @@ fn test_mv_interactive_error() {
 }
 
 #[test]
-fn test_mv_info_self() {
+fn test_mv_into_self() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dir1 = "dir1";
@@ -1350,7 +1350,7 @@ fn test_mv_arg_interactive_skipped() {
         .ignore_stdin_write_error()
         .fails()
         .stderr_is("mv: overwrite 'b'? ")
-        .stdout_is("skipped 'b'\n");
+        .no_stdout();
 }
 
 #[test]
@@ -1360,7 +1360,8 @@ fn test_mv_arg_interactive_skipped_vin() {
     at.touch("b");
     ucmd.args(&["-vin", "a", "b"])
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("mv: not replacing 'b'\n")
+        .no_stdout();
 }
 
 #[test]

@@ -9,6 +9,6 @@ fuzz_target!(|data: &[u8]| {
     let args = data
         .split(|b| *b == delim)
         .filter_map(|e| std::str::from_utf8(e).ok())
-        .map(|e| OsString::from(e));
+        .map(OsString::from);
     uumain(args);
 });

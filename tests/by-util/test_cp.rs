@@ -483,7 +483,8 @@ fn test_cp_arg_interactive_verbose() {
     ucmd.args(&["-vi", "a", "b"])
         .pipe_in("N\n")
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("cp: overwrite 'b'? ")
+        .no_stdout();
 }
 
 #[test]
@@ -494,7 +495,8 @@ fn test_cp_arg_interactive_verbose_clobber() {
     at.touch("b");
     ucmd.args(&["-vin", "a", "b"])
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("cp: not replacing 'b'\n")
+        .no_stdout();
 }
 
 #[test]
@@ -3465,4 +3467,20 @@ fn test_cp_only_source_no_target() {
     if !stderr_str.contains("missing destination file operand after \"a\"") {
         panic!("Failure: stderr was \n{stderr_str}");
     }
+}
+
+#[test]
+fn test_cp_dest_no_permissions() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("valid.txt");
+    at.touch("invalid_perms.txt");
+    at.set_readonly("invalid_perms.txt");
+
+    ts.ucmd()
+        .args(&["valid.txt", "invalid_perms.txt"])
+        .fails()
+        .stderr_contains("invalid_perms.txt")
+        .stderr_contains("denied");
 }

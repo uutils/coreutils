@@ -131,16 +131,8 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
         fmt_opts.use_anti_prefix = true;
     };
 
-    if let Some(s) = matches.get_one::<String>(OPT_WIDTH) {
-        fmt_opts.width = match s.parse::<usize>() {
-            Ok(t) => t,
-            Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("Invalid WIDTH specification: {}: {}", s.quote(), e),
-                ));
-            }
-        };
+    if let Some(width) = matches.get_one::<usize>(OPT_WIDTH) {
+        fmt_opts.width = *width;
         if fmt_opts.width > MAX_WIDTH {
             return Err(USimpleError::new(
                 1,
@@ -156,16 +148,8 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
         );
     };
 
-    if let Some(s) = matches.get_one::<String>(OPT_GOAL) {
-        fmt_opts.goal = match s.parse::<usize>() {
-            Ok(t) => t,
-            Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("Invalid GOAL specification: {}: {}", s.quote(), e),
-                ));
-            }
-        };
+    if let Some(goal) = matches.get_one::<usize>(OPT_GOAL) {
+        fmt_opts.goal = *goal;
         if !matches.contains_id(OPT_WIDTH) {
             fmt_opts.width = cmp::max(
                 fmt_opts.goal * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO,
@@ -372,14 +356,16 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long("width")
                 .help("Fill output lines up to a maximum of WIDTH columns, default 75.")
-                .value_name("WIDTH"),
+                .value_name("WIDTH")
+                .value_parser(clap::value_parser!(usize)),
         )
         .arg(
             Arg::new(OPT_GOAL)
                 .short('g')
                 .long("goal")
                 .help("Goal width, default of 93% of WIDTH. Must be less than WIDTH.")
-                .value_name("GOAL"),
+                .value_name("GOAL")
+                .value_parser(clap::value_parser!(usize)),
         )
         .arg(
             Arg::new(OPT_QUICK)
