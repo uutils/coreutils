@@ -486,7 +486,6 @@ fn prompt_dir(path: &Path, options: &Options) -> bool {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn prompt_file(path: &Path, options: &Options) -> bool {
     // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {
@@ -503,44 +502,40 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
     // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
     match File::options().read(true).write(true).open(path) {
         Ok(file) => {
-            if let Ok(metadata) = file.metadata() {
-                if metadata.permissions().readonly() {
-                    if metadata.len() == 0 {
-                        prompt_yes!(
-                            "remove write-protected regular empty file {}?",
-                            path.quote()
-                        )
-                    } else {
-                        prompt_yes!("remove write-protected regular file {}?", path.quote())
-                    }
-                } else if options.interactive == InteractiveMode::Always {
-                    if metadata.len() == 0 {
-                        prompt_yes!("remove regular empty file {}?", path.quote())
-                    } else {
-                        prompt_yes!("remove file {}?", path.quote())
-                    }
+            let Ok(metadata) = file.metadata() else {
+                return true;
+            };
+
+            if options.interactive == InteractiveMode::Always && !metadata.permissions().readonly()
+            {
+                return if metadata.len() == 0 {
+                    prompt_yes!("remove regular empty file {}?", path.quote())
                 } else {
-                    true
-                }
-            } else {
-                true
+                    prompt_yes!("remove file {}?", path.quote())
+                };
             }
+            prompt_file_permission_readonly(path, Ok(metadata))
         }
         Err(err) => {
-            if err.kind() == ErrorKind::PermissionDenied {
-                match fs::metadata(path) {
-                    Ok(metadata) if metadata.len() == 0 => {
-                        prompt_yes!(
-                            "remove write-protected regular empty file {}?",
-                            path.quote()
-                        )
-                    }
-                    _ => prompt_yes!("remove write-protected regular file {}?", path.quote()),
-                }
-            } else {
-                true
+            if err.kind() != ErrorKind::PermissionDenied {
+                return true;
             }
+            prompt_file_permission_readonly(path, fs::metadata(path))
         }
+    }
+}
+
+fn prompt_file_permission_readonly(
+    path: &Path,
+    metadata_or_err: Result<Metadata, std::io::Error>,
+) -> bool {
+    match metadata_or_err {
+        Ok(metadata) if !metadata.permissions().readonly() => true,
+        Ok(metadata) if metadata.len() == 0 => prompt_yes!(
+            "remove write-protected regular empty file {}?",
+            path.quote()
+        ),
+        _ => prompt_yes!("remove write-protected regular file {}?", path.quote()),
     }
 }
 
