@@ -18,7 +18,7 @@ edition = "2021"
 path = "src/lib/lib.rs"
 
 [dependencies]
-clap = { workspace = true }
+clap = { workspace = true, optional = true }
 uucore_procs = { workspace = true }
 dns-lookup = { version = "2.0.3", optional = true }
 dunce = { version = "1.0.4", optional = true }
@@ -103,3 +103,4 @@ utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
 version-cmp = []
 wide = []
+cli-parser = ["clap"]
