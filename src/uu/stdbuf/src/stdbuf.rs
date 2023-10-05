@@ -14,7 +14,7 @@ use std::process;
 use tempfile::tempdir;
 use tempfile::TempDir;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::parse_size::parse_size;
+use uucore::parse_size::parse_size_u64;
 use uucore::{crash, format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("stdbuf.md");
@@ -101,7 +101,7 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
                     Ok(BufferType::Line)
                 }
             }
-            x => parse_size(x).map_or_else(
+            x => parse_size_u64(x).map_or_else(
                 |e| crash!(125, "invalid mode {}", e),
                 |m| {
                     Ok(BufferType::Size(m.try_into().map_err(|_| {

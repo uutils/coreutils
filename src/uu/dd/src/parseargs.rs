@@ -504,7 +504,7 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
         ..Default::default()
     };
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
-        (None, None, None) => match parser.parse(s) {
+        (None, None, None) => match parser.parse_u64(s) {
             Ok(n) => (n, 1),
             Err(ParseSizeError::InvalidSuffix(_) | ParseSizeError::ParseFailure(_)) => {
                 return Err(ParseError::InvalidNumber(full.to_string()))

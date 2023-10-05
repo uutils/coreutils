@@ -16,7 +16,7 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::parse_size::parse_size;
+use uucore::parse_size::parse_size_u64;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_if_err};
 
 const ABOUT: &str = help_about!("shred.md");
@@ -319,7 +319,7 @@ pub fn uu_app() -> Command {
 fn get_size(size_str_opt: Option<String>) -> Option<u64> {
     size_str_opt
         .as_ref()
-        .and_then(|size| parse_size(size.as_str()).ok())
+        .and_then(|size| parse_size_u64(size.as_str()).ok())
         .or_else(|| {
             if let Some(size) = size_str_opt {
                 show_error!("invalid file size: {}", size.quote());
