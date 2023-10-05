@@ -11,7 +11,7 @@ mod platform;
 
 use crate::filenames::FilenameIterator;
 use crate::filenames::SuffixType;
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command, ValueHint};
 use std::env;
 use std::ffi::OsString;
 use std::fmt;
@@ -39,6 +39,7 @@ static OPT_HEX_SUFFIXES_SHORT: &str = "-x";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
 static OPT_VERBOSE: &str = "verbose";
+static OPT_SEPARATOR: &str = "separator";
 //The ---io and ---io-blksize parameters are consumed and ignored.
 //The parameter is included to make GNU coreutils tests pass.
 static OPT_IO: &str = "-io";
@@ -55,7 +56,6 @@ const AFTER_HELP: &str = help_section!("after help", "split.md");
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     match Settings::from(&matches, &obs_lines) {
@@ -145,6 +145,7 @@ fn should_extract_obs_lines(
         && !slice.starts_with("-C")
         && !slice.starts_with("-l")
         && !slice.starts_with("-n")
+        && !slice.starts_with("-t")
 }
 
 /// Helper function to [`filter_args`]
@@ -208,13 +209,18 @@ fn handle_preceding_options(
             || &slice[2..] == OPT_ADDITIONAL_SUFFIX
             || &slice[2..] == OPT_FILTER
             || &slice[2..] == OPT_NUMBER
-            || &slice[2..] == OPT_SUFFIX_LENGTH;
+            || &slice[2..] == OPT_SUFFIX_LENGTH
+            || &slice[2..] == OPT_SEPARATOR;
     }
     // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
-    *preceding_short_opt_req_value =
-        slice == "-b" || slice == "-C" || slice == "-l" || slice == "-n" || slice == "-a";
+    *preceding_short_opt_req_value = slice == "-b"
+        || slice == "-C"
+        || slice == "-l"
+        || slice == "-n"
+        || slice == "-a"
+        || slice == "-t";
     // slice is a value
     // reset preceding option flags
     if !slice.starts_with('-') {
@@ -278,7 +284,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILTER)
                 .allow_hyphen_values(true)
                 .value_name("COMMAND")
-                .value_hint(clap::ValueHint::CommandName)
+                .value_hint(ValueHint::CommandName)
                 .help(
                     "write to shell COMMAND; file name is $FILE (Currently not implemented for Windows)",
                 ),
@@ -293,7 +299,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
                 .short('d')
-                .action(clap::ArgAction::SetTrue)
+                .action(ArgAction::SetTrue)
                 .overrides_with_all([
                     OPT_NUMERIC_SUFFIXES,
                     OPT_NUMERIC_SUFFIXES_SHORT,
@@ -314,12 +320,13 @@ pub fn uu_app() -> Command {
                     OPT_HEX_SUFFIXES,
                     OPT_HEX_SUFFIXES_SHORT
                 ])
+                .value_name("FROM")
                 .help("same as -d, but allow setting the start value"),
         )
         .arg(
             Arg::new(OPT_HEX_SUFFIXES_SHORT)
                 .short('x')
-                .action(clap::ArgAction::SetTrue)
+                .action(ArgAction::SetTrue)
                 .overrides_with_all([
                     OPT_NUMERIC_SUFFIXES,
                     OPT_NUMERIC_SUFFIXES_SHORT,
@@ -340,6 +347,7 @@ pub fn uu_app() -> Command {
                     OPT_HEX_SUFFIXES,
                     OPT_HEX_SUFFIXES_SHORT
                 ])
+                .value_name("FROM")
                 .help("same as -x, but allow setting the start value"),
         )
         .arg(
@@ -358,6 +366,15 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new(OPT_SEPARATOR)
+                .short('t')
+                .long(OPT_SEPARATOR)
+                .allow_hyphen_values(true)
+                .value_name("SEP")
+                .action(ArgAction::Append)
+                .help("use SEP instead of newline as the record separator; '\0' (zero) specifies the NUL character"),
+        )
+        .arg(
             Arg::new(OPT_IO)
                 .long("io")
                 .alias(OPT_IO)
@@ -372,7 +389,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(ARG_INPUT)
                 .default_value("-")
-                .value_hint(clap::ValueHint::FilePath),
+                .value_hint(ValueHint::FilePath),
         )
         .arg(
             Arg::new(ARG_PREFIX)
@@ -696,6 +713,7 @@ struct Settings {
     filter: Option<String>,
     strategy: Strategy,
     verbose: bool,
+    separator: u8,
 
     /// Whether to *not* produce empty files when using `-n`.
     ///
@@ -722,6 +740,12 @@ enum SettingsError {
     /// Suffix is not large enough to split into specified chunks
     SuffixTooSmall(usize),
 
+    /// Multi-character (Invalid) separator
+    MultiCharacterSeparator(String),
+
+    /// Multiple different separator characters
+    MultipleSeparatorCharacters,
+
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
     NotSupported,
@@ -743,6 +767,12 @@ impl fmt::Display for SettingsError {
             Self::Strategy(e) => e.fmt(f),
             Self::SuffixNotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
             Self::SuffixTooSmall(i) => write!(f, "the suffix length needs to be at least {i}"),
+            Self::MultiCharacterSeparator(s) => {
+                write!(f, "multi-character separator {}", s.quote())
+            }
+            Self::MultipleSeparatorCharacters => {
+                write!(f, "multiple separator characters specified")
+            }
             Self::SuffixContainsSeparator(s) => write!(
                 f,
                 "invalid suffix {}, contains directory separator",
@@ -783,6 +813,26 @@ impl Settings {
                 }
             }
         }
+
+        // Make sure that separator is only one UTF8 character (if specified)
+        // defaults to '\n' - newline character
+        // If the same separator (the same value) was used multiple times - `split` should NOT fail
+        // If the separator was used multiple times but with different values (not all values are the same) - `split` should fail
+        let separator = match matches.get_many::<String>(OPT_SEPARATOR) {
+            Some(mut sep_values) => {
+                let first = sep_values.next().unwrap(); // it is safe to just unwrap here since Clap should not return empty ValuesRef<'_,String> in the option from get_many() call
+                if !sep_values.all(|s| s == first) {
+                    return Err(SettingsError::MultipleSeparatorCharacters);
+                }
+                match first.as_str() {
+                    "\\0" => b'\0',
+                    s if s.as_bytes().len() == 1 => s.as_bytes()[0],
+                    s => return Err(SettingsError::MultiCharacterSeparator(s.to_owned())),
+                }
+            }
+            None => b'\n',
+        };
+
         let result = Self {
             suffix_length: suffix_length_str
                 .parse()
@@ -791,6 +841,7 @@ impl Settings {
             suffix_start,
             additional_suffix,
             verbose: matches.value_source("verbose") == Some(ValueSource::CommandLine),
+            separator,
             strategy,
             input: matches.get_one::<String>(ARG_INPUT).unwrap().to_owned(),
             prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().to_owned(),
@@ -1019,7 +1070,8 @@ impl<'a> Write for LineChunkWriter<'a> {
         // corresponds to the current chunk number.
         let mut prev = 0;
         let mut total_bytes_written = 0;
-        for i in memchr::memchr_iter(b'\n', buf) {
+        let sep = self.settings.separator;
+        for i in memchr::memchr_iter(sep, buf) {
             // If we have exceeded the number of lines to write in the
             // current chunk, then start a new chunk and its
             // corresponding writer.
@@ -1036,8 +1088,8 @@ impl<'a> Write for LineChunkWriter<'a> {
             }
 
             // Write the line, starting from *after* the previous
-            // newline character and ending *after* the current
-            // newline character.
+            // separator character and ending *after* the current
+            // separator character.
             let n = self.inner.write(&buf[prev..i + 1])?;
             total_bytes_written += n;
             prev = i + 1;
@@ -1175,21 +1227,22 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size.try_into().unwrap();
             }
 
-            // Find the first newline character in the buffer.
-            match memchr::memchr(b'\n', buf) {
-                // If there is no newline character and the buffer is
+            // Find the first separator (default - newline character) in the buffer.
+            let sep = self.settings.separator;
+            match memchr::memchr(sep, buf) {
+                // If there is no separator character and the buffer is
                 // not empty, then write as many bytes as we can and
                 // then move on to the next chunk if necessary.
                 None => {
                     let end = self.num_bytes_remaining_in_current_chunk;
 
                     // This is ugly but here to match GNU behavior. If the input
-                    // doesn't end with a \n, pretend that it does for handling
+                    // doesn't end with a separator, pretend that it does for handling
                     // the second to last segment chunk. See `line-bytes.sh`.
                     if end == buf.len()
                         && self.num_bytes_remaining_in_current_chunk
                             < self.chunk_size.try_into().unwrap()
-                        && buf[buf.len() - 1] != b'\n'
+                        && buf[buf.len() - 1] != sep
                     {
                         self.num_bytes_remaining_in_current_chunk = 0;
                     } else {
@@ -1200,8 +1253,8 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                     }
                 }
 
-                // If there is a newline character and the line
-                // (including the newline character) will fit in the
+                // If there is a separator character and the line
+                // (including the separator character) will fit in the
                 // current chunk, then write the entire line and
                 // continue to the next iteration. (See chunk 1 in the
                 // example comment above.)
@@ -1212,8 +1265,8 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                     buf = &buf[num_bytes_written..];
                 }
 
-                // If there is a newline character, the line
-                // (including the newline character) will not fit in
+                // If there is a separator character, the line
+                // (including the separator character) will not fit in
                 // the current chunk, *and* no other lines have been
                 // written to the current chunk, then write as many
                 // bytes as we can and continue to the next
@@ -1230,8 +1283,8 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                     buf = &buf[num_bytes_written..];
                 }
 
-                // If there is a newline character, the line
-                // (including the newline character) will not fit in
+                // If there is a separator character, the line
+                // (including the separator character) will not fit in
                 // the current chunk, and at least one other line has
                 // been written to the current chunk, then signal to
                 // the next iteration that a new chunk needs to be
@@ -1489,15 +1542,16 @@ where
 
     let mut num_bytes_remaining_in_current_chunk = chunk_size;
     let mut i = 0;
-    for line_result in reader.lines() {
+    let sep = settings.separator;
+    for line_result in reader.split(sep) {
         let line = line_result.unwrap();
         let maybe_writer = writers.get_mut(i);
         let writer = maybe_writer.unwrap();
-        let bytes = line.as_bytes();
+        let bytes = line.as_slice();
         writer.write_all(bytes)?;
-        writer.write_all(b"\n")?;
+        writer.write_all(&[sep])?;
 
-        // Add one byte for the newline character.
+        // Add one byte for the separator character.
         let num_bytes = bytes.len() + 1;
         if num_bytes > num_bytes_remaining_in_current_chunk {
             num_bytes_remaining_in_current_chunk = chunk_size;
@@ -1546,15 +1600,16 @@ where
 
     let mut num_bytes_remaining_in_current_chunk = chunk_size;
     let mut i = 0;
-    for line_result in reader.lines() {
+    let sep = settings.separator;
+    for line_result in reader.split(sep) {
         let line = line_result?;
-        let bytes = line.as_bytes();
+        let bytes = line.as_slice();
         if i == chunk_number {
             writer.write_all(bytes)?;
-            writer.write_all(b"\n")?;
+            writer.write_all(&[sep])?;
         }
 
-        // Add one byte for the newline character.
+        // Add one byte for the separator character.
         let num_bytes = bytes.len() + 1;
         if num_bytes >= num_bytes_remaining_in_current_chunk {
             num_bytes_remaining_in_current_chunk = chunk_size;
@@ -1575,7 +1630,7 @@ fn split_into_n_chunks_by_line_round_robin<R>(
     settings: &Settings,
     reader: &mut R,
     num_chunks: u64,
-) -> UResult<()>
+) -> std::io::Result<()>
 where
     R: BufRead,
 {
@@ -1586,7 +1641,8 @@ where
         settings.suffix_length,
         settings.suffix_type,
         settings.suffix_start,
-    )?;
+    )
+    .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
 
     // Create one writer for each chunk. This will create each
     // of the underlying files (if not in `--filter` mode).
@@ -1594,19 +1650,20 @@ where
     for _ in 0..num_chunks {
         let filename = filename_iterator
             .next()
-            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            .ok_or_else(|| io::Error::new(ErrorKind::Other, "output file suffixes exhausted"))?;
         let writer = settings.instantiate_current_writer(filename.as_str())?;
         writers.push(writer);
     }
 
     let num_chunks: usize = num_chunks.try_into().unwrap();
-    for (i, line_result) in reader.lines().enumerate() {
+    let sep = settings.separator;
+    for (i, line_result) in reader.split(sep).enumerate() {
         let line = line_result.unwrap();
         let maybe_writer = writers.get_mut(i % num_chunks);
         let writer = maybe_writer.unwrap();
-        let bytes = line.as_bytes();
+        let bytes = line.as_slice();
         writer.write_all(bytes)?;
-        writer.write_all(b"\n")?;
+        writer.write_all(&[sep])?;
     }
 
     Ok(())
@@ -1631,7 +1688,7 @@ where
 /// * [`split_into_n_chunks_by_line_round_robin`], which splits its input in the
 ///   same way, but writes each chunk to its own file.
 fn kth_chunk_by_line_round_robin<R>(
-    _settings: &Settings,
+    settings: &Settings,
     reader: &mut R,
     chunk_number: u64,
     num_chunks: u64,
@@ -1645,12 +1702,13 @@ where
 
     let num_chunks: usize = num_chunks.try_into().unwrap();
     let chunk_number: usize = chunk_number.try_into().unwrap();
-    for (i, line_result) in reader.lines().enumerate() {
+    let sep = settings.separator;
+    for (i, line_result) in reader.split(sep).enumerate() {
         let line = line_result?;
-        let bytes = line.as_bytes();
+        let bytes = line.as_slice();
         if (i % num_chunks) == chunk_number {
             writer.write_all(bytes)?;
-            writer.write_all(b"\n")?;
+            writer.write_all(&[sep])?;
         }
     }
     Ok(())
@@ -1686,7 +1744,13 @@ fn split(settings: &Settings) -> UResult<()> {
             kth_chunk_by_line(settings, &mut reader, chunk_number, num_chunks)
         }
         Strategy::Number(NumberType::RoundRobin(num_chunks)) => {
-            split_into_n_chunks_by_line_round_robin(settings, &mut reader, num_chunks)
+            match split_into_n_chunks_by_line_round_robin(settings, &mut reader, num_chunks) {
+                Ok(_) => Ok(()),
+                Err(e) => match e.kind() {
+                    ErrorKind::BrokenPipe => Ok(()),
+                    _ => Err(USimpleError::new(1, format!("{e}"))),
+                },
+            }
         }
         Strategy::Number(NumberType::KthRoundRobin(chunk_number, num_chunks)) => {
             // The chunk number is given as a 1-indexed number, but it

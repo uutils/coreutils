@@ -82,6 +82,10 @@ pub fn uu_app() -> Command {
         .arg(Arg::new(options::DIR).short('d').help(
             "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative",
         ))
-        .arg(Arg::new(options::TO).value_hint(clap::ValueHint::AnyPath))
+        .arg(
+            Arg::new(options::TO)
+                .value_hint(clap::ValueHint::AnyPath)
+                .required(true),
+        )
         .arg(Arg::new(options::FROM).value_hint(clap::ValueHint::AnyPath))
 }

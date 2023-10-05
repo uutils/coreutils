@@ -9,10 +9,7 @@ use uucore::mode;
 
 /// Takes a user-supplied string and tries to parse to u16 mode bitmask.
 pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, String> {
-    let numbers: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-
-    // Passing 000 as the existing permissions seems to mirror GNU behavior.
-    if mode_string.contains(numbers) {
+    if mode_string.chars().any(|c| c.is_ascii_digit()) {
         mode::parse_numeric(0, mode_string, considering_dir)
     } else {
         mode::parse_symbolic(0, mode_string, umask, considering_dir)

@@ -3,10 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME subsecond datelike timelike
+// spell-checker:ignore (ToDO) filetime datetime lpszfilepath mktime DATETIME datelike timelike
 // spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
 
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, NaiveTime, TimeZone, Timelike, Utc};
+use chrono::{
+    DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime,
+    TimeZone, Timelike,
+};
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, ArgGroup, Command};
 use filetime::{set_file_times, set_symlink_file_times, FileTime};
@@ -65,6 +68,10 @@ fn datetime_to_filetime<T: TimeZone>(dt: &DateTime<T>) -> FileTime {
     FileTime::from_unix_time(dt.timestamp(), dt.timestamp_subsec_nanos())
 }
 
+fn filetime_to_datetime(ft: &FileTime) -> Option<DateTime<Local>> {
+    Some(DateTime::from_timestamp(ft.unix_seconds(), ft.nanoseconds())?.into())
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -85,35 +92,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     ) {
         (Some(reference), Some(date)) => {
             let (atime, mtime) = stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?;
-            if let Ok(offset) = parse_datetime::from_str(date) {
-                let seconds = offset.num_seconds();
-                let nanos = offset.num_nanoseconds().unwrap_or(0) % 1_000_000_000;
-
-                let ref_atime_secs = atime.unix_seconds();
-                let ref_atime_nanos = atime.nanoseconds();
-                let atime = FileTime::from_unix_time(
-                    ref_atime_secs + seconds,
-                    ref_atime_nanos + nanos as u32,
-                );
-
-                let ref_mtime_secs = mtime.unix_seconds();
-                let ref_mtime_nanos = mtime.nanoseconds();
-                let mtime = FileTime::from_unix_time(
-                    ref_mtime_secs + seconds,
-                    ref_mtime_nanos + nanos as u32,
-                );
-
-                (atime, mtime)
-            } else {
-                let timestamp = parse_date(date)?;
-                (timestamp, timestamp)
-            }
+            let atime = filetime_to_datetime(&atime).ok_or_else(|| {
+                USimpleError::new(1, "Could not process the reference access time")
+            })?;
+            let mtime = filetime_to_datetime(&mtime).ok_or_else(|| {
+                USimpleError::new(1, "Could not process the reference modification time")
+            })?;
+            (parse_date(atime, date)?, parse_date(mtime, date)?)
         }
         (Some(reference), None) => {
             stat(Path::new(reference), !matches.get_flag(options::NO_DEREF))?
         }
         (None, Some(date)) => {
-            let timestamp = parse_date(date)?;
+            let timestamp = parse_date(Local::now(), date)?;
             (timestamp, timestamp)
         }
         (None, None) => {
@@ -333,7 +324,7 @@ fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
     ))
 }
 
-fn parse_date(s: &str) -> UResult<FileTime> {
+fn parse_date(ref_time: DateTime<Local>, s: &str) -> UResult<FileTime> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
@@ -348,8 +339,8 @@ fn parse_date(s: &str) -> UResult<FileTime> {
     // Tue Dec  3 ...
     // ("%c", POSIX_LOCALE_FORMAT),
     //
-    if let Ok(parsed) = Local.datetime_from_str(s, format::POSIX_LOCALE) {
-        return Ok(datetime_to_filetime(&parsed));
+    if let Ok(parsed) = NaiveDateTime::parse_from_str(s, format::POSIX_LOCALE) {
+        return Ok(datetime_to_filetime(&parsed.and_utc()));
     }
 
     // Also support other formats found in the GNU tests like
@@ -361,8 +352,8 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         format::YYYY_MM_DD_HH_MM,
         format::YYYYMMDDHHMM_OFFSET,
     ] {
-        if let Ok(parsed) = Utc.datetime_from_str(s, fmt) {
-            return Ok(datetime_to_filetime(&parsed));
+        if let Ok(parsed) = NaiveDateTime::parse_from_str(s, fmt) {
+            return Ok(datetime_to_filetime(&parsed.and_utc()));
         }
     }
 
@@ -382,8 +373,7 @@ fn parse_date(s: &str) -> UResult<FileTime> {
         }
     }
 
-    if let Ok(duration) = parse_datetime::from_str(s) {
-        let dt = Local::now() + duration;
+    if let Ok(dt) = parse_datetime::parse_datetime_at_date(ref_time, s) {
         return Ok(datetime_to_filetime(&dt));
     }
 
@@ -411,9 +401,17 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         }
     };
 
-    let mut local = chrono::Local
-        .datetime_from_str(&ts, format)
+    let local = NaiveDateTime::parse_from_str(&ts, format)
         .map_err(|_| USimpleError::new(1, format!("invalid date ts format {}", ts.quote())))?;
+    let mut local = match chrono::Local.from_local_datetime(&local) {
+        LocalResult::Single(dt) => dt,
+        _ => {
+            return Err(USimpleError::new(
+                1,
+                format!("invalid date ts format {}", ts.quote()),
+            ))
+        }
+    };
 
     // Chrono caps seconds at 59, but 60 is valid. It might be a leap second
     // or wrap to the next minute. But that doesn't really matter, because we

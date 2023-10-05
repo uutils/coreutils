@@ -8,10 +8,10 @@
 //! * `<https://en.wikipedia.org/wiki/Shunting-yard_algorithm>`
 //!
 
-// spell-checker:ignore (ToDO) binop binops ints paren prec multibytes
+// spell-checker:ignore (ToDO) ints paren prec multibytes
 
 use num_bigint::BigInt;
-use num_traits::{One, Zero};
+use num_traits::Zero;
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::tokens::Token;
@@ -515,7 +515,7 @@ fn value_as_bool(s: &str) -> bool {
         return false;
     }
     match s.parse::<BigInt>() {
-        Ok(n) => n.is_one(),
+        Ok(n) => n != Zero::zero(),
         Err(_) => true,
     }
 }

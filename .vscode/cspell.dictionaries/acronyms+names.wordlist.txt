@@ -58,6 +58,7 @@ MinGW
 Minix
 NetBSD
 Novell
+Nushell
 OpenBSD
 POSIX
 PowerPC
