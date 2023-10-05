@@ -5,6 +5,8 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
+use std::ffi::OsString;
+
 use clap::{crate_version, Command};
 
 use uucore::display::println_verbatim;
@@ -19,9 +21,14 @@ const USAGE: &str = help_usage!("whoami.md");
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().try_get_matches_from(args)?;
-    let username = platform::get_username().map_err_context(|| "failed to get username".into())?;
+    let username = whoami()?;
     println_verbatim(username).map_err_context(|| "failed to print username".into())?;
     Ok(())
+}
+
+/// Get the current username
+pub fn whoami() -> UResult<OsString> {
+    platform::get_username().map_err_context(|| "failed to get username".into())
 }
 
 pub fn uu_app() -> Command {

@@ -166,7 +166,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        if let Ok(duration) = parse_datetime::from_str(date.as_str()) {
+        let ref_time = Local::now();
+        if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date.as_str()) {
+            let duration = new_time.signed_duration_since(ref_time);
             DateSource::Human(duration)
         } else {
             DateSource::Custom(date.into())

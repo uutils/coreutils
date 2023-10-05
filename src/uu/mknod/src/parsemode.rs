@@ -11,8 +11,7 @@ use uucore::mode;
 pub const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
 pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
-    let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    let result = if mode.contains(arr) {
+    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
         mode::parse_numeric(MODE_RW_UGO as u32, mode)
     } else {
         mode::parse_symbolic(MODE_RW_UGO as u32, mode, true)

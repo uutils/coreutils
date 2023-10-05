@@ -118,6 +118,14 @@ fn test_whitespace_with_char() {
 }
 
 #[test]
+fn test_too_large() {
+    new_ucmd!()
+        .args(&["-b1-18446744073709551615", "/dev/null"])
+        .fails()
+        .code_is(1);
+}
+
+#[test]
 fn test_specify_delimiter() {
     for param in ["-d", "--delimiter", "--del"] {
         new_ucmd!()

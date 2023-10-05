@@ -15,6 +15,7 @@ rand = { version = "0.8", features = ["small_rng"] }
 uucore = { path = "../src/uucore/" }
 uu_date = { path = "../src/uu/date/" }
 uu_test = { path = "../src/uu/test/" }
+uu_expr = { path = "../src/uu/expr/" }
 
 
 # Prevent this from interfering with workspaces
@@ -24,6 +25,12 @@ members = ["."]
 [[bin]]
 name = "fuzz_date"
 path = "fuzz_targets/fuzz_date.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_expr"
+path = "fuzz_targets/fuzz_expr.rs"
 test = false
 doc = false
 

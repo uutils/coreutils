@@ -156,6 +156,7 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
         }
         None => fmt_opts.goal = fmt_opts.width * (2 * (100 - 7) + 1) / 200,
     }
+  
     if fmt_opts.goal > fmt_opts.width {
         return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
     }
@@ -365,14 +366,16 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long("width")
                 .help("Fill output lines up to a maximum of WIDTH columns, default 75.")
-                .value_name("WIDTH"),
+                .value_name("WIDTH")
+                .value_parser(clap::value_parser!(usize)),
         )
         .arg(
             Arg::new(OPT_GOAL)
                 .short('g')
                 .long("goal")
                 .help("Goal width, default of 93% of WIDTH. Must be less than WIDTH.")
-                .value_name("GOAL"),
+                .value_name("GOAL")
+                .value_parser(clap::value_parser!(usize)),
         )
         .arg(
             Arg::new(OPT_QUICK)
