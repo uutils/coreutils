@@ -202,7 +202,7 @@ impl<'parser> Parser<'parser> {
 
     /// Same as `parse_u64()`, except returns `u64::MAX` on overflow
     /// GNU lib/coreutils include similar functionality
-    /// and GNU test suite checks this behavior for some utils
+    /// and GNU test suite checks this behavior for some utils (`split` for example)
     pub fn parse_u64_max(&self, size: &str) -> Result<u64, ParseSizeError> {
         let result = self.parse_u64(size);
         match result {
@@ -217,9 +217,7 @@ impl<'parser> Parser<'parser> {
         }
     }
 
-    /// Same as `parse_u128()`, except returns `u128::MAX` on overflow
-    /// /// GNU lib/coreutils include similar functionality
-    /// and GNU test suite checks this behavior for some utils
+    /// Same as `parse_u64_max()`, except for u128, i.e. returns `u128::MAX` on overflow
     pub fn parse_u128_max(&self, size: &str) -> Result<u128, ParseSizeError> {
         let result = self.parse_u128(size);
         match result {
