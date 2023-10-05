@@ -56,6 +56,7 @@
 
 // spell-checker:ignore uioerror rustdoc
 
+#[cfg(feature = "cli-parser")]
 use clap;
 use std::{
     error::Error,
@@ -688,6 +689,7 @@ impl From<i32> for Box<dyn UError> {
 /// let result: Result<_, Box<dyn UError>> = command.try_get_matches().map_err(Into::into);
 /// ```
 #[derive(Debug)]
+#[cfg(feature = "cli-parser")]
 pub struct ClapErrorWrapper {
     code: i32,
     error: clap::Error,
@@ -698,18 +700,21 @@ pub trait UClapError<T> {
     fn with_exit_code(self, code: i32) -> T;
 }
 
+#[cfg(feature = "cli-parser")]
 impl From<clap::Error> for Box<dyn UError> {
     fn from(e: clap::Error) -> Self {
         Box::new(ClapErrorWrapper { code: 1, error: e })
     }
 }
 
+#[cfg(feature = "cli-parser")]
 impl UClapError<ClapErrorWrapper> for clap::Error {
     fn with_exit_code(self, code: i32) -> ClapErrorWrapper {
         ClapErrorWrapper { code, error: self }
     }
 }
 
+#[cfg(feature = "cli-parser")]
 impl UClapError<Result<clap::ArgMatches, ClapErrorWrapper>>
     for Result<clap::ArgMatches, clap::Error>
 {
@@ -718,6 +723,7 @@ impl UClapError<Result<clap::ArgMatches, ClapErrorWrapper>>
     }
 }
 
+#[cfg(feature = "cli-parser")]
 impl UError for ClapErrorWrapper {
     fn code(&self) -> i32 {
         // If the error is a DisplayHelp or DisplayVersion variant,
@@ -733,9 +739,11 @@ impl UError for ClapErrorWrapper {
     }
 }
 
+#[cfg(feature = "cli-parser")]
 impl Error for ClapErrorWrapper {}
 
 // This is abuse of the Display trait
+#[cfg(feature = "cli-parser")]
 impl Display for ClapErrorWrapper {
     fn fmt(&self, _f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         self.error.print().unwrap();

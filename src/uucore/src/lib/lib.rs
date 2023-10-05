@@ -30,6 +30,7 @@ pub use crate::mods::panic;
 pub use crate::parser::parse_glob;
 pub use crate::parser::parse_size;
 pub use crate::parser::parse_time;
+#[cfg(feature = "cli-parser")]
 pub use crate::parser::shortcut_value_parser;
 
 // * feature-gated modules
