@@ -19,7 +19,7 @@ edition = "2021"
 path = "src/cp.rs"
 
 [dependencies]
-clap = { workspace = true }
+clap = { workspace = true, optional = true }
 filetime = { workspace = true }
 libc = { workspace = true }
 quick-error = { workspace = true }
@@ -44,5 +44,7 @@ name = "cp"
 path = "src/main.rs"
 
 [features]
+default = ["cli-parser"]
 feat_selinux = ["selinux"]
 feat_acl = ["exacl"]
+cli-parser = ["clap"]
