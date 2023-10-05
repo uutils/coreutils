@@ -413,7 +413,7 @@ fn remove_dir_recursively(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_dir(path: &Path, options: &Options) -> bool {
-    if prompt_file(path, options) {
+    if prompt_dir(path, options) {
         match fs::read_dir(path) {
             Ok(mut read_dir) => {
                 if read_dir.next().is_none() {
