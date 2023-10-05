@@ -479,12 +479,29 @@ mod tests {
 
     #[test]
     #[cfg(not(target_pointer_width = "128"))]
-    fn overflow_to_max_x64() {
+    fn overflow_to_max_u64() {
+        assert_eq!(Ok(1_099_511_627_776), parse_size_u64_max("1T"));
+        assert_eq!(Ok(1_125_899_906_842_624), parse_size_u64_max("1P"));
         assert_eq!(Ok(u64::MAX), parse_size_u64_max("18446744073709551616"));
         assert_eq!(Ok(u64::MAX), parse_size_u64_max("10000000000000000000000"));
         assert_eq!(Ok(u64::MAX), parse_size_u64_max("1Y"));
         assert_eq!(Ok(u64::MAX), parse_size_u64_max("1R"));
         assert_eq!(Ok(u64::MAX), parse_size_u64_max("1Q"));
+    }
+
+    #[test]
+    #[cfg(not(target_pointer_width = "128"))]
+    fn overflow_to_max_u128() {
+        assert_eq!(
+            Ok(12_379_400_392_853_802_748_991_242_240),
+            parse_size_u128_max("10R")
+        );
+        assert_eq!(
+            Ok(12_676_506_002_282_294_014_967_032_053_760),
+            parse_size_u128_max("10Q")
+        );
+        assert_eq!(Ok(u128::MAX), parse_size_u128_max("1000000000000R"));
+        assert_eq!(Ok(u128::MAX), parse_size_u128_max("1000000000Q"));
     }
 
     #[test]
@@ -610,7 +627,7 @@ mod tests {
 
         parser
             .with_allow_list(&[
-                "b", "k", "K", "m", "M", "MB", "g", "G", "t", "T", "P", "E", "Z", "Y",
+                "b", "k", "K", "m", "M", "MB", "g", "G", "t", "T", "P", "E", "Z", "Y", "R", "Q",
             ])
             .with_default_unit("K")
             .with_b_byte_count(true);
@@ -620,6 +637,14 @@ mod tests {
         assert_eq!(Ok(1000 * 1000), parser.parse("1MB"));
         assert_eq!(Ok(1024 * 1024), parser.parse("1M"));
         assert_eq!(Ok(1024 * 1024 * 1024), parser.parse("1G"));
+        assert_eq!(
+            Ok(1_237_940_039_285_380_274_899_124_224),
+            parser.parse_u128("1R")
+        );
+        assert_eq!(
+            Ok(1_267_650_600_228_229_401_496_703_205_376),
+            parser.parse_u128("1Q")
+        );
 
         assert_eq!(Ok(1), parser.parse("1b"));
         assert_eq!(Ok(1024), parser.parse("1024b"));
