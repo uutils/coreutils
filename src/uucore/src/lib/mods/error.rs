@@ -56,6 +56,8 @@
 
 // spell-checker:ignore uioerror rustdoc
 
+// In case we want to build without clap support
+// Example: nushell
 #[cfg(feature = "cli-parser")]
 use clap;
 use std::{
