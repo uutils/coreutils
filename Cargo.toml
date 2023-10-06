@@ -100,7 +100,6 @@ feat_common_core = [
   "pwd",
   "readlink",
   "realpath",
-  "relpath",
   "rm",
   "rmdir",
   "seq",
@@ -430,7 +429,6 @@ ptx = { optional = true, version = "0.0.21", package = "uu_ptx", path = "src/uu/
 pwd = { optional = true, version = "0.0.21", package = "uu_pwd", path = "src/uu/pwd" }
 readlink = { optional = true, version = "0.0.21", package = "uu_readlink", path = "src/uu/readlink" }
 realpath = { optional = true, version = "0.0.21", package = "uu_realpath", path = "src/uu/realpath" }
-relpath = { optional = true, version = "0.0.21", package = "uu_relpath", path = "src/uu/relpath" }
 rm = { optional = true, version = "0.0.21", package = "uu_rm", path = "src/uu/rm" }
 rmdir = { optional = true, version = "0.0.21", package = "uu_rmdir", path = "src/uu/rmdir" }
 runcon = { optional = true, version = "0.0.21", package = "uu_runcon", path = "src/uu/runcon" }

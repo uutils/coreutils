@@ -269,10 +269,6 @@ mod test_readlink;
 #[path = "by-util/test_realpath.rs"]
 mod test_realpath;
 
-#[cfg(feature = "relpath")]
-#[path = "by-util/test_relpath.rs"]
-mod test_relpath;
-
 #[cfg(feature = "rm")]
 #[path = "by-util/test_rm.rs"]
 mod test_rm;
