@@ -489,7 +489,7 @@ fn pathbuf_from_stdout() -> UResult<PathBuf> {
                     format!("GetFinalPathNameByHandleW failed with code {ret}"),
                 ))
             }
-            e if e == 0 => {
+            0 => {
                 return Err(USimpleError::new(
                     1,
                     format!(
