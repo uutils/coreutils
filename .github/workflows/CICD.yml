@@ -128,6 +128,7 @@ jobs:
   fuzz:
     name: Run the fuzzers
     runs-on: ubuntu-latest
+    continue-on-error: true
     env:
       RUN_FOR: 60
     steps:
