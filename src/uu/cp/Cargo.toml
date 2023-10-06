@@ -47,4 +47,4 @@ path = "src/main.rs"
 default = ["cli-parser"]
 feat_selinux = ["selinux"]
 feat_acl = ["exacl"]
-cli-parser = ["clap", "uucore/cli-parser"]
+cli-parser = ["dep:clap", "uucore/cli-parser"]
