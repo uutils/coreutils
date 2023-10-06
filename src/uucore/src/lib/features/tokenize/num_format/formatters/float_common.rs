@@ -42,9 +42,7 @@ fn has_enough_digits(
         (string_position - 1) - starting_position >= limit
     }
 }
-
 impl FloatAnalysis {
-    #[allow(clippy::cognitive_complexity)]
     pub fn analyze(
         str_in: &str,
         initial_prefix: &InitialPrefix,
@@ -56,66 +54,63 @@ impl FloatAnalysis {
         // the input string
         // has no leading spaces or 0s
         let str_it = get_it_at(initial_prefix.offset, str_in);
+        let hex_input = Self::determine_hex_input(&initial_prefix.radix_in);
+
         let mut ret = Self {
             len_important: 0,
             decimal_pos: None,
             follow: None,
         };
-        let hex_input = match initial_prefix.radix_in {
+
+        ret.process_string_iterator(
+            str_it,
+            str_in,
+            hex_input,
+            max_sd_opt,
+            max_after_dec_opt,
+            hex_output,
+        );
+        ret
+    }
+
+    fn determine_hex_input(radix: &Base) -> bool {
+        match radix {
             Base::Hex => true,
             Base::Ten => false,
             Base::Octal => {
                 panic!("this should never happen: floats should never receive octal input");
             }
-        };
+        }
+    }
+
+    fn process_string_iterator(
+        &mut self,
+        str_it: impl Iterator<Item = char>,
+        str_in: &str,
+        hex_input: bool,
+        max_sd_opt: Option<usize>,
+        max_after_dec_opt: Option<usize>,
+        hex_output: bool,
+    ) {
         let mut i = 0;
         let mut pos_before_first_nonzero_after_decimal: Option<usize> = None;
         for c in str_it {
             match c {
                 e @ ('0'..='9' | 'A'..='F' | 'a'..='f') => {
-                    if !hex_input {
-                        match e {
-                            '0'..='9' => {}
-                            _ => {
-                                warn_incomplete_conv(str_in);
-                                break;
-                            }
-                        }
-                    }
-                    if ret.decimal_pos.is_some()
-                        && pos_before_first_nonzero_after_decimal.is_none()
-                        && e != '0'
-                    {
-                        pos_before_first_nonzero_after_decimal = Some(i - 1);
-                    }
-                    if let Some(max_sd) = max_sd_opt {
-                        if i == max_sd {
-                            // follow is used in cases of %g
-                            // where the character right after the last
-                            // sd is considered is rounded affecting
-                            // the previous digit in 1/2 of instances
-                            ret.follow = Some(e);
-                        } else if ret.decimal_pos.is_some() && i > max_sd {
-                            break;
-                        }
-                    }
-                    if let Some(max_after_dec) = max_after_dec_opt {
-                        if let Some(p) = ret.decimal_pos {
-                            if has_enough_digits(hex_input, hex_output, i, p, max_after_dec) {
-                                break;
-                            }
-                        }
-                    } else if let Some(max_sd) = max_sd_opt {
-                        if let Some(p) = pos_before_first_nonzero_after_decimal {
-                            if has_enough_digits(hex_input, hex_output, i, p, max_sd) {
-                                break;
-                            }
-                        }
-                    }
+                    self.handle_digit(
+                        e,
+                        str_in,
+                        hex_input,
+                        &mut pos_before_first_nonzero_after_decimal,
+                        i,
+                        max_sd_opt,
+                        max_after_dec_opt,
+                        hex_output,
+                    );
                 }
                 '.' => {
-                    if ret.decimal_pos.is_none() {
-                        ret.decimal_pos = Some(i);
+                    if self.decimal_pos.is_none() {
+                        self.decimal_pos = Some(i);
                     } else {
                         warn_incomplete_conv(str_in);
                         break;
@@ -128,8 +123,54 @@ impl FloatAnalysis {
             };
             i += 1;
         }
-        ret.len_important = i;
-        ret
+        self.len_important = i;
+    }
+
+    fn handle_digit(
+        &mut self,
+        e: char,
+        str_in: &str,
+        hex_input: bool,
+        pos_before_first_nonzero_after_decimal: &mut Option<usize>,
+        i: usize,
+        max_sd_opt: Option<usize>,
+        max_after_dec_opt: Option<usize>,
+        hex_output: bool,
+    ) {
+        if !hex_input && !e.is_digit(10) {
+            warn_incomplete_conv(str_in);
+            return;
+        }
+        if self.decimal_pos.is_some()
+            && pos_before_first_nonzero_after_decimal.is_none()
+            && e != '0'
+        {
+            *pos_before_first_nonzero_after_decimal = Some(i - 1);
+        }
+        if let Some(max_sd) = max_sd_opt {
+            if i == max_sd {
+                // follow is used in cases of %g
+                // where the character right after the last
+                // sd is considered is rounded affecting
+                // the previous digit in 1/2 of instances
+                self.follow = Some(e);
+            } else if self.decimal_pos.is_some() && i > max_sd {
+                return;
+            }
+        }
+        if let Some(max_after_dec) = max_after_dec_opt {
+            if let Some(p) = self.decimal_pos {
+                if has_enough_digits(hex_input, hex_output, i, p, max_after_dec) {
+                    return;
+                }
+            }
+        } else if let Some(max_sd) = max_sd_opt {
+            if let Some(p) = *pos_before_first_nonzero_after_decimal {
+                if has_enough_digits(hex_input, hex_output, i, p, max_sd) {
+                    return;
+                }
+            }
+        }
     }
 }
 
