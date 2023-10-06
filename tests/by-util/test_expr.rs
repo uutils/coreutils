@@ -128,6 +128,16 @@ fn test_or() {
         .args(&["1", "|", "a", "/", "5"])
         .succeeds()
         .stdout_only("1\n");
+    
+    new_ucmd!()
+        .args(&["foo", "|", "a", "/", "5"])
+        .succeeds()
+        .stdout_only("foo\n");
+
+    new_ucmd!()
+        .args(&["0", "|", "10", "/", "5"])
+        .succeeds()
+        .stdout_only("2\n");
 }
 
 #[test]
