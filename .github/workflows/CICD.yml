@@ -139,9 +139,11 @@ jobs:
     - name: Download Corpus
       continue-on-error: true
       uses: actions/download-artifact@v3
-      with:
-        name: corpus.tar.gz
-        path: fuzz/
+        # with:
+        #   name: corpus.tar.gz
+        #   path: fuzz/
+    - name: DEBUG(TEMP)
+      run: ls -R
     - name: Uncompress Corpus
       shell: bash
       run: |
