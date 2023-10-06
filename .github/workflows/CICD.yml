@@ -184,7 +184,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: corpus.tar.gz
-        path: fuzz/corpus.tar.gz
+        path: corpus.tar.gz
 
   style_lint:
     name: Style/lint
