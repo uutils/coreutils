@@ -128,7 +128,6 @@ jobs:
   fuzz:
     name: Run the fuzzers
     runs-on: ubuntu-latest
-    continue-on-error: true
     env:
       RUN_FOR: 60
     steps:
@@ -138,6 +137,7 @@ jobs:
       run: cargo install cargo-fuzz
     - uses: Swatinem/rust-cache@v2
     - name: Download Corpus
+      continue-on-error: true
       uses: actions/download-artifact@v3
       with:
         name: corpus.tar.gz
