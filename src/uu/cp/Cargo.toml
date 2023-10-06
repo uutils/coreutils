@@ -24,16 +24,13 @@ filetime = { workspace = true }
 libc = { workspace = true }
 quick-error = { workspace = true }
 selinux = { workspace = true, optional = true }
-uucore = { workspace = true, features = [
-  "backup-control",
-  "entries",
-  "fs",
-  "perms",
-  "mode",
-  "update-control",
-] }
 walkdir = { workspace = true }
 indicatif = { workspace = true }
+
+[dependencies.uucore]
+workspace = true
+default-features = false
+features = ["entries", "fs", "mode", "perms", "update-control", "backup-control"]
 
 [target.'cfg(unix)'.dependencies]
 xattr = { workspace = true }

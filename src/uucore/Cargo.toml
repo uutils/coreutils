@@ -69,8 +69,7 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
 ] }
 
 [features]
-default = []
-# * non-default features
+default = ["cli-parser"]
 backup-control = []
 encoding = ["data-encoding", "data-encoding-macro", "z85", "thiserror"]
 entries = ["libc"]
