@@ -185,7 +185,7 @@ jobs:
     - name: Upload Corpus
       uses: actions/upload-artifact@v3
       with:
-        name: corpus.tar.gz
+        name: corpus-artifact
         path: corpus.tar.gz
 
   style_lint:
