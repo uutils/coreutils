@@ -146,7 +146,7 @@ jobs:
       shell: bash
       run: |
         if [ -f fuzz/corpus.tar.gz ]; then
-          tar -xf corpus.tar.gz
+          tar -xf fuzz/corpus.tar.gz
         fi
     - name: Run fuzz_date for XX seconds
       shell: bash
