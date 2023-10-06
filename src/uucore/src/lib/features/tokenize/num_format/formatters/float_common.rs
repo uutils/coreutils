@@ -265,33 +265,31 @@ fn round_terminal_digit(
     (before_dec, after_dec, false)
 }
 
-#[allow(clippy::cognitive_complexity)]
-pub fn get_primitive_dec(
-    initial_prefix: &InitialPrefix,
-    str_in: &str,
-    analysis: &FloatAnalysis,
-    last_dec_place: usize,
-    sci_mode: Option<bool>,
-) -> FormatPrimitive {
-    let mut f = FormatPrimitive::default();
-
+fn handle_sign(initial_prefix: &InitialPrefix) -> Option<String> {
     // add negative sign section
     if initial_prefix.sign == -1 {
-        f.prefix = Some(String::from("-"));
+        return Some(String::from("-"));
     }
+    None
+}
 
+fn split_string<'a>(analysis: &FloatAnalysis, str_in: &'a str) -> (&'a str, &'a str) {
     // assign the digits before and after the decimal points
     // to separate slices. If no digits after decimal point,
     // assign 0
-    let (mut first_segment_raw, second_segment_raw) = match analysis.decimal_pos {
+    match analysis.decimal_pos {
         Some(pos) => (&str_in[..pos], &str_in[pos + 1..]),
         None => (str_in, "0"),
-    };
-    if first_segment_raw.is_empty() {
-        first_segment_raw = "0";
     }
+}
+
+fn convert_to_base(
+    initial_prefix: &InitialPrefix,
+    first_segment_raw: &str,
+    second_segment_raw: &str,
+) -> (String, String) {
     // convert to string, de_hexifying if input is in hex   // spell-checker:disable-line
-    let (first_segment, second_segment) = match initial_prefix.radix_in {
+    match initial_prefix.radix_in {
         Base::Hex => (
             de_hex(first_segment_raw, true),
             de_hex(second_segment_raw, false),
@@ -300,8 +298,15 @@ pub fn get_primitive_dec(
             String::from(first_segment_raw),
             String::from(second_segment_raw),
         ),
-    };
-    let (pre_dec_unrounded, post_dec_unrounded, mut mantissa) = if sci_mode.is_some() {
+    }
+}
+
+fn handle_sci_mode(
+    first_segment: String,
+    second_segment: String,
+    sci_mode: Option<bool>,
+) -> (String, String, isize) {
+    if sci_mode.is_some() {
         if first_segment.len() > 1 {
             let mut post_dec = String::from(&first_segment[1..]);
             post_dec.push_str(&second_segment);
@@ -339,10 +344,38 @@ pub fn get_primitive_dec(
         }
     } else {
         (first_segment, second_segment, 0)
-    };
+    }
+}
 
+fn round_value(
+    pre_dec_unrounded: String,
+    post_dec_unrounded: String,
+    last_dec_place: usize,
+) -> (String, String, bool) {
     let (pre_dec_draft, post_dec_draft, dec_place_chg) =
         round_terminal_digit(pre_dec_unrounded, post_dec_unrounded, last_dec_place - 1);
+    (pre_dec_draft, post_dec_draft, dec_place_chg)
+}
+
+pub fn get_primitive_dec(
+    initial_prefix: &InitialPrefix,
+    str_in: &str,
+    analysis: &FloatAnalysis,
+    last_dec_place: usize,
+    sci_mode: Option<bool>,
+) -> FormatPrimitive {
+    let mut f = FormatPrimitive::default();
+
+    f.prefix = handle_sign(initial_prefix);
+
+    let (first_segment_raw, second_segment_raw) = split_string(analysis, str_in);
+    let (first_segment, second_segment) =
+        convert_to_base(initial_prefix, first_segment_raw, second_segment_raw);
+    let (pre_dec_unrounded, post_dec_unrounded, mut mantissa) =
+        handle_sci_mode(first_segment, second_segment, sci_mode);
+    let (pre_dec_draft, post_dec_draft, dec_place_chg) =
+        round_value(pre_dec_unrounded, post_dec_unrounded, last_dec_place - 1);
+
     f.post_decimal = Some(post_dec_draft);
     if let Some(capitalized) = sci_mode {
         let si_ind = if capitalized { 'E' } else { 'e' };
