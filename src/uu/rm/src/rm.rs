@@ -475,12 +475,31 @@ impl RecursiveRemover {
     }
 }
 
+fn is_missing_file_error(result: &io::Result<()>) -> bool {
+    let Err(e) = result else {
+        return false;
+    };
+    let Some(err) = e.raw_os_error() else {
+        return false;
+    };
+    matches!(
+        err,
+        libc::EILSEQ | libc::EINVAL | libc::ENOENT | libc::ENOTDIR
+    )
+}
+
 fn remove_dir(path: &Path, options: &Options) -> UResult<()> {
     if !prompt_dir(path, options) {
         return Ok(());
     }
 
-    fs::remove_dir(path).map_err_context(|| format!("cannot remove {}", path.quote()))?;
+    let res = fs::remove_dir(path);
+
+    if options.force && is_missing_file_error(&res) {
+        return Ok(());
+    }
+
+    res.map_err_context(|| format!("cannot remove {}", path.quote()))?;
 
     if options.verbose {
         println!("removed directory {}", normalize(path).quote());
@@ -494,7 +513,13 @@ fn remove_file(path: &Path, options: &Options) -> UResult<()> {
         return Ok(());
     }
 
-    fs::remove_file(path).map_err_context(|| format!("cannot remove {}", path.quote()))?;
+    let res = fs::remove_file(path);
+
+    if options.force && is_missing_file_error(&res) {
+        return Ok(());
+    }
+
+    res.map_err_context(|| format!("cannot remove {}", path.quote()))?;
 
     if options.verbose {
         println!("removed {}", normalize(path).quote());
