@@ -52,7 +52,7 @@ impl AstNode {
                 operands,
             } => {
                 println!(
-                    "Node( {} ) at #{} (evaluate -> {:?})",
+                    "Node( {} ) at #{} ( evaluate -> {:?} )",
                     op_type,
                     token_idx,
                     self.evaluate()
