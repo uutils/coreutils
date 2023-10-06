@@ -591,20 +591,38 @@ impl<'a> State<'a> {
     }
 }
 
-#[uucore::main]
-#[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+fn parse_separator(value_os: &OsString) -> UResult<Sep> {
+    #[cfg(unix)]
+    let value = value_os.as_bytes();
+    #[cfg(not(unix))]
+    let value = match value_os.to_str() {
+        Some(value) => value.as_bytes(),
+        None => {
+            return Err(USimpleError::new(
+                1,
+                "unprintable field separators are only supported on unix-like platforms",
+            ));
+        }
+    };
+    match value.len() {
+        0 => Ok(Sep::Line),
+        1 => Ok(Sep::Char(value[0])),
+        2 if value[0] == b'\\' && value[1] == b'0' => Ok(Sep::Char(0)),
+        _ => Err(USimpleError::new(
+            1,
+            format!("multi-character tab {}", value_os.to_string_lossy()),
+        )),
+    }
+}
 
-    let keys = parse_field_number_option(matches.get_one::<String>("j").map(|s| s.as_str()))?;
-    let key1 = parse_field_number_option(matches.get_one::<String>("1").map(|s| s.as_str()))?;
-    let key2 = parse_field_number_option(matches.get_one::<String>("2").map(|s| s.as_str()))?;
-
-    let mut settings = Settings::default();
+fn parse_print_settings(matches: &clap::ArgMatches) -> UResult<(bool, bool, bool)> {
+    let mut print_joined = true;
+    let mut print_unpaired1 = false;
+    let mut print_unpaired2 = false;
 
     let v_values = matches.get_many::<String>("v");
     if v_values.is_some() {
-        settings.print_joined = false;
+        print_joined = false;
     }
 
     let unpaired = v_values
@@ -612,41 +630,42 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .chain(matches.get_many("a").unwrap_or_default());
     for file_num in unpaired {
         match parse_file_number(file_num)? {
-            FileNum::File1 => settings.print_unpaired1 = true,
-            FileNum::File2 => settings.print_unpaired2 = true,
+            FileNum::File1 => print_unpaired1 = true,
+            FileNum::File2 => print_unpaired2 = true,
         }
     }
+
+    Ok((print_joined, print_unpaired1, print_unpaired2))
+}
+
+fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<Option<usize>> {
+    let value = matches.get_one::<String>(key).map(|s| s.as_str());
+    parse_field_number_option(value)
+}
+
+/// Parses the command-line arguments and constructs a `Settings` struct.
+///
+/// This function takes the matches from the command-line arguments, processes them,
+/// and returns a `Settings` struct that encapsulates the configuration for the program.
+fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
+    let keys = get_and_parse_field_number(matches, "j")?;
+    let key1 = get_and_parse_field_number(matches, "1")?;
+    let key2 = get_and_parse_field_number(matches, "2")?;
+
+    let (print_joined, print_unpaired1, print_unpaired2) = parse_print_settings(matches)?;
+
+    let mut settings = Settings::default();
+
+    settings.print_joined = print_joined;
+    settings.print_unpaired1 = print_unpaired1;
+    settings.print_unpaired2 = print_unpaired2;
 
     settings.ignore_case = matches.get_flag("i");
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
-
     if let Some(value_os) = matches.get_one::<OsString>("t") {
-        #[cfg(unix)]
-        let value = value_os.as_bytes();
-        #[cfg(not(unix))]
-        let value = match value_os.to_str() {
-            Some(value) => value.as_bytes(),
-            None => {
-                return Err(USimpleError::new(
-                    1,
-                    "unprintable field separators are only supported on unix-like platforms",
-                ))
-            }
-        };
-        settings.separator = match value.len() {
-            0 => Sep::Line,
-            1 => Sep::Char(value[0]),
-            2 if value[0] == b'\\' && value[1] == b'0' => Sep::Char(0),
-            _ => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("multi-character tab {}", value_os.to_string_lossy()),
-                ))
-            }
-        };
+        settings.separator = parse_separator(value_os)?;
     }
-
     if let Some(format) = matches.get_one::<String>("o") {
         if format == "auto" {
             settings.autoformat = true;
@@ -676,6 +695,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     settings.line_ending = LineEnding::from_zero_flag(matches.get_flag("z"));
+
+    Ok(settings)
+}
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().try_get_matches_from(args)?;
+
+    let settings = parse_settings(&matches)?;
 
     let file1 = matches.get_one::<String>("file1").unwrap();
     let file2 = matches.get_one::<String>("file2").unwrap();
