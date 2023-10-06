@@ -610,6 +610,12 @@ jobs:
         check() {
           # Warn if the size increases by more than 5%
           threshold='1.05'
+
+          if [[ "$2" -eq 0 || "$3" -eq 0 ]]; then
+              echo "::warning file=$4::Invalid size for $1. Sizes cannot be 0."
+              return
+          fi
+
           ratio=$(jq -n "$2 / $3")
           echo "$1: size=$2, previous_size=$3, ratio=$ratio, threshold=$threshold"
           if [[ "$(jq -n "$ratio > $threshold")" == 'true' ]]; then
