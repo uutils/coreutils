@@ -123,6 +123,11 @@ fn test_or() {
         .args(&["-14", "|", "1"])
         .succeeds()
         .stdout_only("-14\n");
+
+    new_ucmd!()
+        .args(&["1", "|", "a", "/", "5"])
+        .succeeds()
+        .stdout_only("1\n");
 }
 
 #[test]
