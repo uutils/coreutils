@@ -262,7 +262,7 @@ bigdecimal = "0.4"
 binary-heap-plus = "0.5.0"
 bstr = "1.6"
 bytecount = "0.6.4"
-byteorder = "1.4.3"
+byteorder = "1.5.0"
 chrono = { version = "^0.4.31", default-features = false, features = [
   "std",
   "alloc",
