@@ -181,8 +181,6 @@ jobs:
       run: |
         if [ -d fuzz/corpus ]; then
           tar -czvf corpus.tar.gz fuzz/corpus
-          # debug
-          ls -la
         fi
     - name: Upload Corpus
       uses: actions/upload-artifact@v3
