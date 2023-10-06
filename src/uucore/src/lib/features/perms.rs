@@ -12,11 +12,15 @@ use crate::error::USimpleError;
 pub use crate::features::entries;
 use crate::fs::resolve_relative_path;
 use crate::show_error;
-use clap::Arg;
-use clap::ArgMatches;
-use clap::Command;
 use libc::{self, gid_t, uid_t};
 use walkdir::WalkDir;
+
+#[cfg(feature = "cli-parser")]
+use clap::Arg;
+#[cfg(feature = "cli-parser")]
+use clap::ArgMatches;
+#[cfg(feature = "cli-parser")]
+use clap::Command;
 
 use std::io::Error as IOError;
 use std::io::Result as IOResult;
@@ -469,6 +473,8 @@ pub struct GidUidOwnerFilter {
     pub raw_owner: String,
     pub filter: IfFrom,
 }
+
+#[cfg(feature = "cli-parser")]
 type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
 
 /// Base implementation for `chgrp` and `chown`.
@@ -479,6 +485,7 @@ type GidUidFilterOwnerParser = fn(&ArgMatches) -> UResult<GidUidOwnerFilter>;
 /// from `ArgMatches`.
 /// `groups_only` determines whether verbose output will only mention the group.
 #[allow(clippy::cognitive_complexity)]
+#[cfg(feature = "cli-parser")]
 pub fn chown_base(
     mut command: Command,
     args: impl crate::Args,

@@ -86,6 +86,7 @@ use crate::{
     display::Quotable,
     error::{UError, UResult},
 };
+#[cfg(feature = "cli-parser")]
 use clap::ArgMatches;
 use std::{
     env,
@@ -249,6 +250,7 @@ pub mod arguments {
 ///
 /// This function directly takes [`clap::ArgMatches`] as argument and looks for
 /// the '-S' and '--suffix' arguments itself.
+#[cfg(feature = "cli-parser")]
 pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
     let supplied_suffix = matches.get_one::<String>(arguments::OPT_SUFFIX);
     if let Some(suffix) = supplied_suffix {
@@ -336,6 +338,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///     show!(err);
 /// }
 /// ```
+#[cfg(feature = "cli-parser")]
 pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
     if matches.contains_id(arguments::OPT_BACKUP) {
         // Use method to determine the type of backups to make. When this option

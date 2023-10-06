@@ -46,6 +46,7 @@
 //!     }
 //! }
 //! ```
+#[cfg(feature = "cli-parser")]
 use clap::ArgMatches;
 
 // Available update mode
@@ -119,6 +120,7 @@ pub mod arguments {
 ///     let update_mode = update_control::determine_update_mode(&matches);
 ///     assert_eq!(update_mode, UpdateMode::ReplaceAll)
 /// }
+#[cfg(feature = "cli-parser")]
 pub fn determine_update_mode(matches: &ArgMatches) -> UpdateMode {
     if let Some(mode) = matches.get_one::<String>(arguments::OPT_UPDATE) {
         match mode.as_str() {
