@@ -145,7 +145,7 @@ jobs:
     - name: Uncompress Corpus
       shell: bash
       run: |
-        if ! [ -f fuzz/corpus.tar.gz ]; then
+        if [ -f fuzz/corpus.tar.gz ]; then
           tar -xf corpus.tar.gz
         fi
     - name: Run fuzz_date for XX seconds
@@ -177,7 +177,7 @@ jobs:
     - name: Compress Corpus
       shell: bash
       run: |
-        if ! [ -d fuzz/corpus ]; then
+        if [ -d fuzz/corpus ]; then
           tar -czvf corpus.tar.gz fuzz/corpus
         fi
     - name: Upload Corpus
