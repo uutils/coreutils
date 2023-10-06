@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore αbcdef ; (people) kkos
 
 use crate::common::util::TestScenario;
@@ -109,6 +113,16 @@ fn test_or() {
         .args(&["foo", "|", "bar"])
         .succeeds()
         .stdout_only("foo\n");
+
+    new_ucmd!()
+        .args(&["14", "|", "1"])
+        .succeeds()
+        .stdout_only("14\n");
+
+    new_ucmd!()
+        .args(&["-14", "|", "1"])
+        .succeeds()
+        .stdout_only("-14\n");
 }
 
 #[test]
@@ -119,6 +133,13 @@ fn test_and() {
         .stdout_only("foo\n");
 
     new_ucmd!().args(&["", "&", "1"]).run().stdout_is("0\n");
+
+    new_ucmd!().args(&["14", "&", "1"]).run().stdout_is("14\n");
+
+    new_ucmd!()
+        .args(&["-14", "&", "1"])
+        .run()
+        .stdout_is("-14\n");
 }
 
 #[test]

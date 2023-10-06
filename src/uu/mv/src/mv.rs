@@ -1,10 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Orvar Segerström <orvarsegerstrom@gmail.com>
-// (c) Sokovikov Evgeniy  <skv-headless@yandex.ru>
-//
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) sourcepath targetpath
 
@@ -364,7 +361,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         None
     };
 
-    for sourcepath in files.iter() {
+    for sourcepath in files {
         if let Some(ref pb) = count_progress {
             pb.set_message(sourcepath.to_string_lossy().to_string());
         }
@@ -451,19 +448,11 @@ fn rename(
 
         match b.overwrite {
             OverwriteMode::NoClobber => {
-                let err_msg = if b.verbose {
-                    println!("skipped {}", to.quote());
-                    String::new()
-                } else {
-                    format!("not replacing {}", to.quote())
-                };
+                let err_msg = format!("not replacing {}", to.quote());
                 return Err(io::Error::new(io::ErrorKind::Other, err_msg));
             }
             OverwriteMode::Interactive => {
                 if !prompt_yes!("overwrite {}?", to.quote()) {
-                    if b.verbose {
-                        println!("skipped {}", to.quote());
-                    }
                     return Err(io::Error::new(io::ErrorKind::Other, ""));
                 }
             }

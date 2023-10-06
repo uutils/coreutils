@@ -1,7 +1,10 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
 
 use crate::common::util::{AtPath, TestScenario};
-use chrono::TimeZone;
 use filetime::{self, FileTime};
 use std::fs::remove_file;
 use std::path::PathBuf;
@@ -28,7 +31,7 @@ fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
 }
 
 fn str_to_filetime(format: &str, s: &str) -> FileTime {
-    let tm = chrono::Utc.datetime_from_str(s, format).unwrap();
+    let tm = chrono::NaiveDateTime::parse_from_str(s, format).unwrap();
     FileTime::from_unix_time(tm.timestamp(), tm.timestamp_subsec_nanos())
 }
 
@@ -840,4 +843,16 @@ fn test_touch_dash() {
     let (_, mut ucmd) = at_and_ucmd!();
 
     ucmd.args(&["-h", "-"]).succeeds().no_stderr().no_stdout();
+}
+
+#[test]
+// Chrono panics for now
+#[ignore]
+fn test_touch_invalid_date_format() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_invalid_date_format";
+
+    ucmd.args(&["-m", "-t", "+1000000000000 years", file])
+        .fails()
+        .stderr_contains("touch: invalid date format ‘+1000000000000 years’");
 }

@@ -1,6 +1,6 @@
 [package]
 name = "uu_cat"
-version = "0.0.20"
+version = "0.0.21"
 authors = ["uutils developers"]
 license = "MIT"
 description = "cat ~ (uutils) concatenate and display input"
@@ -17,7 +17,6 @@ path = "src/cat.rs"
 [dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }
-is-terminal = { workspace = true }
 uucore = { workspace = true, features = ["fs", "pipes"] }
 
 [target.'cfg(unix)'.dependencies]

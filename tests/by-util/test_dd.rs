@@ -1,5 +1,11 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg
 
+#[cfg(unix)]
+use crate::common::util::run_ucmd_as_root_with_stdin_stdout;
 use crate::common::util::TestScenario;
 #[cfg(all(not(windows), feature = "printf"))]
 use crate::common::util::{UCommand, TESTS_BINARY};
@@ -1561,4 +1567,46 @@ fn test_nocache_file() {
     ucmd.args(&["if=f", "of=/dev/null", "iflag=nocache", "status=noxfer"])
         .succeeds()
         .stderr_only("2048+0 records in\n2048+0 records out\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_skip_past_dev() {
+    // NOTE: This test intends to trigger code which can only be reached with root permissions.
+    let ts = TestScenario::new(util_name!());
+
+    if let Ok(result) = run_ucmd_as_root_with_stdin_stdout(
+        &ts,
+        &["bs=1", "skip=10000000000000000", "count=0", "status=noxfer"],
+        Some("/dev/sda1"),
+        None,
+    ) {
+        result.stderr_contains("dd: 'standard input': cannot skip: Invalid argument");
+        result.stderr_contains("0+0 records in");
+        result.stderr_contains("0+0 records out");
+        result.code_is(1);
+    } else {
+        print!("TEST SKIPPED");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_seek_past_dev() {
+    // NOTE: This test intends to trigger code which can only be reached with root permissions.
+    let ts = TestScenario::new(util_name!());
+
+    if let Ok(result) = run_ucmd_as_root_with_stdin_stdout(
+        &ts,
+        &["bs=1", "seek=10000000000000000", "count=0", "status=noxfer"],
+        None,
+        Some("/dev/sda1"),
+    ) {
+        result.stderr_contains("dd: 'standard output': cannot seek: Invalid argument");
+        result.stderr_contains("0+0 records in");
+        result.stderr_contains("0+0 records out");
+        result.code_is(1);
+    } else {
+        print!("TEST SKIPPED");
+    }
 }

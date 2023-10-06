@@ -1,8 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Anthony Deschamps <anthony.j.deschamps@gmail.com>
-// (c) Sylvestre Ledru <sylvestre@debian.org>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -171,7 +168,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
-        if let Ok(duration) = parse_datetime::from_str(date.as_str()) {
+        let ref_time = Local::now();
+        if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date.as_str()) {
+            let duration = new_time.signed_duration_since(ref_time);
             DateSource::Human(duration)
         } else {
             DateSource::Custom(date.into())
@@ -229,8 +228,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             DateSource::Human(relative_time) => {
                 // Get the current DateTime<FixedOffset> for things like "1 year ago"
                 let current_time = DateTime::<FixedOffset>::from(Local::now());
-                let iter = std::iter::once(Ok(current_time + relative_time));
-                Box::new(iter)
+                // double check the result is overflow or not of the current_time + relative_time
+                // it may cause a panic of chrono::datetime::DateTime add
+                match current_time.checked_add_signed(relative_time) {
+                    Some(date) => {
+                        let iter = std::iter::once(Ok(date));
+                        Box::new(iter)
+                    }
+                    None => {
+                        return Err(USimpleError::new(
+                            1,
+                            format!("invalid date {}", relative_time),
+                        ));
+                    }
+                }
             }
             DateSource::File(ref path) => {
                 if path.is_dir() {

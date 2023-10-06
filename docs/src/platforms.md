@@ -36,7 +36,7 @@ The platforms in tier 2 are more vague, but include:
 ## Utility compatibility per platform
 
 Not all utils work on every platform. For instance, `chgrp` is not supported on
-Windows, because Windows does have the concept of groups. Below is a full table
+Windows, because Windows does not have the concept of groups. Below is a full table
 detailing which utilities are supported for the tier 1 platforms.
 
 Note that for some utilities, not all functionality is supported on each

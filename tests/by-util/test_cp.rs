@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile
 
 use crate::common::util::TestScenario;
@@ -7,7 +11,7 @@ use std::fs::set_permissions;
 #[cfg(not(windows))]
 use std::os::unix::fs;
 
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(all(unix, not(target_os = "freebsd")))]
 use std::os::unix::fs::PermissionsExt;
@@ -479,7 +483,8 @@ fn test_cp_arg_interactive_verbose() {
     ucmd.args(&["-vi", "a", "b"])
         .pipe_in("N\n")
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("cp: overwrite 'b'? ")
+        .no_stdout();
 }
 
 #[test]
@@ -490,7 +495,8 @@ fn test_cp_arg_interactive_verbose_clobber() {
     at.touch("b");
     ucmd.args(&["-vin", "a", "b"])
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("cp: not replacing 'b'\n")
+        .no_stdout();
 }
 
 #[test]
@@ -1350,6 +1356,202 @@ fn test_cp_preserve_xattr_fails_on_android() {
 }
 
 #[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.hard_link("a", "b");
+    at.mkdir("c");
+
+    ucmd.arg("-d").arg("a").arg("b").arg("c").succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_2() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.symlink_file("a", "b");
+    at.mkdir("c");
+
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-H")
+        .arg("a")
+        .arg("b")
+        .arg("c")
+        .succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_3() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.touch("d/a");
+    at.symlink_file("d/a", "d/b");
+
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-L")
+        .arg("d")
+        .arg("c")
+        .succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_4() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.touch("d/a");
+    at.hard_link("d/a", "d/b");
+
+    ucmd.arg("--preserve=links")
+        .arg("-R")
+        .arg("-L")
+        .arg("d")
+        .arg("c")
+        .succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_5() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.touch("d/a");
+    at.hard_link("d/a", "d/b");
+
+    ucmd.arg("-dR")
+        .arg("--no-preserve=links")
+        .arg("d")
+        .arg("c")
+        .succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_ne!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_6() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.hard_link("a", "b");
+    at.mkdir("c");
+
+    ucmd.arg("-d").arg("a").arg("b").arg("c").succeeds();
+
+    assert!(at.dir_exists("c"));
+    assert!(at.plus("c").join("a").exists());
+    assert!(at.plus("c").join("b").exists());
+
+    #[cfg(unix)]
+    {
+        let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
+        let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
+
+        assert_eq!(metadata_a.ino(), metadata_b.ino());
+    }
+}
+
+#[test]
+// android platform will causing stderr = cp: Permission denied (os error 13)
+#[cfg(not(target_os = "android"))]
+fn test_cp_preserve_links_case_7() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("src");
+    at.touch("src/f");
+    at.hard_link("src/f", "src/g");
+
+    at.mkdir("dest");
+    at.touch("dest/g");
+
+    ucmd.arg("-n")
+        .arg("--preserve=links")
+        .arg("src/f")
+        .arg("src/g")
+        .arg("dest")
+        .fails()
+        .stderr_contains("not replacing");
+
+    assert!(at.dir_exists("dest"));
+    assert!(at.plus("dest").join("f").exists());
+    assert!(at.plus("dest").join("g").exists());
+}
+
+#[test]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
@@ -2022,12 +2224,12 @@ fn test_cp_reflink_always_override() {
     const USERDIR: &str = "dir/";
     const MOUNTPOINT: &str = "mountpoint/";
 
-    let src1_path: &str = &vec![MOUNTPOINT, USERDIR, "src1"].concat();
-    let src2_path: &str = &vec![MOUNTPOINT, USERDIR, "src2"].concat();
-    let dst_path: &str = &vec![MOUNTPOINT, USERDIR, "dst"].concat();
+    let src1_path: &str = &[MOUNTPOINT, USERDIR, "src1"].concat();
+    let src2_path: &str = &[MOUNTPOINT, USERDIR, "src2"].concat();
+    let dst_path: &str = &[MOUNTPOINT, USERDIR, "dst"].concat();
 
     scene.fixtures.mkdir(ROOTDIR);
-    scene.fixtures.mkdir(vec![ROOTDIR, USERDIR].concat());
+    scene.fixtures.mkdir([ROOTDIR, USERDIR].concat());
 
     // Setup:
     // Because neither `mkfs.btrfs` not btrfs `mount` options allow us to have a mountpoint owned
@@ -3226,4 +3428,32 @@ fn test_cp_debug_sparse_always_reflink_auto() {
     {
         panic!("Failure: stdout was \n{stdout_str}");
     }
+}
+
+#[test]
+fn test_cp_only_source_no_target() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts.ucmd().arg("a").fails();
+    let stderr_str = result.stderr_str();
+    if !stderr_str.contains("missing destination file operand after \"a\"") {
+        panic!("Failure: stderr was \n{stderr_str}");
+    }
+}
+
+#[test]
+fn test_cp_dest_no_permissions() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("valid.txt");
+    at.touch("invalid_perms.txt");
+    at.set_readonly("invalid_perms.txt");
+
+    ts.ucmd()
+        .args(&["valid.txt", "invalid_perms.txt"])
+        .fails()
+        .stderr_contains("invalid_perms.txt")
+        .stderr_contains("denied");
 }

@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use crate::common::util::TestScenario;
 use filetime::FileTime;
 use std::thread::sleep;
@@ -1278,7 +1282,7 @@ fn test_mv_verbose() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
-#[cfg(features = "mkdir")]
+#[cfg(feature = "mkdir")]
 fn test_mv_permission_error() {
     let scene = TestScenario::new("mkdir");
     let folder1 = "bar";
@@ -1319,7 +1323,7 @@ fn test_mv_interactive_error() {
 }
 
 #[test]
-fn test_mv_info_self() {
+fn test_mv_into_self() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dir1 = "dir1";
@@ -1346,7 +1350,7 @@ fn test_mv_arg_interactive_skipped() {
         .ignore_stdin_write_error()
         .fails()
         .stderr_is("mv: overwrite 'b'? ")
-        .stdout_is("skipped 'b'\n");
+        .no_stdout();
 }
 
 #[test]
@@ -1356,7 +1360,8 @@ fn test_mv_arg_interactive_skipped_vin() {
     at.touch("b");
     ucmd.args(&["-vin", "a", "b"])
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("mv: not replacing 'b'\n")
+        .no_stdout();
 }
 
 #[test]

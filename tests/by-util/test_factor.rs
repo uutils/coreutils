@@ -1,9 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) kwantam <kwantam@gmail.com>
-//
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 #![allow(clippy::unreadable_literal)]
 
 // spell-checker:ignore (methods) hexdigest
@@ -165,15 +163,12 @@ fn test_random() {
         let mut factors = Vec::new();
         while product < min {
             // log distribution---higher probability for lower numbers
-            let factor;
-            loop {
+            let factor = loop {
                 let next = rng.gen_range(0_f64..log_num_primes).exp2().floor() as usize;
                 if next < NUM_PRIMES {
-                    factor = primes[next];
-                    break;
+                    break primes[next];
                 }
-            }
-            let factor = factor;
+            };
 
             match product.checked_mul(factor) {
                 Some(p) => {
@@ -317,7 +312,7 @@ fn run(input_string: &[u8], output_string: &[u8]) {
 fn test_primes_with_exponents() {
     let mut input_string = String::new();
     let mut output_string = String::new();
-    for primes in PRIMES_BY_BITS.iter() {
+    for primes in PRIMES_BY_BITS {
         for &prime in *primes {
             input_string.push_str(&(format!("{prime} "))[..]);
             output_string.push_str(&(format!("{prime}: {prime}\n"))[..]);
@@ -340,6 +335,37 @@ fn test_primes_with_exponents() {
         .pipe_in(input_string)
         .run()
         .stdout_is(String::from_utf8(output_string.as_bytes().to_owned()).unwrap());
+}
+
+#[test]
+fn fails_on_invalid_number() {
+    new_ucmd!().arg("not-a-valid-number").fails();
+    new_ucmd!()
+        .arg("not-a-valid-number")
+        .arg("12")
+        .fails()
+        .stdout_contains("12: 2 2 3");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn short_circuit_write_error() {
+    use std::fs::OpenOptions;
+
+    // Check that the error is printed exactly once and factor does not move on
+    // to the next number when a write error happens.
+    //
+    // Note: Technically, GNU prints the error twice, not because it does not
+    // short circuit the error, but because it always prints the error twice,
+    // for any number of inputs. That's silly behavior and printing once is
+    // clearly better.
+    let f = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .arg("12")
+        .arg("10")
+        .set_stdout(f)
+        .fails()
+        .stderr_is("factor: write error: No space left on device\n");
 }
 
 const PRIMES_BY_BITS: &[&[u64]] = &[

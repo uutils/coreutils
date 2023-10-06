@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Nicholas Juszczak <juszczakn@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) ugoa cmode
 
@@ -40,31 +38,27 @@ fn get_mode(_matches: &ArgMatches, _mode_had_minus_prefix: bool) -> Result<u32, 
 
 #[cfg(not(windows))]
 fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, String> {
-    let digits: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    // Translate a ~str in octal form to u16, default to 777
     // Not tested on Windows
     let mut new_mode = DEFAULT_PERM;
-    match matches.get_one::<String>(options::MODE) {
-        Some(m) => {
-            for mode in m.split(',') {
-                if mode.contains(digits) {
-                    new_mode = mode::parse_numeric(new_mode, m, true)?;
+
+    if let Some(m) = matches.get_one::<String>(options::MODE) {
+        for mode in m.split(',') {
+            if mode.chars().any(|c| c.is_ascii_digit()) {
+                new_mode = mode::parse_numeric(new_mode, m, true)?;
+            } else {
+                let cmode = if mode_had_minus_prefix {
+                    // clap parsing is finished, now put prefix back
+                    format!("-{mode}")
                 } else {
-                    let cmode = if mode_had_minus_prefix {
-                        // clap parsing is finished, now put prefix back
-                        format!("-{mode}")
-                    } else {
-                        mode.to_string()
-                    };
-                    new_mode = mode::parse_symbolic(new_mode, &cmode, mode::get_umask(), true)?;
-                }
+                    mode.to_string()
+                };
+                new_mode = mode::parse_symbolic(new_mode, &cmode, mode::get_umask(), true)?;
             }
-            Ok(new_mode)
         }
-        None => {
-            // If no mode argument is specified return the mode derived from umask
-            Ok(!mode::get_umask() & 0o0777)
-        }
+        Ok(new_mode)
+    } else {
+        // If no mode argument is specified return the mode derived from umask
+        Ok(!mode::get_umask() & 0o0777)
     }
 }
 

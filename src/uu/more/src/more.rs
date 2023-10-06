@@ -1,15 +1,13 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Martin Kysel <code@martinkysel.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE file
-//  * that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (methods) isnt
 
 use std::{
     fs::File,
-    io::{stdin, stdout, BufReader, Read, Stdout, Write},
+    io::{stdin, stdout, BufReader, IsTerminal, Read, Stdout, Write},
     path::Path,
     time::Duration,
 };
@@ -24,7 +22,6 @@ use crossterm::{
     terminal::{self, Clear, ClearType},
 };
 
-use is_terminal::IsTerminal;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;

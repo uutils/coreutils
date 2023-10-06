@@ -1,6 +1,6 @@
 [package]
 name = "uu_mv"
-version = "0.0.20"
+version = "0.0.21"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mv ~ (uutils) move (rename) SOURCE to DESTINATION"
@@ -18,7 +18,11 @@ path = "src/mv.rs"
 clap = { workspace = true }
 fs_extra = { workspace = true }
 indicatif = { workspace = true }
-uucore = { workspace = true, features = ["fs"] }
+uucore = { workspace = true, features = [
+  "backup-control",
+  "fs",
+  "update-control",
+] }
 
 [[bin]]
 name = "mv"

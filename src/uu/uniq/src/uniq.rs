@@ -1,11 +1,9 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Chirag B Jadwani <chirag.jadwani@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Write};
@@ -25,6 +23,7 @@ pub mod options {
     pub static IGNORE_CASE: &str = "ignore-case";
     pub static REPEATED: &str = "repeated";
     pub static SKIP_FIELDS: &str = "skip-fields";
+    pub static OBSOLETE_SKIP_FIELDS: &str = "obsolete_skip_field";
     pub static SKIP_CHARS: &str = "skip-chars";
     pub static UNIQUE: &str = "unique";
     pub static ZERO_TERMINATED: &str = "zero-terminated";
@@ -54,6 +53,8 @@ struct Uniq {
     ignore_case: bool,
     zero_terminated: bool,
 }
+
+const OBSOLETE_SKIP_FIELDS_DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 macro_rules! write_line_terminator {
     ($writer:expr, $line_terminator:expr) => {
@@ -238,6 +239,41 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Optio
     })
 }
 
+/// Gets number of fields to be skipped from the shorthand option `-N`
+///
+/// ```bash
+/// uniq -12345
+/// ```
+/// the first digit isn't interpreted by clap as part of the value
+/// so `get_one()` would return `2345`, then to get the actual value
+/// we loop over every possible first digit, only one of which can be
+/// found in the command line because they conflict with each other,
+/// append the value to it and parse the resulting string as usize,
+/// an error at this point means that a character that isn't a digit was given
+fn obsolete_skip_field(matches: &ArgMatches) -> UResult<Option<usize>> {
+    for opt_text in OBSOLETE_SKIP_FIELDS_DIGITS {
+        let argument = matches.get_one::<String>(opt_text);
+        if matches.contains_id(opt_text) {
+            let mut full = opt_text.to_owned();
+            if let Some(ar) = argument {
+                full.push_str(ar);
+            }
+            let value = full.parse::<usize>();
+
+            if let Ok(val) = value {
+                return Ok(Some(val));
+            } else {
+                return Err(USimpleError {
+                    code: 1,
+                    message: format!("Invalid argument for skip-fields: {}", full),
+                }
+                .into());
+            }
+        }
+    }
+    Ok(None)
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
@@ -249,6 +285,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|mut fi| (fi.next(), fi.next()))
         .unwrap_or_default();
 
+    let skip_fields_modern: Option<usize> = opt_parsed(options::SKIP_FIELDS, &matches)?;
+
+    let skip_fields_old: Option<usize> = obsolete_skip_field(&matches)?;
+
     let uniq = Uniq {
         repeats_only: matches.get_flag(options::REPEATED)
             || matches.contains_id(options::ALL_REPEATED),
@@ -257,7 +297,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             || matches.contains_id(options::GROUP),
         delimiters: get_delimiter(&matches),
         show_counts: matches.get_flag(options::COUNT),
-        skip_fields: opt_parsed(options::SKIP_FIELDS, &matches)?,
+        skip_fields: skip_fields_modern.or(skip_fields_old),
         slice_start: opt_parsed(options::SKIP_CHARS, &matches)?,
         slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
         ignore_case: matches.get_flag(options::IGNORE_CASE),
@@ -278,7 +318,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    let mut cmd = Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
@@ -357,6 +397,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::SKIP_FIELDS)
                 .short('f')
                 .long(options::SKIP_FIELDS)
+                .overrides_with_all(OBSOLETE_SKIP_FIELDS_DIGITS)
                 .help("avoid comparing the first N fields")
                 .value_name("N"),
         )
@@ -374,13 +415,42 @@ pub fn uu_app() -> Command {
                 .help("end lines with 0 byte, not newline")
                 .action(ArgAction::SetTrue),
         )
+        .group(
+            // in GNU `uniq` every every digit of these arguments
+            // would be interpreted as a simple flag,
+            // these flags then are concatenated to get
+            // the number of fields to skip.
+            // in this way `uniq -1 -z -2` would be
+            // equal to `uniq -12 -q`, since this behavior
+            // is counterintuitive and it's hard to do in clap
+            // we handle it more like GNU `fold`: we have a flag
+            // for each possible initial digit, that takes the
+            // rest of the value as argument.
+            // we disallow explicitly multiple occurrences
+            // because then it would have a different behavior
+            // from GNU
+            ArgGroup::new(options::OBSOLETE_SKIP_FIELDS)
+                .multiple(false)
+                .args(OBSOLETE_SKIP_FIELDS_DIGITS)
+        )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .num_args(0..=2)
                 .value_hint(clap::ValueHint::FilePath),
-        )
+        );
+
+    for i in OBSOLETE_SKIP_FIELDS_DIGITS {
+        cmd = cmd.arg(
+            Arg::new(i)
+                .short(i.chars().next().unwrap())
+                .num_args(0..=1)
+                .hide(true),
+        );
+    }
+
+    cmd
 }
 
 fn get_delimiter(matches: &ArgMatches) -> Delimiters {

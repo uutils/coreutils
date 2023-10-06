@@ -1,7 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Alex Lyon <arcterus@mail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -337,9 +335,7 @@ impl Chmoder {
                 let mut new_mode = fperm;
                 let mut naively_expected_new_mode = new_mode;
                 for mode in cmode_unwrapped.split(',') {
-                    // cmode is guaranteed to be Some in this case
-                    let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-                    let result = if mode.contains(arr) {
+                    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
                         mode::parse_numeric(new_mode, mode, file.is_dir()).map(|v| (v, v))
                     } else {
                         mode::parse_symbolic(new_mode, mode, get_umask(), file.is_dir()).map(|m| {
@@ -354,20 +350,22 @@ impl Chmoder {
                             (m, naive_mode)
                         })
                     };
+
                     match result {
                         Ok((mode, naive_mode)) => {
                             new_mode = mode;
                             naively_expected_new_mode = naive_mode;
                         }
                         Err(f) => {
-                            if self.quiet {
-                                return Err(ExitCode::new(1));
+                            return if self.quiet {
+                                Err(ExitCode::new(1))
                             } else {
-                                return Err(USimpleError::new(1, f));
-                            }
+                                Err(USimpleError::new(1, f))
+                            };
                         }
                     }
                 }
+
                 self.change_file(fperm, new_mode, file)?;
                 // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
                 if (new_mode & !naively_expected_new_mode) != 0 {
@@ -438,25 +436,25 @@ mod tests {
     fn test_extract_negative_modes() {
         // "chmod -w -r file" becomes "chmod -w,-r file". clap does not accept "-w,-r" as MODE.
         // Therefore, "w" is added as pseudo mode to pass clap.
-        let (c, a) = extract_negative_modes(vec!["-w", "-r", "file"].iter().map(OsString::from));
+        let (c, a) = extract_negative_modes(["-w", "-r", "file"].iter().map(OsString::from));
         assert_eq!(c, Some("-w,-r".to_string()));
-        assert_eq!(a, vec!["w", "file"]);
+        assert_eq!(a, ["w", "file"]);
 
         // "chmod -w file -r" becomes "chmod -w,-r file". clap does not accept "-w,-r" as MODE.
         // Therefore, "w" is added as pseudo mode to pass clap.
-        let (c, a) = extract_negative_modes(vec!["-w", "file", "-r"].iter().map(OsString::from));
+        let (c, a) = extract_negative_modes(["-w", "file", "-r"].iter().map(OsString::from));
         assert_eq!(c, Some("-w,-r".to_string()));
-        assert_eq!(a, vec!["w", "file"]);
+        assert_eq!(a, ["w", "file"]);
 
         // "chmod -w -- -r file" becomes "chmod -w -r file", where "-r" is interpreted as file.
         // Again, "w" is needed as pseudo mode.
-        let (c, a) = extract_negative_modes(vec!["-w", "--", "-r", "f"].iter().map(OsString::from));
+        let (c, a) = extract_negative_modes(["-w", "--", "-r", "f"].iter().map(OsString::from));
         assert_eq!(c, Some("-w".to_string()));
-        assert_eq!(a, vec!["w", "--", "-r", "f"]);
+        assert_eq!(a, ["w", "--", "-r", "f"]);
 
         // "chmod -- -r file" becomes "chmod -r file".
-        let (c, a) = extract_negative_modes(vec!["--", "-r", "file"].iter().map(OsString::from));
+        let (c, a) = extract_negative_modes(["--", "-r", "file"].iter().map(OsString::from));
         assert_eq!(c, None);
-        assert_eq!(a, vec!["--", "-r", "file"]);
+        assert_eq!(a, ["--", "-r", "file"]);
     }
 }

@@ -102,7 +102,6 @@ PROGS       := \
 	pwd \
 	readlink \
 	realpath \
-	relpath \
 	rm \
 	rmdir \
 	seq \

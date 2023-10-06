@@ -1,10 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Ben Eggers <ben.eggers36@gmail.com>
-//  * (c) Akira Hayakawa <ruby.wktk@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use clap::{crate_version, Arg, Command};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
@@ -157,6 +154,7 @@ impl Graph {
             self.result.push(n.clone());
 
             let n_out_edges = self.out_edges.get_mut(&n).unwrap();
+            #[allow(clippy::explicit_iter_loop)]
             for m in n_out_edges.iter() {
                 let m_in_edges = self.in_edges.get_mut(m).unwrap();
                 m_in_edges.remove(&n);

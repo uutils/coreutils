@@ -1,7 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Jian Zeng <anonymousknight96@gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -197,6 +195,53 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Parses the user string to extract the UID.
+fn parse_uid(user: &str, spec: &str, sep: char) -> UResult<Option<u32>> {
+    if user.is_empty() {
+        return Ok(None);
+    }
+    match Passwd::locate(user) {
+        Ok(u) => Ok(Some(u.uid)), // We have been able to get the uid
+        Err(_) => {
+            // we have NOT been able to find the uid
+            // but we could be in the case where we have user.group
+            if spec.contains('.') && !spec.contains(':') && sep == ':' {
+                // but the input contains a '.' but not a ':'
+                // we might have something like username.groupname
+                // So, try to parse it this way
+                parse_spec(spec, '.').map(|(uid, _)| uid)
+            } else {
+                // It's possible that the `user` string contains a
+                // numeric user ID, in which case, we respect that.
+                match user.parse() {
+                    Ok(uid) => Ok(Some(uid)),
+                    Err(_) => Err(USimpleError::new(
+                        1,
+                        format!("invalid user: {}", spec.quote()),
+                    )),
+                }
+            }
+        }
+    }
+}
+
+/// Parses the group string to extract the GID.
+fn parse_gid(group: &str, spec: &str) -> UResult<Option<u32>> {
+    if group.is_empty() {
+        return Ok(None);
+    }
+    match Group::locate(group) {
+        Ok(g) => Ok(Some(g.gid)),
+        Err(_) => match group.parse() {
+            Ok(gid) => Ok(Some(gid)),
+            Err(_) => Err(USimpleError::new(
+                1,
+                format!("invalid group: {}", spec.quote()),
+            )),
+        },
+    }
+}
+
 /// Parse the owner/group specifier string into a user ID and a group ID.
 ///
 /// The `spec` can be of the form:
@@ -215,52 +260,8 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     let user = args.next().unwrap_or("");
     let group = args.next().unwrap_or("");
 
-    let uid = if user.is_empty() {
-        None
-    } else {
-        Some(match Passwd::locate(user) {
-            Ok(u) => u.uid, // We have been able to get the uid
-            Err(_) =>
-            // we have NOT been able to find the uid
-            // but we could be in the case where we have user.group
-            {
-                if spec.contains('.') && !spec.contains(':') && sep == ':' {
-                    // but the input contains a '.' but not a ':'
-                    // we might have something like username.groupname
-                    // So, try to parse it this way
-                    return parse_spec(spec, '.');
-                } else {
-                    // It's possible that the `user` string contains a
-                    // numeric user ID, in which case, we respect that.
-                    match user.parse() {
-                        Ok(uid) => uid,
-                        Err(_) => {
-                            return Err(USimpleError::new(
-                                1,
-                                format!("invalid user: {}", spec.quote()),
-                            ))
-                        }
-                    }
-                }
-            }
-        })
-    };
-    let gid = if group.is_empty() {
-        None
-    } else {
-        Some(match Group::locate(group) {
-            Ok(g) => g.gid,
-            Err(_) => match group.parse() {
-                Ok(gid) => gid,
-                Err(_) => {
-                    return Err(USimpleError::new(
-                        1,
-                        format!("invalid group: {}", spec.quote()),
-                    ));
-                }
-            },
-        })
-    };
+    let uid = parse_uid(user, spec, sep)?;
+    let gid = parse_gid(group, spec)?;
 
     if user.chars().next().map(char::is_numeric).unwrap_or(false)
         && group.is_empty()
