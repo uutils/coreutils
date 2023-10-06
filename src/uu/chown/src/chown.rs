@@ -209,7 +209,7 @@ fn parse_uid(user: &str, spec: &str, sep: char) -> UResult<Option<u32>> {
                 // but the input contains a '.' but not a ':'
                 // we might have something like username.groupname
                 // So, try to parse it this way
-                return parse_spec(spec, '.').map(|(uid, _)| uid);
+                parse_spec(spec, '.').map(|(uid, _)| uid)
             } else {
                 // It's possible that the `user` string contains a
                 // numeric user ID, in which case, we respect that.
