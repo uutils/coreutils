@@ -39,9 +39,6 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
 }
 
 /// Processes the numeric block of the input string to generate the appropriate options.
-///
-/// This function is responsible for parsing the numeric section of the input string
-/// and generating the corresponding options based on the parsed value and subsequent characters.
 fn process_num_block(
     src: &str,
     last_char: char,
