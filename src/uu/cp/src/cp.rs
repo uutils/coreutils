@@ -33,7 +33,7 @@ use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::UError;
 #[cfg(feature = "cli-parser")]
-use uucore::error::{set_exit_code, UResult, UUsageError};
+use uucore::error::{set_exit_code, UClapError, UResult, UUsageError};
 use uucore::fs::{
     canonicalize, is_symlink_loop, paths_refer_to_same_file, FileInformation, MissingHandling,
     ResolveMode,

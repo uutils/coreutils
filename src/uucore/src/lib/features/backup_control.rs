@@ -82,14 +82,14 @@
 
 // spell-checker:ignore backupopt
 
-use crate::{
-    display::Quotable,
-    error::{UError, UResult},
-};
+#[cfg(feature = "cli-parser")]
+use crate::error::UResult;
+use crate::{display::Quotable, error::UError};
 #[cfg(feature = "cli-parser")]
 use clap::ArgMatches;
+#[cfg(feature = "cli-parser")]
+use std::env;
 use std::{
-    env,
     error::Error,
     fmt::{Debug, Display},
     path::{Path, PathBuf},
@@ -202,6 +202,7 @@ impl Display for BackupError {
 /// recommended to include the `clap` arguments via the functions provided here.
 /// This way the backup-specific arguments are handled uniformly across
 /// utilities and can be maintained in one central place.
+#[cfg(feature = "cli-parser")]
 pub mod arguments {
     use clap::ArgAction;
 
@@ -384,6 +385,7 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
 ///
 /// [10]: BackupError::InvalidArgument
 /// [11]: BackupError::AmbiguousArgument
+#[cfg(feature = "cli-parser")]
 fn match_method(method: &str, origin: &str) -> UResult<BackupMode> {
     let matches: Vec<&&str> = BACKUP_CONTROL_VALUES
         .iter()

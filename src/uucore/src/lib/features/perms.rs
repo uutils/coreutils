@@ -8,6 +8,7 @@
 use crate::display::Quotable;
 use crate::error::strip_errno;
 use crate::error::UResult;
+#[cfg(feature = "cli-parser")]
 use crate::error::USimpleError;
 pub use crate::features::entries;
 use crate::fs::resolve_relative_path;

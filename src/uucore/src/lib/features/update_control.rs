@@ -61,6 +61,7 @@ pub enum UpdateMode {
     ReplaceIfOlder,
 }
 
+#[cfg(feature = "cli-parser")]
 pub mod arguments {
     use clap::ArgAction;
 
