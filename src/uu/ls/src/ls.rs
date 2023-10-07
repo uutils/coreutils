@@ -1856,6 +1856,7 @@ impl PathData {
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();

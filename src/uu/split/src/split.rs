@@ -1714,6 +1714,7 @@ where
     Ok(())
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn split(settings: &Settings) -> UResult<()> {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
