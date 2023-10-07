@@ -11,6 +11,7 @@ pub enum ParseError {
     Syntax,
     Overflow,
 }
+
 /// Parses obsolete syntax
 /// head -NUM\[kmzv\] // spell-checker:disable-line
 pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>, ParseError>> {
@@ -135,6 +136,7 @@ pub fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     fn obsolete(src: &str) -> Option<Result<Vec<String>, ParseError>> {
         let r = parse_obsolete(src);
         match r {
@@ -145,9 +147,11 @@ mod tests {
             None => None,
         }
     }
+
     fn obsolete_result(src: &[&str]) -> Option<Result<Vec<String>, ParseError>> {
         Some(Ok(src.iter().map(|s| s.to_string()).collect()))
     }
+
     #[test]
     fn test_parse_numbers_obsolete() {
         assert_eq!(obsolete("-5"), obsolete_result(&["-n", "5"]));
@@ -167,16 +171,19 @@ mod tests {
             obsolete_result(&["-z", "-c", "110100480"])
         );
     }
+
     #[test]
     fn test_parse_errors_obsolete() {
         assert_eq!(obsolete("-5n"), Some(Err(ParseError::Syntax)));
         assert_eq!(obsolete("-5c5"), Some(Err(ParseError::Syntax)));
     }
+
     #[test]
     fn test_parse_obsolete_no_match() {
         assert_eq!(obsolete("-k"), None);
         assert_eq!(obsolete("asd"), None);
     }
+
     #[test]
     #[cfg(target_pointer_width = "64")]
     fn test_parse_obsolete_overflow_x64() {
@@ -189,6 +196,7 @@ mod tests {
             Some(Err(ParseError::Overflow))
         );
     }
+
     #[test]
     #[cfg(target_pointer_width = "32")]
     fn test_parse_obsolete_overflow_x32() {
