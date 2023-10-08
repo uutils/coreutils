@@ -52,7 +52,7 @@ impl AstNode {
                 operands,
             } => {
                 println!(
-                    "Node( {} ) at #{} (evaluate -> {:?})",
+                    "Node( {} ) at #{} ( evaluate -> {:?} )",
                     op_type,
                     token_idx,
                     self.evaluate()
@@ -155,8 +155,25 @@ impl AstNode {
         }
     }
     pub fn operand_values(&self) -> Result<Vec<String>, String> {
-        if let Self::Node { operands, .. } = self {
+        if let Self::Node {
+            operands, op_type, ..
+        } = self
+        {
             let mut out = Vec::with_capacity(operands.len());
+            let mut operands = operands.iter();
+            // check the first value before `|`, stop evaluate and return directly if it is true.
+            // push dummy to pass the check of `len() == 2`
+            if op_type == "|" {
+                if let Some(value) = operands.next() {
+                    let value = value.evaluate()?;
+                    out.push(value.clone());
+                    if value_as_bool(&value) {
+                        out.push(String::from("dummy"));
+                        return Ok(out);
+                    }
+                }
+            }
+
             for operand in operands {
                 let value = operand.evaluate()?;
                 out.push(value);
