@@ -24,8 +24,8 @@ use crossterm::{
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::{display::Quotable, show};
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("more.md");
@@ -105,51 +105,35 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
             let file = Path::new(file);
             if file.is_dir() {
-                if length == 1 {
-                    terminal::disable_raw_mode().unwrap();
-                    return Err(UUsageError::new(
-                        1,
-                        format!("{} is a directory.", file.quote()),
-                    ));
-                }
-                buff.push_str(&format!("more: {} is a directory.\n", file.quote()));
+                terminal::disable_raw_mode().unwrap();
+                show!(UUsageError::new(
+                    0,
+                    format!("{} is a directory.", file.quote()),
+                ));
+                terminal::enable_raw_mode().unwrap();
                 continue;
             }
             if !file.exists() {
-                if length == 1 {
-                    terminal::disable_raw_mode().unwrap();
-                    return Err(USimpleError::new(
-                        1,
-                        format!("cannot open {}: No such file or directory", file.quote()),
-                    ));
-                }
-                buff.push_str(&format!(
-                    "more: cannot open {}: No such file or directory\n",
-                    file.quote()
+                terminal::disable_raw_mode().unwrap();
+                show!(USimpleError::new(
+                    0,
+                    format!("cannot open {}: No such file or directory", file.quote()),
                 ));
+                terminal::enable_raw_mode().unwrap();
                 continue;
             }
             let opened_file = match File::open(file) {
                 Err(why) => {
-                    if length == 1 {
-                        terminal::disable_raw_mode().unwrap();
-                        return Err(USimpleError::new(
-                            1,
-                            format!("cannot open {}: {}", file.quote(), why.kind()),
-                        ));
-                    }
-                    buff.push_str(&format!(
-                        "more: cannot open {}: {}\n",
-                        file.quote(),
-                        why.kind()
+                    terminal::disable_raw_mode().unwrap();
+                    show!(USimpleError::new(
+                        0,
+                        format!("cannot open {}: {}", file.quote(), why.kind()),
                     ));
+                    terminal::enable_raw_mode().unwrap();
                     continue;
                 }
                 Ok(opened_file) => opened_file,
             };
-            if length > 1 {
-                buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
-            }
             let mut reader = BufReader::new(opened_file);
             reader.read_to_string(&mut buff).unwrap();
             more(
@@ -163,9 +147,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             buff.clear();
         }
         reset_term(&mut stdout);
-        if !buff.is_empty() {
-            print!("{}", buff);
-        }
     } else if !std::io::stdin().is_terminal() {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
