@@ -31,10 +31,12 @@ pub enum AstNode {
         operands: OperandsList,
     },
 }
+
 impl AstNode {
     fn debug_dump(&self) {
         self.debug_dump_impl(1);
     }
+
     fn debug_dump_impl(&self, depth: usize) {
         for _ in 0..depth {
             print!("\t",);
@@ -71,12 +73,14 @@ impl AstNode {
             operands,
         })
     }
+
     fn new_leaf(token_idx: usize, value: &str) -> Box<Self> {
         Box::new(Self::Leaf {
             token_idx,
             value: value.into(),
         })
     }
+
     pub fn evaluate(&self) -> Result<String, String> {
         match self {
             Self::Leaf { value, .. } => Ok(value.clone()),
@@ -154,6 +158,7 @@ impl AstNode {
             },
         }
     }
+
     pub fn operand_values(&self) -> Result<Vec<String>, String> {
         if let Self::Node {
             operands, op_type, ..
@@ -257,6 +262,7 @@ fn ast_from_rpn(rpn: &mut TokenStack) -> Result<Box<AstNode>, String> {
         }
     }
 }
+
 fn maybe_ast_node(
     token_idx: usize,
     op_type: &str,
@@ -520,6 +526,7 @@ fn prefix_operator_substr(values: &[String]) -> String {
 fn bool_as_int(b: bool) -> u8 {
     u8::from(b)
 }
+
 fn bool_as_string(b: bool) -> String {
     if b {
         "1".to_string()
@@ -527,6 +534,7 @@ fn bool_as_string(b: bool) -> String {
         "0".to_string()
     }
 }
+
 fn value_as_bool(s: &str) -> bool {
     if s.is_empty() {
         return false;
