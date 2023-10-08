@@ -166,6 +166,7 @@ jobs:
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   toml_format:
+    name: Style/toml
     runs-on: ubuntu-latest
     steps:
       - name: Clone repository
