@@ -2889,7 +2889,11 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
                 Some('=')
             } else if file_type.is_fifo() {
                 Some('|')
-            } else if file_type.is_file() && file_is_executable(path.md(out).as_ref().unwrap()) {
+            } else if file_type.is_file()
+                // Safe unwrapping if the file was removed between listing and display
+                // See https://github.com/uutils/coreutils/issues/5371
+                && path.md(out).map(file_is_executable).unwrap_or_default()
+            {
                 Some('*')
             } else {
                 None
