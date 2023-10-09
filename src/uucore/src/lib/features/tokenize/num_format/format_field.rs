@@ -17,23 +17,6 @@ pub enum FieldType {
     Charf,
 }
 
-// #[allow(non_camel_case_types)]
-// pub enum FChar {
-// d,
-// e,
-// E,
-// i,
-// f,
-// F,
-// g,
-// G,
-// u,
-// x,
-// X,
-// o
-// }
-//
-
 // a Sub Tokens' fields are stored
 // as a single object so they can be more simply
 // passed by ref to num_format in a Sub method
