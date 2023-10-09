@@ -526,6 +526,7 @@ fn is_potential_directory_path(path: &Path) -> bool {
 ///
 /// Returns a Result type with the Err variant containing the error message.
 ///
+#[allow(clippy::cognitive_complexity)]
 fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
     // first check that paths contains at least one element
     if paths.is_empty() {
