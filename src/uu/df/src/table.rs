@@ -152,8 +152,10 @@ impl From<Filesystem> for Row {
             ffree,
             ..
         } = fs.usage;
-        let bused = blocks - bfree;
-        let fused = files - ffree;
+
+        // On Windows WSL, files can be less than ffree. Protect such cases via saturating_sub.
+        let bused = blocks.saturating_sub(bfree);
+        let fused = files.saturating_sub(ffree);
         Self {
             file: fs.file,
             fs_device: dev_name,
@@ -814,5 +816,36 @@ mod tests {
         assert_eq!(get_formatted_values(100, 99, 1), vec!("1", "1", "1"));
         assert_eq!(get_formatted_values(1000, 1000, 0), vec!("1", "1", "0"));
         assert_eq!(get_formatted_values(1001, 1000, 1), vec!("2", "1", "1"));
+    }
+
+    #[test]
+    fn test_row_converter_with_invalid_numbers() {
+        // copy from wsl linux
+        let d = crate::Filesystem {
+            file: None,
+            mount_info: crate::MountInfo {
+                dev_id: "28".to_string(),
+                dev_name: "none".to_string(),
+                fs_type: "9p".to_string(),
+                mount_dir: "/usr/lib/wsl/drivers".to_string(),
+                mount_option: "ro,nosuid,nodev,noatime".to_string(),
+                mount_root: "/".to_string(),
+                remote: false,
+                dummy: false,
+            },
+            usage: crate::table::FsUsage {
+                blocksize: 4096,
+                blocks: 244029695,
+                bfree: 125085030,
+                bavail: 125085030,
+                bavail_top_bit_set: false,
+                files: 999,
+                ffree: 1000000,
+            },
+        };
+
+        let row = Row::from(d);
+
+        assert_eq!(row.inodes_used, 0);
     }
 }
