@@ -1,0 +1,64 @@
+name: Fuzzing
+
+# spell-checker:ignore fuzzer
+
+on: [push, pull_request]
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  fuzz:
+    name: Run the fuzzers
+    runs-on: ubuntu-latest
+    env:
+      RUN_FOR: 60
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@nightly
+    - name: Install `cargo-fuzz`
+      run: cargo install cargo-fuzz
+    - uses: Swatinem/rust-cache@v2
+    - name: Run fuzz_date for XX seconds
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_date -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_test for XX seconds
+      continue-on-error: true
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_test -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_expr for XX seconds
+      continue-on-error: true
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_expr -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_parse_glob for XX seconds
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_parse_glob -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_parse_size for XX seconds
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_parse_size -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+    - name: Run fuzz_parse_time for XX seconds
+      shell: bash
+      run: |
+        ## Run it
+        cd fuzz
+        cargo +nightly fuzz run fuzz_parse_time -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
