@@ -18,6 +18,7 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::prelude::FileExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::string::ToString;
 
@@ -355,6 +356,9 @@ fn show_debug(copy_debug: &CopyDebug) {
 const ABOUT: &str = help_about!("cp.md");
 const USAGE: &str = help_usage!("cp.md");
 const AFTER_HELP: &str = help_section!("after help", "cp.md");
+const SIZE_LIMIT_FOR_NORMAL_COPY: u64 = 524288000;
+const BUFFER_SIZE: usize = 4096 * 4;
+const BUFFER_SIZE_U64: u64 = BUFFER_SIZE as u64;
 
 static EXIT_ERR: i32 = 1;
 
@@ -1762,6 +1766,18 @@ fn copy_file(
         permissions
     };
 
+    let source_size = source_metadata.len();
+    let mut use_copy_with_intermediate_progress = false;
+    if source_size >= SIZE_LIMIT_FOR_NORMAL_COPY
+        && !source_is_symlink
+        && !source_is_fifo
+        && symlinked_files.len() == 0
+        && matches!(options.copy_mode, CopyMode::Copy)
+        && progress_bar.is_some()
+    {
+        use_copy_with_intermediate_progress = true;
+    }
+
     match options.copy_mode {
         CopyMode::Link => {
             if dest.exists() {
@@ -1785,15 +1801,19 @@ fn copy_file(
             .context(context)?;
         }
         CopyMode::Copy => {
-            copy_helper(
-                source,
-                dest,
-                options,
-                context,
-                source_is_symlink,
-                source_is_fifo,
-                symlinked_files,
-            )?;
+            if use_copy_with_intermediate_progress {
+                copy_with_intermediate_progress(source, dest, progress_bar);
+            } else {
+                copy_helper(
+                    source,
+                    dest,
+                    options,
+                    context,
+                    source_is_symlink,
+                    source_is_fifo,
+                    symlinked_files,
+                )?;
+            }
         }
         CopyMode::SymLink => {
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
@@ -1971,6 +1991,35 @@ fn copy_helper(
     }
 
     Ok(())
+}
+
+/// Copy the file from `source` to `dest` by reading into and writing from a buffer.
+/// Increment the progress bar on each write to show the intermediate progress.
+pub fn copy_with_intermediate_progress(
+    source: &Path,
+    dest: &Path,
+    progress_bar: &Option<ProgressBar>,
+) {
+    let metadata = fs::metadata(source).unwrap();
+    let source_file = OpenOptions::new().read(true).open(source).unwrap();
+    let dest_file = OpenOptions::new()
+        .append(true)
+        .write(true)
+        .create_new(true)
+        .open(dest)
+        .unwrap();
+    let source_size = metadata.len() as usize;
+    progress_bar.as_ref().unwrap().tick();
+    let mut written = 0;
+    while written < source_size {
+        let mut buffer = [0; BUFFER_SIZE];
+        let written_u64 = written as u64;
+        let read = source_file.read_at(&mut buffer, written_u64).unwrap();
+        written += dest_file
+            .write_at(&buffer.get(0..read).unwrap(), written_u64)
+            .unwrap();
+        progress_bar.as_ref().unwrap().inc(BUFFER_SIZE_U64);
+    }
 }
 
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
