@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore tmpfs Pcent Itotal Iused Iavail Ipcent
+// spell-checker:ignore tmpfs Pcent Itotal Iused Iavail Ipcent nosuid nodev
 //! The filesystem usage data table.
 //!
 //! A table ([`Table`]) comprises a header row ([`Header`]) and a
