@@ -447,6 +447,7 @@ mod tests {
     use super::ends_with_slash_dot;
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_ends_with_slash_dot() {
         assert!(ends_with_slash_dot("/."));
         assert!(ends_with_slash_dot("./."));

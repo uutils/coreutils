@@ -38,6 +38,7 @@ pub enum Token {
         value: String,
     },
 }
+
 impl Token {
     fn new_infix_op(v: &str, left_assoc: bool, precedence: u8) -> Self {
         Self::InfixOp {
@@ -46,6 +47,7 @@ impl Token {
             value: v.into(),
         }
     }
+
     fn new_value(v: &str) -> Self {
         Self::Value { value: v.into() }
     }
@@ -56,12 +58,14 @@ impl Token {
             _ => false,
         }
     }
+
     fn is_a_number(&self) -> bool {
         match self {
             Self::Value { value, .. } => value.parse::<BigInt>().is_ok(),
             _ => false,
         }
     }
+
     fn is_a_close_paren(&self) -> bool {
         matches!(*self, Self::ParClose)
     }
