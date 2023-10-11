@@ -311,6 +311,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
                 .long(OPT_NUMERIC_SUFFIXES)
+                .alias("numeric")
                 .require_equals(true)
                 .default_missing_value("0")
                 .num_args(0..=1)
@@ -338,6 +339,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_HEX_SUFFIXES)
                 .long(OPT_HEX_SUFFIXES)
+                .alias("hex")
                 .default_missing_value("0")
                 .require_equals(true)
                 .num_args(0..=1)
@@ -372,7 +374,7 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .value_name("SEP")
                 .action(ArgAction::Append)
-                .help("use SEP instead of newline as the record separator; '\0' (zero) specifies the NUL character"),
+                .help("use SEP instead of newline as the record separator; '\\0' (zero) specifies the NUL character"),
         )
         .arg(
             Arg::new(OPT_IO)
