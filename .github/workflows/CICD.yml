@@ -136,21 +136,21 @@ jobs:
     - name: Install `cargo-fuzz`
       run: cargo install cargo-fuzz
     - uses: Swatinem/rust-cache@v2
-    - name: Download Corpus
+    - name: Restore Cached Corpus
       continue-on-error: true
-      uses: actions/download-artifact@v3
-
-        # with:
-        #   name: corpus.tar.gz
-        #   path: fuzz/
+      uses: actions/cache/restore@v3
+      with:
+        key: corpus-cache
+        path: |
+          fuzz/
     - name: DEBUG(TEMP)
       run: ls -la
-    - name: Uncompress Corpus
-      shell: bash
-      run: |
-        if [ -f fuzz/corpus.tar.gz ]; then
-          tar -xf fuzz/corpus.tar.gz
-        fi
+        # - name: Uncompress Corpus
+        #   shell: bash
+        #   run: |
+        #     if [ -f fuzz/corpus.tar.gz ]; then
+        #       tar -xf fuzz/corpus.tar.gz
+        #     fi
     - name: Run fuzz_date for XX seconds
       shell: bash
       run: |
@@ -177,17 +177,18 @@ jobs:
       shell: bash
       run: |
         cargo +nightly fuzz run fuzz_parse_time -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
-    - name: Compress Corpus
-      shell: bash
-      run: |
-        if [ -d fuzz/corpus ]; then
-          tar -czvf corpus.tar.gz fuzz/corpus
-        fi
-    - name: Upload Corpus
-      uses: actions/upload-artifact@v3
+        # - name: Compress Corpus
+        #   shell: bash
+        #   run: |
+        #     if [ -d fuzz/corpus ]; then
+        #       tar -czvf corpus.tar.gz fuzz/corpus
+        #     fi
+    - name: Save Corpus Cache
+      uses: actions/cache/save@v3
       with:
-        name: corpus-artifact
-        path: corpus.tar.gz
+        key: corpus-cache
+        path: |
+          fuzz/corpus
 
   style_lint:
     name: Style/lint
