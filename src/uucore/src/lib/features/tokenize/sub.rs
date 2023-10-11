@@ -18,7 +18,6 @@ use std::iter::Peekable;
 use std::process::exit;
 use std::slice::Iter;
 use std::str::Chars;
-// use std::collections::HashSet;
 
 use super::num_format::format_field::{FieldType, FormatField};
 use super::num_format::num_format;

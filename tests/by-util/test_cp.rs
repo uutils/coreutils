@@ -1545,7 +1545,6 @@ fn test_cp_preserve_links_case_7() {
         .arg("dest")
         .fails()
         .stderr_contains("not replacing");
-    ();
 
     assert!(at.dir_exists("dest"));
     assert!(at.plus("dest").join("f").exists());
