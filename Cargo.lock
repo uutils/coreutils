@@ -2086,15 +2086,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "term_grid"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "230d3e804faaed5a39b08319efb797783df2fd9671b39b7596490cb486d702cf"
-dependencies = [
- "unicode-width",
-]
-
-[[package]]
 name = "terminal_size"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2649,10 +2640,10 @@ dependencies = [
  "number_prefix",
  "once_cell",
  "selinux",
- "term_grid",
  "terminal_size 0.3.0",
  "unicode-width",
  "uucore",
+ "uutils_term_grid",
 ]
 
 [[package]]
@@ -3275,6 +3266,15 @@ name = "uuid"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "422ee0de9031b5b948b97a8fc04e3aa35230001a722ddd27943e0be31564ce4c"
+
+[[package]]
+name = "uutils_term_grid"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b389452a568698688dda38802068378a16c15c4af9b153cdd99b65391292bbc7"
+dependencies = [
+ "unicode-width",
+]
 
 [[package]]
 name = "version_check"
