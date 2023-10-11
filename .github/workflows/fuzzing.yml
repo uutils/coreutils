@@ -31,7 +31,7 @@ jobs:
         path: |
           fuzz/
     - name: DEBUG (TEMP)
-      run: ls -la
+      run: ls -la fuzz/
     - name: Run fuzz_date for XX seconds
       shell: bash
       run: |
