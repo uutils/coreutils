@@ -1875,6 +1875,7 @@ fn copy_file(
     Ok(())
 }
 
+#[cfg(unix)]
 fn handling_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
     let (is_preserve_mode, is_explicit_no_preserve_mode) = options.preserve_mode();
     if !is_preserve_mode {
