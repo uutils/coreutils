@@ -888,6 +888,7 @@ impl Attributes {
 
 impl Options {
     #[allow(clippy::cognitive_complexity)]
+    /// Constructs an Options instance from command line matches.
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]
@@ -931,23 +932,7 @@ impl Options {
         };
 
         // Parse attributes to preserve
-        let mut attributes =
-            if let Some(attribute_strs) = matches.get_many::<String>(options::PRESERVE) {
-                if attribute_strs.len() == 0 {
-                    Attributes::DEFAULT
-                } else {
-                    Attributes::parse_iter(attribute_strs)?
-                }
-            } else if matches.get_flag(options::ARCHIVE) {
-                // --archive is used. Same as --preserve=all
-                Attributes::ALL
-            } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
-                Attributes::LINKS
-            } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
-                Attributes::DEFAULT
-            } else {
-                Attributes::NONE
-            };
+        let mut attributes = Self::determine_attributes(matches)?;
 
         // handling no-preserve options and adjusting the attributes
         if let Some(attribute_strs) = matches.get_many::<String>(options::NO_PRESERVE) {
@@ -987,50 +972,8 @@ impl Options {
             debug: matches.get_flag(options::DEBUG),
             verbose: matches.get_flag(options::VERBOSE) || matches.get_flag(options::DEBUG),
             strip_trailing_slashes: matches.get_flag(options::STRIP_TRAILING_SLASHES),
-            reflink_mode: {
-                if let Some(reflink) = matches.get_one::<String>(options::REFLINK) {
-                    match reflink.as_str() {
-                        "always" => ReflinkMode::Always,
-                        "auto" => ReflinkMode::Auto,
-                        "never" => ReflinkMode::Never,
-                        value => {
-                            return Err(Error::InvalidArgument(format!(
-                                "invalid argument {} for \'reflink\'",
-                                value.quote()
-                            )));
-                        }
-                    }
-                } else {
-                    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
-                    {
-                        ReflinkMode::Auto
-                    }
-                    #[cfg(not(any(
-                        target_os = "linux",
-                        target_os = "android",
-                        target_os = "macos"
-                    )))]
-                    {
-                        ReflinkMode::Never
-                    }
-                }
-            },
-            sparse_mode: {
-                if let Some(val) = matches.get_one::<String>(options::SPARSE) {
-                    match val.as_str() {
-                        "always" => SparseMode::Always,
-                        "auto" => SparseMode::Auto,
-                        "never" => SparseMode::Never,
-                        _ => {
-                            return Err(Error::InvalidArgument(format!(
-                                "invalid argument {val} for \'sparse\'"
-                            )));
-                        }
-                    }
-                } else {
-                    SparseMode::Auto
-                }
-            },
+            reflink_mode: Self::determine_reflink_mode(matches)?,
+            sparse_mode: Self::determine_sparse_mode(matches)?,
             backup: backup_mode,
             backup_suffix,
             overwrite,
@@ -1044,10 +987,13 @@ impl Options {
         Ok(options)
     }
 
+    /// Determines if symbolic links should be dereferenced.
+    /// dereference means follow
     fn dereference(&self, in_command_line: bool) -> bool {
         self.dereference || (in_command_line && self.cli_dereference)
     }
 
+    /// Checks if hard links should be preserved.
     fn preserve_hard_links(&self) -> bool {
         match self.attributes.links {
             Preserve::No => false,
@@ -1055,6 +1001,112 @@ impl Options {
         }
     }
 
+    /// Gets the attributes to be preserved based on the command line matches.
+    fn get_attributes(matches: &ArgMatches) -> CopyResult<Attributes> {
+        if let Some(attribute_strs) = matches.get_many::<String>(options::PRESERVE) {
+            if attribute_strs.len() == 0 {
+                return Ok(Attributes::DEFAULT);
+            } else {
+                return Attributes::parse_iter(attribute_strs);
+            }
+        } else if matches.get_flag(options::ARCHIVE) {
+            // --archive is used. Same as --preserve=all
+            return Ok(Attributes::ALL);
+        } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
+            return Ok(Attributes::LINKS);
+        } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
+            return Ok(Attributes::DEFAULT);
+        } else {
+            return Ok(Attributes::NONE);
+        }
+    }
+
+    /// Determines the attributes to be preserved based on the command line matches.
+    fn determine_attributes(matches: &ArgMatches) -> CopyResult<Attributes> {
+        let mut attributes = Self::get_attributes(matches)?;
+
+        // handling no-preserve options and adjusting the attributes
+        if let Some(attribute_strs) = matches.get_many::<String>(options::NO_PRESERVE) {
+            if attribute_strs.len() > 0 {
+                let no_preserve_attributes = Attributes::parse_iter(attribute_strs)?;
+                if matches!(no_preserve_attributes.links, Preserve::Yes { .. }) {
+                    attributes.links = Preserve::No;
+                }
+            }
+        }
+
+        attributes = Self::handle_no_preserve_option(attributes, matches)?;
+
+        #[cfg(not(feature = "feat_selinux"))]
+        if let Preserve::Yes { required } = attributes.context {
+            let selinux_disabled_error =
+                Error::Error("SELinux was not enabled during the compile time!".to_string());
+            if required {
+                return Err(selinux_disabled_error);
+            } else {
+                show_error_if_needed(&selinux_disabled_error);
+            }
+        }
+
+        Ok(attributes)
+    }
+
+    /// Handles the no-preserve option and adjusts the attributes accordingly.
+    fn handle_no_preserve_option(
+        mut attributes: Attributes,
+        matches: &ArgMatches,
+    ) -> CopyResult<Attributes> {
+        if let Some(attribute_strs) = matches.get_many::<String>(options::NO_PRESERVE) {
+            if attribute_strs.len() > 0 {
+                let no_preserve_attributes = Attributes::parse_iter(attribute_strs)?;
+                if matches!(no_preserve_attributes.links, Preserve::Yes { .. }) {
+                    attributes.links = Preserve::No;
+                }
+            }
+        }
+        Ok(attributes)
+    }
+
+    /// Determines the reflink mode based on the command line matches.
+    fn determine_reflink_mode(matches: &ArgMatches) -> CopyResult<ReflinkMode> {
+        if let Some(reflink) = matches.get_one::<String>(options::REFLINK) {
+            match reflink.as_str() {
+                "always" => Ok(ReflinkMode::Always),
+                "auto" => Ok(ReflinkMode::Auto),
+                "never" => Ok(ReflinkMode::Never),
+                value => Err(Error::InvalidArgument(format!(
+                    "invalid argument {} for 'reflink'",
+                    value
+                ))),
+            }
+        } else {
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+            {
+                Ok(ReflinkMode::Auto)
+            }
+            #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
+            {
+                Ok(ReflinkMode::Never)
+            }
+        }
+    }
+
+    /// Determines the sparse mode based on the command line matches.
+    fn determine_sparse_mode(matches: &ArgMatches) -> CopyResult<SparseMode> {
+        if let Some(val) = matches.get_one::<String>(options::SPARSE) {
+            match val.as_str() {
+                "always" => Ok(SparseMode::Always),
+                "auto" => Ok(SparseMode::Auto),
+                "never" => Ok(SparseMode::Never),
+                _ => Err(Error::InvalidArgument(format!(
+                    "invalid argument {} for 'sparse'",
+                    val
+                ))),
+            }
+        } else {
+            Ok(SparseMode::Auto)
+        }
+    }
     /// Whether to force overwriting the destination file.
     fn force(&self) -> bool {
         matches!(self.overwrite, OverwriteMode::Clobber(ClobberMode::Force))
