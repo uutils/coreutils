@@ -1889,14 +1889,10 @@ fn handling_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
             target_os = "macos-12",
             target_os = "freebsd",
         )))]
-        const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-        #[cfg(not(any(
-            target_os = "android",
-            target_os = "macos",
-            target_os = "macos-12",
-            target_os = "freebsd",
-        )))]
-        const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
+        {
+             const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+            const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
+        }
 
         #[cfg(any(
             target_os = "android",
