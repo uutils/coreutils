@@ -19,7 +19,7 @@ clap = { workspace = true, features = ["env"] }
 chrono = { workspace = true }
 unicode-width = { workspace = true }
 number_prefix = { workspace = true }
-term_grid = { workspace = true }
+uutils_term_grid = { workspace = true }
 terminal_size = { workspace = true }
 glob = { workspace = true }
 lscolors = { workspace = true }
