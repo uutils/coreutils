@@ -465,6 +465,35 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
     display_permissions_unix(mode, display_file_type)
 }
 
+/// Returns a character representation of the file type based on its mode.
+/// This function is specific to Unix-like systems.
+///
+/// - `mode`: The mode of the file, typically obtained from file metadata.
+///
+/// # Returns
+/// - 'd' for directories
+/// - 'c' for character devices
+/// - 'b' for block devices
+/// - '-' for regular files
+/// - 'p' for FIFOs (named pipes)
+/// - 'l' for symbolic links
+/// - 's' for sockets
+/// - '?' for any other unrecognized file types
+#[cfg(unix)]
+fn get_file_display(mode: mode_t) -> char {
+    match mode & S_IFMT {
+        S_IFDIR => 'd',
+        S_IFCHR => 'c',
+        S_IFBLK => 'b',
+        S_IFREG => '-',
+        S_IFIFO => 'p',
+        S_IFLNK => 'l',
+        S_IFSOCK => 's',
+        // TODO: Other file types
+        _ => '?',
+    }
+}
+
 // The logic below is more readable written this way.
 #[allow(clippy::if_not_else)]
 #[allow(clippy::cognitive_complexity)]
@@ -474,17 +503,7 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
     let mut result;
     if display_file_type {
         result = String::with_capacity(10);
-        result.push(match mode & S_IFMT {
-            S_IFDIR => 'd',
-            S_IFCHR => 'c',
-            S_IFBLK => 'b',
-            S_IFREG => '-',
-            S_IFIFO => 'p',
-            S_IFLNK => 'l',
-            S_IFSOCK => 's',
-            // TODO: Other file types
-            _ => '?',
-        });
+        result.push(get_file_display(mode));
     } else {
         result = String::with_capacity(9);
     }
@@ -880,5 +899,18 @@ mod tests {
         fs::hard_link(&path1, &path2).unwrap();
 
         assert!(are_hardlinks_to_same_file(&path1, &path2));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_get_file_display() {
+        assert_eq!(get_file_display(S_IFDIR | 0o755), 'd');
+        assert_eq!(get_file_display(S_IFCHR | 0o644), 'c');
+        assert_eq!(get_file_display(S_IFBLK | 0o600), 'b');
+        assert_eq!(get_file_display(S_IFREG | 0o777), '-');
+        assert_eq!(get_file_display(S_IFIFO | 0o666), 'p');
+        assert_eq!(get_file_display(S_IFLNK | 0o777), 'l');
+        assert_eq!(get_file_display(S_IFSOCK | 0o600), 's');
+        assert_eq!(get_file_display(0o777), '?');
     }
 }
