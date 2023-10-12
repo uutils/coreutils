@@ -887,7 +887,6 @@ impl Attributes {
 }
 
 impl Options {
-    #[allow(clippy::cognitive_complexity)]
     /// Constructs an Options instance from command line matches.
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
@@ -1873,7 +1872,6 @@ fn handle_update_mode(
 ///
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
-#[allow(clippy::cognitive_complexity)]
 fn copy_file(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
