@@ -2395,10 +2395,10 @@ fn display_grid(
             writeln!(out)?;
         }
     } else {
-        let mut grid = Grid::new(GridOptions {
-            filling: Filling::Spaces(2),
-            direction,
-        });
+        // To match gnu/tests/ls/stat-dtype.sh
+        // we might want to have Text("\t".to_string());
+        let filling = Filling::Spaces(2);
+        let mut grid = Grid::new(GridOptions { filling, direction });
 
         for name in names {
             grid.add(name);

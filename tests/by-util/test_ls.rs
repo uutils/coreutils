@@ -3678,3 +3678,17 @@ fn test_ls_dired_complex() {
     println!("Extracted filenames: {:?}", filenames);
     assert_eq!(filenames, vec!["a1", "a22", "a333", "a4444", "d"]);
 }
+
+#[ignore = "issue #5396"]
+#[test]
+fn test_ls_tabsize_cf() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("e");
+    at.mkdir("e/a2345");
+    at.mkdir("e/b");
+
+    ucmd.args(&["-CF", "e"])
+        .succeeds()
+        .stdout_is("a2345/\tb/\n");
+}
