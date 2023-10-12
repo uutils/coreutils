@@ -29,7 +29,7 @@ jobs:
       with:
         key: corpus-cache
         path: |
-          fuzz/
+          fuzz/corpus
     - name: DEBUG (TEMP)
       run: |
         ls -la fuzz/
