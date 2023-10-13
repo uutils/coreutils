@@ -4,6 +4,10 @@ name: Code Quality
 
 on: [push, pull_request]
 
+env:
+  # * style job configuration
+  STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
+
 permissions:
   contents: read # to fetch code (actions/checkout)
 
