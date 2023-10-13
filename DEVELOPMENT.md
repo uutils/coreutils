@@ -142,6 +142,8 @@ If you also want to test the core utilities:
 
 ```shell
 cargo test  -p uucore -p coreutils
+# or
+cargo test --all-features -p uucore
 ```
 
 Running the complete test suite might take a while. We use [nextest](https://nexte.st/index.html) in
