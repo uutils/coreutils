@@ -548,6 +548,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn all_args_test() {
         assert!(options("--silent").unwrap().quiet);
         assert!(options("--quiet").unwrap().quiet);
