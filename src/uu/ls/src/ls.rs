@@ -2395,8 +2395,8 @@ fn display_grid(
             writeln!(out)?;
         }
     } else {
-        // To match gnu/tests/ls/stat-dtype.sh
-        // we might want to have Text("\t".to_string());
+        // TODO: To match gnu/tests/ls/stat-dtype.sh
+        // we might want to have Filling::Text("\t".to_string());
         let filling = Filling::Spaces(2);
         let mut grid = Grid::new(GridOptions { filling, direction });
 
