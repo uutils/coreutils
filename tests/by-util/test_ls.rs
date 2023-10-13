@@ -3681,7 +3681,7 @@ fn test_ls_dired_complex() {
 
 #[ignore = "issue #5396"]
 #[test]
-fn test_ls_tabsize_cf() {
+fn test_ls_cf_output_should_be_delimited_by_tab() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("e");
