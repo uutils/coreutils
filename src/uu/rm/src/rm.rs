@@ -330,14 +330,20 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     if options.recursive && (!is_root || !options.preserve_root) {
         if options.interactive != InteractiveMode::Always && !options.verbose {
             if let Err(e) = fs::remove_dir_all(path) {
-                had_err = true;
-                if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    // GNU compatibility (rm/fail-eacces.sh)
-                    // here, GNU doesn't use some kind of remove_dir_all
-                    // It will show directory+file
-                    show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
-                } else {
-                    show_error!("cannot remove {}: {}", path.quote(), e);
+                // GNU compatibility (rm/empty-inacc.sh)
+                // remove_dir_all failed. maybe it is because of the permissions
+                // but if the directory is empty, remove_dir might work.
+                // So, let's try that before failing for real
+                if let Err(_e) = fs::remove_dir(path) {
+                    had_err = true;
+                    if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        // GNU compatibility (rm/fail-eacces.sh)
+                        // here, GNU doesn't use some kind of remove_dir_all
+                        // It will show directory+file
+                        show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
+                    } else {
+                        show_error!("cannot remove {}: {}", path.quote(), e);
+                    }
                 }
             }
         } else {
