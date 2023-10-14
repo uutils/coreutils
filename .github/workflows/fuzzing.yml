@@ -36,7 +36,6 @@ jobs:
       run: |
         cargo +nightly fuzz run fuzz_date -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
     - name: Run fuzz_test for XX seconds
-      continue-on-error: true
       shell: bash
       run: |
         cargo +nightly fuzz run fuzz_test -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
@@ -46,17 +45,14 @@ jobs:
       run: |
         cargo +nightly fuzz run fuzz_expr -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
     - name: Run fuzz_parse_glob for XX seconds
-      continue-on-error: true
       shell: bash
       run: |
         cargo +nightly fuzz run fuzz_parse_glob -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
     - name: Run fuzz_parse_size for XX seconds
-      continue-on-error: true
       shell: bash
       run: |
         cargo +nightly fuzz run fuzz_parse_size -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
     - name: Run fuzz_parse_time for XX seconds
-      continue-on-error: true
       shell: bash
       run: |
         cargo +nightly fuzz run fuzz_parse_time -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
