@@ -275,3 +275,16 @@ fn test_invalid_substr() {
         .code_is(1)
         .stdout_only("\n");
 }
+
+#[test]
+fn test_invalid_syntax() {
+    let invalid_syntaxes = [["12", "12"], ["12", "|"], ["|", "12"]];
+
+    for invalid_syntax in invalid_syntaxes {
+        new_ucmd!()
+            .args(&invalid_syntax)
+            .fails()
+            .code_is(2)
+            .stderr_contains("syntax error");
+    }
+}
