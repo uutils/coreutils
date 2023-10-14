@@ -155,6 +155,21 @@ fn test_and() {
         .args(&["-14", "&", "1"])
         .run()
         .stdout_is("-14\n");
+
+    new_ucmd!()
+        .args(&["0", "&", "a", "/", "5"])
+        .run()
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["", "&", "a", "/", "5"])
+        .run()
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["-1", "&", "10", "/", "5"])
+        .succeeds()
+        .stdout_only("-1\n");
 }
 
 #[test]
