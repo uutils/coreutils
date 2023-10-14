@@ -103,6 +103,21 @@ fn test_parenthesis() {
 }
 
 #[test]
+fn test_ignore_plus() {
+    new_ucmd!().args(&["+", "2"]).succeeds().stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["1", "+", "+", "2"])
+        .succeeds()
+        .stdout_only("3\n");
+
+    new_ucmd!()
+        .args(&["1", "+", "2", "=", "+", "3"])
+        .succeeds()
+        .stdout_only("1\n");
+}
+
+#[test]
 fn test_or() {
     new_ucmd!()
         .args(&["0", "|", "foo"])
