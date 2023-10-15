@@ -126,7 +126,7 @@ fn maybe_dump_tokens_acc(tokens_acc: &[(usize, Token)]) {
 }
 
 fn push_token_if_not_escaped(acc: &mut Vec<(usize, Token)>, tok_idx: usize, token: Token, s: &str) {
-    // `+` may escaped such as `expr + 1` and `expr 1 + + 1`
+    // `+` may be escaped such as `expr + 1` and `expr 1 + + 1`
     let prev_is_plus = match acc.last() {
         None => false,
         Some(t) => t.1.is_infix_plus(),
