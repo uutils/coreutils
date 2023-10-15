@@ -30,7 +30,14 @@ indicatif = { workspace = true }
 [dependencies.uucore]
 workspace = true
 default-features = false
-features = ["entries", "fs", "mode", "perms", "update-control", "backup-control"]
+features = [
+  "entries",
+  "fs",
+  "mode",
+  "perms",
+  "update-control",
+  "backup-control",
+]
 
 [target.'cfg(unix)'.dependencies]
 xattr = { workspace = true }
