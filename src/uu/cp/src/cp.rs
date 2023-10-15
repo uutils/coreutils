@@ -363,13 +363,12 @@ const BUFFER_SIZE_U64: u64 = BUFFER_SIZE as u64;
 static EXIT_ERR: i32 = 1;
 
 fn get_size_limit_for_normal_copy() -> u64 {
-    const DEFAULT_SIZE_LIMIT_FOR_NORMAL_COPY: u64 = 524288000; // 500 Mb
-    match std::env::var("CP_SIZE_LIMIT_FOR_NORMAL_COPY") {
-        Ok(val) => val
-            .parse::<u64>()
-            .unwrap_or(DEFAULT_SIZE_LIMIT_FOR_NORMAL_COPY),
-        Err(_) => DEFAULT_SIZE_LIMIT_FOR_NORMAL_COPY,
-    }
+    const DEFAULT: u64 = 524_288_000; // 500 Mb
+
+    std::env::var("CP_SIZE_LIMIT_FOR_NORMAL_COPY")
+        .ok()
+        .and_then(|val| val.parse().ok())
+        .unwrap_or(DEFAULT)
 }
 
 // Argument constants
@@ -2021,29 +2020,25 @@ pub fn copy_with_intermediate_progress(
         .open(dest)
         .unwrap();
     let source_size = metadata.len() as usize;
-    progress_bar.as_ref().unwrap().tick();
+    if let Some(bar) = progress_bar.as_ref() {
+        bar.tick();
+    }
     let mut written = 0;
+    // while source still has bytes to be read
     while written < source_size {
         let mut buffer = [0; BUFFER_SIZE];
-        let written_u64 = written as u64;
-        let read = source_file.read_at(&mut buffer, written_u64)?;
-        match buffer.get(0..read) {
-            Some(bytes_read) => {
-                match dest_file.write_at(bytes_read, written_u64) {
-                    Ok(bytes_written) => {
-                        written += bytes_written;
-                    }
-                    Err(err) => {
-                        return Err(Error::IoErr(err));
-                    }
-                };
-            }
-            None => {
-                return Err("No bytes to read".to_string().into());
-            }
-        };
-
-        progress_bar.as_ref().unwrap().inc(BUFFER_SIZE_U64);
+        // read from source
+        let read = source_file.read_at(&mut buffer, written as u64)?;
+        if read == 0 {
+            return Err("No bytes to read".to_string().into());
+        }
+        // write to destination
+        let bytes_written = dest_file.write_at(&buffer[..read], written as u64)?;
+        written += bytes_written;
+        if let Some(bar) = progress_bar.as_ref() {
+            // show progress
+            bar.inc(BUFFER_SIZE_U64);
+        }
     }
 
     Ok(())
