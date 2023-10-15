@@ -138,6 +138,11 @@ fn test_or() {
         .args(&["0", "|", "10", "/", "5"])
         .succeeds()
         .stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["12", "|", "9a", "+", "1"])
+        .succeeds()
+        .stdout_only("12\n");
 }
 
 #[test]
@@ -274,6 +279,26 @@ fn test_invalid_substr() {
         .fails()
         .code_is(1)
         .stdout_only("\n");
+}
+
+#[test]
+fn test_escape() {
+    new_ucmd!().args(&["+", "1"]).succeeds().stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["1", "+", "+", "1"])
+        .succeeds()
+        .stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["2", "*", "+", "3"])
+        .succeeds()
+        .stdout_only("6\n");
+
+    new_ucmd!()
+        .args(&["(", "1", ")", "+", "1"])
+        .succeeds()
+        .stdout_only("2\n");
 }
 
 #[test]
