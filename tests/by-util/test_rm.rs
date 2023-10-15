@@ -129,6 +129,56 @@ fn test_rm_force_multiple() {
 }
 
 #[test]
+#[cfg(not(windows))]
+fn test_rm_recurs_force_empty_inaccessible_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_recurs_force_empty_inaccessible_dir_dir";
+
+    at.mkdir(dir);
+
+    // remove all permissions
+    at.set_mode(dir, 0);
+
+    ucmd.arg("-rf").arg(dir).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_rm_recurs_force_empty_unreadable_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let parent_dir = "parent";
+    let dir = "parent/test_rm_recurs_force_empty_unreadable_dir_dir";
+
+    at.mkdir(parent_dir);
+    at.mkdir(dir);
+
+    // remove read permissions
+    at.set_mode(dir, 0o333);
+
+    ucmd.arg("-rf").arg(parent_dir).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(parent_dir));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_rm_d_unreadable_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_d_unreadable_dir_dir";
+
+    at.mkdir(dir);
+
+    // remove read permissions
+    at.set_mode(dir, 0o333);
+
+    ucmd.arg("-d").arg(dir).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
 fn test_rm_empty_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_empty_directory";
@@ -240,6 +290,11 @@ fn test_rm_verbose() {
         .arg(file_b)
         .succeeds()
         .stdout_only(format!("removed '{file_a}'\nremoved '{file_b}'\n"));
+}
+
+#[test]
+fn test_rm_preserve_root() {
+    new_ucmd!().arg("/").arg("--preserve-root").fails();
 }
 
 #[test]
@@ -472,6 +527,23 @@ fn test_rm_descend_directory() {
     assert!(!at.dir_exists("a"));
     assert!(!at.file_exists(file_1));
     assert!(!at.file_exists(file_2));
+}
+
+#[test]
+fn test_rm_descent_reject() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let dir1 = "dir1";
+    let dir2 = "dir1/dir2";
+    let file = "dir1/dir2/file";
+
+    at.mkdir_all(dir2);
+    at.touch(file);
+
+    ucmd.arg("-ir").arg(dir1).pipe_in("y\nn\n").succeeds();
+
+    assert!(at.dir_exists(dir2));
+    assert!(at.file_exists(file));
 }
 
 #[cfg(feature = "chmod")]
