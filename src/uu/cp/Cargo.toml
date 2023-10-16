@@ -26,11 +26,7 @@ quick-error = { workspace = true }
 selinux = { workspace = true, optional = true }
 walkdir = { workspace = true }
 indicatif = { workspace = true }
-
-[dependencies.uucore]
-workspace = true
-default-features = false
-features = ["entries", "fs", "mode", "perms", "update-control", "backup-control"]
+uucore = { workspace = true, default-features = false, features = ["entries", "fs", "mode", "perms", "update-control", "backup-control"] }
 
 [target.'cfg(unix)'.dependencies]
 xattr = { workspace = true }
