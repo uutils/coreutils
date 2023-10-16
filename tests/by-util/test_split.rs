@@ -438,7 +438,7 @@ fn test_split_obs_lines_within_combined_shorts() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let name = "obs-lines-within-shorts";
-    RandomFile::new(&at, name).add_lines(400);
+    RandomFile::new(at, name).add_lines(400);
 
     scene
         .ucmd()
@@ -446,9 +446,9 @@ fn test_split_obs_lines_within_combined_shorts() {
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(&at, ".", r"x\d\d$");
+    let glob = Glob::new(at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
-    assert_eq!(glob.collate(), at.read_bytes(name))
+    assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
 /// Test for obsolete lines option as part of combined short options with tailing suffix length with value
@@ -470,7 +470,7 @@ fn test_split_obs_lines_starts_combined_shorts() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let name = "obs-lines-starts-shorts";
-    RandomFile::new(&at, name).add_lines(400);
+    RandomFile::new(at, name).add_lines(400);
 
     scene
         .ucmd()
@@ -478,9 +478,9 @@ fn test_split_obs_lines_starts_combined_shorts() {
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(&at, ".", r"x\d\d$");
+    let glob = Glob::new(at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
-    assert_eq!(glob.collate(), at.read_bytes(name))
+    assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
 /// Test for using both obsolete lines (standalone) option and short/long lines option simultaneously
@@ -585,7 +585,7 @@ fn test_split_multiple_obs_lines_standalone() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let name = "multiple-obs-lines";
-    RandomFile::new(&at, name).add_lines(400);
+    RandomFile::new(at, name).add_lines(400);
 
     scene
         .ucmd()
@@ -593,9 +593,9 @@ fn test_split_multiple_obs_lines_standalone() {
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
+    let glob = Glob::new(at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
-    assert_eq!(glob.collate(), at.read_bytes(name))
+    assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
 /// Test for using more than one obsolete lines option within combined shorts
@@ -605,7 +605,7 @@ fn test_split_multiple_obs_lines_within_combined() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let name = "multiple-obs-lines";
-    RandomFile::new(&at, name).add_lines(400);
+    RandomFile::new(at, name).add_lines(400);
 
     scene
         .ucmd()
@@ -613,9 +613,9 @@ fn test_split_multiple_obs_lines_within_combined() {
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let glob = Glob::new(&at, ".", r"x\d\d$");
+    let glob = Glob::new(at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
-    assert_eq!(glob.collate(), at.read_bytes(name))
+    assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
 /// Test for using both obsolete lines option within combined shorts with conflicting -n option simultaneously
@@ -1193,9 +1193,35 @@ fn test_numeric_suffix() {
 }
 
 #[test]
+fn test_numeric_suffix_alias() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "4", "--numeric=9", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("x09"), "a");
+    assert_eq!(at.read("x10"), "b");
+    assert_eq!(at.read("x11"), "c");
+    assert_eq!(at.read("x12"), "");
+}
+
+#[test]
 fn test_hex_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "--hex-suffixes=9", "threebytes.txt"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert_eq!(at.read("x09"), "a");
+    assert_eq!(at.read("x0a"), "b");
+    assert_eq!(at.read("x0b"), "c");
+    assert_eq!(at.read("x0c"), "");
+}
+
+#[test]
+fn test_hex_suffix_alias() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "4", "--hex=9", "threebytes.txt"])
         .succeeds()
         .no_stdout()
         .no_stderr();
@@ -1543,8 +1569,8 @@ fn test_split_separator_nul_lines() {
     ucmd.args(&["--lines=2", "-t", "\\0", "separator_nul.txt"])
         .succeeds();
 
-    assert_eq!(file_read(&at, "xaa"), "1\02\0");
-    assert_eq!(file_read(&at, "xab"), "3\04\0");
+    assert_eq!(file_read(&at, "xaa"), "1\x002\0");
+    assert_eq!(file_read(&at, "xab"), "3\x004\0");
     assert_eq!(file_read(&at, "xac"), "5\0");
     assert!(!at.plus("xad").exists());
 }
@@ -1555,8 +1581,8 @@ fn test_split_separator_nul_line_bytes() {
     ucmd.args(&["--line-bytes=4", "-t", "\\0", "separator_nul.txt"])
         .succeeds();
 
-    assert_eq!(file_read(&at, "xaa"), "1\02\0");
-    assert_eq!(file_read(&at, "xab"), "3\04\0");
+    assert_eq!(file_read(&at, "xaa"), "1\x002\0");
+    assert_eq!(file_read(&at, "xab"), "3\x004\0");
     assert_eq!(file_read(&at, "xac"), "5\0");
     assert!(!at.plus("xad").exists());
 }
@@ -1567,8 +1593,8 @@ fn test_split_separator_nul_number_l() {
     ucmd.args(&["--number=l/3", "--separator=\\0", "separator_nul.txt"])
         .succeeds();
 
-    assert_eq!(file_read(&at, "xaa"), "1\02\0");
-    assert_eq!(file_read(&at, "xab"), "3\04\0");
+    assert_eq!(file_read(&at, "xaa"), "1\x002\0");
+    assert_eq!(file_read(&at, "xab"), "3\x004\0");
     assert_eq!(file_read(&at, "xac"), "5\0");
     assert!(!at.plus("xad").exists());
 }
@@ -1579,8 +1605,8 @@ fn test_split_separator_nul_number_r() {
     ucmd.args(&["--number=r/3", "--separator=\\0", "separator_nul.txt"])
         .succeeds();
 
-    assert_eq!(file_read(&at, "xaa"), "1\04\0");
-    assert_eq!(file_read(&at, "xab"), "2\05\0");
+    assert_eq!(file_read(&at, "xaa"), "1\x004\0");
+    assert_eq!(file_read(&at, "xab"), "2\x005\0");
     assert_eq!(file_read(&at, "xac"), "3\0");
     assert!(!at.plus("xad").exists());
 }

@@ -389,6 +389,7 @@ mod options {
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 static PRESERVABLE_ATTRIBUTES: &[&str] = &[
     "mode",
     "ownership",

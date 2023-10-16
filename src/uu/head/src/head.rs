@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) zlines BUFWRITER seekable
+// spell-checker:ignore (vars) BUFWRITER seekable
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
@@ -31,6 +31,7 @@ mod options {
     pub const FILES_NAME: &str = "FILE";
     pub const PRESUME_INPUT_PIPE: &str = "-PRESUME-INPUT-PIPE";
 }
+
 mod parse;
 mod take;
 use take::take_all_but;
@@ -519,6 +520,7 @@ mod tests {
     use std::io::Cursor;
 
     use super::*;
+
     fn options(args: &str) -> Result<HeadOptions, String> {
         let combined = "head ".to_owned() + args;
         let args = combined.split_whitespace().map(OsString::from);
@@ -526,6 +528,7 @@ mod tests {
             .get_matches_from(arg_iterate(args).map_err(|_| String::from("Arg iterate failed"))?);
         HeadOptions::get_from(&matches)
     }
+
     #[test]
     fn test_args_modes() {
         let args = options("-n -10M -vz").unwrap();
@@ -533,6 +536,7 @@ mod tests {
         assert!(args.verbose);
         assert_eq!(args.mode, Mode::AllButLastLines(10 * 1024 * 1024));
     }
+
     #[test]
     fn test_gnu_compatibility() {
         let args = options("-n 1 -c 1 -n 5 -c kiB -vqvqv").unwrap(); // spell-checker:disable-line
@@ -542,7 +546,9 @@ mod tests {
         assert_eq!(options("-2b").unwrap().mode, Mode::FirstBytes(1024));
         assert_eq!(options("-5 -c 1").unwrap().mode, Mode::FirstBytes(1));
     }
+
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn all_args_test() {
         assert!(options("--silent").unwrap().quiet);
         assert!(options("--quiet").unwrap().quiet);
@@ -559,11 +565,13 @@ mod tests {
         assert_eq!(options("--bytes 15").unwrap().mode, Mode::FirstBytes(15));
         assert_eq!(options("-c 15").unwrap().mode, Mode::FirstBytes(15));
     }
+
     #[test]
     fn test_options_errors() {
         assert!(options("-n IsThisTheRealLife?").is_err());
         assert!(options("-c IsThisJustFantasy").is_err());
     }
+
     #[test]
     fn test_options_correct_defaults() {
         let opts = HeadOptions::default();
@@ -574,6 +582,7 @@ mod tests {
         assert_eq!(opts.mode, Mode::FirstLines(10));
         assert!(opts.files.is_empty());
     }
+
     fn arg_outputs(src: &str) -> Result<String, ()> {
         let split = src.split_whitespace().map(OsString::from);
         match arg_iterate(split) {
@@ -586,6 +595,7 @@ mod tests {
             Err(_) => Err(()),
         }
     }
+
     #[test]
     fn test_arg_iterate() {
         // test that normal args remain unchanged
@@ -610,6 +620,7 @@ mod tests {
         //test that empty args remain unchanged
         assert_eq!(arg_outputs("head"), Ok("head".to_owned()));
     }
+
     #[test]
     #[cfg(target_os = "linux")]
     fn test_arg_iterate_bad_encoding() {
@@ -618,6 +629,7 @@ mod tests {
         // this arises from a conversion from OsString to &str
         assert!(arg_iterate(vec![OsString::from("head"), invalid].into_iter()).is_err());
     }
+
     #[test]
     fn read_early_exit() {
         let mut empty = std::io::BufReader::new(std::io::Cursor::new(Vec::new()));

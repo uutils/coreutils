@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired subdired
+// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired subdired dtype
 
 use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
@@ -1856,6 +1856,7 @@ impl PathData {
     }
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
@@ -2394,10 +2395,10 @@ fn display_grid(
             writeln!(out)?;
         }
     } else {
-        let mut grid = Grid::new(GridOptions {
-            filling: Filling::Spaces(2),
-            direction,
-        });
+        // TODO: To match gnu/tests/ls/stat-dtype.sh
+        // we might want to have Filling::Text("\t".to_string());
+        let filling = Filling::Spaces(2);
+        let mut grid = Grid::new(GridOptions { filling, direction });
 
         for name in names {
             grid.add(name);
@@ -2888,7 +2889,11 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
                 Some('=')
             } else if file_type.is_fifo() {
                 Some('|')
-            } else if file_type.is_file() && file_is_executable(path.md(out).as_ref().unwrap()) {
+            } else if file_type.is_file()
+                // Safe unwrapping if the file was removed between listing and display
+                // See https://github.com/uutils/coreutils/issues/5371
+                && path.md(out).map(file_is_executable).unwrap_or_default()
+            {
                 Some('*')
             } else {
                 None
