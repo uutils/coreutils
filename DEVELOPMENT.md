@@ -6,7 +6,7 @@ For contributing rules and best practices please refer to [CONTRIBUTING.md](CONT
 
 ## Before you start
 
-For this guide we assume that you already have GitHub account and have `git` and your favorite code editor or IDE installed and configured.
+For this guide we assume that you already have a GitHub account and have `git` and your favorite code editor or IDE installed and configured.
 Before you start working on coreutils, please follow these steps:
 
 1. Fork the [coreutils repository](https://github.com/uutils/coreutils) to your GitHub account.
