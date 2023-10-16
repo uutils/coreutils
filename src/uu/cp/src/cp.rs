@@ -1004,19 +1004,19 @@ impl Options {
     fn get_attributes(matches: &ArgMatches) -> CopyResult<Attributes> {
         if let Some(attribute_strs) = matches.get_many::<String>(options::PRESERVE) {
             if attribute_strs.len() == 0 {
-                return Ok(Attributes::DEFAULT);
+                Ok(Attributes::DEFAULT)
             } else {
-                return Attributes::parse_iter(attribute_strs);
+                Attributes::parse_iter(attribute_strs)
             }
         } else if matches.get_flag(options::ARCHIVE) {
             // --archive is used. Same as --preserve=all
-            return Ok(Attributes::ALL);
+            Ok(Attributes::ALL)
         } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
-            return Ok(Attributes::LINKS);
+            Ok(Attributes::LINKS)
         } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
-            return Ok(Attributes::DEFAULT);
+            Ok(Attributes::DEFAULT)
         } else {
-            return Ok(Attributes::NONE);
+            Ok(Attributes::NONE)
         }
     }
 
@@ -1715,6 +1715,7 @@ fn get_dest_permissions(dest: &Path, source_metadata: &fs::Metadata) -> fs::Perm
 
 // This function handles the copying process based on the specified copy mode.
 // It can handle different modes like linking, copying, symbolic linking, updating, and attribute-only copying.
+#[allow(clippy::too_many_arguments)]
 fn handle_copy_mode(
     options: &Options,
     source: &Path,
@@ -1804,6 +1805,7 @@ fn handle_link_mode(
 
 // This function handles the update mode, which updates the destination based on the source.
 // It can replace all, none, or only older files based on the provided options.
+#[allow(clippy::too_many_arguments)]
 fn handle_update_mode(
     options: &Options,
     source: &Path,
