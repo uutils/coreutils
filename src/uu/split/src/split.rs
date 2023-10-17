@@ -1261,7 +1261,7 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
     /// |------|  |-------|  |--------|  |---|
     /// aaaaaaaa  a\nbbbb\n  cccc\ndd\n  ee\n
     /// ```
-    /// 
+    ///
     /// Implements `--line-bytes=SIZE`
     fn write(&mut self, mut buf: &[u8]) -> std::io::Result<usize> {
         // The total number of bytes written during the loop below.
@@ -1391,7 +1391,7 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
 ///
 /// This function returns an error if there is a problem reading from
 /// `reader` or writing to one of the output files.
-/// 
+///
 /// Implements `--number=CHUNKS`
 /// Where CHUNKS
 /// * N
@@ -1492,7 +1492,7 @@ where
 ///
 /// This function returns an error if there is a problem reading from
 /// `reader` or writing to stdout.
-/// 
+///
 /// Implements `--number=CHUNKS`
 /// Where CHUNKS
 /// * K/N
@@ -1589,7 +1589,7 @@ where
 ///
 /// * [`kth_chunk_by_line`], which splits its input in the same way,
 ///   but writes only one specified chunk to stdout.
-/// 
+///
 /// Implements `--number=CHUNKS`
 /// Where CHUNKS
 /// * l/N
@@ -1668,7 +1668,7 @@ where
 ///
 /// * [`split_into_n_chunks_by_line`], which splits its input in the
 ///   same way, but writes each chunk to its own file.
-/// 
+///
 /// Implements `--number=CHUNKS`
 /// Where CHUNKS
 /// * l/K/N
@@ -1738,7 +1738,7 @@ where
 ///
 /// * [`split_into_n_chunks_by_line`], which splits its input in the same way,
 ///   but without round robin distribution.
-/// 
+///
 /// Implements `--number=CHUNKS`
 /// Where CHUNKS
 /// * r/N
@@ -1811,7 +1811,7 @@ where
 ///
 /// * [`split_into_n_chunks_by_line_round_robin`], which splits its input in the
 ///   same way, but writes each chunk to its own file.
-/// 
+///
 /// Implements `--number=CHUNKS`
 /// Where CHUNKS
 /// * r/K/N
