@@ -1408,7 +1408,6 @@ where
         USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
     })?;
 
-    // TODO - cannot determine file size for stdin input
     let num_bytes = metadata.len();
     let will_have_empty_files = settings.elide_empty_files && num_chunks > num_bytes;
     let (num_chunks, chunk_size) = if will_have_empty_files {
@@ -1502,7 +1501,6 @@ where
     // NOTE: the `elide_empty_files` parameter is ignored here
     // as we do not generate any files
     // and instead writing to stdout
-    // TODO - cannot get metadata or determine file size for stdin input
     let metadata = metadata(&settings.input).map_err(|_| {
         USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
     })?;
@@ -1589,8 +1587,9 @@ where
 {
     // Get the size of the input file in bytes and compute the number
     // of bytes per chunk.
-    // TODO - cannot get metadata or determine file size for stdin input
-    let metadata = metadata(&settings.input).unwrap();
+    let metadata = metadata(&settings.input).map_err(|_| {
+        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
+    })?;
     let num_bytes = metadata.len();
     let chunk_size = (num_bytes / num_chunks) as usize;
 
@@ -1664,8 +1663,9 @@ where
 {
     // Get the size of the input file in bytes and compute the number
     // of bytes per chunk.
-    // TODO - cannot get metadata or determine file size for stdin input
-    let metadata = metadata(&settings.input).unwrap();
+    let metadata = metadata(&settings.input).map_err(|_| {
+        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
+    })?;
     let num_bytes = metadata.len();
     let chunk_size = (num_bytes / num_chunks) as usize;
 

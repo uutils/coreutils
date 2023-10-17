@@ -729,6 +729,24 @@ fn test_split_stdin_num_kth_chunk() {
         .stderr_only("split: -: cannot determine file size\n");
 }
 
+#[test]
+fn test_split_stdin_num_line_chunks() {
+    new_ucmd!()
+        .args(&["--number=l/2"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: -: cannot determine file size\n");
+}
+
+#[test]
+fn test_split_stdin_num_kth_line_chunk() {
+    new_ucmd!()
+        .args(&["--number=l/2/5"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: -: cannot determine file size\n");
+}
+
 fn file_read(at: &AtPath, filename: &str) -> String {
     let mut s = String::new();
     at.open(filename).read_to_string(&mut s).unwrap();
