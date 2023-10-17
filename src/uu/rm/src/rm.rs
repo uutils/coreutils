@@ -514,22 +514,18 @@ fn prompt_file(path: &Path, options: &Options) -> bool {
                     prompt_yes!("remove file {}?", path.quote())
                 };
             }
-            prompt_file_permission_readonly(path, Ok(metadata))
         }
         Err(err) => {
             if err.kind() != ErrorKind::PermissionDenied {
                 return true;
             }
-            prompt_file_permission_readonly(path, fs::metadata(path))
         }
     }
+    prompt_file_permission_readonly(path)
 }
 
-fn prompt_file_permission_readonly(
-    path: &Path,
-    metadata_or_err: Result<Metadata, std::io::Error>,
-) -> bool {
-    match metadata_or_err {
+fn prompt_file_permission_readonly(path: &Path) -> bool {
+    match fs::metadata(path) {
         Ok(metadata) if !metadata.permissions().readonly() => true,
         Ok(metadata) if metadata.len() == 0 => prompt_yes!(
             "remove write-protected regular empty file {}?",
