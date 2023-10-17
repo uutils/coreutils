@@ -470,6 +470,7 @@ fn infix_operator_or(values: &[String]) -> String {
 }
 
 fn infix_operator_and(values: &[String]) -> String {
+    assert!(values.len() == 2);
     if value_as_bool(&values[0]) && value_as_bool(&values[1]) {
         values[0].clone()
     } else {
