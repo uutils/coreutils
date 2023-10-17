@@ -198,6 +198,7 @@ fn test_format_flo64() {
 }
 
 #[test]
+#[allow(clippy::cognitive_complexity)]
 fn test_format_flo16() {
     assert_eq!(format_flo16(f16::from_bits(0x8400u16)), "-6.104e-5");
     assert_eq!(format_flo16(f16::from_bits(0x8401u16)), "-6.109e-5");
