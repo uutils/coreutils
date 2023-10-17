@@ -916,7 +916,7 @@ fn custom_write<T: Write>(
 }
 
 /// Custom wrapper for `write_all()` method
-/// Similar to * [`custom_write`], but returns true or false
+/// Similar to [`custom_write`], but returns true or false
 /// depending on if `--filter` stdin is still open (no BrokenPipe error)
 /// Should not be used for Kth chunk number sub-strategies
 /// as those do not work with `--filter` option
@@ -996,6 +996,7 @@ impl<'a> ByteChunkWriter<'a> {
 }
 
 impl<'a> Write for ByteChunkWriter<'a> {
+    /// Implements `--bytes=SIZE`
     fn write(&mut self, mut buf: &[u8]) -> std::io::Result<usize> {
         // If the length of `buf` exceeds the number of bytes remaining
         // in the current chunk, we will need to write to multiple
@@ -1125,6 +1126,7 @@ impl<'a> LineChunkWriter<'a> {
 }
 
 impl<'a> Write for LineChunkWriter<'a> {
+    /// Implements `--lines=NUMBER`
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         // If the number of lines in `buf` exceeds the number of lines
         // remaining in the current chunk, we will need to write to
@@ -1259,6 +1261,8 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
     /// |------|  |-------|  |--------|  |---|
     /// aaaaaaaa  a\nbbbb\n  cccc\ndd\n  ee\n
     /// ```
+    /// 
+    /// Implements `--line-bytes=SIZE`
     fn write(&mut self, mut buf: &[u8]) -> std::io::Result<usize> {
         // The total number of bytes written during the loop below.
         //
@@ -1387,6 +1391,10 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
 ///
 /// This function returns an error if there is a problem reading from
 /// `reader` or writing to one of the output files.
+/// 
+/// Implements `--number=CHUNKS`
+/// Where CHUNKS
+/// * N
 fn split_into_n_chunks_by_byte<R>(
     settings: &Settings,
     reader: &mut R,
@@ -1484,6 +1492,10 @@ where
 ///
 /// This function returns an error if there is a problem reading from
 /// `reader` or writing to stdout.
+/// 
+/// Implements `--number=CHUNKS`
+/// Where CHUNKS
+/// * K/N
 fn kth_chunks_by_byte<R>(
     settings: &Settings,
     reader: &mut R,
@@ -1577,6 +1589,10 @@ where
 ///
 /// * [`kth_chunk_by_line`], which splits its input in the same way,
 ///   but writes only one specified chunk to stdout.
+/// 
+/// Implements `--number=CHUNKS`
+/// Where CHUNKS
+/// * l/N
 fn split_into_n_chunks_by_line<R>(
     settings: &Settings,
     reader: &mut R,
@@ -1652,6 +1668,10 @@ where
 ///
 /// * [`split_into_n_chunks_by_line`], which splits its input in the
 ///   same way, but writes each chunk to its own file.
+/// 
+/// Implements `--number=CHUNKS`
+/// Where CHUNKS
+/// * l/K/N
 fn kth_chunk_by_line<R>(
     settings: &Settings,
     reader: &mut R,
@@ -1718,6 +1738,10 @@ where
 ///
 /// * [`split_into_n_chunks_by_line`], which splits its input in the same way,
 ///   but without round robin distribution.
+/// 
+/// Implements `--number=CHUNKS`
+/// Where CHUNKS
+/// * r/N
 fn split_into_n_chunks_by_line_round_robin<R>(
     settings: &Settings,
     reader: &mut R,
@@ -1787,6 +1811,10 @@ where
 ///
 /// * [`split_into_n_chunks_by_line_round_robin`], which splits its input in the
 ///   same way, but writes each chunk to its own file.
+/// 
+/// Implements `--number=CHUNKS`
+/// Where CHUNKS
+/// * r/K/N
 fn kth_chunk_by_line_round_robin<R>(
     settings: &Settings,
     reader: &mut R,
