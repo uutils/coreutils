@@ -339,6 +339,36 @@ fn test_filter_broken_pipe() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_filter_with_kth_chunk() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["--filter='some'", "--number=1/2"])
+        .ignore_stdin_write_error()
+        .pipe_in("a\n")
+        .fails()
+        .no_stdout()
+        .stderr_contains("--filter does not process a chunk extracted to stdout");
+    scene
+        .ucmd()
+        .args(&["--filter='some'", "--number=l/1/2"])
+        .ignore_stdin_write_error()
+        .pipe_in("a\n")
+        .fails()
+        .no_stdout()
+        .stderr_contains("--filter does not process a chunk extracted to stdout");
+    scene
+        .ucmd()
+        .args(&["--filter='some'", "--number=r/1/2"])
+        .ignore_stdin_write_error()
+        .pipe_in("a\n")
+        .fails()
+        .no_stdout()
+        .stderr_contains("--filter does not process a chunk extracted to stdout");
+}
+
+#[test]
 fn test_split_lines_number() {
     // Test if stdout/stderr for '--lines' option is correct
     let scene = TestScenario::new(util_name!());
