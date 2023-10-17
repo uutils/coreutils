@@ -916,17 +916,18 @@ fn custom_write<T: Write>(
 }
 
 /// Custom wrapper for `write_all()` method
-/// Similar to * [`custom_write`]
+/// Similar to * [`custom_write`], but returns true or false
+/// depending on if `--filter` stdin is still open (no BrokenPipe error)
 /// Should not be used for Kth chunk number sub-strategies
 /// as those do not work with `--filter` option
 fn custom_write_all<T: Write>(
     bytes: &[u8],
     writer: &mut T,
     settings: &Settings,
-) -> std::io::Result<()> {
+) -> std::io::Result<bool> {
     match writer.write_all(bytes) {
-        Ok(()) => Ok(()),
-        Err(e) if ignorable_io_error(&e, settings) => Ok(()),
+        Ok(()) => Ok(true),
+        Err(e) if ignorable_io_error(&e, settings) => Ok(false),
         Err(e) => Err(e),
     }
 }
@@ -1407,6 +1408,7 @@ where
         USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
     })?;
 
+    // TODO - cannot determine file size for stdin input
     let num_bytes = metadata.len();
     let will_have_empty_files = settings.elide_empty_files && num_chunks > num_bytes;
     let (num_chunks, chunk_size) = if will_have_empty_files {
@@ -1500,6 +1502,7 @@ where
     // NOTE: the `elide_empty_files` parameter is ignored here
     // as we do not generate any files
     // and instead writing to stdout
+    // TODO - cannot get metadata or determine file size for stdin input
     let metadata = metadata(&settings.input).map_err(|_| {
         USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
     })?;
@@ -1586,6 +1589,7 @@ where
 {
     // Get the size of the input file in bytes and compute the number
     // of bytes per chunk.
+    // TODO - cannot get metadata or determine file size for stdin input
     let metadata = metadata(&settings.input).unwrap();
     let num_bytes = metadata.len();
     let chunk_size = (num_bytes / num_chunks) as usize;
@@ -1660,6 +1664,7 @@ where
 {
     // Get the size of the input file in bytes and compute the number
     // of bytes per chunk.
+    // TODO - cannot get metadata or determine file size for stdin input
     let metadata = metadata(&settings.input).unwrap();
     let num_bytes = metadata.len();
     let chunk_size = (num_bytes / num_chunks) as usize;
@@ -1669,7 +1674,7 @@ where
     let mut writer = stdout.lock();
 
     let mut num_bytes_remaining_in_current_chunk = chunk_size;
-    let mut i = 0;
+    let mut i = 1;
     let sep = settings.separator;
     for line_result in reader.split(sep) {
         let line = line_result?;
@@ -1744,13 +1749,21 @@ where
 
     let num_chunks: usize = num_chunks.try_into().unwrap();
     let sep = settings.separator;
+    let mut closed_writers = 0;
     for (i, line_result) in reader.split(sep).enumerate() {
-        let line = line_result.unwrap();
         let maybe_writer = writers.get_mut(i % num_chunks);
         let writer = maybe_writer.unwrap();
+        let mut line = line_result.unwrap();
+        line.push(sep);
         let bytes = line.as_slice();
-        custom_write_all(bytes, writer, settings)?;
-        custom_write_all(&[sep], writer, settings)?;
+        let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
+        if !writer_stdin_open {
+            closed_writers += 1;
+            if closed_writers == num_chunks {
+                // all writers are closed - stop reading
+                break;
+            }
+        }
     }
 
     Ok(())
@@ -1790,6 +1803,10 @@ where
     let num_chunks: usize = num_chunks.try_into().unwrap();
     let chunk_number: usize = chunk_number.try_into().unwrap();
     let sep = settings.separator;
+    // The chunk number is given as a 1-indexed number, but it
+    // is a little easier to deal with a 0-indexed number
+    // since `.enumerate()` returns index `i` starting with 0
+    let chunk_number = chunk_number - 1;
     for (i, line_result) in reader.split(sep).enumerate() {
         let line = line_result?;
         let bytes = line.as_slice();
@@ -1826,18 +1843,12 @@ fn split(settings: &Settings) -> UResult<()> {
             split_into_n_chunks_by_line(settings, &mut reader, num_chunks)
         }
         Strategy::Number(NumberType::KthLines(chunk_number, num_chunks)) => {
-            // The chunk number is given as a 1-indexed number, but it
-            // is a little easier to deal with a 0-indexed number.
-            let chunk_number = chunk_number - 1;
             kth_chunk_by_line(settings, &mut reader, chunk_number, num_chunks)
         }
         Strategy::Number(NumberType::RoundRobin(num_chunks)) => {
             split_into_n_chunks_by_line_round_robin(settings, &mut reader, num_chunks)
         }
         Strategy::Number(NumberType::KthRoundRobin(chunk_number, num_chunks)) => {
-            // The chunk number is given as a 1-indexed number, but it
-            // is a little easier to deal with a 0-indexed number.
-            let chunk_number = chunk_number - 1;
             kth_chunk_by_line_round_robin(settings, &mut reader, chunk_number, num_chunks)
         }
         Strategy::Lines(chunk_size) => {
