@@ -464,8 +464,10 @@ fn infix_operator_or(values: &[String]) -> String {
     assert!(values.len() == 2);
     if value_as_bool(&values[0]) {
         values[0].clone()
-    } else {
+    } else if value_as_bool(&values[1]) {
         values[1].clone()
+    } else {
+        0.to_string()
     }
 }
 
