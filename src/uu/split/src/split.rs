@@ -748,7 +748,10 @@ enum SettingsError {
     /// Multiple different separator characters
     MultipleSeparatorCharacters,
 
-    /// Using `--filter` with Kth chunk options that output to stdout
+    /// Using `--filter` with `--number` option sub-strategies that print Kth chunk out of N chunks to stdout
+    /// K/N
+    /// l/K/N
+    /// r/K/N
     FilterWithKthChunkNumber,
 
     /// The `--filter` option is not supported on Windows.
