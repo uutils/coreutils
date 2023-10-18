@@ -435,6 +435,7 @@ pub fn canonicalize<P: AsRef<Path>>(
 }
 
 #[cfg(not(unix))]
+/// Display the permissions of a file
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
     let write = if metadata.permissions().readonly() {
         '-'
@@ -459,7 +460,6 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
 
 #[cfg(unix)]
 /// Display the permissions of a file
-/// On non unix like system, just show '----------'
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
     let mode: mode_t = metadata.mode() as mode_t;
     display_permissions_unix(mode, display_file_type)
