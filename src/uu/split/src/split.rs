@@ -1315,7 +1315,6 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                     {
                         self.num_bytes_remaining_in_current_chunk = 0;
                     } else {
-                        // let num_bytes_written = self.inner.write(&buf[..end.min(buf.len())])?;
                         let num_bytes_written = custom_write(
                             &buf[..end.min(buf.len())],
                             &mut self.inner,
@@ -1333,7 +1332,6 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                 // continue to the next iteration. (See chunk 1 in the
                 // example comment above.)
                 Some(i) if i < self.num_bytes_remaining_in_current_chunk => {
-                    // let num_bytes_written = self.inner.write(&buf[..i + 1])?;
                     let num_bytes_written =
                         custom_write(&buf[..i + 1], &mut self.inner, self.settings)?;
                     self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
@@ -1353,7 +1351,6 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                         == self.chunk_size.try_into().unwrap() =>
                 {
                     let end = self.num_bytes_remaining_in_current_chunk;
-                    // let num_bytes_written = self.inner.write(&buf[..end])?;
                     let num_bytes_written =
                         custom_write(&buf[..end], &mut self.inner, self.settings)?;
                     self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
