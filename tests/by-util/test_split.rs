@@ -642,10 +642,10 @@ fn test_split_obs_lines_within_combined_with_number() {
 #[test]
 fn test_split_invalid_bytes_size() {
     new_ucmd!()
-        .args(&["-b", "1024R"])
+        .args(&["-b", "1024W"])
         .fails()
         .code_is(1)
-        .stderr_only("split: invalid number of bytes: '1024R'\n");
+        .stderr_only("split: invalid number of bytes: '1024W'\n");
     #[cfg(target_pointer_width = "32")]
     {
         let sizes = ["1000G", "10T"];

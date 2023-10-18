@@ -34,7 +34,7 @@ use uucore::error::FromIo;
 use uucore::error::{set_exit_code, UError, UResult};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::parse_size::{parse_size_u64, ParseSizeError};
 use uucore::{
     crash, format_usage, help_about, help_section, help_usage, show, show_error, show_warning,
 };
@@ -256,12 +256,12 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
 
 fn read_block_size(s: Option<&str>) -> u64 {
     if let Some(s) = s {
-        parse_size(s)
+        parse_size_u64(s)
             .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::BLOCK_SIZE)))
     } else {
         for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
-                if let Ok(v) = parse_size(&env_size) {
+                if let Ok(v) = parse_size_u64(&env_size) {
                     return v;
                 }
             }
@@ -946,7 +946,7 @@ impl FromStr for Threshold {
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let offset = usize::from(s.starts_with(&['-', '+'][..]));
 
-        let size = parse_size(&s[offset..])?;
+        let size = parse_size_u64(&s[offset..])?;
 
         if s.starts_with('-') {
             // Threshold of '-0' excludes everything besides 0 sized entries

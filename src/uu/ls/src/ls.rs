@@ -57,7 +57,7 @@ use uucore::{
     error::{set_exit_code, UError, UResult},
     format_usage,
     fs::display_permissions,
-    parse_size::parse_size,
+    parse_size::parse_size_u64,
     version_cmp::version_cmp,
 };
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
@@ -781,7 +781,7 @@ impl Config {
         };
 
         let block_size: Option<u64> = if !opt_si && !opt_hr && !raw_bs.is_empty() {
-            match parse_size(&raw_bs.to_string_lossy()) {
+            match parse_size_u64(&raw_bs.to_string_lossy()) {
                 Ok(size) => Some(size),
                 Err(_) => {
                     show!(LsError::BlockSizeParseError(

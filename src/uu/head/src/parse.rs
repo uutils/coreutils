@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use std::ffi::OsString;
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::parse_size::{parse_size_u64, ParseSizeError};
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum ParseError {
@@ -129,7 +129,7 @@ pub fn parse_num(src: &str) -> Result<(u64, bool), ParseSizeError> {
     if trimmed_string.is_empty() {
         Ok((0, all_but_last))
     } else {
-        parse_size(trimmed_string).map(|n| (n, all_but_last))
+        parse_size_u64(trimmed_string).map(|n| (n, all_but_last))
     }
 }
 
