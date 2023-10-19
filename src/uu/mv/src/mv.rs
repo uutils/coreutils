@@ -19,12 +19,12 @@ use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
-pub use uucore::backup_control::BackupMode;
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::fs::{are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file};
-use uucore::update_control::{self, UpdateMode};
+use uucore::update_control;
+pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
 use fs_extra::dir::{
