@@ -12,6 +12,7 @@ pub enum MvError {
     NoSuchFile(String),
     SameFile(String, String),
     SelfSubdirectory(String),
+    SelfTargetSubdirectory(String, String),
     DirectoryToNonDirectory(String),
     NonDirectoryToDirectory(String, String),
     NotADirectory(String),
@@ -28,6 +29,10 @@ impl Display for MvError {
             Self::SelfSubdirectory(s) => write!(
                 f,
                 "cannot move '{s}' to a subdirectory of itself, '{s}/{s}'"
+            ),
+            Self::SelfTargetSubdirectory(s, t) => write!(
+                f,
+                "cannot move '{s}' to a subdirectory of itself, '{t}/{s}'"
             ),
             Self::DirectoryToNonDirectory(t) => {
                 write!(f, "cannot overwrite directory {t} with non-directory")

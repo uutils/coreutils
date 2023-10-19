@@ -326,6 +326,18 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
                 Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
             }
         } else {
+            // Check that source & target  do not contain same subdir/dir when both exist
+            // mkdir dir1/dir2; mv dir1 dir1/dir2
+            if target
+                .components()
+                .any(|c| c.as_os_str() == source.as_os_str())
+            {
+                return Err(MvError::SelfTargetSubdirectory(
+                    source.display().to_string(),
+                    target.display().to_string(),
+                )
+                .into());
+            }
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
     } else if target.exists() && source.is_dir() {

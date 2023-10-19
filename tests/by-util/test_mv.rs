@@ -1389,6 +1389,19 @@ fn test_mv_into_self_data() {
     assert!(at.file_exists(file2));
     assert!(!at.file_exists(file1));
 }
+
+#[test]
+fn test_mv_directory_into_subdirectory_of_itself_fails() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir1 = "mydir";
+    let dir2 = "mydir/mydir_2";
+    at.mkdir(dir1);
+    at.mkdir(dir2);
+    scene.ucmd().arg(dir1).arg(dir2).fails().stderr_contains(
+        "mv: cannot move 'mydir' to a subdirectory of itself, 'mydir/mydir_2/mydir'",
+    );
+}
 // Todo:
 
 // $ at.touch a b
