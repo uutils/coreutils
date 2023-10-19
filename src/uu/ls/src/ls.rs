@@ -1856,6 +1856,10 @@ impl PathData {
     }
 }
 
+fn show_dir_name(dir: &Path, out: &mut BufWriter<Stdout>) {
+    write!(out, "{}:", dir.display()).unwrap();
+}
+
 #[allow(clippy::cognitive_complexity)]
 pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
@@ -1922,10 +1926,17 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 }
                 writeln!(out, "{}:", path_data.p_buf.display())?;
                 if config.dired {
-                    dired::calculate_subdired(&mut dired, path_data.display_name.len());
+                    // First directory displayed
+                    let dir_len = path_data.display_name.len();
+                    // add the //SUBDIRED// coordinates
+                    dired::calculate_subdired(&mut dired, dir_len);
+                    // Add the padding for the dir name
+                    dired::add_dir_name(&mut dired, dir_len);
                 }
             } else {
-                writeln!(out, "\n{}:", path_data.p_buf.display())?;
+                writeln!(out)?;
+                show_dir_name(&path_data.p_buf, &mut out);
+                writeln!(out)?;
             }
         }
         let mut listed_ancestors = HashSet::new();
@@ -2104,7 +2115,7 @@ fn enter_directory(
         let total = return_total(&entries, config, out)?;
         write!(out, "{}", total.as_str())?;
         if config.dired {
-            dired::add_total(total.len(), dired);
+            dired::add_total(dired, total.len());
         }
     }
 
@@ -2132,7 +2143,23 @@ fn enter_directory(
                     if listed_ancestors
                         .insert(FileInformation::from_path(&e.p_buf, e.must_dereference)?)
                     {
-                        writeln!(out, "\n{}:", e.p_buf.display())?;
+                        // when listing several directories in recursive mode, we show
+                        // "dirname:" at the beginning of the file list
+                        writeln!(out)?;
+                        if config.dired {
+                            // We already injected the first dir
+                            // Continue with the others
+                            // 2 = \n + \n
+                            dired.padding = 2;
+                            dired::indent(out)?;
+                            let dir_name_size = e.p_buf.to_string_lossy().len();
+                            dired::calculate_subdired(dired, dir_name_size);
+                            // inject dir name
+                            dired::add_dir_name(dired, dir_name_size);
+                        }
+
+                        show_dir_name(&e.p_buf, out);
+                        writeln!(out)?;
                         enter_directory(e, rd, config, out, listed_ancestors, dired)?;
                         listed_ancestors
                             .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
@@ -2547,11 +2574,11 @@ fn display_item_long(
         let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
         if config.dired {
             let (start, end) = dired::calculate_dired(
+                &dired.dired_positions,
                 output_display.len(),
                 displayed_file.len(),
-                &dired.dired_positions,
             );
-            dired::update_positions(start, end, dired);
+            dired::update_positions(dired, start, end);
         }
         write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
     } else {
@@ -2639,9 +2666,9 @@ fn display_item_long(
 
         if config.dired {
             dired::calculate_and_update_positions(
+                dired,
                 output_display.len(),
                 displayed_file.trim().len(),
-                dired,
             );
         }
         write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
