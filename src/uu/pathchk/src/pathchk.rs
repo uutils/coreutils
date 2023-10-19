@@ -193,6 +193,17 @@ fn check_default(path: &[String]) -> bool {
         );
         return false;
     }
+    if total_len == 0 {
+        // Check whether a file name component is in a directory that is not searchable,
+        // or has some other serious problem. POSIX does not allow "" as a file name,
+        // but some non-POSIX hosts do (as an alias for "."),
+        // so allow "" if `symlink_metadata` (corresponds to `lstat`) does.
+        if fs::symlink_metadata(&joined_path).is_err() {
+            writeln!(std::io::stderr(), "pathchk: '': No such file or directory",);
+            return false;
+        }
+    }
+
     // components: length
     for p in path {
         let component_len = p.len();
