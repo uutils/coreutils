@@ -1860,6 +1860,7 @@ fn show_dir_name(dir: &Path, out: &mut BufWriter<Stdout>) {
     write!(out, "{}:", dir.display()).unwrap();
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
