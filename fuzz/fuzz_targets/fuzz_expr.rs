@@ -10,7 +10,7 @@ use uu_expr::uumain;
 
 use rand::seq::SliceRandom;
 use rand::Rng;
-use std::ffi::OsString;
+use std::{env, ffi::OsString};
 
 mod fuzz_common;
 use crate::fuzz_common::{generate_and_run_uumain, run_gnu_cmd};
@@ -85,6 +85,11 @@ fuzz_target!(|_data: &[u8]| {
     args.extend(expr.split_whitespace().map(OsString::from));
 
     let (rust_output, uumain_exit_code) = generate_and_run_uumain(&args, uumain);
+
+    // Use C locale to avoid false positives, like in https://github.com/uutils/coreutils/issues/5378,
+    // because uutils expr doesn't support localization yet
+    // TODO remove once uutils expr supports localization
+    env::set_var("LC_COLLATE", "C");
 
     // Run GNU expr with the provided arguments and compare the output
     match run_gnu_cmd(CMD_PATH, &args[1..], true) {

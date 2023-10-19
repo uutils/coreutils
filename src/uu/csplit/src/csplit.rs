@@ -664,6 +664,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn input_splitter() {
         let input = vec![
             Ok(String::from("aaa")),
@@ -736,6 +737,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn input_splitter_interrupt_rewind() {
         let input = vec![
             Ok(String::from("aaa")),

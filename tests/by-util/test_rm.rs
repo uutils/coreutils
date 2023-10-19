@@ -647,6 +647,21 @@ fn test_prompt_write_protected_no() {
     assert!(at.file_exists(file_2));
 }
 
+#[cfg(feature = "chmod")]
+#[test]
+fn test_remove_inaccessible_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir_1 = "test_rm_protected";
+
+    at.mkdir(dir_1);
+
+    scene.ccmd("chmod").arg("0").arg(dir_1).succeeds();
+
+    scene.ucmd().arg("-rf").arg(dir_1).succeeds();
+    assert!(!at.dir_exists(dir_1));
+}
+
 #[test]
 #[cfg(not(windows))]
 fn test_fifo_removal() {

@@ -3780,3 +3780,17 @@ fn test_ls_subdired_complex() {
     #[cfg(windows)]
     assert_eq!(dirnames, vec!["dir1", "dir1\\c2", "dir1\\d"]);
 }
+
+#[ignore = "issue #5396"]
+#[test]
+fn test_ls_cf_output_should_be_delimited_by_tab() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("e");
+    at.mkdir("e/a2345");
+    at.mkdir("e/b");
+
+    ucmd.args(&["-CF", "e"])
+        .succeeds()
+        .stdout_is("a2345/\tb/\n");
+}

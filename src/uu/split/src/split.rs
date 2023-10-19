@@ -22,7 +22,7 @@ use std::path::Path;
 use std::u64;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
-use uucore::parse_size::{parse_size, parse_size_max, ParseSizeError};
+use uucore::parse_size::{parse_size_u64, parse_size_u64_max, ParseSizeError};
 use uucore::uio_error;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
@@ -503,7 +503,7 @@ impl NumberType {
         let parts: Vec<&str> = s.split('/').collect();
         match &parts[..] {
             [n_str] => {
-                let num_chunks = parse_size(n_str)
+                let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 if num_chunks > 0 {
                     Ok(Self::Bytes(num_chunks))
@@ -512,9 +512,9 @@ impl NumberType {
                 }
             }
             [k_str, n_str] if !k_str.starts_with('l') && !k_str.starts_with('r') => {
-                let num_chunks = parse_size(n_str)
+                let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size(k_str)
+                let chunk_number = parse_size_u64(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
@@ -522,14 +522,14 @@ impl NumberType {
                 Ok(Self::KthBytes(chunk_number, num_chunks))
             }
             ["l", n_str] => {
-                let num_chunks = parse_size(n_str)
+                let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::Lines(num_chunks))
             }
             ["l", k_str, n_str] => {
-                let num_chunks = parse_size(n_str)
+                let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size(k_str)
+                let chunk_number = parse_size_u64(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
@@ -537,14 +537,14 @@ impl NumberType {
                 Ok(Self::KthLines(chunk_number, num_chunks))
             }
             ["r", n_str] => {
-                let num_chunks = parse_size(n_str)
+                let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 Ok(Self::RoundRobin(num_chunks))
             }
             ["r", k_str, n_str] => {
-                let num_chunks = parse_size(n_str)
+                let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size(k_str)
+                let chunk_number = parse_size_u64(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
                 if is_invalid_chunk(chunk_number, num_chunks) {
                     return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
@@ -616,7 +616,7 @@ impl Strategy {
             error: fn(ParseSizeError) -> StrategyError,
         ) -> Result<Strategy, StrategyError> {
             let s = matches.get_one::<String>(option).unwrap();
-            let n = parse_size_max(s).map_err(error)?;
+            let n = parse_size_u64_max(s).map_err(error)?;
             if n > 0 {
                 Ok(strategy(n))
             } else {
@@ -635,7 +635,7 @@ impl Strategy {
             matches.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
         ) {
             (Some(v), false, false, false, false) => {
-                let v = parse_size_max(v).map_err(|_| {
+                let v = parse_size_u64_max(v).map_err(|_| {
                     StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
                 })?;
                 if v > 0 {
@@ -1846,6 +1846,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_number_type_from_error() {
         assert_eq!(
             NumberType::from("xyz").unwrap_err(),

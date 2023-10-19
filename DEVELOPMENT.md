@@ -6,7 +6,7 @@ For contributing rules and best practices please refer to [CONTRIBUTING.md](CONT
 
 ## Before you start
 
-For this guide we assume that you already have GitHub account and have `git` and your favorite code editor or IDE installed and configured.
+For this guide we assume that you already have a GitHub account and have `git` and your favorite code editor or IDE installed and configured.
 Before you start working on coreutils, please follow these steps:
 
 1. Fork the [coreutils repository](https://github.com/uutils/coreutils) to your GitHub account.
@@ -142,6 +142,8 @@ If you also want to test the core utilities:
 
 ```shell
 cargo test  -p uucore -p coreutils
+# or
+cargo test --all-features -p uucore
 ```
 
 Running the complete test suite might take a while. We use [nextest](https://nexte.st/index.html) in
@@ -155,7 +157,7 @@ cargo nextest run --features unix --no-fail-fast
 To debug:
 
 ```shell
-gdb --args target/debug/coreutils ls
+rust-gdb --args target/debug/coreutils ls
 (gdb) b ls.rs:79
 (gdb) run
 ```

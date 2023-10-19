@@ -166,16 +166,26 @@ impl AstNode {
         {
             let mut out = Vec::with_capacity(operands.len());
             let mut operands = operands.iter();
-            // check the first value before `|`, stop evaluate and return directly if it is true.
-            // push dummy to pass the check of `len() == 2`
-            if op_type == "|" {
-                if let Some(value) = operands.next() {
-                    let value = value.evaluate()?;
-                    out.push(value.clone());
-                    if value_as_bool(&value) {
-                        out.push(String::from("dummy"));
-                        return Ok(out);
+
+            if let Some(value) = operands.next() {
+                let value = value.evaluate()?;
+                out.push(value.clone());
+                // short-circuit evaluation for `|` and `&`
+                // push dummy to pass `assert!(values.len() == 2);`
+                match op_type.as_ref() {
+                    "|" => {
+                        if value_as_bool(&value) {
+                            out.push(String::from("dummy"));
+                            return Ok(out);
+                        }
                     }
+                    "&" => {
+                        if !value_as_bool(&value) {
+                            out.push(String::from("dummy"));
+                            return Ok(out);
+                        }
+                    }
+                    _ => {}
                 }
             }
 
@@ -454,12 +464,15 @@ fn infix_operator_or(values: &[String]) -> String {
     assert!(values.len() == 2);
     if value_as_bool(&values[0]) {
         values[0].clone()
-    } else {
+    } else if value_as_bool(&values[1]) {
         values[1].clone()
+    } else {
+        0.to_string()
     }
 }
 
 fn infix_operator_and(values: &[String]) -> String {
+    assert!(values.len() == 2);
     if value_as_bool(&values[0]) && value_as_bool(&values[1]) {
         values[0].clone()
     } else {

@@ -326,6 +326,7 @@ fn current_tty() -> String {
 }
 
 impl Who {
+    #[allow(clippy::cognitive_complexity)]
     fn exec(&mut self) -> UResult<()> {
         let run_level_chk = |_record: i16| {
             #[cfg(not(target_os = "linux"))]
