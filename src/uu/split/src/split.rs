@@ -771,8 +771,7 @@ struct Settings {
     suffix_type: SuffixType,
     suffix_length: usize,
     suffix_start: usize,
-    /// Whether or not suffix should automatically widen,
-    /// i.e. go beyond suffix_length
+    /// Whether or not suffix length should automatically widen
     suffix_auto_widening: bool,
     additional_suffix: String,
     input: String,
