@@ -4,6 +4,36 @@
 // file that was distributed with this source code.
 // spell-checker:ignore dired subdired
 
+/// `dired` Module Documentation
+///
+/// This module handles the --dired output format, representing file and
+/// directory listings.
+///
+/// Key Mechanisms:
+/// 1. **Position Tracking**:
+///    - The module tracks byte positions for each file or directory entry.
+///    - `BytePosition`: Represents a byte range with start and end positions.
+///    - `DiredOutput`: Contains positions for DIRED and SUBDIRED outputs and
+///      maintains a padding value.
+///
+/// 2. **Padding**:
+///    - Padding is used when dealing with directory names or the "total" line.
+///    - The module adjusts byte positions by adding padding for these cases.
+///    - This ensures correct offset for subsequent files or directories.
+///
+/// 3. **Position Calculation**:
+///    - Functions like `calculate_dired`, `calculate_subdired`, and
+///      `calculate_and_update_positions` compute byte positions based on output
+///      length, previous positions, and padding.
+///
+/// 4. **Output**:
+///    - The module provides functions to print the DIRED output
+///      (`print_dired_output`) based on calculated positions and configuration.
+///    - Helpers like `print_positions` print positions with specific prefixes.
+///
+/// Overall, the module ensures each entry in the DIRED output has the correct
+/// byte position, considering additional lines or padding affecting positions.
+///
 use crate::Config;
 use std::fmt;
 use std::io::{BufWriter, Stdout, Write};
