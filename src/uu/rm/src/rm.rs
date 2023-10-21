@@ -53,7 +53,6 @@ pub struct Options {
     /// If no other option sets this mode, [`InteractiveMode::PromptProtected`]
     /// is used
     pub interactive: InteractiveMode,
-    #[allow(dead_code)]
     /// `--one-file-system`
     pub one_fs: bool,
     /// `--preserve-root`/`--no-preserve-root`
@@ -216,8 +215,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_ONE_FILE_SYSTEM)
                 .help(
                     "when removing a hierarchy recursively, skip any directory that is on a file \
-                    system different from that of the corresponding command line argument (NOT \
-                    IMPLEMENTED)",
+                    system different from that of the corresponding command line argument",
                 ).action(ArgAction::SetTrue),
         )
         .arg(
@@ -322,9 +320,49 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     had_err
 }
 
+#[cfg(not(windows))]
+fn get_device_id(p: &Path) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    p.symlink_metadata()
+        .ok()
+        .map(|metadata| MetadataExt::dev(&metadata))
+}
+
+#[cfg(windows)]
+fn get_device_id(_p: &Path) -> Option<u64> {
+    unimplemented!()
+}
+
+/// Checks if the given path is on the same device as its parent.
+/// Returns false if the `one_fs` option is enabled and devices differ.
+fn check_one_fs(path: &Path, options: &Options) -> bool {
+    if !options.one_fs && options.preserve_root != PreserveRoot::YesAll {
+        return true;
+    }
+
+    let parent_device = path.parent().and_then(get_device_id);
+    let current_device = get_device_id(path);
+
+    if parent_device != current_device {
+        show_error!(
+            "skipping {}, since it's on a different device",
+            path.quote()
+        );
+        return false;
+    }
+
+    true
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
+
+    if options.one_fs {
+        if !check_one_fs(path) {
+            return true;
+        }
+    }
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
