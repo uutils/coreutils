@@ -1595,7 +1595,7 @@ pub fn uu_app() -> Command {
                 .long(options::INDICATOR_STYLE)
                 .help(
                     "Append indicator with style WORD to entry names: \
-                none (default),  slash (-p), file-type (--file-type), classify (-F)",
+                none (default), slash (-p), file-type (--file-type), classify (-F)",
                 )
                 .value_parser(["none", "slash", "file-type", "classify"])
                 .overrides_with_all([
