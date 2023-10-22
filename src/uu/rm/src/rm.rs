@@ -248,7 +248,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PRESERVE_ROOT)
                 .long(OPT_PRESERVE_ROOT)
                 .help("do not remove '/' (default)")
-                .value_parser(["default", "all"])
+                .value_parser(["all"])
                 .default_value("default")
                 .default_missing_value("default")
                 .hide_default_value(true)
