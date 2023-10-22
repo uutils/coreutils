@@ -1647,6 +1647,14 @@ fn copy_file(
                 dest.display()
             )));
         }
+        if paths_refer_to_same_file(source, dest, true)
+            && matches!(
+                options.overwrite,
+                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+            )
+        {
+            fs::remove_file(dest)?;
+        }
     }
 
     if file_or_link_exists(dest) {
