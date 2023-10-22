@@ -31,6 +31,13 @@ pub enum InteractiveMode {
     PromptProtected,
 }
 
+#[derive(PartialEq, Debug)]
+pub enum PreserveRoot {
+    Default,
+    YesAll,
+    No,
+}
+
 /// Options for the `rm` command
 ///
 /// All options are public so that the options can be programmatically
@@ -56,7 +63,7 @@ pub struct Options {
     /// `--one-file-system`
     pub one_fs: bool,
     /// `--preserve-root`/`--no-preserve-root`
-    pub preserve_root: bool,
+    pub preserve_root: PreserveRoot,
     /// `-r`, `--recursive`
     pub recursive: bool,
     /// `-d`, `--dir`
@@ -84,6 +91,7 @@ static PRESUME_INPUT_TTY: &str = "-presume-input-tty";
 static ARG_FILES: &str = "files";
 
 #[uucore::main]
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
@@ -136,7 +144,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
             },
             one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
-            preserve_root: !matches.get_flag(OPT_NO_PRESERVE_ROOT),
+            preserve_root: if matches.get_flag(OPT_NO_PRESERVE_ROOT) {
+                PreserveRoot::No
+            } else {
+                match matches
+                    .get_one::<String>(OPT_PRESERVE_ROOT)
+                    .unwrap()
+                    .as_str()
+                {
+                    "all" => PreserveRoot::YesAll,
+                    "default" => PreserveRoot::Default,
+                    _ => PreserveRoot::Default,
+                }
+            },
             recursive: matches.get_flag(OPT_RECURSIVE),
             dir: matches.get_flag(OPT_DIR),
             verbose: matches.get_flag(OPT_VERBOSE),
@@ -228,7 +248,10 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PRESERVE_ROOT)
                 .long(OPT_PRESERVE_ROOT)
                 .help("do not remove '/' (default)")
-                .action(ArgAction::SetTrue),
+                .value_parser(["default", "all"])
+                .default_value("default")
+                .default_missing_value("default")
+                .hide_default_value(true)
         )
         .arg(
             Arg::new(OPT_RECURSIVE)
@@ -353,6 +376,9 @@ fn check_one_fs(path: &Path, options: &Options) -> bool {
             "skipping {}, since it's on a different device",
             path.quote()
         );
+        if options.preserve_root == PreserveRoot::YesAll {
+            show_error!("and --preserve-root=all is in effect");
+        }
         return false;
     }
 
@@ -363,14 +389,12 @@ fn check_one_fs(path: &Path, options: &Options) -> bool {
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
 
-    if options.one_fs {
-        if !check_one_fs(path) {
-            return true;
-        }
+    if !check_one_fs(path, options) {
+        return true;
     }
 
     let is_root = path.has_root() && path.parent().is_none();
-    if options.recursive && (!is_root || !options.preserve_root) {
+    if options.recursive && (!is_root || options.preserve_root == PreserveRoot::No) {
         if options.interactive != InteractiveMode::Always && !options.verbose {
             if let Err(e) = fs::remove_dir_all(path) {
                 // GNU compatibility (rm/empty-inacc.sh)
@@ -436,7 +460,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
                 had_err = remove_dir(dir.path(), options).bitor(had_err);
             }
         }
-    } else if options.dir && (!is_root || !options.preserve_root) {
+    } else if options.dir && (!is_root || options.preserve_root == PreserveRoot::No) {
         had_err = remove_dir(path, options).bitor(had_err);
     } else if options.recursive {
         show_error!("could not remove directory {}", path.quote());
