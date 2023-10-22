@@ -153,7 +153,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     .as_str()
                 {
                     "all" => PreserveRoot::YesAll,
-                    "default" => PreserveRoot::Default,
                     _ => PreserveRoot::Default,
                 }
             },
