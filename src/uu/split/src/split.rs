@@ -37,6 +37,7 @@ static OPT_NUMERIC_SUFFIXES_SHORT: &str = "-d";
 static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
 static OPT_HEX_SUFFIXES_SHORT: &str = "-x";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
+// If no suffix length is specified, default to "2" characters following GNU split behavior
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "2";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_SEPARATOR: &str = "separator";
