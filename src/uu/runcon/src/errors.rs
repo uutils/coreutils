@@ -26,7 +26,7 @@ pub(crate) enum Error {
     #[error("No command is specified")]
     MissingCommand,
 
-    #[error("SELinux is not enabled")]
+    #[error("runcon may be used only on a SELinux kernel")]
     SELinuxNotEnabled,
 
     #[error(transparent)]
