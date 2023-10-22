@@ -340,9 +340,14 @@ fn check_one_fs(path: &Path, options: &Options) -> bool {
         return true;
     }
 
-    let parent_device = path.parent().and_then(get_device_id);
+    // as we can get relative path, we need to canonicalize
+    // and manage potential errors
+    let parent_device = fs::canonicalize(path)
+        .ok()
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .as_deref()
+        .and_then(get_device_id);
     let current_device = get_device_id(path);
-
     if parent_device != current_device {
         show_error!(
             "skipping {}, since it's on a different device",
