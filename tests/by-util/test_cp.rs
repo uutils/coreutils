@@ -2828,6 +2828,22 @@ fn test_cp_mode_hardlink_no_dereference() {
 }
 
 #[test]
+fn test_remove_destination_with_destination_being_a_symlink_to_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let symlink = "symlink";
+
+    at.touch(file);
+    at.symlink_file(file, symlink);
+
+    ucmd.args(&["--remove-destination", file, symlink])
+        .succeeds();
+    assert!(!at.symlink_exists(symlink));
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(symlink));
+}
+
+#[test]
 fn test_remove_destination_symbolic_link_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("loop", "loop");
