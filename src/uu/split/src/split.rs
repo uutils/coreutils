@@ -668,17 +668,38 @@ impl Strategy {
     }
 }
 
-/// Parse the suffix type, start and length from the command-line arguments.
-/// Determine if the output file names suffix is allowed to auto-widen,
-/// i.e. go beyond suffix_length, when more output files need to be written into.
-/// Suffix auto-widening rules are:
-/// - OFF when suffix length N is specified
-///   `-a N` or `--suffix-length=N`
-/// - OFF when suffix start number N is specified using long option with value
+/// Parse the suffix type, start and length from the command-line arguments
+/// as well suffix length auto-widening and auto-width scenarios
+///
+/// Suffix auto-widening: Determine if the output file names suffix is allowed to dynamically auto-widen,
+/// i.e. change (increase) suffix length dynamically as more files need to be written into.
+/// Suffix length auto-widening rules are (in the order they are applied):
+/// - ON by default
+/// - OFF when suffix start N is specified via long option with a value
 ///   `--numeric-suffixes=N` or `--hex-suffixes=N`
-/// - Exception to the above: ON with `-n`/`--number` option (N, K/N, l/N, l/K/N, r/N, r/K/N)
+/// - OFF when suffix length N is specified, except for N=0 (see edge cases below)
+///   `-a N` or `--suffix-length=N`
+/// - OFF if suffix length is auto pre-calculated (auto-width)
+///
+/// Suffix auto-width: Determine if the the output file names suffix length should be automatically pre-calculated
+/// based on number of files that need to written into, having number of files known upfront
+/// Suffix length auto pre-calculation rules:
+/// - Pre-calculate new suffix length when `-n`/`--number` option (N, K/N, l/N, l/K/N, r/N, r/K/N)
+///   is used, where N is number of chunks = number of files to write into
 ///   and suffix start < N number of files
-/// - ON when suffix start number is NOT specified
+///   as in `split --numeric-suffixes=1 --number=r/100 file`
+/// - Do NOT pre-calculate new suffix length otherwise, i.e. when
+///   suffix start >= N number of files
+///   as in `split --numeric-suffixes=100 --number=r/100 file`
+///   OR when suffix length N is specified, except for N=0 (see edge cases below)
+///   `-a N` or `--suffix-length=N`
+///
+/// Edge case:
+/// - If suffix length is specified as 0 AND `-n`/`--number` option used specifying number of files:
+///   set auto widening OFF AND auto pre-calculate required suffix length based on number of files needed
+/// - If suffix length is specified as 0 in any other situation
+///   keep auto widening ON and suffix length to default value
+///
 fn suffix_from(
     matches: &ArgMatches,
     strategy: &Strategy,
@@ -701,18 +722,22 @@ fn suffix_from(
     ) {
         (true, _, _, _) => {
             suffix_type = SuffixType::Decimal;
-            let suffix_opt = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES); // if option was specified, but without value - this will return None as there is no default value
-            if suffix_opt.is_some() {
-                (suffix_start, suffix_auto_widening) =
-                    handle_long_suffix_opt(suffix_opt.unwrap(), strategy, false)?;
+            let opt = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES); // if option was specified, but without value - this will return None as there is no default value
+            if opt.is_some() {
+                suffix_start = opt
+                    .unwrap()
+                    .parse::<usize>()
+                    .map_err(|_| SettingsError::SuffixNotParsable(opt.unwrap().to_string()))?;
+                suffix_auto_widening = false;
             }
         }
         (_, true, _, _) => {
             suffix_type = SuffixType::Hexadecimal;
-            let suffix_opt = matches.get_one::<String>(OPT_HEX_SUFFIXES); // if option was specified, but without value - this will return None as there is no default value
-            if suffix_opt.is_some() {
-                (suffix_start, suffix_auto_widening) =
-                    handle_long_suffix_opt(suffix_opt.unwrap(), strategy, true)?;
+            let opt = matches.get_one::<String>(OPT_HEX_SUFFIXES); // if option was specified, but without value - this will return None as there is no default value
+            if opt.is_some() {
+                suffix_start = usize::from_str_radix(opt.unwrap(), 16)
+                    .map_err(|_| SettingsError::SuffixNotParsable(opt.unwrap().to_string()))?;
+                suffix_auto_widening = false;
             }
         }
         (_, _, true, _) => suffix_type = SuffixType::Decimal, // short numeric suffix '-d'
@@ -720,15 +745,44 @@ fn suffix_from(
         _ => suffix_type = SuffixType::Alphabetic, // no numeric/hex suffix, using default alphabetic
     }
 
+    // Get suffix length (could be coming from command line of default value)
     let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap(); // safe to unwrap here as there is default value for this option
-    let suffix_length: usize = suffix_length_str
+    let mut suffix_length: usize = suffix_length_str
         .parse()
         .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?;
 
-    // Override suffix_auto_widening if suffix length value came from command line
-    // and not from default value
-    if matches.value_source(OPT_SUFFIX_LENGTH) == Some(ValueSource::CommandLine) {
+    // Disable dynamic auto-widening if suffix length was specified in command line with value > 0
+    if matches.value_source(OPT_SUFFIX_LENGTH) == Some(ValueSource::CommandLine)
+        && suffix_length > 0
+    {
         suffix_auto_widening = false;
+    }
+
+    // Auto pre-calculate new suffix length (auto-width) if necessary
+    if let Strategy::Number(ref number_type) = strategy {
+        let chunks = number_type.num_chunks();
+        let required_suffix_length = ((suffix_start as u64 + chunks) as f64)
+            .log(suffix_type.radix() as f64)
+            .ceil() as usize;
+
+        if (suffix_start as u64) < chunks
+            && !(matches.value_source(OPT_SUFFIX_LENGTH) == Some(ValueSource::CommandLine)
+                && suffix_length > 0)
+        {
+            suffix_auto_widening = false;
+            suffix_length = required_suffix_length;
+        }
+
+        if suffix_length < required_suffix_length {
+            return Err(SettingsError::SuffixTooSmall(required_suffix_length));
+        }
+    }
+
+    // Check suffix length == 0 edge case
+    // If it is still 0 at this point, then auto-width pre-calculation did not apply
+    // So, set it to default value and keep auto-widening ON
+    if suffix_length == 0 {
+        suffix_length = OPT_DEFAULT_SUFFIX_LENGTH.parse().unwrap();
     }
 
     Ok((
@@ -737,30 +791,6 @@ fn suffix_from(
         suffix_auto_widening,
         suffix_length,
     ))
-}
-
-/// Helper function to [`suffix_from`] function
-fn handle_long_suffix_opt(
-    suffix_opt: &String,
-    strategy: &Strategy,
-    is_hex: bool,
-) -> Result<(usize, bool), SettingsError> {
-    let suffix_start = if is_hex {
-        usize::from_str_radix(suffix_opt, 16)
-            .map_err(|_| SettingsError::SuffixNotParsable(suffix_opt.to_string()))?
-    } else {
-        suffix_opt
-            .parse::<usize>()
-            .map_err(|_| SettingsError::SuffixNotParsable(suffix_opt.to_string()))?
-    };
-
-    let suffix_auto_widening = if let Strategy::Number(ref number_type) = strategy {
-        let chunks = number_type.num_chunks();
-        (suffix_start as u64) < chunks
-    } else {
-        false
-    };
-    Ok((suffix_start, suffix_auto_widening))
 }
 
 /// Parameters that control how a file gets split.
@@ -881,17 +911,6 @@ impl Settings {
         let strategy = Strategy::from(matches, obs_lines).map_err(SettingsError::Strategy)?;
         let (suffix_type, suffix_start, suffix_auto_widening, suffix_length) =
             suffix_from(matches, &strategy)?;
-
-        if let Strategy::Number(ref number_type) = strategy {
-            let chunks = number_type.num_chunks();
-            if !suffix_auto_widening {
-                let required_suffix_length =
-                    (chunks as f64).log(suffix_type.radix() as f64).ceil() as usize;
-                if suffix_length < required_suffix_length {
-                    return Err(SettingsError::SuffixTooSmall(required_suffix_length));
-                }
-            }
-        }
 
         // Make sure that separator is only one UTF8 character (if specified)
         // defaults to '\n' - newline character
