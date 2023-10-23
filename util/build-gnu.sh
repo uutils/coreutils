@@ -272,6 +272,10 @@ sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du
 # with ls --dired, in case of error, we have a slightly different error position
 sed -i -e "s|44 45|48 49|" tests/ls/stat-failed.sh
 
+# small difference in the error message
+sed -i -e "/ls: invalid argument 'XX' for 'time style'/,/Try 'ls --help' for more information\./c\
+ls: invalid --time-style argument 'XX'\nPossible values are: [\"full-iso\", \"long-iso\", \"iso\", \"locale\", \"+FORMAT (e.g., +%H:%M) for a 'date'-style format\"]\n\nFor more information try --help" tests/ls/time-style-diag.sh
+
 # disable two kind of tests:
 # "hostid BEFORE --help" doesn't fail for GNU. we fail. we are probably doing better
 # "hostid BEFORE --help AFTER " same for this
