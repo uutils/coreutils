@@ -824,6 +824,79 @@ fn test_hex_dynamic_suffix_length() {
     assert_eq!(file_read(&at, "xf000"), "a");
 }
 
+/// Test for dynamic suffix length (auto-widening) disabled when suffix start number is specified
+#[test]
+fn test_dynamic_suffix_length_off_with_suffix_start() {
+    new_ucmd!()
+        .args(&["-b", "1", "--numeric-suffixes=89", "ninetyonebytes.txt"])
+        .fails()
+        .stderr_only("split: output file suffixes exhausted\n");
+}
+
+/// Test for dynamic suffix length (auto-widening) enabled when suffix start number is NOT specified
+#[test]
+fn test_dynamic_suffix_length_on_with_suffix_start_no_value() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-b", "1", "--numeric-suffixes", "ninetyonebytes.txt"])
+        .succeeds();
+    assert_eq!(file_read(&at, "x9000"), "a");
+}
+
+/// Test for suffix auto-width with --number strategy and suffix start number
+#[test]
+fn test_suffix_auto_width_with_number() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--numeric-suffixes=1", "--number=r/100", "fivelines.txt"])
+        .succeeds();
+    let glob = Glob::new(&at, ".", r"x\d\d\d$");
+    assert_eq!(glob.count(), 100);
+    assert_eq!(glob.collate(), at.read_bytes("fivelines.txt"));
+    assert_eq!(file_read(&at, "x001"), "1\n");
+    assert_eq!(file_read(&at, "x100"), "");
+
+    new_ucmd!()
+        .args(&["--numeric-suffixes=100", "--number=r/100", "fivelines.txt"])
+        .fails();
+}
+
+/// Test for edge case of specifying 0 for suffix length
+#[test]
+fn test_suffix_length_zero() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "--numeric-suffixes=1",
+        "--number=r/100",
+        "-a",
+        "0",
+        "fivelines.txt",
+    ])
+    .succeeds();
+    let glob = Glob::new(&at, ".", r"x\d\d\d$");
+    assert_eq!(glob.count(), 100);
+
+    new_ucmd!()
+        .args(&[
+            "--numeric-suffixes=100",
+            "--number=r/100",
+            "-a",
+            "0",
+            "fivelines.txt",
+        ])
+        .fails();
+
+    new_ucmd!()
+        .args(&[
+            "-b",
+            "1",
+            "--numeric-suffixes=89",
+            "-a",
+            "0",
+            "ninetyonebytes.txt",
+        ])
+        .fails()
+        .stderr_only("split: output file suffixes exhausted\n");
+}
+
 #[test]
 fn test_suffixes_exhausted() {
     new_ucmd!()

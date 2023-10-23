@@ -769,8 +769,13 @@ fn suffix_from(
             && !(matches.value_source(OPT_SUFFIX_LENGTH) == Some(ValueSource::CommandLine)
                 && suffix_length > 0)
         {
+            // with auto-width ON the auto-widening is OFF
             suffix_auto_widening = false;
-            suffix_length = required_suffix_length;
+
+            // do not reduce suffix length with auto-width
+            if suffix_length < required_suffix_length {
+                suffix_length = required_suffix_length;
+            }
         }
 
         if suffix_length < required_suffix_length {
