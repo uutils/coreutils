@@ -1401,6 +1401,16 @@ fn test_mv_directory_into_subdirectory_of_itself_fails() {
     scene.ucmd().arg(dir1).arg(dir2).fails().stderr_contains(
         "mv: cannot move 'mydir' to a subdirectory of itself, 'mydir/mydir_2/mydir'",
     );
+
+    // check that it also errors out with /
+    scene
+        .ucmd()
+        .arg(format!("{}/", dir1))
+        .arg(dir2)
+        .fails()
+        .stderr_contains(
+            "mv: cannot move 'mydir/' to a subdirectory of itself, 'mydir/mydir_2/mydir/'",
+        );
 }
 // Todo:
 
