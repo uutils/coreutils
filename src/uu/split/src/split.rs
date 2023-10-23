@@ -37,7 +37,8 @@ static OPT_NUMERIC_SUFFIXES_SHORT: &str = "-d";
 static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
 static OPT_HEX_SUFFIXES_SHORT: &str = "-x";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
-static OPT_DEFAULT_SUFFIX_LENGTH: &str = "0";
+// If no suffix length is specified, default to "2" characters following GNU split behavior
+static OPT_DEFAULT_SUFFIX_LENGTH: &str = "2";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_SEPARATOR: &str = "separator";
 //The ---io and ---io-blksize parameters are consumed and ignored.
@@ -313,7 +314,6 @@ pub fn uu_app() -> Command {
                 .long(OPT_NUMERIC_SUFFIXES)
                 .alias("numeric")
                 .require_equals(true)
-                .default_missing_value("0")
                 .num_args(0..=1)
                 .overrides_with_all([
                     OPT_NUMERIC_SUFFIXES,
@@ -340,7 +340,6 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_HEX_SUFFIXES)
                 .long(OPT_HEX_SUFFIXES)
                 .alias("hex")
-                .default_missing_value("0")
                 .require_equals(true)
                 .num_args(0..=1)
                 .overrides_with_all([
@@ -359,7 +358,7 @@ pub fn uu_app() -> Command {
                 .allow_hyphen_values(true)
                 .value_name("N")
                 .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
-                .help("use suffixes of fixed length N. 0 implies dynamic length, starting with 2"),
+                .help("generate suffixes of length N (default 2)"),
         )
         .arg(
             Arg::new(OPT_VERBOSE)
@@ -669,35 +668,99 @@ impl Strategy {
     }
 }
 
-/// Parse the suffix type from the command-line arguments.
-fn suffix_type_from(matches: &ArgMatches) -> Result<(SuffixType, usize), SettingsError> {
+/// Parse the suffix type, start and length from the command-line arguments.
+/// Determine if the output file names suffix is allowed to auto-widen,
+/// i.e. go beyond suffix_length, when more output files need to be written into.
+/// Suffix auto-widening rules are:
+/// - OFF when suffix length N is specified
+///   `-a N` or `--suffix-length=N`
+/// - OFF when suffix start number N is specified using long option with value
+///   `--numeric-suffixes=N` or `--hex-suffixes=N`
+/// - Exception to the above: ON with `-n`/`--number` option (N, K/N, l/N, l/K/N, r/N, r/K/N)
+///   and suffix start < N number of files
+/// - ON when suffix start number is NOT specified
+fn suffix_from(
+    matches: &ArgMatches,
+    strategy: &Strategy,
+) -> Result<(SuffixType, usize, bool, usize), SettingsError> {
+    let suffix_type: SuffixType;
+
+    // Defaults
+    let mut suffix_start = 0;
+    let mut suffix_auto_widening = true;
+
     // Check if the user is specifying one or more than one suffix
     // Any combination of suffixes is allowed
     // Since all suffixes are setup with 'overrides_with_all()' against themselves and each other,
     // last one wins, all others are ignored
     match (
-        matches.get_one::<String>(OPT_NUMERIC_SUFFIXES),
-        matches.get_one::<String>(OPT_HEX_SUFFIXES),
+        matches.contains_id(OPT_NUMERIC_SUFFIXES),
+        matches.contains_id(OPT_HEX_SUFFIXES),
         matches.get_flag(OPT_NUMERIC_SUFFIXES_SHORT),
         matches.get_flag(OPT_HEX_SUFFIXES_SHORT),
     ) {
-        (Some(v), _, _, _) => {
-            let suffix_start = v;
-            let suffix_start = suffix_start
-                .parse::<usize>()
-                .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
-            Ok((SuffixType::Decimal, suffix_start))
+        (true, _, _, _) => {
+            suffix_type = SuffixType::Decimal;
+            let suffix_opt = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES); // if option was specified, but without value - this will return None as there is no default value
+            if suffix_opt.is_some() {
+                (suffix_start, suffix_auto_widening) =
+                    handle_long_suffix_opt(suffix_opt.unwrap(), strategy, false)?;
+            }
         }
-        (_, Some(v), _, _) => {
-            let suffix_start = v;
-            let suffix_start = usize::from_str_radix(suffix_start, 16)
-                .map_err(|_| SettingsError::SuffixNotParsable(suffix_start.to_string()))?;
-            Ok((SuffixType::Hexadecimal, suffix_start))
+        (_, true, _, _) => {
+            suffix_type = SuffixType::Hexadecimal;
+            let suffix_opt = matches.get_one::<String>(OPT_HEX_SUFFIXES); // if option was specified, but without value - this will return None as there is no default value
+            if suffix_opt.is_some() {
+                (suffix_start, suffix_auto_widening) =
+                    handle_long_suffix_opt(suffix_opt.unwrap(), strategy, true)?;
+            }
         }
-        (_, _, true, _) => Ok((SuffixType::Decimal, 0)), // short numeric suffix '-d', default start 0
-        (_, _, _, true) => Ok((SuffixType::Hexadecimal, 0)), // short hex suffix '-x', default start 0
-        _ => Ok((SuffixType::Alphabetic, 0)), // no numeric/hex suffix, using default alphabetic
+        (_, _, true, _) => suffix_type = SuffixType::Decimal, // short numeric suffix '-d'
+        (_, _, _, true) => suffix_type = SuffixType::Hexadecimal, // short hex suffix '-x'
+        _ => suffix_type = SuffixType::Alphabetic, // no numeric/hex suffix, using default alphabetic
     }
+
+    let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap(); // safe to unwrap here as there is default value for this option
+    let suffix_length: usize = suffix_length_str
+        .parse()
+        .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?;
+
+    // Override suffix_auto_widening if suffix length value came from command line
+    // and not from default value
+    if matches.value_source(OPT_SUFFIX_LENGTH) == Some(ValueSource::CommandLine) {
+        suffix_auto_widening = false;
+    }
+
+    Ok((
+        suffix_type,
+        suffix_start,
+        suffix_auto_widening,
+        suffix_length,
+    ))
+}
+
+/// Helper function to [`suffix_from`] function
+fn handle_long_suffix_opt(
+    suffix_opt: &String,
+    strategy: &Strategy,
+    is_hex: bool,
+) -> Result<(usize, bool), SettingsError> {
+    let suffix_start = if is_hex {
+        usize::from_str_radix(suffix_opt, 16)
+            .map_err(|_| SettingsError::SuffixNotParsable(suffix_opt.to_string()))?
+    } else {
+        suffix_opt
+            .parse::<usize>()
+            .map_err(|_| SettingsError::SuffixNotParsable(suffix_opt.to_string()))?
+    };
+
+    let suffix_auto_widening = if let Strategy::Number(ref number_type) = strategy {
+        let chunks = number_type.num_chunks();
+        (suffix_start as u64) < chunks
+    } else {
+        false
+    };
+    Ok((suffix_start, suffix_auto_widening))
 }
 
 /// Parameters that control how a file gets split.
@@ -709,6 +772,8 @@ struct Settings {
     suffix_type: SuffixType,
     suffix_length: usize,
     suffix_start: usize,
+    /// Whether or not suffix length should automatically widen
+    suffix_auto_widening: bool,
     additional_suffix: String,
     input: String,
     /// When supplied, a shell command to output to instead of xaa, xab …
@@ -809,14 +874,12 @@ impl Settings {
             return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
         }
         let strategy = Strategy::from(matches, obs_lines).map_err(SettingsError::Strategy)?;
-        let (suffix_type, suffix_start) = suffix_type_from(matches)?;
-        let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap();
-        let suffix_length: usize = suffix_length_str
-            .parse()
-            .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?;
+        let (suffix_type, suffix_start, suffix_auto_widening, suffix_length) =
+            suffix_from(matches, &strategy)?;
+
         if let Strategy::Number(ref number_type) = strategy {
             let chunks = number_type.num_chunks();
-            if suffix_length != 0 {
+            if !suffix_auto_widening {
                 let required_suffix_length =
                     (chunks as f64).log(suffix_type.radix() as f64).ceil() as usize;
                 if suffix_length < required_suffix_length {
@@ -845,13 +908,12 @@ impl Settings {
         };
 
         let result = Self {
-            suffix_length: suffix_length_str
-                .parse()
-                .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?,
+            suffix_length,
             suffix_type,
             suffix_start,
+            suffix_auto_widening,
             additional_suffix,
-            verbose: matches.value_source("verbose") == Some(ValueSource::CommandLine),
+            verbose: matches.value_source(OPT_VERBOSE) == Some(ValueSource::CommandLine),
             separator,
             strategy,
             input: matches.get_one::<String>(ARG_INPUT).unwrap().to_owned(),
@@ -979,6 +1041,7 @@ impl<'a> ByteChunkWriter<'a> {
             settings.suffix_length,
             settings.suffix_type,
             settings.suffix_start,
+            settings.suffix_auto_widening,
         )?;
         let filename = filename_iterator
             .next()
@@ -1109,6 +1172,7 @@ impl<'a> LineChunkWriter<'a> {
             settings.suffix_length,
             settings.suffix_type,
             settings.suffix_start,
+            settings.suffix_auto_widening,
         )?;
         let filename = filename_iterator
             .next()
@@ -1222,6 +1286,7 @@ impl<'a> LineBytesChunkWriter<'a> {
             settings.suffix_length,
             settings.suffix_type,
             settings.suffix_start,
+            settings.suffix_auto_widening,
         )?;
         let filename = filename_iterator
             .next()
@@ -1445,6 +1510,7 @@ where
         settings.suffix_length,
         settings.suffix_type,
         settings.suffix_start,
+        settings.suffix_auto_widening,
     )?;
 
     // Create one writer for each chunk. This will create each
@@ -1616,6 +1682,7 @@ where
         settings.suffix_length,
         settings.suffix_type,
         settings.suffix_start,
+        settings.suffix_auto_widening,
     )?;
 
     // Create one writer for each chunk. This will create each
@@ -1757,6 +1824,7 @@ where
         settings.suffix_length,
         settings.suffix_type,
         settings.suffix_start,
+        settings.suffix_auto_widening,
     )
     .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
 
