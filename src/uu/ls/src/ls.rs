@@ -183,7 +183,7 @@ impl UError for LsError {
             Self::BlockSizeParseError(_) => 1,
             Self::ConflictingArgumentDired() => 1,
             Self::AlreadyListedError(_) => 2,
-            Self::TimeStyleParseError(_, _) => 1,
+            Self::TimeStyleParseError(_, _) => 2,
         }
     }
 }

@@ -1737,7 +1737,12 @@ fn test_ls_styles() {
         .stdout_matches(&re_custom_format);
 
     // Also fails due to not having full clap support for time_styles
-    scene.ucmd().arg("-l").arg("-time-style=invalid").fails();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=invalid")
+        .fails()
+        .code_is(2);
 
     //Overwrite options tests
     scene
