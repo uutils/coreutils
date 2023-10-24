@@ -3565,6 +3565,20 @@ fn test_ls_dired_incompatible() {
 }
 
 #[test]
+fn test_ls_dired_and_zero_are_incompatible() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .arg("--zero")
+        .fails()
+        .code_is(2)
+        .stderr_contains("--dired and --zero are incompatible");
+}
+
+#[test]
 fn test_ls_dired_recursive() {
     let scene = TestScenario::new(util_name!());
 

@@ -168,7 +168,8 @@ enum LsError {
     IOError(std::io::Error),
     IOErrorContext(std::io::Error, PathBuf, bool),
     BlockSizeParseError(String),
-    ConflictingArgumentDired(),
+    ConflictingArgumentDired,
+    DiredAndZeroAreIncompatible,
     AlreadyListedError(PathBuf),
     TimeStyleParseError(String, Vec<String>),
 }
@@ -181,7 +182,8 @@ impl UError for LsError {
             Self::IOErrorContext(_, _, false) => 1,
             Self::IOErrorContext(_, _, true) => 2,
             Self::BlockSizeParseError(_) => 1,
-            Self::ConflictingArgumentDired() => 1,
+            Self::ConflictingArgumentDired => 1,
+            Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_, _) => 1,
         }
@@ -196,10 +198,12 @@ impl Display for LsError {
             Self::BlockSizeParseError(s) => {
                 write!(f, "invalid --block-size argument {}", s.quote())
             }
-            Self::ConflictingArgumentDired() => {
+            Self::ConflictingArgumentDired => {
                 write!(f, "--dired requires --format=long")
             }
-
+            Self::DiredAndZeroAreIncompatible => {
+                write!(f, "--dired and --zero are incompatible")
+            }
             Self::TimeStyleParseError(s, possible_time_styles) => {
                 write!(
                     f,
@@ -966,7 +970,10 @@ impl Config {
 
         let dired = options.get_flag(options::DIRED);
         if dired && format != Format::Long {
-            return Err(Box::new(LsError::ConflictingArgumentDired()));
+            return Err(Box::new(LsError::ConflictingArgumentDired));
+        }
+        if dired && format == Format::Long && options.get_flag(options::ZERO) {
+            return Err(Box::new(LsError::DiredAndZeroAreIncompatible));
         }
 
         let dereference = if options.get_flag(options::dereference::ALL) {
@@ -1142,7 +1149,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::ZERO)
                 .long(options::ZERO)
-                .conflicts_with(options::DIRED)
                 .overrides_with(options::ZERO)
                 .help("List entries separated by ASCII NUL characters.")
                 .action(ArgAction::SetTrue),
