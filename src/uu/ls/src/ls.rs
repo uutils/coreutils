@@ -1027,7 +1027,7 @@ impl Config {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let command = uu_app();
 
-    let matches = command.get_matches_from(args);
+    let matches = command.try_get_matches_from(args)?;
 
     let config = Config::from(&matches)?;
 
