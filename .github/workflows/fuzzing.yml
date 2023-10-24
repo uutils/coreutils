@@ -28,6 +28,8 @@ jobs:
             fuzz_parse_glob,
             fuzz_parse_size,
             fuzz_parse_time,
+            # adding more fuzz tests here.
+            # e.g. fuzz_test_a,
           ]
     steps:
     - uses: actions/checkout@v4
