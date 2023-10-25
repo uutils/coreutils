@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
 
 mod error;
 
@@ -405,7 +405,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
 
-    let canonized_target_dir = target_dir
+    let canonicalized_target_dir = target_dir
         .canonicalize()
         .unwrap_or_else(|_| target_dir.to_path_buf());
 
@@ -440,8 +440,8 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
 
         // Check if we have mv dir1 dir2 dir2
         // And generate an error if this is the case
-        if let Ok(canonized_source) = sourcepath.canonicalize() {
-            if canonized_source == canonized_target_dir {
+        if let Ok(canonicalized_source) = sourcepath.canonicalize() {
+            if canonicalized_source == canonicalized_target_dir {
                 // User tried to move directory to itself, warning is shown
                 // and process of moving files is continued.
                 show!(USimpleError::new(
@@ -450,7 +450,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
                         "cannot move '{}' to a subdirectory of itself, '{}/{}'",
                         sourcepath.display(),
                         target_dir.display(),
-                        canonized_target_dir.components().last().map_or_else(
+                        canonicalized_target_dir.components().last().map_or_else(
                             || target_dir.display().to_string(),
                             |dir| { PathBuf::from(dir.as_os_str()).display().to_string() }
                         )
