@@ -1552,8 +1552,8 @@ fn test_cp_preserve_links_case_7() {
 }
 
 #[test]
-#[cfg(all(unix))]
-fn test_cp_no_preserve_mode_case() {
+#[cfg(unix)]
+fn test_cp_no_preserve_mode() {
     use libc::umask;
     use uucore::fs as uufs;
     let (at, mut ucmd) = at_and_ucmd!();
