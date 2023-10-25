@@ -1743,7 +1743,7 @@ fn copy_file(
         let mut permissions = source_metadata.permissions();
         #[cfg(unix)]
         {
-            let mut mode = handling_no_preserve_mode(options, permissions.mode());
+            let mut mode = handle_no_preserve_mode(options, permissions.mode());
 
             // apply umask
             use uucore::mode::get_umask;
@@ -1876,7 +1876,7 @@ fn copy_file(
 }
 
 #[cfg(unix)]
-fn handling_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
+fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
     let (is_preserve_mode, is_explicit_no_preserve_mode) = options.preserve_mode();
     if !is_preserve_mode {
         use libc::{
