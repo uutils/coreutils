@@ -184,7 +184,7 @@ pub struct Attributes {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Preserve {
-    // explicit means is the --no-preserve flag is used or not to distinguish out the default value.
+    // explicit means whether the --no-preserve flag is used or not to distinguish out the default value.
     // e.g. --no-preserve=mode means mode = No { explicit = true }
     No { explicit: bool },
     Yes { required: bool },
