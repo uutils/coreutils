@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc
 
 use crate::common::util::{AtPath, TestScenario};
 use rand::{thread_rng, Rng, SeedableRng};
@@ -857,11 +857,11 @@ fn test_number_n() {
         s
     };
     ucmd.args(&["-n", "5", "asciilowercase.txt"]).succeeds();
-    assert_eq!(file_read("xaa"), "abcde");
-    assert_eq!(file_read("xab"), "fghij");
-    assert_eq!(file_read("xac"), "klmno");
-    assert_eq!(file_read("xad"), "pqrst");
-    assert_eq!(file_read("xae"), "uvwxyz\n");
+    assert_eq!(file_read("xaa"), "abcdef");
+    assert_eq!(file_read("xab"), "ghijkl");
+    assert_eq!(file_read("xac"), "mnopq");
+    assert_eq!(file_read("xad"), "rstuv");
+    assert_eq!(file_read("xae"), "wxyz\n");
     #[cfg(unix)]
     new_ucmd!()
         .args(&["--number=100", "/dev/null"])
@@ -874,11 +874,11 @@ fn test_number_kth_of_n() {
     new_ucmd!()
         .args(&["--number=3/5", "asciilowercase.txt"])
         .succeeds()
-        .stdout_only("klmno");
+        .stdout_only("mnopq");
     new_ucmd!()
         .args(&["--number=5/5", "asciilowercase.txt"])
         .succeeds()
-        .stdout_only("uvwxyz\n");
+        .stdout_only("wxyz\n");
     new_ucmd!()
         .args(&["-e", "--number=99/100", "asciilowercase.txt"])
         .succeeds()
@@ -966,11 +966,11 @@ fn test_split_number_with_io_blksize() {
     };
     ucmd.args(&["-n", "5", "asciilowercase.txt", "---io-blksize", "1024"])
         .succeeds();
-    assert_eq!(file_read("xaa"), "abcde");
-    assert_eq!(file_read("xab"), "fghij");
-    assert_eq!(file_read("xac"), "klmno");
-    assert_eq!(file_read("xad"), "pqrst");
-    assert_eq!(file_read("xae"), "uvwxyz\n");
+    assert_eq!(file_read("xaa"), "abcdef");
+    assert_eq!(file_read("xab"), "ghijkl");
+    assert_eq!(file_read("xac"), "mnopq");
+    assert_eq!(file_read("xad"), "rstuv");
+    assert_eq!(file_read("xae"), "wxyz\n");
 }
 
 #[test]

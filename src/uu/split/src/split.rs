@@ -1446,11 +1446,16 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
 }
 
 /// Split a file into a specific number of chunks by byte.
+/// When file size cannot be evenly divided into the number of chunks of the same size,
+/// the first X chunks are 1 byte longer than the rest,
+/// where X is a reminder of (file size MODULO number of chunks)
 ///
 /// This function always creates one output file for each chunk, even
 /// if there is an error reading or writing one of the chunks or if
-/// the input file is truncated. However, if the `filter` option is
-/// being used, then no files are created.
+/// the input file is truncated. However, if the `--filter` option is
+/// being used, then files will only be created if `$FILE` variable was used
+/// in filter command,
+/// i.e. `split -n 10 --filter='head -c1 > $FILE' in`
 ///
 /// # Errors
 ///
@@ -1468,37 +1473,37 @@ fn split_into_n_chunks_by_byte<R>(
 where
     R: Read,
 {
-    // Get the size of the input file in bytes and compute the number
-    // of bytes per chunk.
-    //
+    // Get the size of the input file in bytes
+    let metadata = metadata(&settings.input).map_err(|_| {
+        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
+    })?;
+    let mut num_bytes = metadata.len();
+
     // If the requested number of chunks exceeds the number of bytes
     // in the file *and* the `elide_empty_files` parameter is enabled,
     // then behave as if the number of chunks was set to the number of
     // bytes in the file. This ensures that we don't write empty
     // files. Otherwise, just write the `num_chunks - num_bytes` empty
     // files.
-    let metadata = metadata(&settings.input).map_err(|_| {
-        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
-    })?;
-
-    let num_bytes = metadata.len();
-    let will_have_empty_files = settings.elide_empty_files && num_chunks > num_bytes;
-    let (num_chunks, chunk_size) = if will_have_empty_files {
-        let num_chunks = num_bytes;
-        let chunk_size = 1;
-        (num_chunks, chunk_size)
+    let num_chunks = if settings.elide_empty_files && num_chunks > num_bytes {
+        num_bytes
     } else {
-        let chunk_size = (num_bytes / (num_chunks)).max(1);
-        (num_chunks, chunk_size)
+        num_chunks
     };
 
     // If we would have written zero chunks of output, then terminate
     // immediately. This happens on `split -e -n 3 /dev/null`, for
     // example.
-    if num_chunks == 0 || num_bytes == 0 {
+    if num_chunks == 0 {
         return Ok(());
     }
 
+    // Calculate chunk size base and modulo reminder
+    // to be used in calculating chunk_size later on
+    let chunk_size_base = num_bytes / num_chunks;
+    let chunk_size_reminder = num_bytes % num_chunks;
+
+    // Make sure number of chunks is within usize bounds
     let num_chunks: usize = num_chunks
         .try_into()
         .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
@@ -1513,8 +1518,9 @@ where
         settings.suffix_auto_widening,
     )?;
 
-    // Create one writer for each chunk. This will create each
-    // of the underlying files (if not in `--filter` mode).
+    // Create one writer for each chunk.
+    // This will create each of the underlying files
+    // or stdin pipes to child shell/command processes if in `--filter` mode
     let mut writers = vec![];
     for _ in 0..num_chunks {
         let filename = filename_iterator
@@ -1530,7 +1536,9 @@ where
     // The last writer gets all remaining bytes so that if the number
     // of bytes in the input file was not evenly divisible by
     // `num_chunks`, we don't leave any bytes behind.
-    for writer in writers.iter_mut().take(num_chunks - 1) {
+    for (i, writer) in (0_u64..).zip(writers.iter_mut().take(num_chunks - 1)) {
+        let chunk_size = chunk_size_base + (chunk_size_reminder > i) as u64;
+        num_bytes -= chunk_size;
         match io::copy(&mut reader.by_ref().take(chunk_size), writer) {
             Ok(_) => continue,
             Err(e) if ignorable_io_error(&e, settings) => continue,
@@ -1540,7 +1548,7 @@ where
 
     // Write all the remaining bytes to the last chunk.
     let i = num_chunks - 1;
-    let last_chunk_size = num_bytes - (chunk_size * (num_chunks as u64 - 1));
+    let last_chunk_size = num_bytes;
     match io::copy(&mut reader.by_ref().take(last_chunk_size), &mut writers[i]) {
         Ok(_) => Ok(()),
         Err(e) if ignorable_io_error(&e, settings) => Ok(()),
@@ -1571,9 +1579,7 @@ fn kth_chunks_by_byte<R>(
 where
     R: BufRead,
 {
-    // Get the size of the input file in bytes and compute the number
-    // of bytes per chunk.
-    //
+    // Get the size of the input file in bytes
     // If the requested number of chunks exceeds the number of bytes
     // in the file - just write empty byte string to stdout
     // NOTE: the `elide_empty_files` parameter is ignored here
@@ -1582,8 +1588,8 @@ where
     let metadata = metadata(&settings.input).map_err(|_| {
         USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
     })?;
+    let mut num_bytes = metadata.len();
 
-    let num_bytes = metadata.len();
     // If input file is empty and we would have written zero chunks of output,
     // then terminate immediately.
     // This happens on `split -e -n 3 /dev/null`, for example.
@@ -1595,12 +1601,16 @@ where
     let stdout = std::io::stdout();
     let mut writer = stdout.lock();
 
-    let chunk_size = (num_bytes / (num_chunks)).max(1);
-    let mut num_bytes: usize = num_bytes.try_into().unwrap();
+    // Calculate chunk size base and modulo reminder
+    // to be used in calculating chunk_size later on
+    let chunk_size_base = num_bytes / num_chunks;
+    let chunk_size_reminder = num_bytes % num_chunks;
 
-    let mut i = 1;
+    let mut i = 0;
     loop {
+        let chunk_size = chunk_size_base + (chunk_size_reminder > i) as u64;
         let buf: &mut Vec<u8> = &mut vec![];
+        i += 1;
         if num_bytes > 0 {
             // Read `chunk_size` bytes from the reader into `buf`
             // except the last.
@@ -1610,7 +1620,7 @@ where
             // `num_chunks`, we don't leave any bytes behind.
             let limit = {
                 if i == num_chunks {
-                    num_bytes.try_into().unwrap()
+                    num_bytes
                 } else {
                     chunk_size
                 }
@@ -1618,7 +1628,7 @@ where
             let n_bytes_read = reader.by_ref().take(limit).read_to_end(buf);
             match n_bytes_read {
                 Ok(n_bytes) => {
-                    num_bytes -= n_bytes;
+                    num_bytes -= n_bytes as u64;
                 }
                 Err(error) => {
                     return Err(USimpleError::new(
@@ -1631,7 +1641,6 @@ where
                 writer.write_all(buf)?;
                 break;
             }
-            i += 1;
         } else {
             break;
         }
