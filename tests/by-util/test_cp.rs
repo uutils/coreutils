@@ -3499,3 +3499,18 @@ fn test_cp_dest_no_permissions() {
         .stderr_contains("invalid_perms.txt")
         .stderr_contains("denied");
 }
+
+#[test]
+fn test_cp_treat_dest_as_a_normal_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.mkdir("dir2");
+    at.touch("dir/a");
+    at.touch("dir/b");
+
+    ucmd.arg("-rT").arg("dir").arg("dir2").succeeds();
+
+    let metadata = at.metadata("dir2");
+    assert_eq!(metadata.len(), 0);
+}
