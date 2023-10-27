@@ -4,9 +4,7 @@
 // file that was distributed with this source code.
 use std::error::Error;
 use std::fmt::{Display, Formatter, Result};
-use std::path::PathBuf;
 
-use uucore::display::Quotable;
 use uucore::error::UError;
 
 #[derive(Debug)]
@@ -20,7 +18,7 @@ pub enum MvError {
     NonDirectoryToDirectory(String, String),
     NotADirectory(String),
     TargetNotADirectory(String),
-    FailedToAccessNotADirectory(PathBuf),
+    FailedToAccessNotADirectory(String),
 }
 
 impl Error for MvError {}
@@ -48,8 +46,8 @@ impl Display for MvError {
             Self::NotADirectory(t) => write!(f, "target {t}: Not a directory"),
             Self::TargetNotADirectory(t) => write!(f, "target directory {t}: Not a directory"),
 
-            Self::FailedToAccessNotADirectory(p) => {
-                write!(f, "failed to access {}: Not a directory", p.quote())
+            Self::FailedToAccessNotADirectory(t) => {
+                write!(f, "failed to access {t}: Not a directory")
             }
         }
     }
