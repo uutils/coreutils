@@ -16,7 +16,6 @@ use std::fs;
 use std::io;
 #[cfg(unix)]
 use std::os::unix;
-use std::os::unix::prelude::OsStrExt;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
@@ -105,11 +104,22 @@ static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
 
 /// Returns true if the passed `path` ends with a path terminator.
+#[cfg(unix)]
 fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::unix::prelude::OsStrExt;
     path.as_os_str()
         .as_bytes()
         .last()
-        .map_or(false, |&byte| std::path::is_separator(byte as char))
+        .map_or(false, |&byte| byte == b'/' || byte == b'\\')
+}
+
+#[cfg(windows)]
+fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::windows::prelude::OsStrExt;
+    path.as_os_str()
+        .encode_wide()
+        .last()
+        .map_or(false, |&wide| wide == b'/'.into() || wide == b'\\'.into())
 }
 
 #[uucore::main]
