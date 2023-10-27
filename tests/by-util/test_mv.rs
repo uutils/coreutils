@@ -1414,6 +1414,35 @@ fn test_mv_directory_into_subdirectory_of_itself_fails() {
             "mv: cannot move 'mydir/' to a subdirectory of itself, 'mydir/mydir_2/mydir/'",
         );
 }
+
+#[test]
+fn test_mv_file_into_dir_where_both_are_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.touch("b");
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("b/")
+        .fails()
+        .stderr_contains("mv: failed to access 'b/': Not a directory");
+}
+
+#[test]
+fn test_mv_dir_into_file_where_both_are_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.touch("b");
+    scene
+        .ucmd()
+        .arg("a/")
+        .arg("b")
+        .fails()
+        .stderr_contains("mv: cannot stat 'a/': Not a directory");
+}
+
 // Todo:
 
 // $ at.touch a b
