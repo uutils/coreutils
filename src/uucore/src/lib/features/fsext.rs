@@ -5,7 +5,7 @@
 
 //! Set of functions to manage file systems
 
-// spell-checker:ignore DATETIME subsecond (arch) bitrig ; (fs) cifs smbfs
+// spell-checker:ignore DATETIME getmntinfo subsecond (arch) bitrig ; (fs) cifs smbfs
 
 use time::macros::format_description;
 use time::UtcOffset;
