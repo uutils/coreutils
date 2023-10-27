@@ -10,6 +10,7 @@ use uucore::error::UError;
 #[derive(Debug)]
 pub enum MvError {
     NoSuchFile(String),
+    CannotStatNotADirectory(String),
     SameFile(String, String),
     SelfSubdirectory(String),
     SelfTargetSubdirectory(String, String),
@@ -25,6 +26,7 @@ impl Display for MvError {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {
             Self::NoSuchFile(s) => write!(f, "cannot stat {s}: No such file or directory"),
+            Self::CannotStatNotADirectory(s) => write!(f, "cannot stat {s}: Not a directory"),
             Self::SameFile(s, t) => write!(f, "{s} and {t} are the same file"),
             Self::SelfSubdirectory(s) => write!(
                 f,

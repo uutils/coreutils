@@ -16,6 +16,7 @@ use std::fs;
 use std::io;
 #[cfg(unix)]
 use std::os::unix;
+use std::os::unix::prelude::OsStrExt;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
@@ -299,7 +300,18 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         .into());
     }
     if source.symlink_metadata().is_err() {
-        return Err(MvError::NoSuchFile(source.quote().to_string()).into());
+        return Err(
+            if source
+                .as_os_str()
+                .as_bytes()
+                .last()
+                .map_or(false, |&byte| std::path::is_separator(byte as char))
+            {
+                MvError::CannotStatNotADirectory(source.quote().to_string()).into()
+            } else {
+                MvError::NoSuchFile(source.quote().to_string()).into()
+            },
+        );
     }
 
     if (source.eq(target)
