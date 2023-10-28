@@ -1737,7 +1737,12 @@ fn test_ls_styles() {
         .stdout_matches(&re_custom_format);
 
     // Also fails due to not having full clap support for time_styles
-    scene.ucmd().arg("-l").arg("-time-style=invalid").fails();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=invalid")
+        .fails()
+        .code_is(2);
 
     //Overwrite options tests
     scene
@@ -3562,6 +3567,20 @@ fn test_ls_dired_incompatible() {
         .fails()
         .code_is(1)
         .stderr_contains("--dired requires --format=long");
+}
+
+#[test]
+fn test_ls_dired_and_zero_are_incompatible() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .arg("--zero")
+        .fails()
+        .code_is(2)
+        .stderr_contains("--dired and --zero are incompatible");
 }
 
 #[test]
