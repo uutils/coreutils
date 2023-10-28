@@ -257,7 +257,7 @@ impl Spec {
     pub fn write<'a>(
         &self,
         mut writer: impl Write,
-        mut args: impl Iterator<Item = FormatArgument>,
+        mut args: impl Iterator<Item = &'a FormatArgument>,
     ) -> Result<(), FormatError> {
         match self {
             &Spec::Char { width, align_left } => {
@@ -265,7 +265,7 @@ impl Spec {
                 let arg = next_arg(&mut args)?;
                 match arg {
                     FormatArgument::Char(c) => write_padded(writer, c, width, false, align_left),
-                    _ => Err(FormatError::InvalidArgument(arg)),
+                    _ => Err(FormatError::InvalidArgument(arg.clone())),
                 }
             }
             &Spec::String { width, align_left } => {
@@ -273,7 +273,7 @@ impl Spec {
                 let arg = next_arg(&mut args)?;
                 match arg {
                     FormatArgument::String(s) => write_padded(writer, s, width, false, align_left),
-                    _ => Err(FormatError::InvalidArgument(arg)),
+                    _ => Err(FormatError::InvalidArgument(arg.clone())),
                 }
             }
             &Spec::SignedInt {
@@ -285,10 +285,10 @@ impl Spec {
 
                 let arg = next_arg(&mut args)?;
                 let FormatArgument::SignedInt(i) = arg else {
-                    return Err(FormatError::InvalidArgument(arg));
+                    return Err(FormatError::InvalidArgument(arg.clone()));
                 };
 
-                if i >= 0 {
+                if *i >= 0 {
                     match positive_sign {
                         PositiveSign::None => Ok(()),
                         PositiveSign::Plus => write!(writer, "+"),
@@ -313,7 +313,7 @@ impl Spec {
 
                 let arg = next_arg(args)?;
                 let FormatArgument::SignedInt(i) = arg else {
-                    return Err(FormatError::InvalidArgument(arg));
+                    return Err(FormatError::InvalidArgument(arg.clone()));
                 };
 
                 let s = match variant {
@@ -355,7 +355,7 @@ impl Spec {
 
                 let arg = next_arg(args)?;
                 let FormatArgument::Float(f) = arg else {
-                    return Err(FormatError::InvalidArgument(arg));
+                    return Err(FormatError::InvalidArgument(arg.clone()));
                 };
 
                 if f.is_sign_positive() {
@@ -369,16 +369,16 @@ impl Spec {
 
                 let s = match variant {
                     FloatVariant::Decimal => {
-                        format_float_decimal(f, precision, case, force_decimal)
+                        format_float_decimal(*f, precision, case, force_decimal)
                     }
                     FloatVariant::Scientific => {
-                        format_float_scientific(f, precision, case, force_decimal)
+                        format_float_scientific(*f, precision, case, force_decimal)
                     }
                     FloatVariant::Shortest => {
-                        format_float_shortest(f, precision, case, force_decimal)
+                        format_float_shortest(*f, precision, case, force_decimal)
                     }
                     FloatVariant::Hexadecimal => {
-                        format_float_hexadecimal(f, precision, case, force_decimal)
+                        format_float_hexadecimal(*f, precision, case, force_decimal)
                     }
                 };
 
@@ -490,7 +490,7 @@ fn format_float_hexadecimal(
     let mut s = match (precision, force_decimal) {
         (0, ForceDecimal::No) => format!("0x{first_digit}p{exponent:+x}"),
         (0, ForceDecimal::Yes) => format!("0x{first_digit}.p{exponent:+x}"),
-        _ => format!("0x{first_digit}.{mantissa:0>13x}p{exponent:+x}")
+        _ => format!("0x{first_digit}.{mantissa:0>13x}p{exponent:+x}"),
     };
 
     if case == Case::Uppercase {
@@ -500,29 +500,29 @@ fn format_float_hexadecimal(
     return s;
 }
 
-fn resolve_asterisk(
+fn resolve_asterisk<'a>(
     option: Option<CanAsterisk<usize>>,
-    args: impl Iterator<Item = FormatArgument>,
+    args: impl Iterator<Item = &'a FormatArgument>,
 ) -> Result<Option<usize>, FormatError> {
     Ok(match option {
         None => None,
         Some(CanAsterisk::Asterisk) => {
             let arg = next_arg(args)?;
             match arg {
-                FormatArgument::UnsignedInt(u) => match usize::try_from(u) {
+                FormatArgument::UnsignedInt(u) => match usize::try_from(*u) {
                     Ok(u) => Some(u),
-                    Err(_) => return Err(FormatError::InvalidArgument(arg)),
+                    Err(_) => return Err(FormatError::InvalidArgument(arg.clone())),
                 },
-                _ => return Err(FormatError::InvalidArgument(arg)),
+                _ => return Err(FormatError::InvalidArgument(arg.clone())),
             }
         }
         Some(CanAsterisk::Fixed(w)) => Some(w),
     })
 }
 
-fn next_arg(
-    mut arguments: impl Iterator<Item = FormatArgument>,
-) -> Result<FormatArgument, FormatError> {
+fn next_arg<'a>(
+    mut arguments: impl Iterator<Item = &'a FormatArgument>,
+) -> Result<&'a FormatArgument, FormatError> {
     arguments.next().ok_or(FormatError::NoMoreArguments)
 }
 

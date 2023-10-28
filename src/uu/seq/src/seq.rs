@@ -9,7 +9,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use num_traits::Zero;
 
 use uucore::error::UResult;
-use uucore::format::printf;
+use uucore::format::{printf, FormatArgument};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;
@@ -144,8 +144,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
     match result {
         Ok(_) => Ok(()),
-        Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
-        Err(e) => Err(e.map_err_context(|| "write error".into())),
+        _ => todo!(),
+        // Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
+        // Err(e) => Err(e.map_err_context(|| "write error".into())),
     }
 }
 
@@ -270,7 +271,7 @@ fn print_seq(
         match format {
             Some(f) => {
                 let s = format!("{value}");
-                printf(f, &[s])?;
+                printf(f, &[FormatArgument::String(s)])?;
             }
             None => write_value_float(&mut stdout, &value, padding, largest_dec)?,
         }
@@ -326,7 +327,7 @@ fn print_seq_integers(
         match format {
             Some(f) => {
                 let s = format!("{value}");
-                printf(f, &[s])?;
+                printf(f, &[FormatArgument::String(s)])?;
             }
             None => write_value_int(&mut stdout, &value, padding, pad)?,
         }

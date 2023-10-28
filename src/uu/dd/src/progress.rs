@@ -13,8 +13,8 @@ use std::io::Write;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use uucore::error::UResult;
 use uucore::format::sprintf;
+use uucore::{error::UResult, format::FormatArgument};
 
 use crate::numbers::{to_magnitude_and_suffix, SuffixType};
 
@@ -152,7 +152,9 @@ impl ProgUpdate {
         let (carriage_return, newline) = if rewrite { ("\r", "") } else { ("", "\n") };
 
         // The duration should be formatted as in `printf %g`.
-        let duration_str = sprintf("%g", &[duration.to_string()])?;
+        // TODO: remove unwrap and make FormatError implement UError
+        let duration_str = sprintf("%g", &[FormatArgument::Float(duration)])?;
+        let duration_str = std::str::from_utf8(&duration_str).unwrap();
 
         // If the number of bytes written is sufficiently large, then
         // print a more concise representation of the number, like

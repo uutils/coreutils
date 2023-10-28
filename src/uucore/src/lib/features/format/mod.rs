@@ -3,7 +3,7 @@
 //! The [`printf`] and [`sprintf`] closely match the behavior of the
 //! corresponding C functions: the former renders a formatted string
 //! to stdout, the latter renders to a new [`String`] object.
-//! 
+//!
 //! In addition to the [`printf`] and [`sprintf`] functions, we expose the
 //! [`Format`] struct, which represents a parsed format string. This reduces
 //! the need for parsing a format string multiple times and assures that no
@@ -14,13 +14,35 @@
 mod spec;
 
 use spec::Spec;
-use std::io::{stdout, Write};
+use std::{
+    error::Error,
+    fmt::Display,
+    io::{stdout, Write},
+};
 
+use crate::error::UError;
+
+#[derive(Debug)]
 pub enum FormatError {
     SpecError,
     IoError(std::io::Error),
     NoMoreArguments,
     InvalidArgument(FormatArgument),
+}
+
+impl Error for FormatError {}
+impl UError for FormatError {}
+
+impl Display for FormatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO: Be more precise about these
+        match self {
+            FormatError::SpecError => write!(f, "invalid spec"),
+            FormatError::IoError(_) => write!(f, "io error"),
+            FormatError::NoMoreArguments => write!(f, "no more arguments"),
+            FormatError::InvalidArgument(_) => write!(f, "invalid argument"),
+        }
+    }
 }
 
 /// A single item to format
@@ -30,21 +52,28 @@ enum FormatItem {
     /// Some plain text
     Text(Vec<u8>),
     /// A single character
-    /// 
+    ///
     /// Added in addition to `Text` as an optimization.
     Char(u8),
 }
 
+#[derive(Clone, Debug)]
 pub enum FormatArgument {
     Char(char),
     String(String),
     UnsignedInt(u64),
     SignedInt(i64),
     Float(f64),
+    // Special argument that gets coerced into the other variants
+    Unparsed(String),
 }
 
 impl FormatItem {
-    fn write<'a>(&self, mut writer: impl Write, args: &mut impl Iterator<Item = FormatArgument>) -> Result<(), FormatError> {
+    fn write<'a>(
+        &self,
+        mut writer: impl Write,
+        args: &mut impl Iterator<Item = &'a FormatArgument>,
+    ) -> Result<(), FormatError> {
         match self {
             FormatItem::Spec(spec) => spec.write(writer, args),
             FormatItem::Text(bytes) => writer.write_all(bytes).map_err(FormatError::IoError),
@@ -110,13 +139,20 @@ fn parse_iter(fmt: &[u8]) -> impl Iterator<Item = Result<FormatItem, FormatError
 /// printf("hello %s", &["world".to_string()]).unwrap();
 /// // prints "hello world"
 /// ```
-pub fn printf(format_string: &[u8], arguments: impl IntoIterator<Item = FormatArgument>) -> Result<(), FormatError> {
+pub fn printf<'a>(
+    format_string: impl AsRef<[u8]>,
+    arguments: impl IntoIterator<Item = &'a FormatArgument>,
+) -> Result<(), FormatError> {
     printf_writer(stdout(), format_string, arguments)
 }
 
-fn printf_writer(mut writer: impl Write, format_string: &[u8], args: impl IntoIterator<Item = FormatArgument>) -> Result<(), FormatError> {
+fn printf_writer<'a>(
+    mut writer: impl Write,
+    format_string: impl AsRef<[u8]>,
+    args: impl IntoIterator<Item = &'a FormatArgument>,
+) -> Result<(), FormatError> {
     let mut args = args.into_iter();
-    for item in parse_iter(format_string) {
+    for item in parse_iter(format_string.as_ref()) {
         item?.write(&mut writer, &mut args)?;
     }
     Ok(())
@@ -137,7 +173,10 @@ fn printf_writer(mut writer: impl Write, format_string: &[u8], args: impl IntoIt
 /// let s = sprintf("hello %s", &["world".to_string()]).unwrap();
 /// assert_eq!(s, "hello world".to_string());
 /// ```
-pub fn sprintf(format_string: &[u8], arguments: impl IntoIterator<Item = FormatArgument>) -> Result<Vec<u8>, FormatError> {
+pub fn sprintf<'a>(
+    format_string: impl AsRef<[u8]>,
+    arguments: impl IntoIterator<Item = &'a FormatArgument>,
+) -> Result<Vec<u8>, FormatError> {
     let mut writer = Vec::new();
     printf_writer(&mut writer, format_string, arguments)?;
     Ok(writer)

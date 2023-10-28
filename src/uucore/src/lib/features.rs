@@ -8,16 +8,14 @@
 pub mod backup_control;
 #[cfg(feature = "encoding")]
 pub mod encoding;
+#[cfg(feature = "format")]
+pub mod format;
 #[cfg(feature = "fs")]
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;
 #[cfg(feature = "lines")]
 pub mod lines;
-#[cfg(feature = "format")]
-pub mod format;
-#[cfg(feature = "memo")]
-pub mod memo;
 #[cfg(feature = "quoting-style")]
 pub mod quoting_style;
 #[cfg(feature = "ranges")]
@@ -26,8 +24,6 @@ pub mod ranges;
 pub mod ringbuffer;
 #[cfg(feature = "sum")]
 pub mod sum;
-#[cfg(feature = "memo")]
-mod tokenize;
 #[cfg(feature = "update-control")]
 pub mod update_control;
 #[cfg(feature = "version-cmp")]
