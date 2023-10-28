@@ -231,6 +231,22 @@ fn test_cp_arg_no_target_directory() {
 }
 
 #[test]
+fn test_cp_arg_no_target_directory_with_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.mkdir("dir2");
+    at.touch("dir/a");
+    at.touch("dir/b");
+
+    ucmd.arg("-rT").arg("dir").arg("dir2").succeeds();
+
+    assert!(at.plus("dir2").join("a").exists());
+    assert!(at.plus("dir2").join("b").exists());
+    assert!(!at.plus("dir2").join("dir").exists());
+}
+
+#[test]
 fn test_cp_target_directory_is_file() {
     new_ucmd!()
         .arg("-t")
@@ -3498,19 +3514,4 @@ fn test_cp_dest_no_permissions() {
         .fails()
         .stderr_contains("invalid_perms.txt")
         .stderr_contains("denied");
-}
-
-#[test]
-fn test_cp_treat_dest_as_a_normal_file() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    at.mkdir("dir");
-    at.mkdir("dir2");
-    at.touch("dir/a");
-    at.touch("dir/b");
-
-    ucmd.arg("-rT").arg("dir").arg("dir2").succeeds();
-
-    let metadata = at.metadata("dir2");
-    assert_eq!(metadata.len(), 0);
 }
