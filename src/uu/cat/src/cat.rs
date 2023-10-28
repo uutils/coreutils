@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) nonprint nonblank nonprinting
+// spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
 
 // last synced with: cat (GNU coreutils) 8.13
 use clap::{crate_version, Arg, ArgAction, Command};
@@ -52,6 +52,8 @@ enum CatError {
     IsDirectory,
     #[error("input file is output file")]
     OutputIsInput,
+    #[error("Too many levels of symbolic links")]
+    TooManySymlinks,
 }
 
 type CatResult<T> = Result<T, CatError>;
@@ -403,7 +405,24 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
         return Ok(InputType::StdIn);
     }
 
-    let ft = metadata(path)?.file_type();
+    let metadata_result = metadata(path);
+    let ft = match metadata_result {
+        Ok(md) => md.file_type(),
+        Err(e) => {
+            if let Some(raw_error) = e.raw_os_error() {
+                // On Unix-like systems, the error code for "Too many levels of symbolic links" is 40 (ELOOP).
+                // we want to provide a proper error message in this case.
+                #[cfg(not(target_os = "macos"))]
+                let too_many_symlink_code = 40;
+                #[cfg(target_os = "macos")]
+                let too_many_symlink_code = 62;
+                if raw_error == too_many_symlink_code {
+                    return Err(CatError::TooManySymlinks);
+                }
+            }
+            return Err(CatError::Io(e));
+        }
+    };
     match ft {
         #[cfg(unix)]
         ft if ft.is_block_device() => Ok(InputType::BlockDevice),
