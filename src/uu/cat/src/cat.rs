@@ -405,8 +405,7 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
         return Ok(InputType::StdIn);
     }
 
-    let metadata_result = metadata(path);
-    let ft = match metadata_result {
+    let ft = match metadata(path) {
         Ok(md) => md.file_type(),
         Err(e) => {
             if let Some(raw_error) = e.raw_os_error() {
