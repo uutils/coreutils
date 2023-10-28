@@ -103,6 +103,25 @@ static OPT_VERBOSE: &str = "verbose";
 static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
 
+/// Returns true if the passed `path` ends with a path terminator.
+#[cfg(unix)]
+fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::unix::prelude::OsStrExt;
+    path.as_os_str()
+        .as_bytes()
+        .last()
+        .map_or(false, |&byte| byte == b'/' || byte == b'\\')
+}
+
+#[cfg(windows)]
+fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::windows::prelude::OsStrExt;
+    path.as_os_str()
+        .encode_wide()
+        .last()
+        .map_or(false, |wide| wide == b'/'.into() || wide == b'\\'.into())
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut app = uu_app();
@@ -299,7 +318,11 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         .into());
     }
     if source.symlink_metadata().is_err() {
-        return Err(MvError::NoSuchFile(source.quote().to_string()).into());
+        return Err(if path_ends_with_terminator(source) {
+            MvError::CannotStatNotADirectory(source.quote().to_string()).into()
+        } else {
+            MvError::NoSuchFile(source.quote().to_string()).into()
+        });
     }
 
     if (source.eq(target)
@@ -316,7 +339,13 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         }
     }
 
-    if target.is_dir() {
+    let target_is_dir = target.is_dir();
+
+    if path_ends_with_terminator(target) && !target_is_dir {
+        return Err(MvError::FailedToAccessNotADirectory(target.quote().to_string()).into());
+    }
+
+    if target_is_dir {
         if opts.no_target_dir {
             if source.is_dir() {
                 rename(source, target, opts, None).map_err_context(|| {

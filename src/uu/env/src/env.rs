@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/* last synced with: env (GNU coreutils) 8.13 */
-
 // spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction
 
 use clap::{crate_name, crate_version, Arg, ArgAction, Command};

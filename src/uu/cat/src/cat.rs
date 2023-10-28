@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
-
-// last synced with: cat (GNU coreutils) 8.13
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::{metadata, File};
 use std::io::{self, IsTerminal, Read, Write};

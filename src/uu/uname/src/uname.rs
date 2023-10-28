@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// last synced with: uname (GNU coreutils) 8.21
-
 // spell-checker:ignore (API) nodename osname sysname (options) mnrsv mnrsvo
 
 use clap::{crate_version, Arg, ArgAction, Command};
