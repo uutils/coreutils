@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use std::str::FromStr;
 
 use crate::units::Unit;
@@ -262,6 +266,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_parse_format_with_invalid_formats() {
         assert!("".parse::<FormatOptions>().is_err());
         assert!("hello".parse::<FormatOptions>().is_err());

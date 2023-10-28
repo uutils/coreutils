@@ -1,3 +1,9 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+//
+// spell-checker:ignore mydir
 use crate::common::util::TestScenario;
 use filetime::FileTime;
 use std::thread::sleep;
@@ -1278,7 +1284,7 @@ fn test_mv_verbose() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
-#[cfg(features = "mkdir")]
+#[cfg(feature = "mkdir")]
 fn test_mv_permission_error() {
     let scene = TestScenario::new("mkdir");
     let folder1 = "bar";
@@ -1319,7 +1325,7 @@ fn test_mv_interactive_error() {
 }
 
 #[test]
-fn test_mv_info_self() {
+fn test_mv_into_self() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dir1 = "dir1";
@@ -1346,7 +1352,7 @@ fn test_mv_arg_interactive_skipped() {
         .ignore_stdin_write_error()
         .fails()
         .stderr_is("mv: overwrite 'b'? ")
-        .stdout_is("skipped 'b'\n");
+        .no_stdout();
 }
 
 #[test]
@@ -1356,7 +1362,8 @@ fn test_mv_arg_interactive_skipped_vin() {
     at.touch("b");
     ucmd.args(&["-vin", "a", "b"])
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("mv: not replacing 'b'\n")
+        .no_stdout();
 }
 
 #[test]
@@ -1384,6 +1391,58 @@ fn test_mv_into_self_data() {
     assert!(at.file_exists(file2));
     assert!(!at.file_exists(file1));
 }
+
+#[test]
+fn test_mv_directory_into_subdirectory_of_itself_fails() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir1 = "mydir";
+    let dir2 = "mydir/mydir_2";
+    at.mkdir(dir1);
+    at.mkdir(dir2);
+    scene.ucmd().arg(dir1).arg(dir2).fails().stderr_contains(
+        "mv: cannot move 'mydir' to a subdirectory of itself, 'mydir/mydir_2/mydir'",
+    );
+
+    // check that it also errors out with /
+    scene
+        .ucmd()
+        .arg(format!("{}/", dir1))
+        .arg(dir2)
+        .fails()
+        .stderr_contains(
+            "mv: cannot move 'mydir/' to a subdirectory of itself, 'mydir/mydir_2/mydir/'",
+        );
+}
+
+#[test]
+fn test_mv_file_into_dir_where_both_are_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.touch("b");
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("b/")
+        .fails()
+        .stderr_contains("mv: failed to access 'b/': Not a directory");
+}
+
+#[test]
+fn test_mv_dir_into_file_where_both_are_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.touch("b");
+    scene
+        .ucmd()
+        .arg("a/")
+        .arg("b")
+        .fails()
+        .stderr_contains("mv: cannot stat 'a/': Not a directory");
+}
+
 // Todo:
 
 // $ at.touch a b

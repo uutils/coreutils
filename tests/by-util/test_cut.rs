@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use crate::common::util::TestScenario;
 
 static INPUT: &str = "lists.txt";
@@ -109,6 +113,14 @@ fn test_whitespace_with_byte() {
 fn test_whitespace_with_char() {
     new_ucmd!()
         .args(&["-c", COMPLEX_SEQUENCE.sequence, "-w"])
+        .fails()
+        .code_is(1);
+}
+
+#[test]
+fn test_too_large() {
+    new_ucmd!()
+        .args(&["-b1-18446744073709551615", "/dev/null"])
         .fails()
         .code_is(1);
 }

@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore extendedbigdecimal extendedbigint bigdecimal numberparse
 //! Parsing numbers for use in `seq`.
 //!
@@ -69,30 +73,13 @@ fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberErr
         }
         Err(_) => {
             // Possibly "NaN" or "inf".
-            //
-            // TODO In Rust v1.53.0, this change
-            // https://github.com/rust-lang/rust/pull/78618 improves the
-            // parsing of floats to include being able to parse "NaN"
-            // and "inf". So when the minimum version of this crate is
-            // increased to 1.53.0, we should just use the built-in
-            // `f32` parsing instead.
-            if s.eq_ignore_ascii_case("inf") {
-                Ok(PreciseNumber::new(
-                    Number::Float(ExtendedBigDecimal::Infinity),
-                    0,
-                    0,
-                ))
-            } else if s.eq_ignore_ascii_case("-inf") {
-                Ok(PreciseNumber::new(
-                    Number::Float(ExtendedBigDecimal::MinusInfinity),
-                    0,
-                    0,
-                ))
-            } else if s.eq_ignore_ascii_case("nan") || s.eq_ignore_ascii_case("-nan") {
-                Err(ParseNumberError::Nan)
-            } else {
-                Err(ParseNumberError::Float)
-            }
+            let float_val = match s.to_ascii_lowercase().as_str() {
+                "inf" | "infinity" => ExtendedBigDecimal::Infinity,
+                "-inf" | "-infinity" => ExtendedBigDecimal::MinusInfinity,
+                "nan" | "-nan" => return Err(ParseNumberError::Nan),
+                _ => return Err(ParseNumberError::Float),
+            };
+            Ok(PreciseNumber::new(Number::Float(float_val), 0, 0))
         }
     }
 }
@@ -479,9 +466,21 @@ mod tests {
     #[test]
     fn test_parse_inf() {
         assert_eq!(parse("inf"), Number::Float(ExtendedBigDecimal::Infinity));
+        assert_eq!(
+            parse("infinity"),
+            Number::Float(ExtendedBigDecimal::Infinity)
+        );
         assert_eq!(parse("+inf"), Number::Float(ExtendedBigDecimal::Infinity));
         assert_eq!(
+            parse("+infinity"),
+            Number::Float(ExtendedBigDecimal::Infinity)
+        );
+        assert_eq!(
             parse("-inf"),
+            Number::Float(ExtendedBigDecimal::MinusInfinity)
+        );
+        assert_eq!(
+            parse("-infinity"),
             Number::Float(ExtendedBigDecimal::MinusInfinity)
         );
     }
@@ -539,6 +538,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_num_integral_digits() {
         // no decimal, no exponent
         assert_eq!(num_integral_digits("123"), 3);
@@ -579,6 +579,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_num_fractional_digits() {
         // no decimal, no exponent
         assert_eq!(num_fractional_digits("123"), 0);

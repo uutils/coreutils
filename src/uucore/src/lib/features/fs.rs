@@ -1,8 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Joseph Crail <jbcrail@gmail.com>
-// (c) Jian Zeng <anonymousknight96 AT gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -31,6 +28,9 @@ use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
 
+/// Used to check if the `mode` has its `perm` bit set.
+///
+/// This macro expands to `mode & perm != 0`.
 #[cfg(unix)]
 #[macro_export]
 macro_rules! has {
@@ -114,6 +114,7 @@ impl FileInformation {
             not(target_vendor = "apple"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_os = "netbsd"),
             not(target_arch = "aarch64"),
             not(target_arch = "riscv64"),
             target_pointer_width = "64"
@@ -125,6 +126,7 @@ impl FileInformation {
                 target_vendor = "apple",
                 target_os = "android",
                 target_os = "freebsd",
+                target_os = "netbsd",
                 target_arch = "aarch64",
                 target_arch = "riscv64",
                 not(target_pointer_width = "64")
@@ -137,9 +139,16 @@ impl FileInformation {
 
     #[cfg(unix)]
     pub fn inode(&self) -> u64 {
-        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+        #[cfg(all(
+            not(any(target_os = "freebsd", target_os = "netbsd")),
+            target_pointer_width = "64"
+        ))]
         return self.0.st_ino;
-        #[cfg(any(target_os = "freebsd", not(target_pointer_width = "64")))]
+        #[cfg(any(
+            target_os = "freebsd",
+            target_os = "netbsd",
+            not(target_pointer_width = "64")
+        ))]
         return self.0.st_ino.into();
     }
 }
@@ -426,6 +435,7 @@ pub fn canonicalize<P: AsRef<Path>>(
 }
 
 #[cfg(not(unix))]
+/// Display the permissions of a file
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
     let write = if metadata.permissions().readonly() {
         '-'
@@ -450,10 +460,38 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
 
 #[cfg(unix)]
 /// Display the permissions of a file
-/// On non unix like system, just show '----------'
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
     let mode: mode_t = metadata.mode() as mode_t;
     display_permissions_unix(mode, display_file_type)
+}
+
+/// Returns a character representation of the file type based on its mode.
+/// This function is specific to Unix-like systems.
+///
+/// - `mode`: The mode of the file, typically obtained from file metadata.
+///
+/// # Returns
+/// - 'd' for directories
+/// - 'c' for character devices
+/// - 'b' for block devices
+/// - '-' for regular files
+/// - 'p' for FIFOs (named pipes)
+/// - 'l' for symbolic links
+/// - 's' for sockets
+/// - '?' for any other unrecognized file types
+#[cfg(unix)]
+fn get_file_display(mode: mode_t) -> char {
+    match mode & S_IFMT {
+        S_IFDIR => 'd',
+        S_IFCHR => 'c',
+        S_IFBLK => 'b',
+        S_IFREG => '-',
+        S_IFIFO => 'p',
+        S_IFLNK => 'l',
+        S_IFSOCK => 's',
+        // TODO: Other file types
+        _ => '?',
+    }
 }
 
 // The logic below is more readable written this way.
@@ -465,17 +503,7 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
     let mut result;
     if display_file_type {
         result = String::with_capacity(10);
-        result.push(match mode & S_IFMT {
-            S_IFDIR => 'd',
-            S_IFCHR => 'c',
-            S_IFBLK => 'b',
-            S_IFREG => '-',
-            S_IFIFO => 'p',
-            S_IFLNK => 'l',
-            S_IFSOCK => 's',
-            // TODO: Other file types
-            _ => '?',
-        });
+        result.push(get_file_display(mode));
     } else {
         result = String::with_capacity(9);
     }
@@ -842,7 +870,7 @@ mod tests {
         let path1 = temp_file.path();
         let path2 = temp_file.path();
 
-        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), true);
+        assert!(are_hardlinks_to_same_file(&path1, &path2));
     }
 
     #[cfg(unix)]
@@ -857,7 +885,7 @@ mod tests {
         let path1 = temp_file1.path();
         let path2 = temp_file2.path();
 
-        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), false);
+        assert!(!are_hardlinks_to_same_file(&path1, &path2));
     }
 
     #[cfg(unix)]
@@ -870,6 +898,19 @@ mod tests {
         let path2 = temp_file.path().with_extension("hardlink");
         fs::hard_link(&path1, &path2).unwrap();
 
-        assert_eq!(are_hardlinks_to_same_file(&path1, &path2), true);
+        assert!(are_hardlinks_to_same_file(&path1, &path2));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_get_file_display() {
+        assert_eq!(get_file_display(S_IFDIR | 0o755), 'd');
+        assert_eq!(get_file_display(S_IFCHR | 0o644), 'c');
+        assert_eq!(get_file_display(S_IFBLK | 0o600), 'b');
+        assert_eq!(get_file_display(S_IFREG | 0o777), '-');
+        assert_eq!(get_file_display(S_IFIFO | 0o666), 'p');
+        assert_eq!(get_file_display(S_IFLNK | 0o777), 'l');
+        assert_eq!(get_file_display(S_IFSOCK | 0o600), 's');
+        assert_eq!(get_file_display(0o777), '?');
     }
 }

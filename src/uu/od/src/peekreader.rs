@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (ToDO) tempbuffer abcdefgh abcdefghij
 
 //! Contains the trait `PeekRead` and type `PeekReader` implementing it.
@@ -182,6 +186,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_peek_read_with_smaller_buffer() {
         let mut sut = PeekReader::new(Cursor::new(&b"abcdefghij"[..]));
 

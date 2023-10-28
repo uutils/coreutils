@@ -1,14 +1,14 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore TODO canonicalizes direntry pathbuf symlinked
 //! Recursively copy the contents of a directory.
 //!
 //! See the [`copy_directory`] function for more information.
 #[cfg(windows)]
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io;
@@ -24,8 +24,8 @@ use uucore::uio_error;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::{
-    aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, preserve_hardlinks,
-    CopyResult, Error, Options, TargetSlice,
+    aligned_ancestors, context_for, copy_attributes, copy_file, copy_link, CopyResult, Error,
+    Options,
 };
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -33,8 +33,8 @@ use crate::{
 fn adjust_canonicalization(p: &Path) -> Cow<Path> {
     // In some cases, \\? can be missing on some Windows paths.  Add it at the
     // beginning unless the path is prefixed with a device namespace.
-    const VERBATIM_PREFIX: &str = r#"\\?"#;
-    const DEVICE_NS_PREFIX: &str = r#"\\."#;
+    const VERBATIM_PREFIX: &str = r"\\?";
+    const DEVICE_NS_PREFIX: &str = r"\\.";
 
     let has_prefix = p
         .components()
@@ -200,7 +200,7 @@ fn copy_direntry(
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
     preserve_hard_links: bool,
-    hard_links: &mut Vec<(String, u64)>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let Entry {
         source_absolute,
@@ -240,30 +240,27 @@ fn copy_direntry(
     // If the source is not a directory, then we need to copy the file.
     if !source_absolute.is_dir() {
         if preserve_hard_links {
-            let dest = local_to_target.as_path().to_path_buf();
-            let found_hard_link = preserve_hardlinks(hard_links, &source_absolute, &dest)?;
-            if !found_hard_link {
-                match copy_file(
-                    progress_bar,
-                    &source_absolute,
-                    local_to_target.as_path(),
-                    options,
-                    symlinked_files,
-                    false,
-                ) {
-                    Ok(_) => Ok(()),
-                    Err(err) => {
-                        if source_absolute.is_symlink() {
-                            // silent the error with a symlink
-                            // In case we do --archive, we might copy the symlink
-                            // before the file itself
-                            Ok(())
-                        } else {
-                            Err(err)
-                        }
+            match copy_file(
+                progress_bar,
+                &source_absolute,
+                local_to_target.as_path(),
+                options,
+                symlinked_files,
+                copied_files,
+                false,
+            ) {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    if source_absolute.is_symlink() {
+                        // silent the error with a symlink
+                        // In case we do --archive, we might copy the symlink
+                        // before the file itself
+                        Ok(())
+                    } else {
+                        Err(err)
                     }
-                }?;
-            }
+                }
+            }?;
         } else {
             // At this point, `path` is just a plain old file.
             // Terminate this function immediately if there is any
@@ -277,6 +274,7 @@ fn copy_direntry(
                 local_to_target.as_path(),
                 options,
                 symlinked_files,
+                copied_files,
                 false,
             ) {
                 Ok(_) => {}
@@ -307,9 +305,10 @@ fn copy_direntry(
 pub(crate) fn copy_directory(
     progress_bar: &Option<ProgressBar>,
     root: &Path,
-    target: &TargetSlice,
+    target: &Path,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     if !options.recursive {
@@ -324,6 +323,7 @@ pub(crate) fn copy_directory(
             target,
             options,
             symlinked_files,
+            copied_files,
             source_in_command_line,
         );
     }
@@ -372,7 +372,6 @@ pub(crate) fn copy_directory(
     };
     let target = tmp.as_path();
 
-    let mut hard_links: Vec<(String, u64)> = vec![];
     let preserve_hard_links = options.preserve_hard_links();
 
     // Collect some paths here that are invariant during the traversal
@@ -397,7 +396,7 @@ pub(crate) fn copy_directory(
                     options,
                     symlinked_files,
                     preserve_hard_links,
-                    &mut hard_links,
+                    copied_files,
                 )?;
             }
             // Print an error message, but continue traversing the directory.
@@ -448,6 +447,7 @@ mod tests {
     use super::ends_with_slash_dot;
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_ends_with_slash_dot() {
         assert!(ends_with_slash_dot("/."));
         assert!(ends_with_slash_dot("./."));

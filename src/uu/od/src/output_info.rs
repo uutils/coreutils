@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore formatteriteminfo blocksize thisblock
 
 use std::cmp;
@@ -204,6 +208,7 @@ impl TypeSizeInfo for TypeInfo {
 }
 
 #[test]
+#[allow(clippy::cognitive_complexity)]
 fn test_calculate_alignment() {
     // For this example `byte_size_block` is 8 and 'print_width_block' is 23:
     // 1777777777777777777777 1777777777777777777777

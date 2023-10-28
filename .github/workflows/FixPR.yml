@@ -26,7 +26,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Initialize job variables
       id: vars
       shell: bash
@@ -85,7 +85,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Initialize job variables
       id: vars
       shell: bash

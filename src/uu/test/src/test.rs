@@ -1,8 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) mahkoh (ju.orth [at] gmail [dot] com)
-// (c) Daniel Rocco <drocco@gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -221,7 +218,7 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
         #[cfg(not(unix))]
         Some("-ef") => unimplemented!(),
         Some("-nt") => f_a.modified().unwrap() > f_b.modified().unwrap(),
-        Some("-ot") => f_a.created().unwrap() > f_b.created().unwrap(),
+        Some("-ot") => f_a.modified().unwrap() < f_b.modified().unwrap(),
         _ => return Err(ParseError::UnknownOperator(op.quote().to_string())),
     })
 }

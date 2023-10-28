@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Nicholas Juszczak <juszczakn@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) ugoa cmode
 
@@ -40,31 +38,27 @@ fn get_mode(_matches: &ArgMatches, _mode_had_minus_prefix: bool) -> Result<u32, 
 
 #[cfg(not(windows))]
 fn get_mode(matches: &ArgMatches, mode_had_minus_prefix: bool) -> Result<u32, String> {
-    let digits: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    // Translate a ~str in octal form to u16, default to 777
     // Not tested on Windows
     let mut new_mode = DEFAULT_PERM;
-    match matches.get_one::<String>(options::MODE) {
-        Some(m) => {
-            for mode in m.split(',') {
-                if mode.contains(digits) {
-                    new_mode = mode::parse_numeric(new_mode, m, true)?;
+
+    if let Some(m) = matches.get_one::<String>(options::MODE) {
+        for mode in m.split(',') {
+            if mode.chars().any(|c| c.is_ascii_digit()) {
+                new_mode = mode::parse_numeric(new_mode, m, true)?;
+            } else {
+                let cmode = if mode_had_minus_prefix {
+                    // clap parsing is finished, now put prefix back
+                    format!("-{mode}")
                 } else {
-                    let cmode = if mode_had_minus_prefix {
-                        // clap parsing is finished, now put prefix back
-                        format!("-{mode}")
-                    } else {
-                        mode.to_string()
-                    };
-                    new_mode = mode::parse_symbolic(new_mode, &cmode, mode::get_umask(), true)?;
-                }
+                    mode.to_string()
+                };
+                new_mode = mode::parse_symbolic(new_mode, &cmode, mode::get_umask(), true)?;
             }
-            Ok(new_mode)
         }
-        None => {
-            // If no mode argument is specified return the mode derived from umask
-            Ok(!mode::get_umask() & 0o0777)
-        }
+        Ok(new_mode)
+    } else {
+        // If no mode argument is specified return the mode derived from umask
+        Ok(!mode::get_umask() & 0o0777)
     }
 }
 
@@ -143,21 +137,34 @@ pub fn uu_app() -> Command {
  */
 fn exec(dirs: ValuesRef<OsString>, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
     for dir in dirs {
-        // Special case to match GNU's behavior:
-        // mkdir -p foo/. should work and just create foo/
-        // std::fs::create_dir("foo/."); fails in pure Rust
-        let path = if recursive {
-            dir_strip_dot_for_creation(&PathBuf::from(dir))
-        } else {
-            // Normal case
-            PathBuf::from(dir)
-        };
-        show_if_err!(mkdir(path.as_path(), recursive, mode, verbose));
+        let path_buf = PathBuf::from(dir);
+        let path = path_buf.as_path();
+
+        show_if_err!(mkdir(path, recursive, mode, verbose));
     }
     Ok(())
 }
 
-fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+/// Create directory at a given `path`.
+///
+/// ## Options
+///
+/// * `recursive` --- create parent directories for the `path`, if they do not
+///     exist.
+/// * `mode` --- file mode for the directories (not implemented on windows).
+/// * `verbose` --- print a message for each printed directory.
+///
+/// ## Trailing dot
+///
+/// To match the GNU behavior, a path with the last directory being a single dot
+/// (like `some/path/to/.`) is created (with the dot stripped).
+pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<()> {
+    // Special case to match GNU's behavior:
+    // mkdir -p foo/. should work and just create foo/
+    // std::fs::create_dir("foo/."); fails in pure Rust
+    let path_buf = dir_strip_dot_for_creation(path);
+    let path = path_buf.as_path();
+
     create_dir(path, recursive, verbose, false)?;
     chmod(path, mode)
 }

@@ -1,7 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Jian Zeng <anonymousknight96@gmail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -328,6 +326,7 @@ fn current_tty() -> String {
 }
 
 impl Who {
+    #[allow(clippy::cognitive_complexity)]
     fn exec(&mut self) -> UResult<()> {
         let run_level_chk = |_record: i16| {
             #[cfg(not(target_os = "linux"))]

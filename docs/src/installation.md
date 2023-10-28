@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva -->
+<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda -->
 
 # Installation
 
@@ -137,6 +137,16 @@ pkg install rust-coreutils
 
 ```shell
 scoop install uutils-coreutils
+```
+
+## Alternative installers
+
+### Conda
+
+[Conda package](https://anaconda.org/conda-forge/uutils-coreutils)
+
+```
+conda install -c conda-forge uutils-coreutils 
 ```
 
 ## Non-standard packages

@@ -1,11 +1,9 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Alex Lyon <arcterus@mail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
-// spell-checker:ignore (path) eacces
+// spell-checker:ignore (path) eacces inacc
 
 use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAction, Command};
 use std::collections::VecDeque;
@@ -20,22 +18,52 @@ use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, sho
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
-enum InteractiveMode {
+/// Enum, determining when the `rm` will prompt the user about the file deletion
+pub enum InteractiveMode {
+    /// Never prompt
     Never,
+    /// Prompt once before removing more than three files, or when removing
+    /// recursively.
     Once,
+    /// Prompt before every removal
     Always,
+    /// Prompt only on write-protected files
     PromptProtected,
 }
 
-struct Options {
-    force: bool,
-    interactive: InteractiveMode,
+/// Options for the `rm` command
+///
+/// All options are public so that the options can be programmatically
+/// constructed by other crates, such as Nushell. That means that this struct
+/// is part of our public API. It should therefore not be changed without good
+/// reason.
+///
+/// The fields are documented with the arguments that determine their value.
+pub struct Options {
+    /// `-f`, `--force`
+    pub force: bool,
+    /// Iterative mode, determines when the command will prompt.
+    ///
+    /// Set by the following arguments:
+    /// - `-i`: [`InteractiveMode::Always`]
+    /// - `-I`: [`InteractiveMode::Once`]
+    /// - `--interactive`: sets one of the above or [`InteractiveMode::Never`]
+    /// - `-f`: implicitly sets [`InteractiveMode::Never`]
+    ///
+    /// If no other option sets this mode, [`InteractiveMode::PromptProtected`]
+    /// is used
+    pub interactive: InteractiveMode,
     #[allow(dead_code)]
-    one_fs: bool,
-    preserve_root: bool,
-    recursive: bool,
-    dir: bool,
-    verbose: bool,
+    /// `--one-file-system`
+    pub one_fs: bool,
+    /// `--preserve-root`/`--no-preserve-root`
+    pub preserve_root: bool,
+    /// `-r`, `--recursive`
+    pub recursive: bool,
+    /// `-d`, `--dir`
+    pub dir: bool,
+    /// `-v`, `--verbose`
+    pub verbose: bool,
 }
 
 const ABOUT: &str = help_about!("rm.md");
@@ -251,7 +279,13 @@ pub fn uu_app() -> Command {
 }
 
 // TODO: implement one-file-system (this may get partially implemented in walkdir)
-fn remove(files: &[&OsStr], options: &Options) -> bool {
+/// Remove (or unlink) the given files
+///
+/// Returns true if it has encountered an error.
+///
+/// Behavior is determined by the `options` parameter, see [`Options`] for
+/// details.
+pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     let mut had_err = false;
 
     for filename in files {
@@ -270,7 +304,7 @@ fn remove(files: &[&OsStr], options: &Options) -> bool {
                 // TODO: actually print out the specific error
                 // TODO: When the error is not about missing files
                 // (e.g., permission), even rm -f should fail with
-                // outputting the error, but there's no easy eay.
+                // outputting the error, but there's no easy way.
                 if options.force {
                     false
                 } else {
@@ -296,14 +330,20 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     if options.recursive && (!is_root || !options.preserve_root) {
         if options.interactive != InteractiveMode::Always && !options.verbose {
             if let Err(e) = fs::remove_dir_all(path) {
-                had_err = true;
-                if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    // GNU compatibility (rm/fail-eacces.sh)
-                    // here, GNU doesn't use some kind of remove_dir_all
-                    // It will show directory+file
-                    show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
-                } else {
-                    show_error!("cannot remove {}: {}", path.quote(), e);
+                // GNU compatibility (rm/empty-inacc.sh)
+                // remove_dir_all failed. maybe it is because of the permissions
+                // but if the directory is empty, remove_dir might work.
+                // So, let's try that before failing for real
+                if let Err(_e) = fs::remove_dir(path) {
+                    had_err = true;
+                    if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        // GNU compatibility (rm/fail-eacces.sh)
+                        // here, GNU doesn't use some kind of remove_dir_all
+                        // It will show directory+file
+                        show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
+                    } else {
+                        show_error!("cannot remove {}: {}", path.quote(), e);
+                    }
                 }
             }
         } else {
@@ -370,7 +410,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_dir(path: &Path, options: &Options) -> bool {
-    if prompt_file(path, options, true) {
+    if prompt_dir(path, options) {
         if let Ok(mut read_dir) = fs::read_dir(path) {
             if options.dir || options.recursive {
                 if read_dir.next().is_none() {
@@ -415,7 +455,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
 }
 
 fn remove_file(path: &Path, options: &Options) -> bool {
-    if prompt_file(path, options, false) {
+    if prompt_file(path, options) {
         match fs::remove_file(path) {
             Ok(_) => {
                 if options.verbose {
@@ -437,8 +477,22 @@ fn remove_file(path: &Path, options: &Options) -> bool {
     false
 }
 
-#[allow(clippy::cognitive_complexity)]
-fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
+fn prompt_dir(path: &Path, options: &Options) -> bool {
+    // If interactive is Never we never want to send prompts
+    if options.interactive == InteractiveMode::Never {
+        return true;
+    }
+
+    // We can't use metadata.permissions.readonly for directories because it only works on files
+    // So we have to handle whether a directory is writable manually
+    if let Ok(metadata) = fs::metadata(path) {
+        handle_writable_directory(path, options, &metadata)
+    } else {
+        true
+    }
+}
+
+fn prompt_file(path: &Path, options: &Options) -> bool {
     // If interactive is Never we never want to send prompts
     if options.interactive == InteractiveMode::Never {
         return true;
@@ -451,60 +505,39 @@ fn prompt_file(path: &Path, options: &Options, is_dir: bool) -> bool {
             }
         }
     }
-    if is_dir {
-        // We can't use metadata.permissions.readonly for directories because it only works on files
-        // So we have to handle whether a directory is writable on not manually
-        if let Ok(metadata) = fs::metadata(path) {
-            handle_writable_directory(path, options, &metadata)
-        } else {
-            true
-        }
-    } else {
-        // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
-        match File::options().read(true).write(true).open(path) {
-            Ok(file) => {
-                if let Ok(metadata) = file.metadata() {
-                    if metadata.permissions().readonly() {
-                        if metadata.len() == 0 {
-                            prompt_yes!(
-                                "remove write-protected regular empty file {}?",
-                                path.quote()
-                            )
-                        } else {
-                            prompt_yes!("remove write-protected regular file {}?", path.quote())
-                        }
-                    } else if options.interactive == InteractiveMode::Always {
-                        if metadata.len() == 0 {
-                            prompt_yes!("remove regular empty file {}?", path.quote())
-                        } else {
-                            prompt_yes!("remove file {}?", path.quote())
-                        }
-                    } else {
-                        true
-                    }
+    // File::open(path) doesn't open the file in write mode so we need to use file options to open it in also write mode to check if it can written too
+    match File::options().read(true).write(true).open(path) {
+        Ok(file) => {
+            let Ok(metadata) = file.metadata() else {
+                return true;
+            };
+
+            if options.interactive == InteractiveMode::Always && !metadata.permissions().readonly()
+            {
+                return if metadata.len() == 0 {
+                    prompt_yes!("remove regular empty file {}?", path.quote())
                 } else {
-                    true
-                }
-            }
-            Err(err) => {
-                if err.kind() == ErrorKind::PermissionDenied {
-                    if let Ok(metadata) = fs::metadata(path) {
-                        if metadata.len() == 0 {
-                            prompt_yes!(
-                                "remove write-protected regular empty file {}?",
-                                path.quote()
-                            )
-                        } else {
-                            prompt_yes!("remove write-protected regular file {}?", path.quote())
-                        }
-                    } else {
-                        prompt_yes!("remove write-protected regular file {}?", path.quote())
-                    }
-                } else {
-                    true
-                }
+                    prompt_yes!("remove file {}?", path.quote())
+                };
             }
         }
+        Err(err) => {
+            if err.kind() != ErrorKind::PermissionDenied {
+                return true;
+            }
+        }
+    }
+    prompt_file_permission_readonly(path)
+}
+
+fn prompt_file_permission_readonly(path: &Path) -> bool {
+    match fs::metadata(path) {
+        Ok(metadata) if !metadata.permissions().readonly() => true,
+        Ok(metadata) if metadata.len() == 0 => prompt_yes!(
+            "remove write-protected regular empty file {}?",
+            path.quote()
+        ),
+        _ => prompt_yes!("remove write-protected regular file {}?", path.quote()),
     }
 }
 

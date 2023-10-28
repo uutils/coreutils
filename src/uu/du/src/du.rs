@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Derek Chiang <derekchiang93@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use chrono::prelude::DateTime;
 use chrono::Local;
@@ -34,8 +32,9 @@ use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
 use uucore::error::FromIo;
 use uucore::error::{set_exit_code, UError, UResult};
+use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::parse_size::{parse_size_u64, ParseSizeError};
 use uucore::{
     crash, format_usage, help_about, help_section, help_usage, show, show_error, show_warning,
 };
@@ -257,12 +256,12 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
 
 fn read_block_size(s: Option<&str>) -> u64 {
     if let Some(s) = s {
-        parse_size(s)
+        parse_size_u64(s)
             .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::BLOCK_SIZE)))
     } else {
         for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
-                if let Ok(v) = parse_size(&env_size) {
+                if let Ok(v) = parse_size_u64(&env_size) {
                     return v;
                 }
             }
@@ -600,11 +599,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let time_format_str =
         parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?;
 
-    let line_separator = if matches.get_flag(options::NULL) {
-        "\0"
-    } else {
-        "\n"
-    };
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::NULL));
 
     let excludes = build_exclude_patterns(&matches)?;
 
@@ -656,12 +651,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         let time_str = tm.format(time_format_str).to_string();
                         print!("{}\t{}\t", convert_size(size), time_str);
                         print_verbatim(stat.path).unwrap();
-                        print!("{line_separator}");
+                        print!("{line_ending}");
                     }
                 } else if !summarize || index == len - 1 {
                     print!("{}\t", convert_size(size));
                     print_verbatim(stat.path).unwrap();
-                    print!("{line_separator}");
+                    print!("{line_ending}");
                 }
                 if options.total && index == (len - 1) {
                     // The last element will be the total size of the the path under
@@ -681,7 +676,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if options.total {
         print!("{}\ttotal", convert_size(grand_total));
-        print!("{line_separator}");
+        print!("{line_ending}");
     }
 
     Ok(())
@@ -951,7 +946,7 @@ impl FromStr for Threshold {
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let offset = usize::from(s.starts_with(&['-', '+'][..]));
 
-        let size = parse_size(&s[offset..])?;
+        let size = parse_size_u64(&s[offset..])?;
 
         if s.starts_with('-') {
             // Threshold of '-0' excludes everything besides 0 sized entries

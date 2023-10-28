@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use half::f16;
 use std::io;
 
@@ -162,6 +166,7 @@ mod tests {
 
     #[test]
     #[allow(clippy::float_cmp)]
+    #[allow(clippy::cognitive_complexity)]
     fn smoke_test() {
         let data = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0xff, 0xff];
         let mut input = PeekReader::new(Cursor::new(&data));

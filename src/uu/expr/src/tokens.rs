@@ -1,9 +1,7 @@
-//* This file is part of the uutils coreutils package.
-//*
-//* (c) Roman Gafiyatullin <r.gafiyatullin@me.com>
-//*
-//* For the full copyright and license information, please view the LICENSE
-//* file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 //!
 //! The following tokens are present in the expr grammar:
@@ -17,8 +15,6 @@
 //!
 
 // spell-checker:ignore (ToDO) paren
-
-use num_bigint::BigInt;
 
 #[derive(Debug, Clone)]
 pub enum Token {
@@ -40,6 +36,7 @@ pub enum Token {
         value: String,
     },
 }
+
 impl Token {
     fn new_infix_op(v: &str, left_assoc: bool, precedence: u8) -> Self {
         Self::InfixOp {
@@ -48,6 +45,7 @@ impl Token {
             value: v.into(),
         }
     }
+
     fn new_value(v: &str) -> Self {
         Self::Value { value: v.into() }
     }
@@ -58,12 +56,11 @@ impl Token {
             _ => false,
         }
     }
-    fn is_a_number(&self) -> bool {
-        match self {
-            Self::Value { value, .. } => value.parse::<BigInt>().is_ok(),
-            _ => false,
-        }
+
+    fn is_a_value(&self) -> bool {
+        matches!(*self, Self::Value { .. })
     }
+
     fn is_a_close_paren(&self) -> bool {
         matches!(*self, Self::ParClose)
     }
@@ -129,14 +126,14 @@ fn maybe_dump_tokens_acc(tokens_acc: &[(usize, Token)]) {
 }
 
 fn push_token_if_not_escaped(acc: &mut Vec<(usize, Token)>, tok_idx: usize, token: Token, s: &str) {
-    // Smells heuristics... :(
+    // `+` may be escaped such as `expr + 1` and `expr 1 + + 1`
     let prev_is_plus = match acc.last() {
         None => false,
         Some(t) => t.1.is_infix_plus(),
     };
     let should_use_as_escaped = if prev_is_plus && acc.len() >= 2 {
         let pre_prev = &acc[acc.len() - 2];
-        !(pre_prev.1.is_a_number() || pre_prev.1.is_a_close_paren())
+        !(pre_prev.1.is_a_value() || pre_prev.1.is_a_close_paren())
     } else {
         prev_is_plus
     };

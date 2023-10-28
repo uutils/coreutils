@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 //! Types for representing and displaying block sizes.
 use crate::{OPT_BLOCKSIZE, OPT_PORTABILITY};
 use clap::ArgMatches;
@@ -9,7 +9,7 @@ use std::{env, fmt};
 
 use uucore::{
     display::Quotable,
-    parse_size::{parse_size, ParseSizeError},
+    parse_size::{parse_size_u64, ParseSizeError},
 };
 
 /// The first ten powers of 1024.
@@ -165,7 +165,7 @@ impl Default for BlockSize {
 pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSizeError> {
     if matches.contains_id(OPT_BLOCKSIZE) {
         let s = matches.get_one::<String>(OPT_BLOCKSIZE).unwrap();
-        let bytes = parse_size(s)?;
+        let bytes = parse_size_u64(s)?;
 
         if bytes > 0 {
             Ok(BlockSize::Bytes(bytes))
@@ -184,7 +184,7 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
 fn block_size_from_env() -> Option<u64> {
     for env_var in ["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
         if let Ok(env_size) = env::var(env_var) {
-            if let Ok(size) = parse_size(&env_size) {
+            if let Ok(size) = parse_size_u64(&env_size) {
                 return Some(size);
             } else {
                 return None;
@@ -239,6 +239,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_to_magnitude_and_suffix_not_powers_of_1024() {
         assert_eq!(to_magnitude_and_suffix(1, SuffixType::Si), "1B");
         assert_eq!(to_magnitude_and_suffix(999, SuffixType::Si), "999B");

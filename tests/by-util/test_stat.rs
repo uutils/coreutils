@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 use crate::common::util::{expected_result, TestScenario};
 
@@ -302,6 +302,19 @@ fn test_stdin_pipe_fifo2() {
         .stdout_contains("character special file")
         .stdout_contains("File: -")
         .succeeded();
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_stdin_with_fs_option() {
+    // $ stat -f -
+    new_ucmd!()
+        .arg("-f")
+        .arg("-")
+        .set_stdin(std::process::Stdio::null())
+        .fails()
+        .code_is(1)
+        .stderr_contains("using '-' to denote standard input does not work in file system mode");
 }
 
 #[test]

@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 
@@ -297,11 +297,15 @@ fn test_head_invalid_num() {
     new_ucmd!()
         .args(&["-c", "1024R", "emptyfile.txt"])
         .fails()
-        .stderr_is("head: invalid number of bytes: '1024R'\n");
+        .stderr_is(
+            "head: invalid number of bytes: '1024R': Value too large for defined data type\n",
+        );
     new_ucmd!()
         .args(&["-n", "1024R", "emptyfile.txt"])
         .fails()
-        .stderr_is("head: invalid number of lines: '1024R'\n");
+        .stderr_is(
+            "head: invalid number of lines: '1024R': Value too large for defined data type\n",
+        );
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])

@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (ToDO) EIGHTBIT ETERM MULTIHARDLINK cpio dtterm jfbterm konsole kterm mlterm rmvb rxvt stat'able svgz tmux webm xspf COLORTERM tzst avif tzst mjpg mjpeg webp dpkg rpmnew rpmorig rpmsave
 
 pub const INTERNAL_DB: &str = r#"# Configuration file for dircolors, a utility to help you set the

@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 #[cfg(not(target_os = "windows"))]
 use crate::common::util::TestScenario;
 
@@ -61,7 +65,7 @@ fn test_stdbuf_invalid_mode_fails() {
             .args(&[*option, "1024R", "head"])
             .fails()
             .code_is(125)
-            .stderr_only("stdbuf: invalid mode '1024R'\n");
+            .stderr_only("stdbuf: invalid mode '1024R': Value too large for defined data type\n");
         #[cfg(not(target_pointer_width = "128"))]
         new_ucmd!()
             .args(&[*option, "1Y", "head"])

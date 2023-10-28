@@ -1,8 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Sunrin SHIMURA
-// Collaborator: Jian Zeng
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -454,7 +451,7 @@ pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResul
     // Randomize.
     let bytes = &mut buf[prefix.len()..prefix.len() + rand];
     rand::thread_rng().fill(bytes);
-    for byte in bytes.iter_mut() {
+    for byte in bytes {
         *byte = match *byte % 62 {
             v @ 0..=9 => v + b'0',
             v @ 10..=35 => v - 10 + b'a',

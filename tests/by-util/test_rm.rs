@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use std::process::Stdio;
 
 use crate::common::util::TestScenario;
@@ -478,7 +482,7 @@ fn test_rm_prompts() {
     // Needed for talking with stdin on platforms where CRLF or LF matters
     const END_OF_LINE: &str = if cfg!(windows) { "\r\n" } else { "\n" };
 
-    let mut answers = vec![
+    let mut answers = [
         "rm: descend into directory 'a'?",
         "rm: remove write-protected regular empty file 'a/empty-no-write'?",
         "rm: remove symbolic link 'a/slink'?",
@@ -641,6 +645,21 @@ fn test_prompt_write_protected_no() {
 
     scene.ucmd().arg(file_2).pipe_in("n").succeeds();
     assert!(at.file_exists(file_2));
+}
+
+#[cfg(feature = "chmod")]
+#[test]
+fn test_remove_inaccessible_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir_1 = "test_rm_protected";
+
+    at.mkdir(dir_1);
+
+    scene.ccmd("chmod").arg("0").arg(dir_1).succeeds();
+
+    scene.ucmd().arg("-rf").arg(dir_1).succeeds();
+    assert!(!at.dir_exists(dir_1));
 }
 
 #[test]

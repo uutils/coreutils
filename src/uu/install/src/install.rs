@@ -1,9 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Ben Eills <ben@beneills.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE file
-//  * that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror
 
@@ -528,6 +526,7 @@ fn is_potential_directory_path(path: &Path) -> bool {
 ///
 /// Returns a Result type with the Err variant containing the error message.
 ///
+#[allow(clippy::cognitive_complexity)]
 fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
     // first check that paths contains at least one element
     if paths.is_empty() {
@@ -619,7 +618,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
     if !target_dir.is_dir() {
         return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
-    for sourcepath in files.iter() {
+    for sourcepath in files {
         if let Err(err) = sourcepath
             .metadata()
             .map_err_context(|| format!("cannot stat {}", sourcepath.quote()))

@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore powf
 use uucore::display::Quotable;
 
@@ -426,6 +430,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_round_with_precision() {
         let rm = RoundMethod::FromZero;
         assert_eq!(1.0, round_with_precision(0.12345, rm, 0));

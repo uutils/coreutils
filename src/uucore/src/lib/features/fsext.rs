@@ -1,11 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Jian Zeng <anonymousknight96@gmail.com>
-// (c) Fangxu Hu <framlog@gmail.com>
-// (c) Sylvestre Ledru <sylvestre@debian.org>
-//
-// For the full copyright and license information, please view the LICENSE file
-// that was distributed with this source code.
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 //! Set of functions to manage file systems
 

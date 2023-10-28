@@ -14,7 +14,7 @@
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
-![MSRV](https://img.shields.io/badge/MSRV-1.64.0-brightgreen)
+![MSRV](https://img.shields.io/badge/MSRV-1.70.0-brightgreen)
 
 </div>
 
@@ -54,8 +54,8 @@ that scripts can be easily transferred between platforms.
 
 uutils has both user and developer documentation available:
 
-- [User Manual](https://uutils.github.io/user/)
-- [Developer Documentation](https://uutils.github.io/dev/coreutils/)
+- [User Manual](https://uutils.github.io/coreutils/book/)
+- [Developer Documentation](https://uutils.github.io/dev/coreutils/) (currently offline, you can use docs.rs in the meantime)
 
 Both can also be generated locally, the instructions for that can be found in
 the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
@@ -71,7 +71,7 @@ the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and
-nightly. The current Minimum Supported Rust Version (MSRV) is `1.64.0`.
+nightly. The current Minimum Supported Rust Version (MSRV) is `1.70.0`.
 
 ## Building
 
@@ -303,7 +303,7 @@ make PREFIX=/my/path uninstall
 
 Below is the evolution of how many GNU tests uutils passes. A more detailed
 breakdown of the GNU test results of the main branch can be found
-[in the user manual](https://uutils.github.io/user/test_coverage.html).
+[in the user manual](https://uutils.github.io/coreutils/book/test_coverage.html).
 
 See <https://github.com/uutils/coreutils/issues/3336> for the main meta bugs
 (many are missing).

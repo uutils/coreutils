@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 use half::f16;
 use std::f32;
 use std::f64;
@@ -87,6 +91,7 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
 
 #[test]
 #[allow(clippy::excessive_precision)]
+#[allow(clippy::cognitive_complexity)]
 fn test_format_flo32() {
     assert_eq!(format_flo32(1.0), "     1.0000000");
     assert_eq!(format_flo32(9.9999990), "     9.9999990");
@@ -163,6 +168,7 @@ fn test_format_flo32() {
 }
 
 #[test]
+#[allow(clippy::cognitive_complexity)]
 fn test_format_flo64() {
     assert_eq!(format_flo64(1.0), "      1.0000000000000000");
     assert_eq!(format_flo64(10.0), "      10.000000000000000");
@@ -192,6 +198,7 @@ fn test_format_flo64() {
 }
 
 #[test]
+#[allow(clippy::cognitive_complexity)]
 fn test_format_flo16() {
     assert_eq!(format_flo16(f16::from_bits(0x8400u16)), "-6.104e-5");
     assert_eq!(format_flo16(f16::from_bits(0x8401u16)), "-6.109e-5");

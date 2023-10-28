@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 /// Functions for formatting a number as a magnitude and a unit suffix.
 
 /// The first ten powers of 1024.
@@ -115,6 +115,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_to_magnitude_and_suffix_not_powers_of_1024() {
         assert_eq!(to_magnitude_and_suffix(1, SuffixType::Si), "1.0 B");
         assert_eq!(to_magnitude_and_suffix(999, SuffixType::Si), "999 B");

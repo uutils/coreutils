@@ -1,7 +1,5 @@
 // This file is part of the uutils coreutils package.
 //
-// (c) Alex Lyon <arcterus@mail.com>
-//
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
@@ -149,8 +147,7 @@ pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
     #[cfg(any(target_os = "freebsd", target_vendor = "apple", target_os = "android"))]
     let fperm = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
 
-    let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    let result = if mode.contains(arr) {
+    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
         parse_numeric(fperm, mode, true)
     } else {
         parse_symbolic(fperm, mode, get_umask(), true)

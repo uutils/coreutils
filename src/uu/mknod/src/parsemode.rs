@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore (path) osrelease
 
 use libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
@@ -7,8 +11,7 @@ use uucore::mode;
 pub const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
 pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
-    let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-    let result = if mode.contains(arr) {
+    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
         mode::parse_numeric(MODE_RW_UGO as u32, mode)
     } else {
         mode::parse_symbolic(MODE_RW_UGO as u32, mode, true)
@@ -39,7 +42,7 @@ mod test {
         assert_eq!(super::parse_mode("u+x").unwrap(), 0o766);
         assert_eq!(
             super::parse_mode("+x").unwrap(),
-            if !is_wsl() { 0o777 } else { 0o776 }
+            if is_wsl() { 0o776 } else { 0o777 }
         );
         assert_eq!(super::parse_mode("a-w").unwrap(), 0o444);
         assert_eq!(super::parse_mode("g-r").unwrap(), 0o626);

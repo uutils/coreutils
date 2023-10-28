@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore lmnop xlmnop
 use crate::common::util::TestScenario;
 use std::process::Stdio;
@@ -620,8 +624,18 @@ fn test_neg_inf() {
 }
 
 #[test]
+fn test_neg_infinity() {
+    run(&["--", "-infinity", "0"], b"-inf\n-inf\n-inf\n");
+}
+
+#[test]
 fn test_inf() {
     run(&["inf"], b"1\n2\n3\n");
+}
+
+#[test]
+fn test_infinity() {
+    run(&["infinity"], b"1\n2\n3\n");
 }
 
 #[test]

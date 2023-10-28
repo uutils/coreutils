@@ -1,7 +1,7 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore zaaa zaab
 //! Compute filenames from a given index.
 //!
@@ -121,9 +121,10 @@ impl<'a> FilenameIterator<'a> {
         suffix_length: usize,
         suffix_type: SuffixType,
         suffix_start: usize,
+        suffix_auto_widening: bool,
     ) -> UResult<FilenameIterator<'a>> {
         let radix = suffix_type.radix();
-        let number = if suffix_length == 0 {
+        let number = if suffix_auto_widening {
             Number::DynamicWidth(DynamicWidthNumber::new(radix, suffix_start))
         } else {
             Number::FixedWidth(
@@ -171,36 +172,42 @@ mod tests {
 
     #[test]
     fn test_filename_iterator_alphabetic_fixed_width() {
-        let mut it = FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Alphabetic, 0).unwrap();
+        let mut it =
+            FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Alphabetic, 0, false).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_aa.txt");
         assert_eq!(it.next().unwrap(), "chunk_ab.txt");
         assert_eq!(it.next().unwrap(), "chunk_ac.txt");
 
-        let mut it = FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Alphabetic, 0).unwrap();
+        let mut it =
+            FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Alphabetic, 0, false).unwrap();
         assert_eq!(it.nth(26 * 26 - 1).unwrap(), "chunk_zz.txt");
         assert_eq!(it.next(), None);
     }
 
     #[test]
     fn test_filename_iterator_numeric_fixed_width() {
-        let mut it = FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Decimal, 0).unwrap();
+        let mut it =
+            FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Decimal, 0, false).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
         assert_eq!(it.next().unwrap(), "chunk_01.txt");
         assert_eq!(it.next().unwrap(), "chunk_02.txt");
 
-        let mut it = FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Decimal, 0).unwrap();
+        let mut it =
+            FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Decimal, 0, false).unwrap();
         assert_eq!(it.nth(10 * 10 - 1).unwrap(), "chunk_99.txt");
         assert_eq!(it.next(), None);
     }
 
     #[test]
     fn test_filename_iterator_alphabetic_dynamic_width() {
-        let mut it = FilenameIterator::new("chunk_", ".txt", 0, SuffixType::Alphabetic, 0).unwrap();
+        let mut it =
+            FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Alphabetic, 0, true).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_aa.txt");
         assert_eq!(it.next().unwrap(), "chunk_ab.txt");
         assert_eq!(it.next().unwrap(), "chunk_ac.txt");
 
-        let mut it = FilenameIterator::new("chunk_", ".txt", 0, SuffixType::Alphabetic, 0).unwrap();
+        let mut it =
+            FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Alphabetic, 0, true).unwrap();
         assert_eq!(it.nth(26 * 25 - 1).unwrap(), "chunk_yz.txt");
         assert_eq!(it.next().unwrap(), "chunk_zaaa.txt");
         assert_eq!(it.next().unwrap(), "chunk_zaab.txt");
@@ -208,12 +215,14 @@ mod tests {
 
     #[test]
     fn test_filename_iterator_numeric_dynamic_width() {
-        let mut it = FilenameIterator::new("chunk_", ".txt", 0, SuffixType::Decimal, 0).unwrap();
+        let mut it =
+            FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Decimal, 0, true).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_00.txt");
         assert_eq!(it.next().unwrap(), "chunk_01.txt");
         assert_eq!(it.next().unwrap(), "chunk_02.txt");
 
-        let mut it = FilenameIterator::new("chunk_", ".txt", 0, SuffixType::Decimal, 0).unwrap();
+        let mut it =
+            FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Decimal, 0, true).unwrap();
         assert_eq!(it.nth(10 * 9 - 1).unwrap(), "chunk_89.txt");
         assert_eq!(it.next().unwrap(), "chunk_9000.txt");
         assert_eq!(it.next().unwrap(), "chunk_9001.txt");
@@ -221,7 +230,8 @@ mod tests {
 
     #[test]
     fn test_filename_iterator_numeric_suffix_decimal() {
-        let mut it = FilenameIterator::new("chunk_", ".txt", 0, SuffixType::Decimal, 5).unwrap();
+        let mut it =
+            FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Decimal, 5, true).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_05.txt");
         assert_eq!(it.next().unwrap(), "chunk_06.txt");
         assert_eq!(it.next().unwrap(), "chunk_07.txt");
@@ -230,7 +240,7 @@ mod tests {
     #[test]
     fn test_filename_iterator_numeric_suffix_hex() {
         let mut it =
-            FilenameIterator::new("chunk_", ".txt", 0, SuffixType::Hexadecimal, 9).unwrap();
+            FilenameIterator::new("chunk_", ".txt", 2, SuffixType::Hexadecimal, 9, true).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_09.txt");
         assert_eq!(it.next().unwrap(), "chunk_0a.txt");
         assert_eq!(it.next().unwrap(), "chunk_0b.txt");
@@ -238,19 +248,21 @@ mod tests {
 
     #[test]
     fn test_filename_iterator_numeric_suffix_err() {
-        let mut it = FilenameIterator::new("chunk_", ".txt", 3, SuffixType::Decimal, 999).unwrap();
+        let mut it =
+            FilenameIterator::new("chunk_", ".txt", 3, SuffixType::Decimal, 999, false).unwrap();
         assert_eq!(it.next().unwrap(), "chunk_999.txt");
         assert!(it.next().is_none());
 
-        let it = FilenameIterator::new("chunk_", ".txt", 3, SuffixType::Decimal, 1000);
+        let it = FilenameIterator::new("chunk_", ".txt", 3, SuffixType::Decimal, 1000, false);
         assert!(it.is_err());
 
         let mut it =
-            FilenameIterator::new("chunk_", ".txt", 3, SuffixType::Hexadecimal, 0xfff).unwrap();
+            FilenameIterator::new("chunk_", ".txt", 3, SuffixType::Hexadecimal, 0xfff, false)
+                .unwrap();
         assert_eq!(it.next().unwrap(), "chunk_fff.txt");
         assert!(it.next().is_none());
 
-        let it = FilenameIterator::new("chunk_", ".txt", 3, SuffixType::Hexadecimal, 0x1000);
+        let it = FilenameIterator::new("chunk_", ".txt", 3, SuffixType::Hexadecimal, 0x1000, false);
         assert!(it.is_err());
     }
 }

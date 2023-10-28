@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 // spell-checker:ignore αbcdef ; (people) kkos
 
 use crate::common::util::TestScenario;
@@ -109,6 +113,44 @@ fn test_or() {
         .args(&["foo", "|", "bar"])
         .succeeds()
         .stdout_only("foo\n");
+
+    new_ucmd!()
+        .args(&["14", "|", "1"])
+        .succeeds()
+        .stdout_only("14\n");
+
+    new_ucmd!()
+        .args(&["-14", "|", "1"])
+        .succeeds()
+        .stdout_only("-14\n");
+
+    new_ucmd!()
+        .args(&["1", "|", "a", "/", "5"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["foo", "|", "a", "/", "5"])
+        .succeeds()
+        .stdout_only("foo\n");
+
+    new_ucmd!()
+        .args(&["0", "|", "10", "/", "5"])
+        .succeeds()
+        .stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["12", "|", "9a", "+", "1"])
+        .succeeds()
+        .stdout_only("12\n");
+
+    new_ucmd!().args(&["", "|", ""]).run().stdout_only("0\n");
+
+    new_ucmd!().args(&["", "|", "0"]).run().stdout_only("0\n");
+
+    new_ucmd!().args(&["", "|", "00"]).run().stdout_only("0\n");
+
+    new_ucmd!().args(&["", "|", "-0"]).run().stdout_only("0\n");
 }
 
 #[test]
@@ -118,7 +160,34 @@ fn test_and() {
         .succeeds()
         .stdout_only("foo\n");
 
-    new_ucmd!().args(&["", "&", "1"]).run().stdout_is("0\n");
+    new_ucmd!()
+        .args(&["14", "&", "1"])
+        .succeeds()
+        .stdout_only("14\n");
+
+    new_ucmd!()
+        .args(&["-14", "&", "1"])
+        .succeeds()
+        .stdout_only("-14\n");
+
+    new_ucmd!()
+        .args(&["-1", "&", "10", "/", "5"])
+        .succeeds()
+        .stdout_only("-1\n");
+
+    new_ucmd!()
+        .args(&["0", "&", "a", "/", "5"])
+        .run()
+        .stdout_only("0\n");
+
+    new_ucmd!()
+        .args(&["", "&", "a", "/", "5"])
+        .run()
+        .stdout_only("0\n");
+
+    new_ucmd!().args(&["", "&", "1"]).run().stdout_only("0\n");
+
+    new_ucmd!().args(&["", "&", ""]).run().stdout_only("0\n");
 }
 
 #[test]
@@ -223,4 +292,37 @@ fn test_invalid_substr() {
         .fails()
         .code_is(1)
         .stdout_only("\n");
+}
+
+#[test]
+fn test_escape() {
+    new_ucmd!().args(&["+", "1"]).succeeds().stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["1", "+", "+", "1"])
+        .succeeds()
+        .stdout_only("2\n");
+
+    new_ucmd!()
+        .args(&["2", "*", "+", "3"])
+        .succeeds()
+        .stdout_only("6\n");
+
+    new_ucmd!()
+        .args(&["(", "1", ")", "+", "1"])
+        .succeeds()
+        .stdout_only("2\n");
+}
+
+#[test]
+fn test_invalid_syntax() {
+    let invalid_syntaxes = [["12", "12"], ["12", "|"], ["|", "12"]];
+
+    for invalid_syntax in invalid_syntaxes {
+        new_ucmd!()
+            .args(&invalid_syntax)
+            .fails()
+            .code_is(2)
+            .stderr_contains("syntax error");
+    }
 }

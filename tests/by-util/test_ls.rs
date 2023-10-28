@@ -1,4 +1,8 @@
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -1733,7 +1737,12 @@ fn test_ls_styles() {
         .stdout_matches(&re_custom_format);
 
     // Also fails due to not having full clap support for time_styles
-    scene.ucmd().arg("-l").arg("-time-style=invalid").fails();
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=invalid")
+        .fails()
+        .code_is(2);
 
     //Overwrite options tests
     scene
@@ -1922,6 +1931,35 @@ fn test_ls_recursive() {
     result.stdout_contains("a/b:\nb");
     #[cfg(windows)]
     result.stdout_contains("a\\b:\nb");
+}
+
+#[test]
+fn test_ls_recursive_1() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("x");
+    at.mkdir("y");
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.mkdir("a/1");
+    at.mkdir("a/2");
+    at.mkdir("a/3");
+    at.touch("f");
+    at.touch("a/1/I");
+    at.touch("a/1/II");
+    #[cfg(unix)]
+    let out = "a:\n1\n2\n3\n\na/1:\nI\nII\n\na/2:\n\na/3:\n\nb:\n\nc:\n";
+    #[cfg(windows)]
+    let out = "a:\n1\n2\n3\n\na\\1:\nI\nII\n\na\\2:\n\na\\3:\n\nb:\n\nc:\n";
+    scene
+        .ucmd()
+        .arg("-R1")
+        .arg("a")
+        .arg("b")
+        .arg("c")
+        .succeeds()
+        .stdout_is(out);
 }
 
 #[test]
@@ -3498,4 +3536,280 @@ fn test_invalid_utf8() {
     let filename = OsStr::from_bytes(b"-\xE0-foo");
     at.touch(filename);
     ucmd.succeeds();
+}
+
+#[cfg(all(unix, feature = "chmod"))]
+#[test]
+fn test_ls_perm_io_errors() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("d");
+    at.symlink_file("/", "d/s");
+
+    scene.ccmd("chmod").arg("600").arg("d").succeeds();
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("d")
+        .fails()
+        .code_is(1)
+        .stderr_contains("Permission denied");
+}
+
+#[test]
+fn test_ls_dired_incompatible() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--dired")
+        .fails()
+        .code_is(1)
+        .stderr_contains("--dired requires --format=long");
+}
+
+#[test]
+fn test_ls_dired_and_zero_are_incompatible() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .arg("--zero")
+        .fails()
+        .code_is(2)
+        .stderr_contains("--dired and --zero are incompatible");
+}
+
+#[test]
+fn test_ls_dired_recursive() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .arg("-R")
+        .succeeds()
+        .stdout_does_not_contain("//DIRED//")
+        .stdout_contains("  total 0")
+        .stdout_contains("//SUBDIRED// 2 3")
+        .stdout_contains("//DIRED-OPTIONS// --quoting-style");
+}
+
+#[test]
+fn test_ls_dired_recursive_multiple() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.mkdir("d/d1");
+    at.mkdir("d/d2");
+    at.touch("d/d2/a");
+    at.touch("d/d2/c2");
+    at.touch("d/d1/f1");
+    at.touch("d/d1/file-long");
+
+    let mut cmd = scene.ucmd();
+    cmd.arg("--dired").arg("-l").arg("-R").arg("d");
+
+    let result = cmd.succeeds();
+
+    let output = result.stdout_str().to_string();
+    println!("Output:\n{}", output);
+
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+    println!("Parsed byte positions: {:?}", positions);
+    assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
+
+    let filenames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
+                .unwrap()
+                .trim()
+                .to_string();
+            println!("Extracted filename: {}", filename);
+            filename
+        })
+        .collect();
+
+    println!("Extracted filenames: {:?}", filenames);
+    assert_eq!(filenames, vec!["d1", "d2", "f1", "file-long", "a", "c2"]);
+}
+
+#[test]
+fn test_ls_dired_simple() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("-l")
+        .succeeds()
+        .stdout_contains("  total 0");
+
+    at.mkdir("d");
+    at.touch("d/a1");
+    let mut cmd = scene.ucmd();
+    cmd.arg("--dired").arg("-l").arg("d");
+    let result = cmd.succeeds();
+    result.stdout_contains("  total 0");
+    println!("    result.stdout = {:#?}", result.stdout_str());
+
+    let dired_line = result
+        .stdout_str()
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+
+    assert_eq!(positions.len(), 2);
+
+    let start_pos = positions[0];
+    let end_pos = positions[1];
+
+    // Extract the filename using the positions
+    let filename =
+        String::from_utf8(result.stdout_str().as_bytes()[start_pos..end_pos].to_vec()).unwrap();
+
+    assert_eq!(filename, "a1");
+}
+
+#[test]
+fn test_ls_dired_complex() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.mkdir("d/d");
+    at.touch("d/a1");
+    at.touch("d/a22");
+    at.touch("d/a333");
+    at.touch("d/a4444");
+
+    let mut cmd = scene.ucmd();
+    cmd.arg("--dired").arg("-l").arg("d");
+    let result = cmd.succeeds();
+
+    // Number of blocks. We run this test only if the default size of a newly created directory is
+    // 4096 bytes to prevent it from failing where this is not the case (e.g. using tmpfs for /tmp).
+    #[cfg(target_os = "linux")]
+    if at.metadata("d/d").len() == 4096 {
+        result.stdout_contains("  total 4");
+    }
+
+    let output = result.stdout_str().to_string();
+    println!("Output:\n{}", output);
+
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//DIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+    println!("{:?}", positions);
+    println!("Parsed byte positions: {:?}", positions);
+    assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
+
+    let filenames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
+                .unwrap()
+                .trim()
+                .to_string();
+            println!("Extracted filename: {}", filename);
+            filename
+        })
+        .collect();
+
+    println!("Extracted filenames: {:?}", filenames);
+    assert_eq!(filenames, vec!["a1", "a22", "a333", "a4444", "d"]);
+}
+
+#[test]
+fn test_ls_subdired_complex() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir1/d");
+    at.mkdir("dir1/c2");
+    at.touch("dir1/a1");
+    at.touch("dir1/a22");
+    at.touch("dir1/a333");
+    at.touch("dir1/c2/a4444");
+
+    let mut cmd = scene.ucmd();
+    cmd.arg("--dired").arg("-l").arg("-R").arg("dir1");
+    let result = cmd.succeeds();
+
+    let output = result.stdout_str().to_string();
+    println!("Output:\n{}", output);
+
+    let dired_line = output
+        .lines()
+        .find(|&line| line.starts_with("//SUBDIRED//"))
+        .unwrap();
+    let positions: Vec<usize> = dired_line
+        .split_whitespace()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect();
+    println!("Parsed byte positions: {:?}", positions);
+    assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
+
+    let dirnames: Vec<String> = positions
+        .chunks(2)
+        .map(|chunk| {
+            let start_pos = chunk[0];
+            let end_pos = chunk[1];
+            let dirname =
+                String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec()).unwrap();
+            println!("Extracted dirname: {}", dirname);
+            dirname
+        })
+        .collect();
+
+    println!("Extracted dirnames: {:?}", dirnames);
+    #[cfg(unix)]
+    assert_eq!(dirnames, vec!["dir1", "dir1/c2", "dir1/d"]);
+    #[cfg(windows)]
+    assert_eq!(dirnames, vec!["dir1", "dir1\\c2", "dir1\\d"]);
+}
+
+#[ignore = "issue #5396"]
+#[test]
+fn test_ls_cf_output_should_be_delimited_by_tab() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("e");
+    at.mkdir("e/a2345");
+    at.mkdir("e/b");
+
+    ucmd.args(&["-CF", "e"])
+        .succeeds()
+        .stdout_is("a2345/\tb/\n");
 }

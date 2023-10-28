@@ -1,3 +1,7 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 //! Merge already sorted files.
 //!
 //! We achieve performance by splitting the tasks of sorting and writing, and reading and parsing between two threads.
@@ -169,11 +173,7 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
                 &request_receiver,
                 &mut reader_files,
                 &settings,
-                if settings.zero_terminated {
-                    b'\0'
-                } else {
-                    b'\n'
-                },
+                settings.line_ending.into(),
             )
         }
     });
@@ -215,7 +215,7 @@ fn reader(
     settings: &GlobalSettings,
     separator: u8,
 ) -> UResult<()> {
-    for (file_idx, recycled_chunk) in recycled_receiver.iter() {
+    for (file_idx, recycled_chunk) in recycled_receiver {
         if let Some(ReaderFile {
             file,
             sender,

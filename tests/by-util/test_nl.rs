@@ -1,4 +1,9 @@
-// spell-checker:ignore iinvalid linvalid ninvalid vinvalid winvalid
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+//
+// spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid
 use crate::common::util::TestScenario;
 
 #[test]
@@ -52,15 +57,15 @@ fn test_sections_and_styles() {
     for (fixture, output) in [
         (
             "section.txt",
-            "\nHEADER1\nHEADER2\n\n1  |BODY1\n2  \
-             |BODY2\n\nFOOTER1\nFOOTER2\n\nNEXTHEADER1\nNEXTHEADER2\n\n1  \
-             |NEXTBODY1\n2  |NEXTBODY2\n\nNEXTFOOTER1\nNEXTFOOTER2\n",
+            "\n    HEADER1\n    HEADER2\n\n1  |BODY1\n2  \
+             |BODY2\n\n    FOOTER1\n    FOOTER2\n\n    NEXTHEADER1\n    NEXTHEADER2\n\n1  \
+             |NEXTBODY1\n2  |NEXTBODY2\n\n    NEXTFOOTER1\n    NEXTFOOTER2\n",
         ),
         (
             "joinblanklines.txt",
-            "1  |Nonempty\n2  |Nonempty\n3  |Followed by 10x empty\n\n\n\n\n4  \
-             |\n\n\n\n\n5  |\n6  |Followed by 5x empty\n\n\n\n\n7  |\n8  \
-             |Followed by 4x empty\n\n\n\n\n9  |Nonempty\n10 |Nonempty\n11 \
+            "1  |Nonempty\n2  |Nonempty\n3  |Followed by 10x empty\n    \n    \n    \n    \n4  \
+             |\n    \n    \n    \n    \n5  |\n6  |Followed by 5x empty\n    \n    \n    \n    \n7  |\n8  \
+             |Followed by 4x empty\n    \n    \n    \n    \n9  |Nonempty\n10 |Nonempty\n11 \
              |Nonempty.\n",
         ),
     ] {
@@ -77,7 +82,11 @@ fn test_sections_and_styles() {
 #[test]
 fn test_no_renumber() {
     for arg in ["-p", "--no-renumber"] {
-        new_ucmd!().arg(arg).succeeds();
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\\:\\:\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n\n     2\tb\n");
     }
 }
 
@@ -258,6 +267,50 @@ fn test_invalid_line_increment() {
 }
 
 #[test]
+fn test_join_blank_lines() {
+    for arg in ["-l3", "--join-blank-lines=3"] {
+        new_ucmd!()
+            .arg(arg)
+            .arg("--body-numbering=a")
+            .pipe_in("\n\n\n\n\n\n")
+            .succeeds()
+            .stdout_is(concat!(
+                "       \n",
+                "       \n",
+                "     1\t\n",
+                "       \n",
+                "       \n",
+                "     2\t\n",
+            ));
+    }
+}
+
+#[test]
+fn test_join_blank_lines_multiple_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a.txt", "\n\n");
+    at.write("b.txt", "\n\n");
+    at.write("c.txt", "\n\n");
+
+    for arg in ["-l3", "--join-blank-lines=3"] {
+        scene
+            .ucmd()
+            .args(&[arg, "--body-numbering=a", "a.txt", "b.txt", "c.txt"])
+            .succeeds()
+            .stdout_is(concat!(
+                "       \n",
+                "       \n",
+                "     1\t\n",
+                "       \n",
+                "       \n",
+                "     2\t\n",
+            ));
+    }
+}
+
+#[test]
 fn test_join_blank_lines_zero() {
     for arg in ["-l0", "--join-blank-lines=0"] {
         new_ucmd!().arg(arg).fails().stderr_contains(
@@ -273,5 +326,311 @@ fn test_invalid_join_blank_lines() {
             .arg(arg)
             .fails()
             .stderr_contains("invalid value 'invalid'");
+    }
+}
+
+#[test]
+fn test_default_body_numbering() {
+    new_ucmd!()
+        .pipe_in("a\n\nb")
+        .succeeds()
+        .stdout_is("     1\ta\n       \n     2\tb\n");
+}
+
+#[test]
+fn test_default_body_numbering_multiple_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("a.txt", "a");
+    at.write("b.txt", "b");
+    at.write("c.txt", "c");
+
+    ucmd.args(&["a.txt", "b.txt", "c.txt"])
+        .succeeds()
+        .stdout_is("     1\ta\n     2\tb\n     3\tc\n");
+}
+
+#[test]
+fn test_default_body_numbering_multiple_files_and_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("a.txt", "a");
+    at.write("c.txt", "c");
+
+    ucmd.args(&["a.txt", "-", "c.txt"])
+        .pipe_in("b")
+        .succeeds()
+        .stdout_is("     1\ta\n     2\tb\n     3\tc\n");
+}
+
+#[test]
+fn test_body_numbering_all_lines_without_delimiter() {
+    for arg in ["-ba", "--body-numbering=a"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n     2\t\n     3\tb\n");
+    }
+}
+
+#[test]
+fn test_body_numbering_no_lines_without_delimiter() {
+    for arg in ["-bn", "--body-numbering=n"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\nb")
+            .succeeds()
+            .stdout_is("       a\n       \n       b\n");
+    }
+}
+
+#[test]
+fn test_body_numbering_non_empty_lines_without_delimiter() {
+    for arg in ["-bt", "--body-numbering=t"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n       \n     2\tb\n");
+    }
+}
+
+#[test]
+fn test_body_numbering_matched_lines_without_delimiter() {
+    for arg in ["-bp^[ac]", "--body-numbering=p^[ac]"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nb\nc")
+            .succeeds()
+            .stdout_is("     1\ta\n       b\n     2\tc\n");
+    }
+}
+
+#[test]
+fn test_numbering_all_lines() {
+    let delimiters_and_args = [
+        ("\\:\\:\\:\n", ["-ha", "--header-numbering=a"]),
+        ("\\:\\:\n", ["-ba", "--body-numbering=a"]),
+        ("\\:\n", ["-fa", "--footer-numbering=a"]),
+    ];
+
+    for (delimiter, args) in delimiters_and_args {
+        for arg in args {
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in(format!("{delimiter}a\n\nb"))
+                .succeeds()
+                .stdout_is("\n     1\ta\n     2\t\n     3\tb\n");
+        }
+    }
+}
+
+#[test]
+fn test_numbering_no_lines() {
+    let delimiters_and_args = [
+        ("\\:\\:\\:\n", ["-hn", "--header-numbering=n"]),
+        ("\\:\\:\n", ["-bn", "--body-numbering=n"]),
+        ("\\:\n", ["-fn", "--footer-numbering=n"]),
+    ];
+
+    for (delimiter, args) in delimiters_and_args {
+        for arg in args {
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in(format!("{delimiter}a\n\nb"))
+                .succeeds()
+                .stdout_is("\n       a\n       \n       b\n");
+        }
+    }
+}
+
+#[test]
+fn test_numbering_non_empty_lines() {
+    let delimiters_and_args = [
+        ("\\:\\:\\:\n", ["-ht", "--header-numbering=t"]),
+        ("\\:\\:\n", ["-bt", "--body-numbering=t"]),
+        ("\\:\n", ["-ft", "--footer-numbering=t"]),
+    ];
+
+    for (delimiter, args) in delimiters_and_args {
+        for arg in args {
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in(format!("{delimiter}a\n\nb"))
+                .succeeds()
+                .stdout_is("\n     1\ta\n       \n     2\tb\n");
+        }
+    }
+}
+
+#[test]
+fn test_numbering_matched_lines() {
+    let delimiters_and_args = [
+        ("\\:\\:\\:\n", ["-hp^[ac]", "--header-numbering=p^[ac]"]),
+        ("\\:\\:\n", ["-bp^[ac]", "--body-numbering=p^[ac]"]),
+        ("\\:\n", ["-fp^[ac]", "--footer-numbering=p^[ac]"]),
+    ];
+
+    for (delimiter, args) in delimiters_and_args {
+        for arg in args {
+            new_ucmd!()
+                .arg(arg)
+                .pipe_in(format!("{delimiter}a\nb\nc"))
+                .succeeds()
+                .stdout_is("\n     1\ta\n       b\n     2\tc\n");
+        }
+    }
+}
+
+#[test]
+fn test_invalid_numbering() {
+    let invalid_args = [
+        "-hinvalid",
+        "--header-numbering=invalid",
+        "-binvalid",
+        "--body-numbering=invalid",
+        "-finvalid",
+        "--footer-numbering=invalid",
+    ];
+
+    for invalid_arg in invalid_args {
+        new_ucmd!()
+            .arg(invalid_arg)
+            .fails()
+            .stderr_contains("invalid numbering style: 'invalid'");
+    }
+}
+
+#[test]
+fn test_invalid_regex_numbering() {
+    let invalid_args = [
+        "-hp[",
+        "--header-numbering=p[",
+        "-bp[",
+        "--body-numbering=p[",
+        "-fp[",
+        "--footer-numbering=p[",
+    ];
+
+    for invalid_arg in invalid_args {
+        new_ucmd!()
+            .arg(invalid_arg)
+            .fails()
+            .stderr_contains("invalid regular expression");
+    }
+}
+
+#[test]
+fn test_line_number_overflow() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MAX))
+        .pipe_in("a\nb")
+        .fails()
+        .stdout_is(format!("{}\ta\n", i64::MAX))
+        .stderr_is("nl: line number overflow\n");
+
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .arg("--line-increment=-1")
+        .pipe_in("a\nb")
+        .fails()
+        .stdout_is(format!("{}\ta\n", i64::MIN))
+        .stderr_is("nl: line number overflow\n");
+}
+
+#[test]
+fn test_line_number_no_overflow() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MAX))
+        .pipe_in("a\n\\:\\:\nb")
+        .succeeds()
+        .stdout_is(format!("{0}\ta\n\n{0}\tb\n", i64::MAX));
+
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .arg("--line-increment=-1")
+        .pipe_in("a\n\\:\\:\nb")
+        .succeeds()
+        .stdout_is(format!("{0}\ta\n\n{0}\tb\n", i64::MIN));
+}
+
+#[test]
+fn test_section_delimiter() {
+    for arg in ["-dabc", "--section-delimiter=abc"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nabcabcabc\nb") // header section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nabcabc\nb") // body section
+            .succeeds()
+            .stdout_is("     1\ta\n\n     1\tb\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nabc\nb") // footer section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+    }
+}
+
+#[test]
+fn test_one_char_section_delimiter_expansion() {
+    for arg in ["-da", "--section-delimiter=a"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\na:a:a:\nb") // header section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\na:a:\nb") // body section
+            .succeeds()
+            .stdout_is("     1\ta\n\n     1\tb\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\na:\nb") // footer section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+    }
+}
+
+#[test]
+fn test_non_ascii_one_char_section_delimiter() {
+    for arg in ["-dä", "--section-delimiter=ä"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\näää\nb") // header section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nää\nb") // body section
+            .succeeds()
+            .stdout_is("     1\ta\n\n     1\tb\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nä\nb") // footer section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+    }
+}
+
+#[test]
+fn test_empty_section_delimiter() {
+    for arg in ["-d ''", "--section-delimiter=''"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n       \n     2\tb\n");
     }
 }
