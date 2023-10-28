@@ -8,7 +8,7 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::error::{UResult, UUsageError};
-use uucore::format::printf;
+use uucore::format::{printf, FormatArgument};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const VERSION: &str = "version";
@@ -30,12 +30,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let format_string = matches
         .get_one::<String>(options::FORMATSTRING)
         .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
-    let values: Vec<String> = match matches.get_many::<String>(options::ARGUMENT) {
-        Some(s) => s.map(|s| s.to_string()).collect(),
+    let values: Vec<_> = match matches.get_many::<String>(options::ARGUMENT) {
+        Some(s) => s.map(|s| FormatArgument::Unparsed(s.to_string())).collect(),
         None => vec![],
     };
 
-    printf(format_string, &values[..])?;
+    printf(format_string, &values)?;
     Ok(())
 }
 
