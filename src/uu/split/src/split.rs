@@ -41,11 +41,11 @@ static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_DEFAULT_SUFFIX_LENGTH: &str = "2";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_SEPARATOR: &str = "separator";
-//The ---io and ---io-blksize parameters are consumed and ignored.
-//The parameter is included to make GNU coreutils tests pass.
-static OPT_IO: &str = "-io";
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
 static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
+//The ---io parameter is consumed and ignored.
+//The parameter is included to make GNU coreutils tests pass.
+static OPT_IO: &str = "-io";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
