@@ -1078,6 +1078,18 @@ fn test_elide_dev_null() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_dev_zero() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "3", "/dev/zero"])
+        .fails()
+        .stderr_only("split: /dev/zero: cannot determine file size\n");
+    assert!(!at.plus("xaa").exists());
+    assert!(!at.plus("xab").exists());
+    assert!(!at.plus("xac").exists());
+}
+
+#[test]
 fn test_lines() {
     let (at, mut ucmd) = at_and_ucmd!();
 

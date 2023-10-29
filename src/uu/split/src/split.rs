@@ -17,7 +17,7 @@ use std::ffi::OsString;
 use std::fmt;
 use std::fs::{metadata, File};
 use std::io;
-use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
+use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::u64;
 use uucore::display::Quotable;
@@ -791,6 +791,7 @@ struct Settings {
     /// chunks. If this is `false`, then empty files will not be
     /// created.
     elide_empty_files: bool,
+    io_blksize: Option<usize>,
 }
 
 /// An error when parsing settings from command-line arguments.
@@ -818,6 +819,9 @@ enum SettingsError {
     /// l/K/N
     /// r/K/N
     FilterWithKthChunkNumber,
+
+    /// Invalid IO block size
+    InvalidIOBlockSize(String),
 
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
@@ -854,6 +858,7 @@ impl fmt::Display for SettingsError {
             Self::FilterWithKthChunkNumber => {
                 write!(f, "--filter does not process a chunk extracted to stdout")
             }
+            Self::InvalidIOBlockSize(s) => write!(f, "invalid IO block size: {}", s.quote()),
             #[cfg(windows)]
             Self::NotSupported => write!(
                 f,
@@ -907,6 +912,20 @@ impl Settings {
             None => b'\n',
         };
 
+        let io_blksize: Option<usize> = if let Some(s) = matches.get_one::<String>(OPT_IO_BLKSIZE) {
+            match parse_size_u64(s) {
+                Ok(n) => {
+                    let n: usize = n
+                        .try_into()
+                        .map_err(|_| SettingsError::InvalidIOBlockSize(s.to_string()))?;
+                    Some(n)
+                }
+                _ => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
+            }
+        } else {
+            None
+        };
+
         let result = Self {
             suffix_length,
             suffix_type,
@@ -920,6 +939,7 @@ impl Settings {
             prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().to_owned(),
             filter: matches.get_one::<String>(OPT_FILTER).map(|s| s.to_owned()),
             elide_empty_files: matches.get_flag(OPT_ELIDE_EMPTY_FILES),
+            io_blksize,
         };
 
         #[cfg(windows)]
@@ -995,6 +1015,81 @@ fn custom_write_all<T: Write>(
         Err(e) if ignorable_io_error(&e, settings) => Ok(false),
         Err(e) => Err(e),
     }
+}
+
+/// Attempt to determine file size  of files that report `0` file size
+/// from [`len()`] function of [`std::fs::metadata`]
+/// Typically system files at /dev, /proc, /sys locations
+/// like /dev/null, /dev/zero, /proc/version, etc.
+///
+/// Used only for subset of `--number=CHUNKS` strategy, as there is a need
+/// to determine input file size upfront in order to know chunk size
+/// to be written into each of N files/chunks:
+/// * N       split into N files based on size of input
+/// * K/N     output Kth of N to stdout
+/// * l/N     split into N files without splitting lines/records
+/// * l/K/N   output Kth of N to stdout without splitting lines/records
+///
+/// Most system files at /dev, /proc, /sys locations should fit entirely into a buffer,
+/// so try to read up to max limit first and return the number of bytes read
+///
+fn get_zero_len_file_size(input: &String, io_blksize: &Option<usize>) -> std::io::Result<u64> {
+    let file_size: u64;
+    let f = File::open(Path::new(input))?;
+    let mut tmp_reader = BufReader::new(Box::new(f) as Box<dyn Read>);
+    let buf: &mut Vec<u8> = &mut vec![];
+
+    // Set max read limit
+    // Use either specified IO block size option value
+    // or default BufReader capacity - whichever is greater
+    let default_capacity = tmp_reader.capacity();
+    let limit: u64 = if let Some(n) = io_blksize {
+        if *n > default_capacity {
+            *n
+        } else {
+            default_capacity
+        }
+    } else {
+        default_capacity
+    }
+    .try_into()
+    .unwrap();
+
+    // Try to read the file up to a limit
+    let num_bytes = tmp_reader
+        .by_ref()
+        .take(limit)
+        .read_to_end(buf)
+        .map(|n| n as u64)?;
+
+    if num_bytes < limit {
+        // Finite file that fits entirely within the limit
+        // Note: files like /dev/null or similar
+        // and files with true file size 0
+        // will also fit here
+        file_size = num_bytes;
+    } else {
+        // Could be that file size is larger than set limit (unlikely)
+        // or could be an "infinite" file like /dev/zero
+        // Attempt direct seek on a File
+        let mut f = File::open(Path::new(input))?;
+        let end = f.seek(SeekFrom::End(0))?;
+        if end > 0 {
+            file_size = end;
+        } else {
+            // Edge case of either "infinite" file (i.e. /dev/zero)
+            // or some other "special" non-standard file type
+            // Give up and return an error
+            // TODO It might be possible to do more here
+            // to address all possible file types and edge cases
+            return Err(io::Error::new(
+                ErrorKind::Other,
+                format!("{}: cannot determine file size", input),
+            ));
+        }
+    }
+
+    Ok(file_size)
 }
 
 /// Write a certain number of bytes to one file, then move on to another one.
@@ -1478,6 +1573,9 @@ where
         USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
     })?;
     let mut num_bytes = metadata.len();
+    if num_bytes == 0 {
+        num_bytes = get_zero_len_file_size(&settings.input, &settings.io_blksize)?;
+    }
 
     // If the requested number of chunks exceeds the number of bytes
     // in the file *and* the `elide_empty_files` parameter is enabled,
@@ -1589,6 +1687,9 @@ where
         USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
     })?;
     let mut num_bytes = metadata.len();
+    if num_bytes == 0 {
+        num_bytes = get_zero_len_file_size(&settings.input, &settings.io_blksize)?;
+    }
 
     // If input file is empty and we would have written zero chunks of output,
     // then terminate immediately.
@@ -1681,7 +1782,10 @@ where
     let metadata = metadata(&settings.input).map_err(|_| {
         USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
     })?;
-    let num_bytes = metadata.len();
+    let mut num_bytes = metadata.len();
+    if num_bytes == 0 {
+        num_bytes = get_zero_len_file_size(&settings.input, &settings.io_blksize)?;
+    }
     let chunk_size = (num_bytes / num_chunks) as usize;
 
     // This object is responsible for creating the filename for each chunk.
@@ -1762,7 +1866,10 @@ where
     let metadata = metadata(&settings.input).map_err(|_| {
         USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
     })?;
-    let num_bytes = metadata.len();
+    let mut num_bytes = metadata.len();
+    if num_bytes == 0 {
+        num_bytes = get_zero_len_file_size(&settings.input, &settings.io_blksize)?;
+    }
     let chunk_size = (num_bytes / num_chunks) as usize;
 
     // Write to stdout instead of to a file.
@@ -1925,7 +2032,7 @@ where
 
 #[allow(clippy::cognitive_complexity)]
 fn split(settings: &Settings) -> UResult<()> {
-    let mut reader = BufReader::new(if settings.input == "-" {
+    let r_box = if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let r = File::open(Path::new(&settings.input)).map_err_context(|| {
@@ -1935,7 +2042,12 @@ fn split(settings: &Settings) -> UResult<()> {
             )
         })?;
         Box::new(r) as Box<dyn Read>
-    });
+    };
+    let mut reader = if let Some(c) = settings.io_blksize {
+        BufReader::with_capacity(c, r_box)
+    } else {
+        BufReader::new(r_box)
+    };
 
     match settings.strategy {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
