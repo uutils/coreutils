@@ -7,7 +7,7 @@
 // spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
 
 use chrono::{
-    DateTime, Datelike, Duration, Local, LocalResult, NaiveDate, NaiveDateTime, NaiveTime,
+    DateTime, Datelike, Duration, Local, LocalResult, Months, NaiveDate, NaiveDateTime, NaiveTime,
     TimeZone, Timelike,
 };
 use clap::builder::ValueParser;
@@ -15,9 +15,11 @@ use clap::{crate_version, Arg, ArgAction, ArgGroup, Command};
 use filetime::{set_file_times, set_symlink_file_times, FileTime};
 use std::ffi::OsString;
 use std::fs::{self, File};
+use std::ops::{Add, Sub};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::parse_date_modifier::{ChronoUnit, DateModParser};
 use uucore::{format_usage, help_about, help_usage, show};
 
 const ABOUT: &str = help_about!("touch.md");
@@ -339,8 +341,14 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> UResult<FileTime> {
     // Tue Dec  3 ...
     // ("%c", POSIX_LOCALE_FORMAT),
     //
-    if let Ok(parsed) = NaiveDateTime::parse_from_str(s, format::POSIX_LOCALE) {
-        return Ok(datetime_to_filetime(&parsed.and_utc()));
+    if let Ok((parsed, modifier)) = NaiveDateTime::parse_and_remainder(s, format::POSIX_LOCALE) {
+        if modifier.is_empty() {
+            return Ok(datetime_to_filetime(&parsed.and_utc()));
+        }
+        return match date_from_modifier(modifier, parsed) {
+            Ok(new_date) => Ok(datetime_to_filetime(&new_date.and_utc())),
+            Err(e) => Err(e),
+        };
     }
 
     // Also support other formats found in the GNU tests like
@@ -352,18 +360,30 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> UResult<FileTime> {
         format::YYYY_MM_DD_HH_MM,
         format::YYYYMMDDHHMM_OFFSET,
     ] {
-        if let Ok(parsed) = NaiveDateTime::parse_from_str(s, fmt) {
-            return Ok(datetime_to_filetime(&parsed.and_utc()));
+        if let Ok((parsed, modifier)) = NaiveDateTime::parse_and_remainder(s, fmt) {
+            if modifier.is_empty() {
+                return Ok(datetime_to_filetime(&parsed.and_utc()));
+            }
+            return match date_from_modifier(modifier, parsed) {
+                Ok(new_date) => Ok(datetime_to_filetime(&new_date.and_utc())),
+                Err(e) => Err(e),
+            };
         }
     }
 
     // "Equivalent to %Y-%m-%d (the ISO 8601 date format). (C99)"
     // ("%F", ISO_8601_FORMAT),
-    if let Ok(parsed_date) = NaiveDate::parse_from_str(s, format::ISO_8601) {
+    if let Ok((parsed_date, modifier)) = NaiveDate::parse_and_remainder(s, format::ISO_8601) {
         let parsed = Local
             .from_local_datetime(&parsed_date.and_time(NaiveTime::MIN))
             .unwrap();
-        return Ok(datetime_to_filetime(&parsed));
+        if modifier.is_empty() {
+            return Ok(datetime_to_filetime(&parsed));
+        }
+        return match date_from_modifier(modifier, parsed) {
+            Ok(new_date) => Ok(datetime_to_filetime(&new_date)),
+            Err(e) => Err(e),
+        };
     }
 
     // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"
@@ -435,6 +455,96 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     }
 
     Ok(datetime_to_filetime(&local))
+}
+
+// Take a date and given an arbitrary string such as "+01 Month -20 YEARS -90 dayS"
+// will parse the string and modify the date accordingly.
+fn date_from_modifier<D>(modifier: &str, mut date: D) -> UResult<D>
+where
+    D: Add<Duration, Output = D>
+        + Sub<Duration, Output = D>
+        + Add<Months, Output = D>
+        + Sub<Months, Output = D>,
+{
+    match DateModParser::parse(modifier) {
+        Ok(map) => {
+            // Convert to a sorted Vector here because order of operations does matter due to leap years.
+            // We want to make sure that we go *back* in time before we go forward.
+            let sorted = {
+                let mut v = map.into_iter().collect::<Vec<(ChronoUnit, i64)>>();
+                v.sort_by(|a, b| a.1.cmp(&b.1));
+                v
+            };
+            for (chrono, time) in sorted {
+                match chrono {
+                    ChronoUnit::Year => {
+                        if time > (i64::MAX / 12) {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("Unable to parse modifier: {modifier}"),
+                            ));
+                        }
+                        date = if time >= 0 {
+                            date.add(Months::new((12 * time) as u32))
+                        } else {
+                            date.sub(Months::new(12 * time.unsigned_abs() as u32))
+                        }
+                    }
+                    ChronoUnit::Month => {
+                        date = if time >= 0 {
+                            date.add(Months::new(time as u32))
+                        } else {
+                            date.sub(Months::new(time.unsigned_abs() as u32))
+                        }
+                    }
+                    ChronoUnit::Week => {
+                        if !((i64::MIN / 604_800)..=(i64::MAX / 604_800)).contains(&time) {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("Unable to parse modifier: {modifier}"),
+                            ));
+                        }
+                        date = date.add(Duration::weeks(time));
+                    }
+                    ChronoUnit::Day => {
+                        if time > (i32::MAX as i64) || time < (i32::MIN as i64) {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("Unable to parse modifier: {modifier}"),
+                            ));
+                        }
+                        date = date.add(Duration::days(time));
+                    }
+                    ChronoUnit::Hour => {
+                        if !((i64::MIN / 3600)..=(i64::MAX / 3600)).contains(&time) {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("Unable to parse modifier: {modifier}"),
+                            ));
+                        }
+                        date = date.add(Duration::hours(time));
+                    }
+                    ChronoUnit::Minute => {
+                        if !((i64::MIN / 60)..=(i64::MAX / 60)).contains(&time) {
+                            return Err(USimpleError::new(
+                                1,
+                                format!("Unable to parse modifier: {modifier}"),
+                            ));
+                        }
+                        date = date.add(Duration::minutes(time));
+                    }
+                    ChronoUnit::Second => {
+                        date = date.add(Duration::seconds(time));
+                    }
+                }
+            }
+            Ok(date)
+        }
+        Err(_) => Err(USimpleError::new(
+            1,
+            format!("Unable to parse modifier: {modifier}"),
+        )),
+    }
 }
 
 // TODO: this may be a good candidate to put in fsext.rs
@@ -511,6 +621,9 @@ fn pathbuf_from_stdout() -> UResult<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use crate::{date_from_modifier, format};
+    use chrono::{NaiveDate, NaiveDateTime};
+
     #[cfg(windows)]
     #[test]
     fn test_get_pathbuf_from_stdout_fails_if_stdout_is_not_a_file() {
@@ -520,5 +633,105 @@ mod tests {
             .expect_err("pathbuf_from_stdout should have failed")
             .to_string()
             .contains("GetFinalPathNameByHandleW failed with code 1"));
+    }
+
+    #[test]
+    fn test_parse_date_from_modifier_ok() {
+        const MODIFIER_OK_0: &str = "+01month";
+        const MODIFIER_OK_1: &str = "00001year-000000001year+\t12months";
+        const MODIFIER_OK_2: &str = "";
+        const MODIFIER_OK_3: &str = "30SecONDS1houR";
+
+        const MODIFIER_OK_4: &str = "30     \t\n\t SECONDS000050000houR-10000yearS";
+
+        const MODIFIER_OK_5: &str = "+0000111MONTHs -   20    yearS 100000day";
+        const MODIFIER_OK_6: &str = "100 week + 0024HOUrs - 50 minutes";
+
+        let date0 = NaiveDate::parse_from_str("2022-05-15", format::ISO_8601).unwrap();
+
+        if let Ok(modified_date) = date_from_modifier(MODIFIER_OK_0, date0) {
+            let expected = NaiveDate::parse_from_str("2022-06-15", format::ISO_8601).unwrap();
+            assert_eq!(modified_date, expected);
+        } else {
+            assert!(false);
+        }
+
+        if let Ok(modified_date) = date_from_modifier(MODIFIER_OK_1, date0) {
+            let expected = NaiveDate::parse_from_str("2023-05-15", format::ISO_8601).unwrap();
+            assert_eq!(modified_date, expected);
+        } else {
+            assert!(false);
+        }
+
+        if let Ok(modified_date) = date_from_modifier(MODIFIER_OK_2, date0) {
+            let expected = NaiveDate::parse_from_str("2022-05-15", format::ISO_8601).unwrap();
+            assert_eq!(modified_date, expected);
+        } else {
+            assert!(false);
+        }
+
+        let date1 =
+            NaiveDateTime::parse_from_str("2022-05-15 18:30:00.0", format::YYYYMMDDHHMMSS).unwrap();
+        if let Ok(modified_date) = date_from_modifier(MODIFIER_OK_3, date1) {
+            let expected =
+                NaiveDateTime::parse_from_str("2022-05-15 19:30:30.0", format::YYYYMMDDHHMMSS)
+                    .unwrap();
+            assert_eq!(modified_date, expected);
+        } else {
+            assert!(false);
+        }
+
+        if let Ok(modified_date) = date_from_modifier(MODIFIER_OK_4, date1) {
+            let expected =
+                NaiveDateTime::parse_from_str("-7972-01-28 2:30:30.0", format::YYYYMMDDHHMMSS)
+                    .unwrap();
+            assert_eq!(modified_date, expected);
+        } else {
+            assert!(false);
+        }
+
+        if let Ok(modified_date) = date_from_modifier(MODIFIER_OK_5, date0) {
+            let expected = NaiveDate::parse_from_str("2285-05-30", format::ISO_8601).unwrap();
+            assert_eq!(modified_date, expected);
+        } else {
+            assert!(false);
+        }
+
+        let date1 =
+            NaiveDateTime::parse_from_str("2022-05-15 0:0:00.0", format::YYYYMMDDHHMMSS).unwrap();
+        if let Ok(modified_date) = date_from_modifier(MODIFIER_OK_6, date1) {
+            let expected =
+                NaiveDateTime::parse_from_str("2024-04-14 23:10:0.0", format::YYYYMMDDHHMMSS)
+                    .unwrap();
+            assert_eq!(modified_date, expected);
+        } else {
+            assert!(false);
+        }
+    }
+
+    #[test]
+    fn test_parse_date_from_modifier_err() {
+        const MODIFIER_F_0: &str = "100000000000000000000000000000000000000 Years";
+        const MODIFIER_F_1: &str = "1000";
+        const MODIFIER_F_2: &str = " 1000 [YEARS]";
+        const MODIFIER_F_3: &str = "-100 Years + 20.0 days ";
+        const MODIFIER_F_4: &str = "days + 10 weeks";
+
+        let date0 = NaiveDate::parse_from_str("2022-05-15", format::ISO_8601).unwrap();
+
+        let modified_date = date_from_modifier(MODIFIER_F_0, date0);
+        assert!(modified_date.is_err());
+
+        let modified_date = date_from_modifier(MODIFIER_F_1, date0);
+        assert!(modified_date.is_err());
+
+        let modified_date = date_from_modifier(MODIFIER_F_2, date0);
+        assert!(modified_date.is_err());
+
+        let modified_date = date_from_modifier(MODIFIER_F_3, date0);
+        assert!(modified_date.is_err());
+
+        let modified_date = date_from_modifier(MODIFIER_F_4, date0);
+        assert!(modified_date.is_err());
     }
 }

@@ -27,6 +27,7 @@ pub use crate::mods::os;
 pub use crate::mods::panic;
 
 // * string parsing modules
+pub use crate::parser::parse_date_modifier;
 pub use crate::parser::parse_glob;
 pub use crate::parser::parse_size;
 pub use crate::parser::parse_time;
