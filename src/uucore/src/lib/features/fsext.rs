@@ -5,7 +5,7 @@
 
 //! Set of functions to manage file systems
 
-// spell-checker:ignore DATETIME subsecond (arch) bitrig ; (fs) cifs smbfs
+// spell-checker:ignore DATETIME getmntinfo subsecond (arch) bitrig ; (fs) cifs smbfs
 
 use time::macros::format_description;
 use time::UtcOffset;
@@ -362,12 +362,18 @@ extern "C" {
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
     #[cfg(any(
-        target_os = "freebsd",
         target_os = "netbsd",
         target_os = "openbsd",
         all(target_vendor = "apple", target_arch = "aarch64")
     ))]
     #[link_name = "getmntinfo"] // spell-checker:disable-line
+    fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
+
+    // Rust on FreeBSD uses 11.x ABI for filesystem metadata syscalls.
+    // Call the right version of the symbol for getmntinfo() result to
+    // match libc StatFS layout.
+    #[cfg(target_os = "freebsd")]
+    #[link_name = "getmntinfo@FBSD_1.0"] // spell-checker:disable-line
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 }
 
