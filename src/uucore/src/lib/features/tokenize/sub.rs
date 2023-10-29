@@ -91,7 +91,7 @@ impl Sub {
         // for more dry printing, field characters are grouped
         // in initialization of token.
         let field_type = match field_char {
-            's' | 'b' => FieldType::Strf,
+            's' | 'b' | 'q' => FieldType::Strf,
             'd' | 'i' | 'u' | 'o' | 'x' | 'X' => FieldType::Intf,
             'f' | 'F' => FieldType::Floatf,
             'a' | 'A' => FieldType::CninetyNineHexFloatf,
@@ -189,7 +189,7 @@ impl SubParser {
 
         let mut legal_fields = [
             // 'a', 'A', //c99 hex float implementation not yet complete
-            'b', 'c', 'd', 'e', 'E', 'f', 'F', 'g', 'G', 'i', 'o', 's', 'u', 'x', 'X',
+            'b', 'c', 'd', 'e', 'E', 'f', 'F', 'g', 'G', 'i', 'o', 'q', 's', 'u', 'x', 'X',
         ];
         let mut specifiers = ['h', 'j', 'l', 'L', 't', 'z'];
         legal_fields.sort_unstable();
@@ -391,6 +391,7 @@ impl Sub {
             // if %s just return arg
             // if %b use UnescapedText module's unescape-fn
             // if %c return first char of arg
+            // if %q return arg which non-printable characters are escaped
             FieldType::Strf | FieldType::Charf => {
                 match pf_arg {
                     Some(arg_string) => {
@@ -404,11 +405,32 @@ impl Sub {
                                 UnescapedText::from_it_core(writer, &mut a_it, true);
                                 None
                             }
-                            // for 'c': get iter of string vals,
+                            'q' => {
+                                let mut non_printable_char = [
+                                    '`', '#', '$', '^', '&', '*', '(', ')', '[', ']', '\\', '{',
+                                    '}', '|', ';', '\'', '"', '<', '>', '?',
+                                ];
+                                non_printable_char.sort_unstable();
+
+                                let arg_string = match field.second_field {
+                                    Some(max) => String::from(&arg_string[..max as usize]),
+                                    None => arg_string.clone(),
+                                };
+
+                                let mut new_arg_string = String::new();
+                                for c in arg_string.chars() {
+                                    if non_printable_char.binary_search(&c).is_ok() {
+                                        new_arg_string.push('\\');
+                                    }
+                                    new_arg_string.push(c);
+                                }
+
+                                Some(new_arg_string)
+                            }
                             // get opt<char> of first val
                             // and map it to opt<String>
-                            /* 'c' | */
-                            _ => arg_string.chars().next().map(|x| x.to_string()),
+                            'c' => arg_string.chars().next().map(|x| x.to_string()),
+                            _ => unreachable!(),
                         }
                     }
                     None => None,
