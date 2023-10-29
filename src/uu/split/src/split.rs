@@ -1017,7 +1017,7 @@ fn custom_write_all<T: Write>(
     }
 }
 
-/// Attempt to determine file size  of files that report `0` file size
+/// Determine the file size  of files that report `0` size
 /// from [`len()`] function of [`std::fs::metadata`]
 /// Typically system files at /dev, /proc, /sys locations
 /// like /dev/null, /dev/zero, /proc/version, etc.
@@ -1031,8 +1031,11 @@ fn custom_write_all<T: Write>(
 /// * l/K/N   output Kth of N to stdout without splitting lines/records
 ///
 /// Most system files at /dev, /proc, /sys locations should fit entirely into a buffer,
-/// so try to read up to max limit first and return the number of bytes read
-///
+/// so try to read up to max limit first and return the number of bytes read first.
+/// If the file's content does not fit into the buffer, attempt to find the end of file
+/// with direct `seek()`.
+/// For the edge case of "infinite" files like /dev/zero, /dev/random and similar
+/// return an error.
 fn get_zero_len_file_size(input: &String, io_blksize: &Option<usize>) -> std::io::Result<u64> {
     let file_size: u64;
     let f = File::open(Path::new(input))?;
@@ -1543,7 +1546,7 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
 /// Split a file into a specific number of chunks by byte.
 /// When file size cannot be evenly divided into the number of chunks of the same size,
 /// the first X chunks are 1 byte longer than the rest,
-/// where X is a reminder of (file size MODULO number of chunks)
+/// where X is a modulus reminder of (file size % number of chunks)
 ///
 /// This function always creates one output file for each chunk, even
 /// if there is an error reading or writing one of the chunks or if
