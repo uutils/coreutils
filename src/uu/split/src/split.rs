@@ -1018,7 +1018,7 @@ fn custom_write_all<T: Write>(
 }
 
 /// Determine the file size  of files that report `0` size
-/// from [`len()`] function of [`std::fs::metadata`]
+/// from `len()` function of [`std::fs::metadata`]
 /// Typically system files at /dev, /proc, /sys locations
 /// like /dev/null, /dev/zero, /proc/version, etc.
 ///
