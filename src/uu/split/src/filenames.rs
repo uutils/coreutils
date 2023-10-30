@@ -230,7 +230,7 @@ impl Suffix {
             .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
             .unwrap()
             .to_string();
-        if additional.contains('/') {
+        if additional.contains('/') || additional.contains('\\') {
             return Err(SuffixError::ContainsSeparator(additional));
         }
 
