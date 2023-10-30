@@ -87,6 +87,9 @@ struct Context<'a> {
 
     /// The target path to which the directory will be copied.
     target: &'a Path,
+
+    /// The source path from which the directory will be copied.
+    root: &'a Path,
 }
 
 impl<'a> Context<'a> {
@@ -102,6 +105,7 @@ impl<'a> Context<'a> {
             current_dir,
             root_parent,
             target,
+            root,
         })
     }
 }
@@ -156,11 +160,19 @@ struct Entry {
 }
 
 impl Entry {
-    fn new(context: &Context, direntry: &DirEntry) -> Result<Self, StripPrefixError> {
+    fn new(
+        context: &Context,
+        direntry: &DirEntry,
+        no_target_dir: bool,
+    ) -> Result<Self, StripPrefixError> {
         let source_relative = direntry.path().to_path_buf();
         let source_absolute = context.current_dir.join(&source_relative);
-        let descendant =
+        let mut descendant =
             get_local_to_root_parent(&source_absolute, context.root_parent.as_deref())?;
+        if no_target_dir {
+            descendant = descendant.strip_prefix(context.root)?.to_path_buf();
+        }
+
         let local_to_target = context.target.join(descendant);
         let target_is_file = context.target.is_file();
         Ok(Self {
@@ -389,7 +401,7 @@ pub(crate) fn copy_directory(
     {
         match direntry_result {
             Ok(direntry) => {
-                let entry = Entry::new(&context, &direntry)?;
+                let entry = Entry::new(&context, &direntry, options.no_target_dir)?;
                 copy_direntry(
                     progress_bar,
                     entry,
