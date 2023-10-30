@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
 
 mod error;
 
@@ -102,6 +102,25 @@ static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
+
+/// Returns true if the passed `path` ends with a path terminator.
+#[cfg(unix)]
+fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::unix::prelude::OsStrExt;
+    path.as_os_str()
+        .as_bytes()
+        .last()
+        .map_or(false, |&byte| byte == b'/' || byte == b'\\')
+}
+
+#[cfg(windows)]
+fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::windows::prelude::OsStrExt;
+    path.as_os_str()
+        .encode_wide()
+        .last()
+        .map_or(false, |wide| wide == b'/'.into() || wide == b'\\'.into())
+}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -299,7 +318,11 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         .into());
     }
     if source.symlink_metadata().is_err() {
-        return Err(MvError::NoSuchFile(source.quote().to_string()).into());
+        return Err(if path_ends_with_terminator(source) {
+            MvError::CannotStatNotADirectory(source.quote().to_string()).into()
+        } else {
+            MvError::NoSuchFile(source.quote().to_string()).into()
+        });
     }
 
     if (source.eq(target)
@@ -316,7 +339,13 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         }
     }
 
-    if target.is_dir() {
+    let target_is_dir = target.is_dir();
+
+    if path_ends_with_terminator(target) && !target_is_dir {
+        return Err(MvError::FailedToAccessNotADirectory(target.quote().to_string()).into());
+    }
+
+    if target_is_dir {
         if opts.no_target_dir {
             if source.is_dir() {
                 rename(source, target, opts, None).map_err_context(|| {
@@ -405,7 +434,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
 
-    let canonized_target_dir = target_dir
+    let canonicalized_target_dir = target_dir
         .canonicalize()
         .unwrap_or_else(|_| target_dir.to_path_buf());
 
@@ -440,8 +469,8 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
 
         // Check if we have mv dir1 dir2 dir2
         // And generate an error if this is the case
-        if let Ok(canonized_source) = sourcepath.canonicalize() {
-            if canonized_source == canonized_target_dir {
+        if let Ok(canonicalized_source) = sourcepath.canonicalize() {
+            if canonicalized_source == canonicalized_target_dir {
                 // User tried to move directory to itself, warning is shown
                 // and process of moving files is continued.
                 show!(USimpleError::new(
@@ -450,7 +479,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
                         "cannot move '{}' to a subdirectory of itself, '{}/{}'",
                         sourcepath.display(),
                         target_dir.display(),
-                        canonized_target_dir.components().last().map_or_else(
+                        canonicalized_target_dir.components().last().map_or_else(
                             || target_dir.display().to_string(),
                             |dir| { PathBuf::from(dir.as_os_str()).display().to_string() }
                         )

@@ -3515,3 +3515,33 @@ fn test_cp_dest_no_permissions() {
         .stderr_contains("invalid_perms.txt")
         .stderr_contains("denied");
 }
+
+#[test]
+#[cfg(all(unix, not(target_os = "freebsd")))]
+fn test_cp_attributes_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let a = "file_a";
+    let b = "file_b";
+    let mode_a = 0o0500;
+    let mode_b = 0o0777;
+
+    at.write(a, "a");
+    at.write(b, "b");
+    at.set_mode(a, mode_a);
+    at.set_mode(b, mode_b);
+
+    let mode_a = at.metadata(a).mode();
+    let mode_b = at.metadata(b).mode();
+
+    // --attributes-only doesn't do anything without other attribute preservation flags
+    ucmd.arg("--attributes-only")
+        .arg(a)
+        .arg(b)
+        .succeeds()
+        .no_output();
+
+    assert_eq!("a", at.read(a));
+    assert_eq!("b", at.read(b));
+    assert_eq!(mode_a, at.metadata(a).mode());
+    assert_eq!(mode_b, at.metadata(b).mode());
+}
