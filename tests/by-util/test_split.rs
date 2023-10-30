@@ -252,6 +252,10 @@ fn test_additional_suffix_no_slash() {
         .args(&["--additional-suffix", "a/b"])
         .fails()
         .usage_error("invalid suffix 'a/b', contains directory separator");
+    new_ucmd!()
+        .args(&["--additional-suffix", "a\\b"])
+        .fails()
+        .usage_error("invalid suffix 'a\\b', contains directory separator");
 }
 
 #[test]
