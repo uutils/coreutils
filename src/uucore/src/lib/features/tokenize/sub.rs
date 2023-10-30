@@ -406,11 +406,11 @@ impl Sub {
                                 None
                             }
                             'q' => {
-                                let mut non_printable_char = [
+                                let mut non_printable_chars = [
                                     '`', '#', '$', '^', '&', '*', '(', ')', '[', ']', '\\', '{',
-                                    '}', '|', ';', '\'', '"', '<', '>', '?',
+                                    '}', '|', ';', '\'', '"', '<', '>', '?', ' ',
                                 ];
-                                non_printable_char.sort_unstable();
+                                non_printable_chars.sort_unstable();
 
                                 let arg_string = match field.second_field {
                                     Some(max) => String::from(&arg_string[..max as usize]),
@@ -419,7 +419,7 @@ impl Sub {
 
                                 let mut new_arg_string = String::new();
                                 for c in arg_string.chars() {
-                                    if non_printable_char.binary_search(&c).is_ok() {
+                                    if non_printable_chars.binary_search(&c).is_ok() {
                                         new_arg_string.push('\\');
                                     }
                                     new_arg_string.push(c);
