@@ -137,6 +137,14 @@ fn sub_q_string_more_non_printable() {
 }
 
 #[test]
+fn sub_q_string_special_non_printable() {
+    new_ucmd!()
+        .args(&["non-printable: %q", "~ ~"])
+        .succeeds()
+        .stdout_only("non-printable: \\~\\ ~");
+}
+
+#[test]
 fn sub_char() {
     new_ucmd!()
         .args(&["the letter %c", "A"])
