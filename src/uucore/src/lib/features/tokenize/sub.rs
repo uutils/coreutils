@@ -418,6 +418,12 @@ impl Sub {
                                 };
 
                                 let mut new_arg_string = String::new();
+                                // `~` is non-printable only when being the first char.
+                                if let Some(first) = arg_string.chars().peekable().peek() {
+                                    if first == &'~' {
+                                        new_arg_string.push('\\');
+                                    }
+                                }
                                 for c in arg_string.chars() {
                                     if non_printable_chars.binary_search(&c).is_ok() {
                                         new_arg_string.push('\\');
