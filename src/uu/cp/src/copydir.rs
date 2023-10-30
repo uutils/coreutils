@@ -88,7 +88,7 @@ struct Context<'a> {
     /// The target path to which the directory will be copied.
     target: &'a Path,
 
-    /// The source path to which the directory will be copied from.
+    /// The source path from which the directory will be copied.
     root: &'a Path,
 }
 
