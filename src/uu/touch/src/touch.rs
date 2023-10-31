@@ -19,7 +19,7 @@ use std::ops::{Add, Sub};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::parse_date_modifier::{ChronoUnit, DateModParser};
+use uucore::parse_time::{ChronoUnit, DateModParser};
 use uucore::{format_usage, help_about, help_usage, show};
 
 const ABOUT: &str = help_about!("touch.md");
@@ -342,12 +342,11 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> UResult<FileTime> {
     // ("%c", POSIX_LOCALE_FORMAT),
     //
     if let Ok((parsed, modifier)) = NaiveDateTime::parse_and_remainder(s, format::POSIX_LOCALE) {
-        if modifier.is_empty() {
+        return if modifier.is_empty() {
             return Ok(datetime_to_filetime(&parsed.and_utc()));
-        }
-        return match date_from_modifier(modifier, parsed) {
-            Ok(new_date) => Ok(datetime_to_filetime(&new_date.and_utc())),
-            Err(e) => Err(e),
+        } else {
+            date_from_modifier(modifier, parsed)
+                .map(|new_date| datetime_to_filetime(&new_date.and_utc()))
         };
     }
 
@@ -355,18 +354,17 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> UResult<FileTime> {
     // in tests/misc/stat-nanoseconds.sh
     // or tests/touch/no-rights.sh
     for fmt in [
-        format::YYYYMMDDHHMMS,
         format::YYYYMMDDHHMMSS,
-        format::YYYY_MM_DD_HH_MM,
+        format::YYYYMMDDHHMMS,
         format::YYYYMMDDHHMM_OFFSET,
+        format::YYYY_MM_DD_HH_MM,
     ] {
         if let Ok((parsed, modifier)) = NaiveDateTime::parse_and_remainder(s, fmt) {
-            if modifier.is_empty() {
-                return Ok(datetime_to_filetime(&parsed.and_utc()));
-            }
-            return match date_from_modifier(modifier, parsed) {
-                Ok(new_date) => Ok(datetime_to_filetime(&new_date.and_utc())),
-                Err(e) => Err(e),
+            return if modifier.is_empty() {
+                Ok(datetime_to_filetime(&parsed.and_utc()))
+            } else {
+                date_from_modifier(modifier, parsed)
+                    .map(|new_date| datetime_to_filetime(&new_date.and_utc()))
             };
         }
     }
@@ -377,12 +375,10 @@ fn parse_date(ref_time: DateTime<Local>, s: &str) -> UResult<FileTime> {
         let parsed = Local
             .from_local_datetime(&parsed_date.and_time(NaiveTime::MIN))
             .unwrap();
-        if modifier.is_empty() {
-            return Ok(datetime_to_filetime(&parsed));
-        }
-        return match date_from_modifier(modifier, parsed) {
-            Ok(new_date) => Ok(datetime_to_filetime(&new_date)),
-            Err(e) => Err(e),
+        return if modifier.is_empty() {
+            Ok(datetime_to_filetime(&parsed))
+        } else {
+            date_from_modifier(modifier, parsed).map(|new_date| datetime_to_filetime(&new_date))
         };
     }
 
@@ -647,6 +643,8 @@ mod tests {
         const MODIFIER_OK_5: &str = "+0000111MONTHs -   20    yearS 100000day";
         const MODIFIER_OK_6: &str = "100 week + 0024HOUrs - 50 minutes";
 
+        const MODIFIER_OK_7: &str = "-100 MONTHS 300 days + 20 \t YEARS";
+
         let date0 = NaiveDate::parse_from_str("2022-05-15", format::ISO_8601).unwrap();
 
         if let Ok(modified_date) = date_from_modifier(MODIFIER_OK_0, date0) {
@@ -707,6 +705,13 @@ mod tests {
         } else {
             assert!(false);
         }
+
+        if let Ok(modified_date) = date_from_modifier(MODIFIER_OK_7, date0) {
+            let expected = NaiveDate::parse_from_str("2034-11-11", format::ISO_8601).unwrap();
+            assert_eq!(modified_date, expected);
+        } else {
+            assert!(false);
+        }
     }
 
     #[test]
@@ -716,6 +721,12 @@ mod tests {
         const MODIFIER_F_2: &str = " 1000 [YEARS]";
         const MODIFIER_F_3: &str = "-100 Years + 20.0 days ";
         const MODIFIER_F_4: &str = "days + 10 weeks";
+        // i64::MAX / 12 + 1
+        const MODIFIER_F_5: &str = "768614336404564651 years";
+        // i64::MAX / 604_800 (seconds/week)
+        const MODIFIER_F_6: &str = "15250284452472 weeks";
+        // i32::MAX
+        const MODIFIER_F_7: &str = "9223372036854775808 days ";
 
         let date0 = NaiveDate::parse_from_str("2022-05-15", format::ISO_8601).unwrap();
 
@@ -732,6 +743,15 @@ mod tests {
         assert!(modified_date.is_err());
 
         let modified_date = date_from_modifier(MODIFIER_F_4, date0);
+        assert!(modified_date.is_err());
+
+        let modified_date = date_from_modifier(MODIFIER_F_5, date0);
+        assert!(modified_date.is_err());
+
+        let modified_date = date_from_modifier(MODIFIER_F_6, date0);
+        assert!(modified_date.is_err());
+
+        let modified_date = date_from_modifier(MODIFIER_F_7, date0);
         assert!(modified_date.is_err());
     }
 }
