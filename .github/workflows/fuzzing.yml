@@ -25,6 +25,7 @@ jobs:
       with:
         shared-key: "cargo-fuzz-cache-key"
         cache-directories: "fuzz/target"
+        cache-all-crates: "true"
     - name: Run `cargo-fuzz build`
       run: cargo +nightly fuzz build
 
@@ -55,6 +56,8 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         shared-key: "cargo-fuzz-cache-key"
+        cache-directories: "fuzz/target"
+        cache-all-crates: "true"
     - name: Restore Cached Corpus
       uses: actions/cache/restore@v3
       with:
