@@ -1456,6 +1456,20 @@ fn test_mv_directory_into_subdirectory_of_itself_fails() {
 }
 
 #[test]
+fn test_mv_dir_into_dir_with_source_name_a_prefix_of_target_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "test";
+    let target = "test2";
+
+    at.mkdir(source);
+    at.mkdir(target);
+
+    ucmd.arg(source).arg(target).succeeds().no_output();
+
+    assert!(at.dir_exists(&format!("{target}/{source}")));
+}
+
+#[test]
 fn test_mv_file_into_dir_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

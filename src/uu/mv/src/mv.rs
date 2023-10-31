@@ -358,29 +358,15 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             } else {
                 Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
             }
+        // Check that source & target do not contain same subdir/dir when both exist
+        // mkdir dir1/dir2; mv dir1 dir1/dir2
+        } else if target.starts_with(source) {
+            Err(MvError::SelfTargetSubdirectory(
+                source.display().to_string(),
+                target.display().to_string(),
+            )
+            .into())
         } else {
-            // Check that source & target  do not contain same subdir/dir when both exist
-            // mkdir dir1/dir2; mv dir1 dir1/dir2
-            let target_contains_itself = target
-                .as_os_str()
-                .to_str()
-                .ok_or("not a valid unicode string")
-                .and_then(|t| {
-                    source
-                        .as_os_str()
-                        .to_str()
-                        .ok_or("not a valid unicode string")
-                        .map(|s| t.contains(s))
-                })
-                .unwrap();
-
-            if target_contains_itself {
-                return Err(MvError::SelfTargetSubdirectory(
-                    source.display().to_string(),
-                    target.display().to_string(),
-                )
-                .into());
-            }
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
     } else if target.exists() && source.is_dir() {
