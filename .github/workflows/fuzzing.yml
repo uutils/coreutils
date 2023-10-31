@@ -13,7 +13,20 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  fuzz:
+  fuzz-build:
+    name: Build the fuzzers
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@nightly
+    - name: Install `cargo-fuzz`
+      run: cargo install cargo-fuzz
+    - uses: Swatinem/rust-cache@v2
+    - name: Run `cargo-fuzz build`
+      run: cargo +nightly fuzz build
+
+  fuzz-run:
+    needs: fuzz-build
     name: Run the fuzzers
     runs-on: ubuntu-latest
     env:
