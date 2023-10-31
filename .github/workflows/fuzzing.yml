@@ -50,6 +50,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@nightly
+    - name: Install `cargo-fuzz`
+      run: cargo install cargo-fuzz
     - uses: Swatinem/rust-cache@v2
       with:
         shared-key: "cargo-fuzz-cache-key"
