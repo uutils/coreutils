@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile uufs
 
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
@@ -1549,6 +1549,32 @@ fn test_cp_preserve_links_case_7() {
     assert!(at.dir_exists("dest"));
     assert!(at.plus("dest").join("f").exists());
     assert!(at.plus("dest").join("g").exists());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_no_preserve_mode() {
+    use libc::umask;
+    use uucore::fs as uufs;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.set_mode("a", 0o731);
+    unsafe { umask(0o077) };
+
+    ucmd.arg("-a")
+        .arg("--no-preserve=mode")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    assert!(at.file_exists("b"));
+
+    let metadata_b = std::fs::metadata(at.subdir.join("b")).unwrap();
+    let permission_b = uufs::display_permissions(&metadata_b, false);
+    assert_eq!(permission_b, "rw-------".to_string());
+
+    unsafe { umask(0o022) };
 }
 
 #[test]
@@ -3472,4 +3498,34 @@ fn test_cp_dest_no_permissions() {
         .fails()
         .stderr_contains("invalid_perms.txt")
         .stderr_contains("denied");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "freebsd")))]
+fn test_cp_attributes_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let a = "file_a";
+    let b = "file_b";
+    let mode_a = 0o0500;
+    let mode_b = 0o0777;
+
+    at.write(a, "a");
+    at.write(b, "b");
+    at.set_mode(a, mode_a);
+    at.set_mode(b, mode_b);
+
+    let mode_a = at.metadata(a).mode();
+    let mode_b = at.metadata(b).mode();
+
+    // --attributes-only doesn't do anything without other attribute preservation flags
+    ucmd.arg("--attributes-only")
+        .arg(a)
+        .arg(b)
+        .succeeds()
+        .no_output();
+
+    assert_eq!("a", at.read(a));
+    assert_eq!("b", at.read(b));
+    assert_eq!(mode_a, at.metadata(a).mode());
+    assert_eq!(mode_b, at.metadata(b).mode());
 }

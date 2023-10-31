@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::extra_unused_lifetimes)]
 
@@ -184,7 +184,9 @@ pub struct Attributes {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Preserve {
-    No,
+    // explicit means whether the --no-preserve flag is used or not to distinguish out the default value.
+    // e.g. --no-preserve=mode means mode = No { explicit = true }
+    No { explicit: bool },
     Yes { required: bool },
 }
 
@@ -197,9 +199,9 @@ impl PartialOrd for Preserve {
 impl Ord for Preserve {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Self::No, Self::No) => Ordering::Equal,
-            (Self::Yes { .. }, Self::No) => Ordering::Greater,
-            (Self::No, Self::Yes { .. }) => Ordering::Less,
+            (Self::No { .. }, Self::No { .. }) => Ordering::Equal,
+            (Self::Yes { .. }, Self::No { .. }) => Ordering::Greater,
+            (Self::No { .. }, Self::Yes { .. }) => Ordering::Less,
             (
                 Self::Yes { required: req_self },
                 Self::Yes {
@@ -800,7 +802,7 @@ impl Attributes {
             }
             #[cfg(not(feature = "feat_selinux"))]
             {
-                Preserve::No
+                Preserve::No { explicit: false }
             }
         },
         links: Preserve::Yes { required: true },
@@ -809,12 +811,12 @@ impl Attributes {
 
     pub const NONE: Self = Self {
         #[cfg(unix)]
-        ownership: Preserve::No,
-        mode: Preserve::No,
-        timestamps: Preserve::No,
-        context: Preserve::No,
-        links: Preserve::No,
-        xattr: Preserve::No,
+        ownership: Preserve::No { explicit: false },
+        mode: Preserve::No { explicit: false },
+        timestamps: Preserve::No { explicit: false },
+        context: Preserve::No { explicit: false },
+        links: Preserve::No { explicit: false },
+        xattr: Preserve::No { explicit: false },
     };
 
     // TODO: ownership is required if the user is root, for non-root users it's not required.
@@ -954,7 +956,9 @@ impl Options {
             if attribute_strs.len() > 0 {
                 let no_preserve_attributes = Attributes::parse_iter(attribute_strs)?;
                 if matches!(no_preserve_attributes.links, Preserve::Yes { .. }) {
-                    attributes.links = Preserve::No;
+                    attributes.links = Preserve::No { explicit: true };
+                } else if matches!(no_preserve_attributes.mode, Preserve::Yes { .. }) {
+                    attributes.mode = Preserve::No { explicit: true };
                 }
             }
         }
@@ -1050,8 +1054,19 @@ impl Options {
 
     fn preserve_hard_links(&self) -> bool {
         match self.attributes.links {
-            Preserve::No => false,
+            Preserve::No { .. } => false,
             Preserve::Yes { .. } => true,
+        }
+    }
+
+    #[cfg(unix)]
+    fn preserve_mode(&self) -> (bool, bool) {
+        match self.attributes.mode {
+            Preserve::No { explicit } => match explicit {
+                true => (false, true),
+                false => (false, false),
+            },
+            Preserve::Yes { .. } => (true, false),
         }
     }
 
@@ -1299,7 +1314,7 @@ impl OverwriteMode {
 /// If it's required, then the error is thrown.
 fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<()> {
     match p {
-        Preserve::No => {}
+        Preserve::No { .. } => {}
         Preserve::Yes { required } => {
             let result = f();
             if *required {
@@ -1736,15 +1751,10 @@ fn copy_file(
         let mut permissions = source_metadata.permissions();
         #[cfg(unix)]
         {
-            use uucore::mode::get_umask;
-
-            let mut mode = permissions.mode();
-
-            // remove sticky bit, suid and gid bit
-            const SPECIAL_PERMS_MASK: u32 = 0o7000;
-            mode &= !SPECIAL_PERMS_MASK;
+            let mut mode = handle_no_preserve_mode(options, permissions.mode());
 
             // apply umask
+            use uucore::mode::get_umask;
             mode &= !get_umask();
 
             permissions.set_mode(mode);
@@ -1871,6 +1881,49 @@ fn copy_file(
     }
 
     Ok(())
+}
+
+#[cfg(unix)]
+fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
+    let (is_preserve_mode, is_explicit_no_preserve_mode) = options.preserve_mode();
+    if !is_preserve_mode {
+        use libc::{
+            S_IRGRP, S_IROTH, S_IRUSR, S_IRWXG, S_IRWXO, S_IRWXU, S_IWGRP, S_IWOTH, S_IWUSR,
+        };
+
+        #[cfg(not(any(
+            target_os = "android",
+            target_os = "macos",
+            target_os = "macos-12",
+            target_os = "freebsd",
+        )))]
+        {
+            const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+            const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
+            match is_explicit_no_preserve_mode {
+                true => return MODE_RW_UGO,
+                false => return org_mode & S_IRWXUGO,
+            };
+        }
+
+        #[cfg(any(
+            target_os = "android",
+            target_os = "macos",
+            target_os = "macos-12",
+            target_os = "freebsd",
+        ))]
+        {
+            const MODE_RW_UGO: u32 =
+                (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+            const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
+            match is_explicit_no_preserve_mode {
+                true => return MODE_RW_UGO,
+                false => return org_mode & S_IRWXUGO,
+            };
+        }
+    }
+
+    org_mode
 }
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
