@@ -22,6 +22,8 @@ jobs:
     - name: Install `cargo-fuzz`
       run: cargo install cargo-fuzz
     - uses: Swatinem/rust-cache@v2
+      with:
+        key: "cargo-fuzz-cache-key"
     - name: Run `cargo-fuzz build`
       run: cargo +nightly fuzz build
 
@@ -50,6 +52,8 @@ jobs:
     - name: Install `cargo-fuzz`
       run: cargo install cargo-fuzz
     - uses: Swatinem/rust-cache@v2
+      with:
+        key: "cargo-fuzz-cache-key"
     - name: Restore Cached Corpus
       uses: actions/cache/restore@v3
       with:
