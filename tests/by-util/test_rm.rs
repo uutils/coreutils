@@ -615,7 +615,6 @@ fn test_rm_force_prompts_order() {
 }
 
 #[test]
-#[ignore = "issue #3722"]
 fn test_rm_directory_rights_rm1() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir_all("b/a/p");
