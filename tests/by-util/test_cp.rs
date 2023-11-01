@@ -3232,6 +3232,7 @@ fn test_cp_archive_on_directory_ending_dot() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
 fn test_cp_debug_default() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3259,6 +3260,7 @@ fn test_cp_debug_default() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
 fn test_cp_debug_multiple_default() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
