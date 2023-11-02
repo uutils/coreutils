@@ -261,7 +261,6 @@ impl SubParser {
                 }
                 x if legal_fields.binary_search(&x).is_ok() => {
                     self.field_char = Some(ch);
-                    self.text_so_far.push(ch);
                     break;
                 }
                 x if specifiers.binary_search(&x).is_ok() => {
