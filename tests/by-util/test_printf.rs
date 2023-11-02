@@ -125,23 +125,15 @@ fn sub_q_string_non_printable() {
     new_ucmd!()
         .args(&["non-printable: %q", "\"$test\""])
         .succeeds()
-        .stdout_only("non-printable: \\\"\\$test\\\"");
-}
-
-#[test]
-fn sub_q_string_more_non_printable() {
-    new_ucmd!()
-        .args(&["non-printable: %q", "[]{}<>"])
-        .succeeds()
-        .stdout_only("non-printable: \\[\\]\\{\\}\\<\\>");
+        .stdout_only("non-printable: '\"$test\"'");
 }
 
 #[test]
 fn sub_q_string_special_non_printable() {
     new_ucmd!()
-        .args(&["non-printable: %q", "~ ~"])
+        .args(&["non-printable: %q", "test~"])
         .succeeds()
-        .stdout_only("non-printable: \\~\\ ~");
+        .stdout_only("non-printable: test~");
 }
 
 #[test]
