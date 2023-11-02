@@ -5,12 +5,14 @@
 
 // spell-checker:ignore (vars/api) fcntl setrlimit setitimer
 // spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGPIPE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VTALRM XCPU XFSZ
+use crate::concat_arrays;
 #[cfg(unix)]
 use nix::errno::Errno;
 #[cfg(unix)]
 use nix::sys::signal::{
     signal, SigHandler::SigDfl, SigHandler::SigIgn, Signal::SIGINT, Signal::SIGPIPE,
 };
+
 pub static DEFAULT_SIGNAL: usize = 15;
 
 /*
@@ -230,8 +232,8 @@ pub static ALL_SIGNALS: [&str; 33] = [
      SIGRTMAX     ((int)_sysconf(_SC_SIGRT_MAX)) last realtime signal
 */
 
-#[cfg(target_os = "solaris")]
-pub static ALL_SIGNALS: [&str; 46] = [
+#[cfg(any(target_os = "solaris", target_os = "illumos"))]
+static _SOLARIS_COMMON_SIGNALS: [&str; 46] = [
     "HUP",
     "INT",
     "QUIT",
@@ -279,6 +281,9 @@ pub static ALL_SIGNALS: [&str; 46] = [
     "RTMIN",
     "RTMAX",
 ];
+
+#[cfg(target_os = "solaris")]
+pub static ALL_SIGNALS: [&str; 46] = _SOLARIS_COMMON_SIGNALS;
 
 /*
 
@@ -287,55 +292,15 @@ pub static ALL_SIGNALS: [&str; 46] = [
 */
 
 #[cfg(target_os = "illumos")]
-pub static ALL_SIGNALS: [&str; 47] = [
-    "HUP",
-    "INT",
-    "QUIT",
-    "ILL",
-    "TRAP",
-    "IOT",
-    "ABRT",
-    "EMT",
-    "FPE",
-    "KILL",
-    "BUS",
-    "SEGV",
-    "SYS",
-    "PIPE",
-    "ALRM",
-    "TERM",
-    "USR1",
-    "USR2",
-    "CLD",
-    "CHLD",
-    "PWR",
-    "WINCH",
-    "URG",
-    "POLL",
-    "IO",
-    "STOP",
-    "TSTP",
-    "CONT",
-    "TTIN",
-    "TTOU",
-    "VTALRM",
-    "PROF",
-    "XCPU",
-    "XFSZ",
-    "WAITING",
-    "LWP",
-    "AIOCANCEL",
-    "FREEZE",
-    "THAW",
-    "CANCEL",
-    "LOST",
-    "XRES",
-    "JVM1",
-    "JVM2",
-    "INFO",
-    "RTMIN",
-    "RTMAX",
-];
+static _ILLUMOS_SPECIFIC_SIGNALS: [&str; 1] = ["LWP"];
+#[cfg(target_os = "illumos")]
+pub static ALL_SIGNALS: [&str; 47] = concat_arrays!(
+    "",
+    46,
+    _SOLARIS_COMMON_SIGNALS,
+    1,
+    _ILLUMOS_SPECIFIC_SIGNALS
+);
 
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     if let Ok(value) = signal_name_or_value.parse() {
