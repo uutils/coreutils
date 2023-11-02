@@ -186,7 +186,7 @@ All string fields have a 'max width' parameter
 
 * `%q`:  escaped string - the string in a format that can be reused as input by most shells.
       Non-printable characters are escaped with the POSIX proposed ‘$''’ syntax,
-      and shell metacharacters are quoted appropriately.
+      and shell meta-characters are quoted appropriately.
       This is an equivalent format to ls --quoting=shell-escape output.
 
 #### CHAR SUBSTITUTIONS
