@@ -247,11 +247,14 @@ fn test_split_additional_suffix() {
 }
 
 #[test]
-fn test_additional_suffix_no_slash() {
+fn test_additional_suffix_dir_separator() {
+    #[cfg(unix)]
     new_ucmd!()
         .args(&["--additional-suffix", "a/b"])
         .fails()
         .usage_error("invalid suffix 'a/b', contains directory separator");
+
+    #[cfg(windows)]
     new_ucmd!()
         .args(&["--additional-suffix", "a\\b"])
         .fails()

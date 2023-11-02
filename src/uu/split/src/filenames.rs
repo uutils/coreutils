@@ -40,6 +40,7 @@ use crate::{
 };
 use clap::ArgMatches;
 use std::fmt;
+use std::path::is_separator;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 
@@ -230,7 +231,7 @@ impl Suffix {
             .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
             .unwrap()
             .to_string();
-        if additional.contains('/') || additional.contains('\\') {
+        if additional.chars().any(is_separator) {
             return Err(SuffixError::ContainsSeparator(additional));
         }
 
