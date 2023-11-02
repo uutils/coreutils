@@ -113,6 +113,15 @@ fn sub_b_string_handle_escapes() {
 }
 
 #[test]
+fn sub_b_string_validate_field_params() {
+    new_ucmd!()
+        .args(&["hello %7b", "world"])
+        .run()
+        .stdout_is("hello ")
+        .stderr_is("printf: %7b: invalid conversion specification\n");
+}
+
+#[test]
 fn sub_b_string_ignore_subs() {
     new_ucmd!()
         .args(&["hello %b", "world %% %i"])
@@ -126,6 +135,15 @@ fn sub_q_string_non_printable() {
         .args(&["non-printable: %q", "\"$test\""])
         .succeeds()
         .stdout_only("non-printable: '\"$test\"'");
+}
+
+#[test]
+fn sub_q_string_validate_field_params() {
+    new_ucmd!()
+        .args(&["hello %7q", "world"])
+        .run()
+        .stdout_is("hello ")
+        .stderr_is("printf: %7q: invalid conversion specification\n");
 }
 
 #[test]
