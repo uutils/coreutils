@@ -332,7 +332,7 @@ impl SubParser {
         if (field_char == 's' && self.min_width_tmp == Some(String::from("0")))
             || (field_char == 'c'
                 && (self.min_width_tmp == Some(String::from("0")) || self.past_decimal))
-            || (field_char == 'b'
+            || ((field_char == 'b' || field_char == 'q')
                 && (self.min_width_tmp.is_some()
                     || self.past_decimal
                     || self.second_field_tmp.is_some()))
@@ -406,20 +406,14 @@ impl Sub {
                                 UnescapedText::from_it_core(writer, &mut a_it, true);
                                 None
                             }
-                            'q' => {
-                                let arg_string = match field.second_field {
-                                    Some(max) => String::from(&arg_string[..max as usize]),
-                                    None => arg_string.clone(),
-                                };
-                                Some(escape_name(
-                                    arg_string.as_ref(),
-                                    &QuotingStyle::Shell {
-                                        escape: true,
-                                        always_quote: false,
-                                        show_control: false,
-                                    },
-                                ))
-                            }
+                            'q' => Some(escape_name(
+                                arg_string.as_ref(),
+                                &QuotingStyle::Shell {
+                                    escape: true,
+                                    always_quote: false,
+                                    show_control: false,
+                                },
+                            )),
                             // get opt<char> of first val
                             // and map it to opt<String>
                             'c' => arg_string.chars().next().map(|x| x.to_string()),
