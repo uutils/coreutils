@@ -10,6 +10,7 @@
 //! Subs which have numeric field chars make use of the num_format
 //! submodule
 use crate::error::{UError, UResult};
+use crate::quoting_style::{escape_name, QuotingStyle};
 use itertools::{put_back_n, PutBackN};
 use std::error::Error;
 use std::fmt::Display;
@@ -406,32 +407,18 @@ impl Sub {
                                 None
                             }
                             'q' => {
-                                let mut non_printable_chars = [
-                                    '`', '#', '$', '^', '&', '*', '(', ')', '[', ']', '\\', '{',
-                                    '}', '|', ';', '\'', '"', '<', '>', '?', ' ',
-                                ];
-                                non_printable_chars.sort_unstable();
-
                                 let arg_string = match field.second_field {
                                     Some(max) => String::from(&arg_string[..max as usize]),
                                     None => arg_string.clone(),
                                 };
-
-                                let mut new_arg_string = String::new();
-                                // `~` is non-printable only when being the first char.
-                                if let Some(first) = arg_string.chars().peekable().peek() {
-                                    if first == &'~' {
-                                        new_arg_string.push('\\');
-                                    }
-                                }
-                                for c in arg_string.chars() {
-                                    if non_printable_chars.binary_search(&c).is_ok() {
-                                        new_arg_string.push('\\');
-                                    }
-                                    new_arg_string.push(c);
-                                }
-
-                                Some(new_arg_string)
+                                Some(escape_name(
+                                    arg_string.as_ref(),
+                                    &QuotingStyle::Shell {
+                                        escape: true,
+                                        always_quote: false,
+                                        show_control: false,
+                                    },
+                                ))
                             }
                             // get opt<char> of first val
                             // and map it to opt<String>
