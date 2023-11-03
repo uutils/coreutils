@@ -234,35 +234,3 @@ macro_rules! crash_if_err(
         }
     )
 );
-
-#[macro_export]
-macro_rules! concat_arrays {
-    ($init:expr, $len1:expr, $arr1:expr, $len2:expr, $arr2:expr) => {{
-        let mut res = [$init; $len1 + $len2];
-        let mut idx = 0;
-        let mut i = 0;
-        while i < $len1 {
-            res[idx] = $arr1[i];
-            idx += 1;
-            i += 1;
-        }
-        let mut j = 0;
-        while j < $len2 {
-            res[idx] = $arr2[j];
-            idx += 1;
-            j += 1;
-        }
-        res
-    }};
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn concat_arrays_test() {
-        static ARRAY1: [i32; 3] = [1, 2, 3];
-        static ARRAY2: [i32; 3] = [4, 5, 6];
-        static RESULT: [i32; 6] = concat_arrays!(0, 3, ARRAY1, 3, ARRAY2);
-        assert_eq!(RESULT, [1, 2, 3, 4, 5, 6]);
-    }
-}

@@ -5,8 +5,6 @@
 
 // spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable occured sysconf
 // spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGPIPE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX AIOCANCEL XRES RTMIN RTMAX
-#[cfg(any(target_os = "solaris", target_os = "illumos"))]
-use crate::concat_arrays;
 #[cfg(unix)]
 use nix::errno::Errno;
 #[cfg(unix)]
@@ -182,8 +180,9 @@ pub static ALL_SIGNALS: [&str; 33] = [
 ];
 
 /*
-
-     The following signals are defined in solaris:
+     The following signals are defined in Solaris and illumos;
+     (the signals for illumos are the same as Solaris, but illumos still has SIGLWP
+     as well as the alias for SIGLWP (SIGAIOCANCEL)):
 
      SIGHUP       1       hangup
      SIGINT       2       interrupt (rubout)
@@ -233,8 +232,14 @@ pub static ALL_SIGNALS: [&str; 33] = [
      SIGRTMAX     ((int)_sysconf(_SC_SIGRT_MAX)) last realtime signal
 */
 
+#[cfg(target_os = "solaris")]
+const SIGNALS_SIZE: usize = 46;
+
+#[cfg(target_os = "illumos")]
+const SIGNALS_SIZE: usize = 47;
+
 #[cfg(any(target_os = "solaris", target_os = "illumos"))]
-static _SOLARIS_COMMON_SIGNALS: [&str; 46] = [
+static ALL_SIGNALS: [&str; SIGNALS_SIZE] = [
     "HUP",
     "INT",
     "QUIT",
@@ -271,6 +276,8 @@ static _SOLARIS_COMMON_SIGNALS: [&str; 46] = [
     "XFSZ",
     "WAITING",
     "AIOCANCEL",
+    #[cfg(target_os = "illumos")]
+    "LWP",
     "FREEZE",
     "THAW",
     "CANCEL",
@@ -282,26 +289,6 @@ static _SOLARIS_COMMON_SIGNALS: [&str; 46] = [
     "RTMIN",
     "RTMAX",
 ];
-
-#[cfg(target_os = "solaris")]
-pub static ALL_SIGNALS: [&str; 46] = _SOLARIS_COMMON_SIGNALS;
-
-/*
-
-     The signals for illumos are the same as solaris, but still has SIGLWP as well as the alias
-     for SIGLWP (SIGAIOCANCEL):
-*/
-
-#[cfg(target_os = "illumos")]
-static _ILLUMOS_SPECIFIC_SIGNALS: [&str; 1] = ["LWP"];
-#[cfg(target_os = "illumos")]
-pub static ALL_SIGNALS: [&str; 47] = concat_arrays!(
-    "",
-    46,
-    _SOLARIS_COMMON_SIGNALS,
-    1,
-    _ILLUMOS_SPECIFIC_SIGNALS
-);
 
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     if let Ok(value) = signal_name_or_value.parse() {
