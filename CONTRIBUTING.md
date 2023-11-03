@@ -51,7 +51,13 @@ use by others:
 
 ## Design Goals
 
-todo
+We have the following goals with our development:
+
+- **Compatible**: The utilities should be a drop-in replacement for the GNU coreutils.
+- **Cross-platform**: All utilities should run on as many of the supported platforms as possible.
+- **Reliable**: The utilities should never unexpectedly fail.
+- **Performant**: Our utilities should be written in fast idiomatic Rust. We aim to match or exceed the performance of the GNU utilities.
+- **Well-tested**: We should have a lot of tests to be able to guarantee reliability and compatibility.
 
 ## How to Help
 
