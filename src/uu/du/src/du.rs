@@ -68,6 +68,7 @@ mod options {
     pub const ONE_FILE_SYSTEM: &str = "one-file-system";
     pub const DEREFERENCE: &str = "dereference";
     pub const DEREFERENCE_ARGS: &str = "dereference-args";
+    pub const NO_DEREFERENCE: &str = "no-dereference";
     pub const INODES: &str = "inodes";
     pub const EXCLUDE: &str = "exclude";
     pub const EXCLUDE_FROM: &str = "exclude-from";
@@ -824,13 +825,14 @@ pub fn uu_app() -> Command {
                 .help("follow only symlinks that are listed on the command line")
                 .action(ArgAction::SetTrue)
         )
-        // .arg(
-        //     Arg::new("no-dereference")
-        //         .short('P')
-        //         .long("no-dereference")
-        //         .help("don't follow any symbolic links (this is the default)")
-        //         .action(ArgAction::SetTrue),
-        // )
+         .arg(
+             Arg::new(options::NO_DEREFERENCE)
+                 .short('P')
+                 .long(options::NO_DEREFERENCE)
+                 .help("don't follow any symbolic links (this is the default)")
+                 .overrides_with(options::DEREFERENCE)
+                 .action(ArgAction::SetTrue),
+         )
         .arg(
             Arg::new(options::BLOCK_SIZE_1M)
                 .short('m')
