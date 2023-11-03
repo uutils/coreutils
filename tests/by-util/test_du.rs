@@ -336,6 +336,42 @@ fn _du_dereference(s: &str) {
     }
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_du_no_dereference() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a_dir";
+    let symlink = "symlink";
+
+    at.mkdir(dir);
+    at.symlink_dir(dir, symlink);
+
+    for arg in ["-P", "--no-dereference"] {
+        ts.ucmd()
+            .arg(arg)
+            .succeeds()
+            .stdout_contains(dir)
+            .stdout_does_not_contain(symlink);
+
+        // ensure no-dereference "wins"
+        ts.ucmd()
+            .arg("--dereference")
+            .arg(arg)
+            .succeeds()
+            .stdout_contains(dir)
+            .stdout_does_not_contain(symlink);
+
+        // ensure dereference "wins"
+        ts.ucmd()
+            .arg(arg)
+            .arg("--dereference")
+            .succeeds()
+            .stdout_contains(symlink)
+            .stdout_does_not_contain(dir);
+    }
+}
+
 #[test]
 fn test_du_inodes_basic() {
     let ts = TestScenario::new(util_name!());
