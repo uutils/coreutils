@@ -7,7 +7,6 @@
 #![allow(clippy::extra_unused_lifetimes)]
 
 use quick_error::quick_error;
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -41,8 +40,8 @@ use uucore::{backup_control, update_control};
 // requires these enum.
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
-    crash, format_usage, help_about, help_section, help_usage, prompt_yes, show_error,
-    show_warning, util_name,
+    format_usage, help_about, help_section, help_usage, prompt_yes, show_error, show_warning,
+    util_name,
 };
 
 use crate::copydir::copy_directory;
@@ -144,6 +143,7 @@ pub enum SparseMode {
 }
 
 /// The expected file type of copy target
+#[derive(Copy, Clone)]
 pub enum TargetType {
     Directory,
     File,
@@ -1195,7 +1195,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             &progress_bar,
             source,
             target,
-            &target_type,
+            target_type,
             options,
             &mut symlinked_files,
             &mut copied_files,
@@ -1220,7 +1220,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
 fn construct_dest_path(
     source_path: &Path,
     target: &Path,
-    target_type: &TargetType,
+    target_type: TargetType,
     options: &Options,
 ) -> CopyResult<PathBuf> {
     if options.no_target_dir && target.is_dir() {
@@ -1235,7 +1235,7 @@ fn construct_dest_path(
         return Err("with --parents, the destination must be a directory".into());
     }
 
-    Ok(match *target_type {
+    Ok(match target_type {
         TargetType::Directory => {
             let root = if options.parents {
                 Path::new("")
@@ -1252,7 +1252,7 @@ fn copy_source(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
     target: &Path,
-    target_type: &TargetType,
+    target_type: TargetType,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
@@ -1995,24 +1995,12 @@ fn copy_link(
 ) -> CopyResult<()> {
     // Here, we will copy the symlink itself (actually, just recreate it)
     let link = fs::read_link(source)?;
-    let dest: Cow<'_, Path> = if dest.is_dir() {
-        match source.file_name() {
-            Some(name) => dest.join(name).into(),
-            None => crash!(
-                EXIT_ERR,
-                "cannot stat {}: No such file or directory",
-                source.quote()
-            ),
-        }
-    } else {
-        // we always need to remove the file to be able to create a symlink,
-        // even if it is writeable.
-        if dest.is_symlink() || dest.is_file() {
-            fs::remove_file(dest)?;
-        }
-        dest.into()
-    };
-    symlink_file(&link, &dest, &context_for(&link, &dest), symlinked_files)
+    // we always need to remove the file to be able to create a symlink,
+    // even if it is writeable.
+    if dest.is_symlink() || dest.is_file() {
+        fs::remove_file(dest)?;
+    }
+    symlink_file(&link, dest, &context_for(&link, dest), symlinked_files)
 }
 
 /// Generate an error message if `target` is not the correct `target_type`
