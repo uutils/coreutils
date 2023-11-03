@@ -8,9 +8,10 @@
 mod filenames;
 mod number;
 mod platform;
+mod strategy;
 
-use crate::filenames::FilenameIterator;
-use crate::filenames::SuffixType;
+use crate::filenames::{FilenameIterator, Suffix, SuffixError};
+use crate::strategy::{NumberType, Strategy, StrategyError};
 use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command, ValueHint};
 use std::env;
 use std::ffi::OsString;
@@ -22,7 +23,7 @@ use std::path::Path;
 use std::u64;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
-use uucore::parse_size::{parse_size_u64, parse_size_u64_max, ParseSizeError};
+
 use uucore::uio_error;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
@@ -37,8 +38,6 @@ static OPT_NUMERIC_SUFFIXES_SHORT: &str = "-d";
 static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
 static OPT_HEX_SUFFIXES_SHORT: &str = "-x";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
-// If no suffix length is specified, default to "2" characters following GNU split behavior
-static OPT_DEFAULT_SUFFIX_LENGTH: &str = "2";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_SEPARATOR: &str = "separator";
 //The ---io and ---io-blksize parameters are consumed and ignored.
@@ -357,7 +356,6 @@ pub fn uu_app() -> Command {
                 .long(OPT_SUFFIX_LENGTH)
                 .allow_hyphen_values(true)
                 .value_name("N")
-                .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
                 .help("generate suffixes of length N (default 2)"),
         )
         .arg(
@@ -398,383 +396,13 @@ pub fn uu_app() -> Command {
         )
 }
 
-/// Sub-strategy to use when splitting a file into a specific number of chunks.
-#[derive(Debug, PartialEq)]
-enum NumberType {
-    /// Split into a specific number of chunks by byte.
-    Bytes(u64),
-
-    /// Split into a specific number of chunks by byte
-    /// but output only the *k*th chunk.
-    KthBytes(u64, u64),
-
-    /// Split into a specific number of chunks by line (approximately).
-    Lines(u64),
-
-    /// Split into a specific number of chunks by line
-    /// (approximately), but output only the *k*th chunk.
-    KthLines(u64, u64),
-
-    /// Assign lines via round-robin to the specified number of output chunks.
-    RoundRobin(u64),
-
-    /// Assign lines via round-robin to the specified number of output
-    /// chunks, but output only the *k*th chunk.
-    KthRoundRobin(u64, u64),
-}
-
-impl NumberType {
-    /// The number of chunks for this number type.
-    fn num_chunks(&self) -> u64 {
-        match self {
-            Self::Bytes(n) => *n,
-            Self::KthBytes(_, n) => *n,
-            Self::Lines(n) => *n,
-            Self::KthLines(_, n) => *n,
-            Self::RoundRobin(n) => *n,
-            Self::KthRoundRobin(_, n) => *n,
-        }
-    }
-}
-
-/// An error due to an invalid parameter to the `-n` command-line option.
-#[derive(Debug, PartialEq)]
-enum NumberTypeError {
-    /// The number of chunks was invalid.
-    ///
-    /// This can happen if the value of `N` in any of the following
-    /// command-line options is not a positive integer:
-    ///
-    /// ```ignore
-    /// -n N
-    /// -n K/N
-    /// -n l/N
-    /// -n l/K/N
-    /// -n r/N
-    /// -n r/K/N
-    /// ```
-    NumberOfChunks(String),
-
-    /// The chunk number was invalid.
-    ///
-    /// This can happen if the value of `K` in any of the following
-    /// command-line options is not a positive integer
-    /// or if `K` is 0
-    /// or if `K` is greater than `N`:
-    ///
-    /// ```ignore
-    /// -n K/N
-    /// -n l/K/N
-    /// -n r/K/N
-    /// ```
-    ChunkNumber(String),
-}
-
-impl NumberType {
-    /// Parse a `NumberType` from a string.
-    ///
-    /// The following strings are valid arguments:
-    ///
-    /// ```ignore
-    /// "N"
-    /// "K/N"
-    /// "l/N"
-    /// "l/K/N"
-    /// "r/N"
-    /// "r/K/N"
-    /// ```
-    ///
-    /// The `N` represents the number of chunks and the `K` represents
-    /// a chunk number.
-    ///
-    /// # Errors
-    ///
-    /// If the string is not one of the valid number types,
-    /// if `K` is not a nonnegative integer,
-    /// or if `K` is 0,
-    /// or if `N` is not a positive integer,
-    /// or if `K` is greater than `N`
-    /// then this function returns [`NumberTypeError`].
-    fn from(s: &str) -> Result<Self, NumberTypeError> {
-        fn is_invalid_chunk(chunk_number: u64, num_chunks: u64) -> bool {
-            chunk_number > num_chunks || chunk_number == 0
-        }
-        let parts: Vec<&str> = s.split('/').collect();
-        match &parts[..] {
-            [n_str] => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                if num_chunks > 0 {
-                    Ok(Self::Bytes(num_chunks))
-                } else {
-                    Err(NumberTypeError::NumberOfChunks(s.to_string()))
-                }
-            }
-            [k_str, n_str] if !k_str.starts_with('l') && !k_str.starts_with('r') => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size_u64(k_str)
-                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
-                if is_invalid_chunk(chunk_number, num_chunks) {
-                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
-                }
-                Ok(Self::KthBytes(chunk_number, num_chunks))
-            }
-            ["l", n_str] => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                Ok(Self::Lines(num_chunks))
-            }
-            ["l", k_str, n_str] => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size_u64(k_str)
-                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
-                if is_invalid_chunk(chunk_number, num_chunks) {
-                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
-                }
-                Ok(Self::KthLines(chunk_number, num_chunks))
-            }
-            ["r", n_str] => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                Ok(Self::RoundRobin(num_chunks))
-            }
-            ["r", k_str, n_str] => {
-                let num_chunks = parse_size_u64(n_str)
-                    .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
-                let chunk_number = parse_size_u64(k_str)
-                    .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
-                if is_invalid_chunk(chunk_number, num_chunks) {
-                    return Err(NumberTypeError::ChunkNumber(k_str.to_string()));
-                }
-                Ok(Self::KthRoundRobin(chunk_number, num_chunks))
-            }
-            _ => Err(NumberTypeError::NumberOfChunks(s.to_string())),
-        }
-    }
-}
-
-/// The strategy for breaking up the input file into chunks.
-enum Strategy {
-    /// Each chunk has the specified number of lines.
-    Lines(u64),
-
-    /// Each chunk has the specified number of bytes.
-    Bytes(u64),
-
-    /// Each chunk has as many lines as possible without exceeding the
-    /// specified number of bytes.
-    LineBytes(u64),
-
-    /// Split the file into this many chunks.
-    ///
-    /// There are several sub-strategies available, as defined by
-    /// [`NumberType`].
-    Number(NumberType),
-}
-
-/// An error when parsing a chunking strategy from command-line arguments.
-enum StrategyError {
-    /// Invalid number of lines.
-    Lines(ParseSizeError),
-
-    /// Invalid number of bytes.
-    Bytes(ParseSizeError),
-
-    /// Invalid number type.
-    NumberType(NumberTypeError),
-
-    /// Multiple chunking strategies were specified (but only one should be).
-    MultipleWays,
-}
-
-impl fmt::Display for StrategyError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Lines(e) => write!(f, "invalid number of lines: {e}"),
-            Self::Bytes(e) => write!(f, "invalid number of bytes: {e}"),
-            Self::NumberType(NumberTypeError::NumberOfChunks(s)) => {
-                write!(f, "invalid number of chunks: {s}")
-            }
-            Self::NumberType(NumberTypeError::ChunkNumber(s)) => {
-                write!(f, "invalid chunk number: {s}")
-            }
-            Self::MultipleWays => write!(f, "cannot split in more than one way"),
-        }
-    }
-}
-
-impl Strategy {
-    /// Parse a strategy from the command-line arguments.
-    fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, StrategyError> {
-        fn get_and_parse(
-            matches: &ArgMatches,
-            option: &str,
-            strategy: fn(u64) -> Strategy,
-            error: fn(ParseSizeError) -> StrategyError,
-        ) -> Result<Strategy, StrategyError> {
-            let s = matches.get_one::<String>(option).unwrap();
-            let n = parse_size_u64_max(s).map_err(error)?;
-            if n > 0 {
-                Ok(strategy(n))
-            } else {
-                Err(error(ParseSizeError::ParseFailure(s.to_string())))
-            }
-        }
-        // Check that the user is not specifying more than one strategy.
-        //
-        // Note: right now, this exact behavior cannot be handled by
-        // overrides_with_all() due to obsolete lines value option
-        match (
-            obs_lines,
-            matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine),
-            matches.value_source(OPT_BYTES) == Some(ValueSource::CommandLine),
-            matches.value_source(OPT_LINE_BYTES) == Some(ValueSource::CommandLine),
-            matches.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
-        ) {
-            (Some(v), false, false, false, false) => {
-                let v = parse_size_u64_max(v).map_err(|_| {
-                    StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
-                })?;
-                if v > 0 {
-                    Ok(Self::Lines(v))
-                } else {
-                    Err(StrategyError::Lines(ParseSizeError::ParseFailure(
-                        v.to_string(),
-                    )))
-                }
-            }
-            (None, false, false, false, false) => Ok(Self::Lines(1000)),
-            (None, true, false, false, false) => {
-                get_and_parse(matches, OPT_LINES, Self::Lines, StrategyError::Lines)
-            }
-            (None, false, true, false, false) => {
-                get_and_parse(matches, OPT_BYTES, Self::Bytes, StrategyError::Bytes)
-            }
-            (None, false, false, true, false) => get_and_parse(
-                matches,
-                OPT_LINE_BYTES,
-                Self::LineBytes,
-                StrategyError::Bytes,
-            ),
-            (None, false, false, false, true) => {
-                let s = matches.get_one::<String>(OPT_NUMBER).unwrap();
-                let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
-                Ok(Self::Number(number_type))
-            }
-            _ => Err(StrategyError::MultipleWays),
-        }
-    }
-}
-
-/// Parse the suffix type, start and length from the command-line arguments.
-/// Determine if the output file names suffix is allowed to auto-widen,
-/// i.e. go beyond suffix_length, when more output files need to be written into.
-/// Suffix auto-widening rules are:
-/// - OFF when suffix length N is specified
-///   `-a N` or `--suffix-length=N`
-/// - OFF when suffix start number N is specified using long option with value
-///   `--numeric-suffixes=N` or `--hex-suffixes=N`
-/// - Exception to the above: ON with `-n`/`--number` option (N, K/N, l/N, l/K/N, r/N, r/K/N)
-///   and suffix start < N number of files
-/// - ON when suffix start number is NOT specified
-fn suffix_from(
-    matches: &ArgMatches,
-    strategy: &Strategy,
-) -> Result<(SuffixType, usize, bool, usize), SettingsError> {
-    let suffix_type: SuffixType;
-
-    // Defaults
-    let mut suffix_start = 0;
-    let mut suffix_auto_widening = true;
-
-    // Check if the user is specifying one or more than one suffix
-    // Any combination of suffixes is allowed
-    // Since all suffixes are setup with 'overrides_with_all()' against themselves and each other,
-    // last one wins, all others are ignored
-    match (
-        matches.contains_id(OPT_NUMERIC_SUFFIXES),
-        matches.contains_id(OPT_HEX_SUFFIXES),
-        matches.get_flag(OPT_NUMERIC_SUFFIXES_SHORT),
-        matches.get_flag(OPT_HEX_SUFFIXES_SHORT),
-    ) {
-        (true, _, _, _) => {
-            suffix_type = SuffixType::Decimal;
-            let suffix_opt = matches.get_one::<String>(OPT_NUMERIC_SUFFIXES); // if option was specified, but without value - this will return None as there is no default value
-            if suffix_opt.is_some() {
-                (suffix_start, suffix_auto_widening) =
-                    handle_long_suffix_opt(suffix_opt.unwrap(), strategy, false)?;
-            }
-        }
-        (_, true, _, _) => {
-            suffix_type = SuffixType::Hexadecimal;
-            let suffix_opt = matches.get_one::<String>(OPT_HEX_SUFFIXES); // if option was specified, but without value - this will return None as there is no default value
-            if suffix_opt.is_some() {
-                (suffix_start, suffix_auto_widening) =
-                    handle_long_suffix_opt(suffix_opt.unwrap(), strategy, true)?;
-            }
-        }
-        (_, _, true, _) => suffix_type = SuffixType::Decimal, // short numeric suffix '-d'
-        (_, _, _, true) => suffix_type = SuffixType::Hexadecimal, // short hex suffix '-x'
-        _ => suffix_type = SuffixType::Alphabetic, // no numeric/hex suffix, using default alphabetic
-    }
-
-    let suffix_length_str = matches.get_one::<String>(OPT_SUFFIX_LENGTH).unwrap(); // safe to unwrap here as there is default value for this option
-    let suffix_length: usize = suffix_length_str
-        .parse()
-        .map_err(|_| SettingsError::SuffixNotParsable(suffix_length_str.to_string()))?;
-
-    // Override suffix_auto_widening if suffix length value came from command line
-    // and not from default value
-    if matches.value_source(OPT_SUFFIX_LENGTH) == Some(ValueSource::CommandLine) {
-        suffix_auto_widening = false;
-    }
-
-    Ok((
-        suffix_type,
-        suffix_start,
-        suffix_auto_widening,
-        suffix_length,
-    ))
-}
-
-/// Helper function to [`suffix_from`] function
-fn handle_long_suffix_opt(
-    suffix_opt: &String,
-    strategy: &Strategy,
-    is_hex: bool,
-) -> Result<(usize, bool), SettingsError> {
-    let suffix_start = if is_hex {
-        usize::from_str_radix(suffix_opt, 16)
-            .map_err(|_| SettingsError::SuffixNotParsable(suffix_opt.to_string()))?
-    } else {
-        suffix_opt
-            .parse::<usize>()
-            .map_err(|_| SettingsError::SuffixNotParsable(suffix_opt.to_string()))?
-    };
-
-    let suffix_auto_widening = if let Strategy::Number(ref number_type) = strategy {
-        let chunks = number_type.num_chunks();
-        (suffix_start as u64) < chunks
-    } else {
-        false
-    };
-    Ok((suffix_start, suffix_auto_widening))
-}
-
 /// Parameters that control how a file gets split.
 ///
 /// You can convert an [`ArgMatches`] instance into a [`Settings`]
 /// instance by calling [`Settings::from`].
 struct Settings {
     prefix: String,
-    suffix_type: SuffixType,
-    suffix_length: usize,
-    suffix_start: usize,
-    /// Whether or not suffix length should automatically widen
-    suffix_auto_widening: bool,
-    additional_suffix: String,
+    suffix: Suffix,
     input: String,
     /// When supplied, a shell command to output to instead of xaa, xab …
     filter: Option<String>,
@@ -799,13 +427,7 @@ enum SettingsError {
     Strategy(StrategyError),
 
     /// Invalid suffix length parameter.
-    SuffixNotParsable(String),
-
-    /// Suffix contains a directory separator, which is not allowed.
-    SuffixContainsSeparator(String),
-
-    /// Suffix is not large enough to split into specified chunks
-    SuffixTooSmall(usize),
+    Suffix(SuffixError),
 
     /// Multi-character (Invalid) separator
     MultiCharacterSeparator(String),
@@ -829,7 +451,8 @@ impl SettingsError {
     fn requires_usage(&self) -> bool {
         matches!(
             self,
-            Self::Strategy(StrategyError::MultipleWays) | Self::SuffixContainsSeparator(_)
+            Self::Strategy(StrategyError::MultipleWays)
+                | Self::Suffix(SuffixError::ContainsSeparator(_))
         )
     }
 }
@@ -838,19 +461,13 @@ impl fmt::Display for SettingsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Strategy(e) => e.fmt(f),
-            Self::SuffixNotParsable(s) => write!(f, "invalid suffix length: {}", s.quote()),
-            Self::SuffixTooSmall(i) => write!(f, "the suffix length needs to be at least {i}"),
+            Self::Suffix(e) => e.fmt(f),
             Self::MultiCharacterSeparator(s) => {
                 write!(f, "multi-character separator {}", s.quote())
             }
             Self::MultipleSeparatorCharacters => {
                 write!(f, "multiple separator characters specified")
             }
-            Self::SuffixContainsSeparator(s) => write!(
-                f,
-                "invalid suffix {}, contains directory separator",
-                s.quote()
-            ),
             Self::FilterWithKthChunkNumber => {
                 write!(f, "--filter does not process a chunk extracted to stdout")
             }
@@ -866,27 +483,8 @@ impl fmt::Display for SettingsError {
 impl Settings {
     /// Parse a strategy from the command-line arguments.
     fn from(matches: &ArgMatches, obs_lines: &Option<String>) -> Result<Self, SettingsError> {
-        let additional_suffix = matches
-            .get_one::<String>(OPT_ADDITIONAL_SUFFIX)
-            .unwrap()
-            .to_string();
-        if additional_suffix.contains('/') {
-            return Err(SettingsError::SuffixContainsSeparator(additional_suffix));
-        }
         let strategy = Strategy::from(matches, obs_lines).map_err(SettingsError::Strategy)?;
-        let (suffix_type, suffix_start, suffix_auto_widening, suffix_length) =
-            suffix_from(matches, &strategy)?;
-
-        if let Strategy::Number(ref number_type) = strategy {
-            let chunks = number_type.num_chunks();
-            if !suffix_auto_widening {
-                let required_suffix_length =
-                    (chunks as f64).log(suffix_type.radix() as f64).ceil() as usize;
-                if suffix_length < required_suffix_length {
-                    return Err(SettingsError::SuffixTooSmall(required_suffix_length));
-                }
-            }
-        }
+        let suffix = Suffix::from(matches, &strategy).map_err(SettingsError::Suffix)?;
 
         // Make sure that separator is only one UTF8 character (if specified)
         // defaults to '\n' - newline character
@@ -908,17 +506,13 @@ impl Settings {
         };
 
         let result = Self {
-            suffix_length,
-            suffix_type,
-            suffix_start,
-            suffix_auto_widening,
-            additional_suffix,
+            prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().to_owned(),
+            suffix,
+            input: matches.get_one::<String>(ARG_INPUT).unwrap().to_owned(),
+            filter: matches.get_one::<String>(OPT_FILTER).map(|s| s.to_owned()),
+            strategy,
             verbose: matches.value_source(OPT_VERBOSE) == Some(ValueSource::CommandLine),
             separator,
-            strategy,
-            input: matches.get_one::<String>(ARG_INPUT).unwrap().to_owned(),
-            prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().to_owned(),
-            filter: matches.get_one::<String>(OPT_FILTER).map(|s| s.to_owned()),
             elide_empty_files: matches.get_flag(OPT_ELIDE_EMPTY_FILES),
         };
 
@@ -1035,14 +629,7 @@ struct ByteChunkWriter<'a> {
 
 impl<'a> ByteChunkWriter<'a> {
     fn new(chunk_size: u64, settings: &'a Settings) -> UResult<ByteChunkWriter<'a>> {
-        let mut filename_iterator = FilenameIterator::new(
-            &settings.prefix,
-            &settings.additional_suffix,
-            settings.suffix_length,
-            settings.suffix_type,
-            settings.suffix_start,
-            settings.suffix_auto_widening,
-        )?;
+        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
         let filename = filename_iterator
             .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
@@ -1166,14 +753,7 @@ struct LineChunkWriter<'a> {
 
 impl<'a> LineChunkWriter<'a> {
     fn new(chunk_size: u64, settings: &'a Settings) -> UResult<LineChunkWriter<'a>> {
-        let mut filename_iterator = FilenameIterator::new(
-            &settings.prefix,
-            &settings.additional_suffix,
-            settings.suffix_length,
-            settings.suffix_type,
-            settings.suffix_start,
-            settings.suffix_auto_widening,
-        )?;
+        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
         let filename = filename_iterator
             .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
@@ -1280,14 +860,7 @@ struct LineBytesChunkWriter<'a> {
 
 impl<'a> LineBytesChunkWriter<'a> {
     fn new(chunk_size: u64, settings: &'a Settings) -> UResult<LineBytesChunkWriter<'a>> {
-        let mut filename_iterator = FilenameIterator::new(
-            &settings.prefix,
-            &settings.additional_suffix,
-            settings.suffix_length,
-            settings.suffix_type,
-            settings.suffix_start,
-            settings.suffix_auto_widening,
-        )?;
+        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
         let filename = filename_iterator
             .next()
             .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
@@ -1504,14 +1077,7 @@ where
         .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
 
     // This object is responsible for creating the filename for each chunk.
-    let mut filename_iterator = FilenameIterator::new(
-        &settings.prefix,
-        &settings.additional_suffix,
-        settings.suffix_length,
-        settings.suffix_type,
-        settings.suffix_start,
-        settings.suffix_auto_widening,
-    )?;
+    let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
 
     // Create one writer for each chunk. This will create each
     // of the underlying files (if not in `--filter` mode).
@@ -1676,14 +1242,7 @@ where
     let chunk_size = (num_bytes / num_chunks) as usize;
 
     // This object is responsible for creating the filename for each chunk.
-    let mut filename_iterator = FilenameIterator::new(
-        &settings.prefix,
-        &settings.additional_suffix,
-        settings.suffix_length,
-        settings.suffix_type,
-        settings.suffix_start,
-        settings.suffix_auto_widening,
-    )?;
+    let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
 
     // Create one writer for each chunk. This will create each
     // of the underlying files (if not in `--filter` mode).
@@ -1818,15 +1377,8 @@ where
     R: BufRead,
 {
     // This object is responsible for creating the filename for each chunk.
-    let mut filename_iterator = FilenameIterator::new(
-        &settings.prefix,
-        &settings.additional_suffix,
-        settings.suffix_length,
-        settings.suffix_type,
-        settings.suffix_start,
-        settings.suffix_auto_widening,
-    )
-    .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
+    let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)
+        .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
 
     // Create one writer for each chunk. This will create each
     // of the underlying files (if not in `--filter` mode).
@@ -2001,103 +1553,5 @@ fn split(settings: &Settings) -> UResult<()> {
                 },
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    use crate::NumberType;
-    use crate::NumberTypeError;
-
-    #[test]
-    fn test_number_type_from() {
-        assert_eq!(NumberType::from("123").unwrap(), NumberType::Bytes(123));
-        assert_eq!(NumberType::from("l/123").unwrap(), NumberType::Lines(123));
-        assert_eq!(
-            NumberType::from("l/123/456").unwrap(),
-            NumberType::KthLines(123, 456)
-        );
-        assert_eq!(
-            NumberType::from("r/123").unwrap(),
-            NumberType::RoundRobin(123)
-        );
-        assert_eq!(
-            NumberType::from("r/123/456").unwrap(),
-            NumberType::KthRoundRobin(123, 456)
-        );
-    }
-
-    #[test]
-    #[allow(clippy::cognitive_complexity)]
-    fn test_number_type_from_error() {
-        assert_eq!(
-            NumberType::from("xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
-        );
-        assert_eq!(
-            NumberType::from("l/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
-        );
-        assert_eq!(
-            NumberType::from("l/123/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
-        );
-        assert_eq!(
-            NumberType::from("l/abc/456").unwrap_err(),
-            NumberTypeError::ChunkNumber("abc".to_string())
-        );
-        assert_eq!(
-            NumberType::from("l/456/123").unwrap_err(),
-            NumberTypeError::ChunkNumber("456".to_string())
-        );
-        assert_eq!(
-            NumberType::from("r/456/123").unwrap_err(),
-            NumberTypeError::ChunkNumber("456".to_string())
-        );
-        assert_eq!(
-            NumberType::from("456/123").unwrap_err(),
-            NumberTypeError::ChunkNumber("456".to_string())
-        );
-        // In GNU split, the number of chunks get precedence:
-        //
-        //     $ split -n l/abc/xyz
-        //     split: invalid number of chunks: ‘xyz’
-        //
-        assert_eq!(
-            NumberType::from("l/abc/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
-        );
-        assert_eq!(
-            NumberType::from("r/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
-        );
-        assert_eq!(
-            NumberType::from("r/123/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
-        );
-        assert_eq!(
-            NumberType::from("r/abc/456").unwrap_err(),
-            NumberTypeError::ChunkNumber("abc".to_string())
-        );
-        // In GNU split, the number of chunks get precedence:
-        //
-        //     $ split -n r/abc/xyz
-        //     split: invalid number of chunks: ‘xyz’
-        //
-        assert_eq!(
-            NumberType::from("r/abc/xyz").unwrap_err(),
-            NumberTypeError::NumberOfChunks("xyz".to_string())
-        );
-    }
-
-    #[test]
-    fn test_number_type_num_chunks() {
-        assert_eq!(NumberType::from("123").unwrap().num_chunks(), 123);
-        assert_eq!(NumberType::from("123/456").unwrap().num_chunks(), 456);
-        assert_eq!(NumberType::from("l/123").unwrap().num_chunks(), 123);
-        assert_eq!(NumberType::from("l/123/456").unwrap().num_chunks(), 456);
-        assert_eq!(NumberType::from("r/123").unwrap().num_chunks(), 123);
-        assert_eq!(NumberType::from("r/123/456").unwrap().num_chunks(), 456);
     }
 }
