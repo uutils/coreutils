@@ -577,9 +577,7 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
 ///
 /// A QuotingStyle variant representing the quoting style to use.
 fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> QuotingStyle {
-    let opt_quoting_style = options
-        .get_one::<String>(options::QUOTING_STYLE)
-        .map(|cmd_line_qs| cmd_line_qs.to_owned());
+    let opt_quoting_style = options.get_one::<String>(options::QUOTING_STYLE).cloned();
 
     if let Some(style) = opt_quoting_style {
         match style.as_str() {
@@ -788,9 +786,7 @@ impl Config {
             match parse_size_u64(&raw_bs.to_string_lossy()) {
                 Ok(size) => Some(size),
                 Err(_) => {
-                    show!(LsError::BlockSizeParseError(
-                        cmd_line_bs.unwrap().to_owned()
-                    ));
+                    show!(LsError::BlockSizeParseError(cmd_line_bs.unwrap().clone()));
                     None
                 }
             }
@@ -3056,7 +3052,7 @@ fn display_file_name(
                             target_data.must_dereference,
                         ) {
                             Ok(md) => md,
-                            Err(_) => path.md(out).unwrap().to_owned(),
+                            Err(_) => path.md(out).unwrap().clone(),
                         };
 
                         name.push_str(&color_name(
@@ -3073,11 +3069,7 @@ fn display_file_name(
                 }
             }
             Err(err) => {
-                show!(LsError::IOErrorContext(
-                    err,
-                    path.p_buf.to_path_buf(),
-                    false
-                ));
+                show!(LsError::IOErrorContext(err, path.p_buf.clone(), false));
             }
         }
     }
@@ -3087,7 +3079,7 @@ fn display_file_name(
     if config.context {
         if let Some(pad_count) = prefix_context {
             let security_context = if matches!(config.format, Format::Commas) {
-                path.security_context.to_owned()
+                path.security_context.clone()
             } else {
                 pad_left(&path.security_context, pad_count)
             };

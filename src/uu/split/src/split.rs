@@ -531,10 +531,10 @@ impl Settings {
         };
 
         let result = Self {
-            prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().to_owned(),
+            prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().clone(),
             suffix,
-            input: matches.get_one::<String>(ARG_INPUT).unwrap().to_owned(),
-            filter: matches.get_one::<String>(OPT_FILTER).map(|s| s.to_owned()),
+            input: matches.get_one::<String>(ARG_INPUT).unwrap().clone(),
+            filter: matches.get_one::<String>(OPT_FILTER).cloned(),
             strategy,
             verbose: matches.value_source(OPT_VERBOSE) == Some(ValueSource::CommandLine),
             separator,

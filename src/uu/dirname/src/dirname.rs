@@ -30,7 +30,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let dirnames: Vec<String> = matches
         .get_many::<String>(options::DIR)
         .unwrap_or_default()
-        .map(|s| s.to_owned())
+        .cloned()
         .collect();
 
     if dirnames.is_empty() {
