@@ -400,7 +400,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         if s.is_empty() {
                             Some("\0".to_owned())
                         } else {
-                            Some(s.to_owned())
+                            Some(s.clone())
                         }
                     }
                     None => None,
@@ -491,7 +491,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let files: Vec<String> = matches
         .get_many::<String>(options::FILE)
         .unwrap_or_default()
-        .map(|s| s.to_owned())
+        .cloned()
         .collect();
 
     match mode_parse {

@@ -75,7 +75,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let headcounts = matches
                 .get_many::<String>(options::HEAD_COUNT)
                 .unwrap_or_default()
-                .map(|s| s.to_owned())
+                .cloned()
                 .collect();
             match parse_head_count(headcounts) {
                 Ok(val) => val,

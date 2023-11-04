@@ -54,7 +54,7 @@ impl Config {
                             format!("{}: No such file or directory", name.maybe_quote()),
                         ));
                     }
-                    Some(name.to_owned())
+                    Some(name.clone())
                 }
             }
             None => None,

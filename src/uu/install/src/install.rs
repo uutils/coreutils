@@ -375,9 +375,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     };
 
     let backup_mode = backup_control::determine_backup_mode(matches)?;
-    let target_dir = matches
-        .get_one::<String>(OPT_TARGET_DIRECTORY)
-        .map(|d| d.to_owned());
+    let target_dir = matches.get_one::<String>(OPT_TARGET_DIRECTORY).cloned();
 
     let preserve_timestamps = matches.get_flag(OPT_PRESERVE_TIMESTAMPS);
     let compare = matches.get_flag(OPT_COMPARE);
@@ -593,7 +591,7 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         let source = sources.first().unwrap();
 
         if source.is_dir() {
-            return Err(InstallError::OmittingDirectory(source.to_path_buf()).into());
+            return Err(InstallError::OmittingDirectory(source.clone()).into());
         }
 
         if target.is_file() || is_new_file_path(&target) {
@@ -628,7 +626,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         }
 
         if sourcepath.is_dir() {
-            let err = InstallError::OmittingDirectory(sourcepath.to_path_buf());
+            let err = InstallError::OmittingDirectory(sourcepath.clone());
             show!(err);
             continue;
         }
@@ -701,12 +699,9 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
         if let Some(ref backup_path) = backup_path {
             // TODO!!
             if let Err(err) = fs::rename(to, backup_path) {
-                return Err(InstallError::BackupFailed(
-                    to.to_path_buf(),
-                    backup_path.to_path_buf(),
-                    err,
-                )
-                .into());
+                return Err(
+                    InstallError::BackupFailed(to.to_path_buf(), backup_path.clone(), err).into(),
+                );
             }
         }
         Ok(backup_path)

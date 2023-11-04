@@ -35,7 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let bytes = matches.get_flag(options::BYTES);
     let spaces = matches.get_flag(options::SPACES);
     let poss_width = match matches.get_one::<String>(options::WIDTH) {
-        Some(v) => Some(v.to_owned()),
+        Some(v) => Some(v.clone()),
         None => obs_width,
     };
 
@@ -50,7 +50,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let files = match matches.get_many::<String>(options::FILE) {
-        Some(v) => v.map(|v| v.to_owned()).collect(),
+        Some(v) => v.cloned().collect(),
         None => vec!["-".to_owned()],
     };
 
