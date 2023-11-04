@@ -69,6 +69,8 @@ use std::convert::{AsRef, From};
     target_os = "openbsd",
     target_os = "linux",
     target_os = "android",
+    target_os = "illumos",
+    target_os = "solaris",
 ))]
 use std::ffi::CStr;
 #[cfg(not(windows))]
@@ -309,7 +311,7 @@ impl MountInfo {
     target_os = "freebsd",
     target_vendor = "apple",
     target_os = "netbsd",
-    target_os = "openbsd"
+    target_os = "openbsd",
 ))]
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
@@ -615,6 +617,8 @@ impl FsMeta for StatFs {
             not(target_vendor = "apple"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_os = "illumos"),
+            not(target_os = "solaris"),
             not(target_arch = "s390x"),
             target_pointer_width = "64"
         ))]
@@ -630,7 +634,12 @@ impl FsMeta for StatFs {
             )
         ))]
         return self.f_bsize.into();
-        #[cfg(any(target_env = "musl", target_os = "freebsd"))]
+        #[cfg(any(
+            target_env = "musl",
+            target_os = "freebsd",
+            target_os = "illumos",
+            target_os = "solaris"
+        ))]
         return self.f_bsize.try_into().unwrap();
     }
     fn total_blocks(&self) -> u64 {
