@@ -4,6 +4,11 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore mydir
+// spell-checker:ignore samedir
+// spell-checker:ignore Samedir
+// spell-checker:ignore samefile
+// spell-checker:ignore Samefile
+
 use crate::common::util::TestScenario;
 use filetime::FileTime;
 use std::thread::sleep;
@@ -407,7 +412,7 @@ fn test_mv_same_file() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_same_hardlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a";
@@ -517,7 +522,7 @@ fn test_mv_same_hardlink_backup_simple() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_mv_same_hardlink_backup_simple_destroy() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_same_file_a~";
@@ -1441,6 +1446,30 @@ fn test_mv_dir_into_file_where_both_are_files() {
         .arg("b")
         .fails()
         .stderr_contains("mv: cannot stat 'a/': Not a directory");
+}
+
+#[test]
+fn test_mv_same_case_insensitive_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file1 = "samefile.txt";
+    at.touch(file1);
+    #[cfg(target_os = "linux")]
+    scene.ucmd().arg(file1).arg("Samefile.txt").succeeds();
+    #[cfg(not(target_os = "linux"))]
+    scene.ucmd().arg(file1).arg("Samefile.txt").fails();
+}
+#[test]
+#[cfg(not(target_os = "macos"))]
+fn test_mv_same_case_insensitive_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file1 = "samedir";
+    at.mkdir(file1);
+    #[cfg(target_os = "linux")]
+    scene.ucmd().arg(file1).arg("Samedir").succeeds();
+    #[cfg(not(target_os = "linux"))]
+    scene.ucmd().arg(file1).arg("Samedir").fails();
 }
 
 // Todo:

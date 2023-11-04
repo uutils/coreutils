@@ -10,6 +10,7 @@ mod error;
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use same_file::is_same_file;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -325,8 +326,9 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         });
     }
 
+    let is_source_same_target = is_same_file(source, target).unwrap_or(false);
     if (source.eq(target)
-        || are_hardlinks_to_same_file(source, target)
+        || are_hardlinks_to_same_file(source, target, is_source_same_target)
         || are_hardlinks_or_one_way_symlink_to_same_file(source, target))
         && opts.backup == BackupMode::NoBackup
     {

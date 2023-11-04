@@ -2683,6 +2683,7 @@ dependencies = [
  "clap",
  "fs_extra",
  "indicatif",
+ "same-file",
  "uucore",
 ]
 

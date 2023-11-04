@@ -650,9 +650,12 @@ pub fn is_symlink_loop(path: &Path) -> bool {
 }
 
 #[cfg(not(unix))]
-// Hard link comparison is not supported on non-Unix platforms
-pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
-    false
+pub fn are_hardlinks_to_same_file(
+    _source: &Path,
+    _target: &Path,
+    is_source_same_target: bool,
+) -> bool {
+    is_source_same_target
 }
 
 /// Checks if two paths are hard links to the same file.
@@ -666,7 +669,11 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 ///
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
 #[cfg(unix)]
-pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
+pub fn are_hardlinks_to_same_file(
+    source: &Path,
+    target: &Path,
+    _is_source_same_target: bool,
+) -> bool {
     let source_metadata = match fs::symlink_metadata(source) {
         Ok(metadata) => metadata,
         Err(_) => return false,
@@ -874,7 +881,7 @@ mod tests {
         let path1 = temp_file.path();
         let path2 = temp_file.path();
 
-        assert!(are_hardlinks_to_same_file(&path1, &path2));
+        assert!(are_hardlinks_to_same_file(&path1, &path2, false));
     }
 
     #[cfg(unix)]
@@ -889,7 +896,7 @@ mod tests {
         let path1 = temp_file1.path();
         let path2 = temp_file2.path();
 
-        assert!(!are_hardlinks_to_same_file(&path1, &path2));
+        assert!(!are_hardlinks_to_same_file(&path1, &path2, false));
     }
 
     #[cfg(unix)]
@@ -902,7 +909,7 @@ mod tests {
         let path2 = temp_file.path().with_extension("hardlink");
         fs::hard_link(&path1, &path2).unwrap();
 
-        assert!(are_hardlinks_to_same_file(&path1, &path2));
+        assert!(are_hardlinks_to_same_file(&path1, &path2, false));
     }
 
     #[cfg(unix)]
