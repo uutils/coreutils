@@ -3,14 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars/api) fcntl setrlimit setitimer
-// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGPIPE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VTALRM XCPU XFSZ
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable occured sysconf
+// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGPIPE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX AIOCANCEL XRES RTMIN RTMAX
 #[cfg(unix)]
 use nix::errno::Errno;
 #[cfg(unix)]
 use nix::sys::signal::{
     signal, SigHandler::SigDfl, SigHandler::SigIgn, Signal::SIGINT, Signal::SIGPIPE,
 };
+
 pub static DEFAULT_SIGNAL: usize = 15;
 
 /*
@@ -176,6 +177,117 @@ pub static ALL_SIGNALS: [&str; 33] = [
     "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
     "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
     "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2", "THR",
+];
+
+/*
+     The following signals are defined in Solaris and illumos;
+     (the signals for illumos are the same as Solaris, but illumos still has SIGLWP
+     as well as the alias for SIGLWP (SIGAIOCANCEL)):
+
+     SIGHUP       1       hangup
+     SIGINT       2       interrupt (rubout)
+     SIGQUIT      3       quit (ASCII FS)
+     SIGILL       4       illegal instruction (not reset when caught)
+     SIGTRAP      5       trace trap (not reset when caught)
+     SIGIOT       6       IOT instruction
+     SIGABRT      6       used by abort, replace SIGIOT in the future
+     SIGEMT       7       EMT instruction
+     SIGFPE       8       floating point exception
+     SIGKILL      9       kill (cannot be caught or ignored)
+     SIGBUS       10      bus error
+     SIGSEGV      11      segmentation violation
+     SIGSYS       12      bad argument to system call
+     SIGPIPE      13      write on a pipe with no one to read it
+     SIGALRM      14      alarm clock
+     SIGTERM      15      software termination signal from kill
+     SIGUSR1      16      user defined signal 1
+     SIGUSR2      17      user defined signal 2
+     SIGCLD       18      child status change
+     SIGCHLD      18      child status change alias (POSIX)
+     SIGPWR       19      power-fail restart
+     SIGWINCH     20      window size change
+     SIGURG       21      urgent socket condition
+     SIGPOLL      22      pollable event occured
+     SIGIO        SIGPOLL socket I/O possible (SIGPOLL alias)
+     SIGSTOP      23      stop (cannot be caught or ignored)
+     SIGTSTP      24      user stop requested from tty
+     SIGCONT      25      stopped process has been continued
+     SIGTTIN      26      background tty read attempted
+     SIGTTOU      27      background tty write attempted
+     SIGVTALRM    28      virtual timer expired
+     SIGPROF      29      profiling timer expired
+     SIGXCPU      30      exceeded cpu limit
+     SIGXFSZ      31      exceeded file size limit
+     SIGWAITING   32      reserved signal no longer used by threading code
+     SIGAIOCANCEL 33      reserved signal no longer used by threading code (formerly SIGLWP)
+     SIGFREEZE    34      special signal used by CPR
+     SIGTHAW      35      special signal used by CPR
+     SIGCANCEL    36      reserved signal for thread cancellation
+     SIGLOST      37      resource lost (eg, record-lock lost)
+     SIGXRES      38      resource control exceeded
+     SIGJVM1      39      reserved signal for Java Virtual Machine
+     SIGJVM2      40      reserved signal for Java Virtual Machine
+     SIGINFO      41      information request
+     SIGRTMIN     ((int)_sysconf(_SC_SIGRT_MIN)) first realtime signal
+     SIGRTMAX     ((int)_sysconf(_SC_SIGRT_MAX)) last realtime signal
+*/
+
+#[cfg(target_os = "solaris")]
+const SIGNALS_SIZE: usize = 46;
+
+#[cfg(target_os = "illumos")]
+const SIGNALS_SIZE: usize = 47;
+
+#[cfg(any(target_os = "solaris", target_os = "illumos"))]
+static ALL_SIGNALS: [&str; SIGNALS_SIZE] = [
+    "HUP",
+    "INT",
+    "QUIT",
+    "ILL",
+    "TRAP",
+    "IOT",
+    "ABRT",
+    "EMT",
+    "FPE",
+    "KILL",
+    "BUS",
+    "SEGV",
+    "SYS",
+    "PIPE",
+    "ALRM",
+    "TERM",
+    "USR1",
+    "USR2",
+    "CLD",
+    "CHLD",
+    "PWR",
+    "WINCH",
+    "URG",
+    "POLL",
+    "IO",
+    "STOP",
+    "TSTP",
+    "CONT",
+    "TTIN",
+    "TTOU",
+    "VTALRM",
+    "PROF",
+    "XCPU",
+    "XFSZ",
+    "WAITING",
+    "AIOCANCEL",
+    #[cfg(target_os = "illumos")]
+    "LWP",
+    "FREEZE",
+    "THAW",
+    "CANCEL",
+    "LOST",
+    "XRES",
+    "JVM1",
+    "JVM2",
+    "INFO",
+    "RTMIN",
+    "RTMAX",
 ];
 
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
