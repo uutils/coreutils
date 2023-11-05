@@ -336,7 +336,7 @@ fn _du_dereference(s: &str) {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(target_os = "windows", target_os = "android", target_os = "freebsd")))]
 #[test]
 fn test_du_no_dereference() {
     let ts = TestScenario::new(util_name!());
