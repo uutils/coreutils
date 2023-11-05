@@ -93,7 +93,7 @@ where
     T: Into<PossibleValue>,
 {
     fn from(values: I) -> Self {
-        Self(values.into_iter().map(|t| t.into()).collect())
+        Self(values.into_iter().map(Into::into).collect())
     }
 }
 

@@ -533,7 +533,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let max_depth = parse_depth(
         matches
             .get_one::<String>(options::MAX_DEPTH)
-            .map(|s| s.as_str()),
+            .map(String::as_str),
         summarize,
     )?;
 
@@ -573,7 +573,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let block_size = read_block_size(
         matches
             .get_one::<String>(options::BLOCK_SIZE)
-            .map(|s| s.as_str()),
+            .map(String::as_str),
     );
 
     let threshold = matches.get_one::<String>(options::THRESHOLD).map(|s| {
@@ -598,7 +598,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let time_format_str =
-        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?;
+        parse_time_style(matches.get_one::<String>("time-style").map(String::as_str))?;
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::NULL));
 

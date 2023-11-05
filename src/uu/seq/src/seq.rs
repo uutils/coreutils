@@ -69,16 +69,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = SeqOptions {
         separator: matches
             .get_one::<String>(OPT_SEPARATOR)
-            .map(|s| s.as_str())
+            .map(String::as_str)
             .unwrap_or("\n")
             .to_string(),
         terminator: matches
             .get_one::<String>(OPT_TERMINATOR)
-            .map(|s| s.as_str())
+            .map(String::as_str)
             .unwrap_or("\n")
             .to_string(),
         equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
-        format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
+        format: matches.get_one::<String>(OPT_FORMAT).map(String::as_str),
     };
 
     let first = if numbers.len() > 1 {

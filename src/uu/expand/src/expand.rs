@@ -204,7 +204,7 @@ struct Options {
 impl Options {
     fn new(matches: &ArgMatches) -> Result<Self, ParseError> {
         let (remaining_mode, tabstops) = match matches.get_many::<String>(options::TABS) {
-            Some(s) => tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
+            Some(s) => tabstops_parse(&s.map(String::as_str).collect::<Vec<_>>().join(","))?,
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
@@ -225,7 +225,7 @@ impl Options {
         let tspaces = " ".repeat(nspaces);
 
         let files: Vec<String> = match matches.get_many::<String>(options::FILES) {
-            Some(s) => s.map(|v| v.to_string()).collect(),
+            Some(s) => s.map(String::to_string).collect(),
             None => vec!["-".to_owned()],
         };
 

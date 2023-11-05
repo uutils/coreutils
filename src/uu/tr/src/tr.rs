@@ -78,7 +78,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let locked_stdout = stdout.lock();
     let mut buffered_stdout = BufWriter::new(locked_stdout);
 
-    let mut sets_iter = sets.iter().map(|c| c.as_str());
+    let mut sets_iter = sets.iter().map(String::as_str);
     let (set1, set2) = Sequence::solve_set_characters(
         sets_iter.next().unwrap_or_default(),
         sets_iter.next().unwrap_or_default(),

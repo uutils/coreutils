@@ -273,7 +273,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let groups = entries::get_groups_gnu(Some(gid)).unwrap();
         let groups = if state.user_specified {
-            possible_pw.as_ref().map(|p| p.belongs_to()).unwrap()
+            possible_pw
+                .as_ref()
+                .map(uucore::entries::Passwd::belongs_to)
+                .unwrap()
         } else {
             groups.clone()
         };

@@ -1853,7 +1853,7 @@ impl PathData {
 
     fn file_type(&self, out: &mut BufWriter<Stdout>) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| self.md(out).map(|md| md.file_type()))
+            .get_or_init(|| self.md(out).map(Metadata::file_type))
             .as_ref()
     }
 }
@@ -1970,7 +1970,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
-        Sort::Size => entries.sort_by_key(|k| Reverse(k.md(out).map(|md| md.len()).unwrap_or(0))),
+        Sort::Size => entries.sort_by_key(|k| Reverse(k.md(out).map(Metadata::len).unwrap_or(0))),
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries.sort_by(|a, b| {

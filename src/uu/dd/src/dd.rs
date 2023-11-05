@@ -1193,7 +1193,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         &matches
             .get_many::<String>(options::OPERANDS)
             .unwrap_or_default()
-            .map(|s| s.as_ref())
+            .map(AsRef::as_ref)
             .collect::<Vec<_>>()[..],
     )?;
 

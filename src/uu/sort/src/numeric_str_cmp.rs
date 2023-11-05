@@ -221,8 +221,8 @@ pub fn numeric_str_cmp((a, a_info): (&str, &NumInfo), (b, b_info): (&str, &NumIn
         a_info.exponent.cmp(&b_info.exponent)
     } else {
         // walk the characters from the front until we find a difference
-        let mut a_chars = a.chars().filter(|c| c.is_ascii_digit());
-        let mut b_chars = b.chars().filter(|c| c.is_ascii_digit());
+        let mut a_chars = a.chars().filter(char::is_ascii_digit);
+        let mut b_chars = b.chars().filter(char::is_ascii_digit);
         loop {
             let a_next = a_chars.next();
             let b_next = b_chars.next();

@@ -64,7 +64,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Mode::Default(
             matches
                 .get_one::<String>(options::FILE)
-                .map(|s| s.as_str())
+                .map(String::as_str)
                 .unwrap_or("-")
                 .to_string(),
         )

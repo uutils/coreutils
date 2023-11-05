@@ -107,7 +107,7 @@ fn parse_implicit_precision(s: &str) -> usize {
     match s.split_once('.') {
         Some((_, decimal_part)) => decimal_part
             .chars()
-            .take_while(|c| c.is_ascii_digit())
+            .take_while(char::is_ascii_digit)
             .count(),
         None => 0,
     }

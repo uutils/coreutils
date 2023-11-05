@@ -101,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mut stdout = setup_term();
         let length = files.len();
 
-        let mut files_iter = files.map(|s| s.as_str()).peekable();
+        let mut files_iter = files.map(String::as_str).peekable();
         while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
             let file = Path::new(file);
             if file.is_dir() {

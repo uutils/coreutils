@@ -391,7 +391,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let owner = matches
         .get_one::<String>(OPT_OWNER)
-        .map(|s| s.as_str())
+        .map(String::as_str)
         .unwrap_or("")
         .to_string();
 
@@ -406,7 +406,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let group = matches
         .get_one::<String>(OPT_GROUP)
-        .map(|s| s.as_str())
+        .map(String::as_str)
         .unwrap_or("")
         .to_string();
 
@@ -433,7 +433,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         strip_program: String::from(
             matches
                 .get_one::<String>(OPT_STRIP_PROGRAM)
-                .map(|s| s.as_str())
+                .map(String::as_str)
                 .unwrap_or(DEFAULT_STRIP_PROGRAM),
         ),
         create_leading: matches.get_flag(OPT_CREATE_LEADING),

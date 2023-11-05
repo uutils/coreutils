@@ -178,13 +178,13 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
 
     let ignore_env = matches.get_flag("ignore-environment");
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
-    let running_directory = matches.get_one::<String>("chdir").map(|s| s.as_str());
+    let running_directory = matches.get_one::<String>("chdir").map(String::as_str);
     let files = match matches.get_many::<String>("file") {
-        Some(v) => v.map(|s| s.as_str()).collect(),
+        Some(v) => v.map(String::as_str).collect(),
         None => Vec::with_capacity(0),
     };
     let unsets = match matches.get_many::<String>("unset") {
-        Some(v) => v.map(|s| s.as_str()).collect(),
+        Some(v) => v.map(String::as_str).collect(),
         None => Vec::with_capacity(0),
     };
 

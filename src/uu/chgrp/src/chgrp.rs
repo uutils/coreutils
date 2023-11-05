@@ -32,7 +32,7 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     } else {
         let group = matches
             .get_one::<String>(options::ARG_GROUP)
-            .map(|s| s.as_str())
+            .map(String::as_str)
             .unwrap_or_default();
         raw_group = group.to_string();
         if group.is_empty() {

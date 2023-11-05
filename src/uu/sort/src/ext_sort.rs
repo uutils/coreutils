@@ -99,7 +99,7 @@ fn reader_writer<
     match read_result {
         ReadResult::WroteChunksToFile { tmp_files } => {
             let merger = merge::merge_with_file_limit::<_, _, Tmp>(
-                tmp_files.into_iter().map(|c| c.reopen()),
+                tmp_files.into_iter().map(ClosedTmpFile::reopen),
                 settings,
                 tmp_dir,
             )?;

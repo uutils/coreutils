@@ -3507,7 +3507,7 @@ fn test_device_number() {
     let dev_dir = read_dir("/dev").unwrap();
     // let's use the first device for test
     let blk_dev = dev_dir
-        .map(|res_entry| res_entry.unwrap())
+        .map(Result::unwrap)
         .find(|entry| {
             entry.file_type().unwrap().is_block_device()
                 || entry.file_type().unwrap().is_char_device()

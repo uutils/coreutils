@@ -145,7 +145,7 @@ impl<'a> Options<'a> {
             },
             settings: matches
                 .get_many::<String>(options::SETTINGS)
-                .map(|v| v.map(|s| s.as_ref()).collect()),
+                .map(|v| v.map(AsRef::as_ref).collect()),
         })
     }
 }

@@ -65,7 +65,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let commands = match matches.get_many::<String>(options::COMMAND) {
-        Some(v) => v.map(|s| s.as_str()).collect(),
+        Some(v) => v.map(String::as_str).collect(),
         None => vec![],
     };
 
@@ -181,15 +181,15 @@ fn set_context(root: &Path, options: &clap::ArgMatches) -> UResult<()> {
     let userspec_str = options.get_one::<String>(options::USERSPEC);
     let user_str = options
         .get_one::<String>(options::USER)
-        .map(|s| s.as_str())
+        .map(String::as_str)
         .unwrap_or_default();
     let group_str = options
         .get_one::<String>(options::GROUP)
-        .map(|s| s.as_str())
+        .map(String::as_str)
         .unwrap_or_default();
     let groups_str = options
         .get_one::<String>(options::GROUPS)
-        .map(|s| s.as_str())
+        .map(String::as_str)
         .unwrap_or_default();
     let skip_chdir = options.contains_id(options::SKIP_CHDIR);
     let userspec = match userspec_str {

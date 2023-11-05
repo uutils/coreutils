@@ -148,7 +148,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut command_values = matches.get_many::<String>(options::COMMAND).unwrap();
     let mut command = process::Command::new(command_values.next().unwrap());
-    let command_params: Vec<&str> = command_values.map(|s| s.as_ref()).collect();
+    let command_params: Vec<&str> = command_values.map(AsRef::as_ref).collect();
 
     let tmp_dir = tempdir().unwrap();
     let (preload_env, libstdbuf) = get_preload_env(&tmp_dir).map_err_context(String::new)?;

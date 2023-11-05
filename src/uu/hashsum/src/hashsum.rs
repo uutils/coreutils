@@ -356,7 +356,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
 
     match matches.get_many::<OsString>("FILE") {
-        Some(files) => hashsum(opts, files.map(|f| f.as_os_str())),
+        Some(files) => hashsum(opts, files.map(OsString::as_os_str)),
         None => hashsum(opts, iter::once(OsStr::new("-"))),
     }
 }

@@ -542,7 +542,7 @@ impl Stater {
         } else {
             matches
                 .get_one::<String>(options::FORMAT)
-                .map(|s| s.as_str())
+                .map(String::as_str)
                 .unwrap_or("")
         };
 

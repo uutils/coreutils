@@ -37,7 +37,7 @@ use std::marker::PhantomData;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 pub use self::ut::*;
 pub use libc::endutxent;
@@ -317,7 +317,7 @@ pub struct UtmpxIter {
 impl UtmpxIter {
     fn new() -> Self {
         // PoisonErrors can safely be ignored
-        let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let guard = LOCK.lock().unwrap_or_else(PoisonError::into_inner);
         Self {
             guard,
             phantom: PhantomData,

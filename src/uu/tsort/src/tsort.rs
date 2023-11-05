@@ -43,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(_) => {
-                let tokens: Vec<String> = line.split_whitespace().map(|s| s.to_owned()).collect();
+                let tokens: Vec<String> = line.split_whitespace().map(ToOwned::to_owned).collect();
                 if tokens.is_empty() {
                     break;
                 }
@@ -169,6 +169,6 @@ impl Graph {
     }
 
     fn is_acyclic(&self) -> bool {
-        self.out_edges.values().all(|edge| edge.is_empty())
+        self.out_edges.values().all(Vec::is_empty)
     }
 }

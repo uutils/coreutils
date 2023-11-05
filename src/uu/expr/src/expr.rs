@@ -55,7 +55,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
     let token_strings = matches
         .get_many::<String>(options::EXPRESSION)
-        .map(|v| v.into_iter().map(|s| s.as_ref()).collect::<Vec<_>>())
+        .map(|v| v.into_iter().map(AsRef::as_ref).collect::<Vec<_>>())
         .unwrap_or_default();
 
     match process_expr(&token_strings[..]) {

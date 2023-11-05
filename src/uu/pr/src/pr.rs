@@ -397,7 +397,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut files = matches
         .get_many::<String>(options::FILES)
-        .map(|v| v.map(|s| s.as_str()).collect::<Vec<_>>())
+        .map(|v| v.map(String::as_str).collect::<Vec<_>>())
         .unwrap_or_default()
         .clone();
     if files.is_empty() {
@@ -514,7 +514,7 @@ fn build_options(
 
     let header = matches
         .get_one::<String>(options::HEADER)
-        .map(|s| s.as_str())
+        .map(String::as_str)
         .unwrap_or(if is_merge_mode || paths[0] == FILE_STDIN {
             ""
         } else {

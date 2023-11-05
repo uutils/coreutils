@@ -31,7 +31,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>(options::FORMATSTRING)
         .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
     let values: Vec<String> = match matches.get_many::<String>(options::ARGUMENT) {
-        Some(s) => s.map(|s| s.to_string()).collect(),
+        Some(s) => s.map(String::to_string).collect(),
         None => vec![],
     };
 

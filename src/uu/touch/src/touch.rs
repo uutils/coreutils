@@ -174,7 +174,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let st = stat(path, !matches.get_flag(options::NO_DEREF))?;
             let time = matches
                 .get_one::<String>(options::TIME)
-                .map(|s| s.as_str())
+                .map(String::as_str)
                 .unwrap_or("");
 
             if !(matches.get_flag(options::ACCESS)

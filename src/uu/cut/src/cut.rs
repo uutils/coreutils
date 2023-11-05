@@ -370,7 +370,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     out_delim: Some(
                         matches
                             .get_one::<String>(options::OUTPUT_DELIMITER)
-                            .map(|s| s.as_str())
+                            .map(String::as_str)
                             .unwrap_or_default()
                             .to_owned(),
                     ),
@@ -385,7 +385,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     out_delim: Some(
                         matches
                             .get_one::<String>(options::OUTPUT_DELIMITER)
-                            .map(|s| s.as_str())
+                            .map(String::as_str)
                             .unwrap_or_default()
                             .to_owned(),
                     ),
@@ -411,7 +411,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let zero_terminated = matches.get_flag(options::ZERO_TERMINATED);
                 let line_ending = LineEnding::from_zero_flag(zero_terminated);
 
-                match matches.get_one::<String>(options::DELIMITER).map(|s| s.as_str()) {
+                match matches.get_one::<String>(options::DELIMITER).map(String::as_str) {
                     Some(_) if whitespace_delimited => {
                             Err("invalid input: Only one of --delimiter (-d) or -w option can be specified".into())
                         }
