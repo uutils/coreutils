@@ -23,6 +23,7 @@ use std::io::Write;
 use std::io::{Seek, SeekFrom};
 #[cfg(all(
     not(target_vendor = "apple"),
+    not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd")
 ))]
@@ -31,6 +32,7 @@ use std::process::Stdio;
 use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
 #[cfg(all(
     not(target_vendor = "apple"),
+    not(target_os = "android"),
     not(target_os = "windows"),
     not(target_os = "freebsd")
 ))]
