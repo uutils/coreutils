@@ -4,10 +4,6 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore mydir
-// spell-checker:ignore samedir
-// spell-checker:ignore Samedir
-// spell-checker:ignore samefile
-// spell-checker:ignore Samefile
 
 use crate::common::util::TestScenario;
 use filetime::FileTime;
@@ -1452,24 +1448,23 @@ fn test_mv_dir_into_file_where_both_are_files() {
 fn test_mv_same_case_insensitive_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let file1 = "samefile.txt";
+    let file1 = "a.txt";
     at.touch(file1);
     #[cfg(target_os = "linux")]
-    scene.ucmd().arg(file1).arg("Samefile.txt").succeeds();
+    scene.ucmd().arg(file1).arg("-f").arg("A.txt").succeeds();
     #[cfg(not(target_os = "linux"))]
-    scene.ucmd().arg(file1).arg("Samefile.txt").fails();
+    scene.ucmd().arg(file1).arg("-f").arg("A.txt").fails();
 }
 #[test]
-#[cfg(not(target_os = "macos"))]
 fn test_mv_same_case_insensitive_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let file1 = "samedir";
-    at.mkdir(file1);
+    let dir1 = "folder";
+    at.mkdir(dir1);
     #[cfg(target_os = "linux")]
-    scene.ucmd().arg(file1).arg("Samedir").succeeds();
+    scene.ucmd().arg(dir1).arg("Folder").succeeds();
     #[cfg(not(target_os = "linux"))]
-    scene.ucmd().arg(file1).arg("Samedir").fails();
+    scene.ucmd().arg(dir1).arg("Folder").fails();
 }
 
 // Todo:
