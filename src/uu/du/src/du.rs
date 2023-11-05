@@ -31,13 +31,11 @@ use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
 use uucore::error::FromIo;
-use uucore::error::{set_exit_code, UError, UResult};
+use uucore::error::{set_exit_code, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
-use uucore::{
-    crash, format_usage, help_about, help_section, help_usage, show, show_error, show_warning,
-};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -255,22 +253,27 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
     result
 }
 
-fn read_block_size(s: Option<&str>) -> u64 {
+fn read_block_size(s: Option<&str>) -> UResult<u64> {
     if let Some(s) = s {
-        parse_size_u64(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::BLOCK_SIZE)))
+        match parse_size_u64(s) {
+            Ok(x) => Ok(x),
+            Err(e) => Err(USimpleError::new(
+                1,
+                format_error_message(&e, s, options::BLOCK_SIZE),
+            )),
+        }
     } else {
         for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
                 if let Ok(v) = parse_size_u64(&env_size) {
-                    return v;
+                    return Ok(v);
                 }
             }
         }
         if env::var("POSIXLY_CORRECT").is_ok() {
-            512
+            Ok(512)
         } else {
-            1024
+            Ok(1024)
         }
     }
 }
@@ -574,12 +577,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         matches
             .get_one::<String>(options::BLOCK_SIZE)
             .map(|s| s.as_str()),
-    );
+    )?;
 
-    let threshold = matches.get_one::<String>(options::THRESHOLD).map(|s| {
-        Threshold::from_str(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::THRESHOLD)))
-    });
+    let threshold = match matches.get_one::<String>(options::THRESHOLD) {
+        Some(s) => match Threshold::from_str(s) {
+            Ok(t) => Some(t),
+            Err(e) => {
+                return Err(USimpleError::new(
+                    1,
+                    format_error_message(&e, s, options::THRESHOLD),
+                ))
+            }
+        },
+        None => None,
+    };
 
     let multiplier: u64 = if matches.get_flag(options::SI) {
         1000
@@ -991,13 +1002,9 @@ mod test_du {
 
     #[test]
     fn test_read_block_size() {
-        let test_data = [
-            (Some("1024".to_string()), 1024),
-            (Some("K".to_string()), 1024),
-            (None, 1024),
-        ];
+        let test_data = [Some("1024".to_string()), Some("K".to_string()), None];
         for it in &test_data {
-            assert_eq!(read_block_size(it.0.as_deref()), it.1);
+            assert!(matches!(read_block_size(it.as_deref()), Ok(1024)));
         }
     }
 }
