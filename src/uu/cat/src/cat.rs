@@ -213,7 +213,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
     let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
-        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
+        Some(v) => v.cloned().collect(),
         None => vec!["-".to_owned()],
     };
 

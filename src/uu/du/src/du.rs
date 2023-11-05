@@ -506,7 +506,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let excludes_iterator = matches
         .get_many::<String>(options::EXCLUDE)
         .unwrap_or_default()
-        .map(|v| v.to_owned());
+        .cloned();
 
     let mut exclude_patterns = Vec::new();
     for f in excludes_iterator.chain(exclude_from_iterator) {
