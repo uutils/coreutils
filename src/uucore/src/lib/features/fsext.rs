@@ -71,6 +71,7 @@ use std::convert::{AsRef, From};
     target_os = "android",
     target_os = "illumos",
     target_os = "solaris",
+    target_os = "redox",
 ))]
 use std::ffi::CStr;
 #[cfg(not(windows))]
@@ -106,7 +107,6 @@ pub use libc::statvfs as StatFs;
     target_vendor = "apple",
     target_os = "freebsd",
     target_os = "openbsd",
-    target_os = "redox"
 ))]
 pub use libc::statfs as statfs_fn;
 #[cfg(any(
@@ -114,7 +114,8 @@ pub use libc::statfs as statfs_fn;
     target_os = "bitrig",
     target_os = "illumos",
     target_os = "solaris",
-    target_os = "dragonfly"
+    target_os = "dragonfly",
+    target_os = "redox"
 ))]
 pub use libc::statvfs as statfs_fn;
 
@@ -639,6 +640,7 @@ impl FsMeta for StatFs {
             not(target_os = "openbsd"),
             not(target_os = "illumos"),
             not(target_os = "solaris"),
+            not(target_os = "redox"),
             not(target_arch = "s390x"),
             target_pointer_width = "64"
         ))]
@@ -646,6 +648,7 @@ impl FsMeta for StatFs {
         #[cfg(all(
             not(target_env = "musl"),
             not(target_os = "freebsd"),
+            not(target_os = "redox"),
             any(
                 target_arch = "s390x",
                 target_vendor = "apple",
@@ -659,7 +662,8 @@ impl FsMeta for StatFs {
             target_env = "musl",
             target_os = "freebsd",
             target_os = "illumos",
-            target_os = "solaris"
+            target_os = "solaris",
+            target_os = "redox"
         ))]
         return self.f_bsize.try_into().unwrap();
     }
@@ -875,6 +879,7 @@ pub fn pretty_time(sec: i64, nsec: i64) -> String {
     // the date was set
     let local_offset = match UtcOffset::local_offset_at(tm) {
         Ok(lo) => lo,
+        Err(_) if cfg!(target_os = "redox") => UtcOffset::UTC,
         Err(e) => {
             panic!("error: {e}");
         }
