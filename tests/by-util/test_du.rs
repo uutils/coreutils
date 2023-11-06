@@ -127,6 +127,61 @@ fn test_du_basics_bad_name() {
 }
 
 #[test]
+fn test_du_basics_duplicate_bad_name() {
+    let bad_name = "bad_name";
+
+    new_ucmd!()
+        .arg(bad_name)
+        .arg(bad_name)
+        .fails()
+        .stderr_only(concat!(
+            "du: bad_name: No such file or directory\n",
+            "du: bad_name: No such file or directory\n"
+        ));
+}
+
+#[test]
+fn test_du_basics_duplicate_file_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = "a";
+
+    at.touch(filename);
+
+    ucmd.arg(filename)
+        .arg(filename)
+        .succeeds()
+        .stdout_is(format!("0\t{filename}\n"));
+}
+
+#[test]
+fn test_du_basics_duplicate_dir_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "dir";
+
+    at.mkdir(dir);
+
+    let result = ucmd.arg(dir).arg(dir).succeeds();
+    assert_eq!(1, result.stdout_str().lines().count());
+}
+
+#[test]
+fn test_du_basics_dir_and_subdir() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "dir";
+    let subdir = "dir/subdir";
+
+    at.mkdir_all(subdir);
+
+    let result = ts.ucmd().arg(dir).arg(subdir).succeeds();
+    assert_eq!(2, result.stdout_str().lines().count());
+
+    // TODO
+    //let result = ts.ucmd().arg(subdir).arg(dir).succeeds();
+    //assert_eq!(2, result.stdout_str().lines().count());
+}
+
+#[test]
 fn test_du_soft_link() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
