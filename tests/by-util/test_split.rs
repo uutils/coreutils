@@ -720,38 +720,39 @@ fn test_split_chunks_num_chunks_oversized_32() {
 
 #[test]
 fn test_split_stdin_num_chunks() {
-    new_ucmd!()
-        .args(&["--number=1"])
-        .fails()
-        .code_is(1)
-        .stderr_only("split: -: cannot determine file size\n");
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--number=1"]).pipe_in("").succeeds();
+    assert_eq!(file_read(&at, "xaa"), "");
+    assert!(!at.plus("xab").exists());
 }
 
 #[test]
 fn test_split_stdin_num_kth_chunk() {
     new_ucmd!()
         .args(&["--number=1/2"])
-        .fails()
-        .code_is(1)
-        .stderr_only("split: -: cannot determine file size\n");
+        .pipe_in("1\n2\n3\n4\n5\n")
+        .succeeds()
+        .stdout_only("1\n2\n3");
 }
 
 #[test]
 fn test_split_stdin_num_line_chunks() {
-    new_ucmd!()
-        .args(&["--number=l/2"])
-        .fails()
-        .code_is(1)
-        .stderr_only("split: -: cannot determine file size\n");
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--number=l/2"])
+        .pipe_in("1\n2\n3\n4\n5\n")
+        .succeeds();
+    assert_eq!(file_read(&at, "xaa"), "1\n2\n3\n");
+    assert_eq!(file_read(&at, "xab"), "4\n5\n");
+    assert!(!at.plus("xac").exists());
 }
 
 #[test]
 fn test_split_stdin_num_kth_line_chunk() {
     new_ucmd!()
         .args(&["--number=l/2/5"])
-        .fails()
-        .code_is(1)
-        .stderr_only("split: -: cannot determine file size\n");
+        .pipe_in("1\n2\n3\n4\n5\n")
+        .succeeds()
+        .stdout_only("2\n");
 }
 
 fn file_read(at: &AtPath, filename: &str) -> String {
