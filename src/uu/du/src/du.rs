@@ -143,7 +143,7 @@ impl Stat {
                 dev_id: metadata.dev(),
             };
 
-            return Ok(Self {
+            Ok(Self {
                 path: path.to_path_buf(),
                 is_dir: metadata.is_dir(),
                 size: if path.is_dir() { 0 } else { metadata.len() },
@@ -153,7 +153,7 @@ impl Stat {
                 created: birth_u64(&metadata),
                 accessed: metadata.atime() as u64,
                 modified: metadata.mtime() as u64,
-            });
+            })
         }
 
         #[cfg(windows)]
