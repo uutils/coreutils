@@ -507,7 +507,7 @@ impl Settings {
                 match first.as_str() {
                     "\\0" => b'\0',
                     s if s.as_bytes().len() == 1 => s.as_bytes()[0],
-                    s => return Err(SettingsError::MultiCharacterSeparator(s.to_owned())),
+                    s => return Err(SettingsError::MultiCharacterSeparator(s.to_string())),
                 }
             }
             None => b'\n',
