@@ -137,39 +137,42 @@ impl Stat {
         }?;
 
         #[cfg(not(windows))]
-        let file_info = FileInfo {
-            file_id: metadata.ino() as u128,
-            dev_id: metadata.dev(),
-        };
-        #[cfg(not(windows))]
-        return Ok(Self {
-            path: path.to_path_buf(),
-            is_dir: metadata.is_dir(),
-            size: if path.is_dir() { 0 } else { metadata.len() },
-            blocks: metadata.blocks(),
-            inodes: 1,
-            inode: Some(file_info),
-            created: birth_u64(&metadata),
-            accessed: metadata.atime() as u64,
-            modified: metadata.mtime() as u64,
-        });
+        {
+            let file_info = FileInfo {
+                file_id: metadata.ino() as u128,
+                dev_id: metadata.dev(),
+            };
+
+            return Ok(Self {
+                path: path.to_path_buf(),
+                is_dir: metadata.is_dir(),
+                size: if path.is_dir() { 0 } else { metadata.len() },
+                blocks: metadata.blocks(),
+                inodes: 1,
+                inode: Some(file_info),
+                created: birth_u64(&metadata),
+                accessed: metadata.atime() as u64,
+                modified: metadata.mtime() as u64,
+            });
+        }
 
         #[cfg(windows)]
-        let size_on_disk = get_size_on_disk(path);
-        #[cfg(windows)]
-        let file_info = get_file_info(path);
-        #[cfg(windows)]
-        Ok(Self {
-            path: path.to_path_buf(),
-            is_dir: metadata.is_dir(),
-            size: if path.is_dir() { 0 } else { metadata.len() },
-            blocks: size_on_disk / 1024 * 2,
-            inode: file_info,
-            inodes: 1,
-            created: windows_creation_time_to_unix_time(metadata.creation_time()),
-            accessed: windows_time_to_unix_time(metadata.last_access_time()),
-            modified: windows_time_to_unix_time(metadata.last_write_time()),
-        })
+        {
+            let size_on_disk = get_size_on_disk(path);
+            let file_info = get_file_info(path);
+
+            Ok(Self {
+                path: path.to_path_buf(),
+                is_dir: metadata.is_dir(),
+                size: if path.is_dir() { 0 } else { metadata.len() },
+                blocks: size_on_disk / 1024 * 2,
+                inodes: 1,
+                inode: file_info,
+                created: windows_creation_time_to_unix_time(metadata.creation_time()),
+                accessed: windows_time_to_unix_time(metadata.last_access_time()),
+                modified: windows_time_to_unix_time(metadata.last_write_time()),
+            })
+        }
     }
 }
 
