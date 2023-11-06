@@ -88,6 +88,7 @@ struct Options {
     separate_dirs: bool,
     one_file_system: bool,
     dereference: Deref,
+    count_links: bool,
     inodes: bool,
     verbose: bool,
 }
@@ -336,6 +337,9 @@ fn du(
 
                             if let Some(inode) = this_stat.inode {
                                 if inodes.contains(&inode) {
+                                    if options.count_links {
+                                        my_stat.inodes += 1;
+                                    }
                                     continue;
                                 }
                                 inodes.insert(inode);
@@ -561,6 +565,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             Deref::None
         },
+        count_links: matches.get_flag(options::COUNT_LINKS),
         inodes: matches.get_flag(options::INODES),
         verbose: matches.get_flag(options::VERBOSE),
     };
