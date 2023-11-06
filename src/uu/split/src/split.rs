@@ -711,7 +711,7 @@ where
 ///
 /// For most files the size will be determined by `len()` function of [`std::fs::metadata`]
 /// However, for the STDIN input stream and files at /dev, /proc, /sys and similar locations
-/// we will need to read from the `reader` in an attempt to find out the inout size
+/// we will need to read from the `reader` in an attempt to find out the input size
 /// In those cases the `buf` might end up with either partial or entire input
 fn get_input_size<R>(
     input: &String,
