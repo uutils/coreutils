@@ -193,7 +193,7 @@ impl Options {
 /// `num_rand_chars`.
 struct Params {
     /// The directory that will contain the temporary file.
-    directory: String,
+    directory: PathBuf,
 
     /// The (non-random) prefix of the temporary file.
     prefix: String,
@@ -298,7 +298,7 @@ impl Params {
         let num_rand_chars = j - i;
 
         Ok(Self {
-            directory,
+            directory: directory.into(),
             prefix,
             num_rand_chars,
             suffix,
@@ -353,9 +353,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Create the temporary file or directory, or simulate creating it.
     let res = if dry_run {
-        dry_exec(Path::new(&tmpdir), &prefix, rand, &suffix)
+        dry_exec(&tmpdir, &prefix, rand, &suffix)
     } else {
-        exec(Path::new(&tmpdir), &prefix, rand, &suffix, make_dir)
+        exec(&tmpdir, &prefix, rand, &suffix, make_dir)
     };
 
     let res = if suppress_file_err {
@@ -565,15 +565,9 @@ pub fn mktemp(options: &Options) -> UResult<PathBuf> {
 
     // Create the temporary file or directory, or simulate creating it.
     if options.dry_run {
-        dry_exec(Path::new(&tmpdir), &prefix, rand, &suffix)
+        dry_exec(&tmpdir, &prefix, rand, &suffix)
     } else {
-        exec(
-            Path::new(&tmpdir),
-            &prefix,
-            rand,
-            &suffix,
-            options.directory,
-        )
+        exec(&tmpdir, &prefix, rand, &suffix, options.directory)
     }
 }
 
