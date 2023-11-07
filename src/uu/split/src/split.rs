@@ -42,8 +42,8 @@ static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_SEPARATOR: &str = "separator";
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
-// Cap ---io-blksize value as well as set max buffer size on reading "infinite" inputs, like /dev/zero
-static OPT_IO_BLKSIZE_MAX: usize = 2_000_000_000;
+// Cap ---io-blksize value
+static OPT_IO_BLKSIZE_MAX: usize = 1_000_000_000;
 static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 //The ---io parameter is consumed and ignored.
 //The parameter is included to make GNU coreutils tests pass.
