@@ -183,7 +183,27 @@ outdated comments!
 
 ## Git Etiquette
 
-todo
+To ensure easy collaboration, we have guidelines for using Git and GitHub.
+
+### Commits
+
+- Make small and atomic commits.
+- Keep a clean history of commits.
+- Write informative commit messages.
+- Annotate your commit message with the component you're editing. For example: `cp: do not overwrite on with -i` or `uucore: add support for FreeBSD`.
+- Do not unnecessarily move items around in the code. This makes the changes much harder to review. If you do need to move things around, do that in a separate commit.
+
+### PRs
+
+- Make the titles of PRs descriptive.
+  - This means describing the problem you solve. For example, do not write `Fix #1234`, but `ls: fix version sort order`.
+  - You can prefix the title with the utility the PR concerns.
+- Keep PRs small and self-contained. A set of small PRs is much more likely to get merged quickly than one large PR.
+- Make sure the CI passes (up to intermittently failing tests).
+- You know your code best, that's why it's best if you can solve merge conflicts on your branch yourself.
+  - It's up to you whether you want to use `git merge main` or `git rebase main`.
+  - Feel free to ask for help with merge conflicts.
+- You do not need to ping maintainers to request a review, but it's fine to do so if you don't get a response within a few days.
 
 ## Platforms
 
