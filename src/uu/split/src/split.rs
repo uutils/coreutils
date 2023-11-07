@@ -617,11 +617,9 @@ fn custom_write_all<T: Write>(
     }
 }
 
-/// Determine the file size of STDIN stream
-/// or files that report `0` size
-/// from `len()` function of [`std::fs::metadata`]
-/// Typically system files at /dev, /proc, /sys locations
-/// like /dev/null, /dev/zero, /proc/version, etc.
+/// Determine the file size of irregular input,
+/// i.e. STDIN stream or files at /dev, /proc, /sys locations
+/// or files that report `0` size by `len()` function of [`std::fs::metadata`]
 ///
 /// Most system files at /dev, /proc, /sys locations should fit entirely into a buffer,
 /// so try to read up to a limit first and return the number of bytes read first.
@@ -633,7 +631,7 @@ fn custom_write_all<T: Write>(
 /// For STDIN stream - read into a buffer up to a limit
 /// If input stream does not EOF before that - return an error
 /// (i.e. "infinite" input as in `cat /dev/zero | split ...`, `yes | split ...` etc.)
-fn get_stdin_or_zero_file_size<R>(
+fn get_irregular_input_size<R>(
     input: &String,
     reader: &mut R,
     buf: &mut Vec<u8>,
@@ -724,16 +722,24 @@ where
 {
     let mut input_size: u64;
 
-    if input == "-" {
-        // STDIN
-        input_size = get_stdin_or_zero_file_size(input, reader, buf, io_blksize)?;
+    if input == "-"
+        || input.starts_with("/dev/")
+        || input.starts_with("/proc/")
+        || input.starts_with("/sys/")
+    {
+        // STDIN or
+        // Files in system Unix and Linux filesystems which
+        // could report incorrect file size via `metadata.len()`
+        // either `0` while there is content
+        // or a size larger than actual content
+        input_size = get_irregular_input_size(input, reader, buf, io_blksize)?;
     } else {
-        // Either a regular file
-        // or a file at system's /dev, /proc, /sys and similar locations
+        // Regular file
         let metadata = metadata(input)?;
         input_size = metadata.len();
+        // Double check the size if `metadata.len()` reports `0`
         if input_size == 0 {
-            input_size = get_stdin_or_zero_file_size(input, reader, buf, io_blksize)?;
+            input_size = get_irregular_input_size(input, reader, buf, io_blksize)?;
         }
     }
     Ok(input_size)
@@ -1309,6 +1315,12 @@ where
                     }
                 }
                 None => {
+                    if i > num_chunks {
+                        // All chunks have been written to, so exit
+                        // Failsafe in case input size that was reported by `get_inout_size()`
+                        // is greater than actual file content
+                        break;
+                    }
                     let idx = (i - 1) as usize;
                     let writer = writers.get_mut(idx).unwrap();
                     writer.write_all(buf)?;
