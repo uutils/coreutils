@@ -15,7 +15,7 @@ use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
-use uucore::{crash, format_usage, help_about, help_usage};
+use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("expand.md");
 const USAGE: &str = help_usage!("expand.md");
@@ -308,16 +308,13 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
+fn open(path: &str) -> std::io::Result<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
     if path == "-" {
-        BufReader::new(Box::new(stdin()) as Box<dyn Read>)
+        Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
-        file_buf = match File::open(path) {
-            Ok(a) => a,
-            Err(e) => crash!(1, "{}: {}\n", path.maybe_quote(), e),
-        };
-        BufReader::new(Box::new(file_buf) as Box<dyn Read>)
+        file_buf = File::open(path)?;
+        Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
 
@@ -378,7 +375,7 @@ fn expand(options: &Options) -> std::io::Result<()> {
     let mut buf = Vec::new();
 
     for file in &options.files {
-        let mut fh = open(file);
+        let mut fh = open(file)?;
 
         while match fh.read_until(b'\n', &mut buf) {
             Ok(s) => s > 0,
