@@ -42,8 +42,8 @@ static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_SEPARATOR: &str = "separator";
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
-// Cap ---io-blksize value. The max value is the same as in GNU and is derived from equivalent of `i32::MAX >> 20 << 20` operation
-static OPT_IO_BLKSIZE_MAX: usize = 2_146_435_072;
+// Cap ---io-blksize value as well as set max buffer size on reading "infinite" inputs, like /dev/zero
+static OPT_IO_BLKSIZE_MAX: usize = 2_000_000_000;
 static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 //The ---io parameter is consumed and ignored.
 //The parameter is included to make GNU coreutils tests pass.
@@ -1245,6 +1245,10 @@ where
     if num_chunks == 0 {
         return Ok(());
     }
+    #[cfg(target_pointer_width = "32")]
+    let _: usize = num_chunks
+        .try_into()
+        .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
 
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = std::io::stdout().lock();
@@ -1317,7 +1321,7 @@ where
                 None => {
                     if i > num_chunks {
                         // All chunks have been written to, so exit
-                        // Failsafe in case input size that was reported by `get_inout_size()`
+                        // Failsafe in case input size that was reported by `get_input_size()`
                         // is greater than actual file content
                         break;
                     }
