@@ -14,8 +14,7 @@ check out these documents:
 
 Now follows a very important warning:
 
-> [!WARNING]
-> uutils is original code and cannot contain any code from GNU or
+> [!WARNING] uutils is original code and cannot contain any code from GNU or
 > other implementations. This means that **we cannot accept any changes based on
 > the GNU source code**. To make sure that cannot happen, **you cannot link to
 > the GNU source code** either.
@@ -53,15 +52,19 @@ use by others:
 
 We have the following goals with our development:
 
-- **Compatible**: The utilities should be a drop-in replacement for the GNU coreutils.
-- **Cross-platform**: All utilities should run on as many of the supported platforms as possible.
+- **Compatible**: The utilities should be a drop-in replacement for the GNU
+  coreutils.
+- **Cross-platform**: All utilities should run on as many of the supported
+  platforms as possible.
 - **Reliable**: The utilities should never unexpectedly fail.
-- **Performant**: Our utilities should be written in fast idiomatic Rust. We aim to match or exceed the performance of the GNU utilities.
-- **Well-tested**: We should have a lot of tests to be able to guarantee reliability and compatibility.
+- **Performant**: Our utilities should be written in fast idiomatic Rust. We aim
+  to match or exceed the performance of the GNU utilities.
+- **Well-tested**: We should have a lot of tests to be able to guarantee
+  reliability and compatibility.
 
 ## How to Help
 
-There are several ways to help and writing code is just one them. Reporting
+There are several ways to help and writing code is just one of them. Reporting
 issues and writing documentation are just as important as writing code.
 
 ### Reporting Issues
@@ -92,7 +95,7 @@ work into a fix that we can't merge! If there's no issue for what you're trying
 to fix yet, make one _before_ you start working on the PR.
 
 Generally, we try to follow what GNU is doing in terms of options and behavior.
-It is recommended to look at the GNU Coreutils manual
+It is recommended to look at the GNU coreutils manual
 ([on the web](https://www.gnu.org/software/coreutils/manual/html_node/index.html),
 or locally using `info <utility>`). It is more in depth than the man pages and
 provides a good description of available features and their implementation
@@ -190,20 +193,58 @@ To ensure easy collaboration, we have guidelines for using Git and GitHub.
 - Make small and atomic commits.
 - Keep a clean history of commits.
 - Write informative commit messages.
-- Annotate your commit message with the component you're editing. For example: `cp: do not overwrite on with -i` or `uucore: add support for FreeBSD`.
-- Do not unnecessarily move items around in the code. This makes the changes much harder to review. If you do need to move things around, do that in a separate commit.
+- Annotate your commit message with the component you're editing. For example:
+  `cp: do not overwrite on with -i` or `uucore: add support for FreeBSD`.
+- Do not unnecessarily move items around in the code. This makes the changes
+  much harder to review. If you do need to move things around, do that in a
+  separate commit.
+
+### Commit messages
+
+You can read this section in the Git book to learn how to write good commit
+messages: https://git-scm.com/book/ch5-2.html.
+
+In addition, here are a few examples for a summary line when committing to
+uutils:
+
+- commit for a single utility
+
+```
+nohup: cleanup and refactor
+```
+
+- commit for a utility's tests
+
+```
+tests/rm: test new feature
+```
+
+Beyond changes to an individual utility or its tests, other summary lines for
+non-utility modules include:
+
+```
+README: add help
+uucore: add new modules
+uutils: add new utility
+gitignore: add temporary files
+```
 
 ### PRs
 
 - Make the titles of PRs descriptive.
-  - This means describing the problem you solve. For example, do not write `Fix #1234`, but `ls: fix version sort order`.
+  - This means describing the problem you solve. For example, do not write
+    `Fix #1234`, but `ls: fix version sort order`.
   - You can prefix the title with the utility the PR concerns.
-- Keep PRs small and self-contained. A set of small PRs is much more likely to get merged quickly than one large PR.
+- Keep PRs small and self-contained. A set of small PRs is much more likely to
+  get merged quickly than one large PR.
 - Make sure the CI passes (up to intermittently failing tests).
-- You know your code best, that's why it's best if you can solve merge conflicts on your branch yourself.
-  - It's up to you whether you want to use `git merge main` or `git rebase main`.
+- You know your code best, that's why it's best if you can solve merge conflicts
+  on your branch yourself.
+  - It's up to you whether you want to use `git merge main` or
+    `git rebase main`.
   - Feel free to ask for help with merge conflicts.
-- You do not need to ping maintainers to request a review, but it's fine to do so if you don't get a response within a few days.
+- You do not need to ping maintainers to request a review, but it's fine to do
+  so if you don't get a response within a few days.
 
 ## Platforms
 
@@ -245,70 +286,6 @@ To improve the GNU compatibility, the following process is recommended:
    test case running both GNU & Rust implementation
 1. Start to modify the Rust implementation to match the expected behavior
 1. Add a test to make sure that we don't regress (our test suite is super quick)
-
-## Commit messages
-
-To help the project maintainers review pull requests from contributors across
-numerous utilities, the team has settled on conventions for commit messages.
-
-From <https://git-scm.com/book/ch5-2.html>:
-
-```
-Capitalized, short (50 chars or less) summary
-
-More detailed explanatory text, if necessary.  Wrap it to about 72
-characters or so.  In some contexts, the first line is treated as the
-subject of an email and the rest of the text as the body.  The blank
-line separating the summary from the body is critical (unless you omit
-the body entirely); tools like rebase will confuse you if you run the
-two together.
-
-Write your commit message in the imperative: "Fix bug" and not "Fixed bug"
-or "Fixes bug."  This convention matches up with commit messages generated
-by commands like git merge and git revert.
-
-Further paragraphs come after blank lines.
-
-  - Bullet points are okay, too
-
-  - Typically a hyphen or asterisk is used for the bullet, followed by a
-    single space, with blank lines in between, but conventions vary here
-
-  - Use a hanging indent
-```
-
-Furthermore, here are a few examples for a summary line:
-
-- commit for a single utility
-
-```
-nohup: cleanup and refactor
-```
-
-- commit for a utility's tests
-
-```
-tests/rm: test new feature
-```
-
-Beyond changes to an individual utility or its tests, other summary lines for
-non-utility modules include:
-
-```
-README: add help
-```
-
-```
-uucore: add new modules
-```
-
-```
-uutils: add new utility
-```
-
-```
-gitignore: add temporary files
-```
 
 ## Code coverage
 
