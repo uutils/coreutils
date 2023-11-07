@@ -824,6 +824,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::DEREFERENCE_ARGS)
                 .short('D')
+                .visible_short_alias('H')
                 .long(options::DEREFERENCE_ARGS)
                 .help("follow only symlinks that are listed on the command line")
                 .action(ArgAction::SetTrue)

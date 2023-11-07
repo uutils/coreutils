@@ -299,11 +299,13 @@ fn test_du_dereference_args() {
     file2.write_all(b"amaz?ng").unwrap();
     at.symlink_dir("subdir", "sublink");
 
-    let result = ts.ucmd().arg("-D").arg("-s").arg("sublink").succeeds();
-    let stdout = result.stdout_str();
+    for arg in ["-D", "-H", "--dereference-args"] {
+        let result = ts.ucmd().arg(arg).arg("-s").arg("sublink").succeeds();
+        let stdout = result.stdout_str();
 
-    assert!(!stdout.starts_with('0'));
-    assert!(stdout.contains("sublink"));
+        assert!(!stdout.starts_with('0'));
+        assert!(stdout.contains("sublink"));
+    }
 
     // Without the option
     let result = ts.ucmd().arg("-s").arg("sublink").succeeds();
