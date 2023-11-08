@@ -3,9 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use libc::{dup, dup2, STDOUT_FILENO};
+use libc::{close, dup, dup2, pipe, STDOUT_FILENO};
 use std::ffi::OsString;
 use std::io;
+use std::io::Write;
 use std::process::Command;
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicBool, Once};
@@ -38,18 +39,43 @@ where
 {
     let uumain_exit_status;
 
+    // Duplicate the stdout file descriptor
     let original_stdout_fd = unsafe { dup(STDOUT_FILENO) };
-    println!("Running test {:?}", &args[1..]);
-    let mut pipe_fds = [-1; 2];
-    unsafe { libc::pipe(pipe_fds.as_mut_ptr()) };
-
-    {
-        unsafe { dup2(pipe_fds[1], STDOUT_FILENO) };
-        uumain_exit_status = uumain_function(args.to_owned().into_iter());
-        unsafe { dup2(original_stdout_fd, STDOUT_FILENO) };
-        unsafe { libc::close(original_stdout_fd) };
+    if original_stdout_fd == -1 {
+        return ("Failed to duplicate STDOUT_FILENO".to_string(), -1);
     }
-    unsafe { libc::close(pipe_fds[1]) };
+    println!("Running test {:?}", &args[0..]);
+    let mut pipe_fds = [-1; 2];
+
+    if unsafe { pipe(pipe_fds.as_mut_ptr()) } == -1 {
+        return ("Failed to create a pipe".to_string(), -1);
+    }
+
+    // Redirect stdout to the pipe
+    unsafe {
+        if dup2(pipe_fds[1], STDOUT_FILENO) == -1 {
+            close(pipe_fds[0]);
+            close(pipe_fds[1]);
+            return (
+                "Failed to redirect STDOUT_FILENO to the pipe".to_string(),
+                -1,
+            );
+        }
+    }
+
+    uumain_exit_status = uumain_function(args.to_owned().into_iter());
+
+    // Restore the original stdout
+    unsafe {
+        if dup2(original_stdout_fd, STDOUT_FILENO) == -1 {
+            return (
+                "Failed to restore the original STDOUT_FILENO".to_string(),
+                -1,
+            );
+        }
+        close(original_stdout_fd);
+    }
+    unsafe { close(pipe_fds[1]) };
 
     let mut captured_output = Vec::new();
     let mut read_buffer = [0; 1024];
@@ -61,6 +87,11 @@ where
                 read_buffer.len(),
             )
         };
+
+        if bytes_read == -1 {
+            eprintln!("Failed to read from the pipe");
+            break;
+        }
         if bytes_read <= 0 {
             break;
         }
