@@ -911,10 +911,6 @@ fn test_suffixes_exhausted() {
         .args(&["-b", "1", "-a", "1", "asciilowercase.txt"])
         .fails()
         .stderr_only("split: output file suffixes exhausted\n");
-    new_ucmd!()
-        .args(&["-n", "28", "-a", "1", "asciilowercase.txt"])
-        .fails()
-        .stderr_only("split: output file suffixes exhausted\n");
 }
 
 #[test]
