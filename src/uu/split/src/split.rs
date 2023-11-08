@@ -41,12 +41,22 @@ static OPT_HEX_SUFFIXES_SHORT: &str = "-x";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_SEPARATOR: &str = "separator";
+static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
 // Cap ---io-blksize value
-static OPT_IO_BLKSIZE_MAX: usize = 1_000_000_000;
-static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
-//The ---io parameter is consumed and ignored.
-//The parameter is included to make GNU coreutils tests pass.
+// For 64bit systems the max value is the same as in GNU
+// and is equivalent of `i32::MAX >> 20 << 20` operation.
+// On 32bit systems however, even though it fits within `u32` and `i32`,
+// it causes rust-lang `library/alloc/src/raw_vec.rs` to panic with 'capacity overflow' error.
+// Could be due to how `std::io::BufReader` handles internal buffers.
+// So we use much smaller value for those
+static OPT_IO_BLKSIZE_MAX: usize = if usize::BITS >= 64 {
+    2_146_435_072
+} else {
+    1_000_000_000
+};
+// The ---io parameter is consumed and ignored.
+// The parameter is included to make GNU coreutils tests pass.
 static OPT_IO: &str = "-io";
 
 static ARG_INPUT: &str = "input";
@@ -672,7 +682,7 @@ where
         // Most likely continuous/infinite input stream
         return Err(io::Error::new(
             ErrorKind::Other,
-            format!("{}: cannot determine file size", input),
+            format!("{}: cannot determine input size", input),
         ));
     } else {
         // Could be that file size is larger than set limit
@@ -1245,10 +1255,12 @@ where
     if num_chunks == 0 {
         return Ok(());
     }
-    #[cfg(target_pointer_width = "32")]
-    let _: usize = num_chunks
-        .try_into()
-        .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
+
+    if usize::BITS < 64 {
+        let _: usize = num_chunks
+            .try_into()
+            .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
+    }
 
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = std::io::stdout().lock();

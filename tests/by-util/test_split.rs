@@ -911,6 +911,18 @@ fn test_suffixes_exhausted() {
         .args(&["-b", "1", "-a", "1", "asciilowercase.txt"])
         .fails()
         .stderr_only("split: output file suffixes exhausted\n");
+    new_ucmd!()
+        .args(&["-n", "28", "-a", "1", "asciilowercase.txt"])
+        .fails()
+        .stderr_only("split: output file suffixes exhausted\n");
+}
+
+#[test]
+fn test_suffix_length_req() {
+    new_ucmd!()
+        .args(&["-n", "100", "-a", "1", "asciilowercase.txt"])
+        .fails()
+        .stderr_only("split: the suffix length needs to be at least 2\n");
 }
 
 #[test]
@@ -1067,6 +1079,32 @@ fn test_split_default_with_io_blksize() {
 }
 
 #[test]
+fn test_split_invalid_io_blksize() {
+    new_ucmd!()
+        .args(&["---io-blksize=XYZ", "threebytes.txt"])
+        .fails()
+        .stderr_only("split: invalid IO block size: 'XYZ'\n");
+    new_ucmd!()
+        .args(&["---io-blksize=5000000000", "threebytes.txt"])
+        .fails()
+        .stderr_only("split: invalid IO block size: '5000000000'\n");
+    #[cfg(target_pointer_width = "32")]
+    new_ucmd!()
+        .args(&["---io-blksize=2146435072", "threebytes.txt"])
+        .fails()
+        .stderr_only("split: invalid IO block size: '2146435072'\n");
+}
+
+#[test]
+fn test_split_number_oversized_stdin() {
+    new_ucmd!()
+        .args(&["--number=3", "---io-blksize=600"])
+        .pipe_in_fixture("sixhundredfiftyonebytes.txt")
+        .fails()
+        .stderr_only("split: -: cannot determine input size\n");
+}
+
+#[test]
 fn test_invalid_suffix_length() {
     new_ucmd!()
         .args(&["-a", "xyz"])
@@ -1193,6 +1231,15 @@ fn test_lines_kth() {
         .args(&["-n", "l/3/10", "onehundredlines.txt"])
         .succeeds()
         .stdout_only("20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_lines_kth_dev_null() {
+    new_ucmd!()
+        .args(&["-n", "l/3/10", "/dev/null"])
+        .succeeds()
+        .stdout_only("");
 }
 
 #[test]
