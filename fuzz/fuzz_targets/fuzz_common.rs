@@ -38,8 +38,6 @@ pub fn generate_and_run_uumain<F>(args: &[OsString], uumain_function: F) -> (Str
 where
     F: FnOnce(std::vec::IntoIter<OsString>) -> i32,
 {
-    let uumain_exit_status;
-
     // Duplicate the stdout and stderr file descriptors
     let original_stdout_fd = unsafe { dup(STDOUT_FILENO) };
     let original_stderr_fd = unsafe { dup(STDERR_FILENO) };
@@ -78,7 +76,8 @@ where
         );
     }
 
-    uumain_exit_status = uumain_function(args.to_owned().into_iter());
+    let uumain_exit_status = uumain_function(args.to_owned().into_iter());
+
     io::stdout().flush().unwrap();
     io::stderr().flush().unwrap();
 
@@ -102,8 +101,8 @@ where
     let captured_stdout = read_from_fd(pipe_stdout_fds[0]).trim().to_string();
     let captured_stderr = read_from_fd(pipe_stderr_fds[0]).to_string();
     let captured_stderr = captured_stderr
-        .splitn(2, ':')
-        .nth(1)
+        .split_once(':')
+        .map(|x| x.1)
         .unwrap_or("")
         .trim()
         .to_string();
@@ -168,8 +167,8 @@ pub fn run_gnu_cmd(
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     let stderr = stderr
-        .splitn(2, ':')
-        .nth(1)
+        .split_once(':')
+        .map(|x| x.1)
         .unwrap_or("")
         .trim()
         .to_string();
@@ -178,5 +177,58 @@ pub fn run_gnu_cmd(
         Ok((stdout, stderr, exit_code))
     } else {
         Err((stdout, stderr, exit_code))
+    }
+}
+
+pub fn compare_result(
+    test_type: &str,
+    input: &str,
+    rust_stdout: &str,
+    gnu_stdout: &str,
+    rust_stderr: &str,
+    gnu_stderr: &str,
+    rust_exit_code: i32,
+    gnu_exit_code: i32,
+    fail_on_stderr_diff: bool,
+) {
+    println!("Test Type: {}", test_type);
+    println!("Input: {}", input);
+
+    let mut discrepancies = Vec::new();
+    let mut should_panic = false;
+
+    if rust_stdout.trim() != gnu_stdout.trim() {
+        discrepancies.push("stdout differs");
+        println!("Rust stdout: {}", rust_stdout);
+        println!("GNU stdout: {}", gnu_stdout);
+        should_panic = true;
+    }
+    if rust_stderr.trim() != gnu_stderr.trim() {
+        discrepancies.push("stderr differs");
+        println!("Rust stderr: {}", rust_stderr);
+        println!("GNU stderr: {}", gnu_stderr);
+        if fail_on_stderr_diff {
+            should_panic = true;
+        }
+    }
+    if rust_exit_code != gnu_exit_code {
+        discrepancies.push("exit code differs");
+        println!("Rust exit code: {}", rust_exit_code);
+        println!("GNU exit code: {}", gnu_exit_code);
+        should_panic = true;
+    }
+
+    if discrepancies.is_empty() {
+        println!("All outputs and exit codes matched.");
+    } else {
+        println!("Discrepancy detected: {}", discrepancies.join(", "));
+        if should_panic {
+            panic!("Test failed for {}: {}", test_type, input);
+        } else {
+            println!(
+                "Test completed with discrepancies for {}: {}",
+                test_type, input
+            );
+        }
     }
 }

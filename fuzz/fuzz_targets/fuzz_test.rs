@@ -13,7 +13,7 @@ use rand::Rng;
 use std::ffi::OsString;
 
 mod fuzz_common;
-use crate::fuzz_common::{generate_and_run_uumain, run_gnu_cmd};
+use crate::fuzz_common::{compare_result, generate_and_run_uumain, run_gnu_cmd};
 
 #[derive(PartialEq, Debug, Clone)]
 enum ArgType {
@@ -204,44 +204,20 @@ fuzz_target!(|_data: &[u8]| {
         args.push(OsString::from(generate_test_arg()));
     }
 
-    let (rust_stdout, rust_stderr, uumain_exit_status) = generate_and_run_uumain(&args, uumain);
+    let (rust_stdout, rust_stderr, uumain_exit_code) = generate_and_run_uumain(&args, uumain);
 
-    // Run GNU test with the provided arguments and compare the output
-    match run_gnu_cmd(CMD_PATH, &args[1..], false) {
-        Ok((gnu_stdout, gnu_stderr, gnu_exit_status)) => {
-            let gnu_stdout = gnu_stdout.trim().to_owned();
-            println!("gnu_exit_status {}", gnu_exit_status);
-            println!("uumain_exit_status {}", uumain_exit_status);
-            if rust_stdout != gnu_stdout || uumain_exit_status != gnu_exit_status {
-                println!("Discrepancy detected!");
-                println!("Test: {:?}", &args[1..]);
-                println!("Rust output: {}", rust_stdout);
-                println!("GNU output: {}", gnu_stdout);
+    let (gnu_stdout, gnu_stderr, gnu_exit_code) =
+        run_gnu_cmd(CMD_PATH, &args[1..], false).unwrap_or_else(|e| e);
 
-                println!("Rust stderr: {}", rust_stderr);
-                println!("GNU stderr: {}", gnu_stderr);
-                println!("My exit status: {}", uumain_exit_status);
-                println!("GNU exit status: {}", gnu_exit_status);
-                panic!();
-            } else {
-                println!(
-                    "Outputs and exit statuses matched for expression {:?}",
-                    &args[1..]
-                );
-            }
-        }
-        Err((_gnu_stdout, gnu_stderr, _gnu_exit_code)) => {
-            if rust_stderr == gnu_stderr {
-                println!(
-                    "GNU execution failed for input: {:?} stderr: {}",
-                    args, rust_stderr
-                );
-            } else {
-                println!("Input: {:?}", args);
-                println!("Rust stderr: {}", rust_stderr);
-                println!("GNU stderr: {}", gnu_stderr);
-                panic!("Different stderr between Rust & GNU");
-            }
-        }
-    }
+    compare_result(
+        "test",
+        &format!("{:?}", &args[1..]),
+        &rust_stdout,
+        &gnu_stdout,
+        &rust_stderr,
+        &gnu_stderr,
+        uumain_exit_code,
+        gnu_exit_code,
+        false, // Set to true if you want to fail on stderr diff
+    );
 });

@@ -13,7 +13,7 @@ use rand::Rng;
 use std::{env, ffi::OsString};
 
 mod fuzz_common;
-use crate::fuzz_common::{generate_and_run_uumain, run_gnu_cmd};
+use crate::fuzz_common::{compare_result, generate_and_run_uumain, run_gnu_cmd};
 
 static CMD_PATH: &str = "expr";
 
@@ -84,52 +84,25 @@ fuzz_target!(|_data: &[u8]| {
     let mut args = vec![OsString::from("expr")];
     args.extend(expr.split_whitespace().map(OsString::from));
 
-    let (rust_stdout, rust_stderr, uumain_exit_code) = generate_and_run_uumain(&args, uumain);
-
     // Use C locale to avoid false positives, like in https://github.com/uutils/coreutils/issues/5378,
     // because uutils expr doesn't support localization yet
     // TODO remove once uutils expr supports localization
     env::set_var("LC_COLLATE", "C");
 
-    // Run GNU expr with the provided arguments and compare the output
-    match run_gnu_cmd(CMD_PATH, &args[1..], true) {
-        Ok((gnu_stdout, gnu_stderr, gnu_exit_code)) => {
-            let gnu_stdout = gnu_stdout.trim().to_owned();
-            if uumain_exit_code != gnu_exit_code {
-                println!("Expression: {}", expr);
+    let (rust_stdout, rust_stderr, uumain_exit_code) = generate_and_run_uumain(&args, uumain);
 
-                println!("GNU stderr: {}", gnu_stderr);
-                println!("Rust stderr: {}", rust_stderr);
+    let (gnu_stdout, gnu_stderr, gnu_exit_code) =
+        run_gnu_cmd(CMD_PATH, &args[1..], false).unwrap_or_else(|e| e);
 
-                println!("Rust code: {}", uumain_exit_code);
-                println!("GNU code: {}", gnu_exit_code);
-                panic!("Different error codes");
-            }
-            if rust_stdout == gnu_stdout {
-                println!(
-                    "Outputs matched for expression: {} => Result: {}",
-                    expr, rust_stdout
-                );
-            } else {
-                println!("Expression: {}", expr);
-                println!("Rust output: {}", rust_stdout);
-                println!("GNU output: {}", gnu_stdout);
-                panic!("Different output between Rust & GNU");
-            }
-        }
-
-        Err((_gnu_stdout, gnu_stderr, _gnu_exit_code)) => {
-            if rust_stderr == gnu_stderr {
-                println!(
-                    "GNU execution failed for input: {} stderr: {}",
-                    expr, rust_stderr
-                );
-            } else {
-                println!("Input: {}", expr);
-                println!("Rust stderr: {}", rust_stderr);
-                println!("GNU stderr: {}", gnu_stderr);
-                panic!("Different stderr between Rust & GNU");
-            }
-        }
-    }
+    compare_result(
+        "expr",
+        &format!("{:?}", &args[1..]),
+        &rust_stdout,
+        &gnu_stdout,
+        &rust_stderr,
+        &gnu_stderr,
+        uumain_exit_code,
+        gnu_exit_code,
+        false, // Set to true if you want to fail on stderr diff
+    );
 });
