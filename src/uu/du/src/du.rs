@@ -255,13 +255,8 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
 
 fn read_block_size(s: Option<&str>) -> UResult<u64> {
     if let Some(s) = s {
-        match parse_size_u64(s) {
-            Ok(x) => Ok(x),
-            Err(e) => Err(USimpleError::new(
-                1,
-                format_error_message(&e, s, options::BLOCK_SIZE),
-            )),
-        }
+        parse_size_u64(s)
+            .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
     } else {
         for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
