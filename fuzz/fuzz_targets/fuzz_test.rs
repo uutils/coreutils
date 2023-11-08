@@ -204,19 +204,22 @@ fuzz_target!(|_data: &[u8]| {
         args.push(OsString::from(generate_test_arg()));
     }
 
-    let (rust_output, uumain_exit_status) = generate_and_run_uumain(&args, uumain);
+    let (rust_stdout, rust_stderr, uumain_exit_status) = generate_and_run_uumain(&args, uumain);
 
     // Run GNU test with the provided arguments and compare the output
     match run_gnu_cmd(CMD_PATH, &args[1..], false) {
-        Ok((gnu_output, gnu_exit_status)) => {
-            let gnu_output = gnu_output.trim().to_owned();
+        Ok((gnu_stdout, gnu_stderr, gnu_exit_status)) => {
+            let gnu_stdout = gnu_stdout.trim().to_owned();
             println!("gnu_exit_status {}", gnu_exit_status);
             println!("uumain_exit_status {}", uumain_exit_status);
-            if rust_output != gnu_output || uumain_exit_status != gnu_exit_status {
+            if rust_stdout != gnu_stdout || uumain_exit_status != gnu_exit_status {
                 println!("Discrepancy detected!");
                 println!("Test: {:?}", &args[1..]);
-                println!("My output: {}", rust_output);
-                println!("GNU output: {}", gnu_output);
+                println!("Rust output: {}", rust_stdout);
+                println!("GNU output: {}", gnu_stdout);
+
+                println!("Rust stderr: {}", rust_stderr);
+                println!("GNU stderr: {}", gnu_stderr);
                 println!("My exit status: {}", uumain_exit_status);
                 println!("GNU exit status: {}", gnu_exit_status);
                 panic!();
@@ -227,8 +230,18 @@ fuzz_target!(|_data: &[u8]| {
                 );
             }
         }
-        Err(_) => {
-            println!("GNU test execution failed for expression {:?}", &args[1..]);
+        Err((_gnu_stdout, gnu_stderr, _gnu_exit_code)) => {
+            if rust_stderr == gnu_stderr {
+                println!(
+                    "GNU execution failed for input: {:?} stderr: {}",
+                    args, rust_stderr
+                );
+            } else {
+                println!("Input: {:?}", args);
+                println!("Rust stderr: {}", rust_stderr);
+                println!("GNU stderr: {}", gnu_stderr);
+                panic!("Different stderr between Rust & GNU");
+            }
         }
     }
 });
