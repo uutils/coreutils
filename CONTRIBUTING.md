@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore reimplementing toybox RUNTEST CARGOFLAGS nextest embeddable Rustonomicon -->
+<!-- spell-checker:ignore reimplementing toybox RUNTEST CARGOFLAGS nextest embeddable Rustonomicon rustdoc's -->
 
 # Contributing to coreutils
 
