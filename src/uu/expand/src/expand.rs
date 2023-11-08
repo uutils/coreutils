@@ -265,7 +265,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(expand_shortcuts(&args))?;
 
-    expand(&Options::new(&matches)?).map_err_context(|| "failed to write output".to_string())
+    expand(&Options::new(&matches)?)
 }
 
 pub fn uu_app() -> Command {
@@ -308,12 +308,12 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn open(path: &str) -> std::io::Result<BufReader<Box<dyn Read + 'static>>> {
+fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
     if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
-        file_buf = File::open(path)?;
+        file_buf = File::open(path).map_err_context(|| path.to_string())?;
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
@@ -367,7 +367,7 @@ enum CharType {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn expand(options: &Options) -> std::io::Result<()> {
+fn expand(options: &Options) -> UResult<()> {
     use self::CharType::*;
 
     let mut output = BufWriter::new(stdout());
@@ -428,12 +428,18 @@ fn expand(options: &Options) -> std::io::Result<()> {
                         // now dump out either spaces if we're expanding, or a literal tab if we're not
                         if init || !options.iflag {
                             if nts <= options.tspaces.len() {
-                                output.write_all(options.tspaces[..nts].as_bytes())?;
+                                output
+                                    .write_all(options.tspaces[..nts].as_bytes())
+                                    .map_err_context(|| "failed to write output".to_string())?;
                             } else {
-                                output.write_all(" ".repeat(nts).as_bytes())?;
+                                output
+                                    .write_all(" ".repeat(nts).as_bytes())
+                                    .map_err_context(|| "failed to write output".to_string())?;
                             };
                         } else {
-                            output.write_all(&buf[byte..byte + nbytes])?;
+                            output
+                                .write_all(&buf[byte..byte + nbytes])
+                                .map_err_context(|| "failed to write output".to_string())?;
                         }
                     }
                     _ => {
@@ -451,14 +457,18 @@ fn expand(options: &Options) -> std::io::Result<()> {
                             init = false;
                         }
 
-                        output.write_all(&buf[byte..byte + nbytes])?;
+                        output
+                            .write_all(&buf[byte..byte + nbytes])
+                            .map_err_context(|| "failed to write output".to_string())?;
                     }
                 }
 
                 byte += nbytes; // advance the pointer
             }
 
-            output.flush()?;
+            output
+                .flush()
+                .map_err_context(|| "failed to write output".to_string())?;
             buf.truncate(0); // clear the buffer
         }
     }
