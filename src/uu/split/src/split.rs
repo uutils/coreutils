@@ -650,17 +650,9 @@ fn get_irregular_input_size<R>(
 where
     R: BufRead,
 {
-    let input_size: u64;
-
     // Set read limit to io_blksize if specified
     // Otherwise to OPT_IO_BLKSIZE_MAX
-    let read_limit: u64 = if let Some(n) = io_blksize {
-        *n
-    } else {
-        OPT_IO_BLKSIZE_MAX
-    }
-    .try_into()
-    .unwrap();
+    let read_limit = io_blksize.unwrap_or(OPT_IO_BLKSIZE_MAX) as u64;
 
     // Try to read into buffer up to a limit
     let num_bytes = reader
@@ -676,7 +668,7 @@ where
         // empty STDIN stream,
         // and files with true file size 0
         // will also fit here
-        input_size = num_bytes;
+        Ok(num_bytes)
     } else if input == "-" {
         // STDIN stream that did not fit all content into a buffer
         // Most likely continuous/infinite input stream
@@ -691,7 +683,7 @@ where
         let mut tmp_fd = File::open(Path::new(input))?;
         let end = tmp_fd.seek(SeekFrom::End(0))?;
         if end > 0 {
-            input_size = end;
+            Ok(end)
         } else {
             // Edge case of either "infinite" file (i.e. /dev/zero)
             // or some other "special" non-standard file type
@@ -704,8 +696,6 @@ where
             ));
         }
     }
-
-    Ok(input_size)
 }
 
 /// Get the size of the input file in bytes
@@ -730,8 +720,6 @@ fn get_input_size<R>(
 where
     R: BufRead,
 {
-    let mut input_size: u64;
-
     if input == "-"
         || input.starts_with("/dev/")
         || input.starts_with("/proc/")
@@ -742,17 +730,18 @@ where
         // could report incorrect file size via `metadata.len()`
         // either `0` while there is content
         // or a size larger than actual content
-        input_size = get_irregular_input_size(input, reader, buf, io_blksize)?;
+        get_irregular_input_size(input, reader, buf, io_blksize)
     } else {
         // Regular file
         let metadata = metadata(input)?;
-        input_size = metadata.len();
+        let size = metadata.len();
         // Double check the size if `metadata.len()` reports `0`
-        if input_size == 0 {
-            input_size = get_irregular_input_size(input, reader, buf, io_blksize)?;
+        if size == 0 {
+            get_irregular_input_size(input, reader, buf, io_blksize)
+        } else {
+            Ok(size)
         }
     }
-    Ok(input_size)
 }
 
 /// Write a certain number of bytes to one file, then move on to another one.
