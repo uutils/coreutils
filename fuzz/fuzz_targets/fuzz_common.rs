@@ -64,6 +64,7 @@ where
     }
 
     uumain_exit_status = uumain_function(args.to_owned().into_iter());
+    io::stdout().flush().unwrap();
 
     // Restore the original stdout
     unsafe {
