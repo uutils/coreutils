@@ -705,20 +705,6 @@ fn test_split_overflow_bytes_size() {
 }
 
 #[test]
-#[cfg(target_pointer_width = "32")]
-fn test_split_chunks_num_chunks_oversized_32() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    at.touch("file");
-    scene
-        .ucmd()
-        .args(&["--number", "5000000000", "sixhundredfiftyonebytes.txt"])
-        .fails()
-        .code_is(1)
-        .stderr_only("split: Number of chunks too big\n");
-}
-
-#[test]
 fn test_split_stdin_num_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["--number=1"]).pipe_in("").succeeds();
@@ -1377,7 +1363,7 @@ fn test_numeric_suffix() {
 }
 
 #[test]
-fn test_numeric_suffix_alias() {
+fn test_numeric_suffix_inferred() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "--numeric=9", "threebytes.txt"])
         .succeeds()

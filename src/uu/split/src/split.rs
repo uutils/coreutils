@@ -55,9 +55,6 @@ static OPT_IO_BLKSIZE_MAX: usize = if usize::BITS >= 64 {
 } else {
     1_000_000_000
 };
-// The ---io parameter is consumed and ignored.
-// The parameter is included to make GNU coreutils tests pass.
-static OPT_IO: &str = "-io";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
@@ -324,7 +321,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
                 .long(OPT_NUMERIC_SUFFIXES)
-                .alias("numeric")
                 .require_equals(true)
                 .num_args(0..=1)
                 .overrides_with_all([
@@ -351,7 +347,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_HEX_SUFFIXES)
                 .long(OPT_HEX_SUFFIXES)
-                .alias("hex")
                 .require_equals(true)
                 .num_args(0..=1)
                 .overrides_with_all([
@@ -385,12 +380,6 @@ pub fn uu_app() -> Command {
                 .value_name("SEP")
                 .action(ArgAction::Append)
                 .help("use SEP instead of newline as the record separator; '\\0' (zero) specifies the NUL character"),
-        )
-        .arg(
-            Arg::new(OPT_IO)
-                .long("io")
-                .alias(OPT_IO)
-                .hide(true),
         )
         .arg(
             Arg::new(OPT_IO_BLKSIZE)
@@ -627,21 +616,27 @@ fn custom_write_all<T: Write>(
     }
 }
 
-/// Determine the file size of irregular input,
-/// i.e. STDIN stream or files at /dev, /proc, /sys locations
-/// or files that report `0` size by `len()` function of [`std::fs::metadata`]
+/// Get the size of the input file in bytes
+/// Used only for subset of `--number=CHUNKS` strategy, as there is a need
+/// to determine input file size upfront in order to know chunk size
+/// to be written into each of N files/chunks:
+/// * N       split into N files based on size of input
+/// * K/N     output Kth of N to stdout
+/// * l/N     split into N files without splitting lines/records
+/// * l/K/N   output Kth of N to stdout without splitting lines/records
 ///
-/// Most system files at /dev, /proc, /sys locations should fit entirely into a buffer,
-/// so try to read up to a limit first and return the number of bytes read first.
-/// If the file's content does not fit into the buffer, attempt to find the end of file
-/// with direct `seek()`.
-/// For the edge case of "infinite" files like /dev/zero, /dev/random and similar
-/// return an error.
+/// For most files the size will be determined by either reading entire file content into a buffer
+/// or by `len()` function of [`std::fs::metadata`].
+/// In these cases the `buf` might end up with either partial or entire input content.
+///
+/// However, for some files which report filesystem metadata size that does not match
+/// their actual content size, we will need to attempt to find the end of file
+/// with direct `seek()` on [`std::fs::File`].
 ///
 /// For STDIN stream - read into a buffer up to a limit
 /// If input stream does not EOF before that - return an error
-/// (i.e. "infinite" input as in `cat /dev/zero | split ...`, `yes | split ...` etc.)
-fn get_irregular_input_size<R>(
+/// (i.e. "infinite" input as in `cat /dev/zero | split ...`, `yes | split ...` etc.).
+fn get_input_size<R>(
     input: &String,
     reader: &mut R,
     buf: &mut Vec<u8>,
@@ -677,69 +672,32 @@ where
             format!("{}: cannot determine input size", input),
         ));
     } else {
-        // Could be that file size is larger than set limit
-        // or could be an "infinite" file like /dev/zero
-        // Attempt direct `seek()` for the end of a file
-        let mut tmp_fd = File::open(Path::new(input))?;
-        let end = tmp_fd.seek(SeekFrom::End(0))?;
-        if end > 0 {
-            Ok(end)
-        } else {
-            // Edge case of either "infinite" file (i.e. /dev/zero)
-            // or some other "special" non-standard file type
-            // Give up and return an error
-            // TODO It might be possible to do more here
-            // to address all possible file types and edge cases
-            return Err(io::Error::new(
-                ErrorKind::Other,
-                format!("{}: cannot determine file size", input),
-            ));
-        }
-    }
-}
-
-/// Get the size of the input file in bytes
-/// Used only for subset of `--number=CHUNKS` strategy, as there is a need
-/// to determine input file size upfront in order to know chunk size
-/// to be written into each of N files/chunks:
-/// * N       split into N files based on size of input
-/// * K/N     output Kth of N to stdout
-/// * l/N     split into N files without splitting lines/records
-/// * l/K/N   output Kth of N to stdout without splitting lines/records
-///
-/// For most files the size will be determined by `len()` function of [`std::fs::metadata`]
-/// However, for the STDIN input stream and files at /dev, /proc, /sys and similar locations
-/// we will need to read from the `reader` in an attempt to find out the input size
-/// In those cases the `buf` might end up with either partial or entire input
-fn get_input_size<R>(
-    input: &String,
-    reader: &mut R,
-    buf: &mut Vec<u8>,
-    io_blksize: &Option<usize>,
-) -> std::io::Result<u64>
-where
-    R: BufRead,
-{
-    if input == "-"
-        || input.starts_with("/dev/")
-        || input.starts_with("/proc/")
-        || input.starts_with("/sys/")
-    {
-        // STDIN or
-        // Files in system Unix and Linux filesystems which
-        // could report incorrect file size via `metadata.len()`
-        // either `0` while there is content
-        // or a size larger than actual content
-        get_irregular_input_size(input, reader, buf, io_blksize)
-    } else {
-        // Regular file
+        // Could be that file size is larger than set read limit
+        // Get the file size from filesystem metadata
         let metadata = metadata(input)?;
-        let size = metadata.len();
-        // Double check the size if `metadata.len()` reports `0`
-        if size == 0 {
-            get_irregular_input_size(input, reader, buf, io_blksize)
+        let metadata_size = metadata.len();
+        if num_bytes <= metadata_size {
+            Ok(metadata_size)
         } else {
-            Ok(size)
+            // Could be a file from locations like /dev, /sys, /proc or similar
+            // which report filesystem metadata size that does not match
+            // their actual content size
+            // Attempt direct `seek()` for the end of a file
+            let mut tmp_fd = File::open(Path::new(input))?;
+            let end = tmp_fd.seek(SeekFrom::End(0))?;
+            if end > 0 {
+                Ok(end)
+            } else {
+                // Edge case of either "infinite" file (i.e. /dev/zero)
+                // or some other "special" non-standard file type
+                // Give up and return an error
+                // TODO It might be possible to do more here
+                // to address all possible file types and edge cases
+                return Err(io::Error::new(
+                    ErrorKind::Other,
+                    format!("{}: cannot determine file size", input),
+                ));
+            }
         }
     }
 }
@@ -1210,7 +1168,7 @@ where
     R: BufRead,
 {
     // Get the size of the input in bytes
-    let initial_buf: &mut Vec<u8> = &mut vec![];
+    let initial_buf = &mut Vec::new();
     let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
     let mut reader = initial_buf.chain(reader);
 
@@ -1245,12 +1203,6 @@ where
         return Ok(());
     }
 
-    if usize::BITS < 64 {
-        let _: usize = num_chunks
-            .try_into()
-            .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
-    }
-
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = std::io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
@@ -1278,11 +1230,9 @@ where
         }
     }
 
-    let mut i = 0;
-    loop {
-        let chunk_size = chunk_size_base + (chunk_size_reminder > i) as u64;
-        let buf: &mut Vec<u8> = &mut vec![];
-        i += 1;
+    for i in 1_u64..=num_chunks {
+        let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
+        let buf = &mut Vec::new();
         if num_bytes > 0 {
             // Read `chunk_size` bytes from the reader into `buf`
             // except the last.
@@ -1320,12 +1270,6 @@ where
                     }
                 }
                 None => {
-                    if i > num_chunks {
-                        // All chunks have been written to, so exit
-                        // Failsafe in case input size that was reported by `get_input_size()`
-                        // is greater than actual file content
-                        break;
-                    }
                     let idx = (i - 1) as usize;
                     let writer = writers.get_mut(idx).unwrap();
                     writer.write_all(buf)?;
@@ -1374,7 +1318,7 @@ where
 {
     // Get the size of the input in bytes and compute the number
     // of bytes per chunk.
-    let initial_buf: &mut Vec<u8> = &mut vec![];
+    let initial_buf = &mut Vec::new();
     let num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
     let reader = initial_buf.chain(reader);
     let chunk_size = (num_bytes / num_chunks) as usize;
