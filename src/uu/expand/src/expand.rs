@@ -366,10 +366,11 @@ enum CharType {
     Other,
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn expand_line(
     buf: &mut Vec<u8>,
     output: &mut BufWriter<std::io::Stdout>,
-    ts: &[usize],
+    tabstops: &[usize],
     options: &Options,
 ) -> std::io::Result<()> {
     use self::CharType::*;
@@ -415,7 +416,7 @@ fn expand_line(
         match ctype {
             Tab => {
                 // figure out how many spaces to the next tabstop
-                let nts = next_tabstop(ts, col, &options.remaining_mode);
+                let nts = next_tabstop(tabstops, col, &options.remaining_mode);
                 col += nts;
 
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
