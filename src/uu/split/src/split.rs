@@ -635,7 +635,7 @@ fn custom_write_all<T: Write>(
 /// For STDIN stream - read into a buffer up to a limit
 /// If input stream does not EOF before that - return an error
 /// (i.e. "infinite" input as in `cat /dev/zero | split ...`, `yes | split ...` etc.).
-/// 
+///
 /// Note: The `buf` might end up with either partial or entire input content.
 fn get_input_size<R>(
     input: &String,
