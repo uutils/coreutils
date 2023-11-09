@@ -1,15 +1,58 @@
 use std::io::Write;
 
-use super::{
-    spec::{
-        Case, FloatVariant, ForceDecimal, NumberAlignment, PositiveSign, Prefix, UnsignedIntVariant,
-    },
-    FormatError,
-};
+use super::FormatError;
 
 pub trait Formatter {
     type Input;
     fn fmt(&self, writer: impl Write, x: Self::Input) -> Result<(), FormatError>;
+}
+
+#[derive(Clone, Copy)]
+pub enum UnsignedIntVariant {
+    Decimal,
+    Octal(Prefix),
+    Hexadecimal(Case, Prefix),
+}
+
+#[derive(Clone, Copy)]
+
+pub enum FloatVariant {
+    Decimal,
+    Scientific,
+    Shortest,
+    Hexadecimal,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Case {
+    Lowercase,
+    Uppercase,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Prefix {
+    No,
+    Yes,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ForceDecimal {
+    No,
+    Yes,
+}
+
+#[derive(Clone, Copy)]
+pub enum PositiveSign {
+    None,
+    Plus,
+    Space,
+}
+
+#[derive(Clone, Copy)]
+pub enum NumberAlignment {
+    Left,
+    RightSpace,
+    RightZero,
 }
 
 pub struct SignedInt {
@@ -85,6 +128,20 @@ pub struct Float {
     pub positive_sign: PositiveSign,
     pub alignment: NumberAlignment,
     pub precision: usize,
+}
+
+impl Default for Float {
+    fn default() -> Self {
+        Self {
+            variant: FloatVariant::Decimal,
+            case: Case::Lowercase,
+            force_decimal: ForceDecimal::No,
+            width: 0,
+            positive_sign: PositiveSign::None,
+            alignment: NumberAlignment::Left,
+            precision: 2,
+        }
+    }
 }
 
 impl Formatter for Float {

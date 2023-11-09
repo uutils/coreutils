@@ -11,7 +11,7 @@
 // spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 
 mod spec;
-mod num_format;
+pub mod num_format;
 
 use spec::Spec;
 use std::{

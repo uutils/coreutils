@@ -1,7 +1,10 @@
 // spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 
 use super::{
-    num_format::{self, Formatter},
+    num_format::{
+        self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
+        UnsignedIntVariant,
+    },
     FormatArgument, FormatError,
 };
 use std::{fmt::Display, io::Write};
@@ -34,54 +37,6 @@ pub enum Spec {
         alignment: NumberAlignment,
         precision: Option<CanAsterisk<usize>>,
     },
-}
-
-#[derive(Clone, Copy)]
-pub enum UnsignedIntVariant {
-    Decimal,
-    Octal(Prefix),
-    Hexadecimal(Case, Prefix),
-}
-
-#[derive(Clone, Copy)]
-
-pub enum FloatVariant {
-    Decimal,
-    Scientific,
-    Shortest,
-    Hexadecimal,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Case {
-    Lowercase,
-    Uppercase,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Prefix {
-    No,
-    Yes,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum ForceDecimal {
-    No,
-    Yes,
-}
-
-#[derive(Clone, Copy)]
-pub enum PositiveSign {
-    None,
-    Plus,
-    Space,
-}
-
-#[derive(Clone, Copy)]
-pub enum NumberAlignment {
-    Left,
-    RightSpace,
-    RightZero,
 }
 
 /// Precision and width specified might use an asterisk to indicate that they are
@@ -295,7 +250,8 @@ impl Spec {
                     width,
                     positive_sign,
                     alignment,
-                }.fmt(writer, *i)
+                }
+                .fmt(writer, *i)
             }
             &Spec::UnsignedInt {
                 variant,
