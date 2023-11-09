@@ -10,6 +10,7 @@
 //! Subs which have numeric field chars make use of the num_format
 //! submodule
 use crate::error::{UError, UResult};
+use crate::quoting_style::{escape_name, QuotingStyle};
 use itertools::{put_back_n, PutBackN};
 use std::error::Error;
 use std::fmt::Display;
@@ -91,7 +92,7 @@ impl Sub {
         // for more dry printing, field characters are grouped
         // in initialization of token.
         let field_type = match field_char {
-            's' | 'b' => FieldType::Strf,
+            's' | 'b' | 'q' => FieldType::Strf,
             'd' | 'i' | 'u' | 'o' | 'x' | 'X' => FieldType::Intf,
             'f' | 'F' => FieldType::Floatf,
             'a' | 'A' => FieldType::CninetyNineHexFloatf,
@@ -189,7 +190,7 @@ impl SubParser {
 
         let mut legal_fields = [
             // 'a', 'A', //c99 hex float implementation not yet complete
-            'b', 'c', 'd', 'e', 'E', 'f', 'F', 'g', 'G', 'i', 'o', 's', 'u', 'x', 'X',
+            'b', 'c', 'd', 'e', 'E', 'f', 'F', 'g', 'G', 'i', 'o', 'q', 's', 'u', 'x', 'X',
         ];
         let mut specifiers = ['h', 'j', 'l', 'L', 't', 'z'];
         legal_fields.sort_unstable();
@@ -260,7 +261,6 @@ impl SubParser {
                 }
                 x if legal_fields.binary_search(&x).is_ok() => {
                     self.field_char = Some(ch);
-                    self.text_so_far.push(ch);
                     break;
                 }
                 x if specifiers.binary_search(&x).is_ok() => {
@@ -331,7 +331,7 @@ impl SubParser {
         if (field_char == 's' && self.min_width_tmp == Some(String::from("0")))
             || (field_char == 'c'
                 && (self.min_width_tmp == Some(String::from("0")) || self.past_decimal))
-            || (field_char == 'b'
+            || ((field_char == 'b' || field_char == 'q')
                 && (self.min_width_tmp.is_some()
                     || self.past_decimal
                     || self.second_field_tmp.is_some()))
@@ -391,6 +391,7 @@ impl Sub {
             // if %s just return arg
             // if %b use UnescapedText module's unescape-fn
             // if %c return first char of arg
+            // if %q return arg which non-printable characters are escaped
             FieldType::Strf | FieldType::Charf => {
                 match pf_arg {
                     Some(arg_string) => {
@@ -404,11 +405,18 @@ impl Sub {
                                 UnescapedText::from_it_core(writer, &mut a_it, true);
                                 None
                             }
-                            // for 'c': get iter of string vals,
+                            'q' => Some(escape_name(
+                                arg_string.as_ref(),
+                                &QuotingStyle::Shell {
+                                    escape: true,
+                                    always_quote: false,
+                                    show_control: false,
+                                },
+                            )),
                             // get opt<char> of first val
                             // and map it to opt<String>
-                            /* 'c' | */
-                            _ => arg_string.chars().next().map(|x| x.to_string()),
+                            'c' => arg_string.chars().next().map(|x| x.to_string()),
+                            _ => unreachable!(),
                         }
                     }
                     None => None,
