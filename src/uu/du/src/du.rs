@@ -31,13 +31,11 @@ use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
 use uucore::error::FromIo;
-use uucore::error::{set_exit_code, UError, UResult};
+use uucore::error::{set_exit_code, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
-use uucore::{
-    crash, format_usage, help_about, help_section, help_usage, show, show_error, show_warning,
-};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -137,39 +135,42 @@ impl Stat {
         }?;
 
         #[cfg(not(windows))]
-        let file_info = FileInfo {
-            file_id: metadata.ino() as u128,
-            dev_id: metadata.dev(),
-        };
-        #[cfg(not(windows))]
-        return Ok(Self {
-            path: path.to_path_buf(),
-            is_dir: metadata.is_dir(),
-            size: if path.is_dir() { 0 } else { metadata.len() },
-            blocks: metadata.blocks(),
-            inodes: 1,
-            inode: Some(file_info),
-            created: birth_u64(&metadata),
-            accessed: metadata.atime() as u64,
-            modified: metadata.mtime() as u64,
-        });
+        {
+            let file_info = FileInfo {
+                file_id: metadata.ino() as u128,
+                dev_id: metadata.dev(),
+            };
+
+            Ok(Self {
+                path: path.to_path_buf(),
+                is_dir: metadata.is_dir(),
+                size: if path.is_dir() { 0 } else { metadata.len() },
+                blocks: metadata.blocks(),
+                inodes: 1,
+                inode: Some(file_info),
+                created: birth_u64(&metadata),
+                accessed: metadata.atime() as u64,
+                modified: metadata.mtime() as u64,
+            })
+        }
 
         #[cfg(windows)]
-        let size_on_disk = get_size_on_disk(path);
-        #[cfg(windows)]
-        let file_info = get_file_info(path);
-        #[cfg(windows)]
-        Ok(Self {
-            path: path.to_path_buf(),
-            is_dir: metadata.is_dir(),
-            size: if path.is_dir() { 0 } else { metadata.len() },
-            blocks: size_on_disk / 1024 * 2,
-            inode: file_info,
-            inodes: 1,
-            created: windows_creation_time_to_unix_time(metadata.creation_time()),
-            accessed: windows_time_to_unix_time(metadata.last_access_time()),
-            modified: windows_time_to_unix_time(metadata.last_write_time()),
-        })
+        {
+            let size_on_disk = get_size_on_disk(path);
+            let file_info = get_file_info(path);
+
+            Ok(Self {
+                path: path.to_path_buf(),
+                is_dir: metadata.is_dir(),
+                size: if path.is_dir() { 0 } else { metadata.len() },
+                blocks: size_on_disk / 1024 * 2,
+                inodes: 1,
+                inode: file_info,
+                created: windows_creation_time_to_unix_time(metadata.creation_time()),
+                accessed: windows_time_to_unix_time(metadata.last_access_time()),
+                modified: windows_time_to_unix_time(metadata.last_write_time()),
+            })
+        }
     }
 }
 
@@ -255,22 +256,22 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
     result
 }
 
-fn read_block_size(s: Option<&str>) -> u64 {
+fn read_block_size(s: Option<&str>) -> UResult<u64> {
     if let Some(s) = s {
         parse_size_u64(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::BLOCK_SIZE)))
+            .map_err(|e| USimpleError::new(1, format_error_message(&e, s, options::BLOCK_SIZE)))
     } else {
         for env_var in ["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
                 if let Ok(v) = parse_size_u64(&env_size) {
-                    return v;
+                    return Ok(v);
                 }
             }
         }
         if env::var("POSIXLY_CORRECT").is_ok() {
-            512
+            Ok(512)
         } else {
-            1024
+            Ok(1024)
         }
     }
 }
@@ -574,12 +575,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         matches
             .get_one::<String>(options::BLOCK_SIZE)
             .map(|s| s.as_str()),
-    );
+    )?;
 
-    let threshold = matches.get_one::<String>(options::THRESHOLD).map(|s| {
-        Threshold::from_str(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(&e, s, options::THRESHOLD)))
-    });
+    let threshold = match matches.get_one::<String>(options::THRESHOLD) {
+        Some(s) => match Threshold::from_str(s) {
+            Ok(t) => Some(t),
+            Err(e) => {
+                return Err(USimpleError::new(
+                    1,
+                    format_error_message(&e, s, options::THRESHOLD),
+                ))
+            }
+        },
+        None => None,
+    };
 
     let multiplier: u64 = if matches.get_flag(options::SI) {
         1000
@@ -821,6 +830,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::DEREFERENCE_ARGS)
                 .short('D')
+                .visible_short_alias('H')
                 .long(options::DEREFERENCE_ARGS)
                 .help("follow only symlinks that are listed on the command line")
                 .action(ArgAction::SetTrue)
@@ -991,13 +1001,9 @@ mod test_du {
 
     #[test]
     fn test_read_block_size() {
-        let test_data = [
-            (Some("1024".to_string()), 1024),
-            (Some("K".to_string()), 1024),
-            (None, 1024),
-        ];
+        let test_data = [Some("1024".to_string()), Some("K".to_string()), None];
         for it in &test_data {
-            assert_eq!(read_block_size(it.0.as_deref()), it.1);
+            assert!(matches!(read_block_size(it.as_deref()), Ok(1024)));
         }
     }
 }
