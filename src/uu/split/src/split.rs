@@ -627,7 +627,6 @@ fn custom_write_all<T: Write>(
 ///
 /// For most files the size will be determined by either reading entire file content into a buffer
 /// or by `len()` function of [`std::fs::metadata`].
-/// In these cases the `buf` might end up with either partial or entire input content.
 ///
 /// However, for some files which report filesystem metadata size that does not match
 /// their actual content size, we will need to attempt to find the end of file
@@ -636,6 +635,8 @@ fn custom_write_all<T: Write>(
 /// For STDIN stream - read into a buffer up to a limit
 /// If input stream does not EOF before that - return an error
 /// (i.e. "infinite" input as in `cat /dev/zero | split ...`, `yes | split ...` etc.).
+/// 
+/// Note: The `buf` might end up with either partial or entire input content.
 fn get_input_size<R>(
     input: &String,
     reader: &mut R,
