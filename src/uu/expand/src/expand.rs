@@ -366,10 +366,98 @@ enum CharType {
     Other,
 }
 
-#[allow(clippy::cognitive_complexity)]
-fn expand(options: &Options) -> UResult<()> {
+fn expand_line(
+    buf: &mut Vec<u8>,
+    output: &mut BufWriter<std::io::Stdout>,
+    ts: &[usize],
+    options: &Options,
+) -> std::io::Result<()> {
     use self::CharType::*;
 
+    let mut col = 0;
+    let mut byte = 0;
+    let mut init = true;
+
+    while byte < buf.len() {
+        let (ctype, cwidth, nbytes) = if options.uflag {
+            let nbytes = char::from(buf[byte]).len_utf8();
+
+            if byte + nbytes > buf.len() {
+                // don't overrun buffer because of invalid UTF-8
+                (Other, 1, 1)
+            } else if let Ok(t) = from_utf8(&buf[byte..byte + nbytes]) {
+                match t.chars().next() {
+                    Some('\t') => (Tab, 0, nbytes),
+                    Some('\x08') => (Backspace, 0, nbytes),
+                    Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes),
+                    None => {
+                        // no valid char at start of t, so take 1 byte
+                        (Other, 1, 1)
+                    }
+                }
+            } else {
+                (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
+            }
+        } else {
+            (
+                match buf[byte] {
+                    // always take exactly 1 byte in strict ASCII mode
+                    0x09 => Tab,
+                    0x08 => Backspace,
+                    _ => Other,
+                },
+                1,
+                1,
+            )
+        };
+
+        // figure out how many columns this char takes up
+        match ctype {
+            Tab => {
+                // figure out how many spaces to the next tabstop
+                let nts = next_tabstop(ts, col, &options.remaining_mode);
+                col += nts;
+
+                // now dump out either spaces if we're expanding, or a literal tab if we're not
+                if init || !options.iflag {
+                    if nts <= options.tspaces.len() {
+                        output.write_all(options.tspaces[..nts].as_bytes())?;
+                    } else {
+                        output.write_all(" ".repeat(nts).as_bytes())?;
+                    };
+                } else {
+                    output.write_all(&buf[byte..byte + nbytes])?;
+                }
+            }
+            _ => {
+                col = if ctype == Other {
+                    col + cwidth
+                } else if col > 0 {
+                    col - 1
+                } else {
+                    0
+                };
+
+                // if we're writing anything other than a space, then we're
+                // done with the line's leading spaces
+                if buf[byte] != 0x20 {
+                    init = false;
+                }
+
+                output.write_all(&buf[byte..byte + nbytes])?;
+            }
+        }
+
+        byte += nbytes; // advance the pointer
+    }
+
+    output.flush()?;
+    buf.truncate(0); // clear the buffer
+
+    Ok(())
+}
+
+fn expand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
     let ts = options.tabstops.as_ref();
     let mut buf = Vec::new();
@@ -381,95 +469,8 @@ fn expand(options: &Options) -> UResult<()> {
             Ok(s) => s > 0,
             Err(_) => buf.is_empty(),
         } {
-            let mut col = 0;
-            let mut byte = 0;
-            let mut init = true;
-
-            while byte < buf.len() {
-                let (ctype, cwidth, nbytes) = if options.uflag {
-                    let nbytes = char::from(buf[byte]).len_utf8();
-
-                    if byte + nbytes > buf.len() {
-                        // don't overrun buffer because of invalid UTF-8
-                        (Other, 1, 1)
-                    } else if let Ok(t) = from_utf8(&buf[byte..byte + nbytes]) {
-                        match t.chars().next() {
-                            Some('\t') => (Tab, 0, nbytes),
-                            Some('\x08') => (Backspace, 0, nbytes),
-                            Some(c) => (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes),
-                            None => {
-                                // no valid char at start of t, so take 1 byte
-                                (Other, 1, 1)
-                            }
-                        }
-                    } else {
-                        (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
-                    }
-                } else {
-                    (
-                        match buf[byte] {
-                            // always take exactly 1 byte in strict ASCII mode
-                            0x09 => Tab,
-                            0x08 => Backspace,
-                            _ => Other,
-                        },
-                        1,
-                        1,
-                    )
-                };
-
-                // figure out how many columns this char takes up
-                match ctype {
-                    Tab => {
-                        // figure out how many spaces to the next tabstop
-                        let nts = next_tabstop(ts, col, &options.remaining_mode);
-                        col += nts;
-
-                        // now dump out either spaces if we're expanding, or a literal tab if we're not
-                        if init || !options.iflag {
-                            if nts <= options.tspaces.len() {
-                                output
-                                    .write_all(options.tspaces[..nts].as_bytes())
-                                    .map_err_context(|| "failed to write output".to_string())?;
-                            } else {
-                                output
-                                    .write_all(" ".repeat(nts).as_bytes())
-                                    .map_err_context(|| "failed to write output".to_string())?;
-                            };
-                        } else {
-                            output
-                                .write_all(&buf[byte..byte + nbytes])
-                                .map_err_context(|| "failed to write output".to_string())?;
-                        }
-                    }
-                    _ => {
-                        col = if ctype == Other {
-                            col + cwidth
-                        } else if col > 0 {
-                            col - 1
-                        } else {
-                            0
-                        };
-
-                        // if we're writing anything other than a space, then we're
-                        // done with the line's leading spaces
-                        if buf[byte] != 0x20 {
-                            init = false;
-                        }
-
-                        output
-                            .write_all(&buf[byte..byte + nbytes])
-                            .map_err_context(|| "failed to write output".to_string())?;
-                    }
-                }
-
-                byte += nbytes; // advance the pointer
-            }
-
-            output
-                .flush()
+            expand_line(&mut buf, &mut output, ts, options)
                 .map_err_context(|| "failed to write output".to_string())?;
-            buf.truncate(0); // clear the buffer
         }
     }
     Ok(())
