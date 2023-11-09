@@ -10,8 +10,8 @@
 //! parsing errors occur during writing.
 // spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 
-// mod num_format;
 mod spec;
+mod num_format;
 
 use spec::Spec;
 use std::{

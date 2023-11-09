@@ -1,6 +1,9 @@
 // spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 
-use super::{FormatArgument, FormatError};
+use super::{
+    num_format::{self, Formatter},
+    FormatArgument, FormatError,
+};
 use std::{fmt::Display, io::Write};
 
 pub enum Spec {
@@ -256,7 +259,7 @@ impl Spec {
 
     pub fn write<'a>(
         &self,
-        mut writer: impl Write,
+        writer: impl Write,
         mut args: impl Iterator<Item = &'a FormatArgument>,
     ) -> Result<(), FormatError> {
         match self {
@@ -288,21 +291,11 @@ impl Spec {
                     return Err(FormatError::InvalidArgument(arg.clone()));
                 };
 
-                if *i >= 0 {
-                    match positive_sign {
-                        PositiveSign::None => Ok(()),
-                        PositiveSign::Plus => write!(writer, "+"),
-                        PositiveSign::Space => write!(writer, " "),
-                    }
-                    .map_err(FormatError::IoError)?;
-                }
-
-                match alignment {
-                    NumberAlignment::Left => write!(writer, "{i:<width$}"),
-                    NumberAlignment::RightSpace => write!(writer, "{i:>width$}"),
-                    NumberAlignment::RightZero => write!(writer, "{i:0>width$}"),
-                }
-                .map_err(FormatError::IoError)
+                num_format::SignedInt {
+                    width,
+                    positive_sign,
+                    alignment,
+                }.fmt(writer, *i)
             }
             &Spec::UnsignedInt {
                 variant,
@@ -312,34 +305,16 @@ impl Spec {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
 
                 let arg = next_arg(args)?;
-                let FormatArgument::SignedInt(i) = arg else {
+                let FormatArgument::UnsignedInt(i) = arg else {
                     return Err(FormatError::InvalidArgument(arg.clone()));
                 };
 
-                let s = match variant {
-                    UnsignedIntVariant::Decimal => format!("{i}"),
-                    UnsignedIntVariant::Octal(Prefix::No) => format!("{i:o}"),
-                    UnsignedIntVariant::Octal(Prefix::Yes) => format!("{i:#o}"),
-                    UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::No) => {
-                        format!("{i:x}")
-                    }
-                    UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes) => {
-                        format!("{i:#x}")
-                    }
-                    UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::No) => {
-                        format!("{i:X}")
-                    }
-                    UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes) => {
-                        format!("{i:#X}")
-                    }
-                };
-
-                match alignment {
-                    NumberAlignment::Left => write!(writer, "{s:<width$}"),
-                    NumberAlignment::RightSpace => write!(writer, "{s:>width$}"),
-                    NumberAlignment::RightZero => write!(writer, "{s:0>width$}"),
+                num_format::UnsignedInt {
+                    variant,
+                    width,
+                    alignment,
                 }
-                .map_err(FormatError::IoError)
+                .fmt(writer, *i)
             }
             &Spec::Float {
                 variant,
@@ -358,146 +333,19 @@ impl Spec {
                     return Err(FormatError::InvalidArgument(arg.clone()));
                 };
 
-                if f.is_sign_positive() {
-                    match positive_sign {
-                        PositiveSign::None => Ok(()),
-                        PositiveSign::Plus => write!(writer, "+"),
-                        PositiveSign::Space => write!(writer, " "),
-                    }
-                    .map_err(FormatError::IoError)?;
+                num_format::Float {
+                    variant,
+                    case,
+                    force_decimal,
+                    width,
+                    positive_sign,
+                    alignment,
+                    precision,
                 }
-
-                let s = match variant {
-                    FloatVariant::Decimal => {
-                        format_float_decimal(*f, precision, case, force_decimal)
-                    }
-                    FloatVariant::Scientific => {
-                        format_float_scientific(*f, precision, case, force_decimal)
-                    }
-                    FloatVariant::Shortest => {
-                        format_float_shortest(*f, precision, case, force_decimal)
-                    }
-                    FloatVariant::Hexadecimal => {
-                        format_float_hexadecimal(*f, precision, case, force_decimal)
-                    }
-                };
-
-                match alignment {
-                    NumberAlignment::Left => write!(writer, "{s:<width$}"),
-                    NumberAlignment::RightSpace => write!(writer, "{s:>width$}"),
-                    NumberAlignment::RightZero => write!(writer, "{s:0>width$}"),
-                }
-                .map_err(FormatError::IoError)
+                .fmt(writer, *f)
             }
         }
     }
-}
-
-fn format_float_nonfinite(f: f64, case: Case) -> String {
-    debug_assert!(!f.is_finite());
-    let mut s = format!("{f}");
-    if case == Case::Uppercase {
-        s.make_ascii_uppercase();
-    }
-    return s;
-}
-
-fn format_float_decimal(
-    f: f64,
-    precision: usize,
-    case: Case,
-    force_decimal: ForceDecimal,
-) -> String {
-    if !f.is_finite() {
-        return format_float_nonfinite(f, case);
-    }
-
-    if precision == 0 && force_decimal == ForceDecimal::Yes {
-        format!("{f:.0}.")
-    } else {
-        format!("{f:.*}", precision)
-    }
-}
-
-fn format_float_scientific(
-    f: f64,
-    precision: usize,
-    case: Case,
-    force_decimal: ForceDecimal,
-) -> String {
-    // If the float is NaN, -Nan, Inf or -Inf, format like any other float
-    if !f.is_finite() {
-        return format_float_nonfinite(f, case);
-    }
-
-    let exponent: i32 = f.log10().floor() as i32;
-    let normalized = f / 10.0_f64.powi(exponent);
-
-    let additional_dot = if precision == 0 && ForceDecimal::Yes == force_decimal {
-        "."
-    } else {
-        ""
-    };
-
-    let exp_char = match case {
-        Case::Lowercase => 'e',
-        Case::Uppercase => 'E',
-    };
-
-    format!(
-        "{normalized:.*}{additional_dot}{exp_char}{exponent:+03}",
-        precision
-    )
-}
-
-// TODO: This could be optimized. It's not terribly important though.
-fn format_float_shortest(
-    f: f64,
-    precision: usize,
-    case: Case,
-    force_decimal: ForceDecimal,
-) -> String {
-    let a = format_float_decimal(f, precision, case, force_decimal);
-    let b = format_float_scientific(f, precision, case, force_decimal);
-
-    if a.len() > b.len() {
-        b
-    } else {
-        a
-    }
-}
-
-fn format_float_hexadecimal(
-    f: f64,
-    precision: usize,
-    case: Case,
-    force_decimal: ForceDecimal,
-) -> String {
-    if !f.is_finite() {
-        return format_float_nonfinite(f, case);
-    }
-
-    let (first_digit, mantissa, exponent) = if f == 0.0 {
-        (0, 0, 0)
-    } else {
-        let bits = f.to_bits();
-        let exponent_bits = ((bits >> 52) & 0x7fff) as i64;
-        let exponent = exponent_bits - 1023;
-        let mantissa = bits & 0xf_ffff_ffff_ffff;
-        (1, mantissa, exponent)
-    };
-
-    let mut s = match (precision, force_decimal) {
-        (0, ForceDecimal::No) => format!("0x{first_digit}p{exponent:+x}"),
-        (0, ForceDecimal::Yes) => format!("0x{first_digit}.p{exponent:+x}"),
-        _ => format!("0x{first_digit}.{mantissa:0>13x}p{exponent:+x}"),
-    };
-
-    if case == Case::Uppercase {
-        s.make_ascii_uppercase();
-    }
-
-    return s;
 }
 
 fn resolve_asterisk<'a>(
