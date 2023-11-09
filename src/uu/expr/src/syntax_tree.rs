@@ -12,7 +12,7 @@
 
 use num_bigint::BigInt;
 use num_traits::Zero;
-use onig::{Regex, RegexOptions, Syntax};
+use regex::Regex;
 
 use crate::tokens::Token;
 
@@ -482,16 +482,15 @@ fn infix_operator_and(values: &[String]) -> String {
 
 fn operator_match(values: &[String]) -> Result<String, String> {
     assert!(values.len() == 2);
-    let re = Regex::with_options(&values[1], RegexOptions::REGEX_OPTION_NONE, Syntax::grep())
-        .map_err(|err| err.description().to_string())?;
-    Ok(if re.captures_len() > 0 {
+    let re = Regex::new(&values[1]).map_err(|err| err.to_string())?;
+    Ok(if re.captures_len() > 1 {
         re.captures(&values[0])
-            .map(|captures| captures.at(1).unwrap())
+            .map(|captures| captures.get(1).unwrap().as_str())
             .unwrap_or("")
             .to_string()
     } else {
         re.find(&values[0])
-            .map_or("0".to_string(), |(start, end)| (end - start).to_string())
+            .map_or("0".to_string(), |m| m.len().to_string())
     })
 }
 
