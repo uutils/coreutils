@@ -12,6 +12,19 @@ use std::process::Command;
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicBool, Once};
 
+/// Represents the result of running a command, including its standard output,
+/// standard error, and exit code.
+pub struct CommandResult {
+    /// The standard output (stdout) of the command as a string.
+    pub stdout: String,
+
+    /// The standard error (stderr) of the command as a string.
+    pub stderr: String,
+
+    /// The exit code of the command.
+    pub exit_code: i32,
+}
+
 static CHECK_GNU: Once = Once::new();
 static IS_GNU: AtomicBool = AtomicBool::new(false);
 
@@ -34,7 +47,7 @@ pub fn is_gnu_cmd(cmd_path: &str) -> Result<(), std::io::Error> {
     }
 }
 
-pub fn generate_and_run_uumain<F>(args: &[OsString], uumain_function: F) -> (String, String, i32)
+pub fn generate_and_run_uumain<F>(args: &[OsString], uumain_function: F) -> CommandResult
 where
     F: FnOnce(std::vec::IntoIter<OsString>) -> i32,
 {
@@ -42,11 +55,11 @@ where
     let original_stdout_fd = unsafe { dup(STDOUT_FILENO) };
     let original_stderr_fd = unsafe { dup(STDERR_FILENO) };
     if original_stdout_fd == -1 || original_stderr_fd == -1 {
-        return (
-            "Failed to duplicate STDOUT_FILENO or STDERR_FILENO".to_string(),
-            "".to_string(),
-            -1,
-        );
+        return CommandResult {
+            stdout: "Failed to duplicate STDOUT_FILENO or STDERR_FILENO".to_string(),
+            stderr: "".to_string(),
+            exit_code: -1,
+        };
     }
     println!("Running test {:?}", &args[0..]);
     let mut pipe_stdout_fds = [-1; 2];
@@ -56,7 +69,11 @@ where
     if unsafe { pipe(pipe_stdout_fds.as_mut_ptr()) } == -1
         || unsafe { pipe(pipe_stderr_fds.as_mut_ptr()) } == -1
     {
-        return ("Failed to create pipes".to_string(), "".to_string(), -1);
+        return CommandResult {
+            stdout: "Failed to create pipes".to_string(),
+            stderr: "".to_string(),
+            exit_code: -1,
+        };
     }
 
     // Redirect stdout and stderr to their respective pipes
@@ -69,11 +86,11 @@ where
             close(pipe_stderr_fds[0]);
             close(pipe_stderr_fds[1]);
         }
-        return (
-            "Failed to redirect STDOUT_FILENO or STDERR_FILENO".to_string(),
-            "".to_string(),
-            -1,
-        );
+        return CommandResult {
+            stdout: "Failed to redirect STDOUT_FILENO or STDERR_FILENO".to_string(),
+            stderr: "".to_string(),
+            exit_code: -1,
+        };
     }
 
     let uumain_exit_status = uumain_function(args.to_owned().into_iter());
@@ -85,18 +102,19 @@ where
     if unsafe { dup2(original_stdout_fd, STDOUT_FILENO) } == -1
         || unsafe { dup2(original_stderr_fd, STDERR_FILENO) } == -1
     {
-        return (
-            "Failed to restore the original STDOUT_FILENO or STDERR_FILENO".to_string(),
-            "".to_string(),
-            -1,
-        );
+        return CommandResult {
+            stdout: "Failed to restore the original STDOUT_FILENO or STDERR_FILENO".to_string(),
+            stderr: "".to_string(),
+            exit_code: -1,
+        };
     }
     unsafe {
         close(original_stdout_fd);
         close(original_stderr_fd);
+
+        close(pipe_stdout_fds[1]);
+        close(pipe_stderr_fds[1]);
     }
-    unsafe { close(pipe_stdout_fds[1]) };
-    unsafe { close(pipe_stderr_fds[1]) };
 
     let captured_stdout = read_from_fd(pipe_stdout_fds[0]).trim().to_string();
     let captured_stderr = read_from_fd(pipe_stderr_fds[0]).to_string();
@@ -107,7 +125,11 @@ where
         .trim()
         .to_string();
 
-    (captured_stdout, captured_stderr, uumain_exit_status)
+    CommandResult {
+        stdout: captured_stdout,
+        stderr: captured_stderr,
+        exit_code: uumain_exit_status,
+    }
 }
 
 fn read_from_fd(fd: RawFd) -> String {
@@ -141,13 +163,17 @@ pub fn run_gnu_cmd(
     cmd_path: &str,
     args: &[OsString],
     check_gnu: bool,
-) -> Result<(String, String, i32), (String, String, i32)> {
+) -> Result<CommandResult, CommandResult> {
     if check_gnu {
         match is_gnu_cmd(cmd_path) {
             Ok(_) => {} // if the check passes, do nothing
             Err(e) => {
                 // Convert the io::Error into the function's error type
-                return Err((String::new(), e.to_string(), -1));
+                return Err(CommandResult {
+                    stdout: String::new(),
+                    stderr: e.to_string(),
+                    exit_code: -1,
+                });
             }
         }
     }
@@ -159,7 +185,13 @@ pub fn run_gnu_cmd(
 
     let output = match command.output() {
         Ok(output) => output,
-        Err(e) => return Err((String::new(), e.to_string(), -1)),
+        Err(e) => {
+            return Err(CommandResult {
+                stdout: String::new(),
+                stderr: e.to_string(),
+                exit_code: -1,
+            });
+        }
     };
     let exit_code = output.status.code().unwrap_or(-1);
 
@@ -174,9 +206,17 @@ pub fn run_gnu_cmd(
         .to_string();
 
     if output.status.success() || !check_gnu {
-        Ok((stdout, stderr, exit_code))
+        Ok(CommandResult {
+            stdout,
+            stderr,
+            exit_code,
+        })
     } else {
-        Err((stdout, stderr, exit_code))
+        Err(CommandResult {
+            stdout,
+            stderr,
+            exit_code,
+        })
     }
 }
 

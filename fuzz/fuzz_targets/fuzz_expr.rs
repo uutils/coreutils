@@ -13,8 +13,8 @@ use rand::Rng;
 use std::{env, ffi::OsString};
 
 mod fuzz_common;
+use crate::fuzz_common::CommandResult;
 use crate::fuzz_common::{compare_result, generate_and_run_uumain, run_gnu_cmd};
-
 static CMD_PATH: &str = "expr";
 
 fn generate_random_string(max_length: usize) -> String {
@@ -88,21 +88,31 @@ fuzz_target!(|_data: &[u8]| {
     // because uutils expr doesn't support localization yet
     // TODO remove once uutils expr supports localization
     env::set_var("LC_COLLATE", "C");
+    let rust_result = generate_and_run_uumain(&args, uumain);
 
-    let (rust_stdout, rust_stderr, uumain_exit_code) = generate_and_run_uumain(&args, uumain);
-
-    let (gnu_stdout, gnu_stderr, gnu_exit_code) =
-        run_gnu_cmd(CMD_PATH, &args[1..], false).unwrap_or_else(|e| e);
+    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false) {
+        Ok(result) => result,
+        Err(error_result) => {
+            eprintln!("Failed to run GNU command:");
+            eprintln!("Stderr: {}", error_result.stderr);
+            eprintln!("Exit Code: {}", error_result.exit_code);
+            CommandResult {
+                stdout: String::new(),
+                stderr: error_result.stderr,
+                exit_code: error_result.exit_code,
+            }
+        }
+    };
 
     compare_result(
         "expr",
         &format!("{:?}", &args[1..]),
-        &rust_stdout,
-        &gnu_stdout,
-        &rust_stderr,
-        &gnu_stderr,
-        uumain_exit_code,
-        gnu_exit_code,
+        &rust_result.stdout,
+        &gnu_result.stdout,
+        &rust_result.stderr,
+        &gnu_result.stderr,
+        rust_result.exit_code,
+        gnu_result.exit_code,
         false, // Set to true if you want to fail on stderr diff
     );
 });
