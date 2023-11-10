@@ -297,7 +297,14 @@ fn du(
     depth: usize,
     inodes: &mut HashSet<FileInfo>,
     exclude: &[Pattern],
-) -> Box<dyn DoubleEndedIterator<Item = Stat>> {
+    matches: &ArgMatches,
+    threshold: &Option<Threshold>,
+    summarize: bool,
+    time_format_str: &str,
+    block_size: u64,
+    multiplier: u64,
+    line_ending: LineEnding,
+) -> UResult<Box<dyn DoubleEndedIterator<Item = Stat>>> {
     let mut stats = vec![];
     let mut futures = vec![];
 
@@ -308,7 +315,45 @@ fn du(
                 show!(
                     e.map_err_context(|| format!("cannot read directory {}", my_stat.path.quote()))
                 );
-                return Box::new(iter::once(my_stat));
+                let convert_size_fn = get_convert_size_fn(&matches);
+
+                let convert_size = |size: u64| {
+                    if options.inodes {
+                        size.to_string()
+                    } else {
+                        convert_size_fn(size, multiplier, block_size)
+                    }
+                };
+
+                let size = choose_size(&matches, &my_stat);
+
+                if !threshold.map_or(false, |threshold| threshold.should_exclude(size))
+                    && options
+                        .max_depth
+                        .map_or(true, |max_depth| depth < max_depth + 1)
+                {
+                    if matches.contains_id(options::TIME) {
+                        let tm = {
+                            let secs = matches
+                                .get_one::<String>(options::TIME)
+                                .map(|s| get_time_secs(s, &my_stat))
+                                .transpose()?
+                                .unwrap_or(my_stat.modified);
+                            DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
+                        };
+                        if !summarize || depth == 0 {
+                            let time_str = tm.format(time_format_str).to_string();
+                            print!("{}\t{}\t", convert_size(size), time_str);
+                            print_verbatim(&my_stat.path).unwrap();
+                            print!("{line_ending}");
+                        }
+                    } else if !summarize || depth == 0 {
+                        print!("{}\t", convert_size(size));
+                        print_verbatim(&my_stat.path).unwrap();
+                        print!("{line_ending}");
+                    }
+                }
+                return Ok(Box::new(iter::once(my_stat)));
             }
         };
 
@@ -350,12 +395,68 @@ fn du(
                                         }
                                     }
                                 }
-                                futures.push(du(this_stat, options, depth + 1, inodes, exclude));
+                                futures.push(du(
+                                    this_stat,
+                                    options,
+                                    depth + 1,
+                                    inodes,
+                                    exclude,
+                                    matches,
+                                    threshold,
+                                    summarize,
+                                    time_format_str,
+                                    block_size,
+                                    multiplier,
+                                    line_ending,
+                                )?);
                             } else {
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
                                 if options.all {
+                                    let convert_size_fn = get_convert_size_fn(&matches);
+
+                                    let convert_size = |size: u64| {
+                                        if options.inodes {
+                                            size.to_string()
+                                        } else {
+                                            convert_size_fn(size, multiplier, block_size)
+                                        }
+                                    };
+
+                                    let size = choose_size(&matches, &this_stat);
+
+                                    if !threshold
+                                        .map_or(false, |threshold| threshold.should_exclude(size))
+                                        && options
+                                            .max_depth
+                                            .map_or(true, |max_depth| depth < max_depth + 1)
+                                    {
+                                        if matches.contains_id(options::TIME) {
+                                            let tm = {
+                                                let secs = matches
+                                                    .get_one::<String>(options::TIME)
+                                                    .map(|s| get_time_secs(s, &this_stat))
+                                                    .transpose()?
+                                                    .unwrap_or(this_stat.modified);
+                                                DateTime::<Local>::from(
+                                                    UNIX_EPOCH + Duration::from_secs(secs),
+                                                )
+                                            };
+                                            if !summarize || depth == 0 {
+                                                let time_str =
+                                                    tm.format(time_format_str).to_string();
+                                                print!("{}\t{}\t", convert_size(size), time_str);
+                                                print_verbatim(&this_stat.path).unwrap();
+                                                print!("{line_ending}");
+                                            }
+                                        } else if !summarize || depth == 0 {
+                                            print!("{}\t", convert_size(size));
+                                            print_verbatim(&this_stat.path).unwrap();
+                                            print!("{line_ending}");
+                                        }
+                                    }
+
                                     stats.push(this_stat);
                                 }
                             }
@@ -380,8 +481,49 @@ fn du(
             .max_depth
             .map_or(true, |max_depth| depth < max_depth)
     }));
+
+    let convert_size_fn = get_convert_size_fn(&matches);
+
+    let convert_size = |size: u64| {
+        if options.inodes {
+            size.to_string()
+        } else {
+            convert_size_fn(size, multiplier, block_size)
+        }
+    };
+
+    let size = choose_size(&matches, &my_stat);
+
+    if !threshold.map_or(false, |threshold| threshold.should_exclude(size))
+        && options
+            .max_depth
+            .map_or(true, |max_depth| depth < max_depth + 1)
+    {
+        if matches.contains_id(options::TIME) {
+            let tm = {
+                let secs = matches
+                    .get_one::<String>(options::TIME)
+                    .map(|s| get_time_secs(s, &my_stat))
+                    .transpose()?
+                    .unwrap_or(my_stat.modified);
+                DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
+            };
+            if !summarize || depth == 0 {
+                let time_str = tm.format(time_format_str).to_string();
+                print!("{}\t{}\t", convert_size(size), time_str);
+                print_verbatim(&my_stat.path).unwrap();
+                print!("{line_ending}");
+            }
+        } else if !summarize || depth == 0 {
+            print!("{}\t", convert_size(size));
+            print_verbatim(&my_stat.path).unwrap();
+            print!("{line_ending}");
+        }
+    }
+
     stats.push(my_stat);
-    Box::new(stats.into_iter())
+
+    Ok(Box::new(stats.into_iter()))
 }
 
 fn convert_size_human(size: u64, multiplier: u64, _block_size: u64) -> String {
@@ -636,44 +778,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if let Some(inode) = stat.inode {
                 inodes.insert(inode);
             }
-            let iter = du(stat, &options, 0, &mut inodes, &excludes);
+            let iter = du(
+                stat,
+                &options,
+                0,
+                &mut inodes,
+                &excludes,
+                &matches,
+                &threshold,
+                summarize,
+                time_format_str,
+                block_size,
+                multiplier,
+                line_ending,
+            )?;
 
             // Sum up all the returned `Stat`s and display results
-            let (_, len) = iter.size_hint();
-            let len = len.unwrap();
-            for (index, stat) in iter.enumerate() {
-                let size = choose_size(&matches, &stat);
-
-                if threshold.map_or(false, |threshold| threshold.should_exclude(size)) {
-                    continue;
-                }
-
-                if matches.contains_id(options::TIME) {
-                    let tm = {
-                        let secs = matches
-                            .get_one::<String>(options::TIME)
-                            .map(|s| get_time_secs(s, &stat))
-                            .transpose()?
-                            .unwrap_or(stat.modified);
-                        DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
-                    };
-                    if !summarize || index == len - 1 {
-                        let time_str = tm.format(time_format_str).to_string();
-                        print!("{}\t{}\t", convert_size(size), time_str);
-                        print_verbatim(stat.path).unwrap();
-                        print!("{line_ending}");
-                    }
-                } else if !summarize || index == len - 1 {
-                    print!("{}\t", convert_size(size));
-                    print_verbatim(stat.path).unwrap();
-                    print!("{line_ending}");
-                }
-                if options.total && index == (len - 1) {
-                    // The last element will be the total size of the the path under
-                    // path_string.  We add it to the grand total.
-                    grand_total += size;
-                }
-            }
+            let size = choose_size(&matches, &iter.last().unwrap());
+            grand_total += size;
         } else {
             show_error!(
                 "{}: {}",
