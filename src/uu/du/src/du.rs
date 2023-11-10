@@ -732,8 +732,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let iter = du(stat, &options, 0, &mut inodes, &excludes, &stat_printer)?;
 
             // Sum up all the returned `Stat`s and display results
-            let size = choose_size(&matches, &iter.last().unwrap());
-            grand_total += size;
+            if let Some(last_stat) = iter.last() {
+                grand_total += choose_size(&matches, &last_stat);
+            }
         } else {
             show_error!(
                 "{}: {}",
