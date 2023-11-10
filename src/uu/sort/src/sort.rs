@@ -329,8 +329,8 @@ impl GlobalSettings {
         // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
         let input = input.trim();
-        if input.ends_with('%') && input.len() != 1 {
-            return Self::parse_memory_percentage(&input[..input.len() - 1]);
+        if let Some(number) = input.strip_suffix('%') {
+            return GlobalSettings::parse_memory_percentage(number);
         }
         let size = Parser::default()
             .with_allow_list(&[
