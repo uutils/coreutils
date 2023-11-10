@@ -322,15 +322,15 @@ struct Precomputed {
 
 impl GlobalSettings {
     /// Parse a SIZE string into a number of bytes.
-    /// A size string comprises an integer and an optional unit.
+    /// A size string comprises an integer and an optional unit or percentage of total memory.
     /// The unit may be k, K, m, M, g, G, t, T, P, E, Z, Y (powers of 1024), or b which is 1.
     /// Default is K.
     fn parse_byte_count(input: &str) -> Result<usize, ParseSizeError> {
         // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
         let input = input.trim();
-        if input.ends_with("%") && input.len() != 1 {
-            return GlobalSettings::parse_memory_percentage(&input[..input.len() - 1]);
+        if input.ends_with('%') && input.len() != 1 {
+            return Self::parse_memory_percentage(&input[..input.len() - 1]);
         }
         let size = Parser::default()
             .with_allow_list(&[
@@ -345,6 +345,8 @@ impl GlobalSettings {
         })
     }
 
+    /// Calculates size of memory from percentage input
+    /// The percentage should range from 0-100
     fn parse_memory_percentage(number_str: &str) -> Result<usize, ParseSizeError> {
         let Ok(percent) = number_str.parse::<u64>() else {
             return Err(ParseSizeError::ParseFailure(format!(
