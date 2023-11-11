@@ -10,8 +10,6 @@ use std::i64;
 use std::io::{BufWriter, Stdout, Write};
 use std::mem;
 
-use uucore::crash;
-
 use crate::parasplit::{ParaWords, Paragraph, WordInfo};
 use crate::FmtOptions;
 
@@ -371,11 +369,8 @@ fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a Wo
     let mut breakwords = vec![];
     // of the active paths, we select the one with the fewest demerits
     let mut best_idx = match active.iter().min_by_key(|&&a| paths[a].demerits) {
-        None => crash!(
-            1,
-            "Failed to find a k-p linebreak solution. This should never happen."
-        ),
         Some(&s) => s,
+        None => unreachable!("Failed to find a k-p linebreak solution. This should never happen."),
     };
 
     // now, chase the pointers back through the break list, recording
