@@ -14,8 +14,8 @@ use std::num::IntErrorKind;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
-use uucore::{crash, crash_if_err, format_usage, help_about, help_usage};
+use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::{format_usage, help_about, help_usage};
 
 const USAGE: &str = help_usage!("unexpand.md");
 const ABOUT: &str = help_about!("unexpand.md");
@@ -161,7 +161,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app().try_get_matches_from(expand_shortcuts(&args))?;
 
-    unexpand(&Options::new(&matches)?).map_err_context(String::new)
+    unexpand(&Options::new(&matches)?)
 }
 
 pub fn uu_app() -> Command {
@@ -209,16 +209,14 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn open(path: &str) -> BufReader<Box<dyn Read + 'static>> {
+fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
     if path == "-" {
-        BufReader::new(Box::new(stdin()) as Box<dyn Read>)
+        Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
-        file_buf = match File::open(path) {
-            Ok(a) => a,
-            Err(e) => crash!(1, "{}: {}", path.maybe_quote(), e),
-        };
-        BufReader::new(Box::new(file_buf) as Box<dyn Read>)
+        file_buf = File::open(path)
+            .map_err(|e| USimpleError::new(1, format!("{}: {}", path.maybe_quote(), e)))?;
+        Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
 
@@ -240,7 +238,7 @@ fn write_tabs(
     prevtab: bool,
     init: bool,
     amode: bool,
-) {
+) -> std::io::Result<()> {
     // This conditional establishes the following:
     // We never turn a single space before a non-blank into
     // a tab, unless it's at the start of the line.
@@ -251,15 +249,16 @@ fn write_tabs(
                 break;
             }
 
-            crash_if_err!(1, output.write_all(b"\t"));
+            output.write_all(b"\t")?;
             scol += nts;
         }
     }
 
     while col > scol {
-        crash_if_err!(1, output.write_all(b" "));
+        output.write_all(b" ")?;
         scol += 1;
     }
+    Ok(())
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -315,14 +314,14 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn unexpand(options: &Options) -> std::io::Result<()> {
+fn unexpand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
     let ts = &options.tabstops[..];
     let mut buf = Vec::new();
     let lastcol = if ts.len() > 1 { *ts.last().unwrap() } else { 0 };
 
     for file in &options.files {
-        let mut fh = open(file);
+        let mut fh = open(file)?;
 
         while match fh.read_until(b'\n', &mut buf) {
             Ok(s) => s > 0,
@@ -345,7 +344,7 @@ fn unexpand(options: &Options) -> std::io::Result<()> {
                         pctype == CharType::Tab,
                         init,
                         true,
-                    );
+                    )?;
                     output.write_all(&buf[byte..])?;
                     scol = col;
                     break;
@@ -380,7 +379,7 @@ fn unexpand(options: &Options) -> std::io::Result<()> {
                             pctype == CharType::Tab,
                             init,
                             options.aflag,
-                        );
+                        )?;
                         init = false; // no longer at the start of a line
                         col = if ctype == CharType::Other {
                             // use computed width
@@ -409,12 +408,12 @@ fn unexpand(options: &Options) -> std::io::Result<()> {
                 pctype == CharType::Tab,
                 init,
                 true,
-            );
+            )?;
             output.flush()?;
             buf.truncate(0); // clear out the buffer
         }
     }
-    output.flush()
+    output.flush().map_err_context(String::new)
 }
 
 #[cfg(test)]
