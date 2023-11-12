@@ -14,31 +14,10 @@ use std::{env, ffi::OsString};
 
 mod fuzz_common;
 use crate::fuzz_common::CommandResult;
-use crate::fuzz_common::{compare_result, generate_and_run_uumain, run_gnu_cmd};
+use crate::fuzz_common::{
+    compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd,
+};
 static CMD_PATH: &str = "expr";
-
-fn generate_random_string(max_length: usize) -> String {
-    let mut rng = rand::thread_rng();
-    let valid_utf8: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-        .chars()
-        .collect();
-    let invalid_utf8 = [0xC3, 0x28]; // Invalid UTF-8 sequence
-    let mut result = String::new();
-
-    for _ in 0..rng.gen_range(1..=max_length) {
-        if rng.gen_bool(0.9) {
-            let ch = valid_utf8.choose(&mut rng).unwrap();
-            result.push(*ch);
-        } else {
-            let ch = invalid_utf8.choose(&mut rng).unwrap();
-            if let Some(c) = char::from_u32(*ch as u32) {
-                result.push(c);
-            }
-        }
-    }
-
-    result
-}
 
 fn generate_expr(max_depth: u32) -> String {
     let mut rng = rand::thread_rng();
