@@ -345,20 +345,50 @@ pub fn compare_result(
 
 pub fn generate_random_string(max_length: usize) -> String {
     let mut rng = rand::thread_rng();
-    let valid_utf8: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+    // Primary character set (most commonly used)
+    let primary_chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
         .chars()
         .collect();
-    let invalid_utf8 = [0xC3, 0x28]; // Invalid UTF-8 sequence
-    let mut result = String::new();
+    // Extended character set (used rarely)
+    let extended_chars: Vec<char> = (' '..=char::from_u32(0x7e).unwrap())
+        .chain((0xa0..=0x17f).filter_map(char::from_u32))
+        .filter(|c| !primary_chars.contains(c))
+        .collect();
+    // Invalid UTF-8 sequences
+    let invalid_utf8_sequences = vec![vec![0xC3, 0x28], vec![0xA0, 0x81], vec![0xE2, 0x28, 0xA1]];
 
-    for _ in 0..rng.gen_range(1..=max_length) {
-        if rng.gen_bool(0.9) {
-            let ch = valid_utf8.choose(&mut rng).unwrap();
-            result.push(*ch);
+    let mut result = String::new();
+    let mut extended_count = 0;
+
+    let extended_max_length = if rng.gen_bool(0.05) {
+        max_length * 1000
+    } else {
+        max_length
+    };
+
+    for _ in 0..extended_max_length {
+        if rng.gen_bool(0.05) {
+            // 5% chance to add an invalid UTF-8 sequence
+            if let Some(invalid_sequence) = invalid_utf8_sequences.choose(&mut rng) {
+                if let Ok(part) = std::str::from_utf8(invalid_sequence) {
+                    result.push_str(part);
+                }
+            }
+        } else if extended_count < 2 && rng.gen_bool(0.05) {
+            // 5% chance to add an extended character, up to 2
+            if let Some(&ch) = extended_chars.choose(&mut rng) {
+                result.push(ch);
+                extended_count += 1;
+            }
+        } else if rng.gen_bool(0.10) {
+            // 10% chance to add b"-\xE0-foo"
+            let injected_sequence = String::from_utf8_lossy(b"-\xE0-foo");
+            result.push_str(&injected_sequence);
         } else {
-            let ch = invalid_utf8.choose(&mut rng).unwrap();
-            if let Some(c) = char::from_u32(*ch as u32) {
-                result.push(c);
+            // Use primary character set
+            if let Some(&ch) = primary_chars.choose(&mut rng) {
+                result.push(ch);
             }
         }
     }
