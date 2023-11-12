@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 
 use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
+use rand::prelude::SliceRandom;
+use rand::Rng;
 use std::ffi::OsString;
 use std::io;
 use std::io::Write;
@@ -271,4 +273,27 @@ pub fn compare_result(
             );
         }
     }
+}
+
+pub fn generate_random_string(max_length: usize) -> String {
+    let mut rng = rand::thread_rng();
+    let valid_utf8: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+        .chars()
+        .collect();
+    let invalid_utf8 = [0xC3, 0x28]; // Invalid UTF-8 sequence
+    let mut result = String::new();
+
+    for _ in 0..rng.gen_range(1..=max_length) {
+        if rng.gen_bool(0.9) {
+            let ch = valid_utf8.choose(&mut rng).unwrap();
+            result.push(*ch);
+        } else {
+            let ch = invalid_utf8.choose(&mut rng).unwrap();
+            if let Some(c) = char::from_u32(*ch as u32) {
+                result.push(c);
+            }
+        }
+    }
+
+    result
 }
