@@ -330,7 +330,8 @@ impl GlobalSettings {
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
         let input = input.trim();
         if let Some(number) = input.strip_suffix('%') {
-            return GlobalSettings::parse_memory_percentage(number);
+            let percent = Self::parse_percentage(number)?;
+            return Self::get_memory_size(percent);
         }
         let size = Parser::default()
             .with_allow_list(&[
@@ -345,25 +346,26 @@ impl GlobalSettings {
         })
     }
 
-    /// Calculates size of memory from percentage input
-    /// The percentage should range from 0-100
-    fn parse_memory_percentage(number_str: &str) -> Result<usize, ParseSizeError> {
+    /// Parses percentage input from input string.
+    fn parse_percentage(number_str: &str) -> Result<usize, ParseSizeError> {
         let Ok(percent) = number_str.parse::<u64>() else {
             return Err(ParseSizeError::ParseFailure(format!(
                 "Invalid Buffer Percentage: {number_str}"
             )));
         };
         match percent {
-            0..=100 => {
-                let system = System::new_with_specifics(RefreshKind::new().with_memory());
-                let total_memory_size = system.total_memory();
-                let size = (total_memory_size * percent) / 100;
-                Ok(size as usize)
-            }
+            0..=100 => Ok(percent as usize),
             _ => Err(ParseSizeError::ParseFailure(format!(
                 "Invalid Buffer Percentage: {number_str}"
             ))),
         }
+    }
+    /// Get's memory size from percent
+    fn get_memory_size(percent: usize) -> Result<usize, ParseSizeError> {
+        let system = System::new_with_specifics(RefreshKind::new().with_memory());
+        let total_memory_size = system.total_memory() as usize;
+        let size = (total_memory_size * percent) / 100;
+        Ok(size)
     }
 
     /// Precompute some data needed for sorting.
@@ -1977,8 +1979,6 @@ mod tests {
 
     #[test]
     fn test_parse_byte_count() {
-        let s = System::new_all();
-        let total_memory_size = s.total_memory();
         let valid_input = [
             ("0", 0),
             ("50K", 50 * 1024),
@@ -1999,9 +1999,7 @@ mod tests {
             ("m", 1024 * 1024),
             #[cfg(not(target_pointer_width = "32"))]
             ("E", 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            ("10%", ((total_memory_size * 10) / 100) as usize),
             ("0%", 0),
-            ("100%", total_memory_size as usize),
         ];
         for (input, expected_output) in &valid_input {
             assert_eq!(
@@ -2023,6 +2021,22 @@ mod tests {
         ];
         for input in &invalid_input {
             assert!(GlobalSettings::parse_byte_count(input).is_err());
+        }
+    }
+
+    #[test]
+    fn test_parse_percentage() {
+        let valid_input = [("0", 0), ("100", 100), ("50", 50)];
+        for (input, expected_output) in &valid_input {
+            assert_eq!(
+                GlobalSettings::parse_percentage(input),
+                Ok(*expected_output)
+            )
+        }
+
+        let invalid_input = ["-10", "101"];
+        for input in &invalid_input {
+            assert!(GlobalSettings::parse_percentage(input).is_err());
         }
     }
 }
