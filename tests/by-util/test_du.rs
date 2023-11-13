@@ -470,6 +470,35 @@ fn test_du_inodes_with_count_links() {
 }
 
 #[test]
+fn test_du_inodes_with_all_and_count_links() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let sep = std::path::MAIN_SEPARATOR_STR;
+
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.hard_link("dir/file", "dir/hard_link");
+
+    // ensure the hard link is not shown without --count-links
+    ts.ucmd()
+        .arg("--inodes")
+        .arg("--all")
+        .arg("dir")
+        .succeeds()
+        .stdout_is(format!("1\tdir{sep}file\n2\tdir\n"));
+
+    ts.ucmd()
+        .arg("--inodes")
+        .arg("--count-links")
+        .arg("--all")
+        .arg("dir")
+        .succeeds()
+        .stdout_contains_line(format!("1\tdir{sep}file"))
+        .stdout_contains_line(format!("1\tdir{sep}hard_link"))
+        .stdout_contains_line("3\tdir");
+}
+
+#[test]
 fn test_du_h_flag_empty_file() {
     new_ucmd!()
         .arg("-h")
