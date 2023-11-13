@@ -1,10 +1,16 @@
 use std::io::Write;
 
-use super::FormatError;
+use super::{
+    spec::{CanAsterisk, Spec},
+    FormatError,
+};
 
 pub trait Formatter {
     type Input;
-    fn fmt(&self, writer: impl Write, x: Self::Input) -> Result<(), FormatError>;
+    fn fmt(&self, writer: impl Write, x: Self::Input) -> std::io::Result<()>;
+    fn try_from_spec(s: Spec) -> Result<Self, FormatError>
+    where
+        Self: Sized;
 }
 
 #[derive(Clone, Copy)]
@@ -64,14 +70,13 @@ pub struct SignedInt {
 impl Formatter for SignedInt {
     type Input = i64;
 
-    fn fmt(&self, mut writer: impl Write, x: Self::Input) -> Result<(), FormatError> {
+    fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
         if x >= 0 {
             match self.positive_sign {
                 PositiveSign::None => Ok(()),
                 PositiveSign::Plus => write!(writer, "+"),
                 PositiveSign::Space => write!(writer, " "),
-            }
-            .map_err(FormatError::IoError)?;
+            }?;
         }
 
         match self.alignment {
@@ -79,7 +84,29 @@ impl Formatter for SignedInt {
             NumberAlignment::RightSpace => write!(writer, "{x:>width$}", width = self.width),
             NumberAlignment::RightZero => write!(writer, "{x:0>width$}", width = self.width),
         }
-        .map_err(FormatError::IoError)
+    }
+
+    fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
+        let Spec::SignedInt {
+            width,
+            positive_sign,
+            alignment,
+        } = s
+        else {
+            return Err(FormatError::SpecError);
+        };
+
+        let width = match width {
+            Some(CanAsterisk::Fixed(x)) => x,
+            None => 0,
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+        };
+
+        Ok(Self {
+            width,
+            positive_sign,
+            alignment,
+        })
     }
 }
 
@@ -92,7 +119,7 @@ pub struct UnsignedInt {
 impl Formatter for UnsignedInt {
     type Input = u64;
 
-    fn fmt(&self, mut writer: impl Write, x: Self::Input) -> Result<(), FormatError> {
+    fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
         let s = match self.variant {
             UnsignedIntVariant::Decimal => format!("{x}"),
             UnsignedIntVariant::Octal(Prefix::No) => format!("{x:o}"),
@@ -116,7 +143,29 @@ impl Formatter for UnsignedInt {
             NumberAlignment::RightSpace => write!(writer, "{s:>width$}", width = self.width),
             NumberAlignment::RightZero => write!(writer, "{s:0>width$}", width = self.width),
         }
-        .map_err(FormatError::IoError)
+    }
+
+    fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
+        let Spec::UnsignedInt {
+            variant,
+            width,
+            alignment,
+        } = s
+        else {
+            return Err(FormatError::SpecError);
+        };
+
+        let width = match width {
+            Some(CanAsterisk::Fixed(x)) => x,
+            None => 0,
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+        };
+
+        Ok(Self {
+            width,
+            variant,
+            alignment,
+        })
     }
 }
 
@@ -147,14 +196,13 @@ impl Default for Float {
 impl Formatter for Float {
     type Input = f64;
 
-    fn fmt(&self, mut writer: impl Write, x: Self::Input) -> Result<(), FormatError> {
+    fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
         if x.is_sign_positive() {
             match self.positive_sign {
                 PositiveSign::None => Ok(()),
                 PositiveSign::Plus => write!(writer, "+"),
                 PositiveSign::Space => write!(writer, " "),
-            }
-            .map_err(FormatError::IoError)?;
+            }?;
         }
 
         let s = match self.variant {
@@ -177,7 +225,46 @@ impl Formatter for Float {
             NumberAlignment::RightSpace => write!(writer, "{s:>width$}", width = self.width),
             NumberAlignment::RightZero => write!(writer, "{s:0>width$}", width = self.width),
         }
-        .map_err(FormatError::IoError)
+    }
+
+    fn try_from_spec(s: Spec) -> Result<Self, FormatError>
+    where
+        Self: Sized,
+    {
+        let Spec::Float {
+            variant,
+            case,
+            force_decimal,
+            width,
+            positive_sign,
+            alignment,
+            precision,
+        } = s
+        else {
+            return Err(FormatError::SpecError);
+        };
+
+        let width = match width {
+            Some(CanAsterisk::Fixed(x)) => x,
+            None => 0,
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+        };
+
+        let precision = match precision {
+            Some(CanAsterisk::Fixed(x)) => x,
+            None => 0,
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+        };
+
+        Ok(Self {
+            variant,
+            case,
+            force_decimal,
+            width,
+            positive_sign,
+            alignment,
+            precision,
+        })
     }
 }
 

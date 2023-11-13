@@ -3,13 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) istr chiter argptr ilen extendedbigdecimal extendedbigint numberparse
-use std::io::{stdout, ErrorKind, Write};
+use std::io::{stdout, Write};
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use num_traits::Zero;
+use num_traits::{Zero, ToPrimitive};
 
 use uucore::error::UResult;
-use uucore::format::{printf, FormatArgument};
+use uucore::format::{printf, FormatArgument, Format, num_format};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;
@@ -119,16 +119,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let result = match (first.number, increment.number, last.number) {
         (Number::Int(first), Number::Int(increment), last) => {
             let last = last.round_towards(&first);
+            let format = match options.format {
+                Some(f) => {
+                    let f = Format::<num_format::SignedInt>::parse(f)?;
+                    Some(f)
+                }
+                None => None,
+            };
             print_seq_integers(
                 (first, increment, last),
                 &options.separator,
                 &options.terminator,
                 options.equal_width,
                 padding,
-                options.format,
+                format,
             )
         }
-        (first, increment, last) => print_seq(
+        (first, increment, last) => {
+            let format = match options.format {
+                Some(f) => {
+                    let f = Format::<num_format::Float>::parse(f)?;
+                    Some(f)
+                }
+                None => None,
+            };
+            print_seq(
             (
                 first.into_extended_big_decimal(),
                 increment.into_extended_big_decimal(),
@@ -139,8 +154,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             &options.terminator,
             options.equal_width,
             padding,
-            options.format,
-        ),
+            format,
+            )
+        }
     };
     match result {
         Ok(_) => Ok(()),
@@ -244,7 +260,7 @@ fn print_seq(
     terminator: &str,
     pad: bool,
     padding: usize,
-    format: Option<&str>,
+    format: Option<Format<num_format::Float>>,
 ) -> UResult<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();
@@ -268,10 +284,16 @@ fn print_seq(
         // it as a string and ultimately writing to `stdout`. We
         // shouldn't have to do so much converting back and forth via
         // strings.
-        match format {
+        match &format {
             Some(f) => {
-                let s = format!("{value}");
-                printf(f, &[FormatArgument::String(s)])?;
+                let float = match &value {
+                    ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
+                    ExtendedBigDecimal::Infinity => f64::INFINITY,
+                    ExtendedBigDecimal::MinusInfinity => f64::NEG_INFINITY,
+                    ExtendedBigDecimal::MinusZero => -0.0,
+                    ExtendedBigDecimal::Nan => f64::NAN,
+                };
+                f.fmt(&mut stdout, float)?;
             }
             None => write_value_float(&mut stdout, &value, padding, largest_dec)?,
         }
@@ -306,7 +328,7 @@ fn print_seq_integers(
     terminator: &str,
     pad: bool,
     padding: usize,
-    format: Option<&str>,
+    format: Option<Format<num_format::SignedInt>>,
 ) -> UResult<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();
@@ -324,10 +346,16 @@ fn print_seq_integers(
         // the current value and writes the result to `stdout`.
         //
         // TODO See similar comment about formatting in `print_seq()`.
-        match format {
+        match &format {
             Some(f) => {
-                let s = format!("{value}");
-                printf(f, &[FormatArgument::String(s)])?;
+                let int = match &value {
+                    ExtendedBigInt::BigInt(bi) => bi.to_i64().unwrap(),
+                    ExtendedBigInt::Infinity => todo!(),
+                    ExtendedBigInt::MinusInfinity => todo!(),
+                    ExtendedBigInt::MinusZero => todo!(),
+                    ExtendedBigInt::Nan => todo!(),
+                };
+                f.fmt(&mut stdout, int)?;
             }
             None => write_value_int(&mut stdout, &value, padding, pad)?,
         }

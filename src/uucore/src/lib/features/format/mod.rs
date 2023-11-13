@@ -10,8 +10,8 @@
 //! parsing errors occur during writing.
 // spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 
-mod spec;
 pub mod num_format;
+mod spec;
 
 use spec::Spec;
 use std::{
@@ -21,6 +21,8 @@ use std::{
 };
 
 use crate::error::UError;
+
+use self::num_format::Formatter;
 
 #[derive(Debug)]
 pub enum FormatError {
@@ -32,6 +34,12 @@ pub enum FormatError {
 
 impl Error for FormatError {}
 impl UError for FormatError {}
+
+impl From<std::io::Error> for FormatError {
+    fn from(value: std::io::Error) -> Self {
+        FormatError::IoError(value)
+    }
+}
 
 impl Display for FormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -180,4 +188,66 @@ pub fn sprintf<'a>(
     let mut writer = Vec::new();
     printf_writer(&mut writer, format_string, arguments)?;
     Ok(writer)
+}
+
+/// A parsed format for a single float value
+/// 
+/// This is used by `seq`. It can be constructed with [`FloatFormat::parse`]
+/// and can write a value with [`FloatFormat::fmt`].
+/// 
+/// It can only accept a single specification without any asterisk parameters.
+/// If it does get more specifications, it will return an error.
+pub struct Format<F: Formatter> {
+    prefix: Vec<u8>,
+    suffix: Vec<u8>,
+    formatter: F,
+}
+
+impl<F: Formatter> Format<F> {
+    pub fn parse(format_string: impl AsRef<[u8]>) -> Result<Self, FormatError> {
+        let mut iter = parse_iter(format_string.as_ref());
+
+        let mut prefix = Vec::new();
+        let mut spec = None;
+        for item in &mut iter {
+            match item? {
+                FormatItem::Spec(s) => {
+                    spec = Some(s);
+                    break;
+                }
+                FormatItem::Text(t) => prefix.extend_from_slice(&t),
+                FormatItem::Char(c) => prefix.push(c),
+            }
+        }
+
+        let Some(spec) = spec else {
+            return Err(FormatError::SpecError);
+        };
+
+        let formatter = F::try_from_spec(spec)?;
+
+        let mut suffix = Vec::new();
+        for item in &mut iter {
+            match item? {
+                FormatItem::Spec(_) => {
+                    return Err(FormatError::SpecError);
+                }
+                FormatItem::Text(t) => suffix.extend_from_slice(&t),
+                FormatItem::Char(c) => suffix.push(c),
+            }
+        }
+
+        Ok(Self {
+            prefix,
+            suffix,
+            formatter,
+        })
+    }
+
+    pub fn fmt(&self, mut w: impl Write, f: F::Input) -> std::io::Result<()> {
+        w.write_all(&self.prefix)?;
+        self.formatter.fmt(&mut w, f)?;
+        w.write_all(&self.suffix)?;
+        Ok(())
+    }
 }

@@ -252,6 +252,7 @@ impl Spec {
                     alignment,
                 }
                 .fmt(writer, *i)
+                .map_err(FormatError::IoError)
             }
             &Spec::UnsignedInt {
                 variant,
@@ -271,6 +272,7 @@ impl Spec {
                     alignment,
                 }
                 .fmt(writer, *i)
+                .map_err(FormatError::IoError)
             }
             &Spec::Float {
                 variant,
@@ -299,6 +301,7 @@ impl Spec {
                     precision,
                 }
                 .fmt(writer, *f)
+                .map_err(FormatError::IoError)
             }
         }
     }
