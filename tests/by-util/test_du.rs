@@ -442,6 +442,33 @@ fn test_du_inodes() {
 }
 
 #[test]
+fn test_du_inodes_with_count_links() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.hard_link("dir/file", "dir/hard_link_a");
+    at.hard_link("dir/file", "dir/hard_link_b");
+
+    // ensure the hard links are not counted without --count-links
+    ts.ucmd()
+        .arg("--inodes")
+        .arg("dir")
+        .succeeds()
+        .stdout_is("2\tdir\n");
+
+    for arg in ["-l", "--count-links"] {
+        ts.ucmd()
+            .arg("--inodes")
+            .arg(arg)
+            .arg("dir")
+            .succeeds()
+            .stdout_is("4\tdir\n");
+    }
+}
+
+#[test]
 fn test_du_h_flag_empty_file() {
     new_ucmd!()
         .arg("-h")
