@@ -259,7 +259,7 @@ test = ["uu_test"]
 [workspace.dependencies]
 bigdecimal = "0.4"
 binary-heap-plus = "0.5.0"
-bstr = "1.7"
+bstr = "1.8"
 bytecount = "0.6.7"
 byteorder = "1.5.0"
 chrono = { version = "^0.4.31", default-features = false, features = [
@@ -313,7 +313,7 @@ regex = "1.10.2"
 rstest = "0.18.2"
 rust-ini = "0.19.0"
 same-file = "1.0.6"
-self_cell = "1.0.1"
+self_cell = "1.0.2"
 selinux = "0.4"
 signal-hook = "0.3.17"
 smallvec = { version = "1.11", features = ["union"] }
