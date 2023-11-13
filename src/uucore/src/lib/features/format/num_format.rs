@@ -13,14 +13,14 @@ pub trait Formatter {
         Self: Sized;
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum UnsignedIntVariant {
     Decimal,
     Octal(Prefix),
     Hexadecimal(Case, Prefix),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 
 pub enum FloatVariant {
     Decimal,
@@ -29,32 +29,32 @@ pub enum FloatVariant {
     Hexadecimal,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Case {
     Lowercase,
     Uppercase,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Prefix {
     No,
     Yes,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ForceDecimal {
     No,
     Yes,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum PositiveSign {
     None,
     Plus,
     Space,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum NumberAlignment {
     Left,
     RightSpace,
@@ -93,7 +93,7 @@ impl Formatter for SignedInt {
             alignment,
         } = s
         else {
-            return Err(FormatError::SpecError);
+            return Err(dbg!(FormatError::SpecError));
         };
 
         let width = match width {
@@ -152,7 +152,7 @@ impl Formatter for UnsignedInt {
             alignment,
         } = s
         else {
-            return Err(FormatError::SpecError);
+            return Err(dbg!(FormatError::SpecError));
         };
 
         let width = match width {
@@ -241,19 +241,19 @@ impl Formatter for Float {
             precision,
         } = s
         else {
-            return Err(FormatError::SpecError);
+            return Err(dbg!(FormatError::SpecError));
         };
 
         let width = match width {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+            Some(CanAsterisk::Asterisk) => return Err(dbg!(FormatError::SpecError)),
         };
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+            Some(CanAsterisk::Asterisk) => return Err(dbg!(FormatError::SpecError)),
         };
 
         Ok(Self {

@@ -115,7 +115,7 @@ fn parse_iter(fmt: &[u8]) -> impl Iterator<Item = Result<FormatItem, FormatError
                     Some(_) => {
                         let spec = match Spec::parse(&mut rest) {
                             Some(spec) => spec,
-                            None => return Some(Err(FormatError::SpecError)),
+                            None => return Some(Err(dbg!(FormatError::SpecError))),
                         };
                         Some(Ok(FormatItem::Spec(spec)))
                     }
@@ -230,7 +230,7 @@ impl<F: Formatter> Format<F> {
         for item in &mut iter {
             match item? {
                 FormatItem::Spec(_) => {
-                    return Err(FormatError::SpecError);
+                    return Err(dbg!(FormatError::SpecError));
                 }
                 FormatItem::Text(t) => suffix.extend_from_slice(&t),
                 FormatItem::Char(c) => suffix.push(c),

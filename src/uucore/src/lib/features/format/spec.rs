@@ -9,6 +9,7 @@ use super::{
 };
 use std::{fmt::Display, io::Write};
 
+#[derive(Debug)]
 pub enum Spec {
     Char {
         width: Option<CanAsterisk<usize>>,
@@ -41,7 +42,7 @@ pub enum Spec {
 
 /// Precision and width specified might use an asterisk to indicate that they are
 /// determined by an argument.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum CanAsterisk<T> {
     Fixed(T),
     Asterisk,
@@ -99,6 +100,7 @@ impl Spec {
         let width = eat_asterisk_or_number(rest);
 
         let precision = if let Some(b'.') = rest.get(0) {
+            *rest = &rest[1..];
             Some(eat_asterisk_or_number(rest).unwrap_or(CanAsterisk::Fixed(0)))
         } else {
             None
@@ -134,7 +136,9 @@ impl Spec {
             *rest = &rest[1..];
         }
 
-        Some(match rest.get(0)? {
+        let type_spec = rest.get(0)?;
+        *rest = &rest[1..];
+        Some(match type_spec {
             b'c' => Spec::Char {
                 width,
                 align_left: minus,
@@ -208,7 +212,10 @@ impl Spec {
                     (false, false) => PositiveSign::None,
                 },
             },
-            _ => return None,
+            x => {
+                dbg!("{:b}", x);
+                return dbg!(None)
+            },
         })
     }
 
