@@ -119,6 +119,32 @@ fn test_du_invalid_size() {
 }
 
 #[test]
+fn test_du_with_posixly_correct() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_move_str();
+
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result);
+}
+
+#[test]
 fn test_du_basics_bad_name() {
     new_ucmd!()
         .arg("bad_name")
