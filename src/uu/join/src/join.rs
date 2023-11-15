@@ -21,7 +21,7 @@ use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
-use uucore::{crash, crash_if_err, format_usage, help_about, help_usage};
+use uucore::{crash_if_err, format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("join.md");
 const USAGE: &str = help_usage!("join.md");
@@ -334,17 +334,23 @@ impl<'a> State<'a> {
         key: usize,
         line_ending: LineEnding,
         print_unpaired: bool,
-    ) -> State<'a> {
+    ) -> Result<State<'a>, JoinError> {
         let f = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
             match File::open(name) {
                 Ok(file) => Box::new(BufReader::new(file)) as Box<dyn BufRead>,
-                Err(err) => crash!(1, "{}: {}", name.maybe_quote(), err),
+                Err(err) => {
+                    return Err(JoinError::UnorderedInput(format!(
+                        "{}: {}",
+                        name.maybe_quote(),
+                        err
+                    )));
+                }
             }
         };
 
-        State {
+        Ok(State {
             key,
             file_name: name,
             file_num,
@@ -355,7 +361,7 @@ impl<'a> State<'a> {
             line_num: 0,
             has_failed: false,
             has_unpaired: false,
-        }
+        })
     }
 
     /// Skip the current unpaired line.
@@ -847,7 +853,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
         settings.key1,
         settings.line_ending,
         settings.print_unpaired1,
-    );
+    )?;
 
     let mut state2 = State::new(
         FileNum::File2,
@@ -856,7 +862,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
         settings.key2,
         settings.line_ending,
         settings.print_unpaired2,
-    );
+    )?;
 
     let input = Input::new(
         settings.separator,
