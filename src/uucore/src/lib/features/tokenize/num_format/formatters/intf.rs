@@ -8,10 +8,11 @@
 //! formatter for unsigned and signed int subs
 //! unsigned int: %X %x (hex u64) %o (octal u64) %u (base ten u64)
 //! signed int: %i %d (both base ten i64)
+use crate::error::set_exit_code;
+use crate::features::tokenize::num_format::num_format::warn_expected_numeric;
+
 use super::super::format_field::FormatField;
-use super::super::formatter::{
-    get_it_at, warn_incomplete_conv, Base, FormatPrimitive, Formatter, InitialPrefix,
-};
+use super::super::formatter::{get_it_at, Base, FormatPrimitive, Formatter, InitialPrefix};
 use std::i64;
 use std::u64;
 
@@ -112,7 +113,8 @@ impl Intf {
                         }
                     }
                     _ => {
-                        warn_incomplete_conv(str_in);
+                        warn_expected_numeric(str_in);
+                        set_exit_code(1);
                         break;
                     }
                 }
