@@ -18,7 +18,7 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
-use std::path::{Path, PathBuf, StripPrefixError};
+use std::path::{Path, PathBuf, StripPrefixError, MAIN_SEPARATOR_STR};
 use std::string::ToString;
 
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
@@ -96,6 +96,9 @@ quick_error! {
         Backup(description: String) { display("{}\nTry '{} --help' for more information.", description, uucore::execution_phrase()) }
 
         NotADirectory(path: PathBuf) { display("'{}' is not a directory", path.display()) }
+
+        /// Result of trying to copy file to non-existing directory, e.g. `cp a no-such/`
+        CannotCreateRegularFile(path: PathBuf) { display("cannot create regular file '{}': Not a directory", path.display()) }
     }
 }
 
@@ -1674,6 +1677,8 @@ fn copy_file(
 
     if file_or_link_exists(dest) {
         handle_existing_dest(source, dest, options, source_in_command_line)?;
+    } else if dest.to_string_lossy().ends_with(MAIN_SEPARATOR_STR) {
+        return Err(Error::CannotCreateRegularFile(dest.to_path_buf()));
     }
 
     if options.preserve_hard_links() {

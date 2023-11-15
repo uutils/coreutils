@@ -105,6 +105,22 @@ fn test_cp_existing_target() {
 }
 
 #[test]
+fn test_cp_non_existing_target_dir() {
+    #[cfg(not(windows))]
+    let non_existing_dir = "non-existing-dir/";
+    #[cfg(windows)]
+    let non_existing_dir = "non-existing-dir\\";
+
+    new_ucmd!()
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(non_existing_dir)
+        .fails()
+        .stderr_is(format!(
+            "cp: cannot create regular file '{non_existing_dir}': Not a directory\n"
+        ));
+}
+
+#[test]
 fn test_cp_duplicate_files() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
