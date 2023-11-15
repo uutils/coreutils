@@ -335,7 +335,7 @@ impl<'a> State<'a> {
         line_ending: LineEnding,
         print_unpaired: bool,
     ) -> Result<State<'a>, JoinError> {
-        let f = if name == "-" {
+        let file_buf = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
             match File::open(name) {
@@ -355,7 +355,7 @@ impl<'a> State<'a> {
             file_name: name,
             file_num,
             print_unpaired,
-            lines: f.split(line_ending as u8),
+            lines: file_buf.split(line_ending as u8),
             max_len: 1,
             seq: Vec::new(),
             line_num: 0,
