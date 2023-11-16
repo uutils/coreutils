@@ -701,10 +701,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(USimpleError::new(1, "both files cannot be standard input"));
     }
 
-    match exec(file1, file2, settings) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(USimpleError::new(1, format!("{e}"))),
-    }
+    exec(file1, file2, settings)
 }
 
 pub fn uu_app() -> Command {
