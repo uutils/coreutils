@@ -212,10 +212,7 @@ impl Spec {
                     (false, false) => PositiveSign::None,
                 },
             },
-            x => {
-                dbg!("{:b}", x);
-                return dbg!(None)
-            },
+            _ => return None,
         })
     }
 
@@ -228,16 +225,16 @@ impl Spec {
             &Spec::Char { width, align_left } => {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
                 let arg = next_arg(&mut args)?;
-                match arg {
-                    FormatArgument::Char(c) => write_padded(writer, c, width, false, align_left),
+                match arg.get_char() {
+                    Some(c) => write_padded(writer, c, width, false, align_left),
                     _ => Err(FormatError::InvalidArgument(arg.clone())),
                 }
             }
             &Spec::String { width, align_left } => {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
                 let arg = next_arg(&mut args)?;
-                match arg {
-                    FormatArgument::String(s) => write_padded(writer, s, width, false, align_left),
+                match arg.get_str() {
+                    Some(s) => write_padded(writer, s, width, false, align_left),
                     _ => Err(FormatError::InvalidArgument(arg.clone())),
                 }
             }
@@ -249,7 +246,7 @@ impl Spec {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
 
                 let arg = next_arg(&mut args)?;
-                let FormatArgument::SignedInt(i) = arg else {
+                let Some(i) = arg.get_i64() else {
                     return Err(FormatError::InvalidArgument(arg.clone()));
                 };
 
@@ -258,7 +255,7 @@ impl Spec {
                     positive_sign,
                     alignment,
                 }
-                .fmt(writer, *i)
+                .fmt(writer, i)
                 .map_err(FormatError::IoError)
             }
             &Spec::UnsignedInt {
@@ -269,7 +266,7 @@ impl Spec {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
 
                 let arg = next_arg(args)?;
-                let FormatArgument::UnsignedInt(i) = arg else {
+                let Some(i) = arg.get_u64() else {
                     return Err(FormatError::InvalidArgument(arg.clone()));
                 };
 
@@ -278,7 +275,7 @@ impl Spec {
                     width,
                     alignment,
                 }
-                .fmt(writer, *i)
+                .fmt(writer, i)
                 .map_err(FormatError::IoError)
             }
             &Spec::Float {
@@ -294,7 +291,7 @@ impl Spec {
                 let precision = resolve_asterisk(precision, &mut args)?.unwrap_or(6);
 
                 let arg = next_arg(args)?;
-                let FormatArgument::Float(f) = arg else {
+                let Some(f) = arg.get_f64() else {
                     return Err(FormatError::InvalidArgument(arg.clone()));
                 };
 
@@ -307,7 +304,7 @@ impl Spec {
                     alignment,
                     precision,
                 }
-                .fmt(writer, *f)
+                .fmt(writer, f)
                 .map_err(FormatError::IoError)
             }
         }
@@ -322,8 +319,8 @@ fn resolve_asterisk<'a>(
         None => None,
         Some(CanAsterisk::Asterisk) => {
             let arg = next_arg(args)?;
-            match arg {
-                FormatArgument::UnsignedInt(u) => match usize::try_from(*u) {
+            match arg.get_u64() {
+                Some(u) => match usize::try_from(u) {
                     Ok(u) => Some(u),
                     Err(_) => return Err(FormatError::InvalidArgument(arg.clone())),
                 },

@@ -8,8 +8,19 @@
 //! [`Format`] struct, which represents a parsed format string. This reduces
 //! the need for parsing a format string multiple times and assures that no
 //! parsing errors occur during writing.
+//!
+//! There are three kinds of parsing that we might want to do:
+//!
+//!  1. Only `printf` specifiers (for e.g. `seq`, `dd`)
+//!  2. Only escape sequences (for e.g. `echo`)
+//!  3. Both `printf` specifiers and escape sequences (for e.g. `printf`)
+//!
+//! This module aims to combine all three use cases.
+
 // spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 
+mod escape;
+mod argument;
 pub mod num_format;
 mod spec;
 
@@ -18,11 +29,16 @@ use std::{
     error::Error,
     fmt::Display,
     io::{stdout, Write},
+    ops::ControlFlow,
 };
+pub use argument::*;
 
 use crate::error::UError;
 
-use self::num_format::Formatter;
+use self::{
+    escape::{parse_escape_code, EscapedChar},
+    num_format::Formatter,
+};
 
 #[derive(Debug)]
 pub enum FormatError {
@@ -54,80 +70,116 @@ impl Display for FormatError {
 }
 
 /// A single item to format
-enum FormatItem {
+pub enum FormatItem<C: FormatChar> {
     /// A format specifier
     Spec(Spec),
-    /// Some plain text
-    Text(Vec<u8>),
     /// A single character
-    ///
-    /// Added in addition to `Text` as an optimization.
-    Char(u8),
+    Char(C),
 }
 
-#[derive(Clone, Debug)]
-pub enum FormatArgument {
-    Char(char),
-    String(String),
-    UnsignedInt(u64),
-    SignedInt(i64),
-    Float(f64),
-    // Special argument that gets coerced into the other variants
-    Unparsed(String),
+pub trait FormatChar {
+    fn write(&self, writer: impl Write) -> std::io::Result<ControlFlow<()>>;
 }
 
-impl FormatItem {
-    fn write<'a>(
-        &self,
-        mut writer: impl Write,
-        args: &mut impl Iterator<Item = &'a FormatArgument>,
-    ) -> Result<(), FormatError> {
-        match self {
-            FormatItem::Spec(spec) => spec.write(writer, args),
-            FormatItem::Text(bytes) => writer.write_all(bytes).map_err(FormatError::IoError),
-            FormatItem::Char(char) => writer.write_all(&[*char]).map_err(FormatError::IoError),
-        }
+impl FormatChar for u8 {
+    fn write(&self, mut writer: impl Write) -> std::io::Result<ControlFlow<()>> {
+        writer.write(&[*self])?;
+        Ok(ControlFlow::Continue(()))
     }
 }
 
-fn parse_iter(fmt: &[u8]) -> impl Iterator<Item = Result<FormatItem, FormatError>> + '_ {
-    let mut rest = fmt;
-    std::iter::from_fn(move || {
-        if rest.is_empty() {
-            return None;
+impl FormatChar for EscapedChar {
+    fn write(&self, mut writer: impl Write) -> std::io::Result<ControlFlow<()>> {
+        match self {
+            EscapedChar::Char(c) => {
+                writer.write(&[*c])?;
+            }
+            EscapedChar::Backslash(c) => {
+                writer.write(&[b'\\', *c])?;
+            }
+            EscapedChar::End => return Ok(ControlFlow::Break(())),
         }
+        Ok(ControlFlow::Continue(()))
+    }
+}
 
-        match rest.iter().position(|c| *c == b'%') {
-            None => {
-                let final_text = rest;
-                rest = &[];
-                Some(Ok(FormatItem::Text(final_text.into())))
-            }
-            Some(0) => {
-                // Handle the spec
-                rest = &rest[1..];
-                match rest.get(0) {
-                    None => Some(Ok(FormatItem::Char(b'%'))),
-                    Some(b'%') => {
-                        rest = &rest[1..];
-                        Some(Ok(FormatItem::Char(b'%')))
-                    }
-                    Some(_) => {
-                        let spec = match Spec::parse(&mut rest) {
-                            Some(spec) => spec,
-                            None => return Some(Err(dbg!(FormatError::SpecError))),
-                        };
-                        Some(Ok(FormatItem::Spec(spec)))
-                    }
-                }
-            }
-            Some(i) => {
-                // The `after` slice includes the % so it will be handled correctly
-                // in the next iteration.
-                let (before, after) = rest.split_at(i);
-                rest = after;
-                return Some(Ok(FormatItem::Text(before.into())));
-            }
+impl<C: FormatChar> FormatItem<C> {
+    pub fn write<'a>(
+        &self,
+        writer: impl Write,
+        args: &mut impl Iterator<Item = &'a FormatArgument>,
+    ) -> Result<ControlFlow<()>, FormatError> {
+        match self {
+            FormatItem::Spec(spec) => spec.write(writer, args)?,
+            FormatItem::Char(c) => return c.write(writer).map_err(FormatError::IoError),
+        };
+        Ok(ControlFlow::Continue(()))
+    }
+}
+
+pub fn parse_spec_and_escape(
+    fmt: &[u8],
+) -> impl Iterator<Item = Result<FormatItem<EscapedChar>, FormatError>> + '_ {
+    let mut current = fmt;
+    std::iter::from_fn(move || match current {
+        [] => return None,
+        [b'%', b'%', rest @ ..] => {
+            current = rest;
+            Some(Ok(FormatItem::Char(EscapedChar::Char(b'%'))))
+        }
+        [b'%', rest @ ..] => {
+            current = rest;
+            let spec = match Spec::parse(&mut current) {
+                Some(spec) => spec,
+                None => return Some(Err(FormatError::SpecError)),
+            };
+            Some(Ok(FormatItem::Spec(spec)))
+        }
+        [b'\\', rest @ ..] => {
+            current = rest;
+            Some(Ok(FormatItem::Char(parse_escape_code(&mut current))))
+        }
+        [c, rest @ ..] => {
+            current = rest;
+            Some(Ok(FormatItem::Char(EscapedChar::Char(*c))))
+        }
+    })
+}
+
+fn parse_spec_only(fmt: &[u8]) -> impl Iterator<Item = Result<FormatItem<u8>, FormatError>> + '_ {
+    let mut current = fmt;
+    std::iter::from_fn(move || match current {
+        [] => return None,
+        [b'%', b'%', rest @ ..] => {
+            current = rest;
+            Some(Ok(FormatItem::Char(b'%')))
+        }
+        [b'%', rest @ ..] => {
+            current = rest;
+            let spec = match Spec::parse(&mut current) {
+                Some(spec) => spec,
+                None => return Some(Err(FormatError::SpecError)),
+            };
+            Some(Ok(FormatItem::Spec(spec)))
+        }
+        [c, rest @ ..] => {
+            current = rest;
+            Some(Ok(FormatItem::Char(*c)))
+        }
+    })
+}
+
+fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = Result<EscapedChar, FormatError>> + '_ {
+    let mut current = fmt;
+    std::iter::from_fn(move || match current {
+        [] => return None,
+        [b'\\', rest @ ..] => {
+            current = rest;
+            Some(Ok(parse_escape_code(&mut current)))
+        }
+        [c, rest @ ..] => {
+            current = rest;
+            Some(Ok(EscapedChar::Char(*c)))
         }
     })
 }
@@ -144,7 +196,7 @@ fn parse_iter(fmt: &[u8]) -> impl Iterator<Item = Result<FormatItem, FormatError
 /// ```rust
 /// use uucore::format::printf;
 ///
-/// printf("hello %s", &["world".to_string()]).unwrap();
+/// printf("hello %s", &[FormatArgument::String("world")]).unwrap();
 /// // prints "hello world"
 /// ```
 pub fn printf<'a>(
@@ -160,7 +212,7 @@ fn printf_writer<'a>(
     args: impl IntoIterator<Item = &'a FormatArgument>,
 ) -> Result<(), FormatError> {
     let mut args = args.into_iter();
-    for item in parse_iter(format_string.as_ref()) {
+    for item in parse_spec_only(format_string.as_ref()) {
         item?.write(&mut writer, &mut args)?;
     }
     Ok(())
@@ -191,10 +243,10 @@ pub fn sprintf<'a>(
 }
 
 /// A parsed format for a single float value
-/// 
+///
 /// This is used by `seq`. It can be constructed with [`FloatFormat::parse`]
 /// and can write a value with [`FloatFormat::fmt`].
-/// 
+///
 /// It can only accept a single specification without any asterisk parameters.
 /// If it does get more specifications, it will return an error.
 pub struct Format<F: Formatter> {
@@ -205,7 +257,7 @@ pub struct Format<F: Formatter> {
 
 impl<F: Formatter> Format<F> {
     pub fn parse(format_string: impl AsRef<[u8]>) -> Result<Self, FormatError> {
-        let mut iter = parse_iter(format_string.as_ref());
+        let mut iter = parse_spec_only(format_string.as_ref());
 
         let mut prefix = Vec::new();
         let mut spec = None;
@@ -215,7 +267,6 @@ impl<F: Formatter> Format<F> {
                     spec = Some(s);
                     break;
                 }
-                FormatItem::Text(t) => prefix.extend_from_slice(&t),
                 FormatItem::Char(c) => prefix.push(c),
             }
         }
@@ -230,9 +281,8 @@ impl<F: Formatter> Format<F> {
         for item in &mut iter {
             match item? {
                 FormatItem::Spec(_) => {
-                    return Err(dbg!(FormatError::SpecError));
+                    return Err(FormatError::SpecError);
                 }
-                FormatItem::Text(t) => suffix.extend_from_slice(&t),
                 FormatItem::Char(c) => suffix.push(c),
             }
         }

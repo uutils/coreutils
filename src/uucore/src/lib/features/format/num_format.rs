@@ -93,7 +93,7 @@ impl Formatter for SignedInt {
             alignment,
         } = s
         else {
-            return Err(dbg!(FormatError::SpecError));
+            return Err(FormatError::SpecError);
         };
 
         let width = match width {
@@ -152,7 +152,7 @@ impl Formatter for UnsignedInt {
             alignment,
         } = s
         else {
-            return Err(dbg!(FormatError::SpecError));
+            return Err(FormatError::SpecError);
         };
 
         let width = match width {
@@ -241,19 +241,19 @@ impl Formatter for Float {
             precision,
         } = s
         else {
-            return Err(dbg!(FormatError::SpecError));
+            return Err(FormatError::SpecError);
         };
 
         let width = match width {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(dbg!(FormatError::SpecError)),
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
         };
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(dbg!(FormatError::SpecError)),
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
         };
 
         Ok(Self {
