@@ -70,7 +70,7 @@ fn preload_strings() -> UResult<(&'static str, &'static str)> {
     Ok(("LD_PRELOAD", "so"))
 }
 
-#[cfg(target_vendor = "linux")]
+#[cfg(target_vendor = "apple")]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
     Ok(("DYLD_LIBRARY_PATH", "dylib"))
 }
