@@ -19,7 +19,7 @@ use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UError, UResult, USimpleError};
+use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::{crash_if_err, format_usage, help_about, help_usage};
 
@@ -334,20 +334,12 @@ impl<'a> State<'a> {
         key: usize,
         line_ending: LineEnding,
         print_unpaired: bool,
-    ) -> Result<State<'a>, JoinError> {
+    ) -> UResult<State<'a>> {
         let file_buf = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
-            match File::open(name) {
-                Ok(file) => Box::new(BufReader::new(file)) as Box<dyn BufRead>,
-                Err(err) => {
-                    return Err(JoinError::UnorderedInput(format!(
-                        "{}: {}",
-                        name.maybe_quote(),
-                        err
-                    )));
-                }
-            }
+            let file = File::open(name).map_err_context(|| format!("{}", name.maybe_quote()))?;
+            Box::new(BufReader::new(file)) as Box<dyn BufRead>
         };
 
         Ok(State {
@@ -365,12 +357,7 @@ impl<'a> State<'a> {
     }
 
     /// Skip the current unpaired line.
-    fn skip_line(
-        &mut self,
-        writer: &mut impl Write,
-        input: &Input,
-        repr: &Repr,
-    ) -> Result<(), JoinError> {
+    fn skip_line(&mut self, writer: &mut impl Write, input: &Input, repr: &Repr) -> UResult<()> {
         if self.print_unpaired {
             self.print_first_line(writer, repr)?;
         }
@@ -381,7 +368,7 @@ impl<'a> State<'a> {
 
     /// Keep reading line sequence until the key does not change, return
     /// the first line whose key differs.
-    fn extend(&mut self, input: &Input) -> Result<Option<Line>, JoinError> {
+    fn extend(&mut self, input: &Input) -> UResult<Option<Line>> {
         while let Some(line) = self.next_line(input)? {
             let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
@@ -490,12 +477,7 @@ impl<'a> State<'a> {
         0
     }
 
-    fn finalize(
-        &mut self,
-        writer: &mut impl Write,
-        input: &Input,
-        repr: &Repr,
-    ) -> Result<(), JoinError> {
+    fn finalize(&mut self, writer: &mut impl Write, input: &Input, repr: &Repr) -> UResult<()> {
         if self.has_line() {
             if self.print_unpaired {
                 self.print_first_line(writer, repr)?;
@@ -843,7 +825,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         )
 }
 
-fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
+fn exec(file1: &str, file2: &str, settings: Settings) -> UResult<()> {
     let stdin = stdin();
 
     let mut state1 = State::new(
