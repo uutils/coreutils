@@ -169,17 +169,17 @@ fn parse_spec_only(fmt: &[u8]) -> impl Iterator<Item = Result<FormatItem<u8>, Fo
     })
 }
 
-fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = Result<EscapedChar, FormatError>> + '_ {
+fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => return None,
         [b'\\', rest @ ..] => {
             current = rest;
-            Some(Ok(parse_escape_code(&mut current)))
+            Some(parse_escape_code(&mut current))
         }
         [c, rest @ ..] => {
             current = rest;
-            Some(Ok(EscapedChar::Char(*c)))
+            Some(EscapedChar::Char(*c))
         }
     })
 }

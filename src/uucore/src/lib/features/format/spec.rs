@@ -5,9 +5,9 @@ use super::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
-    FormatArgument, FormatError,
+    parse_escape_only, FormatArgument, FormatChar, FormatError,
 };
-use std::{fmt::Display, io::Write};
+use std::{fmt::Display, io::Write, ops::ControlFlow};
 
 #[derive(Debug)]
 pub enum Spec {
@@ -17,6 +17,7 @@ pub enum Spec {
     },
     String {
         width: Option<CanAsterisk<usize>>,
+        parse_escape: bool,
         align_left: bool,
     },
     SignedInt {
@@ -145,6 +146,12 @@ impl Spec {
             },
             b's' => Spec::String {
                 width,
+                parse_escape: false,
+                align_left: minus,
+            },
+            b'b' => Spec::String {
+                width,
+                parse_escape: true,
                 align_left: minus,
             },
             b'd' | b'i' => Spec::SignedInt {
@@ -230,12 +237,36 @@ impl Spec {
                     _ => Err(FormatError::InvalidArgument(arg.clone())),
                 }
             }
-            &Spec::String { width, align_left } => {
+            &Spec::String {
+                width,
+                parse_escape,
+                align_left,
+            } => {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
                 let arg = next_arg(&mut args)?;
-                match arg.get_str() {
-                    Some(s) => write_padded(writer, s, width, false, align_left),
-                    _ => Err(FormatError::InvalidArgument(arg.clone())),
+                let Some(s) = arg.get_str() else {
+                    return Err(FormatError::InvalidArgument(arg.clone()));
+                };
+                if parse_escape {
+                    let mut parsed = Vec::new();
+                    for c in parse_escape_only(s.as_bytes()) {
+                        match c.write(&mut parsed)? {
+                            ControlFlow::Continue(()) => {}
+                            ControlFlow::Break(()) => {
+                                // TODO: This should break the _entire execution_ of printf
+                                break;
+                            }
+                        };
+                    }
+                    write_padded(
+                        writer,
+                        std::str::from_utf8(&parsed).expect("TODO: Accept invalid utf8"),
+                        width,
+                        false,
+                        align_left,
+                    )
+                } else {
+                    write_padded(writer, s, width, false, align_left)
                 }
             }
             &Spec::SignedInt {
