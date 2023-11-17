@@ -190,6 +190,11 @@ fn sub_num_int_char_const_in() {
         .args(&["ninety seven is %i", "'a"])
         .succeeds()
         .stdout_only("ninety seven is 97");
+
+    new_ucmd!()
+        .args(&["emoji is %i", "'🙃"])
+        .succeeds()
+        .stdout_only("emoji is 128579");
 }
 
 #[test]
