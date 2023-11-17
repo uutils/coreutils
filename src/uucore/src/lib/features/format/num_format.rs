@@ -63,6 +63,7 @@ pub enum NumberAlignment {
 
 pub struct SignedInt {
     pub width: usize,
+    pub precision: usize,
     pub positive_sign: PositiveSign,
     pub alignment: NumberAlignment,
 }
@@ -79,16 +80,19 @@ impl Formatter for SignedInt {
             }?;
         }
 
+        let s = format!("{:0width$}", x, width = self.precision);
+
         match self.alignment {
-            NumberAlignment::Left => write!(writer, "{x:<width$}", width = self.width),
-            NumberAlignment::RightSpace => write!(writer, "{x:>width$}", width = self.width),
-            NumberAlignment::RightZero => write!(writer, "{x:0>width$}", width = self.width),
+            NumberAlignment::Left => write!(writer, "{s:<width$}", width = self.width),
+            NumberAlignment::RightSpace => write!(writer, "{s:>width$}", width = self.width),
+            NumberAlignment::RightZero => write!(writer, "{s:0>width$}", width = self.width),
         }
     }
 
     fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
         let Spec::SignedInt {
             width,
+            precision,
             positive_sign,
             alignment,
         } = s
@@ -102,8 +106,15 @@ impl Formatter for SignedInt {
             Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
         };
 
+        let precision = match precision {
+            Some(CanAsterisk::Fixed(x)) => x,
+            None => 0,
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+        };
+
         Ok(Self {
             width,
+            precision,
             positive_sign,
             alignment,
         })
@@ -113,6 +124,7 @@ impl Formatter for SignedInt {
 pub struct UnsignedInt {
     pub variant: UnsignedIntVariant,
     pub width: usize,
+    pub precision: usize,
     pub alignment: NumberAlignment,
 }
 
@@ -120,7 +132,7 @@ impl Formatter for UnsignedInt {
     type Input = u64;
 
     fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        let s = match self.variant {
+        let mut s = match self.variant {
             UnsignedIntVariant::Decimal => format!("{x}"),
             UnsignedIntVariant::Octal(Prefix::No) => format!("{x:o}"),
             UnsignedIntVariant::Octal(Prefix::Yes) => format!("{x:#o}"),
@@ -138,6 +150,10 @@ impl Formatter for UnsignedInt {
             }
         };
 
+        if self.precision > s.len() {
+            s = format!("{:0width$}", s, width = self.precision)
+        }
+
         match self.alignment {
             NumberAlignment::Left => write!(writer, "{s:<width$}", width = self.width),
             NumberAlignment::RightSpace => write!(writer, "{s:>width$}", width = self.width),
@@ -149,6 +165,7 @@ impl Formatter for UnsignedInt {
         let Spec::UnsignedInt {
             variant,
             width,
+            precision,
             alignment,
         } = s
         else {
@@ -161,8 +178,15 @@ impl Formatter for UnsignedInt {
             Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
         };
 
+        let precision = match precision {
+            Some(CanAsterisk::Fixed(x)) => x,
+            None => 0,
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+        };
+
         Ok(Self {
             width,
+            precision,
             variant,
             alignment,
         })

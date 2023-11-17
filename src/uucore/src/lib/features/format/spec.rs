@@ -22,12 +22,14 @@ pub enum Spec {
     },
     SignedInt {
         width: Option<CanAsterisk<usize>>,
+        precision: Option<CanAsterisk<usize>>,
         positive_sign: PositiveSign,
         alignment: NumberAlignment,
     },
     UnsignedInt {
         variant: UnsignedIntVariant,
         width: Option<CanAsterisk<usize>>,
+        precision: Option<CanAsterisk<usize>>,
         alignment: NumberAlignment,
     },
     Float {
@@ -167,6 +169,7 @@ impl Spec {
             },
             b'd' | b'i' => Spec::SignedInt {
                 width,
+                precision,
                 alignment: match (minus, zero) {
                     (true, _) => NumberAlignment::Left,
                     (false, true) => NumberAlignment::RightZero,
@@ -197,6 +200,7 @@ impl Spec {
                 };
                 Spec::UnsignedInt {
                     variant,
+                    precision,
                     width,
                     alignment,
                 }
@@ -282,10 +286,12 @@ impl Spec {
             }
             &Spec::SignedInt {
                 width,
+                precision,
                 positive_sign,
                 alignment,
             } => {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
+                let precision = resolve_asterisk(precision, &mut args)?.unwrap_or(0);
 
                 let arg = next_arg(&mut args)?;
                 let Some(i) = arg.get_i64() else {
@@ -294,6 +300,7 @@ impl Spec {
 
                 num_format::SignedInt {
                     width,
+                    precision,
                     positive_sign,
                     alignment,
                 }
@@ -303,9 +310,11 @@ impl Spec {
             &Spec::UnsignedInt {
                 variant,
                 width,
+                precision,
                 alignment,
             } => {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
+                let precision = resolve_asterisk(precision, &mut args)?.unwrap_or(0);
 
                 let arg = next_arg(args)?;
                 let Some(i) = arg.get_u64() else {
@@ -314,6 +323,7 @@ impl Spec {
 
                 num_format::UnsignedInt {
                     variant,
+                    precision,
                     width,
                     alignment,
                 }
