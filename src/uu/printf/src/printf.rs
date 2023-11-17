@@ -43,7 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for item in parse_spec_and_escape(format_string.as_ref()) {
         match item?.write(stdout(), &mut args)? {
             ControlFlow::Continue(()) => {}
-            ControlFlow::Break(()) => break,
+            ControlFlow::Break(()) => return Ok(()),
         };
     }
 
@@ -51,7 +51,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         for item in parse_spec_and_escape(format_string.as_ref()) {
             match item?.write(stdout(), &mut args)? {
                 ControlFlow::Continue(()) => {}
-                ControlFlow::Break(()) => break,
+                ControlFlow::Break(()) => return Ok(()),
             };
         }
     }
