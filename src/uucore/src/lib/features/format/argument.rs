@@ -30,23 +30,51 @@ impl FormatArgument {
     pub fn get_u64(&self) -> Option<u64> {
         match self {
             Self::UnsignedInt(n) => Some(*n),
-            Self::Unparsed(s) => s.parse().ok(),
+            Self::Unparsed(s) => {
+                if let Some(s) = s.strip_prefix("0x") {
+                    u64::from_str_radix(s, 16).ok()
+                } else if let Some(s) = s.strip_prefix("0") {
+                    u64::from_str_radix(s, 8).ok()
+                } else if let Some(s) = s.strip_prefix('\'') {
+                    Some(s.chars().next()? as u64)
+                } else {
+                    s.parse().ok()
+                }
+            }
             _ => None,
         }
     }
-    
+
     pub fn get_i64(&self) -> Option<i64> {
         match self {
             Self::SignedInt(n) => Some(*n),
-            Self::Unparsed(s) => s.parse().ok(),
+            Self::Unparsed(s) => {
+                if let Some(s) = s.strip_prefix("0x") {
+                    i64::from_str_radix(s, 16).ok()
+                } else if let Some(s) = s.strip_prefix("0") {
+                    i64::from_str_radix(s, 8).ok()
+                } else if let Some(s) = s.strip_prefix('\'') {
+                    Some(s.chars().next()? as i64)
+                } else {
+                    s.parse().ok()
+                }
+            }
             _ => None,
         }
     }
-    
+
     pub fn get_f64(&self) -> Option<f64> {
         match self {
             Self::Float(n) => Some(*n),
-            Self::Unparsed(s) => s.parse().ok(),
+            Self::Unparsed(s) => {
+                if s.starts_with("0x") || s.starts_with("-0x") {
+                    unimplemented!("Hexadecimal floats are unimplemented!")
+                } else if let Some(s) = s.strip_prefix('\'') {
+                    Some(s.chars().next()? as u64 as f64)
+                } else {
+                    s.parse().ok()
+                }
+            }
             _ => None,
         }
     }
