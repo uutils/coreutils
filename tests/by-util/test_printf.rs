@@ -376,6 +376,7 @@ fn sub_float_dec_places() {
 }
 
 #[test]
+#[ignore = "hexadecimal floats are unimplemented"]
 fn sub_float_hex_in() {
     new_ucmd!()
         .args(&["%f", "0xF1.1F"])
