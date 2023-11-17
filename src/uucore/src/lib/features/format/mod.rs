@@ -194,9 +194,9 @@ fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
 /// # Examples
 ///
 /// ```rust
-/// use uucore::format::printf;
+/// use uucore::format::{printf, FormatArgument};
 ///
-/// printf("hello %s", &[FormatArgument::String("world")]).unwrap();
+/// printf("hello %s", &[FormatArgument::String("world".into())]).unwrap();
 /// // prints "hello world"
 /// ```
 pub fn printf<'a>(
@@ -228,10 +228,11 @@ fn printf_writer<'a>(
 /// # Examples
 ///
 /// ```rust
-/// use uucore::format::sprintf;
+/// use uucore::format::{sprintf, FormatArgument};
 ///
-/// let s = sprintf("hello %s", &["world".to_string()]).unwrap();
-/// assert_eq!(s, "hello world".to_string());
+/// let s = sprintf("hello %s", &[FormatArgument::String("world".into())]).unwrap();
+/// let s = std::str::from_utf8(&s).unwrap();
+/// assert_eq!(s, "hello world");
 /// ```
 pub fn sprintf<'a>(
     format_string: impl AsRef<[u8]>,
