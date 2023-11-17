@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::process;
 use tempfile::tempdir;
 use tempfile::TempDir;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size_u64;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
@@ -103,7 +103,10 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
                 }
             }
             x => parse_size_u64(x).map_or_else(
-                |e| Err(ProgramOptionsError(format!("invalid mode {e}"))),
+                |e| {
+                    set_exit_code(125);
+                    Err(ProgramOptionsError(format!("invalid mode {e}")))
+                },
                 |m| {
                     Ok(BufferType::Size(m.try_into().map_err(|_| {
                         ProgramOptionsError(format!(
