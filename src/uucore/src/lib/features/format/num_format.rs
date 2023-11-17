@@ -329,8 +329,24 @@ fn format_float_scientific(
         return format_float_nonfinite(f, case);
     }
 
-    let exponent: i32 = f.log10().floor() as i32;
-    let normalized = f / 10.0_f64.powi(exponent);
+    if f == 0.0 {
+        return if force_decimal == ForceDecimal::Yes && precision == 0 {
+            "0.e+00".into()
+        } else {
+            format!("{:.*}e+00", precision, 0.0)
+        };
+    }
+
+    
+    let mut exponent: i32 = f.log10().floor() as i32;
+    let mut normalized = f / 10.0_f64.powi(exponent);
+
+    // If the normalized value will be rounded to a value greater than 10
+    // we need to correct.
+    if (normalized * 10_f64.powi(precision as i32)).round() / 10_f64.powi(precision as i32)  >= 10.0 {
+        normalized /= 10.0;
+        exponent += 1;
+    }
 
     let additional_dot = if precision == 0 && ForceDecimal::Yes == force_decimal {
         "."
@@ -349,20 +365,89 @@ fn format_float_scientific(
     )
 }
 
-// TODO: This could be optimized. It's not terribly important though.
 fn format_float_shortest(
     f: f64,
     precision: usize,
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    let a = format_float_decimal(f, precision, case, force_decimal);
-    let b = format_float_scientific(f, precision, case, force_decimal);
+    // If the float is NaN, -Nan, Inf or -Inf, format like any other float
+    if !f.is_finite() {
+        return format_float_nonfinite(f, case);
+    }
 
-    if a.len() > b.len() {
-        b
+    // Precision here is about how many digits should be displayed
+    // instead of how many digits for the fractional part, this means that if
+    // we pass this to rust's format string, it's always gonna be one less.
+    let precision = precision.saturating_sub(1);
+
+    if f == 0.0 {
+        return match (force_decimal, precision) {
+            (ForceDecimal::Yes, 0) => "0.".into(),
+            (ForceDecimal::Yes, _) => {
+                format!("{:.*}", precision, 0.0)
+            }
+            (ForceDecimal::No, _) => "0".into(),
+        };
+    }
+
+    let mut exponent = f.log10().floor() as i32;
+    if f != 0.0 && exponent <= -4 || exponent > precision as i32 {
+        // Scientific-ish notation (with a few differences)
+        let mut normalized = f / 10.0_f64.powi(exponent);
+
+        // If the normalized value will be rounded to a value greater than 10
+        // we need to correct.
+        if (normalized * 10_f64.powi(precision as i32)).round() / 10_f64.powi(precision as i32)  >= 10.0 {
+            normalized /= 10.0;
+            exponent += 1;
+        }
+
+        let additional_dot = if precision == 0 && ForceDecimal::Yes == force_decimal {
+            "."
+        } else {
+            ""
+        };
+
+        let mut normalized = format!("{normalized:.*}", precision);
+
+        if force_decimal == ForceDecimal::No {
+            while normalized.ends_with('0') {
+                normalized.pop();
+            }
+            if normalized.ends_with('.') {
+                normalized.pop();
+            }
+        }
+
+        let exp_char = match case {
+            Case::Lowercase => 'e',
+            Case::Uppercase => 'E',
+        };
+
+        format!("{normalized}{additional_dot}{exp_char}{exponent:+03}")
     } else {
-        a
+        // Decimal-ish notation with a few differences:
+        //  - The precision works differently and specifies the total number
+        //    of digits instead of the digits in the fractional part.
+        //  - If we don't force the decimal, '0' and `.` are trimmed.
+        let decimal_places = (precision as i32).saturating_sub(exponent) as usize;
+        let mut formatted = if decimal_places == 0 && force_decimal == ForceDecimal::Yes {
+            format!("{f:.0}.")
+        } else {
+            format!("{f:.*}", decimal_places)
+        };
+
+        if force_decimal == ForceDecimal::No {
+            while formatted.ends_with('0') {
+                formatted.pop();
+            }
+            if formatted.ends_with('.') {
+                formatted.pop();
+            }
+        }
+
+        formatted
     }
 }
 
@@ -397,4 +482,108 @@ fn format_float_hexadecimal(
     }
 
     return s;
+}
+
+#[cfg(test)]
+mod test {
+    use crate::format::num_format::{Case, ForceDecimal};
+
+    #[test]
+    fn decimal_float() {
+        use super::format_float_decimal;
+        let f = |x| format_float_decimal(x, 6, Case::Lowercase, ForceDecimal::No);
+        assert_eq!(f(0.0), "0.000000");
+        assert_eq!(f(1.0), "1.000000");
+        assert_eq!(f(100.0), "100.000000");
+        assert_eq!(f(123456.789), "123456.789000");
+        assert_eq!(f(12.3456789), "12.345679");
+        assert_eq!(f(1000000.0), "1000000.000000");
+        assert_eq!(f(99999999.0), "99999999.000000");
+        assert_eq!(f(1.9999995), "1.999999");
+        assert_eq!(f(1.9999996), "2.000000");
+    }
+
+    #[test]
+    fn scientific_float() {
+        use super::format_float_scientific;
+        let f = |x| format_float_scientific(x, 6, Case::Lowercase, ForceDecimal::No);
+        assert_eq!(f(0.0), "0.000000e+00");
+        assert_eq!(f(1.0), "1.000000e+00");
+        assert_eq!(f(100.0), "1.000000e+02");
+        assert_eq!(f(123456.789), "1.234568e+05");
+        assert_eq!(f(12.3456789), "1.234568e+01");
+        assert_eq!(f(1000000.0), "1.000000e+06");
+        assert_eq!(f(99999999.0), "1.000000e+08");
+    }
+
+    #[test]
+    fn scientific_float_zero_precision() {
+        use super::format_float_scientific;
+
+        let f = |x| format_float_scientific(x, 0, Case::Lowercase, ForceDecimal::No);
+        assert_eq!(f(0.0), "0e+00");
+        assert_eq!(f(1.0), "1e+00");
+        assert_eq!(f(100.0), "1e+02");
+        assert_eq!(f(123456.789), "1e+05");
+        assert_eq!(f(12.3456789), "1e+01");
+        assert_eq!(f(1000000.0), "1e+06");
+        assert_eq!(f(99999999.0), "1e+08");
+
+        let f = |x| format_float_scientific(x, 0, Case::Lowercase, ForceDecimal::Yes);
+        assert_eq!(f(0.0), "0.e+00");
+        assert_eq!(f(1.0), "1.e+00");
+        assert_eq!(f(100.0), "1.e+02");
+        assert_eq!(f(123456.789), "1.e+05");
+        assert_eq!(f(12.3456789), "1.e+01");
+        assert_eq!(f(1000000.0), "1.e+06");
+        assert_eq!(f(99999999.0), "1.e+08");
+    }
+
+    #[test]
+    fn shortest_float() {
+        use super::format_float_shortest;
+        let f = |x| format_float_shortest(x, 6, Case::Lowercase, ForceDecimal::No);
+        assert_eq!(f(0.0), "0");
+        assert_eq!(f(1.0), "1");
+        assert_eq!(f(100.0), "100");
+        assert_eq!(f(123456.789), "123457");
+        assert_eq!(f(12.3456789), "12.3457");
+        assert_eq!(f(1000000.0), "1e+06");
+        assert_eq!(f(99999999.0), "1e+08");
+    }
+
+    #[test]
+    fn shortest_float_force_decimal() {
+        use super::format_float_shortest;
+        let f = |x| format_float_shortest(x, 6, Case::Lowercase, ForceDecimal::Yes);
+        assert_eq!(f(0.0), "0.00000");
+        assert_eq!(f(1.0), "1.00000");
+        assert_eq!(f(100.0), "100.000");
+        assert_eq!(f(123456.789), "123457.");
+        assert_eq!(f(12.3456789), "12.3457");
+        assert_eq!(f(1000000.0), "1.00000e+06");
+        assert_eq!(f(99999999.0), "1.00000e+08");
+    }
+
+    #[test]
+    fn shortest_float_force_decimal_zero_precision() {
+        use super::format_float_shortest;
+        let f = |x| format_float_shortest(x, 0, Case::Lowercase, ForceDecimal::No);
+        assert_eq!(f(0.0), "0");
+        assert_eq!(f(1.0), "1");
+        assert_eq!(f(100.0), "1e+02");
+        assert_eq!(f(123456.789), "1e+05");
+        assert_eq!(f(12.3456789), "1e+01");
+        assert_eq!(f(1000000.0), "1e+06");
+        assert_eq!(f(99999999.0), "1e+08");
+        
+        let f = |x| format_float_shortest(x, 0, Case::Lowercase, ForceDecimal::Yes);
+        assert_eq!(f(0.0), "0.");
+        assert_eq!(f(1.0), "1.");
+        assert_eq!(f(100.0), "1.e+02");
+        assert_eq!(f(123456.789), "1.e+05");
+        assert_eq!(f(12.3456789), "1.e+01");
+        assert_eq!(f(1000000.0), "1.e+06");
+        assert_eq!(f(99999999.0), "1.e+08");
+    }
 }

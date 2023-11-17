@@ -251,7 +251,7 @@ fn sub_num_float_e_no_round() {
 #[test]
 fn sub_num_float_round() {
     new_ucmd!()
-        .args(&["two is %f", "1.9999995"])
+        .args(&["two is %f", "1.9999996"])
         .succeeds()
         .stdout_only("two is 2.000000");
 }
