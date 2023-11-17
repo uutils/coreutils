@@ -19,9 +19,9 @@ use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UError, UResult, USimpleError};
+use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
-use uucore::{crash, crash_if_err, format_usage, help_about, help_usage};
+use uucore::{crash_if_err, format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("join.md");
 const USAGE: &str = help_usage!("join.md");
@@ -334,37 +334,30 @@ impl<'a> State<'a> {
         key: usize,
         line_ending: LineEnding,
         print_unpaired: bool,
-    ) -> State<'a> {
-        let f = if name == "-" {
+    ) -> UResult<State<'a>> {
+        let file_buf = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
-            match File::open(name) {
-                Ok(file) => Box::new(BufReader::new(file)) as Box<dyn BufRead>,
-                Err(err) => crash!(1, "{}: {}", name.maybe_quote(), err),
-            }
+            let file = File::open(name).map_err_context(|| format!("{}", name.maybe_quote()))?;
+            Box::new(BufReader::new(file)) as Box<dyn BufRead>
         };
 
-        State {
+        Ok(State {
             key,
             file_name: name,
             file_num,
             print_unpaired,
-            lines: f.split(line_ending as u8),
+            lines: file_buf.split(line_ending as u8),
             max_len: 1,
             seq: Vec::new(),
             line_num: 0,
             has_failed: false,
             has_unpaired: false,
-        }
+        })
     }
 
     /// Skip the current unpaired line.
-    fn skip_line(
-        &mut self,
-        writer: &mut impl Write,
-        input: &Input,
-        repr: &Repr,
-    ) -> Result<(), JoinError> {
+    fn skip_line(&mut self, writer: &mut impl Write, input: &Input, repr: &Repr) -> UResult<()> {
         if self.print_unpaired {
             self.print_first_line(writer, repr)?;
         }
@@ -375,7 +368,7 @@ impl<'a> State<'a> {
 
     /// Keep reading line sequence until the key does not change, return
     /// the first line whose key differs.
-    fn extend(&mut self, input: &Input) -> Result<Option<Line>, JoinError> {
+    fn extend(&mut self, input: &Input) -> UResult<Option<Line>> {
         while let Some(line) = self.next_line(input)? {
             let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
@@ -484,12 +477,7 @@ impl<'a> State<'a> {
         0
     }
 
-    fn finalize(
-        &mut self,
-        writer: &mut impl Write,
-        input: &Input,
-        repr: &Repr,
-    ) -> Result<(), JoinError> {
+    fn finalize(&mut self, writer: &mut impl Write, input: &Input, repr: &Repr) -> UResult<()> {
         if self.has_line() {
             if self.print_unpaired {
                 self.print_first_line(writer, repr)?;
@@ -713,10 +701,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(USimpleError::new(1, "both files cannot be standard input"));
     }
 
-    match exec(file1, file2, settings) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(USimpleError::new(1, format!("{e}"))),
-    }
+    exec(file1, file2, settings)
 }
 
 pub fn uu_app() -> Command {
@@ -837,7 +822,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         )
 }
 
-fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
+fn exec(file1: &str, file2: &str, settings: Settings) -> UResult<()> {
     let stdin = stdin();
 
     let mut state1 = State::new(
@@ -847,7 +832,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
         settings.key1,
         settings.line_ending,
         settings.print_unpaired1,
-    );
+    )?;
 
     let mut state2 = State::new(
         FileNum::File2,
@@ -856,7 +841,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
         settings.key2,
         settings.line_ending,
         settings.print_unpaired2,
-    );
+    )?;
 
     let input = Input::new(
         settings.separator,
