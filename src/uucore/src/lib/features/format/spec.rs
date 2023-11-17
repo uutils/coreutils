@@ -107,34 +107,45 @@ impl Spec {
             None
         };
 
-        let length = rest.get(0).and_then(|c| {
-            Some(match c {
-                b'h' => {
-                    if let Some(b'h') = rest.get(1) {
-                        *rest = &rest[1..];
-                        Length::Char
-                    } else {
-                        Length::Short
+        // Parse 0..N length options, keep the last one
+        // Even though it is just ignored. We might want to use it later and we
+        // should parse those characters.
+        //
+        // TODO: This needs to be configurable: `seq` accepts only one length
+        //       param
+        let mut _length = None;
+        loop {
+            let new_length = rest.get(0).and_then(|c| {
+                Some(match c {
+                    b'h' => {
+                        if let Some(b'h') = rest.get(1) {
+                            *rest = &rest[1..];
+                            Length::Char
+                        } else {
+                            Length::Short
+                        }
                     }
-                }
-                b'l' => {
-                    if let Some(b'l') = rest.get(1) {
-                        *rest = &rest[1..];
-                        Length::Long
-                    } else {
-                        Length::LongLong
+                    b'l' => {
+                        if let Some(b'l') = rest.get(1) {
+                            *rest = &rest[1..];
+                            Length::Long
+                        } else {
+                            Length::LongLong
+                        }
                     }
-                }
-                b'j' => Length::IntMaxT,
-                b'z' => Length::SizeT,
-                b't' => Length::PtfDiffT,
-                b'L' => Length::LongDouble,
-                _ => return None,
-            })
-        });
-
-        if length.is_some() {
-            *rest = &rest[1..];
+                    b'j' => Length::IntMaxT,
+                    b'z' => Length::SizeT,
+                    b't' => Length::PtfDiffT,
+                    b'L' => Length::LongDouble,
+                    _ => return None,
+                })
+            });
+            if new_length.is_some() {
+                *rest = &rest[1..];
+                _length = new_length;
+            } else {
+                break;
+            }
         }
 
         let type_spec = rest.get(0)?;
