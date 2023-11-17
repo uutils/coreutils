@@ -49,9 +49,13 @@ impl FormatArgument {
         match self {
             Self::SignedInt(n) => Some(*n),
             Self::Unparsed(s) => {
-                if let Some(s) = s.strip_prefix("0x") {
-                    i64::from_str_radix(s, 16).ok()
-                } else if let Some(s) = s.strip_prefix("0") {
+                // For hex, we parse `u64` because we do not allow another
+                // minus sign. We might need to do more precise parsing here.
+                if let Some(s) = s.strip_prefix("-0x") {
+                    Some(- (u64::from_str_radix(s, 16).ok()? as i64))
+                } else if let Some(s) = s.strip_prefix("0x") {
+                    Some(u64::from_str_radix(s, 16).ok()? as i64)
+                } else if s.starts_with("-0") || s.starts_with('0') {
                     i64::from_str_radix(s, 8).ok()
                 } else if let Some(s) = s.strip_prefix('\'') {
                     Some(s.chars().next()? as i64)
