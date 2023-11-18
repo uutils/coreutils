@@ -994,9 +994,9 @@ fn test_ls_long() {
 fn test_ls_long_format() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.mkdir(&at.plus_as_string("test-long-dir"));
+    at.mkdir(at.plus_as_string("test-long-dir"));
     at.touch(at.plus_as_string("test-long-dir/test-long-file"));
-    at.mkdir(&at.plus_as_string("test-long-dir/test-long-dir"));
+    at.mkdir(at.plus_as_string("test-long-dir/test-long-dir"));
 
     for arg in LONG_ARGS {
         // Assuming sane username do not have spaces within them.
@@ -1971,7 +1971,7 @@ fn test_ls_color() {
         .join("nested_dir")
         .to_string_lossy()
         .to_string();
-    at.mkdir(&nested_dir);
+    at.mkdir(nested_dir);
     at.mkdir("z");
     let nested_file = Path::new("a")
         .join("nested_file")

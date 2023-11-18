@@ -88,6 +88,7 @@ struct Options {
     separate_dirs: bool,
     one_file_system: bool,
     dereference: Deref,
+    count_links: bool,
     inodes: bool,
     verbose: bool,
 }
@@ -364,7 +365,7 @@ fn du(
     mut my_stat: Stat,
     options: &Options,
     depth: usize,
-    inodes: &mut HashSet<FileInfo>,
+    seen_inodes: &mut HashSet<FileInfo>,
     exclude: &[Pattern],
     stat_printer: &StatPrinter,
 ) -> UResult<Box<dyn DoubleEndedIterator<Item = Stat>>> {
@@ -406,10 +407,13 @@ fn du(
                             }
 
                             if let Some(inode) = this_stat.inode {
-                                if inodes.contains(&inode) {
+                                if seen_inodes.contains(&inode) {
+                                    if options.count_links {
+                                        my_stat.inodes += 1;
+                                    }
                                     continue;
                                 }
-                                inodes.insert(inode);
+                                seen_inodes.insert(inode);
                             }
                             if this_stat.is_dir {
                                 if options.one_file_system {
@@ -425,7 +429,7 @@ fn du(
                                     this_stat,
                                     options,
                                     depth + 1,
-                                    inodes,
+                                    seen_inodes,
                                     exclude,
                                     stat_printer,
                                 )?);
@@ -644,6 +648,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             Deref::None
         },
+        count_links: matches.get_flag(options::COUNT_LINKS),
         inodes: matches.get_flag(options::INODES),
         verbose: matches.get_flag(options::VERBOSE),
     };
@@ -725,11 +730,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Check existence of path provided in argument
         if let Ok(stat) = Stat::new(&path, &options) {
             // Kick off the computation of disk usage from the initial path
-            let mut inodes: HashSet<FileInfo> = HashSet::new();
+            let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
             if let Some(inode) = stat.inode {
-                inodes.insert(inode);
+                seen_inodes.insert(inode);
             }
-            let iter = du(stat, &options, 0, &mut inodes, &excludes, &stat_printer)?;
+            let iter = du(
+                stat,
+                &options,
+                0,
+                &mut seen_inodes,
+                &excludes,
+                &stat_printer,
+            )?;
 
             // Sum up all the returned `Stat`s and display results
             if let Some(last_stat) = iter.last() {

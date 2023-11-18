@@ -18,11 +18,12 @@ use std::ffi::OsString;
 use std::fmt;
 use std::fs::{metadata, File};
 use std::io;
-use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
+use std::io::{stdin, BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::u64;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
+use uucore::parse_size::parse_size_u64;
 
 use uucore::uio_error;
 use uucore::{format_usage, help_about, help_section, help_usage};
@@ -40,11 +41,20 @@ static OPT_HEX_SUFFIXES_SHORT: &str = "-x";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_SEPARATOR: &str = "separator";
-//The ---io and ---io-blksize parameters are consumed and ignored.
-//The parameter is included to make GNU coreutils tests pass.
-static OPT_IO: &str = "-io";
-static OPT_IO_BLKSIZE: &str = "-io-blksize";
 static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
+static OPT_IO_BLKSIZE: &str = "-io-blksize";
+// Cap ---io-blksize value
+// For 64bit systems the max value is the same as in GNU
+// and is equivalent of `i32::MAX >> 20 << 20` operation.
+// On 32bit systems however, even though it fits within `u32` and `i32`,
+// it causes rust-lang `library/alloc/src/raw_vec.rs` to panic with 'capacity overflow' error.
+// Could be due to how `std::io::BufReader` handles internal buffers.
+// So we use much smaller value for those
+static OPT_IO_BLKSIZE_MAX: usize = if usize::BITS >= 64 {
+    2_146_435_072
+} else {
+    1_000_000_000
+};
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
@@ -311,7 +321,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_NUMERIC_SUFFIXES)
                 .long(OPT_NUMERIC_SUFFIXES)
-                .alias("numeric")
                 .require_equals(true)
                 .num_args(0..=1)
                 .overrides_with_all([
@@ -338,7 +347,6 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(OPT_HEX_SUFFIXES)
                 .long(OPT_HEX_SUFFIXES)
-                .alias("hex")
                 .require_equals(true)
                 .num_args(0..=1)
                 .overrides_with_all([
@@ -372,12 +380,6 @@ pub fn uu_app() -> Command {
                 .value_name("SEP")
                 .action(ArgAction::Append)
                 .help("use SEP instead of newline as the record separator; '\\0' (zero) specifies the NUL character"),
-        )
-        .arg(
-            Arg::new(OPT_IO)
-                .long("io")
-                .alias(OPT_IO)
-                .hide(true),
         )
         .arg(
             Arg::new(OPT_IO_BLKSIZE)
@@ -419,6 +421,7 @@ struct Settings {
     /// chunks. If this is `false`, then empty files will not be
     /// created.
     elide_empty_files: bool,
+    io_blksize: Option<usize>,
 }
 
 /// An error when parsing settings from command-line arguments.
@@ -440,6 +443,9 @@ enum SettingsError {
     /// l/K/N
     /// r/K/N
     FilterWithKthChunkNumber,
+
+    /// Invalid IO block size
+    InvalidIOBlockSize(String),
 
     /// The `--filter` option is not supported on Windows.
     #[cfg(windows)]
@@ -471,6 +477,7 @@ impl fmt::Display for SettingsError {
             Self::FilterWithKthChunkNumber => {
                 write!(f, "--filter does not process a chunk extracted to stdout")
             }
+            Self::InvalidIOBlockSize(s) => write!(f, "invalid IO block size: {}", s.quote()),
             #[cfg(windows)]
             Self::NotSupported => write!(
                 f,
@@ -499,10 +506,27 @@ impl Settings {
                 match first.as_str() {
                     "\\0" => b'\0',
                     s if s.as_bytes().len() == 1 => s.as_bytes()[0],
-                    s => return Err(SettingsError::MultiCharacterSeparator(s.to_owned())),
+                    s => return Err(SettingsError::MultiCharacterSeparator(s.to_string())),
                 }
             }
             None => b'\n',
+        };
+
+        let io_blksize: Option<usize> = if let Some(s) = matches.get_one::<String>(OPT_IO_BLKSIZE) {
+            match parse_size_u64(s) {
+                Ok(n) => {
+                    let n: usize = n
+                        .try_into()
+                        .map_err(|_| SettingsError::InvalidIOBlockSize(s.to_string()))?;
+                    if n > OPT_IO_BLKSIZE_MAX {
+                        return Err(SettingsError::InvalidIOBlockSize(s.to_string()));
+                    }
+                    Some(n)
+                }
+                _ => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
+            }
+        } else {
+            None
         };
 
         let result = Self {
@@ -514,6 +538,7 @@ impl Settings {
             verbose: matches.value_source(OPT_VERBOSE) == Some(ValueSource::CommandLine),
             separator,
             elide_empty_files: matches.get_flag(OPT_ELIDE_EMPTY_FILES),
+            io_blksize,
         };
 
         #[cfg(windows)]
@@ -588,6 +613,93 @@ fn custom_write_all<T: Write>(
         Ok(()) => Ok(true),
         Err(e) if ignorable_io_error(&e, settings) => Ok(false),
         Err(e) => Err(e),
+    }
+}
+
+/// Get the size of the input file in bytes
+/// Used only for subset of `--number=CHUNKS` strategy, as there is a need
+/// to determine input file size upfront in order to know chunk size
+/// to be written into each of N files/chunks:
+/// * N       split into N files based on size of input
+/// * K/N     output Kth of N to stdout
+/// * l/N     split into N files without splitting lines/records
+/// * l/K/N   output Kth of N to stdout without splitting lines/records
+///
+/// For most files the size will be determined by either reading entire file content into a buffer
+/// or by `len()` function of [`std::fs::metadata`].
+///
+/// However, for some files which report filesystem metadata size that does not match
+/// their actual content size, we will need to attempt to find the end of file
+/// with direct `seek()` on [`std::fs::File`].
+///
+/// For STDIN stream - read into a buffer up to a limit
+/// If input stream does not EOF before that - return an error
+/// (i.e. "infinite" input as in `cat /dev/zero | split ...`, `yes | split ...` etc.).
+///
+/// Note: The `buf` might end up with either partial or entire input content.
+fn get_input_size<R>(
+    input: &String,
+    reader: &mut R,
+    buf: &mut Vec<u8>,
+    io_blksize: &Option<usize>,
+) -> std::io::Result<u64>
+where
+    R: BufRead,
+{
+    // Set read limit to io_blksize if specified
+    // Otherwise to OPT_IO_BLKSIZE_MAX
+    let read_limit = io_blksize.unwrap_or(OPT_IO_BLKSIZE_MAX) as u64;
+
+    // Try to read into buffer up to a limit
+    let num_bytes = reader
+        .by_ref()
+        .take(read_limit)
+        .read_to_end(buf)
+        .map(|n| n as u64)?;
+
+    if num_bytes < read_limit {
+        // Finite file or STDIN stream that fits entirely
+        // into a buffer within the limit
+        // Note: files like /dev/null or similar,
+        // empty STDIN stream,
+        // and files with true file size 0
+        // will also fit here
+        Ok(num_bytes)
+    } else if input == "-" {
+        // STDIN stream that did not fit all content into a buffer
+        // Most likely continuous/infinite input stream
+        return Err(io::Error::new(
+            ErrorKind::Other,
+            format!("{}: cannot determine input size", input),
+        ));
+    } else {
+        // Could be that file size is larger than set read limit
+        // Get the file size from filesystem metadata
+        let metadata = metadata(input)?;
+        let metadata_size = metadata.len();
+        if num_bytes <= metadata_size {
+            Ok(metadata_size)
+        } else {
+            // Could be a file from locations like /dev, /sys, /proc or similar
+            // which report filesystem metadata size that does not match
+            // their actual content size
+            // Attempt direct `seek()` for the end of a file
+            let mut tmp_fd = File::open(Path::new(input))?;
+            let end = tmp_fd.seek(SeekFrom::End(0))?;
+            if end > 0 {
+                Ok(end)
+            } else {
+                // Edge case of either "infinite" file (i.e. /dev/zero)
+                // or some other "special" non-standard file type
+                // Give up and return an error
+                // TODO It might be possible to do more here
+                // to address all possible file types and edge cases
+                return Err(io::Error::new(
+                    ErrorKind::Other,
+                    format!("{}: cannot determine file size", input),
+                ));
+            }
+        }
     }
 }
 
@@ -1018,155 +1130,110 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
     }
 }
 
-/// Split a file into a specific number of chunks by byte.
+/// Split a file or STDIN into a specific number of chunks by byte.
+/// If in Kth chunk of N mode - print the k-th chunk to STDOUT.
 ///
-/// This function always creates one output file for each chunk, even
+/// When file size cannot be evenly divided into the number of chunks of the same size,
+/// the first X chunks are 1 byte longer than the rest,
+/// where X is a modulus reminder of (file size % number of chunks)
+///
+/// In Kth chunk of N mode - writes to stdout the contents of the chunk identified by `kth_chunk`
+///
+/// In N chunks mode - this function always creates one output file for each chunk, even
 /// if there is an error reading or writing one of the chunks or if
-/// the input file is truncated. However, if the `filter` option is
-/// being used, then no files are created.
+/// the input file is truncated. However, if the `--filter` option is
+/// being used, then files will only be created if `$FILE` variable was used
+/// in filter command,
+/// i.e. `split -n 10 --filter='head -c1 > $FILE' in`
 ///
 /// # Errors
 ///
 /// This function returns an error if there is a problem reading from
-/// `reader` or writing to one of the output files.
+/// `reader` or writing to one of the output files or stdout.
+///
+/// # See also
+///
+/// * [`n_chunks_by_line`], which splits its input into a specific number of chunks by line.
 ///
 /// Implements `--number=CHUNKS`
 /// Where CHUNKS
 /// * N
-fn split_into_n_chunks_by_byte<R>(
+/// * K/N
+fn n_chunks_by_byte<R>(
     settings: &Settings,
     reader: &mut R,
     num_chunks: u64,
+    kth_chunk: Option<u64>,
 ) -> UResult<()>
 where
-    R: Read,
+    R: BufRead,
 {
-    // Get the size of the input file in bytes and compute the number
-    // of bytes per chunk.
-    //
-    // If the requested number of chunks exceeds the number of bytes
-    // in the file *and* the `elide_empty_files` parameter is enabled,
-    // then behave as if the number of chunks was set to the number of
-    // bytes in the file. This ensures that we don't write empty
-    // files. Otherwise, just write the `num_chunks - num_bytes` empty
-    // files.
-    let metadata = metadata(&settings.input).map_err(|_| {
-        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
-    })?;
+    // Get the size of the input in bytes
+    let initial_buf = &mut Vec::new();
+    let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
+    let mut reader = initial_buf.chain(reader);
 
-    let num_bytes = metadata.len();
-    let will_have_empty_files = settings.elide_empty_files && num_chunks > num_bytes;
-    let (num_chunks, chunk_size) = if will_have_empty_files {
-        let num_chunks = num_bytes;
-        let chunk_size = 1;
-        (num_chunks, chunk_size)
+    // If input file is empty and we would not have determined the Kth chunk
+    // in the Kth chunk of N chunk mode, then terminate immediately.
+    // This happens on `split -n 3/10 /dev/null`, for example.
+    if kth_chunk.is_some() && num_bytes == 0 {
+        return Ok(());
+    }
+
+    // If the requested number of chunks exceeds the number of bytes
+    // in the input:
+    // * in Kth chunk of N mode - just write empty byte string to stdout
+    //   NOTE: the `elide_empty_files` parameter is ignored here
+    //   as we do not generate any files
+    //   and instead writing to stdout
+    // * In N chunks mode - if the `elide_empty_files` parameter is enabled,
+    //   then behave as if the number of chunks was set to the number of
+    //   bytes in the file. This ensures that we don't write empty
+    //   files. Otherwise, just write the `num_chunks - num_bytes` empty files.
+    let num_chunks = if kth_chunk.is_none() && settings.elide_empty_files && num_chunks > num_bytes
+    {
+        num_bytes
     } else {
-        let chunk_size = (num_bytes / (num_chunks)).max(1);
-        (num_chunks, chunk_size)
+        num_chunks
     };
 
     // If we would have written zero chunks of output, then terminate
     // immediately. This happens on `split -e -n 3 /dev/null`, for
     // example.
-    if num_chunks == 0 || num_bytes == 0 {
+    if num_chunks == 0 {
         return Ok(());
     }
 
-    let num_chunks: usize = num_chunks
-        .try_into()
-        .map_err(|_| USimpleError::new(1, "Number of chunks too big"))?;
-
-    // This object is responsible for creating the filename for each chunk.
-    let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
-
-    // Create one writer for each chunk. This will create each
-    // of the underlying files (if not in `--filter` mode).
+    // In Kth chunk of N mode - we will write to stdout instead of to a file.
+    let mut stdout_writer = std::io::stdout().lock();
+    // In N chunks mode - we will write to `num_chunks` files
     let mut writers = vec![];
-    for _ in 0..num_chunks {
-        let filename = filename_iterator
-            .next()
-            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
-        let writer = settings.instantiate_current_writer(filename.as_str())?;
-        writers.push(writer);
+
+    // Calculate chunk size base and modulo reminder
+    // to be used in calculating chunk_size later on
+    let chunk_size_base = num_bytes / num_chunks;
+    let chunk_size_reminder = num_bytes % num_chunks;
+
+    // If in N chunks mode
+    // Create one writer for each chunk.
+    // This will create each of the underlying files
+    // or stdin pipes to child shell/command processes if in `--filter` mode
+    if kth_chunk.is_none() {
+        // This object is responsible for creating the filename for each chunk.
+        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)
+            .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
+        for _ in 0..num_chunks {
+            let filename = filename_iterator
+                .next()
+                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            let writer = settings.instantiate_current_writer(filename.as_str())?;
+            writers.push(writer);
+        }
     }
 
-    // Write `chunk_size` bytes from the reader into each writer
-    // except the last.
-    //
-    // The last writer gets all remaining bytes so that if the number
-    // of bytes in the input file was not evenly divisible by
-    // `num_chunks`, we don't leave any bytes behind.
-    for writer in writers.iter_mut().take(num_chunks - 1) {
-        match io::copy(&mut reader.by_ref().take(chunk_size), writer) {
-            Ok(_) => continue,
-            Err(e) if ignorable_io_error(&e, settings) => continue,
-            Err(e) => return Err(uio_error!(e, "input/output error")),
-        };
-    }
-
-    // Write all the remaining bytes to the last chunk.
-    let i = num_chunks - 1;
-    let last_chunk_size = num_bytes - (chunk_size * (num_chunks as u64 - 1));
-    match io::copy(&mut reader.by_ref().take(last_chunk_size), &mut writers[i]) {
-        Ok(_) => Ok(()),
-        Err(e) if ignorable_io_error(&e, settings) => Ok(()),
-        Err(e) => Err(uio_error!(e, "input/output error")),
-    }
-}
-
-/// Print the k-th chunk of a file to stdout, splitting by byte.
-///
-/// This function is like [`split_into_n_chunks_by_byte`], but instead
-/// of writing each chunk to its own file, it only writes to stdout
-/// the contents of the chunk identified by `chunk_number`
-///
-/// # Errors
-///
-/// This function returns an error if there is a problem reading from
-/// `reader` or writing to stdout.
-///
-/// Implements `--number=CHUNKS`
-/// Where CHUNKS
-/// * K/N
-fn kth_chunks_by_byte<R>(
-    settings: &Settings,
-    reader: &mut R,
-    chunk_number: u64,
-    num_chunks: u64,
-) -> UResult<()>
-where
-    R: BufRead,
-{
-    // Get the size of the input file in bytes and compute the number
-    // of bytes per chunk.
-    //
-    // If the requested number of chunks exceeds the number of bytes
-    // in the file - just write empty byte string to stdout
-    // NOTE: the `elide_empty_files` parameter is ignored here
-    // as we do not generate any files
-    // and instead writing to stdout
-    let metadata = metadata(&settings.input).map_err(|_| {
-        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
-    })?;
-
-    let num_bytes = metadata.len();
-    // If input file is empty and we would have written zero chunks of output,
-    // then terminate immediately.
-    // This happens on `split -e -n 3 /dev/null`, for example.
-    if num_bytes == 0 {
-        return Ok(());
-    }
-
-    // Write to stdout instead of to a file.
-    let stdout = std::io::stdout();
-    let mut writer = stdout.lock();
-
-    let chunk_size = (num_bytes / (num_chunks)).max(1);
-    let mut num_bytes: usize = num_bytes.try_into().unwrap();
-
-    let mut i = 1;
-    loop {
-        let buf: &mut Vec<u8> = &mut vec![];
+    for i in 1_u64..=num_chunks {
+        let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
+        let buf = &mut Vec::new();
         if num_bytes > 0 {
             // Read `chunk_size` bytes from the reader into `buf`
             // except the last.
@@ -1176,15 +1243,17 @@ where
             // `num_chunks`, we don't leave any bytes behind.
             let limit = {
                 if i == num_chunks {
-                    num_bytes.try_into().unwrap()
+                    num_bytes
                 } else {
                     chunk_size
                 }
             };
+
             let n_bytes_read = reader.by_ref().take(limit).read_to_end(buf);
+
             match n_bytes_read {
                 Ok(n_bytes) => {
-                    num_bytes -= n_bytes;
+                    num_bytes -= n_bytes as u64;
                 }
                 Err(error) => {
                     return Err(USimpleError::new(
@@ -1193,11 +1262,20 @@ where
                     ));
                 }
             }
-            if i == chunk_number {
-                writer.write_all(buf)?;
-                break;
+
+            match kth_chunk {
+                Some(chunk_number) => {
+                    if i == chunk_number {
+                        stdout_writer.write_all(buf)?;
+                        break;
+                    }
+                }
+                None => {
+                    let idx = (i - 1) as usize;
+                    let writer = writers.get_mut(idx).unwrap();
+                    writer.write_all(buf)?;
+                }
             }
-            i += 1;
         } else {
             break;
         }
@@ -1205,12 +1283,17 @@ where
     Ok(())
 }
 
-/// Split a file into a specific number of chunks by line.
+/// Split a file or STDIN into a specific number of chunks by line.
+/// If in Kth chunk of N mode - print the k-th chunk to STDOUT.
 ///
-/// This function always creates one output file for each chunk, even
+/// In Kth chunk of N mode - writes to stdout the contents of the chunk identified by `kth_chunk`
+///
+/// In N chunks mode - this function always creates one output file for each chunk, even
 /// if there is an error reading or writing one of the chunks or if
-/// the input file is truncated. However, if the `filter` option is
-/// being used, then no files are created.
+/// the input file is truncated. However, if the `--filter` option is
+/// being used, then files will only be created if `$FILE` variable was used
+/// in filter command,
+/// i.e. `split -n l/10 --filter='head -c1 > $FILE' in`
 ///
 /// # Errors
 ///
@@ -1219,119 +1302,82 @@ where
 ///
 /// # See also
 ///
-/// * [`kth_chunk_by_line`], which splits its input in the same way,
-///   but writes only one specified chunk to stdout.
+/// * [`n_chunks_by_byte`], which splits its input into a specific number of chunks by byte.
 ///
 /// Implements `--number=CHUNKS`
 /// Where CHUNKS
 /// * l/N
-fn split_into_n_chunks_by_line<R>(
+/// * l/K/N
+fn n_chunks_by_line<R>(
     settings: &Settings,
     reader: &mut R,
     num_chunks: u64,
+    kth_chunk: Option<u64>,
 ) -> UResult<()>
 where
     R: BufRead,
 {
-    // Get the size of the input file in bytes and compute the number
+    // Get the size of the input in bytes and compute the number
     // of bytes per chunk.
-    let metadata = metadata(&settings.input).map_err(|_| {
-        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
-    })?;
-    let num_bytes = metadata.len();
+    let initial_buf = &mut Vec::new();
+    let num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
+    let reader = initial_buf.chain(reader);
     let chunk_size = (num_bytes / num_chunks) as usize;
 
-    // This object is responsible for creating the filename for each chunk.
-    let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
-
-    // Create one writer for each chunk. This will create each
-    // of the underlying files (if not in `--filter` mode).
-    let mut writers = vec![];
-    for _ in 0..num_chunks {
-        let filename = filename_iterator
-            .next()
-            .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
-        let writer = settings.instantiate_current_writer(filename.as_str())?;
-        writers.push(writer);
+    // If input file is empty and we would not have determined the Kth chunk
+    // in the Kth chunk of N chunk mode, then terminate immediately.
+    // This happens on `split -n l/3/10 /dev/null`, for example.
+    if kth_chunk.is_some() && num_bytes == 0 {
+        return Ok(());
     }
 
-    let mut num_bytes_remaining_in_current_chunk = chunk_size;
-    let mut i = 0;
-    let sep = settings.separator;
-    for line_result in reader.split(sep) {
-        let line = line_result.unwrap();
-        let maybe_writer = writers.get_mut(i);
-        let writer = maybe_writer.unwrap();
-        let bytes = line.as_slice();
-        custom_write_all(bytes, writer, settings)?;
-        custom_write_all(&[sep], writer, settings)?;
+    // In Kth chunk of N mode - we will write to stdout instead of to a file.
+    let mut stdout_writer = std::io::stdout().lock();
+    // In N chunks mode - we will write to `num_chunks` files
+    let mut writers = vec![];
 
-        // Add one byte for the separator character.
-        let num_bytes = bytes.len() + 1;
-        if num_bytes > num_bytes_remaining_in_current_chunk {
-            num_bytes_remaining_in_current_chunk = chunk_size;
-            i += 1;
-        } else {
-            num_bytes_remaining_in_current_chunk -= num_bytes;
+    // If in N chunks mode
+    // Create one writer for each chunk.
+    // This will create each of the underlying files
+    // or stdin pipes to child shell/command processes if in `--filter` mode
+    if kth_chunk.is_none() {
+        // This object is responsible for creating the filename for each chunk.
+        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)
+            .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
+        for _ in 0..num_chunks {
+            let filename = filename_iterator
+                .next()
+                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            let writer = settings.instantiate_current_writer(filename.as_str())?;
+            writers.push(writer);
         }
     }
-
-    Ok(())
-}
-
-/// Print the k-th chunk of a file, splitting by line.
-///
-/// This function is like [`split_into_n_chunks_by_line`], but instead
-/// of writing each chunk to its own file, it only writes to stdout
-/// the contents of the chunk identified by `chunk_number`.
-///
-/// # Errors
-///
-/// This function returns an error if there is a problem reading from
-/// `reader` or writing to one of the output files.
-///
-/// # See also
-///
-/// * [`split_into_n_chunks_by_line`], which splits its input in the
-///   same way, but writes each chunk to its own file.
-///
-/// Implements `--number=CHUNKS`
-/// Where CHUNKS
-/// * l/K/N
-fn kth_chunk_by_line<R>(
-    settings: &Settings,
-    reader: &mut R,
-    chunk_number: u64,
-    num_chunks: u64,
-) -> UResult<()>
-where
-    R: BufRead,
-{
-    // Get the size of the input file in bytes and compute the number
-    // of bytes per chunk.
-    let metadata = metadata(&settings.input).map_err(|_| {
-        USimpleError::new(1, format!("{}: cannot determine file size", settings.input))
-    })?;
-    let num_bytes = metadata.len();
-    let chunk_size = (num_bytes / num_chunks) as usize;
-
-    // Write to stdout instead of to a file.
-    let stdout = std::io::stdout();
-    let mut writer = stdout.lock();
 
     let mut num_bytes_remaining_in_current_chunk = chunk_size;
     let mut i = 1;
     let sep = settings.separator;
+
     for line_result in reader.split(sep) {
-        let line = line_result?;
+        // add separator back in at the end of the line
+        let mut line = line_result?;
+        line.push(sep);
         let bytes = line.as_slice();
-        if i == chunk_number {
-            writer.write_all(bytes)?;
-            writer.write_all(&[sep])?;
+
+        match kth_chunk {
+            Some(chunk_number) => {
+                if i == chunk_number {
+                    stdout_writer.write_all(bytes)?;
+                }
+            }
+            None => {
+                let idx = (i - 1) as usize;
+                let maybe_writer = writers.get_mut(idx);
+                let writer = maybe_writer.unwrap();
+                custom_write_all(bytes, writer, settings)?;
+            }
         }
 
-        // Add one byte for the separator character.
-        let num_bytes = bytes.len() + 1;
+        let num_bytes = bytes.len();
         if num_bytes >= num_bytes_remaining_in_current_chunk {
             num_bytes_remaining_in_current_chunk = chunk_size;
             i += 1;
@@ -1339,72 +1385,8 @@ where
             num_bytes_remaining_in_current_chunk -= num_bytes;
         }
 
-        if i > chunk_number {
-            break;
-        }
-    }
-
-    Ok(())
-}
-
-/// Split a file into a specific number of chunks by line, but
-/// assign lines via round-robin
-///
-/// This function always creates one output file for each chunk, even
-/// if there is an error reading or writing one of the chunks or if
-/// the input file is truncated. However, if the `filter` option is
-/// being used, then no files are created.
-///
-/// # Errors
-///
-/// This function returns an error if there is a problem reading from
-/// `reader` or writing to one of the output files.
-///
-/// # See also
-///
-/// * [`split_into_n_chunks_by_line`], which splits its input in the same way,
-///   but without round robin distribution.
-///
-/// Implements `--number=CHUNKS`
-/// Where CHUNKS
-/// * r/N
-fn split_into_n_chunks_by_line_round_robin<R>(
-    settings: &Settings,
-    reader: &mut R,
-    num_chunks: u64,
-) -> UResult<()>
-where
-    R: BufRead,
-{
-    // This object is responsible for creating the filename for each chunk.
-    let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)
-        .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
-
-    // Create one writer for each chunk. This will create each
-    // of the underlying files (if not in `--filter` mode).
-    let mut writers = vec![];
-    for _ in 0..num_chunks {
-        let filename = filename_iterator
-            .next()
-            .ok_or_else(|| io::Error::new(ErrorKind::Other, "output file suffixes exhausted"))?;
-        let writer = settings.instantiate_current_writer(filename.as_str())?;
-        writers.push(writer);
-    }
-
-    let num_chunks: usize = num_chunks.try_into().unwrap();
-    let sep = settings.separator;
-    let mut closed_writers = 0;
-    for (i, line_result) in reader.split(sep).enumerate() {
-        let maybe_writer = writers.get_mut(i % num_chunks);
-        let writer = maybe_writer.unwrap();
-        let mut line = line_result.unwrap();
-        line.push(sep);
-        let bytes = line.as_slice();
-        let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
-        if !writer_stdin_open {
-            closed_writers += 1;
-            if closed_writers == num_chunks {
-                // all writers are closed - stop reading
+        if let Some(chunk_number) = kth_chunk {
+            if i > chunk_number {
                 break;
             }
         }
@@ -1413,14 +1395,17 @@ where
     Ok(())
 }
 
-/// Print the k-th chunk of a file, splitting by line, but
-/// assign lines via round-robin to the specified number of output
-/// chunks, but output only the *k*th chunk.
+/// Split a file or STDIN into a specific number of chunks by line, but
+/// assign lines via round-robin
 ///
-/// This function is like [`kth_chunk_by_line`], as it only writes to stdout and
-/// prints out only *k*th chunk
-/// It is also like [`split_into_n_chunks_by_line_round_robin`], as it is assigning chunks
-/// using round robin distribution
+/// In Kth chunk of N mode - writes to stdout the contents of the chunk identified by `kth_chunk`
+///
+/// In N chunks mode - this function always creates one output file for each chunk, even
+/// if there is an error reading or writing one of the chunks or if
+/// the input file is truncated. However, if the `--filter` option is
+/// being used, then files will only be created if `$FILE` variable was used
+/// in filter command,
+/// i.e. `split -n r/10 --filter='head -c1 > $FILE' in`
 ///
 /// # Errors
 ///
@@ -1429,46 +1414,83 @@ where
 ///
 /// # See also
 ///
-/// * [`split_into_n_chunks_by_line_round_robin`], which splits its input in the
-///   same way, but writes each chunk to its own file.
+/// * [`n_chunks_by_line`], which splits its input into a specific number of chunks by line.
 ///
 /// Implements `--number=CHUNKS`
 /// Where CHUNKS
+/// * r/N
 /// * r/K/N
-fn kth_chunk_by_line_round_robin<R>(
+fn n_chunks_by_line_round_robin<R>(
     settings: &Settings,
     reader: &mut R,
-    chunk_number: u64,
     num_chunks: u64,
+    kth_chunk: Option<u64>,
 ) -> UResult<()>
 where
     R: BufRead,
 {
-    // Write to stdout instead of to a file.
-    let stdout = std::io::stdout();
-    let mut writer = stdout.lock();
+    // In Kth chunk of N mode - we will write to stdout instead of to a file.
+    let mut stdout_writer = std::io::stdout().lock();
+    // In N chunks mode - we will write to `num_chunks` files
+    let mut writers = vec![];
 
-    let num_chunks: usize = num_chunks.try_into().unwrap();
-    let chunk_number: usize = chunk_number.try_into().unwrap();
-    let sep = settings.separator;
-    // The chunk number is given as a 1-indexed number, but it
-    // is a little easier to deal with a 0-indexed number
-    // since `.enumerate()` returns index `i` starting with 0
-    let chunk_number = chunk_number - 1;
-    for (i, line_result) in reader.split(sep).enumerate() {
-        let line = line_result?;
-        let bytes = line.as_slice();
-        if (i % num_chunks) == chunk_number {
-            writer.write_all(bytes)?;
-            writer.write_all(&[sep])?;
+    // If in N chunks mode
+    // Create one writer for each chunk.
+    // This will create each of the underlying files
+    // or stdin pipes to child shell/command processes if in `--filter` mode
+    if kth_chunk.is_none() {
+        // This object is responsible for creating the filename for each chunk.
+        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)
+            .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
+        for _ in 0..num_chunks {
+            let filename = filename_iterator
+                .next()
+                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            let writer = settings.instantiate_current_writer(filename.as_str())?;
+            writers.push(writer);
         }
     }
+
+    let num_chunks: usize = num_chunks.try_into().unwrap();
+    let sep = settings.separator;
+    let mut closed_writers = 0;
+    for (i, line_result) in reader.split(sep).enumerate() {
+        // add separator back in at the end of the line
+        let mut line = line_result?;
+        line.push(sep);
+        let bytes = line.as_slice();
+
+        match kth_chunk {
+            Some(chunk_number) => {
+                // The `.enumerate()` method returns index `i` starting with 0,
+                // but chunk number is given as a 1-indexed number,
+                // so compare to `chunk_number - 1`
+                if (i % num_chunks) == (chunk_number - 1) as usize {
+                    stdout_writer.write_all(bytes)?;
+                }
+            }
+            None => {
+                let maybe_writer = writers.get_mut(i % num_chunks);
+                let writer = maybe_writer.unwrap();
+
+                let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
+                if !writer_stdin_open {
+                    closed_writers += 1;
+                    if closed_writers == num_chunks {
+                        // all writers are closed - stop reading
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
 #[allow(clippy::cognitive_complexity)]
 fn split(settings: &Settings) -> UResult<()> {
-    let mut reader = BufReader::new(if settings.input == "-" {
+    let r_box = if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let r = File::open(Path::new(&settings.input)).map_err_context(|| {
@@ -1478,26 +1500,33 @@ fn split(settings: &Settings) -> UResult<()> {
             )
         })?;
         Box::new(r) as Box<dyn Read>
-    });
+    };
+    let mut reader = if let Some(c) = settings.io_blksize {
+        BufReader::with_capacity(c, r_box)
+    } else {
+        BufReader::new(r_box)
+    };
 
     match settings.strategy {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
-            split_into_n_chunks_by_byte(settings, &mut reader, num_chunks)
+            // split_into_n_chunks_by_byte(settings, &mut reader, num_chunks)
+            n_chunks_by_byte(settings, &mut reader, num_chunks, None)
         }
         Strategy::Number(NumberType::KthBytes(chunk_number, num_chunks)) => {
-            kth_chunks_by_byte(settings, &mut reader, chunk_number, num_chunks)
+            // kth_chunks_by_byte(settings, &mut reader, chunk_number, num_chunks)
+            n_chunks_by_byte(settings, &mut reader, num_chunks, Some(chunk_number))
         }
         Strategy::Number(NumberType::Lines(num_chunks)) => {
-            split_into_n_chunks_by_line(settings, &mut reader, num_chunks)
+            n_chunks_by_line(settings, &mut reader, num_chunks, None)
         }
         Strategy::Number(NumberType::KthLines(chunk_number, num_chunks)) => {
-            kth_chunk_by_line(settings, &mut reader, chunk_number, num_chunks)
+            n_chunks_by_line(settings, &mut reader, num_chunks, Some(chunk_number))
         }
         Strategy::Number(NumberType::RoundRobin(num_chunks)) => {
-            split_into_n_chunks_by_line_round_robin(settings, &mut reader, num_chunks)
+            n_chunks_by_line_round_robin(settings, &mut reader, num_chunks, None)
         }
         Strategy::Number(NumberType::KthRoundRobin(chunk_number, num_chunks)) => {
-            kth_chunk_by_line_round_robin(settings, &mut reader, chunk_number, num_chunks)
+            n_chunks_by_line_round_robin(settings, &mut reader, num_chunks, Some(chunk_number))
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;

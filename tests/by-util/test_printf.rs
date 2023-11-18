@@ -259,6 +259,14 @@ fn sub_num_hex_upper() {
 }
 
 #[test]
+fn sub_num_hex_non_numerical() {
+    new_ucmd!()
+        .args(&["parameters need to be numbers %X", "%194"])
+        .fails()
+        .code_is(1);
+}
+
+#[test]
 fn sub_num_float() {
     new_ucmd!()
         .args(&["twenty is %f", "20"])

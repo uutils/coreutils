@@ -14,7 +14,8 @@ check out these documents:
 
 Now follows a very important warning:
 
-> [!WARNING] uutils is original code and cannot contain any code from GNU or
+> [!WARNING]
+> uutils is original code and cannot contain any code from GNU or
 > other implementations. This means that **we cannot accept any changes based on
 > the GNU source code**. To make sure that cannot happen, **you cannot link to
 > the GNU source code** either.
