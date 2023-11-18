@@ -27,6 +27,8 @@ use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::mpsc;
+use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
@@ -81,6 +83,7 @@ const USAGE: &str = help_usage!("du.md");
 // TODO: Support Z & Y (currently limited by size of u64)
 const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
 
+#[derive(Clone)]
 struct Options {
     all: bool,
     max_depth: Option<usize>,
@@ -93,7 +96,7 @@ struct Options {
     verbose: bool,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum Deref {
     All,
     Args(Vec<PathBuf>),
@@ -106,6 +109,7 @@ struct FileInfo {
     dev_id: u64,
 }
 
+#[derive(Clone)]
 struct Stat {
     path: PathBuf,
     is_dir: bool,
@@ -289,26 +293,24 @@ fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
     }
 }
 
-struct StatPrinter<'a> {
-    matches: &'a ArgMatches,
-    threshold: &'a Option<Threshold>,
+struct StatPrinter {
+    matches: ArgMatches,
+    threshold: Option<Threshold>,
     summarize: bool,
-    time_format_str: &'a str,
+    time_format_str: String,
     line_ending: LineEnding,
-    options: &'a Options,
-    convert_size: &'a dyn Fn(u64) -> String,
+    options: Options,
 }
 
-impl StatPrinter<'_> {
-    fn new<'a>(
-        matches: &'a ArgMatches,
-        threshold: &'a Option<Threshold>,
+impl StatPrinter {
+    fn new(
+        matches: ArgMatches,
+        threshold: Option<Threshold>,
         summarize: bool,
-        time_format_str: &'a str,
+        time_format_str: String,
         line_ending: LineEnding,
-        options: &'a Options,
-        convert_size: &'a dyn Fn(u64) -> String,
-    ) -> StatPrinter<'a> {
+        options: Options,
+    ) -> StatPrinter {
         StatPrinter {
             matches,
             threshold,
@@ -316,12 +318,16 @@ impl StatPrinter<'_> {
             time_format_str,
             line_ending,
             options,
-            convert_size,
         }
     }
 
-    fn print(&self, stat: &Stat, depth: usize) -> UResult<()> {
-        let size = choose_size(self.matches, &stat);
+    fn print(
+        &self,
+        stat: &Stat,
+        depth: usize,
+        convert_size: &dyn Fn(u64) -> String,
+    ) -> UResult<()> {
+        let size = choose_size(&self.matches, &stat);
 
         if !self
             .threshold
@@ -332,23 +338,23 @@ impl StatPrinter<'_> {
                 .map_or(true, |max_depth| depth <= max_depth)
         {
             if self.matches.contains_id(options::TIME) {
-                let tm = {
-                    let secs = self
-                        .matches
-                        .get_one::<String>(options::TIME)
-                        .map(|s| get_time_secs(s, &stat))
-                        .transpose()?
-                        .unwrap_or(stat.modified);
-                    DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
-                };
                 if !self.summarize || depth == 0 {
-                    let time_str = tm.format(self.time_format_str).to_string();
-                    print!("{}\t{}\t", (self.convert_size)(size), time_str);
+                    let tm = {
+                        let secs = self
+                            .matches
+                            .get_one::<String>(options::TIME)
+                            .map(|s| get_time_secs(s, &stat))
+                            .transpose()?
+                            .unwrap_or(stat.modified);
+                        DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
+                    };
+                    let time_str = tm.format(&self.time_format_str).to_string();
+                    print!("{}\t{}\t", convert_size(size), time_str);
                     print_verbatim(&stat.path).unwrap();
                     print!("{}", self.line_ending);
                 }
             } else if !self.summarize || depth == 0 {
-                print!("{}\t", (self.convert_size)(size));
+                print!("{}\t", convert_size(size));
                 print_verbatim(&stat.path).unwrap();
                 print!("{}", self.line_ending);
             }
@@ -356,6 +362,11 @@ impl StatPrinter<'_> {
 
         Ok(())
     }
+}
+
+struct StatPrintInfo {
+    stat: Stat,
+    depth: usize,
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.
@@ -367,7 +378,7 @@ fn du(
     depth: usize,
     seen_inodes: &mut HashSet<FileInfo>,
     exclude: &[Pattern],
-    stat_printer: &StatPrinter,
+    tx: &mpsc::Sender<StatPrintInfo>,
 ) -> UResult<Box<dyn DoubleEndedIterator<Item = Stat>>> {
     let mut stats = vec![];
     let mut futures = vec![];
@@ -379,7 +390,11 @@ fn du(
                 show!(
                     e.map_err_context(|| format!("cannot read directory {}", my_stat.path.quote()))
                 );
-                stat_printer.print(&my_stat, depth)?;
+                tx.send(StatPrintInfo {
+                    stat: my_stat.clone(),
+                    depth,
+                })
+                .unwrap();
                 return Ok(Box::new(iter::once(my_stat)));
             }
         };
@@ -431,14 +446,18 @@ fn du(
                                     depth + 1,
                                     seen_inodes,
                                     exclude,
-                                    stat_printer,
+                                    tx,
                                 )?);
                             } else {
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
                                 if options.all {
-                                    stat_printer.print(&this_stat, depth)?;
+                                    tx.send(StatPrintInfo {
+                                        stat: this_stat.clone(),
+                                        depth,
+                                    })
+                                    .unwrap();
                                     stats.push(this_stat);
                                 }
                             }
@@ -464,7 +483,11 @@ fn du(
             .map_or(true, |max_depth| depth < max_depth)
     }));
 
-    stat_printer.print(&my_stat, depth)?;
+    tx.send(StatPrintInfo {
+        stat: my_stat.clone(),
+        depth,
+    })
+    .unwrap();
 
     stats.push(my_stat);
 
@@ -700,14 +723,42 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::NULL));
 
     let stat_printer = StatPrinter::new(
-        &matches,
-        &threshold,
+        matches.clone(),
+        threshold.clone(),
         summarize,
-        time_format_str,
+        time_format_str.to_owned(),
         line_ending,
-        &options,
-        &convert_size,
+        options.clone(),
     );
+
+    let (tx, rx) = mpsc::channel::<StatPrintInfo>();
+
+    let printing_thread = thread::spawn({
+        let matchesx = matches.clone();
+        let optionsx = options.clone();
+        move || {
+            let convert_size_fn = get_convert_size_fn(&matchesx);
+
+            let convert_size = |size: u64| {
+                if optionsx.inodes {
+                    size.to_string()
+                } else {
+                    convert_size_fn(size, multiplier, block_size)
+                }
+            };
+            loop {
+                let stat_info = rx.recv();
+
+                match stat_info {
+                    // TODO: actually use depth properly
+                    Ok(stat_info) => stat_printer
+                        .print(&stat_info.stat, stat_info.depth, &convert_size)
+                        .unwrap(),
+                    Err(_) => break,
+                }
+            }
+        }
+    });
 
     let excludes = build_exclude_patterns(&matches)?;
 
@@ -734,14 +785,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if let Some(inode) = stat.inode {
                 seen_inodes.insert(inode);
             }
-            let iter = du(
-                stat,
-                &options,
-                0,
-                &mut seen_inodes,
-                &excludes,
-                &stat_printer,
-            )?;
+            let iter = du(stat, &options, 0, &mut seen_inodes, &excludes, &tx)?;
 
             // Sum up all the returned `Stat`s and display results
             if let Some(last_stat) = iter.last() {
@@ -756,6 +800,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             set_exit_code(1);
         }
     }
+
+    drop(tx);
+
+    printing_thread
+        .join()
+        .expect("Failed to join with printing thread.");
 
     if options.total {
         print!("{}\ttotal", convert_size(grand_total));
