@@ -293,82 +293,6 @@ fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
     }
 }
 
-struct StatPrinter {
-    matches: ArgMatches,
-    threshold: Option<Threshold>,
-    summarize: bool,
-    time_format_str: String,
-    line_ending: LineEnding,
-    options: Options,
-}
-
-impl StatPrinter {
-    fn new(
-        matches: ArgMatches,
-        threshold: Option<Threshold>,
-        summarize: bool,
-        time_format_str: String,
-        line_ending: LineEnding,
-        options: Options,
-    ) -> StatPrinter {
-        StatPrinter {
-            matches,
-            threshold,
-            summarize,
-            time_format_str,
-            line_ending,
-            options,
-        }
-    }
-
-    fn print(
-        &self,
-        stat: &Stat,
-        depth: usize,
-        convert_size: &dyn Fn(u64) -> String,
-    ) -> UResult<()> {
-        let size = choose_size(&self.matches, &stat);
-
-        if !self
-            .threshold
-            .map_or(false, |threshold| threshold.should_exclude(size))
-            && self
-                .options
-                .max_depth
-                .map_or(true, |max_depth| depth <= max_depth)
-        {
-            if self.matches.contains_id(options::TIME) {
-                if !self.summarize || depth == 0 {
-                    let tm = {
-                        let secs = self
-                            .matches
-                            .get_one::<String>(options::TIME)
-                            .map(|s| get_time_secs(s, &stat))
-                            .transpose()?
-                            .unwrap_or(stat.modified);
-                        DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
-                    };
-                    let time_str = tm.format(&self.time_format_str).to_string();
-                    print!("{}\t{}\t", convert_size(size), time_str);
-                    print_verbatim(&stat.path).unwrap();
-                    print!("{}", self.line_ending);
-                }
-            } else if !self.summarize || depth == 0 {
-                print!("{}\t", convert_size(size));
-                print_verbatim(&stat.path).unwrap();
-                print!("{}", self.line_ending);
-            }
-        }
-
-        Ok(())
-    }
-}
-
-struct StatPrintInfo {
-    stat: Stat,
-    depth: usize,
-}
-
 // this takes `my_stat` to avoid having to stat files multiple times.
 // XXX: this should use the impl Trait return type when it is stabilized
 #[allow(clippy::cognitive_complexity)]
@@ -378,7 +302,7 @@ fn du(
     depth: usize,
     seen_inodes: &mut HashSet<FileInfo>,
     exclude: &[Pattern],
-    tx: &mpsc::Sender<StatPrintInfo>,
+    print_tx: &mpsc::Sender<StatPrintInfo>,
 ) -> UResult<Box<dyn DoubleEndedIterator<Item = Stat>>> {
     let mut stats = vec![];
     let mut futures = vec![];
@@ -390,11 +314,12 @@ fn du(
                 show!(
                     e.map_err_context(|| format!("cannot read directory {}", my_stat.path.quote()))
                 );
-                tx.send(StatPrintInfo {
-                    stat: my_stat.clone(),
-                    depth,
-                })
-                .unwrap();
+                print_tx
+                    .send(StatPrintInfo {
+                        stat: my_stat.clone(),
+                        depth,
+                    })
+                    .unwrap();
                 return Ok(Box::new(iter::once(my_stat)));
             }
         };
@@ -446,18 +371,19 @@ fn du(
                                     depth + 1,
                                     seen_inodes,
                                     exclude,
-                                    tx,
+                                    print_tx,
                                 )?);
                             } else {
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
                                 if options.all {
-                                    tx.send(StatPrintInfo {
-                                        stat: this_stat.clone(),
-                                        depth,
-                                    })
-                                    .unwrap();
+                                    print_tx
+                                        .send(StatPrintInfo {
+                                            stat: this_stat.clone(),
+                                            depth,
+                                        })
+                                        .unwrap();
                                     stats.push(this_stat);
                                 }
                             }
@@ -483,11 +409,12 @@ fn du(
             .map_or(true, |max_depth| depth < max_depth)
     }));
 
-    tx.send(StatPrintInfo {
-        stat: my_stat.clone(),
-        depth,
-    })
-    .unwrap();
+    print_tx
+        .send(StatPrintInfo {
+            stat: my_stat.clone(),
+            depth,
+        })
+        .unwrap();
 
     stats.push(my_stat);
 
@@ -632,6 +559,72 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     Ok(exclude_patterns)
 }
 
+struct StatPrintInfo {
+    stat: Stat,
+    depth: usize,
+}
+
+fn print_stats(
+    matches: ArgMatches,
+    threshold: Option<Threshold>,
+    summarize: bool,
+    time_format_str: String,
+    line_ending: LineEnding,
+    options: Options,
+    rx: mpsc::Receiver<StatPrintInfo>,
+    multiplier: u64,
+    block_size: u64,
+) -> UResult<()> {
+    let convert_size_fn = get_convert_size_fn(&matches);
+
+    let convert_size = |size: u64| {
+        if options.inodes {
+            size.to_string()
+        } else {
+            convert_size_fn(size, multiplier, block_size)
+        }
+    };
+
+    loop {
+        let stat_info = rx.recv();
+
+        match stat_info {
+            Ok(stat_info) => {
+                let size = choose_size(&matches, &stat_info.stat);
+
+                if !threshold.map_or(false, |threshold| threshold.should_exclude(size))
+                    && options
+                        .max_depth
+                        .map_or(true, |max_depth| stat_info.depth <= max_depth)
+                {
+                    if !summarize || stat_info.depth == 0 {
+                        if matches.contains_id(options::TIME) {
+                            let tm = {
+                                let secs = matches
+                                    .get_one::<String>(options::TIME)
+                                    .map(|s| get_time_secs(s, &stat_info.stat))
+                                    .transpose()?
+                                    .unwrap_or(stat_info.stat.modified);
+                                DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
+                            };
+                            let time_str = tm.format(&time_format_str).to_string();
+                            print!("{}\t{}\t", convert_size(size), time_str);
+                        } else {
+                            print!("{}\t", convert_size(size));
+                        }
+
+                        print_verbatim(&stat_info.stat.path).unwrap();
+                        print!("{}", line_ending);
+                    }
+                }
+            }
+            Err(_) => break,
+        }
+    }
+
+    Ok(())
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -722,41 +715,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::NULL));
 
-    let stat_printer = StatPrinter::new(
-        matches.clone(),
-        threshold.clone(),
-        summarize,
-        time_format_str.to_owned(),
-        line_ending,
-        options.clone(),
-    );
-
-    let (tx, rx) = mpsc::channel::<StatPrintInfo>();
+    let (print_tx, rx) = mpsc::channel::<StatPrintInfo>();
 
     let printing_thread = thread::spawn({
-        let matchesx = matches.clone();
-        let optionsx = options.clone();
+        let matches = matches.clone();
+        let time_format_str = time_format_str.to_owned();
+        let options = options.clone();
         move || {
-            let convert_size_fn = get_convert_size_fn(&matchesx);
-
-            let convert_size = |size: u64| {
-                if optionsx.inodes {
-                    size.to_string()
-                } else {
-                    convert_size_fn(size, multiplier, block_size)
-                }
-            };
-            loop {
-                let stat_info = rx.recv();
-
-                match stat_info {
-                    // TODO: actually use depth properly
-                    Ok(stat_info) => stat_printer
-                        .print(&stat_info.stat, stat_info.depth, &convert_size)
-                        .unwrap(),
-                    Err(_) => break,
-                }
-            }
+            print_stats(
+                matches,
+                threshold,
+                summarize,
+                time_format_str,
+                line_ending,
+                options,
+                rx,
+                multiplier,
+                block_size,
+            )
         }
     });
 
@@ -785,7 +761,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if let Some(inode) = stat.inode {
                 seen_inodes.insert(inode);
             }
-            let iter = du(stat, &options, 0, &mut seen_inodes, &excludes, &tx)?;
+            let iter = du(stat, &options, 0, &mut seen_inodes, &excludes, &print_tx)?;
 
             // Sum up all the returned `Stat`s and display results
             if let Some(last_stat) = iter.last() {
@@ -801,11 +777,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    drop(tx);
+    drop(print_tx);
 
-    printing_thread
-        .join()
-        .expect("Failed to join with printing thread.");
+    let _ = printing_thread.join().unwrap();
 
     if options.total {
         print!("{}\ttotal", convert_size(grand_total));
