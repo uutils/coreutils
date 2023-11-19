@@ -1159,6 +1159,32 @@ fn test_mv_overwrite_dir() {
 }
 
 #[test]
+fn test_mv_no_target_dir_with_dest_not_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "a";
+    let dir_b = "b";
+
+    at.mkdir(dir_a);
+    ucmd.arg("-T").arg(dir_a).arg(dir_b).succeeds().no_output();
+
+    assert!(!at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+}
+
+#[test]
+fn test_mv_no_target_dir_with_dest_not_existing_and_ending_with_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "a";
+    let dir_b = "b/";
+
+    at.mkdir(dir_a);
+    ucmd.arg("-T").arg(dir_a).arg(dir_b).succeeds().no_output();
+
+    assert!(!at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+}
+
+#[test]
 fn test_mv_overwrite_nonempty_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir_a = "test_mv_overwrite_nonempty_dir_a";
