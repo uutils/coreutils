@@ -17,7 +17,6 @@ use std::fs::Metadata;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Result;
-use std::iter;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -303,10 +302,7 @@ fn du(
     seen_inodes: &mut HashSet<FileInfo>,
     exclude: &[Pattern],
     print_tx: &mpsc::Sender<StatPrintInfo>,
-) -> UResult<Box<dyn DoubleEndedIterator<Item = Stat>>> {
-    let mut stats = vec![];
-    let mut futures = vec![];
-
+) -> UResult<Stat> {
     if my_stat.is_dir {
         let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
@@ -314,13 +310,7 @@ fn du(
                 show!(
                     e.map_err_context(|| format!("cannot read directory {}", my_stat.path.quote()))
                 );
-                print_tx
-                    .send(StatPrintInfo {
-                        stat: my_stat.clone(),
-                        depth,
-                    })
-                    .unwrap();
-                return Ok(Box::new(iter::once(my_stat)));
+                return Ok(my_stat);
             }
         };
 
@@ -365,14 +355,29 @@ fn du(
                                         }
                                     }
                                 }
-                                futures.push(du(
+
+                                let this_stat = du(
                                     this_stat,
                                     options,
                                     depth + 1,
                                     seen_inodes,
                                     exclude,
                                     print_tx,
-                                )?);
+                                )?;
+
+                                if !options.separate_dirs
+                                    && this_stat.path.parent().unwrap() == my_stat.path
+                                {
+                                    my_stat.size += this_stat.size;
+                                    my_stat.blocks += this_stat.blocks;
+                                    my_stat.inodes += this_stat.inodes;
+                                }
+                                print_tx
+                                    .send(StatPrintInfo {
+                                        stat: this_stat,
+                                        depth: depth + 1,
+                                    })
+                                    .unwrap();
                             } else {
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
@@ -380,11 +385,10 @@ fn du(
                                 if options.all {
                                     print_tx
                                         .send(StatPrintInfo {
-                                            stat: this_stat.clone(),
-                                            depth,
+                                            stat: this_stat,
+                                            depth: depth + 1,
                                         })
                                         .unwrap();
-                                    stats.push(this_stat);
                                 }
                             }
                         }
@@ -398,27 +402,7 @@ fn du(
         }
     }
 
-    stats.extend(futures.into_iter().flatten().filter(|stat| {
-        if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
-            my_stat.size += stat.size;
-            my_stat.blocks += stat.blocks;
-            my_stat.inodes += stat.inodes;
-        }
-        options
-            .max_depth
-            .map_or(true, |max_depth| depth < max_depth)
-    }));
-
-    print_tx
-        .send(StatPrintInfo {
-            stat: my_stat.clone(),
-            depth,
-        })
-        .unwrap();
-
-    stats.push(my_stat);
-
-    Ok(Box::new(stats.into_iter()))
+    Ok(my_stat)
 }
 
 fn convert_size_human(size: u64, multiplier: u64, _block_size: u64) -> String {
@@ -761,12 +745,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if let Some(inode) = stat.inode {
                 seen_inodes.insert(inode);
             }
-            let iter = du(stat, &options, 0, &mut seen_inodes, &excludes, &print_tx)?;
+            let stat = du(stat, &options, 0, &mut seen_inodes, &excludes, &print_tx)?;
 
             // Sum up all the returned `Stat`s and display results
-            if let Some(last_stat) = iter.last() {
-                grand_total += choose_size(&matches, &last_stat);
-            }
+            grand_total += choose_size(&matches, &stat);
+
+            print_tx.send(StatPrintInfo { stat, depth: 0 }).unwrap();
         } else {
             show_error!(
                 "{}: {}",
