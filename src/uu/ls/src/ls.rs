@@ -622,6 +622,10 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
         }
     } else if options.get_flag(options::DIRED) {
         QuotingStyle::Literal { show_control }
+    } else if !std::io::stdout().is_terminal() {
+        // By default, `ls` uses Literal quoting when
+        // outputing to a non-terminal file descriptor
+        QuotingStyle::Literal { show_control }
     } else {
         // TODO: use environment variable if available
         QuotingStyle::Shell {
