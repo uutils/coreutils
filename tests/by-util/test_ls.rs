@@ -2461,8 +2461,8 @@ fn test_ls_quoting_style() {
             .arg("one\ntwo")
             .succeeds()
             .stdout_only("one?two\n");
-            // TODO: TTY-expected output, find a way to check this as well
-            // .stdout_only("'one'$'\\n''two'\n");
+        // TODO: TTY-expected output, find a way to check this as well
+        // .stdout_only("'one'$'\\n''two'\n");
 
         for (arg, correct) in [
             ("--quoting-style=literal", "one?two"),
@@ -2550,8 +2550,8 @@ fn test_ls_quoting_style() {
         .arg("one two")
         .succeeds()
         .stdout_only("one two\n");
-        // TODO: TTY-expected output
-        // .stdout_only("'one two'\n");
+    // TODO: TTY-expected output
+    // .stdout_only("'one two'\n");
 
     for (arg, correct) in [
         ("--quoting-style=literal", "one two"),
@@ -2615,8 +2615,8 @@ fn test_ls_quoting_and_color() {
         .arg("one two")
         .succeeds()
         .stdout_only("one two\n");
-        // TODO: TTY-expected output
-        // .stdout_only("'one two'\n");
+    // TODO: TTY-expected output
+    // .stdout_only("'one two'\n");
 }
 
 #[test]
