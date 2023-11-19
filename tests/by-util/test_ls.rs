@@ -2453,13 +2453,16 @@ fn test_ls_quoting_style() {
     {
         at.touch("one\ntwo");
         at.touch("one\\two");
-        // Default is shell-escape
+        // Default is literal, when stdout is not a TTY.
+        // Otherwise, it is shell-escape
         scene
             .ucmd()
             .arg("--hide-control-chars")
             .arg("one\ntwo")
             .succeeds()
-            .stdout_only("'one'$'\\n''two'\n");
+            .stdout_only("one?two\n");
+            // TODO: TTY-expected output, find a way to check this as well
+            // .stdout_only("'one'$'\\n''two'\n");
 
         for (arg, correct) in [
             ("--quoting-style=literal", "one?two"),
@@ -2546,7 +2549,9 @@ fn test_ls_quoting_style() {
         .ucmd()
         .arg("one two")
         .succeeds()
-        .stdout_only("'one two'\n");
+        .stdout_only("one two\n");
+        // TODO: TTY-expected output
+        // .stdout_only("'one two'\n");
 
     for (arg, correct) in [
         ("--quoting-style=literal", "one two"),
@@ -2609,7 +2614,9 @@ fn test_ls_quoting_and_color() {
         .arg("--color")
         .arg("one two")
         .succeeds()
-        .stdout_only("'one two'\n");
+        .stdout_only("one two\n");
+        // TODO: TTY-expected output
+        // .stdout_only("'one two'\n");
 }
 
 #[test]
