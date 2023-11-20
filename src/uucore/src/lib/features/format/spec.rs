@@ -17,6 +17,7 @@ pub enum Spec {
     },
     String {
         width: Option<CanAsterisk<usize>>,
+        precision: Option<CanAsterisk<usize>>,
         parse_escape: bool,
         align_left: bool,
     },
@@ -159,11 +160,13 @@ impl Spec {
             },
             b's' => Spec::String {
                 width,
+                precision,
                 parse_escape: false,
                 align_left: minus,
             },
             b'b' => Spec::String {
                 width,
+                precision,
                 parse_escape: true,
                 align_left: minus,
             },
@@ -254,10 +257,12 @@ impl Spec {
             }
             &Spec::String {
                 width,
+                precision,
                 parse_escape,
                 align_left,
             } => {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
+                let precision = resolve_asterisk(precision, &mut args)?;
                 let arg = next_arg(&mut args)?;
                 let Some(s) = arg.get_str() else {
                     return Err(FormatError::InvalidArgument(arg.clone()));
@@ -273,15 +278,29 @@ impl Spec {
                             }
                         };
                     }
+                    // GNU does do this truncation on a byte level, see for instance:
+                    //     printf "%.1s" 🙃
+                    //     > �
+                    // For now, we let printf panic when we truncate within a code point.
+                    // TODO: We need to not use Rust's formatting for aligning the output,
+                    // so that we can just write bytes to stdout without panicking.
+                    let truncated = match precision {
+                        Some(p) if p < parsed.len() => &parsed[..p],
+                        _ => &parsed,
+                    };
                     write_padded(
                         writer,
-                        std::str::from_utf8(&parsed).expect("TODO: Accept invalid utf8"),
+                        std::str::from_utf8(&truncated).expect("TODO: Accept invalid utf8"),
                         width,
                         false,
                         align_left,
                     )
                 } else {
-                    write_padded(writer, s, width, false, align_left)
+                    let truncated = match precision {
+                        Some(p) if p < s.len() => &s[..p],
+                        _ => s,
+                    };
+                    write_padded(writer, truncated, width, false, align_left)
                 }
             }
             &Spec::SignedInt {
