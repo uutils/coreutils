@@ -19,11 +19,12 @@
 
 // spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 
-mod escape;
 mod argument;
+mod escape;
 pub mod num_format;
 mod spec;
 
+pub use argument::*;
 use spec::Spec;
 use std::{
     error::Error,
@@ -31,7 +32,6 @@ use std::{
     io::{stdout, Write},
     ops::ControlFlow,
 };
-pub use argument::*;
 
 use crate::error::UError;
 
@@ -91,8 +91,11 @@ impl FormatChar for u8 {
 impl FormatChar for EscapedChar {
     fn write(&self, mut writer: impl Write) -> std::io::Result<ControlFlow<()>> {
         match self {
-            EscapedChar::Char(c) => {
+            EscapedChar::Byte(c) => {
                 writer.write(&[*c])?;
+            }
+            EscapedChar::Char(c) => {
+                write!(writer, "{c}")?;
             }
             EscapedChar::Backslash(c) => {
                 writer.write(&[b'\\', *c])?;
@@ -125,7 +128,7 @@ pub fn parse_spec_and_escape(
         [] => return None,
         [b'%', b'%', rest @ ..] => {
             current = rest;
-            Some(Ok(FormatItem::Char(EscapedChar::Char(b'%'))))
+            Some(Ok(FormatItem::Char(EscapedChar::Byte(b'%'))))
         }
         [b'%', rest @ ..] => {
             current = rest;
@@ -141,7 +144,7 @@ pub fn parse_spec_and_escape(
         }
         [c, rest @ ..] => {
             current = rest;
-            Some(Ok(FormatItem::Char(EscapedChar::Char(*c))))
+            Some(Ok(FormatItem::Char(EscapedChar::Byte(*c))))
         }
     })
 }
@@ -179,7 +182,7 @@ fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
         }
         [c, rest @ ..] => {
             current = rest;
-            Some(EscapedChar::Char(*c))
+            Some(EscapedChar::Byte(*c))
         }
     })
 }
