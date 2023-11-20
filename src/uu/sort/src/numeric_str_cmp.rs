@@ -394,8 +394,8 @@ mod tests {
         let (a_info, a_range) = NumInfo::parse(a, &NumInfoParseSettings::default());
         let (b_info, b_range) = NumInfo::parse(b, &NumInfoParseSettings::default());
         let ordering = numeric_str_cmp(
-            (&a[a_range.to_owned()], &a_info),
-            (&b[b_range.to_owned()], &b_info),
+            (&a[a_range.clone()], &a_info),
+            (&b[b_range.clone()], &b_info),
         );
         assert_eq!(ordering, expected);
         let ordering = numeric_str_cmp((&b[b_range], &b_info), (&a[a_range], &a_info));

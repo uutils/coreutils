@@ -5,7 +5,7 @@
 
 //! Set of functions to manage file systems
 
-// spell-checker:ignore DATETIME subsecond (arch) bitrig ; (fs) cifs smbfs
+// spell-checker:ignore DATETIME getmntinfo subsecond (arch) bitrig ; (fs) cifs smbfs
 
 use time::macros::format_description;
 use time::UtcOffset;
@@ -69,6 +69,8 @@ use std::convert::{AsRef, From};
     target_os = "openbsd",
     target_os = "linux",
     target_os = "android",
+    target_os = "illumos",
+    target_os = "solaris",
 ))]
 use std::ffi::CStr;
 #[cfg(not(windows))]
@@ -309,7 +311,7 @@ impl MountInfo {
     target_os = "freebsd",
     target_vendor = "apple",
     target_os = "netbsd",
-    target_os = "openbsd"
+    target_os = "openbsd",
 ))]
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
@@ -362,12 +364,18 @@ extern "C" {
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
     #[cfg(any(
-        target_os = "freebsd",
         target_os = "netbsd",
         target_os = "openbsd",
         all(target_vendor = "apple", target_arch = "aarch64")
     ))]
     #[link_name = "getmntinfo"] // spell-checker:disable-line
+    fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
+
+    // Rust on FreeBSD uses 11.x ABI for filesystem metadata syscalls.
+    // Call the right version of the symbol for getmntinfo() result to
+    // match libc StatFS layout.
+    #[cfg(target_os = "freebsd")]
+    #[link_name = "getmntinfo@FBSD_1.0"] // spell-checker:disable-line
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 }
 
@@ -609,6 +617,8 @@ impl FsMeta for StatFs {
             not(target_vendor = "apple"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_os = "illumos"),
+            not(target_os = "solaris"),
             not(target_arch = "s390x"),
             target_pointer_width = "64"
         ))]
@@ -624,7 +634,12 @@ impl FsMeta for StatFs {
             )
         ))]
         return self.f_bsize.into();
-        #[cfg(any(target_env = "musl", target_os = "freebsd"))]
+        #[cfg(any(
+            target_env = "musl",
+            target_os = "freebsd",
+            target_os = "illumos",
+            target_os = "solaris"
+        ))]
         return self.f_bsize.try_into().unwrap();
     }
     fn total_blocks(&self) -> u64 {

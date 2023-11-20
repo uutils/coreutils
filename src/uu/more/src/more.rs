@@ -88,7 +88,7 @@ impl Options {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
-    let matches = match uu_app().try_get_matches_from(&args) {
+    let matches = match uu_app().try_get_matches_from(args) {
         Ok(m) => m,
         Err(e) => return Err(e.into()),
     };

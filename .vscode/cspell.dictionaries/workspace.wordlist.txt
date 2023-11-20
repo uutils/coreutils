@@ -59,6 +59,7 @@ clippy
 rustc
 rustfmt
 rustup
+rustdoc
 #
 bitor # BitOr trait function
 bitxor # BitXor trait function

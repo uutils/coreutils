@@ -7,9 +7,10 @@ use std::io::Write;
 use std::io::{BufWriter, Error, ErrorKind, Result};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
-use uucore::crash;
+use uucore::error::USimpleError;
 use uucore::fs;
 use uucore::fs::FileInformation;
+use uucore::show;
 
 /// A writer that writes to a shell_process' stdin
 ///
@@ -101,10 +102,13 @@ impl Drop for FilterWriter {
             .expect("Couldn't wait for child process");
         if let Some(return_code) = exit_status.code() {
             if return_code != 0 {
-                crash!(1, "Shell process returned {}", return_code);
+                show!(USimpleError::new(
+                    1,
+                    format!("Shell process returned {}", return_code)
+                ));
             }
         } else {
-            crash!(1, "Shell process terminated by signal")
+            show!(USimpleError::new(1, "Shell process terminated by signal"));
         }
     }
 }

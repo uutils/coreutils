@@ -24,8 +24,6 @@ use std::path::PathBuf;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use rlimit::Resource;
 #[cfg(target_os = "linux")]
 use std::ffi::OsString;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -228,6 +226,22 @@ fn test_cp_arg_no_target_directory() {
         .arg(TEST_COPY_TO_FOLDER)
         .fails()
         .stderr_contains("cannot overwrite directory");
+}
+
+#[test]
+fn test_cp_arg_no_target_directory_with_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.mkdir("dir2");
+    at.touch("dir/a");
+    at.touch("dir/b");
+
+    ucmd.arg("-rT").arg("dir").arg("dir2").succeeds();
+
+    assert!(at.plus("dir2").join("a").exists());
+    assert!(at.plus("dir2").join("b").exists());
+    assert!(!at.plus("dir2").join("dir").exists());
 }
 
 #[test]
@@ -2108,6 +2122,7 @@ fn test_cp_reflink_insufficient_permission() {
 #[test]
 fn test_closes_file_descriptors() {
     use procfs::process::Process;
+    use rlimit::Resource;
     let me = Process::myself().unwrap();
 
     // The test suite runs in parallel, we have pipe, sockets
@@ -2117,7 +2132,6 @@ fn test_closes_file_descriptors() {
     let limit_fd: u64 = number_file_already_opened + 9;
 
     // For debugging purposes:
-    #[cfg(not(target_os = "android"))]
     for f in me.fd().unwrap() {
         let fd = f.unwrap();
         println!("{:?} {:?}", fd, fd.mode());
@@ -3216,6 +3230,7 @@ fn test_cp_archive_on_directory_ending_dot() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
 fn test_cp_debug_default() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3243,6 +3258,7 @@ fn test_cp_debug_default() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
 fn test_cp_debug_multiple_default() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3418,7 +3434,7 @@ fn test_cp_debug_sparse_auto() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn test_cp_debug_reflink_auto() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

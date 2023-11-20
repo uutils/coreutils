@@ -58,10 +58,7 @@ highlight = "all"
 # introduces it.
 # spell-checker: disable
 skip = [
-  # procfs
-  { name = "rustix", version = "0.36.16" },
   # rustix
-  { name = "linux-raw-sys", version = "0.1.4" },
   { name = "linux-raw-sys", version = "0.3.8" },
   # terminal_size
   { name = "rustix", version = "0.37.26" },

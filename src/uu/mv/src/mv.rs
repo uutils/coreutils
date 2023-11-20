@@ -146,7 +146,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let files: Vec<OsString> = matches
         .get_many::<OsString>(ARG_FILES)
         .unwrap_or_default()
-        .map(|v| v.to_os_string())
+        .cloned()
         .collect();
 
     let overwrite_mode = determine_overwrite_mode(&matches);

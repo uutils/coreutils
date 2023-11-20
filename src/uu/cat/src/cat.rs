@@ -3,9 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) nonprint nonblank nonprinting
-
-// last synced with: cat (GNU coreutils) 8.13
+// spell-checker:ignore (ToDO) nonprint nonblank nonprinting ELOOP
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::{metadata, File};
 use std::io::{self, IsTerminal, Read, Write};
@@ -52,6 +50,8 @@ enum CatError {
     IsDirectory,
     #[error("input file is output file")]
     OutputIsInput,
+    #[error("Too many levels of symbolic links")]
+    TooManySymlinks,
 }
 
 type CatResult<T> = Result<T, CatError>;
@@ -213,7 +213,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let squeeze_blank = matches.get_flag(options::SQUEEZE_BLANK);
     let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
-        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
+        Some(v) => v.cloned().collect(),
         None => vec!["-".to_owned()],
     };
 
@@ -403,7 +403,23 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
         return Ok(InputType::StdIn);
     }
 
-    let ft = metadata(path)?.file_type();
+    let ft = match metadata(path) {
+        Ok(md) => md.file_type(),
+        Err(e) => {
+            if let Some(raw_error) = e.raw_os_error() {
+                // On Unix-like systems, the error code for "Too many levels of symbolic links" is 40 (ELOOP).
+                // we want to provide a proper error message in this case.
+                #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+                let too_many_symlink_code = 40;
+                #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+                let too_many_symlink_code = 62;
+                if raw_error == too_many_symlink_code {
+                    return Err(CatError::TooManySymlinks);
+                }
+            }
+            return Err(CatError::Io(e));
+        }
+    };
     match ft {
         #[cfg(unix)]
         ft if ft.is_block_device() => Ok(InputType::BlockDevice),
