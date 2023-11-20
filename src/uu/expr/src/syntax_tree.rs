@@ -13,6 +13,7 @@
 use num_bigint::BigInt;
 use num_traits::Zero;
 use onig::{Regex, RegexOptions, Syntax};
+use uucore::display::Quotable;
 
 use crate::tokens::Token;
 
@@ -214,7 +215,7 @@ pub fn tokens_to_ast(
         assert!(op_stack.is_empty());
 
         maybe_dump_rpn(&out_stack);
-        let result = ast_from_rpn(&mut out_stack);
+        let result = ast_from_rpn(&mut out_stack, None);
         if out_stack.is_empty() {
             maybe_dump_ast(&result);
             result
@@ -253,9 +254,12 @@ fn maybe_dump_rpn(rpn: &TokenStack) {
     }
 }
 
-fn ast_from_rpn(rpn: &mut TokenStack) -> Result<Box<AstNode>, String> {
+fn ast_from_rpn(rpn: &mut TokenStack, op_type: Option<&str>) -> Result<Box<AstNode>, String> {
     match rpn.pop() {
-        None => Err("syntax error (premature end of expression)".to_owned()),
+        None => Err(match op_type {
+            Some(value) => format!("syntax error: unexpected argument {}", value.quote()),
+            None => "missing operand".to_owned(),
+        }),
 
         Some((token_idx, Token::Value { value })) => Ok(AstNode::new_leaf(token_idx, &value)),
 
@@ -281,7 +285,7 @@ fn maybe_ast_node(
 ) -> Result<Box<AstNode>, String> {
     let mut operands = Vec::with_capacity(arity);
     for _ in 0..arity {
-        let operand = ast_from_rpn(rpn)?;
+        let operand = ast_from_rpn(rpn, Some(op_type))?;
         operands.push(operand);
     }
     operands.reverse();
