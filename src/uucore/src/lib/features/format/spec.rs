@@ -5,7 +5,7 @@ use super::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
     },
-    parse_escape_only, FormatArgument, FormatChar, FormatError,
+    parse_escape_only, ArgumentIter, FormatChar, FormatError,
 };
 use std::{fmt::Display, io::Write, ops::ControlFlow};
 
@@ -244,16 +244,12 @@ impl Spec {
     pub fn write<'a>(
         &self,
         writer: impl Write,
-        mut args: impl Iterator<Item = &'a FormatArgument>,
+        mut args: impl ArgumentIter<'a>,
     ) -> Result<(), FormatError> {
         match self {
             &Spec::Char { width, align_left } => {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
-                let arg = next_arg(&mut args)?;
-                match arg.get_char() {
-                    Some(c) => write_padded(writer, c, width, false, align_left),
-                    _ => Err(FormatError::InvalidArgument(arg.clone())),
-                }
+                write_padded(writer, args.get_char(), width, false, align_left)
             }
             &Spec::String {
                 width,
@@ -263,10 +259,7 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
                 let precision = resolve_asterisk(precision, &mut args)?;
-                let arg = next_arg(&mut args)?;
-                let Some(s) = arg.get_str() else {
-                    return Err(FormatError::InvalidArgument(arg.clone()));
-                };
+                let s = args.get_str();
                 if parse_escape {
                     let mut parsed = Vec::new();
                     for c in parse_escape_only(s.as_bytes()) {
@@ -311,11 +304,7 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
                 let precision = resolve_asterisk(precision, &mut args)?.unwrap_or(0);
-
-                let arg = next_arg(&mut args)?;
-                let Some(i) = arg.get_i64() else {
-                    return Err(FormatError::InvalidArgument(arg.clone()));
-                };
+                let i = args.get_i64();
 
                 num_format::SignedInt {
                     width,
@@ -334,11 +323,7 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
                 let precision = resolve_asterisk(precision, &mut args)?.unwrap_or(0);
-
-                let arg = next_arg(args)?;
-                let Some(i) = arg.get_u64() else {
-                    return Err(FormatError::InvalidArgument(arg.clone()));
-                };
+                let i = args.get_u64();
 
                 num_format::UnsignedInt {
                     variant,
@@ -360,11 +345,7 @@ impl Spec {
             } => {
                 let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
                 let precision = resolve_asterisk(precision, &mut args)?.unwrap_or(6);
-
-                let arg = next_arg(args)?;
-                let Some(f) = arg.get_f64() else {
-                    return Err(FormatError::InvalidArgument(arg.clone()));
-                };
+                let f = args.get_f64();
 
                 num_format::Float {
                     variant,
@@ -384,28 +365,13 @@ impl Spec {
 
 fn resolve_asterisk<'a>(
     option: Option<CanAsterisk<usize>>,
-    args: impl Iterator<Item = &'a FormatArgument>,
+    mut args: impl ArgumentIter<'a>,
 ) -> Result<Option<usize>, FormatError> {
     Ok(match option {
         None => None,
-        Some(CanAsterisk::Asterisk) => {
-            let arg = next_arg(args)?;
-            match arg.get_u64() {
-                Some(u) => match usize::try_from(u) {
-                    Ok(u) => Some(u),
-                    Err(_) => return Err(FormatError::InvalidArgument(arg.clone())),
-                },
-                _ => return Err(FormatError::InvalidArgument(arg.clone())),
-            }
-        }
+        Some(CanAsterisk::Asterisk) => Some(usize::try_from(args.get_u64()).ok().unwrap_or(0)),
         Some(CanAsterisk::Fixed(w)) => Some(w),
     })
-}
-
-fn next_arg<'a>(
-    mut arguments: impl Iterator<Item = &'a FormatArgument>,
-) -> Result<&'a FormatArgument, FormatError> {
-    arguments.next().ok_or(FormatError::NoMoreArguments)
 }
 
 fn write_padded(

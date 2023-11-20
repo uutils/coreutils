@@ -9,84 +9,103 @@ pub enum FormatArgument {
     Unparsed(String),
 }
 
-impl FormatArgument {
-    pub fn get_char(&self) -> Option<char> {
-        match self {
-            Self::Char(c) => Some(*c),
-            Self::Unparsed(s) => {
+pub trait ArgumentIter<'a>: Iterator<Item = &'a FormatArgument> {
+    fn get_char(&mut self) -> char;
+    fn get_i64(&mut self) -> i64;
+    fn get_u64(&mut self) -> u64;
+    fn get_f64(&mut self) -> f64;
+    fn get_str(&mut self) -> &'a str;
+}
+
+impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
+    fn get_char(&mut self) -> char {
+        let Some(next) = self.next() else {
+            return '\0';
+        };
+        match next {
+            FormatArgument::Char(c) => *c,
+            FormatArgument::Unparsed(s) => {
                 let mut chars = s.chars();
                 let Some(c) = chars.next() else {
-                    return None;
+                    return '\0';
                 };
                 let None = chars.next() else {
-                    return None;
+                    return '\0';
                 };
-                Some(c)
+                c
             }
-            _ => None,
+            _ => '\0',
         }
     }
 
-    pub fn get_u64(&self) -> Option<u64> {
-        match self {
-            Self::UnsignedInt(n) => Some(*n),
-            Self::Unparsed(s) => {
-                if let Some(s) = s.strip_prefix("0x") {
-                    u64::from_str_radix(s, 16).ok()
-                } else if let Some(s) = s.strip_prefix("0") {
-                    u64::from_str_radix(s, 8).ok()
-                } else if let Some(s) = s.strip_prefix('\'') {
-                    Some(s.chars().next()? as u64)
-                } else {
-                    s.parse().ok()
-                }
+    fn get_u64(&mut self) -> u64 {
+        let Some(next) = self.next() else {
+            return 0;
+        };
+        match next {
+            FormatArgument::UnsignedInt(n) => *n,
+            FormatArgument::Unparsed(s) => if let Some(s) = s.strip_prefix("0x") {
+                u64::from_str_radix(s, 16).ok()
+            } else if let Some(s) = s.strip_prefix("0") {
+                u64::from_str_radix(s, 8).ok()
+            } else if let Some(s) = s.strip_prefix('\'') {
+                s.chars().next().map(|c| c as u64)
+            } else {
+                s.parse().ok()
             }
-            _ => None,
+            .unwrap_or(0),
+            _ => 0,
         }
     }
 
-    pub fn get_i64(&self) -> Option<i64> {
-        match self {
-            Self::SignedInt(n) => Some(*n),
-            Self::Unparsed(s) => {
+    fn get_i64(&mut self) -> i64 {
+        let Some(next) = self.next() else {
+            return 0;
+        };
+        match next {
+            FormatArgument::SignedInt(n) => *n,
+            FormatArgument::Unparsed(s) => {
                 // For hex, we parse `u64` because we do not allow another
                 // minus sign. We might need to do more precise parsing here.
                 if let Some(s) = s.strip_prefix("-0x") {
-                    Some(- (u64::from_str_radix(s, 16).ok()? as i64))
+                    u64::from_str_radix(s, 16).ok().map(|x| -(x as i64))
                 } else if let Some(s) = s.strip_prefix("0x") {
-                    Some(u64::from_str_radix(s, 16).ok()? as i64)
+                    u64::from_str_radix(s, 16).ok().map(|x| x as i64)
                 } else if s.starts_with("-0") || s.starts_with('0') {
                     i64::from_str_radix(s, 8).ok()
                 } else if let Some(s) = s.strip_prefix('\'') {
-                    Some(s.chars().next()? as i64)
+                    s.chars().next().map(|x| x as i64)
                 } else {
                     s.parse().ok()
                 }
+                .unwrap_or(0)
             }
-            _ => None,
+            _ => 0,
         }
     }
 
-    pub fn get_f64(&self) -> Option<f64> {
-        match self {
-            Self::Float(n) => Some(*n),
-            Self::Unparsed(s) => {
-                if s.starts_with("0x") || s.starts_with("-0x") {
-                    unimplemented!("Hexadecimal floats are unimplemented!")
-                } else if let Some(s) = s.strip_prefix('\'') {
-                    Some(s.chars().next()? as u64 as f64)
-                } else {
-                    s.parse().ok()
-                }
+    fn get_f64(&mut self) -> f64 {
+        let Some(next) = self.next() else {
+            return 0.0;
+        };
+        match next {
+            FormatArgument::Float(n) => *n,
+            FormatArgument::Unparsed(s) => if s.starts_with("0x") || s.starts_with("-0x") {
+                unimplemented!("Hexadecimal floats are unimplemented!")
+            } else if let Some(s) = s.strip_prefix('\'') {
+                s.chars().next().map(|x| x as u64 as f64)
+            } else {
+                s.parse().ok()
             }
-            _ => None,
+            .unwrap_or(0.0),
+            _ => 0.0,
         }
     }
 
-    pub fn get_str(&self) -> Option<&str> {
-        match self {
-            Self::Unparsed(s) | Self::String(s) => Some(s),
-            _ => None,
+    fn get_str(&mut self) -> &'a str {
+        match self.next() {
+            Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) => s,
+            _ => "",
         }
     }
 }
