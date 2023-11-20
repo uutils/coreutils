@@ -97,7 +97,7 @@ fuzz_target!(|_data: &[u8]| {
     };
 
     compare_result(
-        "expr",
+        "printf",
         &format!("{:?}", &args[1..]),
         &rust_result.stdout,
         &gnu_result.stdout,
