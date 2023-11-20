@@ -1,4 +1,6 @@
-// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
+// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety intmax ptrdiff
+
+use crate::quoting_style::{escape_name, QuotingStyle};
 
 use super::{
     num_format::{
@@ -16,11 +18,12 @@ pub enum Spec {
         align_left: bool,
     },
     String {
-        width: Option<CanAsterisk<usize>>,
         precision: Option<CanAsterisk<usize>>,
-        parse_escape: bool,
+        width: Option<CanAsterisk<usize>>,
         align_left: bool,
     },
+    EscapedString,
+    QuotedString,
     SignedInt {
         width: Option<CanAsterisk<usize>>,
         precision: Option<CanAsterisk<usize>>,
@@ -76,12 +79,14 @@ enum Length {
 }
 
 impl Spec {
-    pub fn parse(rest: &mut &[u8]) -> Option<Self> {
+    pub fn parse<'a>(rest: &mut &'a [u8]) -> Result<Self, &'a [u8]> {
         // Based on the C++ reference, the spec format looks like:
         //
         //   %[flags][width][.precision][length]specifier
         //
         // However, we have already parsed the '%'.
+        let mut index = 0;
+        let start = *rest;
 
         let mut minus = false;
         let mut plus = false;
@@ -89,110 +94,100 @@ impl Spec {
         let mut hash = false;
         let mut zero = false;
 
-        while let Some(x @ (b'-' | b'+' | b' ' | b'#' | b'0')) = rest.get(0) {
+        while let Some(x) = rest.get(index) {
             match x {
                 b'-' => minus = true,
                 b'+' => plus = true,
                 b' ' => space = true,
                 b'#' => hash = true,
                 b'0' => zero = true,
-                _ => unreachable!(),
+                _ => break,
             }
-            *rest = &rest[1..]
+            index += 1;
         }
 
-        let width = eat_asterisk_or_number(rest);
+        let alignment = match (minus, zero) {
+            (true, _) => NumberAlignment::Left,
+            (false, true) => NumberAlignment::RightZero,
+            (false, false) => NumberAlignment::RightSpace,
+        };
 
-        let precision = if let Some(b'.') = rest.get(0) {
-            *rest = &rest[1..];
-            Some(eat_asterisk_or_number(rest).unwrap_or(CanAsterisk::Fixed(0)))
+        let positive_sign = match (plus, space) {
+            (true, _) => PositiveSign::Plus,
+            (false, true) => PositiveSign::Space,
+            (false, false) => PositiveSign::None,
+        };
+
+        let width = eat_asterisk_or_number(rest, &mut index);
+
+        let precision = if let Some(b'.') = rest.get(index) {
+            index += 1;
+            Some(eat_asterisk_or_number(rest, &mut index).unwrap_or(CanAsterisk::Fixed(0)))
         } else {
             None
         };
 
-        // Parse 0..N length options, keep the last one
-        // Even though it is just ignored. We might want to use it later and we
-        // should parse those characters.
-        //
-        // TODO: This needs to be configurable: `seq` accepts only one length
-        //       param
-        let mut _length = None;
-        loop {
-            let new_length = rest.get(0).and_then(|c| {
-                Some(match c {
-                    b'h' => {
-                        if let Some(b'h') = rest.get(1) {
-                            *rest = &rest[1..];
-                            Length::Char
-                        } else {
-                            Length::Short
-                        }
-                    }
-                    b'l' => {
-                        if let Some(b'l') = rest.get(1) {
-                            *rest = &rest[1..];
-                            Length::Long
-                        } else {
-                            Length::LongLong
-                        }
-                    }
-                    b'j' => Length::IntMaxT,
-                    b'z' => Length::SizeT,
-                    b't' => Length::PtfDiffT,
-                    b'L' => Length::LongDouble,
-                    _ => return None,
-                })
-            });
-            if new_length.is_some() {
-                *rest = &rest[1..];
-                _length = new_length;
-            } else {
-                break;
-            }
-        }
+        // We ignore the length. It's not really relevant to printf
+        let _ = Self::parse_length(rest, &mut index);
 
-        let type_spec = rest.get(0)?;
-        *rest = &rest[1..];
-        Some(match type_spec {
-            b'c' => Spec::Char {
-                width,
-                align_left: minus,
-            },
-            b's' => Spec::String {
-                width,
-                precision,
-                parse_escape: false,
-                align_left: minus,
-            },
-            b'b' => Spec::String {
-                width,
-                precision,
-                parse_escape: true,
-                align_left: minus,
-            },
-            b'd' | b'i' => Spec::SignedInt {
-                width,
-                precision,
-                alignment: match (minus, zero) {
-                    (true, _) => NumberAlignment::Left,
-                    (false, true) => NumberAlignment::RightZero,
-                    (false, false) => NumberAlignment::RightSpace,
-                },
-                positive_sign: match (plus, space) {
-                    (true, _) => PositiveSign::Plus,
-                    (false, true) => PositiveSign::Space,
-                    (false, false) => PositiveSign::None,
-                },
-            },
+        let Some(type_spec) = rest.get(index) else {
+            return Err(&start[..index]);
+        };
+        index += 1;
+        *rest = &start[index..];
+
+        Ok(match type_spec {
+            // GNU accepts minus, plus and space even though they are not used
+            b'c' => {
+                if hash || precision.is_some() {
+                    return Err(&start[..index]);
+                }
+                Self::Char {
+                    width,
+                    align_left: minus,
+                }
+            }
+            b's' => {
+                if hash {
+                    return Err(&start[..index]);
+                }
+                Self::String {
+                    precision,
+                    width,
+                    align_left: minus,
+                }
+            }
+            b'b' => {
+                if hash || minus || plus || space || width.is_some() || precision.is_some() {
+                    return Err(&start[..index]);
+                }
+                Self::EscapedString
+            }
+            b'q' => {
+                if hash || minus || plus || space || width.is_some() || precision.is_some() {
+                    return Err(&start[..index]);
+                }
+                Self::QuotedString
+            }
+            b'd' | b'i' => {
+                if hash {
+                    return Err(&start[..index]);
+                }
+                Self::SignedInt {
+                    width,
+                    precision,
+                    alignment,
+                    positive_sign,
+                }
+            }
             c @ (b'u' | b'o' | b'x' | b'X') => {
+                // Normal unsigned integer cannot have a prefix
+                if *c == b'u' && hash {
+                    return Err(&start[..index]);
+                }
                 let prefix = match hash {
                     false => Prefix::No,
                     true => Prefix::Yes,
-                };
-                let alignment = match (minus, zero) {
-                    (true, _) => NumberAlignment::Left,
-                    (false, true) => NumberAlignment::RightZero,
-                    (false, false) => NumberAlignment::RightSpace,
                 };
                 let variant = match c {
                     b'u' => UnsignedIntVariant::Decimal,
@@ -201,14 +196,14 @@ impl Spec {
                     b'X' => UnsignedIntVariant::Hexadecimal(Case::Uppercase, prefix),
                     _ => unreachable!(),
                 };
-                Spec::UnsignedInt {
+                Self::UnsignedInt {
                     variant,
                     precision,
                     width,
                     alignment,
                 }
             }
-            c @ (b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A') => Spec::Float {
+            c @ (b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A') => Self::Float {
                 width,
                 precision,
                 variant: match c {
@@ -226,115 +221,157 @@ impl Spec {
                     false => Case::Lowercase,
                     true => Case::Uppercase,
                 },
-                alignment: match (minus, zero) {
-                    (true, _) => NumberAlignment::Left,
-                    (false, true) => NumberAlignment::RightZero,
-                    (false, false) => NumberAlignment::RightSpace,
-                },
-                positive_sign: match (plus, space) {
-                    (true, _) => PositiveSign::Plus,
-                    (false, true) => PositiveSign::Space,
-                    (false, false) => PositiveSign::None,
-                },
+                alignment,
+                positive_sign,
             },
-            _ => return None,
+            _ => return Err(&start[..index]),
         })
+    }
+
+    fn parse_length(rest: &mut &[u8], index: &mut usize) -> Option<Length> {
+        // Parse 0..N length options, keep the last one
+        // Even though it is just ignored. We might want to use it later and we
+        // should parse those characters.
+        //
+        // TODO: This needs to be configurable: `seq` accepts only one length
+        //       param
+        let mut length = None;
+        loop {
+            let new_length = rest.get(*index).and_then(|c| {
+                Some(match c {
+                    b'h' => {
+                        if let Some(b'h') = rest.get(*index + 1) {
+                            *index += 1;
+                            Length::Char
+                        } else {
+                            Length::Short
+                        }
+                    }
+                    b'l' => {
+                        if let Some(b'l') = rest.get(*index + 1) {
+                            *index += 1;
+                            Length::Long
+                        } else {
+                            Length::LongLong
+                        }
+                    }
+                    b'j' => Length::IntMaxT,
+                    b'z' => Length::SizeT,
+                    b't' => Length::PtfDiffT,
+                    b'L' => Length::LongDouble,
+                    _ => return None,
+                })
+            });
+            if new_length.is_some() {
+                *index += 1;
+                length = new_length;
+            } else {
+                break;
+            }
+        }
+        length
     }
 
     pub fn write<'a>(
         &self,
-        writer: impl Write,
+        mut writer: impl Write,
         mut args: impl ArgumentIter<'a>,
     ) -> Result<(), FormatError> {
         match self {
-            &Spec::Char { width, align_left } => {
-                let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
-                write_padded(writer, args.get_char(), width, false, align_left)
+            Self::Char { width, align_left } => {
+                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
+                write_padded(writer, args.get_char(), width, false, *align_left)
             }
-            &Spec::String {
+            Self::String {
                 width,
-                precision,
-                parse_escape,
                 align_left,
+                precision,
             } => {
-                let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
-                let precision = resolve_asterisk(precision, &mut args)?;
+                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
+
+                // GNU does do this truncation on a byte level, see for instance:
+                //     printf "%.1s" 🙃
+                //     > �
+                // For now, we let printf panic when we truncate within a code point.
+                // TODO: We need to not use Rust's formatting for aligning the output,
+                // so that we can just write bytes to stdout without panicking.
+                let precision = resolve_asterisk(*precision, &mut args)?;
                 let s = args.get_str();
-                if parse_escape {
-                    let mut parsed = Vec::new();
-                    for c in parse_escape_only(s.as_bytes()) {
-                        match c.write(&mut parsed)? {
-                            ControlFlow::Continue(()) => {}
-                            ControlFlow::Break(()) => {
-                                // TODO: This should break the _entire execution_ of printf
-                                break;
-                            }
-                        };
-                    }
-                    // GNU does do this truncation on a byte level, see for instance:
-                    //     printf "%.1s" 🙃
-                    //     > �
-                    // For now, we let printf panic when we truncate within a code point.
-                    // TODO: We need to not use Rust's formatting for aligning the output,
-                    // so that we can just write bytes to stdout without panicking.
-                    let truncated = match precision {
-                        Some(p) if p < parsed.len() => &parsed[..p],
-                        _ => &parsed,
-                    };
-                    write_padded(
-                        writer,
-                        std::str::from_utf8(&truncated).expect("TODO: Accept invalid utf8"),
-                        width,
-                        false,
-                        align_left,
-                    )
-                } else {
-                    let truncated = match precision {
-                        Some(p) if p < s.len() => &s[..p],
-                        _ => s,
-                    };
-                    write_padded(writer, truncated, width, false, align_left)
-                }
+                let truncated = match precision {
+                    Some(p) if p < s.len() => &s[..p],
+                    _ => s,
+                };
+                write_padded(writer, truncated, width, false, *align_left)
             }
-            &Spec::SignedInt {
+            Self::EscapedString => {
+                let s = args.get_str();
+                let mut parsed = Vec::new();
+                for c in parse_escape_only(s.as_bytes()) {
+                    match c.write(&mut parsed)? {
+                        ControlFlow::Continue(()) => {}
+                        ControlFlow::Break(()) => {
+                            // TODO: This should break the _entire execution_ of printf
+                            break;
+                        }
+                    };
+                }
+                writer.write_all(&parsed).map_err(FormatError::IoError)
+            }
+            Self::QuotedString => {
+                let s = args.get_str();
+                writer
+                    .write_all(
+                        escape_name(
+                            s.as_ref(),
+                            &QuotingStyle::Shell {
+                                escape: true,
+                                always_quote: false,
+                                show_control: false,
+                            },
+                        )
+                        .as_bytes(),
+                    )
+                    .map_err(FormatError::IoError)
+            }
+            Self::SignedInt {
                 width,
                 precision,
                 positive_sign,
                 alignment,
             } => {
-                let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
-                let precision = resolve_asterisk(precision, &mut args)?.unwrap_or(0);
+                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
+                let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(0);
                 let i = args.get_i64();
 
                 num_format::SignedInt {
                     width,
                     precision,
-                    positive_sign,
-                    alignment,
+                    positive_sign: *positive_sign,
+                    alignment: *alignment,
                 }
                 .fmt(writer, i)
                 .map_err(FormatError::IoError)
             }
-            &Spec::UnsignedInt {
+            Self::UnsignedInt {
                 variant,
                 width,
                 precision,
                 alignment,
             } => {
-                let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
-                let precision = resolve_asterisk(precision, &mut args)?.unwrap_or(0);
+                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
+                let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(0);
                 let i = args.get_u64();
 
                 num_format::UnsignedInt {
-                    variant,
+                    variant: *variant,
                     precision,
                     width,
-                    alignment,
+                    alignment: *alignment,
                 }
                 .fmt(writer, i)
                 .map_err(FormatError::IoError)
             }
-            &Spec::Float {
+            Self::Float {
                 variant,
                 case,
                 force_decimal,
@@ -343,18 +380,18 @@ impl Spec {
                 alignment,
                 precision,
             } => {
-                let width = resolve_asterisk(width, &mut args)?.unwrap_or(0);
-                let precision = resolve_asterisk(precision, &mut args)?.unwrap_or(6);
+                let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
+                let precision = resolve_asterisk(*precision, &mut args)?.unwrap_or(6);
                 let f = args.get_f64();
 
                 num_format::Float {
-                    variant,
-                    case,
-                    force_decimal,
                     width,
-                    positive_sign,
-                    alignment,
                     precision,
+                    variant: *variant,
+                    case: *case,
+                    force_decimal: *force_decimal,
+                    positive_sign: *positive_sign,
+                    alignment: *alignment,
                 }
                 .fmt(writer, f)
                 .map_err(FormatError::IoError)
@@ -390,23 +427,26 @@ fn write_padded(
     .map_err(FormatError::IoError)
 }
 
-fn eat_asterisk_or_number(rest: &mut &[u8]) -> Option<CanAsterisk<usize>> {
-    if let Some(b'*') = rest.get(0) {
-        *rest = &rest[1..];
+fn eat_asterisk_or_number(rest: &mut &[u8], index: &mut usize) -> Option<CanAsterisk<usize>> {
+    if let Some(b'*') = rest.get(*index) {
+        *index += 1;
         Some(CanAsterisk::Asterisk)
     } else {
-        eat_number(rest).map(CanAsterisk::Fixed)
+        eat_number(rest, index).map(CanAsterisk::Fixed)
     }
 }
 
-fn eat_number(rest: &mut &[u8]) -> Option<usize> {
-    match rest.iter().position(|b| !b.is_ascii_digit()) {
+fn eat_number(rest: &mut &[u8], index: &mut usize) -> Option<usize> {
+    match rest[*index..].iter().position(|b| !b.is_ascii_digit()) {
         None | Some(0) => None,
         Some(i) => {
             // TODO: This might need to handle errors better
             // For example in case of overflow.
-            let parsed = std::str::from_utf8(&rest[..i]).unwrap().parse().unwrap();
-            *rest = &rest[i..];
+            let parsed = std::str::from_utf8(&rest[*index..(*index + i)])
+                .unwrap()
+                .parse()
+                .unwrap();
+            *index += i;
             Some(parsed)
         }
     }

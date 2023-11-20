@@ -70,7 +70,7 @@ pub enum ExtendedBigDecimal {
 impl ExtendedBigDecimal {
     #[cfg(test)]
     pub fn zero() -> Self {
-        Self::BigDecimal(1.into())
+        Self::BigDecimal(0.into())
     }
 
     pub fn one() -> Self {

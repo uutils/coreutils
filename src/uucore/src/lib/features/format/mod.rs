@@ -42,10 +42,13 @@ use self::{
 
 #[derive(Debug)]
 pub enum FormatError {
-    SpecError,
+    SpecError(Vec<u8>),
     IoError(std::io::Error),
     NoMoreArguments,
     InvalidArgument(FormatArgument),
+    TooManySpecs,
+    NeedAtLeastOneSpec,
+    WrongSpecType,
 }
 
 impl Error for FormatError {}
@@ -53,18 +56,26 @@ impl UError for FormatError {}
 
 impl From<std::io::Error> for FormatError {
     fn from(value: std::io::Error) -> Self {
-        FormatError::IoError(value)
+        Self::IoError(value)
     }
 }
 
 impl Display for FormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO: Be more precise about these
         match self {
-            FormatError::SpecError => write!(f, "invalid spec"),
-            FormatError::IoError(_) => write!(f, "io error"),
-            FormatError::NoMoreArguments => write!(f, "no more arguments"),
-            FormatError::InvalidArgument(_) => write!(f, "invalid argument"),
+            Self::SpecError(s) => write!(
+                f,
+                "%{}: invalid conversion specification",
+                String::from_utf8_lossy(s)
+            ),
+            // TODO: The next two should print the spec as well
+            Self::TooManySpecs => write!(f, "format has too many % directives"),
+            Self::NeedAtLeastOneSpec => write!(f, "format has no % directive"),
+            // TODO: Error message below needs some work
+            Self::WrongSpecType => write!(f, "wrong % directive type was given"),
+            Self::IoError(_) => write!(f, "io error"),
+            Self::NoMoreArguments => write!(f, "no more arguments"),
+            Self::InvalidArgument(_) => write!(f, "invalid argument"),
         }
     }
 }
@@ -83,7 +94,7 @@ pub trait FormatChar {
 
 impl FormatChar for u8 {
     fn write(&self, mut writer: impl Write) -> std::io::Result<ControlFlow<()>> {
-        writer.write(&[*self])?;
+        writer.write_all(&[*self])?;
         Ok(ControlFlow::Continue(()))
     }
 }
@@ -91,16 +102,16 @@ impl FormatChar for u8 {
 impl FormatChar for EscapedChar {
     fn write(&self, mut writer: impl Write) -> std::io::Result<ControlFlow<()>> {
         match self {
-            EscapedChar::Byte(c) => {
-                writer.write(&[*c])?;
+            Self::Byte(c) => {
+                writer.write_all(&[*c])?;
             }
-            EscapedChar::Char(c) => {
+            Self::Char(c) => {
                 write!(writer, "{c}")?;
             }
-            EscapedChar::Backslash(c) => {
-                writer.write(&[b'\\', *c])?;
+            Self::Backslash(c) => {
+                writer.write_all(&[b'\\', *c])?;
             }
-            EscapedChar::End => return Ok(ControlFlow::Break(())),
+            Self::End => return Ok(ControlFlow::Break(())),
         }
         Ok(ControlFlow::Continue(()))
     }
@@ -113,8 +124,8 @@ impl<C: FormatChar> FormatItem<C> {
         args: &mut impl Iterator<Item = &'a FormatArgument>,
     ) -> Result<ControlFlow<()>, FormatError> {
         match self {
-            FormatItem::Spec(spec) => spec.write(writer, args)?,
-            FormatItem::Char(c) => return c.write(writer).map_err(FormatError::IoError),
+            Self::Spec(spec) => spec.write(writer, args)?,
+            Self::Char(c) => return c.write(writer).map_err(FormatError::IoError),
         };
         Ok(ControlFlow::Continue(()))
     }
@@ -125,7 +136,7 @@ pub fn parse_spec_and_escape(
 ) -> impl Iterator<Item = Result<FormatItem<EscapedChar>, FormatError>> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
-        [] => return None,
+        [] => None,
         [b'%', b'%', rest @ ..] => {
             current = rest;
             Some(Ok(FormatItem::Char(EscapedChar::Byte(b'%'))))
@@ -133,8 +144,8 @@ pub fn parse_spec_and_escape(
         [b'%', rest @ ..] => {
             current = rest;
             let spec = match Spec::parse(&mut current) {
-                Some(spec) => spec,
-                None => return Some(Err(FormatError::SpecError)),
+                Ok(spec) => spec,
+                Err(slice) => return Some(Err(FormatError::SpecError(slice.to_vec()))),
             };
             Some(Ok(FormatItem::Spec(spec)))
         }
@@ -152,7 +163,7 @@ pub fn parse_spec_and_escape(
 fn parse_spec_only(fmt: &[u8]) -> impl Iterator<Item = Result<FormatItem<u8>, FormatError>> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
-        [] => return None,
+        [] => None,
         [b'%', b'%', rest @ ..] => {
             current = rest;
             Some(Ok(FormatItem::Char(b'%')))
@@ -160,8 +171,8 @@ fn parse_spec_only(fmt: &[u8]) -> impl Iterator<Item = Result<FormatItem<u8>, Fo
         [b'%', rest @ ..] => {
             current = rest;
             let spec = match Spec::parse(&mut current) {
-                Some(spec) => spec,
-                None => return Some(Err(FormatError::SpecError)),
+                Ok(spec) => spec,
+                Err(slice) => return Some(Err(FormatError::SpecError(slice.to_vec()))),
             };
             Some(Ok(FormatItem::Spec(spec)))
         }
@@ -175,7 +186,7 @@ fn parse_spec_only(fmt: &[u8]) -> impl Iterator<Item = Result<FormatItem<u8>, Fo
 fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
-        [] => return None,
+        [] => None,
         [b'\\', rest @ ..] => {
             current = rest;
             Some(parse_escape_code(&mut current))
@@ -248,8 +259,8 @@ pub fn sprintf<'a>(
 
 /// A parsed format for a single float value
 ///
-/// This is used by `seq`. It can be constructed with [`FloatFormat::parse`]
-/// and can write a value with [`FloatFormat::fmt`].
+/// This is used by `seq`. It can be constructed with [`Format::parse`]
+/// and can write a value with [`Format::fmt`].
 ///
 /// It can only accept a single specification without any asterisk parameters.
 /// If it does get more specifications, it will return an error.
@@ -276,7 +287,7 @@ impl<F: Formatter> Format<F> {
         }
 
         let Some(spec) = spec else {
-            return Err(FormatError::SpecError);
+            return Err(FormatError::NeedAtLeastOneSpec);
         };
 
         let formatter = F::try_from_spec(spec)?;
@@ -285,7 +296,7 @@ impl<F: Formatter> Format<F> {
         for item in &mut iter {
             match item? {
                 FormatItem::Spec(_) => {
-                    return Err(FormatError::SpecError);
+                    return Err(FormatError::TooManySpecs);
                 }
                 FormatItem::Char(c) => suffix.push(c),
             }

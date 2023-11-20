@@ -97,19 +97,19 @@ impl Formatter for SignedInt {
             alignment,
         } = s
         else {
-            return Err(FormatError::SpecError);
+            return Err(FormatError::WrongSpecType);
         };
 
         let width = match width {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
         };
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
         };
 
         Ok(Self {
@@ -151,7 +151,7 @@ impl Formatter for UnsignedInt {
         };
 
         if self.precision > s.len() {
-            s = format!("{:0width$}", s, width = self.precision)
+            s = format!("{:0width$}", s, width = self.precision);
         }
 
         match self.alignment {
@@ -169,19 +169,19 @@ impl Formatter for UnsignedInt {
             alignment,
         } = s
         else {
-            return Err(FormatError::SpecError);
+            return Err(FormatError::WrongSpecType);
         };
 
         let width = match width {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
         };
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
         };
 
         Ok(Self {
@@ -212,7 +212,7 @@ impl Default for Float {
             width: 0,
             positive_sign: PositiveSign::None,
             alignment: NumberAlignment::Left,
-            precision: 2,
+            precision: 6,
         }
     }
 }
@@ -229,19 +229,23 @@ impl Formatter for Float {
             }?;
         }
 
-        let s = match self.variant {
-            FloatVariant::Decimal => {
-                format_float_decimal(x, self.precision, self.case, self.force_decimal)
+        let s = if x.is_finite() {
+            match self.variant {
+                FloatVariant::Decimal => {
+                    format_float_decimal(x, self.precision, self.force_decimal)
+                }
+                FloatVariant::Scientific => {
+                    format_float_scientific(x, self.precision, self.case, self.force_decimal)
+                }
+                FloatVariant::Shortest => {
+                    format_float_shortest(x, self.precision, self.case, self.force_decimal)
+                }
+                FloatVariant::Hexadecimal => {
+                    format_float_hexadecimal(x, self.precision, self.case, self.force_decimal)
+                }
             }
-            FloatVariant::Scientific => {
-                format_float_scientific(x, self.precision, self.case, self.force_decimal)
-            }
-            FloatVariant::Shortest => {
-                format_float_shortest(x, self.precision, self.case, self.force_decimal)
-            }
-            FloatVariant::Hexadecimal => {
-                format_float_hexadecimal(x, self.precision, self.case, self.force_decimal)
-            }
+        } else {
+            format_float_non_finite(x, self.case)
         };
 
         match self.alignment {
@@ -265,19 +269,19 @@ impl Formatter for Float {
             precision,
         } = s
         else {
-            return Err(FormatError::SpecError);
+            return Err(FormatError::WrongSpecType);
         };
 
         let width = match width {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
         };
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => x,
             None => 0,
-            Some(CanAsterisk::Asterisk) => return Err(FormatError::SpecError),
+            Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
         };
 
         Ok(Self {
@@ -292,25 +296,16 @@ impl Formatter for Float {
     }
 }
 
-fn format_float_nonfinite(f: f64, case: Case) -> String {
+fn format_float_non_finite(f: f64, case: Case) -> String {
     debug_assert!(!f.is_finite());
     let mut s = format!("{f}");
     if case == Case::Uppercase {
         s.make_ascii_uppercase();
     }
-    return s;
+    s
 }
 
-fn format_float_decimal(
-    f: f64,
-    precision: usize,
-    case: Case,
-    force_decimal: ForceDecimal,
-) -> String {
-    if !f.is_finite() {
-        return format_float_nonfinite(f, case);
-    }
-
+fn format_float_decimal(f: f64, precision: usize, force_decimal: ForceDecimal) -> String {
     if precision == 0 && force_decimal == ForceDecimal::Yes {
         format!("{f:.0}.")
     } else {
@@ -324,11 +319,6 @@ fn format_float_scientific(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    // If the float is NaN, -Nan, Inf or -Inf, format like any other float
-    if !f.is_finite() {
-        return format_float_nonfinite(f, case);
-    }
-
     if f == 0.0 {
         return if force_decimal == ForceDecimal::Yes && precision == 0 {
             "0.e+00".into()
@@ -337,13 +327,13 @@ fn format_float_scientific(
         };
     }
 
-    
     let mut exponent: i32 = f.log10().floor() as i32;
     let mut normalized = f / 10.0_f64.powi(exponent);
 
     // If the normalized value will be rounded to a value greater than 10
     // we need to correct.
-    if (normalized * 10_f64.powi(precision as i32)).round() / 10_f64.powi(precision as i32)  >= 10.0 {
+    if (normalized * 10_f64.powi(precision as i32)).round() / 10_f64.powi(precision as i32) >= 10.0
+    {
         normalized /= 10.0;
         exponent += 1;
     }
@@ -371,11 +361,6 @@ fn format_float_shortest(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    // If the float is NaN, -Nan, Inf or -Inf, format like any other float
-    if !f.is_finite() {
-        return format_float_nonfinite(f, case);
-    }
-
     // Precision here is about how many digits should be displayed
     // instead of how many digits for the fractional part, this means that if
     // we pass this to rust's format string, it's always gonna be one less.
@@ -398,7 +383,9 @@ fn format_float_shortest(
 
         // If the normalized value will be rounded to a value greater than 10
         // we need to correct.
-        if (normalized * 10_f64.powi(precision as i32)).round() / 10_f64.powi(precision as i32)  >= 10.0 {
+        if (normalized * 10_f64.powi(precision as i32)).round() / 10_f64.powi(precision as i32)
+            >= 10.0
+        {
             normalized /= 10.0;
             exponent += 1;
         }
@@ -412,12 +399,7 @@ fn format_float_shortest(
         let mut normalized = format!("{normalized:.*}", precision);
 
         if force_decimal == ForceDecimal::No {
-            while normalized.ends_with('0') {
-                normalized.pop();
-            }
-            if normalized.ends_with('.') {
-                normalized.pop();
-            }
+            strip_zeros_and_dot(&mut normalized);
         }
 
         let exp_char = match case {
@@ -439,12 +421,7 @@ fn format_float_shortest(
         };
 
         if force_decimal == ForceDecimal::No {
-            while formatted.ends_with('0') {
-                formatted.pop();
-            }
-            if formatted.ends_with('.') {
-                formatted.pop();
-            }
+            strip_zeros_and_dot(&mut formatted);
         }
 
         formatted
@@ -457,10 +434,6 @@ fn format_float_hexadecimal(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
-    if !f.is_finite() {
-        return format_float_nonfinite(f, case);
-    }
-
     let (first_digit, mantissa, exponent) = if f == 0.0 {
         (0, 0, 0)
     } else {
@@ -481,7 +454,16 @@ fn format_float_hexadecimal(
         s.make_ascii_uppercase();
     }
 
-    return s;
+    s
+}
+
+fn strip_zeros_and_dot(s: &mut String) {
+    while s.ends_with('0') {
+        s.pop();
+    }
+    if s.ends_with('.') {
+        s.pop();
+    }
 }
 
 #[cfg(test)]
@@ -491,7 +473,7 @@ mod test {
     #[test]
     fn decimal_float() {
         use super::format_float_decimal;
-        let f = |x| format_float_decimal(x, 6, Case::Lowercase, ForceDecimal::No);
+        let f = |x| format_float_decimal(x, 6, ForceDecimal::No);
         assert_eq!(f(0.0), "0.000000");
         assert_eq!(f(1.0), "1.000000");
         assert_eq!(f(100.0), "100.000000");
@@ -576,7 +558,7 @@ mod test {
         assert_eq!(f(12.3456789), "1e+01");
         assert_eq!(f(1000000.0), "1e+06");
         assert_eq!(f(99999999.0), "1e+08");
-        
+
         let f = |x| format_float_shortest(x, 0, Case::Lowercase, ForceDecimal::Yes);
         assert_eq!(f(0.0), "0.");
         assert_eq!(f(1.0), "1.");

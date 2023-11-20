@@ -1,3 +1,7 @@
+use os_display::Quotable;
+
+use crate::{error::set_exit_code, show_warning};
+
 #[derive(Clone, Debug)]
 pub enum FormatArgument {
     Char(char),
@@ -44,16 +48,25 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::UnsignedInt(n) => *n,
-            FormatArgument::Unparsed(s) => if let Some(s) = s.strip_prefix("0x") {
-                u64::from_str_radix(s, 16).ok()
-            } else if let Some(s) = s.strip_prefix("0") {
-                u64::from_str_radix(s, 8).ok()
-            } else if let Some(s) = s.strip_prefix('\'') {
-                s.chars().next().map(|c| c as u64)
-            } else {
-                s.parse().ok()
+            FormatArgument::Unparsed(s) => {
+                let opt = if let Some(s) = s.strip_prefix("0x") {
+                    u64::from_str_radix(s, 16).ok()
+                } else if let Some(s) = s.strip_prefix('0') {
+                    u64::from_str_radix(s, 8).ok()
+                } else if let Some(s) = s.strip_prefix('\'') {
+                    s.chars().next().map(|c| c as u64)
+                } else {
+                    s.parse().ok()
+                };
+                match opt {
+                    Some(n) => n,
+                    None => {
+                        show_warning!("{}: expected a numeric value", s.quote());
+                        set_exit_code(1);
+                        0
+                    }
+                }
             }
-            .unwrap_or(0),
             _ => 0,
         }
     }
@@ -67,7 +80,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
             FormatArgument::Unparsed(s) => {
                 // For hex, we parse `u64` because we do not allow another
                 // minus sign. We might need to do more precise parsing here.
-                if let Some(s) = s.strip_prefix("-0x") {
+                let opt = if let Some(s) = s.strip_prefix("-0x") {
                     u64::from_str_radix(s, 16).ok().map(|x| -(x as i64))
                 } else if let Some(s) = s.strip_prefix("0x") {
                     u64::from_str_radix(s, 16).ok().map(|x| x as i64)
@@ -77,8 +90,15 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
                     s.chars().next().map(|x| x as i64)
                 } else {
                     s.parse().ok()
+                };
+                match opt {
+                    Some(n) => n,
+                    None => {
+                        show_warning!("{}: expected a numeric value", s.quote());
+                        set_exit_code(1);
+                        0
+                    }
                 }
-                .unwrap_or(0)
             }
             _ => 0,
         }
@@ -90,14 +110,23 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::Float(n) => *n,
-            FormatArgument::Unparsed(s) => if s.starts_with("0x") || s.starts_with("-0x") {
-                unimplemented!("Hexadecimal floats are unimplemented!")
-            } else if let Some(s) = s.strip_prefix('\'') {
-                s.chars().next().map(|x| x as u64 as f64)
-            } else {
-                s.parse().ok()
+            FormatArgument::Unparsed(s) => {
+                let opt = if s.starts_with("0x") || s.starts_with("-0x") {
+                    unimplemented!("Hexadecimal floats are unimplemented!")
+                } else if let Some(s) = s.strip_prefix('\'') {
+                    s.chars().next().map(|x| x as u64 as f64)
+                } else {
+                    s.parse().ok()
+                };
+                match opt {
+                    Some(n) => n,
+                    None => {
+                        show_warning!("{}: expected a numeric value", s.quote());
+                        set_exit_code(1);
+                        0.0
+                    }
+                }
             }
-            .unwrap_or(0.0),
             _ => 0.0,
         }
     }

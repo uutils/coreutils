@@ -122,7 +122,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         &options.terminator,
         options.equal_width,
         padding,
-        format,
+        &format,
     );
     match result {
         Ok(_) => Ok(()),
@@ -203,7 +203,7 @@ fn print_seq(
     terminator: &str,
     pad: bool,
     padding: usize,
-    format: Option<Format<num_format::Float>>,
+    format: &Option<Format<num_format::Float>>,
 ) -> std::io::Result<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();

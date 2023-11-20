@@ -21,16 +21,16 @@ impl Base {
         }
     }
 
-    fn to_digit(&self, c: u8) -> Option<u8> {
+    fn convert_digit(&self, c: u8) -> Option<u8> {
         match self {
-            Base::Oct => {
+            Self::Oct => {
                 if matches!(c, b'0'..=b'7') {
                     Some(c - b'0')
                 } else {
                     None
                 }
             }
-            Base::Hex => match c {
+            Self::Hex => match c {
                 b'0'..=b'9' => Some(c - b'0'),
                 b'A'..=b'F' => Some(c - b'A' + 10),
                 b'a'..=b'f' => Some(c - b'a' + 10),
@@ -49,32 +49,35 @@ fn parse_code(input: &mut &[u8], base: Base) -> Option<u8> {
     // yield incorrect results because it will interpret values larger than
     // `u8::MAX` as unicode.
     let [c, rest @ ..] = input else { return None };
-    let mut ret = base.to_digit(*c)?;
-    *input = &rest[..];
+    let mut ret = base.convert_digit(*c)?;
+    *input = rest;
 
     for _ in 1..base.max_digits() {
         let [c, rest @ ..] = input else { break };
-        let Some(n) = base.to_digit(*c) else { break };
+        let Some(n) = base.convert_digit(*c) else {
+            break;
+        };
         ret = ret.wrapping_mul(base as u8).wrapping_add(n);
-        *input = &rest[..];
+        *input = rest;
     }
 
     Some(ret)
 }
 
+// spell-checker:disable-next
 /// Parse `\uHHHH` and `\UHHHHHHHH`
 // TODO: This should print warnings and possibly halt execution when it fails to parse
 // TODO: If the character cannot be converted to u32, the input should be printed.
 fn parse_unicode(input: &mut &[u8], digits: u8) -> Option<char> {
     let (c, rest) = input.split_first()?;
-    let mut ret = Base::Hex.to_digit(*c)? as u32;
-    *input = &rest[..];
+    let mut ret = Base::Hex.convert_digit(*c)? as u32;
+    *input = rest;
 
     for _ in 1..digits {
         let (c, rest) = input.split_first()?;
-        let n = Base::Hex.to_digit(*c)?;
+        let n = Base::Hex.convert_digit(*c)?;
         ret = ret.wrapping_mul(Base::Hex as u32).wrapping_add(n as u32);
-        *input = &rest[..];
+        *input = rest;
     }
 
     char::from_u32(ret)
@@ -91,12 +94,12 @@ pub fn parse_escape_code(rest: &mut &[u8]) -> EscapedChar {
             }
         }
 
-        *rest = &new_rest[..];
+        *rest = new_rest;
         match c {
             b'\\' => EscapedChar::Byte(b'\\'),
             b'a' => EscapedChar::Byte(b'\x07'),
             b'b' => EscapedChar::Byte(b'\x08'),
-            b'c' => return EscapedChar::End,
+            b'c' => EscapedChar::End,
             b'e' => EscapedChar::Byte(b'\x1b'),
             b'f' => EscapedChar::Byte(b'\x0c'),
             b'n' => EscapedChar::Byte(b'\n'),

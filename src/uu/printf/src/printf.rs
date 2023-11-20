@@ -10,9 +10,9 @@ use std::io::stdout;
 use std::ops::ControlFlow;
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use uucore::error::{UResult, UUsageError};
+use uucore::error::{UError, UResult, UUsageError};
 use uucore::format::{parse_spec_and_escape, FormatArgument};
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::{format_usage, help_about, help_section, help_usage, show};
 
 const VERSION: &str = "version";
 const HELP: &str = "help";
@@ -49,10 +49,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     while args.peek().is_some() {
         for item in parse_spec_and_escape(format_string.as_ref()) {
-            match item?.write(stdout(), &mut args)? {
-                ControlFlow::Continue(()) => {}
-                ControlFlow::Break(()) => return Ok(()),
-            };
+            match item {
+                Ok(item) => {
+                    match item.write(stdout(), &mut args)? {
+                        ControlFlow::Continue(()) => {}
+                        ControlFlow::Break(()) => return Ok(()),
+                    };
+                }
+                Err(e) => show!(e),
+            }
         }
     }
     Ok(())

@@ -3,12 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore extendedbigdecimal extendedbigint
-//! A type to represent the possible start, increment, and end values for seq.
-//!
-//! The [`Number`] enumeration represents the possible values for the
-//! start, increment, and end values for `seq`. These may be integers,
-//! floating point numbers, negative zero, etc. A [`Number`] can be
-//! parsed from a string by calling [`str::parse`].
 use num_traits::Zero;
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
@@ -29,7 +23,11 @@ pub struct PreciseNumber {
 }
 
 impl PreciseNumber {
-    pub fn new(number: ExtendedBigDecimal, num_integral_digits: usize, num_fractional_digits: usize) -> Self {
+    pub fn new(
+        number: ExtendedBigDecimal,
+        num_integral_digits: usize,
+        num_fractional_digits: usize,
+    ) -> Self {
         Self {
             number,
             num_integral_digits,
