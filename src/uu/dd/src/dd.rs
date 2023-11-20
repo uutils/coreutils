@@ -52,9 +52,9 @@ use uucore::display::Quotable;
 #[cfg(unix)]
 use uucore::error::set_exit_code;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 #[cfg(target_os = "linux")]
-use uucore::{show, show_if_err};
+use uucore::show_if_err;
+use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 const ABOUT: &str = help_about!("dd.md");
 const AFTER_HELP: &str = help_section!("after help", "dd.md");

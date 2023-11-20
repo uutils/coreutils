@@ -17,7 +17,7 @@ use std::ffi::OsString;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show};
 
 const ABOUT: &str = help_about!("touch.md");
