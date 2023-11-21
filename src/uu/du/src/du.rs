@@ -291,6 +291,7 @@ fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.
+#[allow(clippy::cognitive_complexity)]
 fn du(
     mut my_stat: Stat,
     options: &Options,
@@ -665,6 +666,7 @@ impl StatPrinter {
 }
 
 #[uucore::main]
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
