@@ -28,7 +28,7 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 
 #[test]
 fn test_buffer_sizes() {
-    let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
+    let buffer_sizes = ["0", "50K", "50k", "1M", "100M", "20%", "0%"];
     for buffer_size in &buffer_sizes {
         TestScenario::new(util_name!())
             .ucmd()
