@@ -360,7 +360,7 @@ impl GlobalSettings {
             ))),
         }
     }
-    /// Get's memory size from percent
+    /// get memory size from percent
     fn get_memory_size(percent: usize) -> Result<usize, ParseSizeError> {
         let system = System::new_with_specifics(RefreshKind::new().with_memory());
         let total_memory_size = system.total_memory() as usize;
@@ -2031,7 +2031,7 @@ mod tests {
             assert_eq!(
                 GlobalSettings::parse_percentage(input),
                 Ok(*expected_output)
-            )
+            );
         }
 
         let invalid_input = ["-10", "101"];
