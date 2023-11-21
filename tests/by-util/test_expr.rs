@@ -100,6 +100,11 @@ fn test_parenthesis() {
         .args(&["(", "1", "+", "1", ")", "*", "2"])
         .succeeds()
         .stdout_only("4\n");
+
+    new_ucmd!()
+        .args(&["1", "(", ")"])
+        .fails()
+        .stderr_only("expr: syntax error (operation should be prefix)\n");
 }
 
 #[test]
@@ -221,6 +226,11 @@ fn test_index() {
         .args(&["index", "αbcdef_f", "f"])
         .succeeds()
         .stdout_only("6\n");
+
+    new_ucmd!()
+        .args(&["αbcdef", "index", "α"])
+        .fails()
+        .stderr_only("expr: syntax error (operation should be prefix)\n");
 }
 
 #[test]
@@ -234,6 +244,11 @@ fn test_length() {
         .args(&["length", "abcdef"])
         .succeeds()
         .stdout_only("6\n");
+
+    new_ucmd!()
+        .args(&["abcdef", "length"])
+        .fails()
+        .stderr_only("expr: syntax error (operation should be prefix)\n");
 }
 
 #[test]
@@ -271,6 +286,11 @@ fn test_substr() {
         .args(&["substr", "abc", "1", "1"])
         .succeeds()
         .stdout_only("a\n");
+
+    new_ucmd!()
+        .args(&["abc", "substr", "1", "1"])
+        .fails()
+        .stderr_only("expr: syntax error (operation should be prefix)\n");
 }
 
 #[test]
