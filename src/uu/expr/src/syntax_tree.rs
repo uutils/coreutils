@@ -332,8 +332,12 @@ fn push_token_to_either_stack(
         }
 
         Token::PrefixOp { .. } | Token::ParOpen => {
-            op_stack.push((token_idx, token.clone()));
-            Ok(())
+            if out_stack.is_empty() {
+                op_stack.push((token_idx, token.clone()));
+                Ok(())
+            } else {
+                Err(String::from("syntax error (operation should be prefix)"))
+            }
         }
 
         Token::ParClose => move_till_match_paren(out_stack, op_stack),
