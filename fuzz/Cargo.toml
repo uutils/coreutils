@@ -16,6 +16,7 @@ uucore = { path = "../src/uucore/" }
 uu_date = { path = "../src/uu/date/" }
 uu_test = { path = "../src/uu/test/" }
 uu_expr = { path = "../src/uu/expr/" }
+uu_printf = { path = "../src/uu/printf/" }
 
 
 # Prevent this from interfering with workspaces
@@ -25,6 +26,12 @@ members = ["."]
 [[bin]]
 name = "fuzz_date"
 path = "fuzz_targets/fuzz_date.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_printf"
+path = "fuzz_targets/fuzz_printf.rs"
 test = false
 doc = false
 
