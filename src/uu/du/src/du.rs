@@ -291,8 +291,6 @@ fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
 }
 
 // this takes `my_stat` to avoid having to stat files multiple times.
-// XXX: this should use the impl Trait return type when it is stabilized
-#[allow(clippy::cognitive_complexity)]
 fn du(
     mut my_stat: Stat,
     options: &Options,
@@ -667,7 +665,6 @@ impl StatPrinter {
 }
 
 #[uucore::main]
-#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
@@ -716,10 +713,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
 
-    let (print_tx, rx) = mpsc::channel::<UResult<StatPrintInfo>>();
-
+    // Use separate thread to print output, so we can print finished results while computation is still running
     let stat_printer = StatPrinter::new(matches.clone(), options.clone(), summarize)?;
-
+    let (print_tx, rx) = mpsc::channel::<UResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
     let excludes = build_exclude_patterns(&matches)?;
