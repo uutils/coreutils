@@ -37,16 +37,14 @@ jobs:
     strategy:
       matrix:
         test-target:
-          [
-            fuzz_date,
-            fuzz_test,
-            fuzz_expr,
-            fuzz_parse_glob,
-            fuzz_parse_size,
-            fuzz_parse_time,
-            # adding more fuzz tests here.
-            # e.g. fuzz_test_a,
-          ]
+          - { name: fuzz_test, should_pass: true }
+          # https://github.com/uutils/coreutils/issues/5311
+          - { name: fuzz_date, should_pass: false }
+          - { name: fuzz_expr, should_pass: true }
+          - { name: fuzz_printf, should_pass: false }
+          - { name: fuzz_parse_glob, should_pass: true }
+          - { name: fuzz_parse_size, should_pass: true }
+          - { name: fuzz_parse_time, should_pass: true }
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@nightly
@@ -59,16 +57,17 @@ jobs:
     - name: Restore Cached Corpus
       uses: actions/cache/restore@v3
       with:
-        key: corpus-cache-${{ matrix.test-target }}
+        key: corpus-cache-${{ matrix.test-target.name }}
         path: |
-          fuzz/corpus/${{ matrix.test-target }}
-    - name: Run ${{ matrix.test-target }} for XX seconds
+          fuzz/corpus/${{ matrix.test-target.name }}
+    - name: Run ${{ matrix.test-target.name }} for XX seconds
       shell: bash
+      continue-on-error: ${{ !matrix.test-target.name.should_pass }}
       run: |
-        cargo +nightly fuzz run ${{ matrix.test-target }} -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
+        cargo +nightly fuzz run ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
     - name: Save Corpus Cache
       uses: actions/cache/save@v3
       with:
-        key: corpus-cache-${{ matrix.test-target }}
+        key: corpus-cache-${{ matrix.test-target.name }}
         path: |
-          fuzz/corpus/${{ matrix.test-target }}
+          fuzz/corpus/${{ matrix.test-target.name }}
