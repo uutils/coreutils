@@ -7,7 +7,7 @@
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
-use std::io::Write;
+use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
 use std::path::PathBuf;
 use std::process;
@@ -15,7 +15,7 @@ use tempfile::tempdir;
 use tempfile::TempDir;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size_u64;
-use uucore::{format_usage, help_about, help_section, help_usage};
+use uucore::{crash, format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("stdbuf.md");
 const USAGE: &str = help_usage!("stdbuf.md");
@@ -66,13 +66,13 @@ struct ProgramOptionsError(String);
     target_os = "netbsd",
     target_os = "dragonflybsd"
 ))]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Ok(("LD_PRELOAD", "so"))
+fn preload_strings() -> (&'static str, &'static str) {
+    ("LD_PRELOAD", "so")
 }
 
 #[cfg(target_vendor = "apple")]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Ok(("DYLD_LIBRARY_PATH", "dylib"))
+fn preload_strings() -> (&'static str, &'static str) {
+    ("DYLD_LIBRARY_PATH", "dylib")
 }
 
 #[cfg(not(any(
@@ -83,11 +83,10 @@ fn preload_strings() -> UResult<(&'static str, &'static str)> {
     target_os = "dragonflybsd",
     target_vendor = "apple"
 )))]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Err(USimpleError::new(
-        1,
-        "Command not supported for this operating system!",
-    ))
+fn preload_strings() -> (&'static str, &'static str) {
+    use uucore::crash;
+
+    crash!(1, "Command not supported for this operating system!")
 }
 
 fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
@@ -103,7 +102,7 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
                 }
             }
             x => parse_size_u64(x).map_or_else(
-                |e| Err(ProgramOptionsError(format!("invalid mode {e}"))),
+                |e| crash!(125, "invalid mode {}", e),
                 |m| {
                     Ok(BufferType::Size(m.try_into().map_err(|_| {
                         ProgramOptionsError(format!(
@@ -129,8 +128,8 @@ fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_typ
     }
 }
 
-fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
-    let (preload, extension) = preload_strings()?;
+fn get_preload_env(tmp_dir: &TempDir) -> io::Result<(String, PathBuf)> {
+    let (preload, extension) = preload_strings();
     let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
 
     let mut file = File::create(&inject_path)?;
@@ -152,7 +151,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let command_params: Vec<&str> = command_values.map(|s| s.as_ref()).collect();
 
     let tmp_dir = tempdir().unwrap();
-    let (preload_env, libstdbuf) = get_preload_env(&tmp_dir)?;
+    let (preload_env, libstdbuf) = get_preload_env(&tmp_dir).map_err_context(String::new)?;
     command.env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", &options.stdin);
     set_command_env(&mut command, "_STDBUF_O", &options.stdout);

@@ -5,22 +5,6 @@ if test "$1" != "--do-it"; then
     ARG="--dry-run --allow-dirty"
 fi
 
-# Function to check if the crate is already published
-is_already_published() {
-    local crate_name=$1
-    local crate_version=$2
-
-    # Use the crates.io API to get the latest version of the crate
-    local latest_published_version
-    latest_published_version=$(curl -s https://crates.io/api/v1/crates/$crate_name | jq -r '.crate.max_version')
-
-    if [ "$latest_published_version" = "$crate_version" ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
 # Figure out any dependencies between the util via Cargo.toml
 # We store this as edges in a graph with each line:
 # [dependent] [dependency]
@@ -51,19 +35,12 @@ TOTAL_ORDER=$(echo -e $PARTIAL_ORDER | tsort | tac)
 # Remove the ROOT node from the start
 TOTAL_ORDER=${TOTAL_ORDER#ROOT}
 
-CRATE_VERSION=$(grep '^version' Cargo.toml | head -n1 | cut -d '"' -f2)
-
 set -e
 for dir in src/uuhelp_parser/ src/uucore_procs/ src/uucore/ src/uu/stdbuf/src/libstdbuf/; do
     (
         cd "$dir"
-        CRATE_NAME=$(grep '^name =' "Cargo.toml" | head -n1 | cut -d '"' -f2)
         #shellcheck disable=SC2086
-        if ! is_already_published "$CRATE_NAME" "$CRATE_VERSION"; then
-            cargo publish $ARG
-        else
-            echo "Skip: $CRATE_NAME $CRATE_VERSION already published"
-        fi
+        cargo publish $ARG
     )
     sleep 2s
 done
@@ -71,13 +48,8 @@ done
 for p in $TOTAL_ORDER; do
     (
         cd "src/uu/$p"
-        CRATE_NAME=$(grep '^name =' "Cargo.toml" | head -n1 | cut -d '"' -f2)
         #shellcheck disable=SC2086
-        if ! is_already_published "$CRATE_NAME" "$CRATE_VERSION"; then
-            cargo publish $ARG
-        else
-            echo "Skip: $CRATE_NAME $CRATE_VERSION already published"
-        fi
+        cargo publish $ARG
     )
 done
 

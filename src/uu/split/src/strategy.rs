@@ -8,7 +8,10 @@
 use crate::{OPT_BYTES, OPT_LINES, OPT_LINE_BYTES, OPT_NUMBER};
 use clap::{parser::ValueSource, ArgMatches};
 use std::fmt;
-use uucore::parse_size::{parse_size_u64, parse_size_u64_max, ParseSizeError};
+use uucore::{
+    display::Quotable,
+    parse_size::{parse_size_u64, parse_size_u64_max, ParseSizeError},
+};
 
 /// Sub-strategy of the [`Strategy::Number`]
 /// Splitting a file into a specific number of chunks.
@@ -208,10 +211,10 @@ impl fmt::Display for StrategyError {
             Self::Lines(e) => write!(f, "invalid number of lines: {e}"),
             Self::Bytes(e) => write!(f, "invalid number of bytes: {e}"),
             Self::NumberType(NumberTypeError::NumberOfChunks(s)) => {
-                write!(f, "invalid number of chunks: {s}")
+                write!(f, "invalid number of chunks: {}", s.quote())
             }
             Self::NumberType(NumberTypeError::ChunkNumber(s)) => {
-                write!(f, "invalid chunk number: {s}")
+                write!(f, "invalid chunk number: {}", s.quote())
             }
             Self::MultipleWays => write!(f, "cannot split in more than one way"),
         }
