@@ -557,6 +557,50 @@ struct StatPrinter {
 }
 
 impl StatPrinter {
+    fn new(matches: ArgMatches, options: Options, summarize: bool) -> UResult<Self> {
+        let block_size = read_block_size(
+            matches
+                .get_one::<String>(options::BLOCK_SIZE)
+                .map(|s| s.as_str()),
+        )?;
+
+        let threshold = match matches.get_one::<String>(options::THRESHOLD) {
+            Some(s) => match Threshold::from_str(s) {
+                Ok(t) => Some(t),
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format_error_message(&e, s, options::THRESHOLD),
+                    ))
+                }
+            },
+            None => None,
+        };
+
+        let multiplier: u64 = if matches.get_flag(options::SI) {
+            1000
+        } else {
+            1024
+        };
+
+        let time_format_str =
+            parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?
+                .to_string();
+
+        let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::NULL));
+
+        Ok(Self {
+            matches,
+            threshold,
+            summarize,
+            time_format_str,
+            line_ending,
+            options,
+            multiplier,
+            block_size,
+        })
+    }
+
     fn print_stats(&self, rx: &mpsc::Receiver<StatPrintInfo>) -> UResult<()> {
         let convert_size_fn = get_convert_size_fn(&self.matches);
 
@@ -568,12 +612,17 @@ impl StatPrinter {
             }
         };
 
+        let mut grand_total = 0;
         loop {
             let stat_info = rx.recv();
 
             match stat_info {
                 Ok(stat_info) => {
                     let size = choose_size(&self.matches, &stat_info.stat);
+
+                    if stat_info.depth == 0 {
+                        grand_total += size;
+                    }
 
                     if !self
                         .threshold
@@ -606,6 +655,11 @@ impl StatPrinter {
                 }
                 Err(_) => break,
             }
+        }
+
+        if self.options.total {
+            print!("{}\ttotal", convert_size(grand_total));
+            print!("{}", self.line_ending);
         }
 
         Ok(())
@@ -662,71 +716,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
 
-    let block_size = read_block_size(
-        matches
-            .get_one::<String>(options::BLOCK_SIZE)
-            .map(|s| s.as_str()),
-    )?;
-
-    let threshold = match matches.get_one::<String>(options::THRESHOLD) {
-        Some(s) => match Threshold::from_str(s) {
-            Ok(t) => Some(t),
-            Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    format_error_message(&e, s, options::THRESHOLD),
-                ))
-            }
-        },
-        None => None,
-    };
-
-    let multiplier: u64 = if matches.get_flag(options::SI) {
-        1000
-    } else {
-        1024
-    };
-
-    let convert_size_fn = get_convert_size_fn(&matches);
-
-    let convert_size = |size: u64| {
-        if options.inodes {
-            size.to_string()
-        } else {
-            convert_size_fn(size, multiplier, block_size)
-        }
-    };
-
-    let time_format_str =
-        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?;
-
-    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::NULL));
-
     let (print_tx, rx) = mpsc::channel::<StatPrintInfo>();
 
-    let printing_thread = thread::spawn({
-        let matches = matches.clone();
-        let time_format_str = time_format_str.to_owned();
-        let options = options.clone();
-        move || {
-            let stat_printer = StatPrinter {
-                matches,
-                threshold,
-                summarize,
-                time_format_str,
-                line_ending,
-                options,
-                multiplier,
-                block_size,
-            };
+    let stat_printer = StatPrinter::new(matches.clone(), options.clone(), summarize)?;
 
-            stat_printer.print_stats(&rx)
-        }
-    });
+    let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
     let excludes = build_exclude_patterns(&matches)?;
 
-    let mut grand_total = 0;
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
         if !&excludes.is_empty() {
@@ -751,9 +748,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             let stat = du(stat, &options, 0, &mut seen_inodes, &excludes, &print_tx)?;
 
-            // Sum up all the returned `Stat`s and display results
-            grand_total += choose_size(&matches, &stat);
-
             print_tx
                 .send(StatPrintInfo { stat, depth: 0 })
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
@@ -772,11 +766,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     printing_thread
         .join()
         .map_err(|_| USimpleError::new(1, "Printing thread panicked."))??;
-
-    if options.total {
-        print!("{}\ttotal", convert_size(grand_total));
-        print!("{line_ending}");
-    }
 
     Ok(())
 }
