@@ -108,7 +108,6 @@ struct FileInfo {
     dev_id: u64,
 }
 
-#[derive(Clone)]
 struct Stat {
     path: PathBuf,
     is_dir: bool,
@@ -365,9 +364,7 @@ fn du(
                                     print_tx,
                                 )?;
 
-                                if !options.separate_dirs
-                                    && this_stat.path.parent().unwrap() == my_stat.path
-                                {
+                                if !options.separate_dirs {
                                     my_stat.size += this_stat.size;
                                     my_stat.blocks += this_stat.blocks;
                                     my_stat.inodes += this_stat.inodes;
@@ -377,7 +374,7 @@ fn du(
                                         stat: this_stat,
                                         depth: depth + 1,
                                     })
-                                    .unwrap();
+                                    .map_err(|e| USimpleError::new(1, e.to_string()))?;
                             } else {
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
@@ -388,7 +385,7 @@ fn du(
                                             stat: this_stat,
                                             depth: depth + 1,
                                         })
-                                        .unwrap();
+                                        .map_err(|e| USimpleError::new(1, e.to_string()))?;
                                 }
                             }
                         }
@@ -548,65 +545,71 @@ struct StatPrintInfo {
     depth: usize,
 }
 
-fn print_stats(
+struct StatPrinter {
     matches: ArgMatches,
     threshold: Option<Threshold>,
     summarize: bool,
     time_format_str: String,
     line_ending: LineEnding,
     options: Options,
-    rx: mpsc::Receiver<StatPrintInfo>,
     multiplier: u64,
     block_size: u64,
-) -> UResult<()> {
-    let convert_size_fn = get_convert_size_fn(&matches);
+}
 
-    let convert_size = |size: u64| {
-        if options.inodes {
-            size.to_string()
-        } else {
-            convert_size_fn(size, multiplier, block_size)
-        }
-    };
+impl StatPrinter {
+    fn print_stats(&self, rx: &mpsc::Receiver<StatPrintInfo>) -> UResult<()> {
+        let convert_size_fn = get_convert_size_fn(&self.matches);
 
-    loop {
-        let stat_info = rx.recv();
+        let convert_size = |size: u64| {
+            if self.options.inodes {
+                size.to_string()
+            } else {
+                convert_size_fn(size, self.multiplier, self.block_size)
+            }
+        };
 
-        match stat_info {
-            Ok(stat_info) => {
-                let size = choose_size(&matches, &stat_info.stat);
+        loop {
+            let stat_info = rx.recv();
 
-                if !threshold.map_or(false, |threshold| threshold.should_exclude(size))
-                    && options
-                        .max_depth
-                        .map_or(true, |max_depth| stat_info.depth <= max_depth)
-                {
-                    if !summarize || stat_info.depth == 0 {
-                        if matches.contains_id(options::TIME) {
+            match stat_info {
+                Ok(stat_info) => {
+                    let size = choose_size(&self.matches, &stat_info.stat);
+
+                    if !self
+                        .threshold
+                        .map_or(false, |threshold| threshold.should_exclude(size))
+                        && self
+                            .options
+                            .max_depth
+                            .map_or(true, |max_depth| stat_info.depth <= max_depth)
+                        && (!self.summarize || stat_info.depth == 0)
+                    {
+                        if self.matches.contains_id(options::TIME) {
                             let tm = {
-                                let secs = matches
+                                let secs = self
+                                    .matches
                                     .get_one::<String>(options::TIME)
                                     .map(|s| get_time_secs(s, &stat_info.stat))
                                     .transpose()?
                                     .unwrap_or(stat_info.stat.modified);
                                 DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
                             };
-                            let time_str = tm.format(&time_format_str).to_string();
+                            let time_str = tm.format(&self.time_format_str).to_string();
                             print!("{}\t{}\t", convert_size(size), time_str);
                         } else {
                             print!("{}\t", convert_size(size));
                         }
 
                         print_verbatim(&stat_info.stat.path).unwrap();
-                        print!("{}", line_ending);
+                        print!("{}", self.line_ending);
                     }
                 }
+                Err(_) => break,
             }
-            Err(_) => break,
         }
-    }
 
-    Ok(())
+        Ok(())
+    }
 }
 
 #[uucore::main]
@@ -706,17 +709,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let time_format_str = time_format_str.to_owned();
         let options = options.clone();
         move || {
-            print_stats(
+            let stat_printer = StatPrinter {
                 matches,
                 threshold,
                 summarize,
                 time_format_str,
                 line_ending,
                 options,
-                rx,
                 multiplier,
                 block_size,
-            )
+            };
+
+            stat_printer.print_stats(&rx)
         }
     });
 
@@ -750,7 +754,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // Sum up all the returned `Stat`s and display results
             grand_total += choose_size(&matches, &stat);
 
-            print_tx.send(StatPrintInfo { stat, depth: 0 }).unwrap();
+            print_tx
+                .send(StatPrintInfo { stat, depth: 0 })
+                .map_err(|e| USimpleError::new(1, e.to_string()))?;
         } else {
             show_error!(
                 "{}: {}",
@@ -763,7 +769,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     drop(print_tx);
 
-    let _ = printing_thread.join().unwrap();
+    printing_thread
+        .join()
+        .map_err(|_| USimpleError::new(1, "Printing thread panicked."))??;
 
     if options.total {
         print!("{}\ttotal", convert_size(grand_total));
