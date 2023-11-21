@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase fghij klmno pqrst uvwxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc
 
 use crate::common::util::{AtPath, TestScenario};
 use rand::{thread_rng, Rng, SeedableRng};
@@ -705,53 +705,40 @@ fn test_split_overflow_bytes_size() {
 }
 
 #[test]
-#[cfg(target_pointer_width = "32")]
-fn test_split_chunks_num_chunks_oversized_32() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-    at.touch("file");
-    scene
-        .ucmd()
-        .args(&["--number", "5000000000", "sixhundredfiftyonebytes.txt"])
-        .fails()
-        .code_is(1)
-        .stderr_only("split: Number of chunks too big\n");
-}
-
-#[test]
 fn test_split_stdin_num_chunks() {
-    new_ucmd!()
-        .args(&["--number=1"])
-        .fails()
-        .code_is(1)
-        .stderr_only("split: -: cannot determine file size\n");
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--number=1"]).pipe_in("").succeeds();
+    assert_eq!(file_read(&at, "xaa"), "");
+    assert!(!at.plus("xab").exists());
 }
 
 #[test]
 fn test_split_stdin_num_kth_chunk() {
     new_ucmd!()
         .args(&["--number=1/2"])
-        .fails()
-        .code_is(1)
-        .stderr_only("split: -: cannot determine file size\n");
+        .pipe_in("1\n2\n3\n4\n5\n")
+        .succeeds()
+        .stdout_only("1\n2\n3");
 }
 
 #[test]
 fn test_split_stdin_num_line_chunks() {
-    new_ucmd!()
-        .args(&["--number=l/2"])
-        .fails()
-        .code_is(1)
-        .stderr_only("split: -: cannot determine file size\n");
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--number=l/2"])
+        .pipe_in("1\n2\n3\n4\n5\n")
+        .succeeds();
+    assert_eq!(file_read(&at, "xaa"), "1\n2\n3\n");
+    assert_eq!(file_read(&at, "xab"), "4\n5\n");
+    assert!(!at.plus("xac").exists());
 }
 
 #[test]
 fn test_split_stdin_num_kth_line_chunk() {
     new_ucmd!()
         .args(&["--number=l/2/5"])
-        .fails()
-        .code_is(1)
-        .stderr_only("split: -: cannot determine file size\n");
+        .pipe_in("1\n2\n3\n4\n5\n")
+        .succeeds()
+        .stdout_only("2\n");
 }
 
 fn file_read(at: &AtPath, filename: &str) -> String {
@@ -913,6 +900,14 @@ fn test_suffixes_exhausted() {
 }
 
 #[test]
+fn test_suffix_length_req() {
+    new_ucmd!()
+        .args(&["-n", "100", "-a", "1", "asciilowercase.txt"])
+        .fails()
+        .stderr_only("split: the suffix length needs to be at least 2\n");
+}
+
+#[test]
 fn test_verbose() {
     new_ucmd!()
         .args(&["-b", "5", "--verbose", "asciilowercase.txt"])
@@ -937,11 +932,11 @@ fn test_number_n() {
         s
     };
     ucmd.args(&["-n", "5", "asciilowercase.txt"]).succeeds();
-    assert_eq!(file_read("xaa"), "abcde");
-    assert_eq!(file_read("xab"), "fghij");
-    assert_eq!(file_read("xac"), "klmno");
-    assert_eq!(file_read("xad"), "pqrst");
-    assert_eq!(file_read("xae"), "uvwxyz\n");
+    assert_eq!(file_read("xaa"), "abcdef");
+    assert_eq!(file_read("xab"), "ghijkl");
+    assert_eq!(file_read("xac"), "mnopq");
+    assert_eq!(file_read("xad"), "rstuv");
+    assert_eq!(file_read("xae"), "wxyz\n");
     #[cfg(unix)]
     new_ucmd!()
         .args(&["--number=100", "/dev/null"])
@@ -954,11 +949,11 @@ fn test_number_kth_of_n() {
     new_ucmd!()
         .args(&["--number=3/5", "asciilowercase.txt"])
         .succeeds()
-        .stdout_only("klmno");
+        .stdout_only("mnopq");
     new_ucmd!()
         .args(&["--number=5/5", "asciilowercase.txt"])
         .succeeds()
-        .stdout_only("uvwxyz\n");
+        .stdout_only("wxyz\n");
     new_ucmd!()
         .args(&["-e", "--number=99/100", "asciilowercase.txt"])
         .succeeds()
@@ -1046,11 +1041,11 @@ fn test_split_number_with_io_blksize() {
     };
     ucmd.args(&["-n", "5", "asciilowercase.txt", "---io-blksize", "1024"])
         .succeeds();
-    assert_eq!(file_read("xaa"), "abcde");
-    assert_eq!(file_read("xab"), "fghij");
-    assert_eq!(file_read("xac"), "klmno");
-    assert_eq!(file_read("xad"), "pqrst");
-    assert_eq!(file_read("xae"), "uvwxyz\n");
+    assert_eq!(file_read("xaa"), "abcdef");
+    assert_eq!(file_read("xab"), "ghijkl");
+    assert_eq!(file_read("xac"), "mnopq");
+    assert_eq!(file_read("xad"), "rstuv");
+    assert_eq!(file_read("xae"), "wxyz\n");
 }
 
 #[test]
@@ -1063,6 +1058,32 @@ fn test_split_default_with_io_blksize() {
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
+}
+
+#[test]
+fn test_split_invalid_io_blksize() {
+    new_ucmd!()
+        .args(&["---io-blksize=XYZ", "threebytes.txt"])
+        .fails()
+        .stderr_only("split: invalid IO block size: 'XYZ'\n");
+    new_ucmd!()
+        .args(&["---io-blksize=5000000000", "threebytes.txt"])
+        .fails()
+        .stderr_only("split: invalid IO block size: '5000000000'\n");
+    #[cfg(target_pointer_width = "32")]
+    new_ucmd!()
+        .args(&["---io-blksize=2146435072", "threebytes.txt"])
+        .fails()
+        .stderr_only("split: invalid IO block size: '2146435072'\n");
+}
+
+#[test]
+fn test_split_number_oversized_stdin() {
+    new_ucmd!()
+        .args(&["--number=3", "---io-blksize=600"])
+        .pipe_in_fixture("sixhundredfiftyonebytes.txt")
+        .fails()
+        .stderr_only("split: -: cannot determine input size\n");
 }
 
 #[test]
@@ -1158,6 +1179,18 @@ fn test_elide_dev_null() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_dev_zero() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n", "3", "/dev/zero"])
+        .fails()
+        .stderr_only("split: /dev/zero: cannot determine file size\n");
+    assert!(!at.plus("xaa").exists());
+    assert!(!at.plus("xab").exists());
+    assert!(!at.plus("xac").exists());
+}
+
+#[test]
 fn test_lines() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1180,6 +1213,15 @@ fn test_lines_kth() {
         .args(&["-n", "l/3/10", "onehundredlines.txt"])
         .succeeds()
         .stdout_only("20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_lines_kth_dev_null() {
+    new_ucmd!()
+        .args(&["-n", "l/3/10", "/dev/null"])
+        .succeeds()
+        .stdout_only("");
 }
 
 #[test]
@@ -1321,7 +1363,7 @@ fn test_numeric_suffix() {
 }
 
 #[test]
-fn test_numeric_suffix_alias() {
+fn test_numeric_suffix_inferred() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "--numeric=9", "threebytes.txt"])
         .succeeds()

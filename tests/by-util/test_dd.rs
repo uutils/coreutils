@@ -1470,7 +1470,7 @@ fn test_seek_output_fifo() {
         .args(&["count=0", "seek=1", "of=fifo", "status=noxfer"])
         .run_no_wait();
 
-    std::fs::write(at.plus("fifo"), &vec![0; 512]).unwrap();
+    std::fs::write(at.plus("fifo"), vec![0; 512]).unwrap();
 
     child
         .wait()
@@ -1492,7 +1492,7 @@ fn test_skip_input_fifo() {
         .args(&["count=0", "skip=1", "if=fifo", "status=noxfer"])
         .run_no_wait();
 
-    std::fs::write(at.plus("fifo"), &vec![0; 512]).unwrap();
+    std::fs::write(at.plus("fifo"), vec![0; 512]).unwrap();
 
     child
         .wait()
