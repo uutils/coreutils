@@ -16,7 +16,6 @@ use std::fs::File;
 use std::fs::Metadata;
 use std::io::BufRead;
 use std::io::BufReader;
-use std::io::Result;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -32,11 +31,11 @@ use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
 use uucore::error::FromIo;
-use uucore::error::{set_exit_code, UError, UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -121,7 +120,7 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: &Path, options: &Options) -> Result<Self> {
+    fn new(path: &Path, options: &Options) -> std::io::Result<Self> {
         // Determine whether to dereference (follow) the symbolic link
         let should_dereference = match &options.dereference {
             Deref::All => true,
@@ -300,15 +299,15 @@ fn du(
     depth: usize,
     seen_inodes: &mut HashSet<FileInfo>,
     exclude: &[Pattern],
-    print_tx: &mpsc::Sender<StatPrintInfo>,
-) -> UResult<Stat> {
+    print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
+) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
     if my_stat.is_dir {
         let read = match fs::read_dir(&my_stat.path) {
             Ok(read) => read,
             Err(e) => {
-                show!(
-                    e.map_err_context(|| format!("cannot read directory {}", my_stat.path.quote()))
-                );
+                print_tx.send(Err(e.map_err_context(|| {
+                    format!("cannot read directory {}", my_stat.path.quote())
+                })))?;
                 return Ok(my_stat);
             }
         };
@@ -369,32 +368,28 @@ fn du(
                                     my_stat.blocks += this_stat.blocks;
                                     my_stat.inodes += this_stat.inodes;
                                 }
-                                print_tx
-                                    .send(StatPrintInfo {
-                                        stat: this_stat,
-                                        depth: depth + 1,
-                                    })
-                                    .map_err(|e| USimpleError::new(1, e.to_string()))?;
+                                print_tx.send(Ok(StatPrintInfo {
+                                    stat: this_stat,
+                                    depth: depth + 1,
+                                }))?;
                             } else {
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
                                 if options.all {
-                                    print_tx
-                                        .send(StatPrintInfo {
-                                            stat: this_stat,
-                                            depth: depth + 1,
-                                        })
-                                        .map_err(|e| USimpleError::new(1, e.to_string()))?;
+                                    print_tx.send(Ok(StatPrintInfo {
+                                        stat: this_stat,
+                                        depth: depth + 1,
+                                    }))?;
                                 }
                             }
                         }
-                        Err(e) => show!(
-                            e.map_err_context(|| format!("cannot access {}", entry.path().quote()))
-                        ),
+                        Err(e) => print_tx.send(Err(e.map_err_context(|| {
+                            format!("cannot access {}", entry.path().quote())
+                        })))?,
                     }
                 }
-                Err(error) => show_error!("{}", error),
+                Err(error) => print_tx.send(Err(error.into()))?,
             }
         }
     }
@@ -607,31 +602,34 @@ impl StatPrinter {
         })
     }
 
-    fn print_stats(&self, rx: &mpsc::Receiver<StatPrintInfo>) -> UResult<()> {
+    fn print_stats(&self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
         let mut grand_total = 0;
         loop {
-            let stat_info = rx.recv();
+            let received = rx.recv();
 
-            match stat_info {
-                Ok(stat_info) => {
-                    let size = choose_size(&self.matches, &stat_info.stat);
+            match received {
+                Ok(message) => match message {
+                    Ok(stat_info) => {
+                        let size = choose_size(&self.matches, &stat_info.stat);
 
-                    if stat_info.depth == 0 {
-                        grand_total += size;
+                        if stat_info.depth == 0 {
+                            grand_total += size;
+                        }
+
+                        if !self
+                            .threshold
+                            .map_or(false, |threshold| threshold.should_exclude(size))
+                            && self
+                                .options
+                                .max_depth
+                                .map_or(true, |max_depth| stat_info.depth <= max_depth)
+                            && (!self.summarize || stat_info.depth == 0)
+                        {
+                            self.print_stat(&stat_info.stat, size)?;
+                        }
                     }
-
-                    if !self
-                        .threshold
-                        .map_or(false, |threshold| threshold.should_exclude(size))
-                        && self
-                            .options
-                            .max_depth
-                            .map_or(true, |max_depth| stat_info.depth <= max_depth)
-                        && (!self.summarize || stat_info.depth == 0)
-                    {
-                        self.print_stat(&stat_info.stat, size)?;
-                    }
-                }
+                    Err(e) => show!(e),
+                },
                 Err(_) => break,
             }
         }
@@ -718,7 +716,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
 
-    let (print_tx, rx) = mpsc::channel::<StatPrintInfo>();
+    let (print_tx, rx) = mpsc::channel::<UResult<StatPrintInfo>>();
 
     let stat_printer = StatPrinter::new(matches.clone(), options.clone(), summarize)?;
 
@@ -748,18 +746,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if let Some(inode) = stat.inode {
                 seen_inodes.insert(inode);
             }
-            let stat = du(stat, &options, 0, &mut seen_inodes, &excludes, &print_tx)?;
+            let stat = du(stat, &options, 0, &mut seen_inodes, &excludes, &print_tx)
+                .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
             print_tx
-                .send(StatPrintInfo { stat, depth: 0 })
+                .send(Ok(StatPrintInfo { stat, depth: 0 }))
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
         } else {
-            show_error!(
-                "{}: {}",
-                path.to_string_lossy().maybe_quote(),
-                "No such file or directory"
-            );
-            set_exit_code(1);
+            print_tx
+                .send(Err(USimpleError::new(
+                    1,
+                    format!(
+                        "{}: No such file or directory",
+                        path.to_string_lossy().maybe_quote()
+                    ),
+                )))
+                .map_err(|e| USimpleError::new(1, e.to_string()))?;
         }
     }
 
@@ -772,7 +774,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-fn get_time_secs(s: &str, stat: &Stat) -> std::result::Result<u64, DuError> {
+fn get_time_secs(s: &str, stat: &Stat) -> Result<u64, DuError> {
     let secs = match s {
         "ctime" | "status" => stat.modified,
         "access" | "atime" | "use" => stat.accessed,
@@ -1035,7 +1037,7 @@ enum Threshold {
 impl FromStr for Threshold {
     type Err = ParseSizeError;
 
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let offset = usize::from(s.starts_with(&['-', '+'][..]));
 
         let size = parse_size_u64(&s[offset..])?;
