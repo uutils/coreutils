@@ -8,7 +8,8 @@ use cpp::cpp;
 use libc::{c_char, c_int, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
 use std::env;
 use std::ptr;
-use uucore::crash;
+use uucore::error::USimpleError;
+use uucore::show;
 
 cpp! {{
     #include <cstdio>
@@ -38,10 +39,10 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         "0" => (_IONBF, 0_usize),
         "L" => (_IOLBF, 0_usize),
         input => {
-            let buff_size: usize = match input.parse() {
-                Ok(num) => num,
-                Err(e) => crash!(1, "incorrect size of buffer!: {}", e),
-            };
+            let buff_size: usize = input
+                .parse()
+                .map_err(|e| format!("incorrect size of buffer!: {}", e))
+                .unwrap();
             (_IOFBF, buff_size as size_t)
         }
     };
@@ -52,7 +53,7 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         res = libc::setvbuf(stream, buffer, mode, size);
     }
     if res != 0 {
-        crash!(res, "error while calling setvbuf!");
+        show!(USimpleError::new(res, "error while calling setvbuf!"));
     }
 }
 
