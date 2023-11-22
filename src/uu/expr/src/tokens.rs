@@ -16,6 +16,8 @@
 
 // spell-checker:ignore (ToDO) paren
 
+use uucore::display::Quotable;
+
 #[derive(Debug, Clone)]
 pub enum Token {
     Value {
@@ -89,18 +91,36 @@ pub fn strings_to_tokens(strings: &[&str]) -> Result<Vec<(usize, Token)>, String
 
             "|" => Token::new_infix_op(s, true, 1),
 
-            "match" | "index" => Token::PrefixOp {
-                arity: 2,
-                value: s.to_string(),
-            },
-            "substr" => Token::PrefixOp {
-                arity: 3,
-                value: s.to_string(),
-            },
-            "length" => Token::PrefixOp {
-                arity: 1,
-                value: s.to_string(),
-            },
+            "match" | "index" => {
+                if tok_idx == 1 {
+                    Token::PrefixOp {
+                        arity: 2,
+                        value: s.to_string(),
+                    }
+                } else {
+                    return Err(format!("syntax error: unexpected argument {}", s.quote()));
+                }
+            }
+            "substr" => {
+                if tok_idx == 1 {
+                    Token::PrefixOp {
+                        arity: 3,
+                        value: s.to_string(),
+                    }
+                } else {
+                    return Err(format!("syntax error: unexpected argument {}", s.quote()));
+                }
+            }
+            "length" => {
+                if tok_idx == 1 {
+                    Token::PrefixOp {
+                        arity: 1,
+                        value: s.to_string(),
+                    }
+                } else {
+                    return Err(format!("syntax error: unexpected argument {}", s.quote()));
+                }
+            }
 
             _ => Token::new_value(s),
         };
