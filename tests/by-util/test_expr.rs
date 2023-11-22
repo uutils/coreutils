@@ -7,6 +7,14 @@
 use crate::common::util::TestScenario;
 
 #[test]
+fn test_no_arguments() {
+    new_ucmd!()
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: missing operand\n");
+}
+
+#[test]
 fn test_simple_values() {
     // null or 0 => EXIT_VALUE == 1
     new_ucmd!().args(&[""]).fails().code_is(1).stdout_only("\n");
@@ -295,6 +303,12 @@ fn test_substr() {
 
 #[test]
 fn test_invalid_substr() {
+    new_ucmd!()
+        .args(&["56", "substr"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: unexpected argument 'substr'\n");
+
     new_ucmd!()
         .args(&["substr", "abc", "0", "1"])
         .fails()
