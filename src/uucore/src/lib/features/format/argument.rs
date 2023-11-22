@@ -1,7 +1,19 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
 use os_display::Quotable;
 
 use crate::{error::set_exit_code, show_warning};
 
+/// An argument for formatting
+///
+/// Each of these variants is only accepted by their respective directives. For
+/// example, [`FormatArgument::Char`] requires a `%c` directive.
+///
+/// The [`FormatArgument::Unparsed`] variant contains a string that can be
+/// parsed into other types. This is used by the `printf` utility.
 #[derive(Clone, Debug)]
 pub enum FormatArgument {
     Char(char),

@@ -1,4 +1,9 @@
-// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety intmax ptrdiff
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore (vars) intmax ptrdiff
 
 use crate::quoting_style::{escape_name, QuotingStyle};
 
@@ -11,6 +16,10 @@ use super::{
 };
 use std::{fmt::Display, io::Write, ops::ControlFlow};
 
+/// A parsed specification for formatting a value
+///
+/// This might require more than one argument to resolve width or precision
+/// values that are given as `*`.
 #[derive(Debug)]
 pub enum Spec {
     Char {

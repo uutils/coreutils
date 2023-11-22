@@ -1,8 +1,19 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+//! Parsing of escape sequences
+
 #[derive(Debug)]
 pub enum EscapedChar {
+    /// A single byte
     Byte(u8),
+    /// A unicode character
     Char(char),
+    /// A character prefixed with a backslash (i.e. an invalid escape sequence)
     Backslash(u8),
+    /// Specifies that the string should stop (`\c`)
     End,
 }
 

@@ -1,23 +1,34 @@
-//! Main entry point for our implementation of printf.
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+//! `printf`-style formatting
 //!
-//! The [`printf`] and [`sprintf`] closely match the behavior of the
+//! Rust has excellent formatting capabilities, but the coreutils require very
+//! specific formatting that needs to work exactly like the GNU utilities.
+//! Naturally, the GNU behavior is based on the C `printf` functionality.
+//!
+//! Additionally, we need support for escape sequences for the `printf` utility.
+//!
+//! The [`printf`] and [`sprintf`] functions closely match the behavior of the
 //! corresponding C functions: the former renders a formatted string
 //! to stdout, the latter renders to a new [`String`] object.
 //!
-//! In addition to the [`printf`] and [`sprintf`] functions, we expose the
-//! [`Format`] struct, which represents a parsed format string. This reduces
-//! the need for parsing a format string multiple times and assures that no
-//! parsing errors occur during writing.
-//!
 //! There are three kinds of parsing that we might want to do:
 //!
-//!  1. Only `printf` specifiers (for e.g. `seq`, `dd`)
-//!  2. Only escape sequences (for e.g. `echo`)
-//!  3. Both `printf` specifiers and escape sequences (for e.g. `printf`)
+//!  1. Parse only `printf` directives (for e.g. `seq`, `dd`)
+//!  2. Parse only escape sequences (for e.g. `echo`)
+//!  3. Parse both `printf` specifiers and escape sequences (for e.g. `printf`)
 //!
-//! This module aims to combine all three use cases.
-
-// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
+//! This module aims to combine all three use cases. An iterator parsing each
+//! of these cases is provided by [`parse_escape_only`], [`parse_spec_only`]
+//! and [`parse_spec_and_escape`], respectively.
+//!
+//! There is a special [`Format`] type, which can be used to parse a format
+//! string containing exactly one directive and does not use any `*` in that
+//! directive. This format can be printed in a type-safe manner without failing
+//! (modulo IO errors).
 
 mod argument;
 mod escape;
@@ -131,6 +142,7 @@ impl<C: FormatChar> FormatItem<C> {
     }
 }
 
+/// Parse a format string containing % directives and escape sequences
 pub fn parse_spec_and_escape(
     fmt: &[u8],
 ) -> impl Iterator<Item = Result<FormatItem<EscapedChar>, FormatError>> + '_ {
@@ -160,7 +172,10 @@ pub fn parse_spec_and_escape(
     })
 }
 
-fn parse_spec_only(fmt: &[u8]) -> impl Iterator<Item = Result<FormatItem<u8>, FormatError>> + '_ {
+/// Parse a format string containing % directives
+pub fn parse_spec_only(
+    fmt: &[u8],
+) -> impl Iterator<Item = Result<FormatItem<u8>, FormatError>> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => None,
@@ -183,7 +198,8 @@ fn parse_spec_only(fmt: &[u8]) -> impl Iterator<Item = Result<FormatItem<u8>, Fo
     })
 }
 
-fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
+/// Parse a format string containing escape sequences
+pub fn parse_escape_only(fmt: &[u8]) -> impl Iterator<Item = EscapedChar> + '_ {
     let mut current = fmt;
     std::iter::from_fn(move || match current {
         [] => None,
