@@ -11,7 +11,7 @@ fn test_no_arguments() {
     new_ucmd!()
         .fails()
         .code_is(2)
-        .stderr_only("expr: missing operand\n");
+        .usage_error("missing operand");
 }
 
 #[test]
