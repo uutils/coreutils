@@ -498,7 +498,8 @@ fn infix_operator_and(values: &[String]) -> String {
 
 fn operator_match(values: &[String]) -> Result<String, String> {
     assert!(values.len() == 2);
-    let re = Regex::with_options(&values[1], RegexOptions::REGEX_OPTION_NONE, Syntax::grep())
+    let re_string = format!("^{}", &values[1]);
+    let re = Regex::with_options(&re_string, RegexOptions::REGEX_OPTION_NONE, Syntax::grep())
         .map_err(|err| err.description().to_string())?;
     Ok(if re.captures_len() > 0 {
         re.captures(&values[0])
