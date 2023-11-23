@@ -5,7 +5,7 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::{
-    error::{UResult, USimpleError},
+    error::{UResult, USimpleError, UUsageError},
     format_usage, help_about, help_section, help_usage,
 };
 
@@ -57,6 +57,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_many::<String>(options::EXPRESSION)
         .map(|v| v.into_iter().map(|s| s.as_ref()).collect::<Vec<_>>())
         .unwrap_or_default();
+
+    if token_strings.is_empty() {
+        return Err(UUsageError::new(2, "missing operand"));
+    }
 
     match process_expr(&token_strings[..]) {
         Ok(expr_result) => print_expr_ok(&expr_result),

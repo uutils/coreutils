@@ -215,7 +215,7 @@ pub fn tokens_to_ast(
         assert!(op_stack.is_empty());
 
         maybe_dump_rpn(&out_stack);
-        let result = ast_from_rpn(&mut out_stack, None);
+        let result = ast_from_rpn(&mut out_stack);
         if out_stack.is_empty() {
             maybe_dump_ast(&result);
             result
@@ -254,13 +254,9 @@ fn maybe_dump_rpn(rpn: &TokenStack) {
     }
 }
 
-fn ast_from_rpn(rpn: &mut TokenStack, op_type: Option<&str>) -> Result<Box<AstNode>, String> {
+fn ast_from_rpn(rpn: &mut TokenStack) -> Result<Box<AstNode>, String> {
     match rpn.pop() {
-        None => Err(match op_type {
-            Some(value) => format!("syntax error: unexpected argument {}", value.quote()),
-            None => "missing operand".to_owned(),
-        }),
-
+        None => Err("syntax error (premature end of expression)".to_owned()),
         Some((token_idx, Token::Value { value })) => Ok(AstNode::new_leaf(token_idx, &value)),
 
         Some((token_idx, Token::InfixOp { value, .. })) => {
@@ -285,7 +281,7 @@ fn maybe_ast_node(
 ) -> Result<Box<AstNode>, String> {
     let mut operands = Vec::with_capacity(arity);
     for _ in 0..arity {
-        let operand = ast_from_rpn(rpn, Some(op_type))?;
+        let operand = ast_from_rpn(rpn)?;
         operands.push(operand);
     }
     operands.reverse();
@@ -335,12 +331,24 @@ fn push_token_to_either_stack(
             }
         }
 
-        Token::PrefixOp { .. } | Token::ParOpen => {
+        Token::ParOpen => {
             if out_stack.is_empty() {
                 op_stack.push((token_idx, token.clone()));
                 Ok(())
             } else {
-                Err(String::from("syntax error (operation should be prefix)"))
+                Err("syntax error: unexpected argument '('".to_string())
+            }
+        }
+
+        Token::PrefixOp { value, .. } => {
+            if out_stack.is_empty() {
+                op_stack.push((token_idx, token.clone()));
+                Ok(())
+            } else {
+                Err(format!(
+                    "syntax error: unexpected argument {}",
+                    value.quote()
+                ))
             }
         }
 

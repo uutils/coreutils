@@ -11,7 +11,7 @@ fn test_no_arguments() {
     new_ucmd!()
         .fails()
         .code_is(2)
-        .stderr_only("expr: missing operand\n");
+        .usage_error("missing operand");
 }
 
 #[test]
@@ -112,7 +112,8 @@ fn test_parenthesis() {
     new_ucmd!()
         .args(&["1", "(", ")"])
         .fails()
-        .stderr_only("expr: syntax error (operation should be prefix)\n");
+        .code_is(2)
+        .stderr_only("expr: syntax error: unexpected argument '('\n");
 }
 
 #[test]
@@ -238,7 +239,8 @@ fn test_index() {
     new_ucmd!()
         .args(&["αbcdef", "index", "α"])
         .fails()
-        .stderr_only("expr: syntax error (operation should be prefix)\n");
+        .code_is(2)
+        .stderr_only("expr: syntax error: unexpected argument 'index'\n");
 }
 
 #[test]
@@ -256,7 +258,8 @@ fn test_length() {
     new_ucmd!()
         .args(&["abcdef", "length"])
         .fails()
-        .stderr_only("expr: syntax error (operation should be prefix)\n");
+        .code_is(2)
+        .stderr_only("expr: syntax error: unexpected argument 'length'\n");
 }
 
 #[test]
@@ -298,17 +301,12 @@ fn test_substr() {
     new_ucmd!()
         .args(&["abc", "substr", "1", "1"])
         .fails()
-        .stderr_only("expr: syntax error (operation should be prefix)\n");
+        .code_is(2)
+        .stderr_only("expr: syntax error: unexpected argument 'substr'\n");
 }
 
 #[test]
 fn test_invalid_substr() {
-    new_ucmd!()
-        .args(&["56", "substr"])
-        .fails()
-        .code_is(2)
-        .stderr_only("expr: syntax error: unexpected argument 'substr'\n");
-
     new_ucmd!()
         .args(&["substr", "abc", "0", "1"])
         .fails()
