@@ -324,7 +324,7 @@ pub(crate) fn copy_directory(
     source_in_command_line: bool,
 ) -> CopyResult<()> {
     if !options.recursive {
-        return Err(format!("omitting directory {}", root.quote()).into());
+        return Err(format!("-r not specified; omitting directory {}", root.quote()).into());
     }
 
     // if no-dereference is enabled and this is a symlink, copy it as a file

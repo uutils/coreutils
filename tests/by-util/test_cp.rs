@@ -131,7 +131,9 @@ fn test_cp_directory_not_recursive() {
         .arg(TEST_COPY_TO_FOLDER)
         .arg(TEST_HELLO_WORLD_DEST)
         .fails()
-        .stderr_contains("omitting directory");
+        .stderr_is(format!(
+            "cp: -r not specified; omitting directory '{TEST_COPY_TO_FOLDER}'\n"
+        ));
 }
 
 #[test]
