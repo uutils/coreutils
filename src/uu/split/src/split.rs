@@ -1167,7 +1167,7 @@ trait ManageOutFiles {
     /// Each OutFile is generated with filename, while the writer for it could be
     /// optional, to be instantiated later by the calling function as needed.
     /// Optional writers could happen in the following situations:
-    /// * in [`n_chunks_by_line`] if `elide_empty_files` parameter is set to `true`
+    /// * in [`n_chunks_by_line`] and [`n_chunks_by_line_round_robin`] if `elide_empty_files` parameter is set to `true`
     /// * if the number of files is greater than system limit for open files
     fn init(num_files: u64, settings: &Settings, is_writer_optional: bool) -> UResult<Self>
     where
@@ -1584,6 +1584,12 @@ fn n_chunks_by_line_round_robin<R>(
 where
     R: BufRead,
 {
+    // Get the size of the input in bytes and compute the number
+    // of bytes per chunk.
+    let initial_buf = &mut Vec::new();
+    let num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
+    let reader = initial_buf.chain(reader);
+
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = std::io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
@@ -1594,16 +1600,22 @@ where
     // This will create each of the underlying files
     // or stdin pipes to child shell/command processes if in `--filter` mode
     if kth_chunk.is_none() {
-        out_files = OutFiles::init(num_chunks, settings, false)?;
+        out_files = OutFiles::init(num_chunks, settings, settings.elide_empty_files)?;
     }
 
     let num_chunks: usize = num_chunks.try_into().unwrap();
     let sep = settings.separator;
     let mut closed_writers = 0;
+    let mut num_bytes_written = 0;
+
     for (i, line_result) in reader.split(sep).enumerate() {
-        // add separator back in at the end of the line
         let mut line = line_result?;
-        line.push(sep);
+        // add separator back in at the end of the line,
+        // since `reader.split(sep)` removes it,
+        // except if the last line did not end with separator character
+        if (num_bytes_written + line.len() as u64) < num_bytes {
+            line.push(sep);
+        }
         let bytes = line.as_slice();
 
         match kth_chunk {
@@ -1627,6 +1639,8 @@ where
                 }
             }
         }
+        let num_line_bytes = bytes.len() as u64;
+        num_bytes_written += num_line_bytes;
     }
 
     Ok(())
