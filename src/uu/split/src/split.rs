@@ -622,7 +622,7 @@ fn custom_write_all<T: Write>(
 
 /// Get the size of the input file in bytes
 /// Used only for subset of `--number=CHUNKS` strategy, as there is a need
-/// to determine input file size upfront in order to know chunk size
+/// to determine input file size upfront in order to estimate the chunk size
 /// to be written into each of N files/chunks:
 /// * N       split into N files based on size of input
 /// * K/N     output Kth of N to stdout
@@ -1141,23 +1141,6 @@ struct OutFile {
     is_new: bool,
 }
 
-// impl OutFile {
-//     /// Get the writer for the output file.
-//     /// Instantiate the writer if it has not been instantiated upfront
-//     /// or temporarily closed to free up system resources
-//     fn get_writer(&mut self, settings: &Settings) -> UResult<&mut BufWriter<Box<dyn Write>>> {
-//         if self.maybe_writer.is_some() {
-//             Ok(self.maybe_writer.as_mut().unwrap())
-//         } else {
-//             // Writer was not instantiated upfront or was temporarily closed due to system resources constraints.
-//             // Instantiate it and record for future use.
-//             self.maybe_writer =
-//                 Some(settings.instantiate_current_writer(self.filename.as_str(), self.is_new)?);
-//             Ok(self.maybe_writer.as_mut().unwrap())
-//         }
-//     }
-// }
-
 /// A set of output files
 /// Used in [`n_chunks_by_byte`], [`n_chunks_by_line`]
 /// and [`n_chunks_by_line_round_robin`] functions.
@@ -1551,7 +1534,11 @@ where
 }
 
 /// Split a file or STDIN into a specific number of chunks by line, but
-/// assign lines via round-robin
+/// assign lines via round-robin.
+/// Note: There is no need to know the size of the input upfront for this method,
+/// since the lines are assigned to chunks randomly and the size of each chunk
+/// does not need to be estimated. As a result, "infinite" inputs are supported
+/// for this method, i.e. `yes | split -n r/10` or `yes | split -n r/3/11`
 ///
 /// In Kth chunk of N mode - writes to stdout the contents of the chunk identified by `kth_chunk`
 ///
@@ -1584,12 +1571,6 @@ fn n_chunks_by_line_round_robin<R>(
 where
     R: BufRead,
 {
-    // Get the size of the input in bytes and compute the number
-    // of bytes per chunk.
-    let initial_buf = &mut Vec::new();
-    let num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
-    let reader = initial_buf.chain(reader);
-
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = std::io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
@@ -1606,23 +1587,20 @@ where
     let num_chunks: usize = num_chunks.try_into().unwrap();
     let sep = settings.separator;
     let mut closed_writers = 0;
-    let mut num_bytes_written = 0;
 
-    for (i, line_result) in reader.split(sep).enumerate() {
-        let mut line = line_result?;
-        // add separator back in at the end of the line,
-        // since `reader.split(sep)` removes it,
-        // except if the last line did not end with separator character
-        if (num_bytes_written + line.len() as u64) < num_bytes {
-            line.push(sep);
-        }
+    let mut i = 0;
+    loop {
+        let line = &mut Vec::new();
+        let num_bytes_read = reader.by_ref().read_until(sep, line)?;
+
+        // if there is nothing else to read - exit the loop
+        if num_bytes_read == 0 {
+            break;
+        };
+
         let bytes = line.as_slice();
-
         match kth_chunk {
             Some(chunk_number) => {
-                // The `.enumerate()` method returns index `i` starting with 0,
-                // but chunk number is given as a 1-indexed number,
-                // so compare to `chunk_number - 1`
                 if (i % num_chunks) == (chunk_number - 1) as usize {
                     stdout_writer.write_all(bytes)?;
                 }
@@ -1632,17 +1610,15 @@ where
                 let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
                 if !writer_stdin_open {
                     closed_writers += 1;
-                    if closed_writers == num_chunks {
-                        // all writers are closed - stop reading
-                        break;
-                    }
                 }
             }
         }
-        let num_line_bytes = bytes.len() as u64;
-        num_bytes_written += num_line_bytes;
+        i += 1;
+        if closed_writers == num_chunks {
+            // all writers are closed - stop reading
+            break;
+        }
     }
-
     Ok(())
 }
 

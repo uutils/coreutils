@@ -2,11 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc
+// spell-checker:ignore xzaaa sixhundredfiftyonebytes ninetyonebytes threebytes asciilowercase ghijkl mnopq rstuv wxyz fivelines twohundredfortyonebytes onehundredlines nbbbb dxen ncccc rlimit NOFILE
 
 use crate::common::util::{AtPath, TestScenario};
 use rand::{thread_rng, Rng, SeedableRng};
 use regex::Regex;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rlimit::Resource;
 #[cfg(not(windows))]
 use std::env;
 use std::path::Path;
@@ -1250,10 +1252,19 @@ fn test_number_by_lines_kth_no_end_sep() {
         .succeeds()
         .stdout_only("2222\n");
     new_ucmd!()
-        .args(&["-e", "-n", "l/8/10"])
+        .args(&["-e", "-n", "l/2/2"])
         .pipe_in("1\n2222\n3\n4")
         .succeeds()
-        .stdout_only("3\n");
+        .stdout_only("3\n4");
+}
+
+#[test]
+fn test_number_by_lines_rr_kth_no_end_sep() {
+    new_ucmd!()
+        .args(&["-n", "r/2/3"])
+        .pipe_in("1\n2\n3\n4\n5")
+        .succeeds()
+        .stdout_only("2\n5");
 }
 
 #[test]
@@ -1624,6 +1635,15 @@ fn test_round_robin() {
 
     assert_eq!(at.read("xaa"), "1\n3\n5\n");
     assert_eq!(at.read("xab"), "2\n4\n");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_round_robin_limited_file_descriptors() {
+    new_ucmd!()
+        .args(&["-n", "r/40", "onehundredlines.txt"])
+        .limit(Resource::NOFILE, 9, 9)
+        .succeeds();
 }
 
 #[test]
