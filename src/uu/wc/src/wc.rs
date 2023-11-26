@@ -167,7 +167,9 @@ impl<'a> Inputs<'a> {
                     None => Ok(Self::Files0From(input)),
                 }
             }
-            (Some(mut files), Some(_)) => Err(WcError::files_disabled(files.next()).into()),
+            (Some(mut files), Some(_)) => {
+                Err(WcError::files_disabled(files.next().unwrap()).into())
+            }
         }
     }
 
@@ -365,8 +367,8 @@ impl WcError {
             None => Self::ZeroLengthFileName,
         }
     }
-    fn files_disabled(first_extra: Option<&OsString>) -> Self {
-        let extra = first_extra.unwrap().to_string_lossy().into_owned().into();
+    fn files_disabled(first_extra: &OsString) -> Self {
+        let extra = first_extra.to_string_lossy().into_owned().into();
         Self::FilesDisabled { extra }
     }
 }
