@@ -500,22 +500,59 @@ fn test_touch_set_date6() {
 }
 
 #[test]
-fn test_touch_set_date7() {
-    let (at, mut ucmd) = at_and_ucmd!();
+fn test_touch_set_with_modifier_ok() {
     let file = "test_touch_set_date";
 
-    ucmd.args(&["-d", "2004-01-16 12:00 +0000", file])
-        .succeeds()
-        .no_stderr();
+    let times = [
+        ("2004-01-16 12:00 +0000", 1_074_254_400),
+        ("2022-05-15 +01 month", 1655251200),
+        ("2022-05-15 00001year-000000001year+\t12months", 1684108800),
+        ("2022-05-15 18:30 -0400 30SecONDS1houR", 1652643030),
+        ("2022-05-15 +0000111MONTHs -   20    yearS 100000day", 9953366400),
+        ("2022-05-15 100 week + 0024HOUrs - 50 minutes", 1713136200),
+        ("2022-05-15 -100 MONTHS 300 days + 20 \t YEARS", 2046816000),
+        ("2022-05-15 0:0:0.0 -100 MONTHS 300 days + 20 \t YEARS", 2046816000),
+    ];
 
-    assert!(at.file_exists(file));
+    for (date, unix) in times {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["-d", date, file])
+            .succeeds()
+            .no_stderr();
 
-    let expected = FileTime::from_unix_time(1_074_254_400, 0);
+        assert!(at.file_exists(file));
 
-    let (atime, mtime) = get_file_times(&at, file);
-    assert_eq!(atime, mtime);
-    assert_eq!(atime, expected);
-    assert_eq!(mtime, expected);
+        let expected = FileTime::from_unix_time(unix, 0);
+
+        let (atime, mtime) = get_file_times(&at, file);
+        assert_eq!(atime, mtime);
+        assert_eq!(atime, expected);
+        assert_eq!(mtime, expected);
+    }
+}
+
+#[test]
+fn test_touch_set_with_modifier_err() {
+    let file = "test_touch_set_date";
+
+    let times = [
+        ("2022-05-15", "100000000000000000000000000000000000000 Years"),
+        ("2022-05-15", "1000"),
+        ("2022-05-15", "1000 [YEARS]"),
+        ("2022-05-15", "-100 Years + 20.0 days "),
+        ("2022-05-15", "days + 10 weeks"),
+        ("2022-05-15", "768614336404564651 years"),
+        ("2022-05-15", "15250284452472 weeks"),
+        ("2022-05-15", "9223372036854775808 days ")
+    ];
+
+    for (date, modifier) in times {
+        let (_, mut ucmd) = at_and_ucmd!();
+        let date_arg = format!("{}{}", date, modifier);
+        ucmd.args(&["-d", &date_arg, file])
+            .fails()
+            .stderr_contains(format!("touch: Unable to parse modifier: {}", modifier));
+    }
 }
 
 /// Test for setting the date by a relative time unit.
