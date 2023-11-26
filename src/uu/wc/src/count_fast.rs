@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// cSpell:ignore sysconf
 use crate::word_count::WordCount;
 
 use super::WordCountable;
@@ -11,7 +13,7 @@ use std::fs::OpenOptions;
 use std::io::{self, ErrorKind, Read};
 
 #[cfg(unix)]
-use libc::S_IFREG;
+use libc::{sysconf, S_IFREG, _SC_PAGESIZE};
 #[cfg(unix)]
 use nix::sys::stat;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -87,11 +89,25 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // If stat.st_size = 0 then
             //  - either the size is 0
             //  - or the size is unknown.
-            // The second case happens for files in pseudo-filesystems. For
-            // example with /proc/version and /sys/kernel/profiling. So,
-            // if it is 0 we don't report that and instead do a full read.
+            // The second case happens for files in pseudo-filesystems.
+            // For example with /proc/version.
+            // So, if it is 0 we don't report that and instead do a full read.
+            //
+            // Another thing to consider for files in pseudo-filesystems like /proc, /sys
+            // and similar is that they could report `st_size` greater than actual content.
+            // For example /sys/kernel/profiling could report `st_size` equal to
+            // system page size (typically 4096 on 64bit system), while it's file content
+            // would count up only to a couple of bytes.
+            // This condition usually occurs for files in pseudo-filesystems like /proc, /sys
+            // that report `st_size` in the multiples of system page size.
+            // In such cases - fall back on full read
             if (stat.st_mode as libc::mode_t & S_IFREG) != 0 && stat.st_size > 0 {
-                return (stat.st_size as usize, None);
+                let sys_page_size = unsafe { sysconf(_SC_PAGESIZE) as usize };
+                if stat.st_size as usize % sys_page_size > 0 {
+                    // regular file or file from /proc, /sys and similar pseudo-filesystems
+                    // with size that is NOT a multiple of system page size
+                    return (stat.st_size as usize, None);
+                }
             }
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
