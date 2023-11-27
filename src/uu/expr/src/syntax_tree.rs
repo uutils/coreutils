@@ -13,6 +13,7 @@
 use num_bigint::BigInt;
 use num_traits::Zero;
 use onig::{Regex, RegexOptions, Syntax};
+use uucore::display::Quotable;
 
 use crate::tokens::Token;
 
@@ -256,7 +257,6 @@ fn maybe_dump_rpn(rpn: &TokenStack) {
 fn ast_from_rpn(rpn: &mut TokenStack) -> Result<Box<AstNode>, String> {
     match rpn.pop() {
         None => Err("syntax error (premature end of expression)".to_owned()),
-
         Some((token_idx, Token::Value { value })) => Ok(AstNode::new_leaf(token_idx, &value)),
 
         Some((token_idx, Token::InfixOp { value, .. })) => {
@@ -331,9 +331,25 @@ fn push_token_to_either_stack(
             }
         }
 
-        Token::PrefixOp { .. } | Token::ParOpen => {
-            op_stack.push((token_idx, token.clone()));
-            Ok(())
+        Token::ParOpen => {
+            if out_stack.is_empty() {
+                op_stack.push((token_idx, token.clone()));
+                Ok(())
+            } else {
+                Err("syntax error: unexpected argument '('".to_string())
+            }
+        }
+
+        Token::PrefixOp { value, .. } => {
+            if out_stack.is_empty() {
+                op_stack.push((token_idx, token.clone()));
+                Ok(())
+            } else {
+                Err(format!(
+                    "syntax error: unexpected argument {}",
+                    value.quote()
+                ))
+            }
         }
 
         Token::ParClose => move_till_match_paren(out_stack, op_stack),
@@ -482,7 +498,8 @@ fn infix_operator_and(values: &[String]) -> String {
 
 fn operator_match(values: &[String]) -> Result<String, String> {
     assert!(values.len() == 2);
-    let re = Regex::with_options(&values[1], RegexOptions::REGEX_OPTION_NONE, Syntax::grep())
+    let re_string = format!("^{}", &values[1]);
+    let re = Regex::with_options(&re_string, RegexOptions::REGEX_OPTION_NONE, Syntax::grep())
         .map_err(|err| err.description().to_string())?;
     Ok(if re.captures_len() > 0 {
         re.captures(&values[0])
