@@ -379,6 +379,17 @@ impl std::ops::AddAssign for WriteStat {
     }
 }
 
+impl std::ops::Add for WriteStat {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Self {
+            writes_complete: self.writes_complete + other.writes_complete,
+            writes_partial: self.writes_partial + other.writes_partial,
+            bytes_total: self.bytes_total + other.bytes_total,
+        }
+    }
+}
+
 /// How much detail to report when printing transfer statistics.
 ///
 /// This corresponds to the available settings of the `status`
