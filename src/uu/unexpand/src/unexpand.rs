@@ -218,7 +218,7 @@ fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
             Ok(a) => a,
             Err(e) => {
                 let err = format!("{}: {}", path.maybe_quote(), e);
-                return Err(USimpleError::new(1,err));
+                return Err(USimpleError::new(1, err));
             }
         };
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
