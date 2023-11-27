@@ -28,7 +28,6 @@ pub enum UnsignedIntVariant {
 }
 
 #[derive(Clone, Copy, Debug)]
-
 pub enum FloatVariant {
     Decimal,
     Scientific,
