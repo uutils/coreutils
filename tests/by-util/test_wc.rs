@@ -423,7 +423,8 @@ fn test_files_from_pseudo_filesystem() {
 
 #[test]
 fn test_files0_disabled_files_argument() {
-    const MSG: &str = "file operands cannot be combined with --files0-from";
+    const MSG: &str =
+        "extra operand 'lorem_ipsum.txt'\nfile operands cannot be combined with --files0-from";
     new_ucmd!()
         .args(&["--files0-from=files0_list.txt"])
         .arg("lorem_ipsum.txt")
