@@ -5,7 +5,7 @@
 // spell-checker:ignore (ToDO) IOFBF IOLBF IONBF cstdio setvbuf
 
 use cpp::cpp;
-use libc::{c_char, c_int, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
+use libc::{c_char, c_int, fileno, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
 use std::env;
 use std::ptr;
 
@@ -54,7 +54,11 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         res = libc::setvbuf(stream, buffer, mode, size);
     }
     if res != 0 {
-        eprintln!("could not set buffering of {:?} to mode {}", stream, mode);
+        eprintln!(
+            "could not set buffering of {} to mode {}",
+            unsafe { fileno(stream) },
+            mode
+        );
     }
 }
 
