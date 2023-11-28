@@ -5,10 +5,8 @@
 
 // spell-checker:ignore (ToDO) INFTY MULT accum breakwords linebreak linebreaking linebreaks linelen maxlength minlength nchars ostream overlen parasplit plass posn powf punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen
 
-use std::cmp;
-use std::i64;
 use std::io::{BufWriter, Stdout, Write};
-use std::mem;
+use std::{cmp, i64, mem};
 
 use uucore::crash;
 
@@ -46,7 +44,7 @@ pub fn break_lines(
     ostream: &mut BufWriter<Stdout>,
 ) -> std::io::Result<()> {
     // indent
-    let p_indent = &para.indent_str[..];
+    let p_indent = &para.indent_str;
     let p_indent_len = para.indent_len;
 
     // words
@@ -55,14 +53,12 @@ pub fn break_lines(
 
     // the first word will *always* appear on the first line
     // make sure of this here
-    let (w, w_len) = match p_words_words.next() {
-        Some(winfo) => (winfo.word, winfo.word_nchars),
-        None => {
-            return ostream.write_all(b"\n");
-        }
+    let Some(winfo) = p_words_words.next() else {
+        return ostream.write_all(b"\n");
     };
+
     // print the init, if it exists, and get its length
-    let p_init_len = w_len
+    let p_init_len = winfo.word_nchars
         + if opts.crown || opts.tagged {
             // handle "init" portion
             ostream.write_all(para.init_str.as_bytes())?;
@@ -75,8 +71,9 @@ pub fn break_lines(
             // except that mail headers get no indent at all
             0
         };
+
     // write first word after writing init
-    ostream.write_all(w.as_bytes())?;
+    ostream.write_all(winfo.word.as_bytes())?;
 
     // does this paragraph require uniform spacing?
     let uniform = para.mail_header || opts.uniform;
@@ -103,15 +100,16 @@ fn break_simple<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     mut iter: T,
     args: &mut BreakArgs<'a>,
 ) -> std::io::Result<()> {
-    iter.try_fold((args.init_len, false), |l, winfo| {
-        accum_words_simple(args, l, winfo)
+    iter.try_fold((args.init_len, false), |(l, prev_punct), winfo| {
+        accum_words_simple(args, l, prev_punct, winfo)
     })?;
     args.ostream.write_all(b"\n")
 }
 
 fn accum_words_simple<'a>(
     args: &mut BreakArgs<'a>,
-    (l, prev_punct): (usize, bool),
+    l: usize,
+    prev_punct: bool,
     winfo: &'a WordInfo<'a>,
 ) -> std::io::Result<(usize, bool)> {
     // compute the length of this word, considering how tabs will expand at this position on the line
@@ -233,14 +231,14 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
         linebreak: None,
         break_before: false,
         demerits: 0,
-        prev_rat: 0.0f32,
+        prev_rat: 0.0,
         length: args.init_len,
         fresh: false,
     }];
     // this vec holds the current active linebreaks; next_ holds the breaks that will be active for
     // the next word
-    let active_breaks = &mut vec![0];
-    let next_active_breaks = &mut vec![];
+    let mut active_breaks = vec![0];
+    let mut next_active_breaks = vec![];
 
     let stretch = (args.opts.width - args.opts.goal) as isize;
     let minlength = args.opts.goal - stretch as usize;
@@ -248,10 +246,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     let mut is_sentence_start = false;
     let mut least_demerits = 0;
     loop {
-        let w = match iter.next() {
-            None => break,
-            Some(w) => w,
-        };
+        let Some(w) = iter.next() else { break };
 
         // if this is the last word, we don't add additional demerits for this break
         let (is_last_word, is_sentence_end) = match iter.peek() {
@@ -358,13 +353,13 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
             least_demerits = cmp::max(ld_next, 0);
         }
         // swap in new list of active breaks
-        mem::swap(active_breaks, next_active_breaks);
+        mem::swap(&mut active_breaks, &mut next_active_breaks);
         // If this was the last word in a sentence, the next one must be the first in the next.
         is_sentence_start = is_sentence_end;
     }
 
     // return the best path
-    build_best_path(&linebreaks, active_breaks)
+    build_best_path(&linebreaks, &active_breaks)
 }
 
 fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a WordInfo<'a>, bool)> {
