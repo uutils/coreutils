@@ -6,7 +6,6 @@
 // spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use std::cmp;
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
 use std::io::{BufReader, BufWriter, Read, Stdout};
@@ -84,27 +83,32 @@ impl FmtOptions {
         let prefix = matches.get_one::<String>(OPT_PREFIX).map(String::from);
         let anti_prefix = matches.get_one::<String>(OPT_SKIP_PREFIX).map(String::from);
 
-        let mut width = 75;
-        let mut goal = 70;
-        if let Some(w) = matches.get_one::<usize>(OPT_WIDTH) {
-            width = *w;
-            if width > MAX_WIDTH {
-                return Err(USimpleError::new(
-                    1,
-                    format!("invalid width: '{}': Numerical result out of range", width),
-                ));
+        let width_opt = matches.get_one::<usize>(OPT_WIDTH);
+        let goal_opt = matches.get_one::<usize>(OPT_GOAL);
+        let (width, goal) = match (width_opt, goal_opt) {
+            (Some(&w), Some(&g)) => {
+                if g > w {
+                    return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
+                }
+                (w, g)
             }
-            goal = cmp::min(width * DEFAULT_GOAL_TO_WIDTH_RATIO / 100, width - 3);
+            (Some(&w), None) => {
+                let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).min(w - 3);
+                (w, g)
+            }
+            (None, Some(&g)) => {
+                let w = (g * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO).max(g + 3);
+                (w, g)
+            }
+            (None, None) => (75, 70),
         };
 
-        if let Some(g) = matches.get_one::<usize>(OPT_GOAL) {
-            goal = *g;
-            if !matches.contains_id(OPT_WIDTH) {
-                width = cmp::max(goal * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO, goal + 3);
-            } else if goal > width {
-                return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
-            }
-        };
+        if width > MAX_WIDTH {
+            return Err(USimpleError::new(
+                1,
+                format!("invalid width: '{}': Numerical result out of range", width),
+            ));
+        }
 
         let mut tabwidth = 8;
         if let Some(s) = matches.get_one::<String>(OPT_TAB_WIDTH) {
