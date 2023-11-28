@@ -147,32 +147,6 @@ impl FmtOptions {
     }
 }
 
-/// Parse the command line arguments and return the list of files and formatting options.
-///
-/// # Arguments
-///
-/// * `args` - Command line arguments.
-///
-/// # Returns
-///
-/// A tuple containing a vector of file names and a `FmtOptions` struct.
-fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)> {
-    let matches = uu_app().try_get_matches_from(args)?;
-
-    let mut files: Vec<String> = matches
-        .get_many::<String>(options::FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    let fmt_opts = FmtOptions::from_matches(&matches)?;
-
-    if files.is_empty() {
-        files.push("-".to_owned());
-    }
-
-    Ok((files, fmt_opts))
-}
-
 /// Process the content of a file and format it according to the provided options.
 ///
 /// # Arguments
@@ -226,7 +200,14 @@ fn process_file(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let (files, fmt_opts) = parse_arguments(args)?;
+    let matches = uu_app().try_get_matches_from(args)?;
+
+    let files: Vec<String> = matches
+        .get_many::<String>(options::FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or(vec!["-".into()]);
+
+    let fmt_opts = FmtOptions::from_matches(&matches)?;
 
     let mut ostream = BufWriter::new(stdout());
 
