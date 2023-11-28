@@ -10,8 +10,6 @@ use std::i64;
 use std::io::{BufWriter, Stdout, Write};
 use std::mem;
 
-use uucore::crash;
-
 use crate::parasplit::{ParaWords, Paragraph, WordInfo};
 use crate::FmtOptions;
 
