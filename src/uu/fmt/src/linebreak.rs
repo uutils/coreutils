@@ -10,9 +10,7 @@ use std::i64;
 use std::io::{BufWriter, Stdout, Write};
 use std::mem;
 
-use uucore::error::FromIo;
-use uucore::error::UResult;
-use uucore::error::USimpleError;
+use uucore::crash;
 
 use crate::parasplit::{ParaWords, Paragraph, WordInfo};
 use crate::FmtOptions;
@@ -46,7 +44,7 @@ pub fn break_lines(
     para: &Paragraph,
     opts: &FmtOptions,
     ostream: &mut BufWriter<Stdout>,
-) -> UResult<()> {
+) -> std::io::Result<()> {
     // indent
     let p_indent = &para.indent_str[..];
     let p_indent_len = para.indent_len;
@@ -60,7 +58,7 @@ pub fn break_lines(
     let (w, w_len) = match p_words_words.next() {
         Some(winfo) => (winfo.word, winfo.word_nchars),
         None => {
-            return ostream.write_all(b"\n").map_err_context(|| "failed to write output".to_string());
+            return ostream.write_all(b"\n");
         }
     };
     // print the init, if it exists, and get its length
@@ -104,18 +102,18 @@ pub fn break_lines(
 fn break_simple<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     mut iter: T,
     args: &mut BreakArgs<'a>,
-) -> UResult<()> {
+) -> std::io::Result<()> {
     iter.try_fold((args.init_len, false), |l, winfo| {
         accum_words_simple(args, l, winfo)
     })?;
-    args.ostream.write_all(b"\n").map_err_context(|| "failed to write output".to_string())
+    args.ostream.write_all(b"\n")
 }
 
 fn accum_words_simple<'a>(
     args: &mut BreakArgs<'a>,
     (l, prev_punct): (usize, bool),
     winfo: &'a WordInfo<'a>,
-) -> UResult<(usize, bool)> {
+) -> std::io::Result<(usize, bool)> {
     // compute the length of this word, considering how tabs will expand at this position on the line
     let wlen = winfo.word_nchars + args.compute_width(winfo, l, false);
 
@@ -143,12 +141,12 @@ fn accum_words_simple<'a>(
 fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
     mut iter: T,
     args: &mut BreakArgs<'a>,
-) -> UResult<()> {
+) -> std::io::Result<()> {
     // run the algorithm to get the breakpoints
-    let breakpoints = find_kp_breakpoints(iter.clone(), args)?;
+    let breakpoints = find_kp_breakpoints(iter.clone(), args);
 
     // iterate through the breakpoints (note that breakpoints is in reverse break order, so we .rev() it
-    let result: UResult<(bool, bool)> = breakpoints.iter().rev().try_fold(
+    let result: std::io::Result<(bool, bool)> = breakpoints.iter().rev().try_fold(
         (false, false),
         |(mut prev_punct, mut fresh), &(next_break, break_before)| {
             if fresh {
@@ -210,7 +208,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
         fresh = false;
         write_with_spaces(word, slen, args.ostream)?;
     }
-    args.ostream.write_all(b"\n").map_err_context(|| "failed to write output".to_string())
+    args.ostream.write_all(b"\n")
 }
 
 struct LineBreak<'a> {
@@ -227,7 +225,7 @@ struct LineBreak<'a> {
 fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     iter: T,
     args: &BreakArgs<'a>,
-) -> UResult<Vec<(&'a WordInfo<'a>, bool)>> {
+) -> Vec<(&'a WordInfo<'a>, bool)> {
     let mut iter = iter.peekable();
     // set up the initial null linebreak
     let mut linebreaks = vec![LineBreak {
@@ -369,14 +367,14 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     build_best_path(&linebreaks, active_breaks)
 }
 
-fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> UResult<Vec<(&'a WordInfo<'a>, bool)>> {
+fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a WordInfo<'a>, bool)> {
     let mut breakwords = vec![];
     // of the active paths, we select the one with the fewest demerits
     let mut best_idx = match active.iter().min_by_key(|&&a| paths[a].demerits) {
-        None => return Err(USimpleError::new(
+        None => crash!(
             1,
             "Failed to find a k-p linebreak solution. This should never happen."
-        )),
+        ),
         Some(&s) => s,
     };
 
@@ -385,7 +383,7 @@ fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> UResult<Vec
     loop {
         let next_best = &paths[best_idx];
         match next_best.linebreak {
-            None => return Ok(breakwords),
+            None => return breakwords,
             Some(prev) => {
                 breakwords.push((prev, next_best.break_before));
                 best_idx = next_best.prev;
