@@ -80,24 +80,20 @@ impl<'a> FileLines<'a> {
 
     /// returns true if this line should be formatted
     fn match_prefix(&self, line: &str) -> (bool, usize) {
-        if !self.opts.use_prefix {
+        let Some(prefix) = &self.opts.prefix else {
             return (true, 0);
-        }
+        };
 
-        FileLines::match_prefix_generic(&self.opts.prefix[..], line, self.opts.xprefix)
+        FileLines::match_prefix_generic(prefix, line, self.opts.xprefix)
     }
 
     /// returns true if this line should be formatted
     fn match_anti_prefix(&self, line: &str) -> bool {
-        if !self.opts.use_anti_prefix {
+        let Some(anti_prefix) = &self.opts.anti_prefix else {
             return true;
-        }
+        };
 
-        match FileLines::match_prefix_generic(
-            &self.opts.anti_prefix[..],
-            line,
-            self.opts.xanti_prefix,
-        ) {
+        match FileLines::match_prefix_generic(anti_prefix, line, self.opts.xanti_prefix) {
             (true, _) => false,
             (_, _) => true,
         }
@@ -176,7 +172,7 @@ impl<'a> Iterator for FileLines<'a> {
         // not truly blank we will not allow mail headers on the
         // following line)
         if pmatch
-            && n[poffset + self.opts.prefix.len()..]
+            && n[poffset + self.opts.prefix.as_ref().map_or(0, |s| s.len())..]
                 .chars()
                 .all(char::is_whitespace)
         {
@@ -190,7 +186,7 @@ impl<'a> Iterator for FileLines<'a> {
         }
 
         // figure out the indent, prefix, and prefixindent ending points
-        let prefix_end = poffset + self.opts.prefix.len();
+        let prefix_end = poffset + self.opts.prefix.as_ref().map_or(0, |s| s.len());
         let (indent_end, prefix_len, indent_len) = self.compute_indent(&n[..], prefix_end);
 
         Some(Line::FormatLine(FileLine {
@@ -357,7 +353,7 @@ impl<'a> Iterator for ParagraphStream<'a> {
                 }
             } else if in_mail {
                 // lines following mail headers must begin with spaces
-                if fl.indent_end == 0 || (self.opts.use_prefix && fl.pfxind_end == 0) {
+                if fl.indent_end == 0 || (self.opts.prefix.is_some() && fl.pfxind_end == 0) {
                     break; // this line does not begin with spaces
                 }
             } else if !second_done {

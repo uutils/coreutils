@@ -49,11 +49,9 @@ pub struct FmtOptions {
     tagged: bool,
     mail: bool,
     split_only: bool,
-    use_prefix: bool,
-    prefix: String,
+    prefix: Option<String>,
     xprefix: bool,
-    use_anti_prefix: bool,
-    anti_prefix: String,
+    anti_prefix: Option<String>,
     xanti_prefix: bool,
     uniform: bool,
     quick: bool,
@@ -83,19 +81,8 @@ impl FmtOptions {
         let xprefix = matches.contains_id(OPT_EXACT_PREFIX);
         let xanti_prefix = matches.contains_id(OPT_SKIP_PREFIX);
 
-        let mut prefix = String::new();
-        let mut use_prefix = false;
-        if let Some(s) = matches.get_one::<String>(OPT_PREFIX).map(String::from) {
-            prefix = s;
-            use_prefix = true;
-        };
-
-        let mut anti_prefix = String::new();
-        let mut use_anti_prefix = false;
-        if let Some(s) = matches.get_one::<String>(OPT_SKIP_PREFIX).map(String::from) {
-            anti_prefix = s;
-            use_anti_prefix = true;
-        };
+        let prefix = matches.get_one::<String>(OPT_PREFIX).map(String::from);
+        let anti_prefix = matches.get_one::<String>(OPT_SKIP_PREFIX).map(String::from);
 
         let mut width = 75;
         let mut goal = 70;
@@ -143,10 +130,8 @@ impl FmtOptions {
             uniform,
             quick,
             split_only,
-            use_prefix,
             prefix,
             xprefix,
-            use_anti_prefix,
             anti_prefix,
             xanti_prefix,
             width,
