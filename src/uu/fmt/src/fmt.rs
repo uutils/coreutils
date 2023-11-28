@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) PSKIP linebreak ostream parasplit tabwidth xanti xprefix
 
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::cmp;
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
@@ -40,6 +40,9 @@ static OPT_TAB_WIDTH: &str = "tab-width";
 
 static ARG_FILES: &str = "files";
 
+// by default, goal is 93% of width
+const DEFAULT_GOAL_TO_WIDTH_RATIO: usize = 93;
+
 pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;
 pub struct FmtOptions {
     crown: bool,
@@ -59,25 +62,97 @@ pub struct FmtOptions {
     tabwidth: usize,
 }
 
-impl Default for FmtOptions {
-    fn default() -> Self {
-        Self {
-            crown: false,
-            tagged: false,
-            mail: false,
-            uniform: false,
-            quick: false,
-            split_only: false,
-            use_prefix: false,
-            prefix: String::new(),
-            xprefix: false,
-            use_anti_prefix: false,
-            anti_prefix: String::new(),
-            xanti_prefix: false,
-            width: 75,
-            goal: 70,
-            tabwidth: 8,
+impl FmtOptions {
+    fn from_matches(matches: &ArgMatches) -> UResult<Self> {
+        let mut tagged = matches.get_flag(OPT_TAGGED_PARAGRAPH);
+        let mut crown = matches.get_flag(OPT_CROWN_MARGIN);
+
+        let mail = matches.get_flag(OPT_PRESERVE_HEADERS);
+        let uniform = matches.get_flag(OPT_UNIFORM_SPACING);
+        let quick = matches.get_flag(OPT_QUICK);
+        let split_only = matches.get_flag(OPT_SPLIT_ONLY);
+
+        if crown {
+            tagged = false;
         }
+        if split_only {
+            crown = false;
+            tagged = false;
+        }
+
+        let xprefix = matches.contains_id(OPT_EXACT_PREFIX);
+        let xanti_prefix = matches.contains_id(OPT_SKIP_PREFIX);
+
+        let mut prefix = String::new();
+        let mut use_prefix = false;
+        if let Some(s) = matches.get_one::<String>(OPT_PREFIX).map(String::from) {
+            prefix = s;
+            use_prefix = true;
+        };
+
+        let mut anti_prefix = String::new();
+        let mut use_anti_prefix = false;
+        if let Some(s) = matches.get_one::<String>(OPT_SKIP_PREFIX).map(String::from) {
+            anti_prefix = s;
+            use_anti_prefix = true;
+        };
+
+        let mut width = 75;
+        let mut goal = 70;
+        if let Some(w) = matches.get_one::<usize>(OPT_WIDTH) {
+            width = *w;
+            if width > MAX_WIDTH {
+                return Err(USimpleError::new(
+                    1,
+                    format!("invalid width: '{}': Numerical result out of range", width),
+                ));
+            }
+            goal = cmp::min(width * DEFAULT_GOAL_TO_WIDTH_RATIO / 100, width - 3);
+        };
+
+        if let Some(g) = matches.get_one::<usize>(OPT_GOAL) {
+            goal = *g;
+            if !matches.contains_id(OPT_WIDTH) {
+                width = cmp::max(goal * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO, goal + 3);
+            } else if goal > width {
+                return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
+            }
+        };
+
+        let mut tabwidth = 8;
+        if let Some(s) = matches.get_one::<String>(OPT_TAB_WIDTH) {
+            tabwidth = match s.parse::<usize>() {
+                Ok(t) => t,
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("Invalid TABWIDTH specification: {}: {}", s.quote(), e),
+                    ));
+                }
+            };
+        };
+
+        if tabwidth < 1 {
+            tabwidth = 1;
+        }
+
+        Ok(Self {
+            crown,
+            tagged,
+            mail,
+            uniform,
+            quick,
+            split_only,
+            use_prefix,
+            prefix,
+            xprefix,
+            use_anti_prefix,
+            anti_prefix,
+            xanti_prefix,
+            width,
+            goal,
+            tabwidth,
+        })
     }
 }
 
@@ -90,12 +165,7 @@ impl Default for FmtOptions {
 /// # Returns
 ///
 /// A tuple containing a vector of file names and a `FmtOptions` struct.
-#[allow(clippy::cognitive_complexity)]
-#[allow(clippy::field_reassign_with_default)]
 fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)> {
-    // by default, goal is 93% of width
-    const DEFAULT_GOAL_TO_WIDTH_RATIO: usize = 93;
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     let mut files: Vec<String> = matches
@@ -103,81 +173,7 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let mut fmt_opts = FmtOptions::default();
-
-    fmt_opts.tagged = matches.get_flag(OPT_TAGGED_PARAGRAPH);
-    if matches.get_flag(OPT_CROWN_MARGIN) {
-        fmt_opts.crown = true;
-        fmt_opts.tagged = false;
-    }
-    fmt_opts.mail = matches.get_flag(OPT_PRESERVE_HEADERS);
-    fmt_opts.uniform = matches.get_flag(OPT_UNIFORM_SPACING);
-    fmt_opts.quick = matches.get_flag(OPT_QUICK);
-    if matches.get_flag(OPT_SPLIT_ONLY) {
-        fmt_opts.split_only = true;
-        fmt_opts.crown = false;
-        fmt_opts.tagged = false;
-    }
-    fmt_opts.xprefix = matches.contains_id(OPT_EXACT_PREFIX);
-    fmt_opts.xanti_prefix = matches.contains_id(OPT_SKIP_PREFIX);
-
-    if let Some(s) = matches.get_one::<String>(OPT_PREFIX).map(String::from) {
-        fmt_opts.prefix = s;
-        fmt_opts.use_prefix = true;
-    };
-
-    if let Some(s) = matches.get_one::<String>(OPT_SKIP_PREFIX).map(String::from) {
-        fmt_opts.anti_prefix = s;
-        fmt_opts.use_anti_prefix = true;
-    };
-
-    if let Some(width) = matches.get_one::<usize>(OPT_WIDTH) {
-        fmt_opts.width = *width;
-        if fmt_opts.width > MAX_WIDTH {
-            return Err(USimpleError::new(
-                1,
-                format!(
-                    "invalid width: '{}': Numerical result out of range",
-                    fmt_opts.width,
-                ),
-            ));
-        }
-        fmt_opts.goal = cmp::min(
-            fmt_opts.width * DEFAULT_GOAL_TO_WIDTH_RATIO / 100,
-            fmt_opts.width - 3,
-        );
-    };
-
-    if let Some(goal) = matches.get_one::<usize>(OPT_GOAL) {
-        fmt_opts.goal = *goal;
-        if !matches.contains_id(OPT_WIDTH) {
-            fmt_opts.width = cmp::max(
-                fmt_opts.goal * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO,
-                fmt_opts.goal + 3,
-            );
-        } else if fmt_opts.goal > fmt_opts.width {
-            return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
-        }
-    };
-
-    if let Some(s) = matches.get_one::<String>(OPT_TAB_WIDTH) {
-        fmt_opts.tabwidth = match s.parse::<usize>() {
-            Ok(t) => t,
-            Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("Invalid TABWIDTH specification: {}: {}", s.quote(), e),
-                ));
-            }
-        };
-    };
-
-    if fmt_opts.tabwidth < 1 {
-        fmt_opts.tabwidth = 1;
-    }
-
-    // immutable now
-    let fmt_opts = fmt_opts;
+    let fmt_opts = FmtOptions::from_matches(&matches)?;
 
     if files.is_empty() {
         files.push("-".to_owned());
