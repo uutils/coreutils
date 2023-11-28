@@ -13,8 +13,8 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show_warning};
 
-use self::linebreak::break_lines;
-use self::parasplit::ParagraphStream;
+use linebreak::break_lines;
+use parasplit::ParagraphStream;
 
 mod linebreak;
 mod parasplit;

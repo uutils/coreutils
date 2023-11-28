@@ -5,10 +5,8 @@
 
 // spell-checker:ignore (ToDO) INFTY MULT accum breakwords linebreak linebreaking linebreaks linelen maxlength minlength nchars ostream overlen parasplit plass posn powf punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen
 
-use std::cmp;
-use std::i64;
 use std::io::{BufWriter, Stdout, Write};
-use std::mem;
+use std::{cmp, i64, mem};
 
 use uucore::crash;
 
