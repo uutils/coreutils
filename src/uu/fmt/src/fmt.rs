@@ -7,8 +7,7 @@
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
-use std::io::{stdin, stdout, Write};
-use std::io::{BufReader, BufWriter, Read, Stdout};
+use std::io::{stdin, stdout, BufReader, BufWriter, Read, Stdout, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show_warning};
@@ -19,25 +18,26 @@ use parasplit::ParagraphStream;
 mod linebreak;
 mod parasplit;
 
-static ABOUT: &str = help_about!("fmt.md");
+const ABOUT: &str = help_about!("fmt.md");
 const USAGE: &str = help_usage!("fmt.md");
-static MAX_WIDTH: usize = 2500;
+const MAX_WIDTH: usize = 2500;
 
-static OPT_CROWN_MARGIN: &str = "crown-margin";
-static OPT_TAGGED_PARAGRAPH: &str = "tagged-paragraph";
-static OPT_PRESERVE_HEADERS: &str = "preserve-headers";
-static OPT_SPLIT_ONLY: &str = "split-only";
-static OPT_UNIFORM_SPACING: &str = "uniform-spacing";
-static OPT_PREFIX: &str = "prefix";
-static OPT_SKIP_PREFIX: &str = "skip-prefix";
-static OPT_EXACT_PREFIX: &str = "exact-prefix";
-static OPT_EXACT_SKIP_PREFIX: &str = "exact-skip-prefix";
-static OPT_WIDTH: &str = "width";
-static OPT_GOAL: &str = "goal";
-static OPT_QUICK: &str = "quick";
-static OPT_TAB_WIDTH: &str = "tab-width";
-
-static ARG_FILES: &str = "files";
+mod options {
+    pub const CROWN_MARGIN: &str = "crown-margin";
+    pub const TAGGED_PARAGRAPH: &str = "tagged-paragraph";
+    pub const PRESERVE_HEADERS: &str = "preserve-headers";
+    pub const SPLIT_ONLY: &str = "split-only";
+    pub const UNIFORM_SPACING: &str = "uniform-spacing";
+    pub const PREFIX: &str = "prefix";
+    pub const SKIP_PREFIX: &str = "skip-prefix";
+    pub const EXACT_PREFIX: &str = "exact-prefix";
+    pub const EXACT_SKIP_PREFIX: &str = "exact-skip-prefix";
+    pub const WIDTH: &str = "width";
+    pub const GOAL: &str = "goal";
+    pub const QUICK: &str = "quick";
+    pub const TAB_WIDTH: &str = "tab-width";
+    pub const FILES: &str = "files";
+}
 
 // by default, goal is 93% of width
 const DEFAULT_GOAL_TO_WIDTH_RATIO: usize = 93;
@@ -61,13 +61,13 @@ pub struct FmtOptions {
 
 impl FmtOptions {
     fn from_matches(matches: &ArgMatches) -> UResult<Self> {
-        let mut tagged = matches.get_flag(OPT_TAGGED_PARAGRAPH);
-        let mut crown = matches.get_flag(OPT_CROWN_MARGIN);
+        let mut tagged = matches.get_flag(options::TAGGED_PARAGRAPH);
+        let mut crown = matches.get_flag(options::CROWN_MARGIN);
 
-        let mail = matches.get_flag(OPT_PRESERVE_HEADERS);
-        let uniform = matches.get_flag(OPT_UNIFORM_SPACING);
-        let quick = matches.get_flag(OPT_QUICK);
-        let split_only = matches.get_flag(OPT_SPLIT_ONLY);
+        let mail = matches.get_flag(options::PRESERVE_HEADERS);
+        let uniform = matches.get_flag(options::UNIFORM_SPACING);
+        let quick = matches.get_flag(options::QUICK);
+        let split_only = matches.get_flag(options::SPLIT_ONLY);
 
         if crown {
             tagged = false;
@@ -77,14 +77,16 @@ impl FmtOptions {
             tagged = false;
         }
 
-        let xprefix = matches.contains_id(OPT_EXACT_PREFIX);
-        let xanti_prefix = matches.contains_id(OPT_SKIP_PREFIX);
+        let xprefix = matches.contains_id(options::EXACT_PREFIX);
+        let xanti_prefix = matches.contains_id(options::SKIP_PREFIX);
 
-        let prefix = matches.get_one::<String>(OPT_PREFIX).map(String::from);
-        let anti_prefix = matches.get_one::<String>(OPT_SKIP_PREFIX).map(String::from);
+        let prefix = matches.get_one::<String>(options::PREFIX).map(String::from);
+        let anti_prefix = matches
+            .get_one::<String>(options::SKIP_PREFIX)
+            .map(String::from);
 
-        let width_opt = matches.get_one::<usize>(OPT_WIDTH);
-        let goal_opt = matches.get_one::<usize>(OPT_GOAL);
+        let width_opt = matches.get_one::<usize>(options::WIDTH);
+        let goal_opt = matches.get_one::<usize>(options::GOAL);
         let (width, goal) = match (width_opt, goal_opt) {
             (Some(&w), Some(&g)) => {
                 if g > w {
@@ -111,7 +113,7 @@ impl FmtOptions {
         }
 
         let mut tabwidth = 8;
-        if let Some(s) = matches.get_one::<String>(OPT_TAB_WIDTH) {
+        if let Some(s) = matches.get_one::<String>(options::TAB_WIDTH) {
             tabwidth = match s.parse::<usize>() {
                 Ok(t) => t,
                 Err(e) => {
@@ -158,7 +160,7 @@ fn parse_arguments(args: impl uucore::Args) -> UResult<(Vec<String>, FmtOptions)
     let matches = uu_app().try_get_matches_from(args)?;
 
     let mut files: Vec<String> = matches
-        .get_many::<String>(ARG_FILES)
+        .get_many::<String>(options::FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
@@ -242,9 +244,9 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
-            Arg::new(OPT_CROWN_MARGIN)
+            Arg::new(options::CROWN_MARGIN)
                 .short('c')
-                .long(OPT_CROWN_MARGIN)
+                .long(options::CROWN_MARGIN)
                 .help(
                     "First and second line of paragraph \
                     may have different indentations, in which \
@@ -254,7 +256,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_TAGGED_PARAGRAPH)
+            Arg::new(options::TAGGED_PARAGRAPH)
                 .short('t')
                 .long("tagged-paragraph")
                 .help(
@@ -264,7 +266,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_PRESERVE_HEADERS)
+            Arg::new(options::PRESERVE_HEADERS)
                 .short('m')
                 .long("preserve-headers")
                 .help(
@@ -274,14 +276,14 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_SPLIT_ONLY)
+            Arg::new(options::SPLIT_ONLY)
                 .short('s')
                 .long("split-only")
                 .help("Split lines only, do not reflow.")
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_UNIFORM_SPACING)
+            Arg::new(options::UNIFORM_SPACING)
                 .short('u')
                 .long("uniform-spacing")
                 .help(
@@ -294,7 +296,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_PREFIX)
+            Arg::new(options::PREFIX)
                 .short('p')
                 .long("prefix")
                 .help(
@@ -306,7 +308,7 @@ pub fn uu_app() -> Command {
                 .value_name("PREFIX"),
         )
         .arg(
-            Arg::new(OPT_SKIP_PREFIX)
+            Arg::new(options::SKIP_PREFIX)
                 .short('P')
                 .long("skip-prefix")
                 .help(
@@ -317,7 +319,7 @@ pub fn uu_app() -> Command {
                 .value_name("PSKIP"),
         )
         .arg(
-            Arg::new(OPT_EXACT_PREFIX)
+            Arg::new(options::EXACT_PREFIX)
                 .short('x')
                 .long("exact-prefix")
                 .help(
@@ -327,7 +329,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_EXACT_SKIP_PREFIX)
+            Arg::new(options::EXACT_SKIP_PREFIX)
                 .short('X')
                 .long("exact-skip-prefix")
                 .help(
@@ -337,7 +339,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_WIDTH)
+            Arg::new(options::WIDTH)
                 .short('w')
                 .long("width")
                 .help("Fill output lines up to a maximum of WIDTH columns, default 75.")
@@ -345,7 +347,7 @@ pub fn uu_app() -> Command {
                 .value_parser(clap::value_parser!(usize)),
         )
         .arg(
-            Arg::new(OPT_GOAL)
+            Arg::new(options::GOAL)
                 .short('g')
                 .long("goal")
                 .help("Goal width, default of 93% of WIDTH. Must be less than WIDTH.")
@@ -353,7 +355,7 @@ pub fn uu_app() -> Command {
                 .value_parser(clap::value_parser!(usize)),
         )
         .arg(
-            Arg::new(OPT_QUICK)
+            Arg::new(options::QUICK)
                 .short('q')
                 .long("quick")
                 .help(
@@ -363,7 +365,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OPT_TAB_WIDTH)
+            Arg::new(options::TAB_WIDTH)
                 .short('T')
                 .long("tab-width")
                 .help(
@@ -374,7 +376,7 @@ pub fn uu_app() -> Command {
                 .value_name("TABWIDTH"),
         )
         .arg(
-            Arg::new(ARG_FILES)
+            Arg::new(options::FILES)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
         )
