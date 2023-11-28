@@ -224,8 +224,7 @@ fn process_file(
                     .write_all(b"\n")
                     .map_err_context(|| "failed to write output".to_string())?;
             }
-            Ok(para) => break_lines(&para, fmt_opts, ostream)
-                .map_err_context(|| "failed to write output".to_string())?,
+            Ok(para) => break_lines(&para, fmt_opts, ostream)?,
         }
     }
 
