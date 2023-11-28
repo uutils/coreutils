@@ -6,9 +6,12 @@
 // spell-checker:ignore (change!) each's
 // spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
 
+use std::io::stdout;
+use std::ops::ControlFlow;
+
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::error::{UResult, UUsageError};
-use uucore::memo::printf;
+use uucore::format::{parse_spec_and_escape, FormatArgument};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const VERSION: &str = "version";
@@ -30,12 +33,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let format_string = matches
         .get_one::<String>(options::FORMATSTRING)
         .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
-    let values: Vec<String> = match matches.get_many::<String>(options::ARGUMENT) {
-        Some(s) => s.map(|s| s.to_string()).collect(),
+
+    let values: Vec<_> = match matches.get_many::<String>(options::ARGUMENT) {
+        Some(s) => s.map(|s| FormatArgument::Unparsed(s.to_string())).collect(),
         None => vec![],
     };
 
-    printf(format_string, &values[..])?;
+    let mut args = values.iter().peekable();
+    for item in parse_spec_and_escape(format_string.as_ref()) {
+        match item?.write(stdout(), &mut args)? {
+            ControlFlow::Continue(()) => {}
+            ControlFlow::Break(()) => return Ok(()),
+        };
+    }
+
+    while args.peek().is_some() {
+        for item in parse_spec_and_escape(format_string.as_ref()) {
+            match item?.write(stdout(), &mut args)? {
+                ControlFlow::Continue(()) => {}
+                ControlFlow::Break(()) => return Ok(()),
+            };
+        }
+    }
     Ok(())
 }
 

@@ -117,22 +117,37 @@ impl Drop for FilterWriter {
 pub fn instantiate_current_writer(
     filter: &Option<String>,
     filename: &str,
+    is_new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {
     match filter {
-        None => Ok(BufWriter::new(Box::new(
-            // write to the next file
-            std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(std::path::Path::new(&filename))
-                .map_err(|_| {
-                    Error::new(
-                        ErrorKind::Other,
-                        format!("unable to open '{filename}'; aborting"),
-                    )
-                })?,
-        ) as Box<dyn Write>)),
+        None => {
+            let file = if is_new {
+                // create new file
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(std::path::Path::new(&filename))
+                    .map_err(|_| {
+                        Error::new(
+                            ErrorKind::Other,
+                            format!("unable to open '{filename}'; aborting"),
+                        )
+                    })?
+            } else {
+                // re-open file that we previously created to append to it
+                std::fs::OpenOptions::new()
+                    .append(true)
+                    .open(std::path::Path::new(&filename))
+                    .map_err(|_| {
+                        Error::new(
+                            ErrorKind::Other,
+                            format!("unable to re-open '{filename}'; aborting"),
+                        )
+                    })?
+            };
+            Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
+        }
         Some(ref filter_command) => Ok(BufWriter::new(Box::new(
             // spawn a shell command and write to it
             FilterWriter::new(filter_command, filename)?,
