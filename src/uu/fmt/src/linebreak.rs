@@ -60,9 +60,7 @@ pub fn break_lines(
     let (w, w_len) = match p_words_words.next() {
         Some(winfo) => (winfo.word, winfo.word_nchars),
         None => {
-            return ostream
-                .write_all(b"\n")
-                .map_err_context(|| "failed to write output".to_string());
+            return ostream.write_all(b"\n").map_err_context(|| "failed to write output".to_string());
         }
     };
     // print the init, if it exists, and get its length
@@ -110,9 +108,7 @@ fn break_simple<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     iter.try_fold((args.init_len, false), |l, winfo| {
         accum_words_simple(args, l, winfo)
     })?;
-    args.ostream
-        .write_all(b"\n")
-        .map_err_context(|| "failed to write output".to_string())
+    args.ostream.write_all(b"\n").map_err_context(|| "failed to write output".to_string())
 }
 
 fn accum_words_simple<'a>(
@@ -214,9 +210,7 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
         fresh = false;
         write_with_spaces(word, slen, args.ostream)?;
     }
-    args.ostream
-        .write_all(b"\n")
-        .map_err_context(|| "failed to write output".to_string())
+    args.ostream.write_all(b"\n").map_err_context(|| "failed to write output".to_string())
 }
 
 struct LineBreak<'a> {
@@ -375,19 +369,14 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     build_best_path(&linebreaks, active_breaks)
 }
 
-fn build_best_path<'a>(
-    paths: &[LineBreak<'a>],
-    active: &[usize],
-) -> UResult<Vec<(&'a WordInfo<'a>, bool)>> {
+fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> UResult<Vec<(&'a WordInfo<'a>, bool)>> {
     let mut breakwords = vec![];
     // of the active paths, we select the one with the fewest demerits
     let mut best_idx = match active.iter().min_by_key(|&&a| paths[a].demerits) {
-        None => {
-            return Err(USimpleError::new(
-                1,
-                "Failed to find a k-p linebreak solution. This should never happen.",
-            ))
-        }
+        None => return Err(USimpleError::new(
+            1,
+            "Failed to find a k-p linebreak solution. This should never happen."
+        )),
         Some(&s) => s,
     };
 
