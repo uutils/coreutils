@@ -2952,7 +2952,6 @@ dependencies = [
  "cpp",
  "cpp_build",
  "libc",
- "uucore",
 ]
 
 [[package]]

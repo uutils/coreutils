@@ -22,7 +22,6 @@ crate-type = [
 [dependencies]
 cpp = "0.5"
 libc = { workspace = true }
-uucore = { version = ">=0.0.19", package = "uucore", path = "../../../../uucore" }
 
 [build-dependencies]
 cpp_build = "0.5"
