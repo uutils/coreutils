@@ -371,10 +371,7 @@ fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a Wo
     let mut breakwords = vec![];
     // of the active paths, we select the one with the fewest demerits
     let mut best_idx = match active.iter().min_by_key(|&&a| paths[a].demerits) {
-        None => crash!(
-            1,
-            "Failed to find a k-p linebreak solution. This should never happen."
-        ),
+        None => unreachable!(),
         Some(&s) => s,
     };
 
