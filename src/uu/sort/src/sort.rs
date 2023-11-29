@@ -17,6 +17,7 @@ mod merge;
 mod numeric_str_cmp;
 mod tmp_dir;
 
+use crate::tmp_dir::TmpDirWrapper;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, Command};
@@ -38,6 +39,7 @@ use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
+use sysinfo::{RefreshKind, System, SystemExt};
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
@@ -45,8 +47,6 @@ use uucore::line_ending::LineEnding;
 use uucore::parse_size::{ParseSizeError, Parser};
 use uucore::version_cmp::version_cmp;
 use uucore::{format_usage, help_about, help_section, help_usage};
-
-use crate::tmp_dir::TmpDirWrapper;
 
 const ABOUT: &str = help_about!("sort.md");
 const USAGE: &str = help_usage!("sort.md");
@@ -322,23 +322,50 @@ struct Precomputed {
 
 impl GlobalSettings {
     /// Parse a SIZE string into a number of bytes.
-    /// A size string comprises an integer and an optional unit.
+    /// A size string comprises an integer and an optional unit or percentage of total memory.
     /// The unit may be k, K, m, M, g, G, t, T, P, E, Z, Y (powers of 1024), or b which is 1.
     /// Default is K.
     fn parse_byte_count(input: &str) -> Result<usize, ParseSizeError> {
         // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y
         // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
+        let input = input.trim();
+        if let Some(number) = input.strip_suffix('%') {
+            let percent = Self::parse_percentage(number)?;
+            return Self::get_memory_size(percent);
+        }
         let size = Parser::default()
             .with_allow_list(&[
                 "b", "k", "K", "m", "M", "g", "G", "t", "T", "P", "E", "Z", "Y",
             ])
             .with_default_unit("K")
             .with_b_byte_count(true)
-            .parse(input.trim())?;
+            .parse(input)?;
 
         usize::try_from(size).map_err(|_| {
             ParseSizeError::SizeTooBig(format!("Buffer size {size} does not fit in address space"))
         })
+    }
+
+    /// Parses percentage input from input string.
+    fn parse_percentage(number_str: &str) -> Result<usize, ParseSizeError> {
+        let Ok(percent) = number_str.parse::<u64>() else {
+            return Err(ParseSizeError::ParseFailure(format!(
+                "Invalid Buffer Percentage: {number_str}"
+            )));
+        };
+        match percent {
+            0..=100 => Ok(percent as usize),
+            _ => Err(ParseSizeError::ParseFailure(format!(
+                "Invalid Buffer Percentage: {number_str}"
+            ))),
+        }
+    }
+    /// get memory size from percent
+    fn get_memory_size(percent: usize) -> Result<usize, ParseSizeError> {
+        let system = System::new_with_specifics(RefreshKind::new().with_memory());
+        let total_memory_size = system.total_memory() as usize;
+        let size = (total_memory_size * percent) / 100;
+        Ok(size)
     }
 
     /// Precompute some data needed for sorting.
@@ -1972,6 +1999,7 @@ mod tests {
             ("m", 1024 * 1024),
             #[cfg(not(target_pointer_width = "32"))]
             ("E", 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+            ("0%", 0),
         ];
         for (input, expected_output) in &valid_input {
             assert_eq!(
@@ -1988,9 +2016,27 @@ mod tests {
         }
 
         // ParseFailure
-        let invalid_input = ["nonsense", "1B", "B", "b", "p", "e", "z", "y"];
+        let invalid_input = [
+            "nonsense", "1B", "B", "b", "p", "e", "z", "y", "-1%", "%", "101%", "10%2%",
+        ];
         for input in &invalid_input {
             assert!(GlobalSettings::parse_byte_count(input).is_err());
+        }
+    }
+
+    #[test]
+    fn test_parse_percentage() {
+        let valid_input = [("0", 0), ("100", 100), ("50", 50)];
+        for (input, expected_output) in &valid_input {
+            assert_eq!(
+                GlobalSettings::parse_percentage(input),
+                Ok(*expected_output)
+            );
+        }
+
+        let invalid_input = ["-10", "101"];
+        for input in &invalid_input {
+            assert!(GlobalSettings::parse_percentage(input).is_err());
         }
     }
 }
