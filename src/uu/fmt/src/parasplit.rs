@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) INFTY MULT PSKIP accum aftertab beforetab breakwords fmt's formatline linebreak linebreaking linebreaks linelen maxlength minlength nchars noformat noformatline ostream overlen parasplit pfxind plass pmatch poffset posn powf prefixindent punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen wordsplits xanti xprefix
+// spell-checker:ignore (ToDO) INFTY MULT PSKIP accum aftertab beforetab breakwords fmt's formatline linebreak linebreaking linebreaks linelen maxlength minlength nchars noformat noformatline ostream overlen parasplit plass pmatch poffset posn powf prefixindent punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen wordsplits xanti xprefix
 
 use std::io::{BufRead, Lines};
 use std::iter::Peekable;
@@ -60,7 +60,7 @@ pub struct FileLine {
     /// The end of the indent, always the start of the text
     indent_end: usize,
     /// The end of the PREFIX's indent, that is, the spaces before the prefix
-    pfxind_end: usize,
+    prefix_indent_end: usize,
     /// Display length of indent taking into account tabs
     indent_len: usize,
     /// PREFIX indent length taking into account tabs
@@ -192,7 +192,7 @@ impl<'a> Iterator for FileLines<'a> {
         Some(Line::FormatLine(FileLine {
             line: n,
             indent_end,
-            pfxind_end: poffset,
+            prefix_indent_end: poffset,
             indent_len,
             prefix_len,
         }))
@@ -210,7 +210,7 @@ pub struct Paragraph {
     lines: Vec<String>,
     /// string representing the init, that is, the first line's indent
     pub init_str: String,
-    /// printable length of the init string considering TABWIDTH    
+    /// printable length of the init string considering TABWIDTH
     pub init_len: usize,
     /// byte location of end of init in first line String
     init_end: usize,
@@ -299,7 +299,7 @@ impl<'a> Iterator for ParagraphStream<'a> {
         let mut indent_end = 0;
         let mut indent_len = 0;
         let mut prefix_len = 0;
-        let mut pfxind_end = 0;
+        let mut prefix_indent_end = 0;
         let mut p_lines = Vec::new();
 
         let mut in_mail = false;
@@ -316,7 +316,7 @@ impl<'a> Iterator for ParagraphStream<'a> {
                 // detect mail header
                 if self.opts.mail && self.next_mail && ParagraphStream::is_mail_header(fl) {
                     in_mail = true;
-                    // there can't be any indent or pfxind because otherwise is_mail_header
+                    // there can't be any indent or prefixindent because otherwise is_mail_header
                     // would fail since there cannot be any whitespace before the colon in a
                     // valid header field
                     indent_str.push_str("  ");
@@ -339,7 +339,7 @@ impl<'a> Iterator for ParagraphStream<'a> {
 
                     // save these to check for matching lines
                     prefix_len = fl.prefix_len;
-                    pfxind_end = fl.pfxind_end;
+                    prefix_indent_end = fl.prefix_indent_end;
 
                     // in tagged mode, add 4 spaces of additional indenting by default
                     // (gnu fmt's behavior is different: it seems to find the closest column to
@@ -353,14 +353,14 @@ impl<'a> Iterator for ParagraphStream<'a> {
                 }
             } else if in_mail {
                 // lines following mail headers must begin with spaces
-                if fl.indent_end == 0 || (self.opts.prefix.is_some() && fl.pfxind_end == 0) {
+                if fl.indent_end == 0 || (self.opts.prefix.is_some() && fl.prefix_indent_end == 0) {
                     break; // this line does not begin with spaces
                 }
             } else if !second_done {
                 // now we have enough info to handle crown margin and tagged mode
 
                 // in both crown and tagged modes we require that prefix_len is the same
-                if prefix_len != fl.prefix_len || pfxind_end != fl.pfxind_end {
+                if prefix_len != fl.prefix_len || prefix_indent_end != fl.prefix_indent_end {
                     break;
                 }
 
@@ -382,7 +382,7 @@ impl<'a> Iterator for ParagraphStream<'a> {
             } else {
                 // detect mismatch
                 if indent_end != fl.indent_end
-                    || pfxind_end != fl.pfxind_end
+                    || prefix_indent_end != fl.prefix_indent_end
                     || indent_len != fl.indent_len
                     || prefix_len != fl.prefix_len
                 {
