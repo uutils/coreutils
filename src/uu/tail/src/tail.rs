@@ -31,7 +31,7 @@ use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{get_exit_code, set_exit_code, FromIo, UError, UResult, USimpleError};
+use uucore::error::{get_exit_code, set_exit_code, FromIo, UResult, USimpleError};
 use uucore::{show, show_error};
 
 #[uucore::main]

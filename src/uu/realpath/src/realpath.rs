@@ -15,13 +15,13 @@ use std::{
 use uucore::fs::make_path_relative_to;
 use uucore::{
     display::{print_verbatim, Quotable},
-    error::{FromIo, UResult},
+    error::{FromIo, UClapError, UResult},
     format_usage,
     fs::{canonicalize, MissingHandling, ResolveMode},
     help_about, help_usage,
     line_ending::LineEnding,
+    show_if_err,
 };
-use uucore::{error::UClapError, show, show_if_err};
 
 static ABOUT: &str = help_about!("realpath.md");
 const USAGE: &str = help_usage!("realpath.md");
