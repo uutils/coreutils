@@ -364,6 +364,8 @@ fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a Wo
     // of the active paths, we select the one with the fewest demerits
     active.iter().min_by_key(|&&a| paths[a].demerits).iter().map(|&&(mut best_idx)| {
         let mut breakwords = vec![];
+        // now, chase the pointers back through the break list, recording
+        // the words at which we should break
         loop {
             let next_best = &paths[best_idx];
             match next_best.linebreak {
