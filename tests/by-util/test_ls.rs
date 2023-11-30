@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir1
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -864,11 +864,11 @@ fn test_ls_zero() {
         .succeeds()
         .stdout_only("\"0-test-zero\"\x00\"2-test-zero\"\x00\"3-test-zero\"\x00");
 
-    scene
-        .ucmd()
-        .args(&["--zero", "--color=always"])
-        .succeeds()
-        .stdout_only("\x1b[1;34m0-test-zero\x1b[0m\x002-test-zero\x003-test-zero\x00");
+    let result = scene.ucmd().args(&["--zero", "--color=always"]).succeeds();
+    assert_eq!(
+        result.stdout_str(),
+        "\u{1b}[0m\u{1b}[01;34m0-test-zero\x1b[0m\x002-test-zero\x003-test-zero\x00"
+    );
 
     scene
         .ucmd()
@@ -921,12 +921,9 @@ fn test_ls_zero() {
                 "\"0-test-zero\"\x00\"1\\ntest-zero\"\x00\"2-test-zero\"\x00\"3-test-zero\"\x00",
             );
 
-        scene
-            .ucmd()
-            .args(&["--zero", "--color=always"])
-            .succeeds()
-            .stdout_only(
-                "\x1b[1;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00",
+        let result = scene.ucmd().args(&["--zero", "--color=always"]).succeeds();
+        assert_eq!(result.stdout_str(),
+                "\u{1b}[0m\u{1b}[01;34m0-test-zero\x1b[0m\x001\ntest-zero\x002-test-zero\x003-test-zero\x00",
             );
 
         scene
@@ -1202,12 +1199,21 @@ fn test_ls_long_symlink_color() {
     }
 
     fn capture_colored_string(input: &str) -> (Color, Name) {
-        let colored_name = Regex::new(r"\x1b\[([0-9;]+)m(.+)\x1b\[0m").unwrap();
+        // Input can be:
+        // \u{1b}[0m\u{1b}[01;36mln-dir3\u{1b}[0m
+        // \u{1b}[0m\u{1b}[01;34m./dir1/dir2/dir3\u{1b}[0m
+        // \u{1b}[0m\u{1b}[01;36mln-file-invalid\u{1b}[0m
+        // \u{1b}[01;36mdir1/invalid-target\u{1b}[0m
+        let colored_name = Regex::new(r"(?:\x1b\[0m\x1b)?\[([0-9;]+)m(.+)\x1b\[0m").unwrap();
         match colored_name.captures(input) {
-            Some(captures) => (
-                captures.get(1).unwrap().as_str().to_string(),
-                captures.get(2).unwrap().as_str().to_string(),
-            ),
+            Some(captures) => {
+                dbg!(captures.get(1).unwrap().as_str().to_string());
+                dbg!(captures.get(2).unwrap().as_str().to_string());
+                return (
+                    captures.get(1).unwrap().as_str().to_string(),
+                    captures.get(2).unwrap().as_str().to_string(),
+                );
+            }
             None => (String::new(), input.to_string()),
         }
     }
@@ -1977,6 +1983,20 @@ fn test_ls_recursive_1() {
         .stdout_is(out);
 }
 
+// Function to convert a string to its ASCII representation
+fn to_ascii_representation(input: &str) -> String {
+    input
+        .chars()
+        .map(|c| {
+            if c.is_ascii_control() || !c.is_ascii() {
+                format!("\\x{:02x}", c as u32)
+            } else {
+                c.to_string()
+            }
+        })
+        .collect::<String>()
+}
+
 #[test]
 fn test_ls_color() {
     let scene = TestScenario::new(util_name!());
@@ -1995,9 +2015,9 @@ fn test_ls_color() {
     at.touch(nested_file);
     at.touch("test-color");
 
-    let a_with_colors = "\x1b[1;34ma\x1b[0m";
-    let z_with_colors = "\x1b[1;34mz\x1b[0m";
-    let nested_dir_with_colors = "\x1b[1;34mnested_dir\x1b[0m"; // spell-checker:disable-line
+    let a_with_colors = "\x1b[0m\x1b[01;34ma\x1b[0m";
+    let z_with_colors = "\x1b[01;34mz\x1b[0m\n";
+    let nested_dir_with_colors = "\x1b[0m\x1b[01;34mnested_dir\x1b[0m\x0anested_file"; // spell-checker:disable-line
 
     // Color is disabled by default
     let result = scene.ucmd().succeeds();
@@ -2006,12 +2026,9 @@ fn test_ls_color() {
 
     // Color should be enabled
     for param in ["--color", "--col", "--color=always", "--col=always"] {
-        scene
-            .ucmd()
-            .arg(param)
-            .succeeds()
-            .stdout_contains(a_with_colors)
-            .stdout_contains(z_with_colors);
+        let result = scene.ucmd().arg(param).succeeds();
+        assert!(result.stdout_str().contains(a_with_colors));
+        assert!(result.stdout_str().contains(z_with_colors));
     }
 
     // Color should be disabled
@@ -2020,12 +2037,8 @@ fn test_ls_color() {
     assert!(!result.stdout_str().contains(z_with_colors));
 
     // Nested dir should be shown and colored
-    scene
-        .ucmd()
-        .arg("--color")
-        .arg("a")
-        .succeeds()
-        .stdout_contains(nested_dir_with_colors);
+    let result = scene.ucmd().arg("--color").arg("a").succeeds();
+    assert!(result.stdout_str().contains(nested_dir_with_colors));
 
     // No output
     scene
@@ -2037,13 +2050,18 @@ fn test_ls_color() {
 
     // The colors must not mess up the grid layout
     at.touch("b");
-    scene
+    let result = scene
         .ucmd()
         .arg("--color")
         .arg("-w=15")
         .arg("-C")
-        .succeeds()
-        .stdout_only(format!("{a_with_colors}  test-color\nb  {z_with_colors}\n"));
+        .succeeds();
+    let expected = format!("{}  test-color\x0ab  {}", a_with_colors, z_with_colors);
+    assert_eq!(
+        to_ascii_representation(result.stdout_str()),
+        to_ascii_representation(&expected)
+    );
+    assert_eq!(result.stdout_str(), expected);
 }
 
 #[cfg(unix)]

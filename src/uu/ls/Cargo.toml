@@ -22,7 +22,7 @@ number_prefix = { workspace = true }
 uutils_term_grid = { workspace = true }
 terminal_size = { workspace = true }
 glob = { workspace = true }
-lscolors = { workspace = true }
+lscolors = { workspace = true, features = ["gnu_legacy"] }
 uucore = { workspace = true, features = [
   "entries",
   "fs",
