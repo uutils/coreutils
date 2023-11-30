@@ -1023,6 +1023,21 @@ fn test_ls_long_format() {
     ).unwrap());
 }
 
+#[test]
+fn test_ls_long_padding_of_size_column_with_multiple_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.touch("dir/a");
+    at.touch("dir/b");
+
+    ucmd.arg("-l")
+        .arg("dir")
+        .succeeds()
+        .stdout_contains(" 0 ")
+        .stdout_does_not_contain("  0 ");
+}
+
 /// This test tests `ls -laR --color`.
 /// This test is mainly about coloring, but, the recursion, symlink `->` processing,
 /// and `.` and `..` being present in `-a` all need to work for the test to pass.
