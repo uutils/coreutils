@@ -25,7 +25,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: macos-12 , features: unix } ## GHA MacOS-11.0 VM won't have VirtualBox; refs: <https://github.com/actions/virtual-environments/issues/4060> , <https://github.com/actions/virtual-environments/pull/4010>
+          - { os: ubuntu-22.04 , features: unix }
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
@@ -35,9 +35,11 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v0.3.1
+      uses: vmactions/freebsd-vm@v1.0.2
       with:
         usesh: true
+        sync: rsync
+        copyback: false
         # We need jq to run show-utils.sh and bash to use inline shell string replacement
         prepare: pkg install -y curl sudo jq bash
         run: |
@@ -48,11 +50,11 @@ jobs:
           #
           TEST_USER=tester
           REPO_NAME=${GITHUB_WORKSPACE##*/}
-          WORKSPACE_PARENT="/Users/runner/work/${REPO_NAME}"
+          WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
           WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
           #
           pw adduser -n ${TEST_USER} -d /root/ -g wheel -c "Coreutils user to build" -w random
-          chown -R ${TEST_USER}:wheel /root/ "/Users/runner/work/${REPO_NAME}"/
+          chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
           whoami
           #
           # Further work needs to be done in a sudo as we are changing users
@@ -114,7 +116,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: macos-12 , features: unix } ## GHA MacOS-11.0 VM won't have VirtualBox; refs: <https://github.com/actions/virtual-environments/issues/4060> , <https://github.com/actions/virtual-environments/pull/4010>
+          - { os: ubuntu-22.04 , features: unix }
     env:
       mem: 4096
       SCCACHE_GHA_ENABLED: "true"
@@ -125,10 +127,11 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.3
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v0.3.1
+      uses: vmactions/freebsd-vm@v1.0.2
       with:
         usesh: true
-        # sync: sshfs
+        sync: rsync
+        copyback: false
         prepare: pkg install -y curl gmake sudo
         run: |
           ## Prepare, build, and test
@@ -141,12 +144,12 @@ jobs:
           #
           TEST_USER=tester
           REPO_NAME=${GITHUB_WORKSPACE##*/}
-          WORKSPACE_PARENT="/Users/runner/work/${REPO_NAME}"
+          WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
           WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
           #
           pw adduser -n ${TEST_USER} -d /root/ -g wheel -c "Coreutils user to build" -w random
           # chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
-          chown -R ${TEST_USER}:wheel /root/ "/Users/runner/work/${REPO_NAME}"/
+          chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
           whoami
           #
           # Further work needs to be done in a sudo as we are changing users
