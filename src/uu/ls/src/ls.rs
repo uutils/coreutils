@@ -741,14 +741,14 @@ impl Config {
 
         let mut needs_color = extract_color(options);
 
-        let cmd_line_bs = options.get_one::<String>(options::size::BLOCK_SIZE);
-        let opt_si = cmd_line_bs.is_some()
+        let opt_block_size = options.get_one::<String>(options::size::BLOCK_SIZE);
+        let opt_si = opt_block_size.is_some()
             && options
                 .get_one::<String>(options::size::BLOCK_SIZE)
                 .unwrap()
                 .eq("si")
             || options.get_flag(options::size::SI);
-        let opt_hr = (cmd_line_bs.is_some()
+        let opt_hr = (opt_block_size.is_some()
             && options
                 .get_one::<String>(options::size::BLOCK_SIZE)
                 .unwrap()
@@ -756,9 +756,9 @@ impl Config {
             || options.get_flag(options::size::HUMAN_READABLE);
         let opt_kb = options.get_flag(options::size::KIBIBYTES);
 
-        let bs_env_var = std::env::var_os("BLOCK_SIZE");
-        let ls_bs_env_var = std::env::var_os("LS_BLOCK_SIZE");
-        let pc_env_var = std::env::var_os("POSIXLY_CORRECT");
+        let env_var_block_size = std::env::var_os("BLOCK_SIZE");
+        let env_var_ls_block_size = std::env::var_os("LS_BLOCK_SIZE");
+        let env_var_posixly_correct = std::env::var_os("POSIXLY_CORRECT");
 
         let size_format = if opt_si {
             SizeFormat::Decimal
@@ -768,13 +768,13 @@ impl Config {
             SizeFormat::Bytes
         };
 
-        let raw_bs = if let Some(cmd_line_bs) = cmd_line_bs {
-            OsString::from(cmd_line_bs)
+        let raw_block_size = if let Some(opt_block_size) = opt_block_size {
+            OsString::from(opt_block_size)
         } else if !opt_kb {
-            if let Some(ls_bs_env_var) = ls_bs_env_var {
-                ls_bs_env_var
-            } else if let Some(bs_env_var) = bs_env_var {
-                bs_env_var
+            if let Some(env_var_ls_block_size) = env_var_ls_block_size {
+                env_var_ls_block_size
+            } else if let Some(env_var_block_size) = env_var_block_size {
+                env_var_block_size
             } else {
                 OsString::from("")
             }
@@ -782,15 +782,17 @@ impl Config {
             OsString::from("")
         };
 
-        let block_size: Option<u64> = if !opt_si && !opt_hr && !raw_bs.is_empty() {
-            match parse_size_u64(&raw_bs.to_string_lossy()) {
+        let block_size: Option<u64> = if !opt_si && !opt_hr && !raw_block_size.is_empty() {
+            match parse_size_u64(&raw_block_size.to_string_lossy()) {
                 Ok(size) => Some(size),
                 Err(_) => {
-                    show!(LsError::BlockSizeParseError(cmd_line_bs.unwrap().clone()));
+                    show!(LsError::BlockSizeParseError(
+                        opt_block_size.unwrap().clone()
+                    ));
                     None
                 }
             }
-        } else if let Some(pc) = pc_env_var {
+        } else if let Some(pc) = env_var_posixly_correct {
             if pc.as_os_str() == OsStr::new("true") || pc == OsStr::new("1") {
                 Some(POSIXLY_CORRECT_BLOCK_SIZE)
             } else {
