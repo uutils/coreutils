@@ -101,7 +101,26 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // This condition usually occurs for files in pseudo-filesystems like /proc, /sys
             // that report `st_size` in the multiples of system page size.
             // In such cases - fall back on full read
-            if (stat.st_mode as libc::mode_t & S_IFREG) != 0 && stat.st_size > 0 {
+            //
+            // And finally a special case of input redirection in *nix shell:
+            // `( wc -c ; wc -c ) < file` should return
+            // ```
+            // size_of_file
+            // 0
+            // ```
+            // Similarly
+            // `( head -c1 ; wc -c ) < file` should return
+            // ```
+            // first_byte_of_file
+            // size_of_file - 1
+            // ```
+            // Since the input stream from file is treated as continuous across both commands inside ().
+            // In cases like this, due to `<` redirect, the `stat.st_mode` would report input as a regular file
+            // and `stat.st_size` would report the size of file on disk
+            // and NOT the remaining number of bytes in the input stream. The raw file descriptor
+            // in this situation would be equal to `0` for STDIN in both invocations.
+            // Therefore we cannot rely of `st_size` here and should fall back on full read.
+            if fd > 0 && (stat.st_mode as libc::mode_t & S_IFREG) != 0 && stat.st_size > 0 {
                 let sys_page_size = unsafe { sysconf(_SC_PAGESIZE) as usize };
                 if stat.st_size as usize % sys_page_size > 0 {
                     // regular file or file from /proc, /sys and similar pseudo-filesystems
