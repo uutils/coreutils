@@ -9,7 +9,7 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::lines::lines;
 use uucore::{format_usage, help_about, help_usage, show};
