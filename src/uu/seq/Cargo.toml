@@ -20,7 +20,7 @@ bigdecimal = { workspace = true }
 clap = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-uucore = { workspace = true, features = ["memo", "quoting-style"] }
+uucore = { workspace = true, features = ["format", "quoting-style"] }
 
 [[bin]]
 name = "seq"

@@ -3,19 +3,69 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use std::fmt::Display;
+
 use clap::{crate_version, Arg, ArgAction, Command};
+use syntax_tree::AstNode;
 use uucore::{
-    error::{UResult, USimpleError},
+    display::Quotable,
+    error::{UError, UResult},
     format_usage, help_about, help_section, help_usage,
 };
 
+use crate::syntax_tree::is_truthy;
+
 mod syntax_tree;
-mod tokens;
 
 mod options {
     pub const VERSION: &str = "version";
     pub const HELP: &str = "help";
     pub const EXPRESSION: &str = "expression";
+}
+
+pub type ExprResult<T> = Result<T, ExprError>;
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExprError {
+    UnexpectedArgument(String),
+    MissingArgument(String),
+    NonIntegerArgument,
+    MissingOperand,
+    DivisionByZero,
+    InvalidRegexExpression,
+    ExpectedClosingBraceAfter(String),
+}
+
+impl Display for ExprError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnexpectedArgument(s) => {
+                write!(f, "syntax error: unexpected argument {}", s.quote())
+            }
+            Self::MissingArgument(s) => {
+                write!(f, "syntax error: missing argument after {}", s.quote())
+            }
+            Self::NonIntegerArgument => write!(f, "non-integer argument"),
+            Self::MissingOperand => write!(f, "missing operand"),
+            Self::DivisionByZero => write!(f, "division by zero"),
+            Self::InvalidRegexExpression => write!(f, "Invalid regex expression"),
+            Self::ExpectedClosingBraceAfter(s) => {
+                write!(f, "expected ')' after {}", s.quote())
+            }
+        }
+    }
+}
+
+impl std::error::Error for ExprError {}
+
+impl UError for ExprError {
+    fn code(&self) -> i32 {
+        2
+    }
+
+    fn usage(&self) -> bool {
+        *self == Self::MissingOperand
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -53,32 +103,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // For expr utility we do not want getopts.
     // The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`
     let matches = uu_app().try_get_matches_from(args)?;
-    let token_strings = matches
+    let token_strings: Vec<&str> = matches
         .get_many::<String>(options::EXPRESSION)
         .map(|v| v.into_iter().map(|s| s.as_ref()).collect::<Vec<_>>())
         .unwrap_or_default();
 
-    match process_expr(&token_strings[..]) {
-        Ok(expr_result) => print_expr_ok(&expr_result),
-        Err(expr_error) => Err(USimpleError::new(2, &expr_error)),
+    let res = AstNode::parse(&token_strings)?.eval()?;
+    println!("{res}");
+    if !is_truthy(&res) {
+        return Err(1.into());
     }
-}
-
-fn process_expr(token_strings: &[&str]) -> Result<String, String> {
-    let maybe_tokens = tokens::strings_to_tokens(token_strings);
-    let maybe_ast = syntax_tree::tokens_to_ast(maybe_tokens);
-    evaluate_ast(maybe_ast)
-}
-
-fn print_expr_ok(expr_result: &str) -> UResult<()> {
-    println!("{expr_result}");
-    if expr_result.parse::<i32>() == Ok(0) || expr_result.is_empty() {
-        Err(1.into())
-    } else {
-        Ok(())
-    }
-}
-
-fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::AstNode>, String>) -> Result<String, String> {
-    maybe_ast.and_then(|ast| ast.evaluate())
+    Ok(())
 }

@@ -17,7 +17,7 @@ use uucore::line_ending::LineEnding;
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
 use uucore::ranges::Range;
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_if_err};
+use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
 
 mod matcher;
 mod searcher;
@@ -426,7 +426,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             delim = "";
                         }
                         if delim.chars().count() > 1 {
-                            Err("invalid input: The '--delimiter' ('-d') option expects empty or 1 character long, but was provided a value 2 characters or longer".into())
+                            Err("the delimiter must be a single character".into())
                         } else {
                             let delim = if delim.is_empty() {
                                 "\0".to_owned()

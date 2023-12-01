@@ -3,23 +3,21 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE
-
-mod datastructures;
-use datastructures::*;
-
-mod parseargs;
-use parseargs::Parser;
-
-mod conversion_tables;
-
-mod progress;
-use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
+// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput
 
 mod blocks;
-use blocks::conv_block_unblock_helper;
-
+mod bufferedoutput;
+mod conversion_tables;
+mod datastructures;
 mod numbers;
+mod parseargs;
+mod progress;
+
+use crate::bufferedoutput::BufferedOutput;
+use blocks::conv_block_unblock_helper;
+use datastructures::*;
+use parseargs::Parser;
+use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
 
 use std::cmp;
 use std::env;
@@ -52,9 +50,9 @@ use uucore::display::Quotable;
 #[cfg(unix)]
 use uucore::error::set_exit_code;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 #[cfg(target_os = "linux")]
-use uucore::{show, show_if_err};
+use uucore::show_if_err;
+use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 const ABOUT: &str = help_about!("dd.md");
 const AFTER_HELP: &str = help_section!("after help", "dd.md");
@@ -76,6 +74,8 @@ struct Settings {
     oconv: OConvFlags,
     oflags: OFlags,
     status: Option<StatusLevel>,
+    /// Whether the output writer should buffer partial blocks until complete.
+    buffered: bool,
 }
 
 /// A timer which triggers on a given interval
@@ -126,6 +126,12 @@ impl Alarm {
 enum Num {
     Blocks(u64),
     Bytes(u64),
+}
+
+impl Default for Num {
+    fn default() -> Self {
+        Self::Blocks(0)
+    }
 }
 
 impl Num {
@@ -796,6 +802,68 @@ impl<'a> Output<'a> {
             Ok(())
         }
     }
+
+    /// Truncate the underlying file to the current stream position, if possible.
+    fn truncate(&mut self) -> std::io::Result<()> {
+        self.dst.truncate()
+    }
+}
+
+/// The block writer either with or without partial block buffering.
+enum BlockWriter<'a> {
+    /// Block writer with partial block buffering.
+    ///
+    /// Partial blocks are buffered until completed.
+    Buffered(BufferedOutput<'a>),
+
+    /// Block writer without partial block buffering.
+    ///
+    /// Partial blocks are written immediately.
+    Unbuffered(Output<'a>),
+}
+
+impl<'a> BlockWriter<'a> {
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+        match self {
+            Self::Unbuffered(o) => o.discard_cache(offset, len),
+            Self::Buffered(o) => o.discard_cache(offset, len),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<WriteStat> {
+        match self {
+            Self::Unbuffered(_) => Ok(WriteStat::default()),
+            Self::Buffered(o) => o.flush(),
+        }
+    }
+
+    fn sync(&mut self) -> io::Result<()> {
+        match self {
+            Self::Unbuffered(o) => o.sync(),
+            Self::Buffered(o) => o.sync(),
+        }
+    }
+
+    /// Truncate the file to the final cursor location.
+    fn truncate(&mut self) {
+        // Calling `set_len()` may result in an error (for example,
+        // when calling it on `/dev/null`), but we don't want to
+        // terminate the process when that happens. Instead, we
+        // suppress the error by calling `Result::ok()`. This matches
+        // the behavior of GNU `dd` when given the command-line
+        // argument `of=/dev/null`.
+        match self {
+            Self::Unbuffered(o) => o.truncate().ok(),
+            Self::Buffered(o) => o.truncate().ok(),
+        };
+    }
+
+    fn write_blocks(&mut self, buf: &[u8]) -> std::io::Result<WriteStat> {
+        match self {
+            Self::Unbuffered(o) => o.write_blocks(buf),
+            Self::Buffered(o) => o.write_blocks(buf),
+        }
+    }
 }
 
 /// Copy the given input data to this output, consuming both.
@@ -809,7 +877,7 @@ impl<'a> Output<'a> {
 ///
 /// If there is a problem reading from the input or writing to
 /// this output.
-fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
+fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
     // The read and write statistics.
     //
     // These objects are counters, initialized to zero. After each
@@ -846,6 +914,9 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
     let (prog_tx, rx) = mpsc::channel();
     let output_thread = thread::spawn(gen_prog_updater(rx, i.settings.status));
 
+    // Whether to truncate the output file after all blocks have been written.
+    let truncate = !o.settings.oconv.notrunc;
+
     // Optimization: if no blocks are to be written, then don't
     // bother allocating any buffers.
     if let Some(Num::Blocks(0) | Num::Bytes(0)) = i.settings.count {
@@ -870,7 +941,15 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
             let len = o.dst.len()?.try_into().unwrap();
             o.discard_cache(offset, len);
         }
-        return finalize(&mut o, rstat, wstat, start, &prog_tx, output_thread);
+        return finalize(
+            BlockWriter::Unbuffered(o),
+            rstat,
+            wstat,
+            start,
+            &prog_tx,
+            output_thread,
+            truncate,
+        );
     };
 
     // Create a common buffer with a capacity of the block size.
@@ -890,13 +969,23 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
     let mut read_offset = 0;
     let mut write_offset = 0;
 
+    let input_nocache = i.settings.iflags.nocache;
+    let output_nocache = o.settings.oflags.nocache;
+
+    // Add partial block buffering, if needed.
+    let mut o = if o.settings.buffered {
+        BlockWriter::Buffered(BufferedOutput::new(o))
+    } else {
+        BlockWriter::Unbuffered(o)
+    };
+
     // The main read/write loop.
     //
     // Each iteration reads blocks from the input and writes
     // blocks to this output. Read/write statistics are updated on
     // each iteration and cumulative statistics are reported to
     // the progress reporting thread.
-    while below_count_limit(&i.settings.count, &rstat, &wstat) {
+    while below_count_limit(&i.settings.count, &rstat) {
         // Read a block from the input then write the block to the output.
         //
         // As an optimization, make an educated guess about the
@@ -914,7 +1003,7 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
         //
         // TODO Better error handling for overflowing `offset` and `len`.
         let read_len = rstat_update.bytes_total;
-        if i.settings.iflags.nocache {
+        if input_nocache {
             let offset = read_offset.try_into().unwrap();
             let len = read_len.try_into().unwrap();
             i.discard_cache(offset, len);
@@ -926,7 +1015,7 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
         //
         // TODO Better error handling for overflowing `offset` and `len`.
         let write_len = wstat_update.bytes_total;
-        if o.settings.oflags.nocache {
+        if output_nocache {
             let offset = write_offset.try_into().unwrap();
             let len = write_len.try_into().unwrap();
             o.discard_cache(offset, len);
@@ -946,34 +1035,33 @@ fn dd_copy(mut i: Input, mut o: Output) -> std::io::Result<()> {
             prog_tx.send(prog_update).unwrap_or(());
         }
     }
-    finalize(&mut o, rstat, wstat, start, &prog_tx, output_thread)
+    finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)
 }
 
 /// Flush output, print final stats, and join with the progress thread.
 fn finalize<T>(
-    output: &mut Output,
+    mut output: BlockWriter,
     rstat: ReadStat,
     wstat: WriteStat,
     start: Instant,
     prog_tx: &mpsc::Sender<ProgUpdate>,
     output_thread: thread::JoinHandle<T>,
+    truncate: bool,
 ) -> std::io::Result<()> {
-    // Flush the output, if configured to do so.
+    // Flush the output in case a partial write has been buffered but
+    // not yet written.
+    let wstat_update = output.flush()?;
+
+    // Sync the output, if configured to do so.
     output.sync()?;
 
     // Truncate the file to the final cursor location.
-    //
-    // Calling `set_len()` may result in an error (for example,
-    // when calling it on `/dev/null`), but we don't want to
-    // terminate the process when that happens. Instead, we
-    // suppress the error by calling `Result::ok()`. This matches
-    // the behavior of GNU `dd` when given the command-line
-    // argument `of=/dev/null`.
-    if !output.settings.oconv.notrunc {
-        output.dst.truncate().ok();
+    if truncate {
+        output.truncate();
     }
 
     // Print the final read/write statistics.
+    let wstat = wstat + wstat_update;
     let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), true);
     prog_tx.send(prog_update).unwrap_or(());
     // Wait for the output thread to finish
@@ -1103,16 +1191,10 @@ fn calc_loop_bsize(
 
 // Decide if the current progress is below a count=N limit or return
 // true if no such limit is set.
-fn below_count_limit(count: &Option<Num>, rstat: &ReadStat, wstat: &WriteStat) -> bool {
+fn below_count_limit(count: &Option<Num>, rstat: &ReadStat) -> bool {
     match count {
-        Some(Num::Blocks(n)) => {
-            let n = *n;
-            rstat.reads_complete + rstat.reads_partial <= n
-        }
-        Some(Num::Bytes(n)) => {
-            let n = (*n).try_into().unwrap();
-            wstat.bytes_total <= n
-        }
+        Some(Num::Blocks(n)) => rstat.reads_complete + rstat.reads_partial < *n,
+        Some(Num::Bytes(n)) => rstat.bytes_total < *n,
         None => true,
     }
 }

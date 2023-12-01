@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore nbbbb ncccc hexdigit
+// spell-checker:ignore nbbbb ncccc hexdigit getmaxstdio
 
 mod filenames;
 mod number;
@@ -563,7 +563,11 @@ impl Settings {
         Ok(result)
     }
 
-    fn instantiate_current_writer(&self, filename: &str) -> io::Result<BufWriter<Box<dyn Write>>> {
+    fn instantiate_current_writer(
+        &self,
+        filename: &str,
+        is_new: bool,
+    ) -> io::Result<BufWriter<Box<dyn Write>>> {
         if platform::paths_refer_to_same_file(&self.input, filename) {
             return Err(io::Error::new(
                 ErrorKind::Other,
@@ -571,7 +575,7 @@ impl Settings {
             ));
         }
 
-        platform::instantiate_current_writer(&self.filter, filename)
+        platform::instantiate_current_writer(&self.filter, filename, is_new)
     }
 }
 
@@ -618,7 +622,7 @@ fn custom_write_all<T: Write>(
 
 /// Get the size of the input file in bytes
 /// Used only for subset of `--number=CHUNKS` strategy, as there is a need
-/// to determine input file size upfront in order to know chunk size
+/// to determine input file size upfront in order to estimate the chunk size
 /// to be written into each of N files/chunks:
 /// * N       split into N files based on size of input
 /// * K/N     output Kth of N to stdout
@@ -748,7 +752,7 @@ impl<'a> ByteChunkWriter<'a> {
         if settings.verbose {
             println!("creating file {}", filename.quote());
         }
-        let inner = settings.instantiate_current_writer(&filename)?;
+        let inner = settings.instantiate_current_writer(&filename, true)?;
         Ok(ByteChunkWriter {
             settings,
             chunk_size,
@@ -786,7 +790,7 @@ impl<'a> Write for ByteChunkWriter<'a> {
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
-                self.inner = self.settings.instantiate_current_writer(&filename)?;
+                self.inner = self.settings.instantiate_current_writer(&filename, true)?;
             }
 
             // If the capacity of this chunk is greater than the number of
@@ -872,7 +876,7 @@ impl<'a> LineChunkWriter<'a> {
         if settings.verbose {
             println!("creating file {}", filename.quote());
         }
-        let inner = settings.instantiate_current_writer(&filename)?;
+        let inner = settings.instantiate_current_writer(&filename, true)?;
         Ok(LineChunkWriter {
             settings,
             chunk_size,
@@ -907,7 +911,7 @@ impl<'a> Write for LineChunkWriter<'a> {
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
-                self.inner = self.settings.instantiate_current_writer(&filename)?;
+                self.inner = self.settings.instantiate_current_writer(&filename, true)?;
                 self.num_lines_remaining_in_current_chunk = self.chunk_size;
             }
 
@@ -979,7 +983,7 @@ impl<'a> LineBytesChunkWriter<'a> {
         if settings.verbose {
             println!("creating file {}", filename.quote());
         }
-        let inner = settings.instantiate_current_writer(&filename)?;
+        let inner = settings.instantiate_current_writer(&filename, true)?;
         Ok(LineBytesChunkWriter {
             settings,
             chunk_size,
@@ -1045,7 +1049,7 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                 if self.settings.verbose {
                     println!("creating file {}", filename.quote());
                 }
-                self.inner = self.settings.instantiate_current_writer(&filename)?;
+                self.inner = self.settings.instantiate_current_writer(&filename, true)?;
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size.try_into().unwrap();
             }
 
@@ -1130,14 +1134,131 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
     }
 }
 
+/// Output file parameters
+struct OutFile {
+    filename: String,
+    maybe_writer: Option<BufWriter<Box<dyn Write>>>,
+    is_new: bool,
+}
+
+/// A set of output files
+/// Used in [`n_chunks_by_byte`], [`n_chunks_by_line`]
+/// and [`n_chunks_by_line_round_robin`] functions.
+type OutFiles = Vec<OutFile>;
+trait ManageOutFiles {
+    /// Initialize a new set of output files
+    /// Each OutFile is generated with filename, while the writer for it could be
+    /// optional, to be instantiated later by the calling function as needed.
+    /// Optional writers could happen in the following situations:
+    /// * in [`n_chunks_by_line`] and [`n_chunks_by_line_round_robin`] if `elide_empty_files` parameter is set to `true`
+    /// * if the number of files is greater than system limit for open files
+    fn init(num_files: u64, settings: &Settings, is_writer_optional: bool) -> UResult<Self>
+    where
+        Self: Sized;
+    /// Get the writer for the output file by index.
+    /// If system limit of open files has been reached
+    /// it will try to close one of previously instantiated writers
+    /// to free up resources and re-try instantiating current writer,
+    /// except for `--filter` mode.
+    /// The writers that get closed to free up resources for the current writer
+    /// are flagged as `is_new=false`, so they can be re-opened for appending
+    /// instead of created anew if we need to keep writing into them later,
+    /// i.e. in case of round robin distribution as in [`n_chunks_by_line_round_robin`]
+    fn get_writer(
+        &mut self,
+        idx: usize,
+        settings: &Settings,
+    ) -> UResult<&mut BufWriter<Box<dyn Write>>>;
+}
+
+impl ManageOutFiles for OutFiles {
+    fn init(num_files: u64, settings: &Settings, is_writer_optional: bool) -> UResult<Self> {
+        // This object is responsible for creating the filename for each chunk
+        let mut filename_iterator: FilenameIterator<'_> =
+            FilenameIterator::new(&settings.prefix, &settings.suffix)
+                .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
+        let mut out_files: Self = Self::new();
+        for _ in 0..num_files {
+            let filename = filename_iterator
+                .next()
+                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
+            let maybe_writer = if is_writer_optional {
+                None
+            } else {
+                let instantiated = settings.instantiate_current_writer(filename.as_str(), true);
+                // If there was an error instantiating the writer for a file,
+                // it could be due to hitting the system limit of open files,
+                // so record it as None and let [`get_writer`] function handle closing/re-opening
+                // of writers as needed within system limits.
+                // However, for `--filter` child process writers - propagate the error,
+                // as working around system limits of open files for child shell processes
+                // is currently not supported (same as in GNU)
+                match instantiated {
+                    Ok(writer) => Some(writer),
+                    Err(e) if settings.filter.is_some() => {
+                        return Err(e.into());
+                    }
+                    Err(_) => None,
+                }
+            };
+            out_files.push(OutFile {
+                filename,
+                maybe_writer,
+                is_new: true,
+            });
+        }
+        Ok(out_files)
+    }
+
+    fn get_writer(
+        &mut self,
+        idx: usize,
+        settings: &Settings,
+    ) -> UResult<&mut BufWriter<Box<dyn Write>>> {
+        if self[idx].maybe_writer.is_some() {
+            Ok(self[idx].maybe_writer.as_mut().unwrap())
+        } else {
+            // Writer was not instantiated upfront or was temporarily closed due to system resources constraints.
+            // Instantiate it and record for future use.
+            let maybe_writer =
+                settings.instantiate_current_writer(self[idx].filename.as_str(), self[idx].is_new);
+            if let Ok(writer) = maybe_writer {
+                self[idx].maybe_writer = Some(writer);
+                Ok(self[idx].maybe_writer.as_mut().unwrap())
+            } else if settings.filter.is_some() {
+                // Propagate error if in `--filter` mode
+                Err(maybe_writer.err().unwrap().into())
+            } else {
+                // Could have hit system limit for open files.
+                // Try to close one previously instantiated writer first
+                for (i, out_file) in self.iter_mut().enumerate() {
+                    if i != idx && out_file.maybe_writer.is_some() {
+                        out_file.maybe_writer.as_mut().unwrap().flush()?;
+                        out_file.maybe_writer = None;
+                        out_file.is_new = false;
+                        break;
+                    }
+                }
+                // And then try to instantiate the writer again
+                // If this fails - give up and propagate the error
+                self[idx].maybe_writer =
+                    Some(settings.instantiate_current_writer(
+                        self[idx].filename.as_str(),
+                        self[idx].is_new,
+                    )?);
+                Ok(self[idx].maybe_writer.as_mut().unwrap())
+            }
+        }
+    }
+}
+
 /// Split a file or STDIN into a specific number of chunks by byte.
-/// If in Kth chunk of N mode - print the k-th chunk to STDOUT.
 ///
 /// When file size cannot be evenly divided into the number of chunks of the same size,
 /// the first X chunks are 1 byte longer than the rest,
 /// where X is a modulus reminder of (file size % number of chunks)
 ///
-/// In Kth chunk of N mode - writes to stdout the contents of the chunk identified by `kth_chunk`
+/// In Kth chunk of N mode - writes to STDOUT the contents of the chunk identified by `kth_chunk`
 ///
 /// In N chunks mode - this function always creates one output file for each chunk, even
 /// if there is an error reading or writing one of the chunks or if
@@ -1207,7 +1328,7 @@ where
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = std::io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
-    let mut writers = vec![];
+    let mut out_files: OutFiles = OutFiles::new();
 
     // Calculate chunk size base and modulo reminder
     // to be used in calculating chunk_size later on
@@ -1219,16 +1340,7 @@ where
     // This will create each of the underlying files
     // or stdin pipes to child shell/command processes if in `--filter` mode
     if kth_chunk.is_none() {
-        // This object is responsible for creating the filename for each chunk.
-        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)
-            .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
-        for _ in 0..num_chunks {
-            let filename = filename_iterator
-                .next()
-                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
-            let writer = settings.instantiate_current_writer(filename.as_str())?;
-            writers.push(writer);
-        }
+        out_files = OutFiles::init(num_chunks, settings, false)?;
     }
 
     for i in 1_u64..=num_chunks {
@@ -1272,7 +1384,7 @@ where
                 }
                 None => {
                     let idx = (i - 1) as usize;
-                    let writer = writers.get_mut(idx).unwrap();
+                    let writer = out_files.get_writer(idx, settings)?;
                     writer.write_all(buf)?;
                 }
             }
@@ -1284,9 +1396,14 @@ where
 }
 
 /// Split a file or STDIN into a specific number of chunks by line.
-/// If in Kth chunk of N mode - print the k-th chunk to STDOUT.
 ///
-/// In Kth chunk of N mode - writes to stdout the contents of the chunk identified by `kth_chunk`
+/// It is most likely that input cannot be evenly divided into the number of chunks
+/// of the same size in bytes or number of lines, since we cannot break lines.
+/// It is also likely that there could be empty files (having `elide_empty_files` is disabled)
+/// when a long line overlaps one or more chunks.
+///
+/// In Kth chunk of N mode - writes to STDOUT the contents of the chunk identified by `kth_chunk`
+/// Note: the `elide_empty_files` flag is ignored in this mode
 ///
 /// In N chunks mode - this function always creates one output file for each chunk, even
 /// if there is an error reading or writing one of the chunks or if
@@ -1322,81 +1439,106 @@ where
     let initial_buf = &mut Vec::new();
     let num_bytes = get_input_size(&settings.input, reader, initial_buf, &settings.io_blksize)?;
     let reader = initial_buf.chain(reader);
-    let chunk_size = (num_bytes / num_chunks) as usize;
 
     // If input file is empty and we would not have determined the Kth chunk
     // in the Kth chunk of N chunk mode, then terminate immediately.
     // This happens on `split -n l/3/10 /dev/null`, for example.
-    if kth_chunk.is_some() && num_bytes == 0 {
+    // Similarly, if input file is empty and `elide_empty_files` parameter is enabled,
+    // then we would have written zero chunks of output,
+    // so terminate immediately as well.
+    // This happens on `split -e -n l/3 /dev/null`, for example.
+    if num_bytes == 0 && (kth_chunk.is_some() || settings.elide_empty_files) {
         return Ok(());
     }
 
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = std::io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
-    let mut writers = vec![];
+    let mut out_files: OutFiles = OutFiles::new();
+
+    // Calculate chunk size base and modulo reminder
+    // to be used in calculating `num_bytes_should_be_written` later on
+    let chunk_size_base = num_bytes / num_chunks;
+    let chunk_size_reminder = num_bytes % num_chunks;
 
     // If in N chunks mode
-    // Create one writer for each chunk.
-    // This will create each of the underlying files
-    // or stdin pipes to child shell/command processes if in `--filter` mode
+    // Generate filenames for each file and
+    // if `elide_empty_files` parameter is NOT enabled - instantiate the writer
+    // which will create each of the underlying files or stdin pipes
+    // to child shell/command processes if in `--filter` mode.
+    // Otherwise keep writer optional, to be instantiated later if there is data
+    // to write for the associated chunk.
     if kth_chunk.is_none() {
-        // This object is responsible for creating the filename for each chunk.
-        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)
-            .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
-        for _ in 0..num_chunks {
-            let filename = filename_iterator
-                .next()
-                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
-            let writer = settings.instantiate_current_writer(filename.as_str())?;
-            writers.push(writer);
-        }
+        out_files = OutFiles::init(num_chunks, settings, settings.elide_empty_files)?;
     }
 
-    let mut num_bytes_remaining_in_current_chunk = chunk_size;
-    let mut i = 1;
+    let mut chunk_number = 1;
     let sep = settings.separator;
+    let mut num_bytes_should_be_written = chunk_size_base + (chunk_size_reminder > 0) as u64;
+    let mut num_bytes_written = 0;
 
     for line_result in reader.split(sep) {
-        // add separator back in at the end of the line
         let mut line = line_result?;
-        line.push(sep);
+        // add separator back in at the end of the line,
+        // since `reader.split(sep)` removes it,
+        // except if the last line did not end with separator character
+        if (num_bytes_written + line.len() as u64) < num_bytes {
+            line.push(sep);
+        }
         let bytes = line.as_slice();
 
         match kth_chunk {
-            Some(chunk_number) => {
-                if i == chunk_number {
+            Some(kth) => {
+                if chunk_number == kth {
                     stdout_writer.write_all(bytes)?;
                 }
             }
             None => {
-                let idx = (i - 1) as usize;
-                let maybe_writer = writers.get_mut(idx);
-                let writer = maybe_writer.unwrap();
+                // Should write into a file
+                let idx = (chunk_number - 1) as usize;
+                let writer = out_files.get_writer(idx, settings)?;
                 custom_write_all(bytes, writer, settings)?;
             }
         }
 
-        let num_bytes = bytes.len();
-        if num_bytes >= num_bytes_remaining_in_current_chunk {
-            num_bytes_remaining_in_current_chunk = chunk_size;
-            i += 1;
-        } else {
-            num_bytes_remaining_in_current_chunk -= num_bytes;
+        // Advance to the next chunk if the current one is filled.
+        // There could be a situation when a long line, which started in current chunk,
+        // would overlap the next chunk (or even several next chunks),
+        // and since we cannot break lines for this split strategy, we could end up with
+        // empty files in place(s) of skipped chunk(s)
+        let num_line_bytes = bytes.len() as u64;
+        num_bytes_written += num_line_bytes;
+        let mut skipped = -1;
+        while num_bytes_should_be_written <= num_bytes_written {
+            num_bytes_should_be_written +=
+                chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
+            chunk_number += 1;
+            skipped += 1;
         }
 
-        if let Some(chunk_number) = kth_chunk {
-            if i > chunk_number {
+        // If a chunk was skipped and `elide_empty_files` flag is set,
+        // roll chunk_number back to preserve sequential continuity
+        // of file names for files written to,
+        // except for Kth chunk of N mode
+        if settings.elide_empty_files && skipped > 0 && kth_chunk.is_none() {
+            chunk_number -= skipped as u64;
+        }
+
+        if let Some(kth) = kth_chunk {
+            if chunk_number > kth {
                 break;
             }
         }
     }
-
     Ok(())
 }
 
 /// Split a file or STDIN into a specific number of chunks by line, but
-/// assign lines via round-robin
+/// assign lines via round-robin.
+/// Note: There is no need to know the size of the input upfront for this method,
+/// since the lines are assigned to chunks randomly and the size of each chunk
+/// does not need to be estimated. As a result, "infinite" inputs are supported
+/// for this method, i.e. `yes | split -n r/10` or `yes | split -n r/3/11`
 ///
 /// In Kth chunk of N mode - writes to stdout the contents of the chunk identified by `kth_chunk`
 ///
@@ -1432,59 +1574,51 @@ where
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = std::io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
-    let mut writers = vec![];
+    let mut out_files: OutFiles = OutFiles::new();
 
     // If in N chunks mode
     // Create one writer for each chunk.
     // This will create each of the underlying files
     // or stdin pipes to child shell/command processes if in `--filter` mode
     if kth_chunk.is_none() {
-        // This object is responsible for creating the filename for each chunk.
-        let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)
-            .map_err(|e| io::Error::new(ErrorKind::Other, format!("{e}")))?;
-        for _ in 0..num_chunks {
-            let filename = filename_iterator
-                .next()
-                .ok_or_else(|| USimpleError::new(1, "output file suffixes exhausted"))?;
-            let writer = settings.instantiate_current_writer(filename.as_str())?;
-            writers.push(writer);
-        }
+        out_files = OutFiles::init(num_chunks, settings, settings.elide_empty_files)?;
     }
 
     let num_chunks: usize = num_chunks.try_into().unwrap();
     let sep = settings.separator;
     let mut closed_writers = 0;
-    for (i, line_result) in reader.split(sep).enumerate() {
-        // add separator back in at the end of the line
-        let mut line = line_result?;
-        line.push(sep);
-        let bytes = line.as_slice();
 
+    let mut i = 0;
+    loop {
+        let line = &mut Vec::new();
+        let num_bytes_read = reader.by_ref().read_until(sep, line)?;
+
+        // if there is nothing else to read - exit the loop
+        if num_bytes_read == 0 {
+            break;
+        };
+
+        let bytes = line.as_slice();
         match kth_chunk {
             Some(chunk_number) => {
-                // The `.enumerate()` method returns index `i` starting with 0,
-                // but chunk number is given as a 1-indexed number,
-                // so compare to `chunk_number - 1`
                 if (i % num_chunks) == (chunk_number - 1) as usize {
                     stdout_writer.write_all(bytes)?;
                 }
             }
             None => {
-                let maybe_writer = writers.get_mut(i % num_chunks);
-                let writer = maybe_writer.unwrap();
-
+                let writer = out_files.get_writer(i % num_chunks, settings)?;
                 let writer_stdin_open = custom_write_all(bytes, writer, settings)?;
                 if !writer_stdin_open {
                     closed_writers += 1;
-                    if closed_writers == num_chunks {
-                        // all writers are closed - stop reading
-                        break;
-                    }
                 }
             }
         }
+        i += 1;
+        if closed_writers == num_chunks {
+            // all writers are closed - stop reading
+            break;
+        }
     }
-
     Ok(())
 }
 

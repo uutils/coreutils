@@ -358,6 +358,7 @@ fn parse_icf_tokens_remaining() {
                 fsync: true,
                 ..Default::default()
             },
+            is_conv_specified: true,
             ..Default::default()
         })
     );

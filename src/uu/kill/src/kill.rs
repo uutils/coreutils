@@ -10,7 +10,7 @@ use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::signals::{signal_by_name_or_value, ALL_SIGNALS};
 use uucore::{format_usage, help_about, help_usage, show};
 
