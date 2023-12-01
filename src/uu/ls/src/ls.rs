@@ -20,7 +20,7 @@ use std::os::windows::fs::MetadataExt;
 use std::{
     cmp::Reverse,
     error::Error,
-    ffi::{OsStr, OsString},
+    ffi::OsString,
     fmt::{Display, Write as FmtWrite},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{stdout, BufWriter, ErrorKind, Stdout, Write},
@@ -792,12 +792,8 @@ impl Config {
                     None
                 }
             }
-        } else if let Some(pc) = env_var_posixly_correct {
-            if pc.as_os_str() == OsStr::new("true") || pc == OsStr::new("1") {
-                Some(POSIXLY_CORRECT_BLOCK_SIZE)
-            } else {
-                None
-            }
+        } else if env_var_posixly_correct.is_some() {
+            Some(POSIXLY_CORRECT_BLOCK_SIZE)
         } else {
             None
         };
