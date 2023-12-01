@@ -2,7 +2,11 @@ name: Fuzzing
 
 # spell-checker:ignore fuzzer
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read # to fetch code (actions/checkout)
