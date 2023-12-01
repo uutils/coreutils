@@ -257,6 +257,8 @@ fn test_cp_target_directory_is_file() {
 }
 
 #[test]
+// FixMe: for FreeBSD, flaky test; track repair progress at GH:uutils/coreutils/issue/4725
+#[cfg(not(target_os = "freebsd"))]
 fn test_cp_arg_update_interactive() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
