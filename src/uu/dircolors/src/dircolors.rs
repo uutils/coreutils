@@ -10,9 +10,10 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
+use std::fmt::Write;
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES};
+use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{help_about, help_section, help_usage};
@@ -28,9 +29,6 @@ mod options {
 const USAGE: &str = help_usage!("dircolors.md");
 const ABOUT: &str = help_about!("dircolors.md");
 const AFTER_HELP: &str = help_section!("after help", "dircolors.md");
-
-mod colors;
-use self::colors::INTERNAL_DB;
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum OutputFmt {
@@ -181,7 +179,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             ));
         }
-        println!("{INTERNAL_DB}");
+
+        println!("{}", generate_dircolors_config());
         return Ok(());
     }
 
@@ -222,6 +221,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     } else if files[0].eq("-") {
         let fin = BufReader::new(std::io::stdin());
+        // For example, for echo "owt 40;33"|dircolors -b -
         result = parse(fin.lines().map_while(Result::ok), &out_format, files[0]);
     } else {
         let path = Path::new(files[0]);
@@ -368,7 +368,7 @@ enum ParseState {
 use uucore::{format_usage, parse_glob};
 
 #[allow(clippy::cognitive_complexity)]
-fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
+fn parse<T>(user_input: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,
     T::Item: Borrow<str>,
@@ -384,7 +384,7 @@ where
 
     let mut state = ParseState::Global;
 
-    for (num, line) in lines.into_iter().enumerate() {
+    for (num, line) in user_input.into_iter().enumerate() {
         let num = num + 1;
         let line = line.borrow().purify();
         if line.is_empty() {
@@ -396,13 +396,12 @@ where
         let (key, val) = line.split_two();
         if val.is_empty() {
             return Err(format!(
-                "{}:{}: invalid line;  missing second token",
+                "{}:{}: invalid line; missing second token",
                 fp.maybe_quote(),
                 num
             ));
         }
         let lower = key.to_lowercase();
-
         if lower == "term" || lower == "colorterm" {
             if term.fnmatch(val) {
                 state = ParseState::Matched;
@@ -417,6 +416,7 @@ where
             }
             if state != ParseState::Pass {
                 let search_key = lower.as_str();
+
                 if key.starts_with('.') {
                     if *fmt == OutputFmt::Display {
                         result.push_str(format!("\x1b[{val}m*{key}\t{val}\x1b[0m\n").as_str());
@@ -480,6 +480,53 @@ fn escape(s: &str) -> String {
     }
 
     result
+}
+
+
+pub fn generate_dircolors_config() -> String {
+    let mut config = String::new();
+
+    // Adding the complete header comments as in the original file
+    writeln!(config, "# Configuration file for dircolors, a utility to help you set the").unwrap();
+    writeln!(config, "# LS_COLORS environment variable used by GNU ls with the --color option.").unwrap();
+    writeln!(config, "# The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the").unwrap();
+    writeln!(config, "# slackware version of dircolors) are recognized but ignored.").unwrap();
+    writeln!(config, "# Global config options can be specified before TERM or COLORTERM entries").unwrap();
+    writeln!(config, "# Below are TERM or COLORTERM entries, which can be glob patterns, which").unwrap();
+    writeln!(config, "# restrict following config to systems with matching environment variables.").unwrap();
+    writeln!(config, "COLORTERM ?*").unwrap();
+    for term in TERMS.iter() {
+        writeln!(config, "TERM {}", term).unwrap();
+    }
+
+    // Adding file types and their color codes with header
+    writeln!(config, "# Below are the color init strings for the basic file types.").unwrap();
+    writeln!(config, "# One can use codes for 256 or more colors supported by modern terminals.").unwrap();
+    writeln!(config, "# The default color codes use the capabilities of an 8 color terminal").unwrap();
+    writeln!(config, "# with some additional attributes as per the following codes:").unwrap();
+    writeln!(config, "# Attribute codes:").unwrap();
+    writeln!(config, "# 00=none 01=bold 04=underscore 05=blink 07=reverse 08=concealed").unwrap();
+    writeln!(config, "# Text color codes:").unwrap();
+    writeln!(config, "# 30=black 31=red 32=green 33=yellow 34=blue 35=magenta 36=cyan 37=white").unwrap();
+    writeln!(config, "# Background color codes:").unwrap();
+    writeln!(config, "# 40=black 41=red 42=green 43=yellow 44=blue 45=magenta 46=cyan 47=white").unwrap();
+    writeln!(config, "#NORMAL 00 # no color code at all").unwrap();
+    writeln!(config, "#FILE 00 # regular file: use no color at all").unwrap();
+
+    for (name, _, code) in FILE_TYPES.iter() {
+        writeln!(config, "{} {}", name, code).unwrap();
+    }
+
+    writeln!(config, "# List any file extensions like '.gz' or '.tar' that you would like ls").unwrap();
+    writeln!(config, "# to color below. Put the extension, a space, and the color init string.").unwrap();
+
+    for (ext, color) in FILE_COLORS.iter() {
+        writeln!(config, "{} {}", ext, color).unwrap();
+    }
+    writeln!(config, "# Subsequent TERM or COLORTERM entries, can be used to add / override").unwrap();
+    write!(config, "# config specific to those matching environment variables.").unwrap();
+
+    config
 }
 
 #[cfg(test)]
