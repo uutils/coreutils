@@ -7,10 +7,10 @@
 
 use std::borrow::Borrow;
 use std::env;
+use std::fmt::Write;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::fmt::Write;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
@@ -92,13 +92,7 @@ pub fn generate_type_output(fmt: &OutputFmt) -> String {
     }
 }
 
-enum ExtensionFormat {
-    StarDot, // Format as ".*ext"
-    Dot,     // Format as ".ext"
-    NoDot,   // Format as "ext"
-}
-
-fn generate_ls_colors(fmt: &OutputFmt, format: ExtensionFormat, sep: &str) -> String {
+fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
     match fmt {
         OutputFmt::Display => {
             let mut display_parts = vec![];
@@ -113,25 +107,15 @@ fn generate_ls_colors(fmt: &OutputFmt, format: ExtensionFormat, sep: &str) -> St
             // existing logic for other formats
             let mut parts = vec![];
             for &(extension, code) in FILE_COLORS.iter() {
-                let formatted_extension = match format {
-                    ExtensionFormat::StarDot => format!("*{}", extension),
-                    ExtensionFormat::Dot => extension.to_string(),
-                    ExtensionFormat::NoDot => {
-                        if extension.starts_with('.') {
-                            extension[1..].to_string()
-                        } else {
-                            extension.to_string()
-                        }
-                    }
-                };
+                let formatted_extension = format!("*{}", extension);
                 parts.push(format!("{}={}", formatted_extension, code));
             }
-            let (prefix, suffix) = get_colors_format_strings(&fmt);
+            let (prefix, suffix) = get_colors_format_strings(fmt);
             let ls_colors = parts.join(sep);
             format!(
                 "{}{}:{}:{}",
                 prefix,
-                generate_type_output(&fmt),
+                generate_type_output(fmt),
                 ls_colors,
                 suffix
             )
@@ -208,10 +192,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let result;
     if files.is_empty() {
-        println!(
-            "{}",
-            generate_ls_colors(&out_format, ExtensionFormat::StarDot, ":")
-        );
+        println!("{}", generate_ls_colors(&out_format, ":"));
 
         return Ok(());
     } else if files.len() > 1 {
@@ -373,9 +354,8 @@ where
     T: IntoIterator,
     T::Item: Borrow<str>,
 {
-    // 1790 > $(dircolors | wc -m)
     let mut result = String::with_capacity(1790);
-    let (prefix, suffix) = get_colors_format_strings(&fmt);
+    let (prefix, suffix) = get_colors_format_strings(fmt);
 
     result.push_str(&prefix);
 
@@ -482,34 +462,89 @@ fn escape(s: &str) -> String {
     result
 }
 
-
 pub fn generate_dircolors_config() -> String {
     let mut config = String::new();
 
     // Adding the complete header comments as in the original file
-    writeln!(config, "# Configuration file for dircolors, a utility to help you set the").unwrap();
-    writeln!(config, "# LS_COLORS environment variable used by GNU ls with the --color option.").unwrap();
-    writeln!(config, "# The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the").unwrap();
-    writeln!(config, "# slackware version of dircolors) are recognized but ignored.").unwrap();
-    writeln!(config, "# Global config options can be specified before TERM or COLORTERM entries").unwrap();
-    writeln!(config, "# Below are TERM or COLORTERM entries, which can be glob patterns, which").unwrap();
-    writeln!(config, "# restrict following config to systems with matching environment variables.").unwrap();
+    writeln!(
+        config,
+        "# Configuration file for dircolors, a utility to help you set the"
+    )
+    .unwrap();
+    writeln!(
+        config,
+        "# LS_COLORS environment variable used by GNU ls with the --color option."
+    )
+    .unwrap();
+    writeln!(
+        config,
+        "# The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the"
+    )
+    .unwrap();
+    writeln!(
+        config,
+        "# slackware version of dircolors) are recognized but ignored."
+    )
+    .unwrap();
+    writeln!(
+        config,
+        "# Global config options can be specified before TERM or COLORTERM entries"
+    )
+    .unwrap();
+    writeln!(
+        config,
+        "# Below are TERM or COLORTERM entries, which can be glob patterns, which"
+    )
+    .unwrap();
+    writeln!(
+        config,
+        "# restrict following config to systems with matching environment variables."
+    )
+    .unwrap();
     writeln!(config, "COLORTERM ?*").unwrap();
     for term in TERMS.iter() {
         writeln!(config, "TERM {}", term).unwrap();
     }
 
     // Adding file types and their color codes with header
-    writeln!(config, "# Below are the color init strings for the basic file types.").unwrap();
-    writeln!(config, "# One can use codes for 256 or more colors supported by modern terminals.").unwrap();
-    writeln!(config, "# The default color codes use the capabilities of an 8 color terminal").unwrap();
-    writeln!(config, "# with some additional attributes as per the following codes:").unwrap();
+    writeln!(
+        config,
+        "# Below are the color init strings for the basic file types."
+    )
+    .unwrap();
+    writeln!(
+        config,
+        "# One can use codes for 256 or more colors supported by modern terminals."
+    )
+    .unwrap();
+    writeln!(
+        config,
+        "# The default color codes use the capabilities of an 8 color terminal"
+    )
+    .unwrap();
+    writeln!(
+        config,
+        "# with some additional attributes as per the following codes:"
+    )
+    .unwrap();
     writeln!(config, "# Attribute codes:").unwrap();
-    writeln!(config, "# 00=none 01=bold 04=underscore 05=blink 07=reverse 08=concealed").unwrap();
+    writeln!(
+        config,
+        "# 00=none 01=bold 04=underscore 05=blink 07=reverse 08=concealed"
+    )
+    .unwrap();
     writeln!(config, "# Text color codes:").unwrap();
-    writeln!(config, "# 30=black 31=red 32=green 33=yellow 34=blue 35=magenta 36=cyan 37=white").unwrap();
+    writeln!(
+        config,
+        "# 30=black 31=red 32=green 33=yellow 34=blue 35=magenta 36=cyan 37=white"
+    )
+    .unwrap();
     writeln!(config, "# Background color codes:").unwrap();
-    writeln!(config, "# 40=black 41=red 42=green 43=yellow 44=blue 45=magenta 46=cyan 47=white").unwrap();
+    writeln!(
+        config,
+        "# 40=black 41=red 42=green 43=yellow 44=blue 45=magenta 46=cyan 47=white"
+    )
+    .unwrap();
     writeln!(config, "#NORMAL 00 # no color code at all").unwrap();
     writeln!(config, "#FILE 00 # regular file: use no color at all").unwrap();
 
@@ -517,14 +552,30 @@ pub fn generate_dircolors_config() -> String {
         writeln!(config, "{} {}", name, code).unwrap();
     }
 
-    writeln!(config, "# List any file extensions like '.gz' or '.tar' that you would like ls").unwrap();
-    writeln!(config, "# to color below. Put the extension, a space, and the color init string.").unwrap();
+    writeln!(
+        config,
+        "# List any file extensions like '.gz' or '.tar' that you would like ls"
+    )
+    .unwrap();
+    writeln!(
+        config,
+        "# to color below. Put the extension, a space, and the color init string."
+    )
+    .unwrap();
 
     for (ext, color) in FILE_COLORS.iter() {
         writeln!(config, "{} {}", ext, color).unwrap();
     }
-    writeln!(config, "# Subsequent TERM or COLORTERM entries, can be used to add / override").unwrap();
-    write!(config, "# config specific to those matching environment variables.").unwrap();
+    writeln!(
+        config,
+        "# Subsequent TERM or COLORTERM entries, can be used to add / override"
+    )
+    .unwrap();
+    write!(
+        config,
+        "# config specific to those matching environment variables."
+    )
+    .unwrap();
 
     config
 }
