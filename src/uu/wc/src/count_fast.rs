@@ -10,7 +10,7 @@ use super::WordCountable;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::OpenOptions;
-use std::io::{self, ErrorKind, Read};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
 
 #[cfg(unix)]
 use libc::{sysconf, S_IFREG, _SC_PAGESIZE};
@@ -100,7 +100,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // would count up only to a couple of bytes.
             // This condition usually occurs for files in pseudo-filesystems like /proc, /sys
             // that report `st_size` in the multiples of system page size.
-            // In such cases - fall back on full read
+            // In such cases - attempt `seek()` for the end of file
             //
             // And finally a special case of input redirection in *nix shell:
             // `( wc -c ; wc -c ) < file` should return
@@ -126,6 +126,10 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     // regular file or file from /proc, /sys and similar pseudo-filesystems
                     // with size that is NOT a multiple of system page size
                     return (stat.st_size as usize, None);
+                } else if let Some(file) = handle.inner_file() {
+                    if let Ok(n) = file.seek(SeekFrom::End(0)) {
+                        return (n as usize, None);
+                    }
                 }
             }
             #[cfg(any(target_os = "linux", target_os = "android"))]
