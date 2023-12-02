@@ -100,7 +100,8 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // would count up only to a couple of bytes.
             // This condition usually occurs for files in pseudo-filesystems like /proc, /sys
             // that report `st_size` in the multiples of system page size.
-            // In such cases - attempt `seek()` for the end of file
+            // In such cases - attempt `seek()` almost to the end of the file
+            // and then fall back on read to count the rest.
             //
             // And finally a special case of input redirection in *nix shell:
             // `( wc -c ; wc -c ) < file` should return
@@ -127,8 +128,9 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     // with size that is NOT a multiple of system page size
                     return (stat.st_size as usize, None);
                 } else if let Some(file) = handle.inner_file() {
-                    if let Ok(n) = file.seek(SeekFrom::End(0)) {
-                        return (n as usize, None);
+                    let offset = stat.st_size - stat.st_size % (stat.st_blksize as i64 + 1);
+                    if let Ok(n) = file.seek(SeekFrom::Start(offset as u64)) {
+                        byte_count = n as usize;
                     }
                 }
             }
