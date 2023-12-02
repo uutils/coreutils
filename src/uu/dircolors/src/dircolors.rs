@@ -12,7 +12,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use uucore::colors::FILE_ATTRIBUTE_CODES;
+use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{help_about, help_section, help_usage};
@@ -55,6 +55,89 @@ pub fn guess_syntax() -> OutputFmt {
             }
         }
         _ => OutputFmt::Unknown,
+    }
+}
+
+fn get_colors_format_strings(fmt: &OutputFmt) -> (String, String) {
+    let prefix = match fmt {
+        OutputFmt::Shell => "LS_COLORS='".to_string(),
+        OutputFmt::CShell => "setenv LS_COLORS '".to_string(),
+        OutputFmt::Display => String::new(),
+        OutputFmt::Unknown => unreachable!(),
+    };
+
+    let suffix = match fmt {
+        OutputFmt::Shell => "';\nexport LS_COLORS".to_string(),
+        OutputFmt::CShell => "'".to_string(),
+        OutputFmt::Display => String::new(),
+        OutputFmt::Unknown => unreachable!(),
+    };
+
+    (prefix, suffix)
+}
+
+pub fn generate_type_output(fmt: &OutputFmt) -> String {
+    match fmt {
+        OutputFmt::Display => FILE_TYPES
+            .iter()
+            .map(|&(_, key, val)| format!("\x1b[{}m{}\t{}\x1b[0m", val, key, val))
+            .collect::<Vec<String>>()
+            .join("\n"),
+        _ => {
+            // Existing logic for other formats
+            FILE_TYPES
+                .iter()
+                .map(|&(_, v1, v2)| format!("{}={}", v1, v2))
+                .collect::<Vec<String>>()
+                .join(":")
+        }
+    }
+}
+
+enum ExtensionFormat {
+    StarDot, // Format as ".*ext"
+    Dot,     // Format as ".ext"
+    NoDot,   // Format as "ext"
+}
+
+fn generate_ls_colors(fmt: &OutputFmt, format: ExtensionFormat, sep: &str) -> String {
+    match fmt {
+        OutputFmt::Display => {
+            let mut display_parts = vec![];
+            let type_output = generate_type_output(fmt);
+            display_parts.push(type_output);
+            for &(extension, code) in FILE_COLORS.iter() {
+                display_parts.push(format!("\x1b[{}m*{}\t{}\x1b[0m", code, extension, code));
+            }
+            display_parts.join("\n")
+        }
+        _ => {
+            // existing logic for other formats
+            let mut parts = vec![];
+            for &(extension, code) in FILE_COLORS.iter() {
+                let formatted_extension = match format {
+                    ExtensionFormat::StarDot => format!("*{}", extension),
+                    ExtensionFormat::Dot => extension.to_string(),
+                    ExtensionFormat::NoDot => {
+                        if extension.starts_with('.') {
+                            extension[1..].to_string()
+                        } else {
+                            extension.to_string()
+                        }
+                    }
+                };
+                parts.push(format!("{}={}", formatted_extension, code));
+            }
+            let (prefix, suffix) = get_colors_format_strings(&fmt);
+            let ls_colors = parts.join(sep);
+            format!(
+                "{}{}:{}:{}",
+                prefix,
+                generate_type_output(&fmt),
+                ls_colors,
+                suffix
+            )
+        }
     }
 }
 
@@ -126,7 +209,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let result;
     if files.is_empty() {
-        result = parse(INTERNAL_DB.lines(), &out_format, "");
+        println!(
+            "{}",
+            generate_ls_colors(&out_format, ExtensionFormat::StarDot, ":")
+        );
+
+        return Ok(());
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
@@ -287,12 +375,9 @@ where
 {
     // 1790 > $(dircolors | wc -m)
     let mut result = String::with_capacity(1790);
-    match fmt {
-        OutputFmt::Shell => result.push_str("LS_COLORS='"),
-        OutputFmt::CShell => result.push_str("setenv LS_COLORS '"),
-        OutputFmt::Display => (),
-        OutputFmt::Unknown => unreachable!(),
-    }
+    let (prefix, suffix) = get_colors_format_strings(&fmt);
+
+    result.push_str(&prefix);
 
     let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
     let term = term.as_str();
@@ -331,6 +416,7 @@ where
                 state = ParseState::Continue;
             }
             if state != ParseState::Pass {
+                let search_key = lower.as_str();
                 if key.starts_with('.') {
                     if *fmt == OutputFmt::Display {
                         result.push_str(format!("\x1b[{val}m*{key}\t{val}\x1b[0m\n").as_str());
@@ -345,7 +431,10 @@ where
                     }
                 } else if lower == "options" || lower == "color" || lower == "eightbit" {
                     // Slackware only. Ignore
-                } else if let Some(s) = FILE_ATTRIBUTE_CODES.get(lower.as_str()) {
+                } else if let Some((_, s)) = FILE_ATTRIBUTE_CODES
+                    .iter()
+                    .find(|&&(key, _)| key == search_key)
+                {
                     if *fmt == OutputFmt::Display {
                         result.push_str(format!("\x1b[{val}m{s}\t{val}\x1b[0m\n").as_str());
                     } else {
@@ -363,15 +452,11 @@ where
         }
     }
 
-    match fmt {
-        OutputFmt::Shell => result.push_str("';\nexport LS_COLORS"),
-        OutputFmt::CShell => result.push('\''),
-        OutputFmt::Display => {
-            // remove latest "\n"
-            result.pop();
-        }
-        OutputFmt::Unknown => unreachable!(),
+    if fmt == &OutputFmt::Display {
+        // remove latest "\n"
+        result.pop();
     }
+    result.push_str(&suffix);
 
     Ok(result)
 }

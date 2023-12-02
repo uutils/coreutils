@@ -4,19 +4,15 @@
 // file that was distributed with this source code.
 
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
 
 /* The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the
  * slackware version of dircolors) are recognized but ignored.
  * Global config options can be specified before TERM or COLORTERM entries
  * below are TERM or COLORTERM entries, which can be glob patterns, which
  * restrict following config to systems with matching environment variables.
- * COLORTERM ?*
 */
-
-pub static TERMS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
-    let mut m = HashMap::new();
-    [
+pub static TERMS: Lazy<Vec<&str>> = Lazy::new(|| {
+    vec![
         "Eterm",
         "ansi",
         "*color*",
@@ -43,11 +39,6 @@ pub static TERMS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
         "vt100",
         "xterm*",
     ]
-    .iter()
-    .for_each(|&term| {
-        m.insert(term, "");
-    });
-    m
 });
 
 /*
@@ -64,34 +55,27 @@ pub static TERMS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
 #NORMAL 00 # no color code at all
 #FILE 00 # regular file: use no color at all
 */
-// FILE_TYPES with Lazy initialization
-pub static FILE_TYPES: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
-    let mut m = HashMap::new();
-    [
-        ("RESET", "0"),                     // reset to "normal" color
-        ("DIR", "01;34"),                   // directory
-        ("LINK", "01;36"),                  // symbolic link
-        ("MULTIHARDLINK", "00"),            // regular file with more than one link
-        ("FIFO", "40;33"),                  // pipe
-        ("SOCK", "01;35"),                  // socket
-        ("DOOR", "01;35"),                  // door
-        ("BLK", "40;33;01"),                // block device driver
-        ("CHR", "40;33;01"),                // character device driver
-        ("ORPHAN", "40;31;01"),             // symlink to nonexistent file, or non-stat'able file
-        ("MISSING", "00"),                  // ... and the files they point to
-        ("SETUID", "37;41"),                // file that is setuid (u+s)
-        ("SETGID", "30;43"),                // file that is setgid (g+s)
-        ("CAPABILITY", "00"),               // file with capability
-        ("STICKY_OTHER_WRITABLE", "30;42"), // dir that is sticky and other-writable (+t,o+w)
-        ("OTHER_WRITABLE", "34;42"),        // dir that is other-writable (o+w) and not sticky
-        ("STICKY", "37;44"), // dir with the sticky bit set (+t) and not other-writable
-        ("EXEC", "01;32"),   // files with execute permission
+pub static FILE_TYPES: Lazy<Vec<(&'static str, &'static str, &'static str)>> = Lazy::new(|| {
+    vec![
+        ("RESET", "rs", "0"),                     // reset to "normal" color
+        ("DIR", "di", "01;34"),                   // directory
+        ("LINK", "ln", "01;36"),                  // symbolic link
+        ("MULTIHARDLINK", "mh", "00"),            // regular file with more than one link
+        ("FIFO", "pi", "40;33"),                  // pipe
+        ("SOCK", "so", "01;35"),                  // socket
+        ("DOOR", "do", "01;35"),                  // door
+        ("BLK", "bd", "40;33;01"),                // block device driver
+        ("CHR", "cd", "40;33;01"),                // character device driver
+        ("ORPHAN", "or", "40;31;01"), // symlink to nonexistent file, or non-stat'able file
+        ("MISSING", "mi", "00"),      // ... and the files they point to
+        ("SETUID", "su", "37;41"),    // file that is setuid (u+s)
+        ("SETGID", "sg", "30;43"),    // file that is setgid (g+s)
+        ("CAPABILITY", "ca", "00"),   // file with capability
+        ("STICKY_OTHER_WRITABLE", "tw", "30;42"), // dir that is sticky and other-writable (+t,o+w)
+        ("OTHER_WRITABLE", "ow", "34;42"), // dir that is other-writable (o+w) and not sticky
+        ("STICKY", "st", "37;44"),    // dir with the sticky bit set (+t) and not other-writable
+        ("EXEC", "ex", "01;32"),      // files with execute permission
     ]
-    .iter()
-    .for_each(|&(k, v)| {
-        m.insert(k, v);
-    });
-    m
 });
 
 /*
@@ -99,9 +83,9 @@ pub static FILE_TYPES: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
 # to color below. Put the extension, a space, and the color init string.
 # (and any comments you want to add after a '#')
 */
-pub static FILE_COLORS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
-    let mut m = HashMap::new();
-    [
+pub static FILE_COLORS: Lazy<Vec<(&str, &str)>> = Lazy::new(|| {
+    vec![
+        /*
         // Executables (Windows)
         (".cmd", "01;32"),
         (".exe", "01;32"),
@@ -109,7 +93,7 @@ pub static FILE_COLORS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
         (".btm", "01;32"),
         (".bat", "01;32"),
         (".sh", "01;32"),
-        (".csh", "01;32"),
+        (".csh", "01;32"),*/
         // Archives or compressed
         (".tar", "01;31"),
         (".tgz", "01;31"),
@@ -207,6 +191,7 @@ pub static FILE_COLORS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
         (".yuv", "01;35"),
         (".cgm", "01;35"),
         (".emf", "01;35"),
+        // https://wiki.xiph.org/MIME_Types_and_File_Extensions
         (".ogv", "01;35"),
         (".ogx", "01;35"),
         // Audio formats
@@ -222,13 +207,14 @@ pub static FILE_COLORS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
         (".ogg", "00;36"),
         (".ra", "00;36"),
         (".wav", "00;36"),
+        // https://wiki.xiph.org/MIME_Types_and_File_Extensions
         (".oga", "00;36"),
         (".opus", "00;36"),
         (".spx", "00;36"),
         (".xspf", "00;36"),
         // Backup files
-        ("*~", "00;90"),
-        ("*#", "00;90"),
+        ("~", "00;90"),
+        ("#", "00;90"),
         (".bak", "00;90"),
         (".old", "00;90"),
         (".orig", "00;90"),
@@ -245,16 +231,10 @@ pub static FILE_COLORS: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
         (".rpmorig", "00;90"),
         (".rpmsave", "00;90"),
     ]
-    .iter()
-    .for_each(|&(k, v)| {
-        m.insert(k, v);
-    });
-    m
 });
 
-pub static FILE_ATTRIBUTE_CODES: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
-    let mut m = HashMap::new();
-    [
+pub static FILE_ATTRIBUTE_CODES: Lazy<Vec<(&str, &str)>> = Lazy::new(|| {
+    vec![
         ("normal", "no"),
         ("norm", "no"),
         ("file", "fi"),
@@ -293,9 +273,4 @@ pub static FILE_ATTRIBUTE_CODES: Lazy<HashMap<&str, &str>> = Lazy::new(|| {
         ("multihardlink", "mh"),
         ("clrtoeol", "cl"),
     ]
-    .iter()
-    .for_each(|&(k, v)| {
-        m.insert(k, v);
-    });
-    m
 });
