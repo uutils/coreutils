@@ -130,11 +130,12 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     // with size that is NOT a multiple of system page size
                     return (stat.st_size as usize, None);
                 } else if let Some(file) = handle.inner_file() {
-                    // On some platforms `stat.st_blksize` is of i32 type,
+                    // On some platforms `stat.st_blksize` and/or `st.st_size` is of i32 type,
                     // i.e. MacOS on Apple Silicon (aarch64-apple-darwin),
-                    // as well as Debian Linux on ARM (aarch64-unknown-linux-gnu)
+                    // as well as Debian Linux on ARM (aarch64-unknown-linux-gnu), etc.
                     #[allow(clippy::unnecessary_cast)]
-                    let offset = stat.st_size - stat.st_size % (stat.st_blksize as i64 + 1);
+                    let offset =
+                        stat.st_size as i64 - stat.st_size as i64 % (stat.st_blksize as i64 + 1);
 
                     if let Ok(n) = file.seek(SeekFrom::Start(offset as u64)) {
                         byte_count = n as usize;
