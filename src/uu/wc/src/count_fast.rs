@@ -10,12 +10,14 @@ use super::WordCountable;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::OpenOptions;
-use std::io::{self, ErrorKind, Read, Seek, SeekFrom};
+use std::io::{self, ErrorKind, Read};
 
 #[cfg(unix)]
 use libc::{sysconf, S_IFREG, _SC_PAGESIZE};
 #[cfg(unix)]
 use nix::sys::stat;
+#[cfg(unix)]
+use std::io::{Seek, SeekFrom};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::io::AsRawFd;
 
@@ -128,7 +130,12 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     // with size that is NOT a multiple of system page size
                     return (stat.st_size as usize, None);
                 } else if let Some(file) = handle.inner_file() {
+                    // On some platforms `stat.st_blksize` is of i32 type,
+                    // i.e. MacOS on Apple Silicon (aarch64-apple-darwin),
+                    // as well as Debian Linux on ARM (aarch64-unknown-linux-gnu)
+                    #[allow(clippy::unnecessary_cast)]
                     let offset = stat.st_size - stat.st_size % (stat.st_blksize as i64 + 1);
+
                     if let Ok(n) = file.seek(SeekFrom::Start(offset as u64)) {
                         byte_count = n as usize;
                     }
