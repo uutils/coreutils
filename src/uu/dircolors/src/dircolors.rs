@@ -12,6 +12,7 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use clap::{crate_version, Arg, ArgAction, Command};
+use uucore::colors::FILE_ATTRIBUTE_CODES;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{help_about, help_section, help_usage};
@@ -276,7 +277,6 @@ enum ParseState {
     Pass,
 }
 
-use std::collections::HashMap;
 use uucore::{format_usage, parse_glob};
 
 #[allow(clippy::cognitive_complexity)]
@@ -293,45 +293,6 @@ where
         OutputFmt::Display => (),
         OutputFmt::Unknown => unreachable!(),
     }
-
-    let mut table: HashMap<&str, &str> = HashMap::with_capacity(48);
-    table.insert("normal", "no");
-    table.insert("norm", "no");
-    table.insert("file", "fi");
-    table.insert("reset", "rs");
-    table.insert("dir", "di");
-    table.insert("lnk", "ln");
-    table.insert("link", "ln");
-    table.insert("symlink", "ln");
-    table.insert("orphan", "or");
-    table.insert("missing", "mi");
-    table.insert("fifo", "pi");
-    table.insert("pipe", "pi");
-    table.insert("sock", "so");
-    table.insert("blk", "bd");
-    table.insert("block", "bd");
-    table.insert("chr", "cd");
-    table.insert("char", "cd");
-    table.insert("door", "do");
-    table.insert("exec", "ex");
-    table.insert("left", "lc");
-    table.insert("leftcode", "lc");
-    table.insert("right", "rc");
-    table.insert("rightcode", "rc");
-    table.insert("end", "ec");
-    table.insert("endcode", "ec");
-    table.insert("suid", "su");
-    table.insert("setuid", "su");
-    table.insert("sgid", "sg");
-    table.insert("setgid", "sg");
-    table.insert("sticky", "st");
-    table.insert("other_writable", "ow");
-    table.insert("owr", "ow");
-    table.insert("sticky_other_writable", "tw");
-    table.insert("owt", "tw");
-    table.insert("capability", "ca");
-    table.insert("multihardlink", "mh");
-    table.insert("clrtoeol", "cl");
 
     let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
     let term = term.as_str();
@@ -384,7 +345,7 @@ where
                     }
                 } else if lower == "options" || lower == "color" || lower == "eightbit" {
                     // Slackware only. Ignore
-                } else if let Some(s) = table.get(lower.as_str()) {
+                } else if let Some(s) = FILE_ATTRIBUTE_CODES.get(lower.as_str()) {
                     if *fmt == OutputFmt::Display {
                         result.push_str(format!("\x1b[{val}m{s}\t{val}\x1b[0m\n").as_str());
                     } else {
