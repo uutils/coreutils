@@ -128,8 +128,9 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // Since the input stream from file is treated as continuous across both commands inside ().
             // In cases like this, due to `<` redirect, the `stat.st_mode` would report input as a regular file
             // and `stat.st_size` would report the size of file on disk
-            // and NOT the remaining number of bytes in the input stream. The raw file descriptor
-            // in this situation would be equal to `0` for STDIN in both invocations.
+            // and NOT the remaining number of bytes in the input stream. 
+            // However, the raw file descriptor in this situation would be equal to `0` 
+            // for STDIN in both invocations.
             // Therefore we cannot rely of `st_size` here and should fall back on full read.
             if fd > 0 && (stat.st_mode as libc::mode_t & S_IFREG) != 0 && stat.st_size > 0 {
                 let sys_page_size = unsafe { sysconf(_SC_PAGESIZE) as usize };
@@ -138,7 +139,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     // with size that is NOT a multiple of system page size
                     return (stat.st_size as usize, None);
                 } else if let Some(file) = handle.inner_file() {
-                    // On some platforms `stat.st_blksize` and `st.st_size`
+                    // On some platforms `stat.st_blksize` and `stat.st_size`
                     // are of different types: i64 vs i32
                     // i.e. MacOS on Apple Silicon (aarch64-apple-darwin),
                     // Debian Linux on ARM (aarch64-unknown-linux-gnu),
