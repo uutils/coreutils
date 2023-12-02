@@ -268,7 +268,7 @@ impl StrUtils for str {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum ParseState {
     Global,
     Matched,
@@ -279,12 +279,8 @@ enum ParseState {
 use std::collections::HashMap;
 use uucore::{format_usage, parse_glob};
 
-#[allow(clippy::cognitive_complexity)]
-fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
-where
-    T: IntoIterator,
-    T::Item: Borrow<str>,
-{
+// Initialize result and table
+fn init_parse(fmt: &OutputFmt) -> (String, HashMap<&'static str, &'static str>) {
     // 1790 > $(dircolors | wc -m)
     let mut result = String::with_capacity(1790);
     match fmt {
@@ -332,10 +328,84 @@ where
     table.insert("capability", "ca");
     table.insert("multihardlink", "mh");
     table.insert("clrtoeol", "cl");
+    (result, table)
+}
 
+fn handle_terminal_type(lower: &str, val: &str, term: &str, state: &mut ParseState) {
+    if lower == "term" || lower == "colorterm" {
+        if term.fnmatch(val) {
+            *state = ParseState::Matched;
+        } else if *state != ParseState::Matched {
+            *state = ParseState::Pass;
+        }
+    } else if *state == ParseState::Matched {
+        // prevent subsequent mismatched TERM from cancelling the input
+        *state = ParseState::Continue;
+    }
+}
+
+fn process_line(
+    line: &str,
+    fmt: &OutputFmt,
+    state: &mut ParseState,
+    table: &HashMap<&str, &str>,
+    result: &mut String,
+    num: usize,
+    fp: &str,
+) -> Result<(), String> {
+    let (key, val) = line.split_two();
+    if val.is_empty() {
+        return Err(format!(
+            "{}:{}: invalid line; missing second token",
+            fp.maybe_quote(),
+            num
+        ));
+    }
+    let lower = key.to_lowercase();
+
+    if *state != ParseState::Pass {
+        if key.starts_with('.') {
+            // handle file extension
+            add_formatting(result, fmt, key, val, "file extension");
+        } else if key.starts_with('*') {
+            // handle wildcard
+            add_formatting(result, fmt, key, val, "wildcard");
+        } else if let Some(s) = table.get(lower.as_str()) {
+            // handle known keyword
+            add_formatting(result, fmt, s, val, "keyword");
+        } else if lower != "options" && lower != "color" && lower != "eightbit" {
+            // unrecognized keyword
+            return Err(format!(
+                "{}:{}: unrecognized keyword {}",
+                fp.maybe_quote(),
+                num,
+                key
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn add_formatting(result: &mut String, fmt: &OutputFmt, key: &str, val: &str, description: &str) {
+    match fmt {
+        OutputFmt::Display => {
+            result.push_str(format!("\x1b[{val}m{key} ({description})\t{val}\x1b[0m\n").as_str());
+        }
+        _ => {
+            result.push_str(format!("{key}={val}:").as_str());
+        }
+    }
+}
+
+fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
+where
+    T: IntoIterator,
+    T::Item: Borrow<str>,
+{
+    let (mut result, table) = init_parse(fmt);
     let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
     let term = term.as_str();
-
     let mut state = ParseState::Global;
 
     for (num, line) in lines.into_iter().enumerate() {
@@ -346,60 +416,11 @@ where
         }
 
         let line = escape(line);
-
         let (key, val) = line.split_two();
-        if val.is_empty() {
-            return Err(format!(
-                "{}:{}: invalid line;  missing second token",
-                fp.maybe_quote(),
-                num
-            ));
-        }
         let lower = key.to_lowercase();
 
-        if lower == "term" || lower == "colorterm" {
-            if term.fnmatch(val) {
-                state = ParseState::Matched;
-            } else if state != ParseState::Matched {
-                state = ParseState::Pass;
-            }
-        } else {
-            if state == ParseState::Matched {
-                // prevent subsequent mismatched TERM from
-                // cancelling the input
-                state = ParseState::Continue;
-            }
-            if state != ParseState::Pass {
-                if key.starts_with('.') {
-                    if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{val}m*{key}\t{val}\x1b[0m\n").as_str());
-                    } else {
-                        result.push_str(format!("*{key}={val}:").as_str());
-                    }
-                } else if key.starts_with('*') {
-                    if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{val}m{key}\t{val}\x1b[0m\n").as_str());
-                    } else {
-                        result.push_str(format!("{key}={val}:").as_str());
-                    }
-                } else if lower == "options" || lower == "color" || lower == "eightbit" {
-                    // Slackware only. Ignore
-                } else if let Some(s) = table.get(lower.as_str()) {
-                    if *fmt == OutputFmt::Display {
-                        result.push_str(format!("\x1b[{val}m{s}\t{val}\x1b[0m\n").as_str());
-                    } else {
-                        result.push_str(format!("{s}={val}:").as_str());
-                    }
-                } else {
-                    return Err(format!(
-                        "{}:{}: unrecognized keyword {}",
-                        fp.maybe_quote(),
-                        num,
-                        key
-                    ));
-                }
-            }
-        }
+        handle_terminal_type(&lower, val, term, &mut state);
+        process_line(&line, fmt, &mut state, &table, &mut result, num, fp)?;
     }
 
     match fmt {
@@ -439,12 +460,87 @@ fn escape(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::escape;
-
+    use crate::{handle_terminal_type, process_line};
+    use crate::{OutputFmt, ParseState};
+    use std::collections::HashMap;
     #[test]
     fn test_escape() {
         assert_eq!("", escape(""));
         assert_eq!("'\\''", escape("'"));
         assert_eq!("\\:", escape(":"));
         assert_eq!("\\:", escape("\\:"));
+    }
+
+    // Test for handle_terminal_type function
+    #[test]
+    fn test_handle_terminal_type() {
+        let mut state = ParseState::Global;
+        let term = "xterm-256color";
+
+        // Test with matching TERM
+        handle_terminal_type("term", "xterm*", term, &mut state);
+        assert_eq!(state, ParseState::Matched);
+
+        // Reset state and test with non-matching TERM
+        state = ParseState::Global;
+        handle_terminal_type("term", "vt100", term, &mut state);
+        assert_eq!(state, ParseState::Pass);
+    }
+
+    #[test]
+    fn test_process_line() {
+        let mut result = String::new();
+        let mut state = ParseState::Global;
+        let fmt = OutputFmt::Shell;
+        let num = 1;
+        let fp = "test_file";
+        let mut table = HashMap::new();
+        table.insert("dir", "di");
+
+        // Test processing a valid line
+        let line = "DIR 01;34";
+        let res = process_line(line, &fmt, &mut state, &table, &mut result, num, fp);
+        assert!(res.is_ok());
+        assert_eq!(result, "di=01;34:");
+
+        // Test processing an invalid line (no value part)
+        result.clear();
+        let invalid_line = "DIR";
+        let res = process_line(invalid_line, &fmt, &mut state, &table, &mut result, num, fp);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_handle_terminal_type_various_cases() {
+        let term = "xterm-256color";
+
+        // Test with matching TERM
+        let mut state = ParseState::Global;
+        handle_terminal_type("term", "xterm*", term, &mut state);
+        assert_eq!(state, ParseState::Matched);
+
+        // Test with non-matching TERM
+        state = ParseState::Global;
+        handle_terminal_type("term", "vt100", term, &mut state);
+        assert_eq!(state, ParseState::Pass);
+
+        // Test with matching COLORTERM
+        state = ParseState::Global;
+        handle_terminal_type("colorterm", "xterm*", term, &mut state);
+        assert_eq!(state, ParseState::Matched);
+
+        // Test with non-matching COLORTERM
+        state = ParseState::Global;
+        handle_terminal_type("colorterm", "vt100", term, &mut state);
+        assert_eq!(state, ParseState::Pass);
+
+        // Test with already matched state
+        state = ParseState::Matched;
+        handle_terminal_type("term", "vt100", term, &mut state);
+        assert_eq!(state, ParseState::Matched);
+
+        state = ParseState::Pass;
+        handle_terminal_type("term", "xterm*", term, &mut state);
+        assert_eq!(state, ParseState::Matched);
     }
 }
