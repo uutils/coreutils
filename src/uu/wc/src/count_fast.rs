@@ -20,6 +20,12 @@ use nix::sys::stat;
 use std::io::{Seek, SeekFrom};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::io::AsRawFd;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
+#[cfg(windows)]
+const FILE_ATTRIBUTE_ARCHIVE: u32 = 32;
+#[cfg(windows)]
+const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use libc::S_IFIFO;
@@ -76,6 +82,8 @@ fn count_bytes_using_splice(fd: &impl AsRawFd) -> Result<usize, usize> {
 ///   1. On Unix,  we can simply `stat` the file if it is regular.
 ///   2. On Linux -- if the above did not work -- we can use splice to count
 ///      the number of bytes if the file is a FIFO.
+///   3. On Windows we can use `std::os::windows::fs::MetadataExt` to get file size
+///      for regular files
 ///   3. Otherwise, we just read normally, but without the overhead of counting
 ///      other things such as lines and words.
 #[inline]
@@ -130,9 +138,12 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     // with size that is NOT a multiple of system page size
                     return (stat.st_size as usize, None);
                 } else if let Some(file) = handle.inner_file() {
-                    // On some platforms `stat.st_blksize` and/or `st.st_size` is of i32 type,
+                    // On some platforms `stat.st_blksize` and `st.st_size`
+                    // are of different types: i64 vs i32
                     // i.e. MacOS on Apple Silicon (aarch64-apple-darwin),
-                    // as well as Debian Linux on ARM (aarch64-unknown-linux-gnu), etc.
+                    // Debian Linux on ARM (aarch64-unknown-linux-gnu),
+                    // 32bit i686 targets, etc.
+                    // While on the others they are of the same type.
                     #[allow(clippy::unnecessary_cast)]
                     let offset =
                         stat.st_size as i64 - stat.st_size as i64 % (stat.st_blksize as i64 + 1);
@@ -151,6 +162,22 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                         Ok(n) => return (n, None),
                         Err(n) => byte_count = n,
                     }
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        if let Some(file) = handle.inner_file() {
+            if let Ok(metadata) = file.metadata() {
+                let attributes = metadata.file_attributes();
+                let size = metadata.file_size();
+
+                if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0
+                    || (attributes & FILE_ATTRIBUTE_NORMAL) != 0
+                {
+                    return (size as usize, None);
                 }
             }
         }
