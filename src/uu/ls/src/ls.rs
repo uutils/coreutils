@@ -3228,7 +3228,7 @@ fn calculate_padding_collection(
                 padding_collections.minor = minor_len.max(padding_collections.minor);
                 padding_collections.size = size_len
                     .max(padding_collections.size)
-                    .max(padding_collections.major + padding_collections.minor + 2usize);
+                    .max(padding_collections.major);
             }
         }
     }
