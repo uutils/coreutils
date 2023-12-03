@@ -25,6 +25,7 @@ build = "build.rs"
 default = ["feat_common_core"]
 ## OS feature shortcodes
 macos = ["feat_os_macos"]
+openbsd = ["feat_os_openbsd"]
 unix = ["feat_os_unix"]
 windows = ["feat_os_windows"]
 ## project-specific feature shortcodes
@@ -142,6 +143,15 @@ feat_Tier1 = [
 feat_os_macos = [
   "feat_os_unix", ## == a modern/usual *nix platform
   #
+  "feat_require_unix_hostid",
+]
+# "feat_os_openbsd" == set of utilities which can be built/run on OpenBSD
+# utmpx is not supported on OpenBSD, contrary to other modern *nix platforms
+feat_os_openbsd = [
+  "feat_Tier1",
+  #
+  "feat_require_crate_cpp",
+  "feat_require_unix",
   "feat_require_unix_hostid",
 ]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms
