@@ -441,6 +441,7 @@ fn test_du_inodes() {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[test]
 fn test_du_inodes_with_count_links() {
     let ts = TestScenario::new(util_name!());
