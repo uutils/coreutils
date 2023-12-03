@@ -201,39 +201,39 @@ pub enum NumOrStr {
 }
 
 impl From<usize> for NumOrStr {
-    fn from(num: usize) -> NumOrStr {
-        NumOrStr::Num(BigInt::from(num))
+    fn from(num: usize) -> Self {
+        Self::Num(BigInt::from(num))
     }
 }
 
 impl From<BigInt> for NumOrStr {
-    fn from(num: BigInt) -> NumOrStr {
-        NumOrStr::Num(num)
+    fn from(num: BigInt) -> Self {
+        Self::Num(num)
     }
 }
 
 impl From<String> for NumOrStr {
-    fn from(str: String) -> NumOrStr {
-        NumOrStr::Str(str)
+    fn from(str: String) -> Self {
+        Self::Str(str)
     }
 }
 
 impl NumOrStr {
-    pub fn to_usize(self: Self) -> Option<usize> {
+    pub fn to_usize(self) -> Option<usize> {
         match self.to_bigint() {
             Ok(num) => num.to_usize(),
             Err(_) => None,
         }
     }
 
-    pub fn to_string(self: Self) -> String {
+    pub fn to_string(self) -> String {
         match self {
             Self::Num(num) => num.to_string(),
             Self::Str(str) => str.to_string(),
         }
     }
 
-    pub fn to_bigint(self: Self) -> ExprResult<BigInt> {
+    pub fn to_bigint(self) -> ExprResult<BigInt> {
         match self {
             Self::Num(num) => Ok(num),
             Self::Str(str) => str
@@ -242,7 +242,7 @@ impl NumOrStr {
         }
     }
 
-    pub fn coerce_bigint(self: &Self) -> Result<BigInt, ParseBigIntError> {
+    pub fn coerce_bigint(&self) -> Result<BigInt, ParseBigIntError> {
         match self {
             Self::Num(num) => Ok(num.clone()),
             Self::Str(str) => str.parse::<BigInt>(),
