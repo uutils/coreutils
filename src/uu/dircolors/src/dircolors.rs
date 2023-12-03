@@ -9,6 +9,7 @@ use std::borrow::Borrow;
 use std::env;
 use std::fmt::Write;
 use std::fs::File;
+use std::io::IsTerminal;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
@@ -192,9 +193,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let result;
     if files.is_empty() {
-        println!("{}", generate_ls_colors(&out_format, ":"));
-
-        return Ok(());
+        // Check if data is being piped into the program
+        if std::io::stdin().is_terminal() {
+            // No data piped, use default behavior
+            println!("{}", generate_ls_colors(&out_format, ":"));
+            return Ok(());
+        } else {
+            // Data is piped, process the input from stdin
+            let fin = BufReader::new(std::io::stdin());
+            result = parse(fin.lines().map_while(Result::ok), &out_format, "-");
+        }
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
@@ -376,7 +384,8 @@ where
         let (key, val) = line.split_two();
         if val.is_empty() {
             return Err(format!(
-                "{}:{}: invalid line; missing second token",
+                // The double space is what GNU is doing
+                "{}:{}: invalid line;  missing second token",
                 fp.maybe_quote(),
                 num
             ));
