@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) ints paren prec multibytes
 
-use num_bigint::BigInt;
+use num_bigint::{BigInt, ParseBigIntError};
 use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
 
@@ -57,9 +57,9 @@ impl BinOp {
 
 impl RelationOp {
     fn eval(&self, a: &AstNode, b: &AstNode) -> ExprResult<NumOrStr> {
-        let a = a.eval()?.coerce_num();
-        let b = b.eval()?.coerce_num();
-        let b = if let (NumOrStr::Num(a), NumOrStr::Num(b)) = (&a, &b) {
+        let a = a.eval()?;
+        let b = b.eval()?;
+        let b = if let (Ok(a), Ok(b)) = (&a.coerce_bigint(), &b.coerce_bigint()) {
             match self {
                 Self::Lt => a < b,
                 Self::Leq => a <= b,
@@ -242,13 +242,10 @@ impl NumOrStr {
         }
     }
 
-    pub fn coerce_num(self: Self) -> NumOrStr {
+    pub fn coerce_bigint(self: &Self) -> Result<BigInt, ParseBigIntError> {
         match self {
-            Self::Num(num) => Self::from(num),
-            Self::Str(str) => match str.parse::<BigInt>() {
-                Ok(num) => Self::from(num),
-                Err(_) => Self::from(str),
-            },
+            Self::Num(num) => Ok(num.clone()),
+            Self::Str(str) => str.parse::<BigInt>(),
         }
     }
 }
@@ -458,7 +455,7 @@ impl<'a> Parser<'a> {
 /// Truthy strings are either empty or match the regex "-?0+".
 pub fn is_truthy(s: &NumOrStr) -> bool {
     match s {
-        NumOrStr::Num(num) => num == &BigInt::from(0),
+        NumOrStr::Num(num) => num != &BigInt::from(0),
         NumOrStr::Str(str) => {
             // Edge case: `-` followed by nothing is truthy
             if str == "-" {
