@@ -89,12 +89,8 @@ impl RelationOp {
 
 impl NumericOp {
     fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<NumOrStr> {
-        let a: BigInt = left
-            .eval()?
-            .to_bigint()?;
-        let b: BigInt = right
-            .eval()?
-            .to_bigint()?;
+        let a: BigInt = left.eval()?.to_bigint()?;
+        let b: BigInt = right.eval()?.to_bigint()?;
         Ok(NumOrStr::Num(match self {
             Self::Add => a + b,
             Self::Sub => a - b,
@@ -207,25 +203,25 @@ pub enum NumOrStr {
 impl NumOrStr {
     pub fn to_usize(self: NumOrStr) -> Option<usize> {
         match self.to_bigint() {
-            Ok(num) => {num.to_usize()}
-            Err(_) => {None},
+            Ok(num) => num.to_usize(),
+            Err(_) => None,
         }
     }
 
     pub fn to_string(self: &NumOrStr) -> String {
         match self {
-            NumOrStr::Num(num) => {num.to_string()}
-            NumOrStr::Str(str)  => {str.to_string()},
+            NumOrStr::Num(num) => num.to_string(),
+            NumOrStr::Str(str) => str.to_string(),
         }
     }
 
     pub fn to_bigint(self: NumOrStr) -> ExprResult<BigInt> {
         match self {
-            NumOrStr::Num(num) => {Ok(num)}
-            NumOrStr::Str(str) => { match str.parse::<BigInt>() {
-                Ok(val) => {Ok(val)},
-                Err(_) => {Err(ExprError::NonIntegerArgument)}
-            }},
+            NumOrStr::Num(num) => Ok(num),
+            NumOrStr::Str(str) => match str.parse::<BigInt>() {
+                Ok(val) => Ok(val),
+                Err(_) => Err(ExprError::NonIntegerArgument),
+            },
         }
     }
 }
@@ -284,9 +280,13 @@ impl AstNode {
                     return Ok(NumOrStr::Str(String::new()));
                 };
 
-                Ok(NumOrStr::Str(string.chars().skip(pos).take(length).collect()))
+                Ok(NumOrStr::Str(
+                    string.chars().skip(pos).take(length).collect(),
+                ))
             }
-            Self::Length { string } => Ok(NumOrStr::Num(BigInt::from(string.eval()?.to_string().chars().count()))),
+            Self::Length { string } => Ok(NumOrStr::Num(BigInt::from(
+                string.eval()?.to_string().chars().count(),
+            ))),
         }
     }
 }
