@@ -110,6 +110,8 @@ cargo build --release --features macos
 cargo build --release --features windows
 # or ...
 cargo build --release --features unix
+# or ...
+cargo build --release --features openbsd
 ```
 
 If you don't want to build every utility available on your platform into the
