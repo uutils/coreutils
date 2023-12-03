@@ -244,6 +244,14 @@ fn test_single_only_lines() {
 }
 
 #[test]
+fn test_single_only_bytes() {
+    new_ucmd!()
+        .args(&["-c", "lorem_ipsum.txt"])
+        .run()
+        .stdout_is("772 lorem_ipsum.txt\n");
+}
+
+#[test]
 fn test_single_all_counts() {
     new_ucmd!()
         .args(&["-c", "-l", "-L", "-m", "-w", "alice_in_wonderland.txt"])
