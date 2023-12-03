@@ -13,7 +13,7 @@ use uucore::{
     format_usage, help_about, help_section, help_usage,
 };
 
-use crate::syntax_tree::is_truthy;
+use crate::syntax_tree::{is_truthy, NumOrStr};
 
 mod syntax_tree;
 
@@ -110,7 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let res = AstNode::parse(&token_strings)?.eval()?.to_string();
     println!("{res}");
-    if !is_truthy(&res) {
+    if !is_truthy(&NumOrStr::from(res)) {
         return Err(1.into());
     }
     Ok(())
