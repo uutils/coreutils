@@ -78,11 +78,11 @@ pub static FILE_TYPES: Lazy<Vec<(&'static str, &'static str, &'static str)>> = L
     ]
 });
 
-/*
-# List any file extensions like '.gz' or '.tar' that you would like ls
-# to color below. Put the extension, a space, and the color init string.
-# (and any comments you want to add after a '#')
-*/
+/// Colors for file types
+///
+/// List any file extensions like '.gz' or '.tar' that you would like ls
+/// to color below. Put the extension, a space, and the color init string.
+/// (and any comments you want to add after a '#')
 pub static FILE_COLORS: Lazy<Vec<(&str, &str)>> = Lazy::new(|| {
     vec![
         /*
