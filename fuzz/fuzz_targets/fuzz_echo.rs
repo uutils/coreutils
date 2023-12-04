@@ -51,6 +51,7 @@ fn generate_escape_sequence(rng: &mut impl Rng) -> String {
     let escape_sequences = [
         "\\\\", "\\a", "\\b", "\\c", "\\e", "\\f", "\\n", "\\r", "\\t", "\\v", "\\0NNN", "\\xHH",
     ];
+    // \0NNN and \xHH need more work
     escape_sequences.choose(rng).unwrap().to_string()
 }
 
