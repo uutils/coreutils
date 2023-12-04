@@ -317,6 +317,7 @@ self_cell = "1.0.2"
 selinux = "0.4"
 signal-hook = "0.3.17"
 smallvec = { version = "1.11", features = ["union"] }
+sysinfo = "0.29.10"
 tempfile = "3.8.1"
 uutils_term_grid = "0.3"
 terminal_size = "0.3.0"
