@@ -2946,7 +2946,6 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
-#[allow(unused_variables)]
 #[allow(clippy::cognitive_complexity)]
 fn display_file_name(
     path: &PathData,
