@@ -89,8 +89,8 @@ impl RelationOp {
 
 impl NumericOp {
     fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<NumOrStr> {
-        let a = <NumOrStr as Into<ExprResult<BigInt>>>::into(left.eval()?)?;
-        let b = <NumOrStr as Into<ExprResult<BigInt>>>::into(right.eval()?)?;
+        let a = ExprResult::<BigInt>::from(left.eval()?)?;
+        let b = ExprResult::<BigInt>::from(right.eval()?)?;
         Ok(NumOrStr::Num(match self {
             Self::Add => a + b,
             Self::Sub => a - b,
@@ -218,29 +218,29 @@ impl From<String> for NumOrStr {
     }
 }
 
-impl Into<Option<usize>> for NumOrStr {
-    fn into(self) -> Option<usize> {
-        match self.into() {
+impl From<NumOrStr> for Option<usize> {
+    fn from(s: NumOrStr) -> Self {
+        match s.into() {
             Ok(num) => num.to_usize(),
             Err(_) => None,
         }
     }
 }
 
-impl Into<String> for NumOrStr {
-    fn into(self) -> String {
-        match self {
-            Self::Num(num) => num.to_string(),
-            Self::Str(str) => str.to_string(),
+impl From<NumOrStr> for String {
+    fn from(s: NumOrStr) -> Self {
+        match s {
+            NumOrStr::Num(num) => num.to_string(),
+            NumOrStr::Str(str) => str.to_string(),
         }
     }
 }
 
-impl Into<ExprResult<BigInt>> for NumOrStr {
-    fn into(self) -> ExprResult<BigInt> {
-        match self {
-            Self::Num(num) => Ok(num),
-            Self::Str(str) => str
+impl From<NumOrStr> for ExprResult<BigInt> {
+    fn from(s: NumOrStr) -> Self {
+        match s {
+            NumOrStr::Num(num) => Ok(num),
+            NumOrStr::Str(str) => str
                 .parse::<BigInt>()
                 .map_err(|_| ExprError::NonIntegerArgument),
         }
@@ -303,9 +303,8 @@ impl AstNode {
                 //
                 // So we coerce errors into 0 to make that the only case we
                 // have to care about.
-                let pos: usize = <NumOrStr as Into<Option<usize>>>::into(pos.eval()?).unwrap_or(0);
-                let length: usize =
-                    <NumOrStr as Into<Option<usize>>>::into(length.eval()?).unwrap_or(0);
+                let pos: usize = Option::<usize>::from(pos.eval()?).unwrap_or(0);
+                let length: usize = Option::<usize>::from(length.eval()?).unwrap_or(0);
 
                 let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) else {
                     return Ok(NumOrStr::from(String::new()));
@@ -315,11 +314,9 @@ impl AstNode {
                     string.chars().skip(pos).take(length).collect::<String>(),
                 ))
             }
-            Self::Length { string } => Ok(NumOrStr::from(
-                <NumOrStr as Into<String>>::into(string.eval()?)
-                    .chars()
-                    .count(),
-            )),
+            Self::Length { string } => {
+                Ok(NumOrStr::from(String::from(string.eval()?).chars().count()))
+            }
         }
     }
 }
