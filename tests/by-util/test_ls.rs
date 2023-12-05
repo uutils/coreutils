@@ -3148,11 +3148,8 @@ fn test_ls_path() {
         .stdout_is(expected_stdout);
 
     let abs_path = format!("{}/{}", at.as_string(), path);
-    let expected_stdout = if cfg!(windows) {
-        format!("\'{abs_path}\'\n")
-    } else {
-        format!("{abs_path}\n")
-    };
+    let expected_stdout = format!("{abs_path}\n");
+
     scene.ucmd().arg(&abs_path).run().stdout_is(expected_stdout);
 
     let expected_stdout = format!("{path}\n{file1}\n");
