@@ -497,18 +497,22 @@ pub fn generate_dircolors_config() -> String {
         config.push_str(&format!("TERM {}\n", term));
     }
 
-    config.push_str("# Below are the color init strings for the basic file types.\n");
-    config.push_str("# One can use codes for 256 or more colors supported by modern terminals.\n");
-    config.push_str("# The default color codes use the capabilities of an 8 color terminal\n");
-    config.push_str("# with some additional attributes as per the following codes:\n");
-    config.push_str("# Attribute codes:\n");
-    config.push_str("# 00=none 01=bold 04=underscore 05=blink 07=reverse 08=concealed\n");
-    config.push_str("# Text color codes:\n");
-    config.push_str("# 30=black 31=red 32=green 33=yellow 34=blue 35=magenta 36=cyan 37=white\n");
-    config.push_str("# Background color codes:\n");
-    config.push_str("# 40=black 41=red 42=green 43=yellow 44=blue 45=magenta 46=cyan 47=white\n");
-    config.push_str("#NORMAL 00 # no color code at all\n");
-    config.push_str("#FILE 00 # regular file: use no color at all\n");
+    config.push_str(
+        "\
+        # Below are the color init strings for the basic file types.\n\
+        # One can use codes for 256 or more colors supported by modern terminals.\n\
+        # The default color codes use the capabilities of an 8 color terminal\n\
+        # with some additional attributes as per the following codes:\n\
+        # Attribute codes:\n\
+        # 00=none 01=bold 04=underscore 05=blink 07=reverse 08=concealed\n\
+        # Text color codes:\n\
+        # 30=black 31=red 32=green 33=yellow 34=blue 35=magenta 36=cyan 37=white\n\
+        # Background color codes:\n\
+        # 40=black 41=red 42=green 43=yellow 44=blue 45=magenta 46=cyan 47=white\n\
+        #NORMAL 00 # no color code at all\n\
+        #FILE 00 # regular file: use no color at all\n\
+        ",
+    );
 
     for (name, _, code) in FILE_TYPES {
         config.push_str(&format!("{} {}\n", name, code));
