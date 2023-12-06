@@ -481,7 +481,7 @@ fn escape(s: &str) -> String {
 pub fn generate_dircolors_config() -> String {
     let mut config = String::new();
 
-   config.push_str(
+    config.push_str(
         "\
          # Configuration file for dircolors, a utility to help you set the\n\
          # LS_COLORS environment variable used by GNU ls with the --color option.\n\
