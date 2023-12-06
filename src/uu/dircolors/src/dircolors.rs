@@ -481,14 +481,17 @@ fn escape(s: &str) -> String {
 pub fn generate_dircolors_config() -> String {
     let mut config = String::new();
 
-    config.push_str("# Configuration file for dircolors, a utility to help you set the\n");
-    config.push_str("# LS_COLORS environment variable used by GNU ls with the --color option.\n");
-    config.push_str("# The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the\n");
-    config.push_str("# slackware version of dircolors) are recognized but ignored.\n");
-    config.push_str("# Global config options can be specified before TERM or COLORTERM entries\n");
-    config.push_str("# Below are TERM or COLORTERM entries, which can be glob patterns, which\n");
-    config
-        .push_str("# restrict following config to systems with matching environment variables.\n");
+   config.push_str(
+        "\
+         # Configuration file for dircolors, a utility to help you set the\n\
+         # LS_COLORS environment variable used by GNU ls with the --color option.\n\
+         # The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the\n\
+         # slackware version of dircolors) are recognized but ignored.\n\
+         # Global config options can be specified before TERM or COLORTERM entries\n\
+         # Below are TERM or COLORTERM entries, which can be glob patterns, which\n\
+         # restrict following config to systems with matching environment variables.\n\
+        ",
+    );
     config.push_str("COLORTERM ?*\n");
     for term in TERMS {
         config.push_str(&format!("TERM {}\n", term));
