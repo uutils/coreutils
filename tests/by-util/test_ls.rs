@@ -3828,3 +3828,30 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
         .succeeds()
         .stdout_is("a2345/\tb/\n");
 }
+
+#[cfg(all(unix, feature = "dd"))]
+#[test]
+fn test_posixly_correct() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ccmd("dd")
+        .arg("if=/dev/zero")
+        .arg("of=file")
+        .arg("bs=1024")
+        .arg("count=1")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-s")
+        .succeeds()
+        .stdout_contains_line("total 4");
+
+    scene
+        .ucmd()
+        .arg("-s")
+        .env("POSIXLY_CORRECT", "some_value")
+        .succeeds()
+        .stdout_contains_line("total 8");
+}
