@@ -3,35 +3,30 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use chrono::prelude::DateTime;
-use chrono::Local;
-use clap::ArgAction;
-use clap::{crate_version, Arg, ArgMatches, Command};
+use chrono::{DateTime, Local};
+use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
-use std::fs;
-use std::fs::File;
+use std::error::Error;
+use std::fmt::Display;
 #[cfg(not(windows))]
 use std::fs::Metadata;
-use std::io::BufRead;
-use std::io::BufReader;
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
-use std::{error::Error, fmt::Display};
 use uucore::display::{print_verbatim, Quotable};
-use uucore::error::FromIo;
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
