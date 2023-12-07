@@ -16,7 +16,7 @@ path = "src/hostname.rs"
 
 [dependencies]
 clap = { workspace = true }
-hostname = { version = "0.3", features = ["set"] }
+hostname = { workspace = true, features = ["set"] }
 uucore = { workspace = true, features = ["wide"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

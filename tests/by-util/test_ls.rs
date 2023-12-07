@@ -3855,3 +3855,33 @@ fn test_posixly_correct() {
         .succeeds()
         .stdout_contains_line("total 8");
 }
+
+#[test]
+fn test_ls_hyperlink() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "a.txt";
+
+    at.touch(file);
+
+    let path = at.root_dir_resolved();
+    let separator = std::path::MAIN_SEPARATOR_STR;
+
+    let result = scene.ucmd().arg("--hyperlink").succeeds();
+    assert!(result.stdout_str().contains("\x1b]8;;file://"));
+    assert!(result
+        .stdout_str()
+        .contains(&format!("{path}{separator}{file}\x07{file}\x1b]8;;\x07")));
+
+    let result = scene.ucmd().arg("--hyperlink=always").succeeds();
+    assert!(result.stdout_str().contains("\x1b]8;;file://"));
+    assert!(result
+        .stdout_str()
+        .contains(&format!("{path}{separator}{file}\x07{file}\x1b]8;;\x07")));
+
+    scene
+        .ucmd()
+        .arg("--hyperlink=never")
+        .succeeds()
+        .stdout_is(format!("{file}\n"));
+}

@@ -155,6 +155,7 @@ pub mod options {
     pub static GROUP_DIRECTORIES_FIRST: &str = "group-directories-first";
     pub static ZERO: &str = "zero";
     pub static DIRED: &str = "dired";
+    pub static HYPERLINK: &str = "hyperlink";
 }
 
 const DEFAULT_TERM_WIDTH: u16 = 80;
@@ -418,6 +419,7 @@ pub struct Config {
     group_directories_first: bool,
     line_ending: LineEnding,
     dired: bool,
+    hyperlink: bool,
 }
 
 // Fields that can be removed or added to the long format
@@ -563,6 +565,25 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
             "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
             /* "never" | "no" | "none" | */ _ => false,
         },
+    }
+}
+
+/// Extracts the hyperlink option to use based on the options provided.
+///
+/// # Returns
+///
+/// A boolean representing whether to hyperlink files.
+fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
+    let hyperlink = options
+        .get_one::<String>(options::HYPERLINK)
+        .unwrap()
+        .as_str();
+
+    match hyperlink {
+        "always" | "yes" | "force" => true,
+        "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
+        "never" | "no" | "none" => false,
+        _ => unreachable!("should be handled by clap"),
     }
 }
 
@@ -736,10 +757,9 @@ impl Config {
         }
 
         let sort = extract_sort(options);
-
         let time = extract_time(options);
-
         let mut needs_color = extract_color(options);
+        let hyperlink = extract_hyperlink(options);
 
         let opt_block_size = options.get_one::<String>(options::size::BLOCK_SIZE);
         let opt_si = opt_block_size.is_some()
@@ -1020,6 +1040,7 @@ impl Config {
             group_directories_first: options.get_flag(options::GROUP_DIRECTORIES_FIRST),
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
+            hyperlink,
         })
     }
 }
@@ -1153,6 +1174,19 @@ pub fn uu_app() -> Command {
                 .short('D')
                 .help("generate output designed for Emacs' dired (Directory Editor) mode")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::HYPERLINK)
+                .long(options::HYPERLINK)
+                .help("hyperlink file names WHEN")
+                .value_parser([
+                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
+                ])
+                .require_equals(true)
+                .num_args(0..=1)
+                .default_missing_value("always")
+                .default_value("never")
+                .value_name("WHEN"),
         )
         // The next four arguments do not override with the other format
         // options, see the comment in Config::from for the reason.
@@ -2958,6 +2992,18 @@ fn display_file_name(
     // We need to keep track of the width ourselves instead of letting term_grid
     // infer it because the color codes mess up term_grid's width calculation.
     let mut width = name.width();
+
+    if config.hyperlink {
+        let hostname = hostname::get().unwrap_or(OsString::from(""));
+        let hostname = hostname.to_string_lossy();
+
+        let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
+        let absolute_path = absolute_path.to_string_lossy();
+
+        // TODO encode path
+        // \x1b = ESC, \x07 = BEL
+        name = format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07");
+    }
 
     if let Some(ls_colors) = &config.color {
         let md = path.md(out);
