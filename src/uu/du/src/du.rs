@@ -87,6 +87,18 @@ struct Options {
     count_links: bool,
     inodes: bool,
     verbose: bool,
+    threshold: Option<Threshold>,
+    apparent_size: bool,
+    // TODO: the size conversion fields should be unified
+    si: bool,
+    bytes: bool,
+    human_readable: bool,
+    block_size_1k: bool,
+    block_size_1m: bool,
+    block_size: u64,
+    time: Option<Time>,
+    time_format: String,
+    line_ending: LineEnding,
 }
 
 #[derive(PartialEq, Clone)]
@@ -94,6 +106,13 @@ enum Deref {
     All,
     Args(Vec<PathBuf>),
     None,
+}
+
+#[derive(Clone, Copy)]
+enum Time {
+    Accessed,
+    Modified,
+    Created,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -273,10 +292,10 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
-fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
-    if matches.get_flag(options::INODES) {
+fn choose_size(options: &Options, stat: &Stat) -> u64 {
+    if options.inodes {
         stat.inodes
-    } else if matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES) {
+    } else if options.apparent_size || options.bytes {
         stat.size
     } else {
         // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
@@ -423,14 +442,14 @@ fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
     format!("{}", ((size as f64) / (block_size as f64)).ceil())
 }
 
-fn get_convert_size_fn(matches: &ArgMatches) -> Box<dyn Fn(u64, u64, u64) -> String + Send> {
-    if matches.get_flag(options::HUMAN_READABLE) || matches.get_flag(options::SI) {
+fn get_convert_size_fn(options: &Options) -> Box<dyn Fn(u64, u64, u64) -> String + Send> {
+    if options.human_readable || options.si {
         Box::new(convert_size_human)
-    } else if matches.get_flag(options::BYTES) {
+    } else if options.bytes {
         Box::new(convert_size_b)
-    } else if matches.get_flag(options::BLOCK_SIZE_1K) {
+    } else if options.block_size_1k {
         Box::new(convert_size_k)
-    } else if matches.get_flag(options::BLOCK_SIZE_1M) {
+    } else if options.block_size_1m {
         Box::new(convert_size_m)
     } else {
         Box::new(convert_size_other)
@@ -442,7 +461,7 @@ enum DuError {
     InvalidMaxDepthArg(String),
     SummarizeDepthConflict(String),
     InvalidTimeStyleArg(String),
-    InvalidTimeArg(String),
+    InvalidTimeArg,
     InvalidGlob(String),
 }
 
@@ -468,11 +487,9 @@ Try '{} --help' for more information.",
                 s.quote(),
                 uucore::execution_phrase()
             ),
-            Self::InvalidTimeArg(s) => write!(
+            Self::InvalidTimeArg => write!(
                 f,
-                "Invalid argument {} for --time.
-'birth' and 'creation' arguments are not supported on this platform.",
-                s.quote()
+                "'birth' and 'creation' arguments for --time are not supported on this platform.",
             ),
             Self::InvalidGlob(s) => write!(f, "Invalid exclude syntax: {s}"),
         }
@@ -487,7 +504,7 @@ impl UError for DuError {
             Self::InvalidMaxDepthArg(_)
             | Self::SummarizeDepthConflict(_)
             | Self::InvalidTimeStyleArg(_)
-            | Self::InvalidTimeArg(_)
+            | Self::InvalidTimeArg
             | Self::InvalidGlob(_) => 1,
         }
     }
@@ -535,62 +552,25 @@ struct StatPrintInfo {
 }
 
 struct StatPrinter {
-    matches: ArgMatches,
-    threshold: Option<Threshold>,
     summarize: bool,
-    time_format_str: String,
-    line_ending: LineEnding,
     options: Options,
     convert_size: Box<dyn Fn(u64) -> String + Send>,
 }
 
 impl StatPrinter {
-    fn new(matches: ArgMatches, options: Options, summarize: bool) -> UResult<Self> {
-        let block_size = read_block_size(
-            matches
-                .get_one::<String>(options::BLOCK_SIZE)
-                .map(|s| s.as_str()),
-        )?;
+    fn new(options: Options, summarize: bool) -> UResult<Self> {
+        let multiplier: u64 = if options.si { 1000 } else { 1024 };
 
-        let multiplier: u64 = if matches.get_flag(options::SI) {
-            1000
-        } else {
-            1024
-        };
-
-        let convert_size_fn = get_convert_size_fn(&matches);
+        let convert_size_fn = get_convert_size_fn(&options);
 
         let convert_size: Box<dyn Fn(u64) -> String + Send> = if options.inodes {
             Box::new(|size: u64| size.to_string())
         } else {
-            Box::new(move |size: u64| convert_size_fn(size, multiplier, block_size))
+            Box::new(move |size: u64| convert_size_fn(size, multiplier, options.block_size))
         };
-
-        let threshold = match matches.get_one::<String>(options::THRESHOLD) {
-            Some(s) => match Threshold::from_str(s) {
-                Ok(t) => Some(t),
-                Err(e) => {
-                    return Err(USimpleError::new(
-                        1,
-                        format_error_message(&e, s, options::THRESHOLD),
-                    ))
-                }
-            },
-            None => None,
-        };
-
-        let time_format_str =
-            parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?
-                .to_string();
-
-        let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::NULL));
 
         Ok(Self {
-            matches,
-            threshold,
             summarize,
-            time_format_str,
-            line_ending,
             options,
             convert_size,
         })
@@ -604,13 +584,14 @@ impl StatPrinter {
             match received {
                 Ok(message) => match message {
                     Ok(stat_info) => {
-                        let size = choose_size(&self.matches, &stat_info.stat);
+                        let size = choose_size(&self.options, &stat_info.stat);
 
                         if stat_info.depth == 0 {
                             grand_total += size;
                         }
 
                         if !self
+                            .options
                             .threshold
                             .map_or(false, |threshold| threshold.should_exclude(size))
                             && self
@@ -630,31 +611,24 @@ impl StatPrinter {
 
         if self.options.total {
             print!("{}\ttotal", (self.convert_size)(grand_total));
-            print!("{}", self.line_ending);
+            print!("{}", self.options.line_ending);
         }
 
         Ok(())
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
-        if self.matches.contains_id(options::TIME) {
-            let tm = {
-                let secs = self
-                    .matches
-                    .get_one::<String>(options::TIME)
-                    .map(|s| get_time_secs(s, stat))
-                    .transpose()?
-                    .unwrap_or(stat.modified);
-                DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
-            };
-            let time_str = tm.format(&self.time_format_str).to_string();
+        if let Some(time) = self.options.time {
+            let secs = get_time_secs(time, stat)?;
+            let tm = DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs));
+            let time_str = tm.format(&self.options.time_format).to_string();
             print!("{}\t{}\t", (self.convert_size)(size), time_str);
         } else {
             print!("{}\t", (self.convert_size)(size));
         }
 
         print_verbatim(&stat.path).unwrap();
-        print!("{}", self.line_ending);
+        print!("{}", self.options.line_ending);
 
         Ok(())
     }
@@ -685,6 +659,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec![PathBuf::from(".")],
     };
 
+    let time = matches.contains_id(options::TIME).then(|| {
+        match matches.get_one::<String>(options::TIME).map(AsRef::as_ref) {
+            None | Some("ctime" | "status") => Time::Modified,
+            Some("access" | "atime" | "use") => Time::Accessed,
+            Some("birth" | "creation") => Time::Created,
+            _ => unreachable!("should be caught by clap"),
+        }
+    });
+
+    let block_size = read_block_size(
+        matches
+            .get_one::<String>(options::BLOCK_SIZE)
+            .map(|s| s.as_str()),
+    )?;
+
     let options = Options {
         all: matches.get_flag(options::ALL),
         max_depth,
@@ -702,6 +691,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         count_links: matches.get_flag(options::COUNT_LINKS),
         inodes: matches.get_flag(options::INODES),
         verbose: matches.get_flag(options::VERBOSE),
+        si: matches.get_flag(options::SI),
+        threshold: matches
+            .get_one::<String>(options::THRESHOLD)
+            .map(|s| {
+                Threshold::from_str(s).map_err(|e| {
+                    USimpleError::new(1, format_error_message(&e, s, options::THRESHOLD))
+                })
+            })
+            .transpose()?,
+        apparent_size: matches.get_flag(options::APPARENT_SIZE),
+        bytes: matches.get_flag(options::BYTES),
+        time,
+        block_size,
+        human_readable: matches.get_flag(options::HUMAN_READABLE),
+        block_size_1k: matches.get_flag(options::BLOCK_SIZE_1K),
+        block_size_1m: matches.get_flag(options::BLOCK_SIZE_1M),
+        time_format: parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?
+            .to_string(),
+        line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
     };
 
     if options.inodes
@@ -711,7 +719,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     // Use separate thread to print output, so we can print finished results while computation is still running
-    let stat_printer = StatPrinter::new(matches.clone(), options.clone(), summarize)?;
+    let stat_printer = StatPrinter::new(options.clone(), summarize)?;
     let (print_tx, rx) = mpsc::channel::<UResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
@@ -767,17 +775,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-fn get_time_secs(s: &str, stat: &Stat) -> Result<u64, DuError> {
-    let secs = match s {
-        "ctime" | "status" => stat.modified,
-        "access" | "atime" | "use" => stat.accessed,
-        "birth" | "creation" => stat
-            .created
-            .ok_or_else(|| DuError::InvalidTimeArg(s.into()))?,
-        // below should never happen as clap already restricts the values.
-        _ => unreachable!("Invalid field for --time"),
-    };
-    Ok(secs)
+fn get_time_secs(time: Time, stat: &Stat) -> Result<u64, DuError> {
+    match time {
+        Time::Modified => Ok(stat.modified),
+        Time::Accessed => Ok(stat.accessed),
+        Time::Created => stat.created.ok_or_else(|| DuError::InvalidTimeArg),
+    }
 }
 
 fn parse_time_style(s: Option<&str>) -> UResult<&str> {
