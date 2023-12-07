@@ -76,17 +76,20 @@ const USAGE: &str = help_usage!("du.md");
 // TODO: Support Z & Y (currently limited by size of u64)
 const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
 
-#[derive(Clone)]
-struct Options {
+struct TraversalOptions {
     all: bool,
-    max_depth: Option<usize>,
-    total: bool,
     separate_dirs: bool,
     one_file_system: bool,
     dereference: Deref,
     count_links: bool,
-    inodes: bool,
     verbose: bool,
+}
+
+#[derive(Clone)]
+struct PrintingOptions {
+    total: bool,
+    inodes: bool,
+    max_depth: Option<usize>,
     threshold: Option<Threshold>,
     apparent_size: bool,
     // TODO: the size conversion fields should be unified
@@ -134,7 +137,7 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: &Path, options: &Options) -> std::io::Result<Self> {
+    fn new(path: &Path, options: &TraversalOptions) -> std::io::Result<Self> {
         // Determine whether to dereference (follow) the symbolic link
         let should_dereference = match &options.dereference {
             Deref::All => true,
@@ -292,7 +295,7 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
-fn choose_size(options: &Options, stat: &Stat) -> u64 {
+fn choose_size(options: &PrintingOptions, stat: &Stat) -> u64 {
     if options.inodes {
         stat.inodes
     } else if options.apparent_size || options.bytes {
@@ -308,7 +311,7 @@ fn choose_size(options: &Options, stat: &Stat) -> u64 {
 #[allow(clippy::cognitive_complexity)]
 fn du(
     mut my_stat: Stat,
-    options: &Options,
+    options: &TraversalOptions,
     depth: usize,
     seen_inodes: &mut HashSet<FileInfo>,
     exclude: &[Pattern],
@@ -442,7 +445,7 @@ fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
     format!("{}", ((size as f64) / (block_size as f64)).ceil())
 }
 
-fn get_convert_size_fn(options: &Options) -> Box<dyn Fn(u64, u64, u64) -> String + Send> {
+fn get_convert_size_fn(options: &PrintingOptions) -> Box<dyn Fn(u64, u64, u64) -> String + Send> {
     if options.human_readable || options.si {
         Box::new(convert_size_human)
     } else if options.bytes {
@@ -553,12 +556,12 @@ struct StatPrintInfo {
 
 struct StatPrinter {
     summarize: bool,
-    options: Options,
+    options: PrintingOptions,
     convert_size: Box<dyn Fn(u64) -> String + Send>,
 }
 
 impl StatPrinter {
-    fn new(options: Options, summarize: bool) -> UResult<Self> {
+    fn new(options: PrintingOptions, summarize: bool) -> UResult<Self> {
         let multiplier: u64 = if options.si { 1000 } else { 1024 };
 
         let convert_size_fn = get_convert_size_fn(&options);
@@ -674,10 +677,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .map(|s| s.as_str()),
     )?;
 
-    let options = Options {
+    let traversal_options = TraversalOptions {
         all: matches.get_flag(options::ALL),
-        max_depth,
-        total: matches.get_flag(options::TOTAL),
         separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
         one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
         dereference: if matches.get_flag(options::DEREFERENCE) {
@@ -689,8 +690,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Deref::None
         },
         count_links: matches.get_flag(options::COUNT_LINKS),
-        inodes: matches.get_flag(options::INODES),
         verbose: matches.get_flag(options::VERBOSE),
+    };
+
+    let printing_options = PrintingOptions {
+        max_depth,
+        total: matches.get_flag(options::TOTAL),
+        inodes: matches.get_flag(options::INODES),
         si: matches.get_flag(options::SI),
         threshold: matches
             .get_one::<String>(options::THRESHOLD)
@@ -712,14 +718,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
     };
 
-    if options.inodes
+    if printing_options.inodes
         && (matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES))
     {
         show_warning!("options --apparent-size and -b are ineffective with --inodes");
     }
 
     // Use separate thread to print output, so we can print finished results while computation is still running
-    let stat_printer = StatPrinter::new(options.clone(), summarize)?;
+    let stat_printer = StatPrinter::new(printing_options.clone(), summarize)?;
     let (print_tx, rx) = mpsc::channel::<UResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
@@ -732,7 +738,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             for pattern in &excludes {
                 if pattern.matches(&path_string) {
                     // if the directory is ignored, leave early
-                    if options.verbose {
+                    if traversal_options.verbose {
                         println!("{} ignored", path_string.quote());
                     }
                     continue 'loop_file;
@@ -741,14 +747,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         // Check existence of path provided in argument
-        if let Ok(stat) = Stat::new(&path, &options) {
+        if let Ok(stat) = Stat::new(&path, &traversal_options) {
             // Kick off the computation of disk usage from the initial path
             let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
             if let Some(inode) = stat.inode {
                 seen_inodes.insert(inode);
             }
-            let stat = du(stat, &options, 0, &mut seen_inodes, &excludes, &print_tx)
-                .map_err(|e| USimpleError::new(1, e.to_string()))?;
+            let stat = du(
+                stat,
+                &traversal_options,
+                0,
+                &mut seen_inodes,
+                &excludes,
+                &print_tx,
+            )
+            .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
             print_tx
                 .send(Ok(StatPrintInfo { stat, depth: 0 }))
@@ -779,7 +792,7 @@ fn get_time_secs(time: Time, stat: &Stat) -> Result<u64, DuError> {
     match time {
         Time::Modified => Ok(stat.modified),
         Time::Accessed => Ok(stat.accessed),
-        Time::Created => stat.created.ok_or_else(|| DuError::InvalidTimeArg),
+        Time::Created => stat.created.ok_or(DuError::InvalidTimeArg),
     }
 }
 
