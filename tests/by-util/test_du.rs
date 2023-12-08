@@ -365,12 +365,19 @@ fn test_du_no_dereference() {
             .stdout_does_not_contain(symlink);
 
         // ensure dereference "wins"
-        ts.ucmd()
-            .arg(arg)
-            .arg("--dereference")
-            .succeeds()
-            .stdout_contains(symlink)
-            .stdout_does_not_contain(dir);
+        let result = ts.ucmd().arg(arg).arg("--dereference").succeeds();
+
+        #[cfg(target_os = "linux")]
+        {
+            let result_reference = unwrap_or_return!(expected_result(&ts, &[arg, "--dereference"]));
+
+            if result_reference.succeeded() {
+                assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            }
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        result.stdout_contains(symlink).stdout_does_not_contain(dir);
     }
 }
 
