@@ -10,7 +10,8 @@ use clap::{
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
-use lscolors::LsColors;
+use lscolors::{LsColors, Style};
+
 use number_prefix::NumberPrefix;
 use std::{cell::OnceCell, num::IntErrorKind};
 use std::{collections::HashSet, io::IsTerminal};
@@ -1900,6 +1901,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut dirs = Vec::<PathData>::new();
     let mut out = BufWriter::new(stdout());
     let mut dired = DiredOutput::default();
+    let mut style_manager = StyleManager::new();
     let initial_locs_len = locs.len();
 
     for loc in locs {
@@ -1933,7 +1935,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     sort_entries(&mut files, config, &mut out);
     sort_entries(&mut dirs, config, &mut out);
 
-    display_items(&files, config, &mut out, &mut dired)?;
+    display_items(&files, config, &mut out, &mut dired, &mut style_manager)?;
 
     for (pos, path_data) in dirs.iter().enumerate() {
         // Do read_dir call here to match GNU semantics by printing
@@ -1985,6 +1987,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             &mut out,
             &mut listed_ancestors,
             &mut dired,
+            &mut style_manager,
         )?;
     }
     if config.dired {
@@ -2101,6 +2104,7 @@ fn enter_directory(
     out: &mut BufWriter<Stdout>,
     listed_ancestors: &mut HashSet<FileInformation>,
     dired: &mut DiredOutput,
+    style_manager: &mut StyleManager,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
@@ -2153,7 +2157,7 @@ fn enter_directory(
         }
     }
 
-    display_items(&entries, config, out, dired)?;
+    display_items(&entries, config, out, dired, style_manager)?;
 
     if config.recursive {
         for e in entries
@@ -2194,7 +2198,15 @@ fn enter_directory(
 
                         show_dir_name(&e.p_buf, out);
                         writeln!(out)?;
-                        enter_directory(e, rd, config, out, listed_ancestors, dired)?;
+                        enter_directory(
+                            e,
+                            rd,
+                            config,
+                            out,
+                            listed_ancestors,
+                            dired,
+                            style_manager,
+                        )?;
                         listed_ancestors
                             .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
                     } else {
@@ -2316,6 +2328,7 @@ fn display_items(
     config: &Config,
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
+    style_manager: &mut StyleManager,
 ) -> UResult<()> {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
@@ -2338,7 +2351,7 @@ fn display_items(
                     display_additional_leading_info(item, &padding_collection, config, out)?;
                 write!(out, "{more_info}")?;
             }
-            display_item_long(item, &padding_collection, config, out, dired)?;
+            display_item_long(item, &padding_collection, config, out, dired, style_manager)?;
         }
     } else {
         let mut longest_context_len = 1;
@@ -2358,7 +2371,7 @@ fn display_items(
 
         for i in items {
             let more_info = display_additional_leading_info(i, &padding, config, out)?;
-            let cell = display_file_name(i, config, prefix_context, more_info, out);
+            let cell = display_file_name(i, config, prefix_context, more_info, out, style_manager);
             names_vec.push(cell);
         }
 
@@ -2513,6 +2526,7 @@ fn display_item_long(
     config: &Config,
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
+    style_manager: &mut StyleManager,
 ) -> UResult<()> {
     let mut output_display: String = String::new();
     if config.dired {
@@ -2605,7 +2619,8 @@ fn display_item_long(
 
         write!(output_display, " {} ", display_date(md, config)).unwrap();
 
-        let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
+        let displayed_file =
+            display_file_name(item, config, None, String::new(), out, style_manager).contents;
         if config.dired {
             let (start, end) = dired::calculate_dired(
                 &dired.dired_positions,
@@ -2687,7 +2702,8 @@ fn display_item_long(
             write!(output_display, " {}", pad_right("?", padding.uname)).unwrap();
         }
 
-        let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
+        let displayed_file =
+            display_file_name(item, config, None, String::new(), out, style_manager).contents;
         let date_len = 12;
 
         write!(
@@ -2985,6 +3001,7 @@ fn display_file_name(
     prefix_context: Option<usize>,
     more_info: String,
     out: &mut BufWriter<Stdout>,
+    style_manager: &mut StyleManager,
 ) -> Cell {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
@@ -3008,13 +3025,14 @@ fn display_file_name(
     if let Some(ls_colors) = &config.color {
         let md = path.md(out);
         name = if md.is_some() {
-            color_name(name, &path.p_buf, md, ls_colors)
+            color_name(name, &path.p_buf, md, ls_colors, style_manager)
         } else {
             color_name(
                 name,
                 &path.p_buf,
                 path.p_buf.symlink_metadata().ok().as_ref(),
                 ls_colors,
+                style_manager,
             )
         };
     }
@@ -3103,6 +3121,7 @@ fn display_file_name(
                             &target_data.p_buf,
                             Some(&target_metadata),
                             ls_colors,
+                            style_manager,
                         ));
                     }
                 } else {
@@ -3137,15 +3156,50 @@ fn display_file_name(
     }
 }
 
-fn color_name(name: String, path: &Path, md: Option<&Metadata>, ls_colors: &LsColors) -> String {
-    match ls_colors.style_for_path_with_metadata(path, md) {
-        Some(style) => {
-            return style
-                .to_nu_ansi_term_style()
-                .reset_before_style()
-                .paint(name)
-                .to_string();
+/// We need this struct to be able to store the previous style.
+/// This because we need to check the previous value in case we don't need
+/// the reset
+struct StyleManager {
+    current_style: Option<Style>,
+}
+
+impl StyleManager {
+    fn new() -> Self {
+        Self {
+            current_style: None,
         }
+    }
+
+    fn apply_style(&mut self, new_style: &Style, name: &str) -> String {
+        if let Some(current) = &self.current_style {
+            if *current == *new_style {
+                // Current style is the same as new style, apply without reset.
+                let mut style = new_style.to_nu_ansi_term_style();
+                style.prefix_with_reset = false;
+                return style.paint(name).to_string();
+            }
+        }
+
+        // We are getting a new style, we need to reset it
+        self.current_style = Some(new_style.clone());
+        new_style
+            .to_nu_ansi_term_style()
+            .reset_before_style()
+            .paint(name)
+            .to_string()
+    }
+}
+
+/// Colors the provided name based on the style determined for the given path.
+fn color_name(
+    name: String,
+    path: &Path,
+    md: Option<&Metadata>,
+    ls_colors: &LsColors,
+    style_manager: &mut StyleManager,
+) -> String {
+    match ls_colors.style_for_path_with_metadata(path, md) {
+        Some(style) => style_manager.apply_style(style, &name),
         None => name,
     }
 }

@@ -3903,3 +3903,23 @@ fn test_ls_hyperlink() {
         .succeeds()
         .stdout_is(format!("{file}\n"));
 }
+
+#[test]
+fn test_ls_color_do_not_reset() {
+    let scene: TestScenario = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("example");
+    at.mkdir("example/a");
+    at.mkdir("example/b");
+
+    let result = scene
+        .ucmd()
+        .arg("--color=always")
+        .arg("example/")
+        .succeeds();
+    // the second color code should not have a reset
+    assert_eq!(
+        result.stdout_str().escape_default().to_string(),
+        "\\u{1b}[0m\\u{1b}[01;34ma\\u{1b}[0m\\n\\u{1b}[01;34mb\\u{1b}[0m\\n"
+    );
+}
