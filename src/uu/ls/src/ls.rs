@@ -3019,7 +3019,23 @@ fn display_file_name(
         let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
         let absolute_path = absolute_path.to_string_lossy();
 
-        // TODO encode path
+        #[cfg(not(target_os = "windows"))]
+        let unencoded_chars = "_-.:~/";
+        #[cfg(target_os = "windows")]
+        let unencoded_chars = "_-.:~/\\";
+
+        // percentage encoding of path
+        let absolute_path: String = absolute_path
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || unencoded_chars.contains(c) {
+                    c.to_string()
+                } else {
+                    format!("%{:02x}", c as u8)
+                }
+            })
+            .collect();
+
         // \x1b = ESC, \x07 = BEL
         name = format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07");
     }
