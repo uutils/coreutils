@@ -1983,20 +1983,6 @@ fn test_ls_recursive_1() {
         .stdout_is(out);
 }
 
-// Function to convert a string to its ASCII representation
-fn to_ascii_representation(input: &str) -> String {
-    input
-        .chars()
-        .map(|c| {
-            if c.is_ascii_control() || !c.is_ascii() {
-                format!("\\x{:02x}", c as u32)
-            } else {
-                c.to_string()
-            }
-        })
-        .collect::<String>()
-}
-
 #[test]
 fn test_ls_color() {
     let scene = TestScenario::new(util_name!());
@@ -2058,8 +2044,8 @@ fn test_ls_color() {
         .succeeds();
     let expected = format!("{}  test-color\x0ab  {}", a_with_colors, z_with_colors);
     assert_eq!(
-        to_ascii_representation(result.stdout_str()),
-        to_ascii_representation(&expected)
+        result.stdout_str().escape_default().to_string(),
+        expected.escape_default().to_string()
     );
     assert_eq!(result.stdout_str(), expected);
 }
