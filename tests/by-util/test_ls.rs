@@ -3874,6 +3874,56 @@ fn test_ls_invalid_block_size() {
         .stderr_is("ls: invalid --block-size argument 'invalid'\n");
 }
 
+#[cfg(all(unix, feature = "dd"))]
+#[test]
+fn test_ls_block_size_override() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ccmd("dd")
+        .arg("if=/dev/zero")
+        .arg("of=file")
+        .arg("bs=1024")
+        .arg("count=1")
+        .succeeds();
+
+    // --si "wins"
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--block-size=512")
+        .arg("--si")
+        .succeeds()
+        .stdout_contains_line("total 4.1k");
+
+    // --block-size "wins"
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--si")
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_contains_line("total 8");
+
+    // --human-readable "wins"
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--block-size=512")
+        .arg("--human-readable")
+        .succeeds()
+        .stdout_contains_line("total 4.0K");
+
+    // --block-size "wins"
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--human-readable")
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_contains_line("total 8");
+}
+
 #[test]
 fn test_ls_hyperlink() {
     let scene = TestScenario::new(util_name!());
