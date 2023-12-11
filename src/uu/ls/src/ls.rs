@@ -1961,7 +1961,8 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 if config.dired {
                     dired::indent(&mut out)?;
                 }
-                writeln!(out, "{}:", path_data.p_buf.display())?;
+                show_dir_name(&path_data.p_buf, &mut out);
+                writeln!(out)?;
                 if config.dired {
                     // First directory displayed
                     let dir_len = path_data.display_name.len();
