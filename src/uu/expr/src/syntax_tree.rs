@@ -238,8 +238,8 @@ impl NumOrStr {
 
     pub fn eval_as_bigint(self) -> ExprResult<BigInt> {
         match self {
-            NumOrStr::Num(num) => Ok(num),
-            NumOrStr::Str(str) => str
+            Self::Num(num) => Ok(num),
+            Self::Str(str) => str
                 .parse::<BigInt>()
                 .map_err(|_| ExprError::NonIntegerArgument),
         }
@@ -247,8 +247,8 @@ impl NumOrStr {
 
     pub fn eval_as_string(self) -> String {
         match self {
-            NumOrStr::Num(num) => num.to_string(),
-            NumOrStr::Str(str) => str,
+            Self::Num(num) => num.to_string(),
+            Self::Str(str) => str,
         }
     }
 }
