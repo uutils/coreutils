@@ -3865,6 +3865,16 @@ fn test_posixly_correct() {
 }
 
 #[test]
+fn test_ls_invalid_block_size() {
+    new_ucmd!()
+        .arg("--block-size=invalid")
+        .fails()
+        .code_is(2)
+        .no_stdout()
+        .stderr_is("ls: invalid --block-size argument 'invalid'\n");
+}
+
+#[test]
 fn test_ls_hyperlink() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

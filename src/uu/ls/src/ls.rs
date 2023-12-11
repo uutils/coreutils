@@ -183,7 +183,7 @@ impl UError for LsError {
             Self::IOError(_) => 1,
             Self::IOErrorContext(_, _, false) => 1,
             Self::IOErrorContext(_, _, true) => 2,
-            Self::BlockSizeParseError(_) => 1,
+            Self::BlockSizeParseError(_) => 2,
             Self::ConflictingArgumentDired => 1,
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
@@ -809,10 +809,9 @@ impl Config {
             match parse_size_u64(&raw_block_size.to_string_lossy()) {
                 Ok(size) => Some(size),
                 Err(_) => {
-                    show!(LsError::BlockSizeParseError(
-                        opt_block_size.unwrap().clone()
-                    ));
-                    None
+                    return Err(Box::new(LsError::BlockSizeParseError(
+                        opt_block_size.unwrap().clone(),
+                    )));
                 }
             }
         } else if env_var_posixly_correct.is_some() {
