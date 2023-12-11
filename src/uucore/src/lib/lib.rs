@@ -35,6 +35,8 @@ pub use crate::parser::shortcut_value_parser;
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
 pub use crate::features::backup_control;
+#[cfg(feature = "colors")]
+pub use crate::features::colors;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
 #[cfg(feature = "format")]

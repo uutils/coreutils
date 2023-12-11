@@ -17,7 +17,8 @@ uu_date = { path = "../src/uu/date/" }
 uu_test = { path = "../src/uu/test/" }
 uu_expr = { path = "../src/uu/expr/" }
 uu_printf = { path = "../src/uu/printf/" }
-
+uu_echo = { path = "../src/uu/echo/" }
+uu_seq = { path = "../src/uu/seq/" }
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -32,6 +33,18 @@ doc = false
 [[bin]]
 name = "fuzz_printf"
 path = "fuzz_targets/fuzz_printf.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_echo"
+path = "fuzz_targets/fuzz_echo.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_seq"
+path = "fuzz_targets/fuzz_seq.rs"
 test = false
 doc = false
 

@@ -6,6 +6,8 @@
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
+#[cfg(feature = "colors")]
+pub mod colors;
 #[cfg(feature = "encoding")]
 pub mod encoding;
 #[cfg(feature = "format")]

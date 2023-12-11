@@ -553,7 +553,7 @@ fn test_nonexistent_file_is_not_symlink() {
 }
 
 #[test]
-// FixME: freebsd fails with 'chmod: sticky_file: Inappropriate file type or format'
+// Only the superuser is allowed to set the sticky bit on files on FreeBSD.
 // Windows has no concept of sticky bit
 #[cfg(not(any(windows, target_os = "freebsd")))]
 fn test_file_is_sticky() {

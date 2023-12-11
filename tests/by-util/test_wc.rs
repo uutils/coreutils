@@ -244,6 +244,14 @@ fn test_single_only_lines() {
 }
 
 #[test]
+fn test_single_only_bytes() {
+    new_ucmd!()
+        .args(&["-c", "lorem_ipsum.txt"])
+        .run()
+        .stdout_is("772 lorem_ipsum.txt\n");
+}
+
+#[test]
 fn test_single_all_counts() {
     new_ucmd!()
         .args(&["-c", "-l", "-L", "-m", "-w", "alice_in_wonderland.txt"])
@@ -419,6 +427,14 @@ fn test_files_from_pseudo_filesystem() {
     use pretty_assertions::assert_ne;
     let result = new_ucmd!().arg("-c").arg("/proc/cpuinfo").succeeds();
     assert_ne!(result.stdout_str(), "0 /proc/cpuinfo\n");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.arg("-c").arg("/sys/kernel/profiling").succeeds();
+    let actual = at.read("/sys/kernel/profiling").len();
+    assert_eq!(
+        result.stdout_str(),
+        format!("{} /sys/kernel/profiling\n", actual)
+    );
 }
 
 #[test]

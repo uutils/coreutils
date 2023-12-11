@@ -497,7 +497,10 @@ impl FsUsage {
     #[cfg(unix)]
     pub fn new(statvfs: StatFs) -> Self {
         {
-            #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+            #[cfg(all(
+                not(any(target_os = "freebsd", target_os = "openbsd")),
+                target_pointer_width = "64"
+            ))]
             return Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
                 blocks: statvfs.f_blocks,
@@ -507,7 +510,10 @@ impl FsUsage {
                 files: statvfs.f_files,
                 ffree: statvfs.f_ffree,
             };
-            #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+            #[cfg(all(
+                not(any(target_os = "freebsd", target_os = "openbsd")),
+                not(target_pointer_width = "64")
+            ))]
             return Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
                 blocks: statvfs.f_blocks.into(),
@@ -529,6 +535,19 @@ impl FsUsage {
                     != 0,
                 files: statvfs.f_files,
                 ffree: statvfs.f_ffree.try_into().unwrap(),
+            };
+            #[cfg(target_os = "openbsd")]
+            return Self {
+                blocksize: statvfs.f_bsize.into(),
+                blocks: statvfs.f_blocks,
+                bfree: statvfs.f_bfree,
+                bavail: statvfs.f_bavail.try_into().unwrap(),
+                bavail_top_bit_set: ((std::convert::TryInto::<u64>::try_into(statvfs.f_bavail)
+                    .unwrap())
+                    & (1u64.rotate_right(1)))
+                    != 0,
+                files: statvfs.f_files,
+                ffree: statvfs.f_ffree,
             };
         }
     }
@@ -617,6 +636,7 @@ impl FsMeta for StatFs {
             not(target_vendor = "apple"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_os = "openbsd"),
             not(target_os = "illumos"),
             not(target_os = "solaris"),
             not(target_arch = "s390x"),
@@ -630,6 +650,7 @@ impl FsMeta for StatFs {
                 target_arch = "s390x",
                 target_vendor = "apple",
                 target_os = "android",
+                target_os = "openbsd",
                 not(target_pointer_width = "64")
             )
         ))]
@@ -655,11 +676,19 @@ impl FsMeta for StatFs {
         return self.f_bfree.into();
     }
     fn avail_blocks(&self) -> u64 {
-        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+        #[cfg(all(
+            not(target_os = "freebsd"),
+            not(target_os = "openbsd"),
+            target_pointer_width = "64"
+        ))]
         return self.f_bavail;
-        #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+        #[cfg(all(
+            not(target_os = "freebsd"),
+            not(target_os = "openbsd"),
+            not(target_pointer_width = "64")
+        ))]
         return self.f_bavail.into();
-        #[cfg(target_os = "freebsd")]
+        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
         return self.f_bavail.try_into().unwrap();
     }
     fn total_file_nodes(&self) -> u64 {

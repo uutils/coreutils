@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// cSpell:ignore sysconf
 use crate::word_count::WordCount;
 
 use super::WordCountable;
@@ -11,11 +13,19 @@ use std::fs::OpenOptions;
 use std::io::{self, ErrorKind, Read};
 
 #[cfg(unix)]
-use libc::S_IFREG;
+use libc::{sysconf, S_IFREG, _SC_PAGESIZE};
 #[cfg(unix)]
 use nix::sys::stat;
+#[cfg(unix)]
+use std::io::{Seek, SeekFrom};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::io::AsRawFd;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
+#[cfg(windows)]
+const FILE_ATTRIBUTE_ARCHIVE: u32 = 32;
+#[cfg(windows)]
+const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use libc::S_IFIFO;
@@ -72,6 +82,8 @@ fn count_bytes_using_splice(fd: &impl AsRawFd) -> Result<usize, usize> {
 ///   1. On Unix,  we can simply `stat` the file if it is regular.
 ///   2. On Linux -- if the above did not work -- we can use splice to count
 ///      the number of bytes if the file is a FIFO.
+///   3. On Windows we can use `std::os::windows::fs::MetadataExt` to get file size
+///      for regular files
 ///   3. Otherwise, we just read normally, but without the overhead of counting
 ///      other things such as lines and words.
 #[inline]
@@ -87,11 +99,60 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // If stat.st_size = 0 then
             //  - either the size is 0
             //  - or the size is unknown.
-            // The second case happens for files in pseudo-filesystems. For
-            // example with /proc/version and /sys/kernel/profiling. So,
-            // if it is 0 we don't report that and instead do a full read.
-            if (stat.st_mode as libc::mode_t & S_IFREG) != 0 && stat.st_size > 0 {
-                return (stat.st_size as usize, None);
+            // The second case happens for files in pseudo-filesystems.
+            // For example with /proc/version.
+            // So, if it is 0 we don't report that and instead do a full read.
+            //
+            // Another thing to consider for files in pseudo-filesystems like /proc, /sys
+            // and similar is that they could report `st_size` greater than actual content.
+            // For example /sys/kernel/profiling could report `st_size` equal to
+            // system page size (typically 4096 on 64bit system), while it's file content
+            // would count up only to a couple of bytes.
+            // This condition usually occurs for files in pseudo-filesystems like /proc, /sys
+            // that report `st_size` in the multiples of system page size.
+            // In such cases - attempt `seek()` almost to the end of the file
+            // and then fall back on read to count the rest.
+            //
+            // And finally a special case of input redirection in *nix shell:
+            // `( wc -c ; wc -c ) < file` should return
+            // ```
+            // size_of_file
+            // 0
+            // ```
+            // Similarly
+            // `( head -c1 ; wc -c ) < file` should return
+            // ```
+            // first_byte_of_file
+            // size_of_file - 1
+            // ```
+            // Since the input stream from file is treated as continuous across both commands inside ().
+            // In cases like this, due to `<` redirect, the `stat.st_mode` would report input as a regular file
+            // and `stat.st_size` would report the size of file on disk
+            // and NOT the remaining number of bytes in the input stream.
+            // However, the raw file descriptor in this situation would be equal to `0`
+            // for STDIN in both invocations.
+            // Therefore we cannot rely of `st_size` here and should fall back on full read.
+            if fd > 0 && (stat.st_mode as libc::mode_t & S_IFREG) != 0 && stat.st_size > 0 {
+                let sys_page_size = unsafe { sysconf(_SC_PAGESIZE) as usize };
+                if stat.st_size as usize % sys_page_size > 0 {
+                    // regular file or file from /proc, /sys and similar pseudo-filesystems
+                    // with size that is NOT a multiple of system page size
+                    return (stat.st_size as usize, None);
+                } else if let Some(file) = handle.inner_file() {
+                    // On some platforms `stat.st_blksize` and `stat.st_size`
+                    // are of different types: i64 vs i32
+                    // i.e. MacOS on Apple Silicon (aarch64-apple-darwin),
+                    // Debian Linux on ARM (aarch64-unknown-linux-gnu),
+                    // 32bit i686 targets, etc.
+                    // While on the others they are of the same type.
+                    #[allow(clippy::unnecessary_cast)]
+                    let offset =
+                        stat.st_size as i64 - stat.st_size as i64 % (stat.st_blksize as i64 + 1);
+
+                    if let Ok(n) = file.seek(SeekFrom::Start(offset as u64)) {
+                        byte_count = n as usize;
+                    }
+                }
             }
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
@@ -102,6 +163,21 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                         Ok(n) => return (n, None),
                         Err(n) => byte_count = n,
                     }
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        if let Some(file) = handle.inner_file() {
+            if let Ok(metadata) = file.metadata() {
+                let attributes = metadata.file_attributes();
+
+                if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0
+                    || (attributes & FILE_ATTRIBUTE_NORMAL) != 0
+                {
+                    return (metadata.file_size() as usize, None);
                 }
             }
         }
