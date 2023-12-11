@@ -47,7 +47,7 @@ jobs:
           - { name: fuzz_date, should_pass: false }
           - { name: fuzz_expr, should_pass: true }
           - { name: fuzz_printf, should_pass: false }
-          - { name: fuzz_echo, should_pass: false }
+          - { name: fuzz_echo, should_pass: true }
           - { name: fuzz_seq, should_pass: false }
           - { name: fuzz_parse_glob, should_pass: true }
           - { name: fuzz_parse_size, should_pass: true }

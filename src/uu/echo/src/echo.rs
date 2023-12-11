@@ -154,13 +154,15 @@ pub fn uu_app() -> Command {
             Arg::new(options::ENABLE_BACKSLASH_ESCAPE)
                 .short('e')
                 .help("enable interpretation of backslash escapes")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DISABLE_BACKSLASH_ESCAPE),
         )
         .arg(
             Arg::new(options::DISABLE_BACKSLASH_ESCAPE)
                 .short('E')
                 .help("disable interpretation of backslash escapes (default)")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ENABLE_BACKSLASH_ESCAPE),
         )
         .arg(Arg::new(options::STRING).action(ArgAction::Append))
 }
