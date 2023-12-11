@@ -219,15 +219,6 @@ impl From<String> for NumOrStr {
     }
 }
 
-impl From<NumOrStr> for Option<usize> {
-    fn from(s: NumOrStr) -> Self {
-        match s.eval_as_bigint() {
-            Ok(num) => num.to_usize(),
-            Err(_) => None,
-        }
-    }
-}
-
 impl NumOrStr {
     pub fn to_bigint(&self) -> Result<BigInt, ParseBigIntError> {
         match self {
@@ -300,8 +291,16 @@ impl AstNode {
                 //
                 // So we coerce errors into 0 to make that the only case we
                 // have to care about.
-                let pos: usize = Option::<usize>::from(pos.eval()?).unwrap_or(0);
-                let length: usize = Option::<usize>::from(length.eval()?).unwrap_or(0);
+                let pos = pos
+                    .eval()?
+                    .eval_as_bigint()
+                    .map_or(0.into(), |n| n.to_usize())
+                    .unwrap_or(0);
+                let length = length
+                    .eval()?
+                    .eval_as_bigint()
+                    .map_or(0.into(), |n| n.to_usize())
+                    .unwrap_or(0);
 
                 let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) else {
                     return Ok(String::new().into());
