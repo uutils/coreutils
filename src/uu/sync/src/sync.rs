@@ -16,7 +16,7 @@ use std::path::Path;
 use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("sync.md");
@@ -71,7 +71,6 @@ mod platform {
     use std::fs::OpenOptions;
     use std::os::windows::prelude::*;
     use std::path::Path;
-    use uucore::crash;
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
         GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
@@ -88,12 +87,14 @@ mod platform {
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
                     if FlushFileBuffers(file.as_raw_handle() as HANDLE) == 0 {
-                        crash!(GetLastError() as i32, "failed to flush file buffer");
+                        USimpleError::new(1, format_error_message(GetLastError() as i32,
+                                                                  "failed to flush file buffer"));
                     }
                 }
-                Err(e) => crash!(
+                Err(e) => USimpleError::new(1, format_error_message(
                     e.raw_os_error().unwrap_or(1),
                     "failed to create volume handle"
+                    )
                 ),
             }
         }
@@ -103,7 +104,7 @@ mod platform {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
         let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
         if handle == INVALID_HANDLE_VALUE {
-            crash!(GetLastError() as i32, "failed to find first volume");
+            USimpleError::new(1, format_error_message(GetLastError() as i32, "failed to find first volume"));
         }
         (String::from_wide_null(&name), handle)
     }
@@ -119,7 +120,7 @@ mod platform {
                         FindVolumeClose(next_volume_handle);
                         return volumes;
                     }
-                    err => crash!(err as i32, "failed to find next volume"),
+                    err => USimpleError::new(1, format_error_message(err as i32, "failed to find next volume")),
                 }
             } else {
                 volumes.push(String::from_wide_null(&name));
