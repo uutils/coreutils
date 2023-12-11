@@ -80,17 +80,17 @@ impl RelationOp {
             }
         };
         if b {
-            Ok(NumOrStr::from(1))
+            Ok(1.into())
         } else {
-            Ok(NumOrStr::from(0))
+            Ok(0.into())
         }
     }
 }
 
 impl NumericOp {
     fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<NumOrStr> {
-        let a = ExprResult::<BigInt>::from(left.eval()?)?;
-        let b = ExprResult::<BigInt>::from(right.eval()?)?;
+        let a = left.eval()?.eval_as_bigint()?;
+        let b = right.eval()?.eval_as_bigint()?;
         Ok(NumOrStr::Num(match self {
             Self::Add => a + b,
             Self::Sub => a - b,
@@ -121,22 +121,22 @@ impl StringOp {
                 if is_truthy(&right) {
                     return Ok(right);
                 }
-                Ok(NumOrStr::from(0))
+                Ok(0.into())
             }
             Self::And => {
                 let left = left.eval()?;
                 if !is_truthy(&left) {
-                    return Ok(NumOrStr::from(0));
+                    return Ok(0.into());
                 }
                 let right = right.eval()?;
                 if !is_truthy(&right) {
-                    return Ok(NumOrStr::from(0));
+                    return Ok(0.into());
                 }
                 Ok(left)
             }
             Self::Match => {
-                let left: String = left.eval()?.into();
-                let right: String = right.eval()?.into();
+                let left = left.eval()?.eval_as_string();
+                let right = right.eval()?.eval_as_string();
                 let re_string = format!("^{}", right);
                 let re = Regex::with_options(
                     &re_string,
@@ -144,7 +144,7 @@ impl StringOp {
                     Syntax::grep(),
                 )
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
-                Ok(NumOrStr::from(if re.captures_len() > 0 {
+                Ok(if re.captures_len() > 0 {
                     re.captures(&left)
                         .map(|captures| captures.at(1).unwrap())
                         .unwrap_or("")
@@ -152,19 +152,20 @@ impl StringOp {
                 } else {
                     re.find(&left)
                         .map_or("0".to_string(), |(start, end)| (end - start).to_string())
-                }))
+                }
+                .into())
             }
             Self::Index => {
-                let left: String = left.eval()?.into();
-                let right: String = right.eval()?.into();
+                let left = left.eval()?.eval_as_string();
+                let right = right.eval()?.eval_as_string();
                 for (current_idx, ch_h) in left.chars().enumerate() {
                     for ch_n in right.to_string().chars() {
                         if ch_n == ch_h {
-                            return Ok(NumOrStr::from(current_idx + 1));
+                            return Ok((current_idx + 1).into());
                         }
                     }
                 }
-                Ok(NumOrStr::from(0))
+                Ok(0.into())
             }
         }
     }
@@ -220,29 +221,9 @@ impl From<String> for NumOrStr {
 
 impl From<NumOrStr> for Option<usize> {
     fn from(s: NumOrStr) -> Self {
-        match s.into() {
+        match s.eval_as_bigint() {
             Ok(num) => num.to_usize(),
             Err(_) => None,
-        }
-    }
-}
-
-impl From<NumOrStr> for String {
-    fn from(s: NumOrStr) -> Self {
-        match s {
-            NumOrStr::Num(num) => num.to_string(),
-            NumOrStr::Str(str) => str.to_string(),
-        }
-    }
-}
-
-impl From<NumOrStr> for ExprResult<BigInt> {
-    fn from(s: NumOrStr) -> Self {
-        match s {
-            NumOrStr::Num(num) => Ok(num),
-            NumOrStr::Str(str) => str
-                .parse::<BigInt>()
-                .map_err(|_| ExprError::NonIntegerArgument),
         }
     }
 }
@@ -252,6 +233,22 @@ impl NumOrStr {
         match self {
             Self::Num(num) => Ok(num.clone()),
             Self::Str(str) => str.parse::<BigInt>(),
+        }
+    }
+
+    pub fn eval_as_bigint(self) -> ExprResult<BigInt> {
+        match self {
+            NumOrStr::Num(num) => Ok(num),
+            NumOrStr::Str(str) => str
+                .parse::<BigInt>()
+                .map_err(|_| ExprError::NonIntegerArgument),
+        }
+    }
+
+    pub fn eval_as_string(self) -> String {
+        match self {
+            NumOrStr::Num(num) => num.to_string(),
+            NumOrStr::Str(str) => str,
         }
     }
 }
@@ -283,7 +280,7 @@ impl AstNode {
 
     pub fn eval(&self) -> ExprResult<NumOrStr> {
         match self {
-            Self::Leaf { value } => Ok(NumOrStr::from(value.to_string())),
+            Self::Leaf { value } => Ok(value.to_string().into()),
             Self::BinOp {
                 op_type,
                 left,
@@ -294,7 +291,7 @@ impl AstNode {
                 pos,
                 length,
             } => {
-                let string: String = string.eval()?.into();
+                let string: String = string.eval()?.eval_as_string();
 
                 // The GNU docs say:
                 //
@@ -307,16 +304,17 @@ impl AstNode {
                 let length: usize = Option::<usize>::from(length.eval()?).unwrap_or(0);
 
                 let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) else {
-                    return Ok(NumOrStr::from(String::new()));
+                    return Ok(String::new().into());
                 };
 
-                Ok(NumOrStr::from(
-                    string.chars().skip(pos).take(length).collect::<String>(),
-                ))
+                Ok(string
+                    .chars()
+                    .skip(pos)
+                    .take(length)
+                    .collect::<String>()
+                    .into())
             }
-            Self::Length { string } => {
-                Ok(NumOrStr::from(String::from(string.eval()?).chars().count()))
-            }
+            Self::Length { string } => Ok(string.eval()?.eval_as_string().chars().count().into()),
         }
     }
 }
