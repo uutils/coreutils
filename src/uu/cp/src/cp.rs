@@ -1896,6 +1896,7 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
             target_os = "macos",
             target_os = "macos-12",
             target_os = "freebsd",
+            target_os = "redox",
         )))]
         {
             const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
@@ -1911,6 +1912,7 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
             target_os = "macos",
             target_os = "macos-12",
             target_os = "freebsd",
+            target_os = "redox",
         ))]
         {
             const MODE_RW_UGO: u32 =

@@ -240,6 +240,7 @@ feat_os_unix_redox = [
   "feat_common_core",
   #
   "chmod",
+  "stat",
   "uname",
 ]
 # "feat_os_windows_legacy" == slightly restricted set of utilities which can be built/run on early windows platforms (eg, "WinXP")
