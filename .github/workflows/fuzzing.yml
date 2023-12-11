@@ -36,6 +36,7 @@ jobs:
     needs: fuzz-build
     name: Run the fuzzers
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       RUN_FOR: 60
     strategy:
