@@ -87,14 +87,21 @@ mod platform {
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
                     if FlushFileBuffers(file.as_raw_handle() as HANDLE) == 0 {
-                        USimpleError::new(1, format_error_message(GetLastError() as i32,
-                                                                  "failed to flush file buffer"));
+                        USimpleError::new(
+                            1,
+                            format_error_message(
+                                GetLastError() as i32,
+                                "failed to flush file buffer",
+                            ),
+                        );
                     }
                 }
-                Err(e) => USimpleError::new(1, format_error_message(
-                    e.raw_os_error().unwrap_or(1),
-                    "failed to create volume handle"
-                    )
+                Err(e) => USimpleError::new(
+                    1,
+                    format_error_message(
+                        e.raw_os_error().unwrap_or(1),
+                        "failed to create volume handle",
+                    ),
                 ),
             }
         }
@@ -104,7 +111,10 @@ mod platform {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
         let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
         if handle == INVALID_HANDLE_VALUE {
-            USimpleError::new(1, format_error_message(GetLastError() as i32, "failed to find first volume"));
+            USimpleError::new(
+                1,
+                format_error_message(GetLastError() as i32, "failed to find first volume"),
+            );
         }
         (String::from_wide_null(&name), handle)
     }
@@ -120,7 +130,10 @@ mod platform {
                         FindVolumeClose(next_volume_handle);
                         return volumes;
                     }
-                    err => USimpleError::new(1, format_error_message(err as i32, "failed to find next volume")),
+                    err => USimpleError::new(
+                        1,
+                        format_error_message(err as i32, "failed to find next volume"),
+                    ),
                 }
             } else {
                 volumes.push(String::from_wide_null(&name));
