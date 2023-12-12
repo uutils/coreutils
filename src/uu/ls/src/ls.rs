@@ -1070,6 +1070,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .infer_long_args(true)
         .disable_help_flag(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)

@@ -3925,6 +3925,21 @@ fn test_ls_block_size_override() {
 }
 
 #[test]
+fn test_ls_block_size_override_self() {
+    new_ucmd!()
+        .arg("--block-size=512")
+        .arg("--block-size=512")
+        .succeeds();
+
+    new_ucmd!()
+        .arg("--human-readable")
+        .arg("--human-readable")
+        .succeeds();
+
+    new_ucmd!().arg("--si").arg("--si").succeeds();
+}
+
+#[test]
 fn test_ls_hyperlink() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
