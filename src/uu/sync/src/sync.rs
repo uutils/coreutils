@@ -16,7 +16,7 @@ use std::path::Path;
 use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("sync.md");
