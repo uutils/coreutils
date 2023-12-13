@@ -10,8 +10,18 @@ use std::thread::sleep;
 use std::time::Duration;
 
 #[test]
-fn test_invalid_arg() {
+fn test_mv_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
+fn test_mv_missing_dest() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "dir";
+
+    at.mkdir(dir);
+
+    ucmd.arg(dir).fails();
 }
 
 #[test]
@@ -25,16 +35,6 @@ fn test_mv_rename_dir() {
     ucmd.arg(dir1).arg(dir2).succeeds().no_stderr();
 
     assert!(at.dir_exists(dir2));
-}
-
-#[test]
-fn test_mv_fail() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let dir1 = "test_mv_rename_dir";
-
-    at.mkdir(dir1);
-
-    ucmd.arg(dir1).fails();
 }
 
 #[test]
