@@ -526,7 +526,13 @@ jobs:
           i686-*) TARGET_ARCH=i686 ;;
           x86_64-*) TARGET_ARCH=x86_64 ;;
         esac;
-        unset TARGET_OS ; case '${{ matrix.job.target }}' in *-linux-*) TARGET_OS=linux ;; *-apple-*) TARGET_OS=macos ;; *-windows-*) TARGET_OS=windows ;; *-redox*) TARGET_OS=redox ;; esac;
+        unset TARGET_OS
+        case '${{ matrix.job.target }}' in
+          *-linux-*) TARGET_OS=linux ;;
+          *-apple-*) TARGET_OS=macos ;;
+          *-windows-*) TARGET_OS=windows ;;
+          *-redox*) TARGET_OS=redox ;;
+        esac
         outputs TARGET_ARCH TARGET_OS
         # package name
         PKG_suffix=".tar.gz" ; case '${{ matrix.job.target }}' in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
@@ -561,10 +567,18 @@ jobs:
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
         # * CARGO_CMD
-        CARGO_CMD='cross' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) CARGO_CMD='cargo' ;; redoxer) CARGO_CMD='redoxer' ;; esac;
+        CARGO_CMD='cross'
+        CARGO_CMD_OPTIONS='+${{ env.RUST_MIN_SRV }}'
+        case '${{ matrix.job.use-cross }}' in
+          ''|0|f|false|n|no)
+            CARGO_CMD='cargo'
+            ;;
+          redoxer)
+            CARGO_CMD='redoxer'
+            CARGO_CMD_OPTIONS=''
+            ;;
+        esac
         outputs CARGO_CMD
-        # * CARGO_CMD_OPTIONS
-        CARGO_CMD_OPTIONS='+${{ env.RUST_MIN_SRV }}' ; case '${{ matrix.job.target }}' in *-redox*) CARGO_CMD_OPTIONS="" ;; esac;
         outputs CARGO_CMD_OPTIONS
         # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
         if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
