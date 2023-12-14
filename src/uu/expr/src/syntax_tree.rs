@@ -5,7 +5,8 @@
 
 // spell-checker:ignore (ToDO) ints paren prec multibytes
 
-use num_bigint::BigInt;
+use num_bigint::{BigInt, ParseBigIntError};
+use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::{ExprError, ExprResult};
@@ -45,7 +46,7 @@ pub enum StringOp {
 }
 
 impl BinOp {
-    fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<String> {
+    fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<NumOrStr> {
         match self {
             Self::Relation(op) => op.eval(left, right),
             Self::Numeric(op) => op.eval(left, right),
@@ -55,10 +56,10 @@ impl BinOp {
 }
 
 impl RelationOp {
-    fn eval(&self, a: &AstNode, b: &AstNode) -> ExprResult<String> {
+    fn eval(&self, a: &AstNode, b: &AstNode) -> ExprResult<NumOrStr> {
         let a = a.eval()?;
         let b = b.eval()?;
-        let b = if let (Ok(a), Ok(b)) = (a.parse::<BigInt>(), b.parse::<BigInt>()) {
+        let b = if let (Ok(a), Ok(b)) = (&a.to_bigint(), &b.to_bigint()) {
             match self {
                 Self::Lt => a < b,
                 Self::Leq => a <= b,
@@ -79,24 +80,18 @@ impl RelationOp {
             }
         };
         if b {
-            Ok("1".into())
+            Ok(1.into())
         } else {
-            Ok("0".into())
+            Ok(0.into())
         }
     }
 }
 
 impl NumericOp {
-    fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<String> {
-        let a: BigInt = left
-            .eval()?
-            .parse()
-            .map_err(|_| ExprError::NonIntegerArgument)?;
-        let b: BigInt = right
-            .eval()?
-            .parse()
-            .map_err(|_| ExprError::NonIntegerArgument)?;
-        Ok(match self {
+    fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<NumOrStr> {
+        let a = left.eval()?.eval_as_bigint()?;
+        let b = right.eval()?.eval_as_bigint()?;
+        Ok(NumOrStr::Num(match self {
             Self::Add => a + b,
             Self::Sub => a - b,
             Self::Mul => a * b,
@@ -110,13 +105,12 @@ impl NumericOp {
                 };
                 a % b
             }
-        }
-        .to_string())
+        }))
     }
 }
 
 impl StringOp {
-    fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<String> {
+    fn eval(&self, left: &AstNode, right: &AstNode) -> ExprResult<NumOrStr> {
         match self {
             Self::Or => {
                 let left = left.eval()?;
@@ -127,23 +121,23 @@ impl StringOp {
                 if is_truthy(&right) {
                     return Ok(right);
                 }
-                Ok("0".into())
+                Ok(0.into())
             }
             Self::And => {
                 let left = left.eval()?;
                 if !is_truthy(&left) {
-                    return Ok("0".into());
+                    return Ok(0.into());
                 }
                 let right = right.eval()?;
                 if !is_truthy(&right) {
-                    return Ok("0".into());
+                    return Ok(0.into());
                 }
                 Ok(left)
             }
             Self::Match => {
-                let left = left.eval()?;
-                let right = right.eval()?;
-                let re_string = format!("^{}", &right);
+                let left = left.eval()?.eval_as_string();
+                let right = right.eval()?.eval_as_string();
+                let re_string = format!("^{}", right);
                 let re = Regex::with_options(
                     &re_string,
                     RegexOptions::REGEX_OPTION_NONE,
@@ -158,19 +152,20 @@ impl StringOp {
                 } else {
                     re.find(&left)
                         .map_or("0".to_string(), |(start, end)| (end - start).to_string())
-                })
+                }
+                .into())
             }
             Self::Index => {
-                let left = left.eval()?;
-                let right = right.eval()?;
+                let left = left.eval()?.eval_as_string();
+                let right = right.eval()?.eval_as_string();
                 for (current_idx, ch_h) in left.chars().enumerate() {
-                    for ch_n in right.chars() {
+                    for ch_n in right.to_string().chars() {
                         if ch_n == ch_h {
-                            return Ok((current_idx + 1).to_string());
+                            return Ok((current_idx + 1).into());
                         }
                     }
                 }
-                Ok("0".to_string())
+                Ok(0.into())
             }
         }
     }
@@ -200,6 +195,55 @@ const PRECEDENCE: &[&[(&str, BinOp)]] = &[
     &[(":", BinOp::String(StringOp::Match))],
 ];
 
+#[derive(Debug, PartialEq, Eq, Ord, PartialOrd)]
+pub enum NumOrStr {
+    Num(BigInt),
+    Str(String),
+}
+
+impl From<usize> for NumOrStr {
+    fn from(num: usize) -> Self {
+        Self::Num(BigInt::from(num))
+    }
+}
+
+impl From<BigInt> for NumOrStr {
+    fn from(num: BigInt) -> Self {
+        Self::Num(num)
+    }
+}
+
+impl From<String> for NumOrStr {
+    fn from(str: String) -> Self {
+        Self::Str(str)
+    }
+}
+
+impl NumOrStr {
+    pub fn to_bigint(&self) -> Result<BigInt, ParseBigIntError> {
+        match self {
+            Self::Num(num) => Ok(num.clone()),
+            Self::Str(str) => str.parse::<BigInt>(),
+        }
+    }
+
+    pub fn eval_as_bigint(self) -> ExprResult<BigInt> {
+        match self {
+            Self::Num(num) => Ok(num),
+            Self::Str(str) => str
+                .parse::<BigInt>()
+                .map_err(|_| ExprError::NonIntegerArgument),
+        }
+    }
+
+    pub fn eval_as_string(self) -> String {
+        match self {
+            Self::Num(num) => num.to_string(),
+            Self::Str(str) => str,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum AstNode {
     Leaf {
@@ -225,9 +269,9 @@ impl AstNode {
         Parser::new(input).parse()
     }
 
-    pub fn eval(&self) -> ExprResult<String> {
+    pub fn eval(&self) -> ExprResult<NumOrStr> {
         match self {
-            Self::Leaf { value } => Ok(value.into()),
+            Self::Leaf { value } => Ok(value.to_string().into()),
             Self::BinOp {
                 op_type,
                 left,
@@ -238,7 +282,7 @@ impl AstNode {
                 pos,
                 length,
             } => {
-                let string = string.eval()?;
+                let string: String = string.eval()?.eval_as_string();
 
                 // The GNU docs say:
                 //
@@ -247,16 +291,31 @@ impl AstNode {
                 //
                 // So we coerce errors into 0 to make that the only case we
                 // have to care about.
-                let pos: usize = pos.eval()?.parse().unwrap_or(0);
-                let length: usize = length.eval()?.parse().unwrap_or(0);
+                let pos = pos
+                    .eval()?
+                    .eval_as_bigint()
+                    .ok()
+                    .and_then(|n| n.to_usize())
+                    .unwrap_or(0);
+                let length = length
+                    .eval()?
+                    .eval_as_bigint()
+                    .ok()
+                    .and_then(|n| n.to_usize())
+                    .unwrap_or(0);
 
                 let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) else {
-                    return Ok(String::new());
+                    return Ok(String::new().into());
                 };
 
-                Ok(string.chars().skip(pos).take(length).collect())
+                Ok(string
+                    .chars()
+                    .skip(pos)
+                    .take(length)
+                    .collect::<String>()
+                    .into())
             }
-            Self::Length { string } => Ok(string.eval()?.chars().count().to_string()),
+            Self::Length { string } => Ok(string.eval()?.eval_as_string().chars().count().into()),
         }
     }
 }
@@ -399,21 +458,26 @@ impl<'a> Parser<'a> {
 /// Determine whether `expr` should evaluate the string as "truthy"
 ///
 /// Truthy strings are either empty or match the regex "-?0+".
-pub fn is_truthy(s: &str) -> bool {
-    // Edge case: `-` followed by nothing is truthy
-    if s == "-" {
-        return true;
+pub fn is_truthy(s: &NumOrStr) -> bool {
+    match s {
+        NumOrStr::Num(num) => num != &BigInt::from(0),
+        NumOrStr::Str(str) => {
+            // Edge case: `-` followed by nothing is truthy
+            if str == "-" {
+                return true;
+            }
+
+            let mut bytes = str.bytes();
+
+            // Empty string is falsy
+            let Some(first) = bytes.next() else {
+                return false;
+            };
+
+            let is_zero = (first == b'-' || first == b'0') && bytes.all(|b| b == b'0');
+            !is_zero
+        }
     }
-
-    let mut bytes = s.bytes();
-
-    // Empty string is falsy
-    let Some(first) = bytes.next() else {
-        return false;
-    };
-
-    let is_zero = (first == b'-' || first == b'0') && bytes.all(|b| b == b'0');
-    !is_zero
 }
 
 #[cfg(test)]
