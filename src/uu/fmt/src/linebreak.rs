@@ -365,8 +365,7 @@ fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a Wo
     active
         .iter()
         .min_by_key(|&&a| paths[a].demerits)
-        .iter()
-        .flat_map(|&&(mut best_idx)| {
+        .map(|&(mut best_idx)| {
             let mut breakwords = vec![];
             // now, chase the pointers back through the break list, recording
             // the words at which we should break
@@ -381,7 +380,7 @@ fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a Wo
                 }
             }
         })
-        .collect()
+        .unwrap_or_default()
 }
 
 // "infinite" badness is more like (1+BAD_INFTY)^2 because of how demerits are computed
