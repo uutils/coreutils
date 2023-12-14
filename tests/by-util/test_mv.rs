@@ -10,8 +10,18 @@ use std::thread::sleep;
 use std::time::Duration;
 
 #[test]
-fn test_invalid_arg() {
+fn test_mv_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
+fn test_mv_missing_dest() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "dir";
+
+    at.mkdir(dir);
+
+    ucmd.arg(dir).fails();
 }
 
 #[test]
@@ -25,16 +35,6 @@ fn test_mv_rename_dir() {
     ucmd.arg(dir1).arg(dir2).succeeds().no_stderr();
 
     assert!(at.dir_exists(dir2));
-}
-
-#[test]
-fn test_mv_fail() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let dir1 = "test_mv_rename_dir";
-
-    at.mkdir(dir1);
-
-    ucmd.arg(dir1).fails();
 }
 
 #[test]
@@ -1153,6 +1153,32 @@ fn test_mv_overwrite_dir() {
     at.mkdir(dir_a);
     at.mkdir(dir_b);
     ucmd.arg("-T").arg(dir_a).arg(dir_b).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+}
+
+#[test]
+fn test_mv_no_target_dir_with_dest_not_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "a";
+    let dir_b = "b";
+
+    at.mkdir(dir_a);
+    ucmd.arg("-T").arg(dir_a).arg(dir_b).succeeds().no_output();
+
+    assert!(!at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+}
+
+#[test]
+fn test_mv_no_target_dir_with_dest_not_existing_and_ending_with_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "a";
+    let dir_b = "b/";
+
+    at.mkdir(dir_a);
+    ucmd.arg("-T").arg(dir_a).arg(dir_b).succeeds().no_output();
 
     assert!(!at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));

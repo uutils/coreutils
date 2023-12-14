@@ -13,7 +13,7 @@ use std::os::unix::fs;
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
@@ -257,6 +257,8 @@ fn test_cp_target_directory_is_file() {
 }
 
 #[test]
+// FixMe: for FreeBSD, flaky test; track repair progress at GH:uutils/coreutils/issue/4725
+#[cfg(not(target_os = "freebsd"))]
 fn test_cp_arg_update_interactive() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
@@ -2379,13 +2381,18 @@ fn test_copy_symlink_force() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 fn test_no_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
     use uucore::mode::get_umask;
 
-    const PERMS_ALL: u32 = 0o7777;
+    const PERMS_ALL: u32 = if cfg!(target_os = "freebsd") {
+        // Only the superuser can set the sticky bit on a file.
+        0o6777
+    } else {
+        0o7777
+    };
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -2405,11 +2412,16 @@ fn test_no_preserve_mode() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 fn test_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
-    const PERMS_ALL: u32 = 0o7777;
+    const PERMS_ALL: u32 = if cfg!(target_os = "freebsd") {
+        // Only the superuser can set the sticky bit on a file.
+        0o6777
+    } else {
+        0o7777
+    };
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");

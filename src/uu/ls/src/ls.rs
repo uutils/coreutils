@@ -3,14 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf tabsize dired subdired dtype
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype
 
 use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
-use lscolors::LsColors;
+use lscolors::{LsColors, Style};
+
 use number_prefix::NumberPrefix;
 use std::{cell::OnceCell, num::IntErrorKind};
 use std::{collections::HashSet, io::IsTerminal};
@@ -20,7 +21,7 @@ use std::os::windows::fs::MetadataExt;
 use std::{
     cmp::Reverse,
     error::Error,
-    ffi::{OsStr, OsString},
+    ffi::OsString,
     fmt::{Display, Write as FmtWrite},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{stdout, BufWriter, ErrorKind, Stdout, Write},
@@ -155,6 +156,7 @@ pub mod options {
     pub static GROUP_DIRECTORIES_FIRST: &str = "group-directories-first";
     pub static ZERO: &str = "zero";
     pub static DIRED: &str = "dired";
+    pub static HYPERLINK: &str = "hyperlink";
 }
 
 const DEFAULT_TERM_WIDTH: u16 = 80;
@@ -181,7 +183,7 @@ impl UError for LsError {
             Self::IOError(_) => 1,
             Self::IOErrorContext(_, _, false) => 1,
             Self::IOErrorContext(_, _, true) => 2,
-            Self::BlockSizeParseError(_) => 1,
+            Self::BlockSizeParseError(_) => 2,
             Self::ConflictingArgumentDired => 1,
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
@@ -418,6 +420,7 @@ pub struct Config {
     group_directories_first: bool,
     line_ending: LineEnding,
     dired: bool,
+    hyperlink: bool,
 }
 
 // Fields that can be removed or added to the long format
@@ -566,6 +569,25 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
     }
 }
 
+/// Extracts the hyperlink option to use based on the options provided.
+///
+/// # Returns
+///
+/// A boolean representing whether to hyperlink files.
+fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
+    let hyperlink = options
+        .get_one::<String>(options::HYPERLINK)
+        .unwrap()
+        .as_str();
+
+    match hyperlink {
+        "always" | "yes" | "force" => true,
+        "auto" | "tty" | "if-tty" => std::io::stdout().is_terminal(),
+        "never" | "no" | "none" => false,
+        _ => unreachable!("should be handled by clap"),
+    }
+}
+
 /// Extracts the quoting style to use based on the options provided.
 ///
 /// # Arguments
@@ -620,7 +642,9 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
         QuotingStyle::C {
             quotes: quoting_style::Quotes::Double,
         }
-    } else if options.get_flag(options::DIRED) {
+    } else if options.get_flag(options::DIRED) || !std::io::stdout().is_terminal() {
+        // By default, `ls` uses Literal quoting when
+        // writing to a non-terminal file descriptor
         QuotingStyle::Literal { show_control }
     } else {
         // TODO: use environment variable if available
@@ -736,19 +760,18 @@ impl Config {
         }
 
         let sort = extract_sort(options);
-
         let time = extract_time(options);
-
         let mut needs_color = extract_color(options);
+        let hyperlink = extract_hyperlink(options);
 
-        let cmd_line_bs = options.get_one::<String>(options::size::BLOCK_SIZE);
-        let opt_si = cmd_line_bs.is_some()
+        let opt_block_size = options.get_one::<String>(options::size::BLOCK_SIZE);
+        let opt_si = opt_block_size.is_some()
             && options
                 .get_one::<String>(options::size::BLOCK_SIZE)
                 .unwrap()
                 .eq("si")
             || options.get_flag(options::size::SI);
-        let opt_hr = (cmd_line_bs.is_some()
+        let opt_hr = (opt_block_size.is_some()
             && options
                 .get_one::<String>(options::size::BLOCK_SIZE)
                 .unwrap()
@@ -756,9 +779,9 @@ impl Config {
             || options.get_flag(options::size::HUMAN_READABLE);
         let opt_kb = options.get_flag(options::size::KIBIBYTES);
 
-        let bs_env_var = std::env::var_os("BLOCK_SIZE");
-        let ls_bs_env_var = std::env::var_os("LS_BLOCK_SIZE");
-        let pc_env_var = std::env::var_os("POSIXLY_CORRECT");
+        let env_var_block_size = std::env::var_os("BLOCK_SIZE");
+        let env_var_ls_block_size = std::env::var_os("LS_BLOCK_SIZE");
+        let env_var_posixly_correct = std::env::var_os("POSIXLY_CORRECT");
 
         let size_format = if opt_si {
             SizeFormat::Decimal
@@ -768,13 +791,13 @@ impl Config {
             SizeFormat::Bytes
         };
 
-        let raw_bs = if let Some(cmd_line_bs) = cmd_line_bs {
-            OsString::from(cmd_line_bs)
+        let raw_block_size = if let Some(opt_block_size) = opt_block_size {
+            OsString::from(opt_block_size)
         } else if !opt_kb {
-            if let Some(ls_bs_env_var) = ls_bs_env_var {
-                ls_bs_env_var
-            } else if let Some(bs_env_var) = bs_env_var {
-                bs_env_var
+            if let Some(env_var_ls_block_size) = env_var_ls_block_size {
+                env_var_ls_block_size
+            } else if let Some(env_var_block_size) = env_var_block_size {
+                env_var_block_size
             } else {
                 OsString::from("")
             }
@@ -782,20 +805,17 @@ impl Config {
             OsString::from("")
         };
 
-        let block_size: Option<u64> = if !opt_si && !opt_hr && !raw_bs.is_empty() {
-            match parse_size_u64(&raw_bs.to_string_lossy()) {
+        let block_size: Option<u64> = if !opt_si && !opt_hr && !raw_block_size.is_empty() {
+            match parse_size_u64(&raw_block_size.to_string_lossy()) {
                 Ok(size) => Some(size),
                 Err(_) => {
-                    show!(LsError::BlockSizeParseError(cmd_line_bs.unwrap().clone()));
-                    None
+                    return Err(Box::new(LsError::BlockSizeParseError(
+                        opt_block_size.unwrap().clone(),
+                    )));
                 }
             }
-        } else if let Some(pc) = pc_env_var {
-            if pc.as_os_str() == OsStr::new("true") || pc == OsStr::new("1") {
-                Some(POSIXLY_CORRECT_BLOCK_SIZE)
-            } else {
-                None
-            }
+        } else if env_var_posixly_correct.is_some() {
+            Some(POSIXLY_CORRECT_BLOCK_SIZE)
         } else {
             None
         };
@@ -1022,6 +1042,7 @@ impl Config {
             group_directories_first: options.get_flag(options::GROUP_DIRECTORIES_FIRST),
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
+            hyperlink,
         })
     }
 }
@@ -1049,6 +1070,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .infer_long_args(true)
         .disable_help_flag(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
@@ -1155,6 +1177,19 @@ pub fn uu_app() -> Command {
                 .short('D')
                 .help("generate output designed for Emacs' dired (Directory Editor) mode")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::HYPERLINK)
+                .long(options::HYPERLINK)
+                .help("hyperlink file names WHEN")
+                .value_parser([
+                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
+                ])
+                .require_equals(true)
+                .num_args(0..=1)
+                .default_missing_value("always")
+                .default_value("never")
+                .value_name("WHEN"),
         )
         // The next four arguments do not override with the other format
         // options, see the comment in Config::from for the reason.
@@ -1518,7 +1553,7 @@ pub fn uu_app() -> Command {
                 .short('h')
                 .long(options::size::HUMAN_READABLE)
                 .help("Print human readable file sizes (e.g. 1K 234M 56G).")
-                .overrides_with(options::size::SI)
+                .overrides_with_all([options::size::BLOCK_SIZE, options::size::SI])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1535,6 +1570,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::size::SI)
                 .long(options::size::SI)
                 .help("Print human readable file sizes using powers of 1000 instead of 1024.")
+                .overrides_with_all([options::size::BLOCK_SIZE, options::size::HUMAN_READABLE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1542,7 +1578,8 @@ pub fn uu_app() -> Command {
                 .long(options::size::BLOCK_SIZE)
                 .require_equals(true)
                 .value_name("BLOCK_SIZE")
-                .help("scale sizes by BLOCK_SIZE when printing them"),
+                .help("scale sizes by BLOCK_SIZE when printing them")
+                .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
         )
         .arg(
             Arg::new(options::INODE)
@@ -1868,6 +1905,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut dirs = Vec::<PathData>::new();
     let mut out = BufWriter::new(stdout());
     let mut dired = DiredOutput::default();
+    let mut style_manager = StyleManager::new();
     let initial_locs_len = locs.len();
 
     for loc in locs {
@@ -1901,7 +1939,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     sort_entries(&mut files, config, &mut out);
     sort_entries(&mut dirs, config, &mut out);
 
-    display_items(&files, config, &mut out, &mut dired)?;
+    display_items(&files, config, &mut out, &mut dired, &mut style_manager)?;
 
     for (pos, path_data) in dirs.iter().enumerate() {
         // Do read_dir call here to match GNU semantics by printing
@@ -1926,7 +1964,8 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 if config.dired {
                     dired::indent(&mut out)?;
                 }
-                writeln!(out, "{}:", path_data.p_buf.display())?;
+                show_dir_name(&path_data.p_buf, &mut out);
+                writeln!(out)?;
                 if config.dired {
                     // First directory displayed
                     let dir_len = path_data.display_name.len();
@@ -1953,6 +1992,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             &mut out,
             &mut listed_ancestors,
             &mut dired,
+            &mut style_manager,
         )?;
     }
     if config.dired {
@@ -2069,6 +2109,7 @@ fn enter_directory(
     out: &mut BufWriter<Stdout>,
     listed_ancestors: &mut HashSet<FileInformation>,
     dired: &mut DiredOutput,
+    style_manager: &mut StyleManager,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
@@ -2121,7 +2162,7 @@ fn enter_directory(
         }
     }
 
-    display_items(&entries, config, out, dired)?;
+    display_items(&entries, config, out, dired, style_manager)?;
 
     if config.recursive {
         for e in entries
@@ -2162,7 +2203,15 @@ fn enter_directory(
 
                         show_dir_name(&e.p_buf, out);
                         writeln!(out)?;
-                        enter_directory(e, rd, config, out, listed_ancestors, dired)?;
+                        enter_directory(
+                            e,
+                            rd,
+                            config,
+                            out,
+                            listed_ancestors,
+                            dired,
+                            style_manager,
+                        )?;
                         listed_ancestors
                             .remove(&FileInformation::from_path(&e.p_buf, e.must_dereference)?);
                     } else {
@@ -2284,6 +2333,7 @@ fn display_items(
     config: &Config,
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
+    style_manager: &mut StyleManager,
 ) -> UResult<()> {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
@@ -2306,7 +2356,7 @@ fn display_items(
                     display_additional_leading_info(item, &padding_collection, config, out)?;
                 write!(out, "{more_info}")?;
             }
-            display_item_long(item, &padding_collection, config, out, dired)?;
+            display_item_long(item, &padding_collection, config, out, dired, style_manager)?;
         }
     } else {
         let mut longest_context_len = 1;
@@ -2326,7 +2376,7 @@ fn display_items(
 
         for i in items {
             let more_info = display_additional_leading_info(i, &padding, config, out)?;
-            let cell = display_file_name(i, config, prefix_context, more_info, out);
+            let cell = display_file_name(i, config, prefix_context, more_info, out, style_manager);
             names_vec.push(cell);
         }
 
@@ -2481,6 +2531,7 @@ fn display_item_long(
     config: &Config,
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
+    style_manager: &mut StyleManager,
 ) -> UResult<()> {
     let mut output_display: String = String::new();
     if config.dired {
@@ -2573,7 +2624,8 @@ fn display_item_long(
 
         write!(output_display, " {} ", display_date(md, config)).unwrap();
 
-        let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
+        let displayed_file =
+            display_file_name(item, config, None, String::new(), out, style_manager).contents;
         if config.dired {
             let (start, end) = dired::calculate_dired(
                 &dired.dired_positions,
@@ -2655,7 +2707,8 @@ fn display_item_long(
             write!(output_display, " {}", pad_right("?", padding.uname)).unwrap();
         }
 
-        let displayed_file = display_file_name(item, config, None, String::new(), out).contents;
+        let displayed_file =
+            display_file_name(item, config, None, String::new(), out, style_manager).contents;
         let date_len = 12;
 
         write!(
@@ -2946,7 +2999,6 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
-#[allow(unused_variables)]
 #[allow(clippy::cognitive_complexity)]
 fn display_file_name(
     path: &PathData,
@@ -2954,6 +3006,7 @@ fn display_file_name(
     prefix_context: Option<usize>,
     more_info: String,
     out: &mut BufWriter<Stdout>,
+    style_manager: &mut StyleManager,
 ) -> Cell {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
@@ -2962,16 +3015,29 @@ fn display_file_name(
     // infer it because the color codes mess up term_grid's width calculation.
     let mut width = name.width();
 
+    if config.hyperlink {
+        let hostname = hostname::get().unwrap_or(OsString::from(""));
+        let hostname = hostname.to_string_lossy();
+
+        let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
+        let absolute_path = absolute_path.to_string_lossy();
+
+        // TODO encode path
+        // \x1b = ESC, \x07 = BEL
+        name = format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07");
+    }
+
     if let Some(ls_colors) = &config.color {
         let md = path.md(out);
         name = if md.is_some() {
-            color_name(name, &path.p_buf, md, ls_colors)
+            color_name(name, &path.p_buf, md, ls_colors, style_manager)
         } else {
             color_name(
                 name,
                 &path.p_buf,
                 path.p_buf.symlink_metadata().ok().as_ref(),
                 ls_colors,
+                style_manager,
             )
         };
     }
@@ -3060,6 +3126,7 @@ fn display_file_name(
                             &target_data.p_buf,
                             Some(&target_metadata),
                             ls_colors,
+                            style_manager,
                         ));
                     }
                 } else {
@@ -3094,11 +3161,50 @@ fn display_file_name(
     }
 }
 
-fn color_name(name: String, path: &Path, md: Option<&Metadata>, ls_colors: &LsColors) -> String {
-    match ls_colors.style_for_path_with_metadata(path, md) {
-        Some(style) => {
-            return style.to_nu_ansi_term_style().paint(name).to_string();
+/// We need this struct to be able to store the previous style.
+/// This because we need to check the previous value in case we don't need
+/// the reset
+struct StyleManager {
+    current_style: Option<Style>,
+}
+
+impl StyleManager {
+    fn new() -> Self {
+        Self {
+            current_style: None,
         }
+    }
+
+    fn apply_style(&mut self, new_style: &Style, name: &str) -> String {
+        if let Some(current) = &self.current_style {
+            if *current == *new_style {
+                // Current style is the same as new style, apply without reset.
+                let mut style = new_style.to_nu_ansi_term_style();
+                style.prefix_with_reset = false;
+                return style.paint(name).to_string();
+            }
+        }
+
+        // We are getting a new style, we need to reset it
+        self.current_style = Some(new_style.clone());
+        new_style
+            .to_nu_ansi_term_style()
+            .reset_before_style()
+            .paint(name)
+            .to_string()
+    }
+}
+
+/// Colors the provided name based on the style determined for the given path.
+fn color_name(
+    name: String,
+    path: &Path,
+    md: Option<&Metadata>,
+    ls_colors: &LsColors,
+    style_manager: &mut StyleManager,
+) -> String {
+    match ls_colors.style_for_path_with_metadata(path, md) {
+        Some(style) => style_manager.apply_style(style, &name),
         None => name,
     }
 }
@@ -3228,7 +3334,7 @@ fn calculate_padding_collection(
                 padding_collections.minor = minor_len.max(padding_collections.minor);
                 padding_collections.size = size_len
                     .max(padding_collections.size)
-                    .max(padding_collections.major + padding_collections.minor + 2usize);
+                    .max(padding_collections.major);
             }
         }
     }

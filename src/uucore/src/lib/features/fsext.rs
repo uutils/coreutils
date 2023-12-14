@@ -71,6 +71,7 @@ use std::convert::{AsRef, From};
     target_os = "android",
     target_os = "illumos",
     target_os = "solaris",
+    target_os = "redox",
 ))]
 use std::ffi::CStr;
 #[cfg(not(windows))]
@@ -106,7 +107,6 @@ pub use libc::statvfs as StatFs;
     target_vendor = "apple",
     target_os = "freebsd",
     target_os = "openbsd",
-    target_os = "redox"
 ))]
 pub use libc::statfs as statfs_fn;
 #[cfg(any(
@@ -114,7 +114,8 @@ pub use libc::statfs as statfs_fn;
     target_os = "bitrig",
     target_os = "illumos",
     target_os = "solaris",
-    target_os = "dragonfly"
+    target_os = "dragonfly",
+    target_os = "redox"
 ))]
 pub use libc::statvfs as statfs_fn;
 
@@ -497,7 +498,10 @@ impl FsUsage {
     #[cfg(unix)]
     pub fn new(statvfs: StatFs) -> Self {
         {
-            #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+            #[cfg(all(
+                not(any(target_os = "freebsd", target_os = "openbsd")),
+                target_pointer_width = "64"
+            ))]
             return Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
                 blocks: statvfs.f_blocks,
@@ -507,7 +511,10 @@ impl FsUsage {
                 files: statvfs.f_files,
                 ffree: statvfs.f_ffree,
             };
-            #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+            #[cfg(all(
+                not(any(target_os = "freebsd", target_os = "openbsd")),
+                not(target_pointer_width = "64")
+            ))]
             return Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
                 blocks: statvfs.f_blocks.into(),
@@ -529,6 +536,19 @@ impl FsUsage {
                     != 0,
                 files: statvfs.f_files,
                 ffree: statvfs.f_ffree.try_into().unwrap(),
+            };
+            #[cfg(target_os = "openbsd")]
+            return Self {
+                blocksize: statvfs.f_bsize.into(),
+                blocks: statvfs.f_blocks,
+                bfree: statvfs.f_bfree,
+                bavail: statvfs.f_bavail.try_into().unwrap(),
+                bavail_top_bit_set: ((std::convert::TryInto::<u64>::try_into(statvfs.f_bavail)
+                    .unwrap())
+                    & (1u64.rotate_right(1)))
+                    != 0,
+                files: statvfs.f_files,
+                ffree: statvfs.f_ffree,
             };
         }
     }
@@ -617,8 +637,10 @@ impl FsMeta for StatFs {
             not(target_vendor = "apple"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_os = "openbsd"),
             not(target_os = "illumos"),
             not(target_os = "solaris"),
+            not(target_os = "redox"),
             not(target_arch = "s390x"),
             target_pointer_width = "64"
         ))]
@@ -626,10 +648,12 @@ impl FsMeta for StatFs {
         #[cfg(all(
             not(target_env = "musl"),
             not(target_os = "freebsd"),
+            not(target_os = "redox"),
             any(
                 target_arch = "s390x",
                 target_vendor = "apple",
                 target_os = "android",
+                target_os = "openbsd",
                 not(target_pointer_width = "64")
             )
         ))]
@@ -638,7 +662,8 @@ impl FsMeta for StatFs {
             target_env = "musl",
             target_os = "freebsd",
             target_os = "illumos",
-            target_os = "solaris"
+            target_os = "solaris",
+            target_os = "redox"
         ))]
         return self.f_bsize.try_into().unwrap();
     }
@@ -655,11 +680,19 @@ impl FsMeta for StatFs {
         return self.f_bfree.into();
     }
     fn avail_blocks(&self) -> u64 {
-        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+        #[cfg(all(
+            not(target_os = "freebsd"),
+            not(target_os = "openbsd"),
+            target_pointer_width = "64"
+        ))]
         return self.f_bavail;
-        #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+        #[cfg(all(
+            not(target_os = "freebsd"),
+            not(target_os = "openbsd"),
+            not(target_pointer_width = "64")
+        ))]
         return self.f_bavail.into();
-        #[cfg(target_os = "freebsd")]
+        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
         return self.f_bavail.try_into().unwrap();
     }
     fn total_file_nodes(&self) -> u64 {
@@ -846,6 +879,7 @@ pub fn pretty_time(sec: i64, nsec: i64) -> String {
     // the date was set
     let local_offset = match UtcOffset::local_offset_at(tm) {
         Ok(lo) => lo,
+        Err(_) if cfg!(target_os = "redox") => UtcOffset::UTC,
         Err(e) => {
             panic!("error: {e}");
         }

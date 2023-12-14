@@ -8,10 +8,12 @@
 use std::borrow::Borrow;
 use std::env;
 use std::fs::File;
+//use std::io::IsTerminal;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use clap::{crate_version, Arg, ArgAction, Command};
+use uucore::colors::{FILE_ATTRIBUTE_CODES, FILE_COLORS, FILE_TYPES, TERMS};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::{help_about, help_section, help_usage};
@@ -27,9 +29,6 @@ mod options {
 const USAGE: &str = help_usage!("dircolors.md");
 const ABOUT: &str = help_about!("dircolors.md");
 const AFTER_HELP: &str = help_section!("after help", "dircolors.md");
-
-mod colors;
-use self::colors::INTERNAL_DB;
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum OutputFmt {
@@ -54,6 +53,77 @@ pub fn guess_syntax() -> OutputFmt {
             }
         }
         _ => OutputFmt::Unknown,
+    }
+}
+
+fn get_colors_format_strings(fmt: &OutputFmt) -> (String, String) {
+    let prefix = match fmt {
+        OutputFmt::Shell => "LS_COLORS='".to_string(),
+        OutputFmt::CShell => "setenv LS_COLORS '".to_string(),
+        OutputFmt::Display => String::new(),
+        OutputFmt::Unknown => unreachable!(),
+    };
+
+    let suffix = match fmt {
+        OutputFmt::Shell => "';\nexport LS_COLORS".to_string(),
+        OutputFmt::CShell => "'".to_string(),
+        OutputFmt::Display => String::new(),
+        OutputFmt::Unknown => unreachable!(),
+    };
+
+    (prefix, suffix)
+}
+
+pub fn generate_type_output(fmt: &OutputFmt) -> String {
+    match fmt {
+        OutputFmt::Display => FILE_TYPES
+            .iter()
+            .map(|&(_, key, val)| format!("\x1b[{}m{}\t{}\x1b[0m", val, key, val))
+            .collect::<Vec<String>>()
+            .join("\n"),
+        _ => {
+            // Existing logic for other formats
+            FILE_TYPES
+                .iter()
+                .map(|&(_, v1, v2)| format!("{}={}", v1, v2))
+                .collect::<Vec<String>>()
+                .join(":")
+        }
+    }
+}
+
+fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
+    match fmt {
+        OutputFmt::Display => {
+            let mut display_parts = vec![];
+            let type_output = generate_type_output(fmt);
+            display_parts.push(type_output);
+            for &(extension, code) in FILE_COLORS {
+                let prefix = if extension.starts_with('*') { "" } else { "*" };
+                let formatted_extension =
+                    format!("\x1b[{}m{}{}\t{}\x1b[0m", code, prefix, extension, code);
+                display_parts.push(formatted_extension);
+            }
+            display_parts.join("\n")
+        }
+        _ => {
+            // existing logic for other formats
+            let mut parts = vec![];
+            for &(extension, code) in FILE_COLORS {
+                let prefix = if extension.starts_with('*') { "" } else { "*" };
+                let formatted_extension = format!("{}{}", prefix, extension);
+                parts.push(format!("{}={}", formatted_extension, code));
+            }
+            let (prefix, suffix) = get_colors_format_strings(fmt);
+            let ls_colors = parts.join(sep);
+            format!(
+                "{}{}:{}:{}",
+                prefix,
+                generate_type_output(fmt),
+                ls_colors,
+                suffix
+            )
+        }
     }
 }
 
@@ -97,7 +167,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             ));
         }
-        println!("{INTERNAL_DB}");
+
+        println!("{}", generate_dircolors_config());
         return Ok(());
     }
 
@@ -125,7 +196,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let result;
     if files.is_empty() {
-        result = parse(INTERNAL_DB.lines(), &out_format, "");
+        println!("{}", generate_ls_colors(&out_format, ":"));
+        return Ok(());
+        /*
+        // Check if data is being piped into the program
+        if std::io::stdin().is_terminal() {
+            // No data piped, use default behavior
+            println!("{}", generate_ls_colors(&out_format, ":"));
+            return Ok(());
+        } else {
+            // Data is piped, process the input from stdin
+            let fin = BufReader::new(std::io::stdin());
+            result = parse(fin.lines().map_while(Result::ok), &out_format, "-");
+        }
+         */
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
@@ -133,6 +217,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     } else if files[0].eq("-") {
         let fin = BufReader::new(std::io::stdin());
+        // For example, for echo "owt 40;33"|dircolors -b -
         result = parse(fin.lines().map_while(Result::ok), &out_format, files[0]);
     } else {
         let path = Path::new(files[0]);
@@ -276,69 +361,25 @@ enum ParseState {
     Pass,
 }
 
-use std::collections::HashMap;
 use uucore::{format_usage, parse_glob};
 
 #[allow(clippy::cognitive_complexity)]
-fn parse<T>(lines: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
+fn parse<T>(user_input: T, fmt: &OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,
     T::Item: Borrow<str>,
 {
-    // 1790 > $(dircolors | wc -m)
     let mut result = String::with_capacity(1790);
-    match fmt {
-        OutputFmt::Shell => result.push_str("LS_COLORS='"),
-        OutputFmt::CShell => result.push_str("setenv LS_COLORS '"),
-        OutputFmt::Display => (),
-        OutputFmt::Unknown => unreachable!(),
-    }
+    let (prefix, suffix) = get_colors_format_strings(fmt);
 
-    let mut table: HashMap<&str, &str> = HashMap::with_capacity(48);
-    table.insert("normal", "no");
-    table.insert("norm", "no");
-    table.insert("file", "fi");
-    table.insert("reset", "rs");
-    table.insert("dir", "di");
-    table.insert("lnk", "ln");
-    table.insert("link", "ln");
-    table.insert("symlink", "ln");
-    table.insert("orphan", "or");
-    table.insert("missing", "mi");
-    table.insert("fifo", "pi");
-    table.insert("pipe", "pi");
-    table.insert("sock", "so");
-    table.insert("blk", "bd");
-    table.insert("block", "bd");
-    table.insert("chr", "cd");
-    table.insert("char", "cd");
-    table.insert("door", "do");
-    table.insert("exec", "ex");
-    table.insert("left", "lc");
-    table.insert("leftcode", "lc");
-    table.insert("right", "rc");
-    table.insert("rightcode", "rc");
-    table.insert("end", "ec");
-    table.insert("endcode", "ec");
-    table.insert("suid", "su");
-    table.insert("setuid", "su");
-    table.insert("sgid", "sg");
-    table.insert("setgid", "sg");
-    table.insert("sticky", "st");
-    table.insert("other_writable", "ow");
-    table.insert("owr", "ow");
-    table.insert("sticky_other_writable", "tw");
-    table.insert("owt", "tw");
-    table.insert("capability", "ca");
-    table.insert("multihardlink", "mh");
-    table.insert("clrtoeol", "cl");
+    result.push_str(&prefix);
 
     let term = env::var("TERM").unwrap_or_else(|_| "none".to_owned());
     let term = term.as_str();
 
     let mut state = ParseState::Global;
 
-    for (num, line) in lines.into_iter().enumerate() {
+    for (num, line) in user_input.into_iter().enumerate() {
         let num = num + 1;
         let line = line.borrow().purify();
         if line.is_empty() {
@@ -350,13 +391,13 @@ where
         let (key, val) = line.split_two();
         if val.is_empty() {
             return Err(format!(
+                // The double space is what GNU is doing
                 "{}:{}: invalid line;  missing second token",
                 fp.maybe_quote(),
                 num
             ));
         }
         let lower = key.to_lowercase();
-
         if lower == "term" || lower == "colorterm" {
             if term.fnmatch(val) {
                 state = ParseState::Matched;
@@ -370,6 +411,8 @@ where
                 state = ParseState::Continue;
             }
             if state != ParseState::Pass {
+                let search_key = lower.as_str();
+
                 if key.starts_with('.') {
                     if *fmt == OutputFmt::Display {
                         result.push_str(format!("\x1b[{val}m*{key}\t{val}\x1b[0m\n").as_str());
@@ -384,7 +427,10 @@ where
                     }
                 } else if lower == "options" || lower == "color" || lower == "eightbit" {
                     // Slackware only. Ignore
-                } else if let Some(s) = table.get(lower.as_str()) {
+                } else if let Some((_, s)) = FILE_ATTRIBUTE_CODES
+                    .iter()
+                    .find(|&&(key, _)| key == search_key)
+                {
                     if *fmt == OutputFmt::Display {
                         result.push_str(format!("\x1b[{val}m{s}\t{val}\x1b[0m\n").as_str());
                     } else {
@@ -402,15 +448,11 @@ where
         }
     }
 
-    match fmt {
-        OutputFmt::Shell => result.push_str("';\nexport LS_COLORS"),
-        OutputFmt::CShell => result.push('\''),
-        OutputFmt::Display => {
-            // remove latest "\n"
-            result.pop();
-        }
-        OutputFmt::Unknown => unreachable!(),
+    if fmt == &OutputFmt::Display {
+        // remove latest "\n"
+        result.pop();
     }
+    result.push_str(&suffix);
 
     Ok(result)
 }
@@ -434,6 +476,58 @@ fn escape(s: &str) -> String {
     }
 
     result
+}
+
+pub fn generate_dircolors_config() -> String {
+    let mut config = String::new();
+
+    config.push_str(
+        "\
+         # Configuration file for dircolors, a utility to help you set the\n\
+         # LS_COLORS environment variable used by GNU ls with the --color option.\n\
+         # The keywords COLOR, OPTIONS, and EIGHTBIT (honored by the\n\
+         # slackware version of dircolors) are recognized but ignored.\n\
+         # Global config options can be specified before TERM or COLORTERM entries\n\
+         # Below are TERM or COLORTERM entries, which can be glob patterns, which\n\
+         # restrict following config to systems with matching environment variables.\n\
+        ",
+    );
+    config.push_str("COLORTERM ?*\n");
+    for term in TERMS {
+        config.push_str(&format!("TERM {}\n", term));
+    }
+
+    config.push_str(
+        "\
+        # Below are the color init strings for the basic file types.\n\
+        # One can use codes for 256 or more colors supported by modern terminals.\n\
+        # The default color codes use the capabilities of an 8 color terminal\n\
+        # with some additional attributes as per the following codes:\n\
+        # Attribute codes:\n\
+        # 00=none 01=bold 04=underscore 05=blink 07=reverse 08=concealed\n\
+        # Text color codes:\n\
+        # 30=black 31=red 32=green 33=yellow 34=blue 35=magenta 36=cyan 37=white\n\
+        # Background color codes:\n\
+        # 40=black 41=red 42=green 43=yellow 44=blue 45=magenta 46=cyan 47=white\n\
+        #NORMAL 00 # no color code at all\n\
+        #FILE 00 # regular file: use no color at all\n\
+        ",
+    );
+
+    for (name, _, code) in FILE_TYPES {
+        config.push_str(&format!("{} {}\n", name, code));
+    }
+
+    config.push_str("# List any file extensions like '.gz' or '.tar' that you would like ls\n");
+    config.push_str("# to color below. Put the extension, a space, and the color init string.\n");
+
+    for (ext, color) in FILE_COLORS {
+        config.push_str(&format!("{} {}\n", ext, color));
+    }
+    config.push_str("# Subsequent TERM or COLORTERM entries, can be used to add / override\n");
+    config.push_str("# config specific to those matching environment variables.");
+
+    config
 }
 
 #[cfg(test)]

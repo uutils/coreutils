@@ -369,12 +369,12 @@ fn wipe_file(
         let metadata = fs::metadata(path).map_err_context(String::new)?;
         let mut perms = metadata.permissions();
         #[cfg(unix)]
-        #[allow(clippy::useless_conversion)]
+        #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
         {
             // NOTE: set_readonly(false) makes the file world-writable on Unix.
-            // NOTE: S_IWUSR type is u16 on macOS.
-            if (perms.mode() & u32::from(S_IWUSR)) == 0 {
-                perms.set_mode(u32::from(S_IWUSR));
+            // NOTE: S_IWUSR type is u16 on macOS, i32 on Redox.
+            if (perms.mode() & (S_IWUSR as u32)) == 0 {
+                perms.set_mode(S_IWUSR as u32);
             }
         }
         #[cfg(not(unix))]

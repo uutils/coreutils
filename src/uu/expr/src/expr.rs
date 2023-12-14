@@ -108,9 +108,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.into_iter().map(|s| s.as_ref()).collect::<Vec<_>>())
         .unwrap_or_default();
 
-    let res = AstNode::parse(&token_strings)?.eval()?;
+    let res: String = AstNode::parse(&token_strings)?.eval()?.eval_as_string();
     println!("{res}");
-    if !is_truthy(&res) {
+    if !is_truthy(&res.into()) {
         return Err(1.into());
     }
     Ok(())
