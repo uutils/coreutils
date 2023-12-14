@@ -294,12 +294,14 @@ impl AstNode {
                 let pos = pos
                     .eval()?
                     .eval_as_bigint()
-                    .map_or(0.into(), |n| n.to_usize())
+                    .ok()
+                    .and_then(|n| n.to_usize())
                     .unwrap_or(0);
                 let length = length
                     .eval()?
                     .eval_as_bigint()
-                    .map_or(0.into(), |n| n.to_usize())
+                    .ok()
+                    .and_then(|n| n.to_usize())
                     .unwrap_or(0);
 
                 let (Some(pos), Some(_)) = (pos.checked_sub(1), length.checked_sub(1)) else {
