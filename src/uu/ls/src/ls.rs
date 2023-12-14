@@ -1070,6 +1070,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .infer_long_args(true)
         .disable_help_flag(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
@@ -1552,7 +1553,7 @@ pub fn uu_app() -> Command {
                 .short('h')
                 .long(options::size::HUMAN_READABLE)
                 .help("Print human readable file sizes (e.g. 1K 234M 56G).")
-                .overrides_with(options::size::SI)
+                .overrides_with_all([options::size::BLOCK_SIZE, options::size::SI])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1569,6 +1570,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::size::SI)
                 .long(options::size::SI)
                 .help("Print human readable file sizes using powers of 1000 instead of 1024.")
+                .overrides_with_all([options::size::BLOCK_SIZE, options::size::HUMAN_READABLE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1576,7 +1578,8 @@ pub fn uu_app() -> Command {
                 .long(options::size::BLOCK_SIZE)
                 .require_equals(true)
                 .value_name("BLOCK_SIZE")
-                .help("scale sizes by BLOCK_SIZE when printing them"),
+                .help("scale sizes by BLOCK_SIZE when printing them")
+                .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
         )
         .arg(
             Arg::new(options::INODE)
