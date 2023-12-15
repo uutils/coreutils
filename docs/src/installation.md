@@ -131,6 +131,12 @@ pkg install rust-coreutils
 
 ## Windows
 
+### Winget
+
+```shell
+winget install uutils.coreutils
+```
+
 ### Scoop
 
 [![Scoop package](https://repology.org/badge/version-for-repo/scoop/uutils-coreutils.svg)](https://scoop.sh/#/apps?q=uutils-coreutils&s=0&d=1&o=true)
