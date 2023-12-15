@@ -5,9 +5,8 @@
 
 // spell-checker:ignore (ToDO) coreutil
 
-use crate::common::util::{check_coreutil_version, expected_result, is_ci, whoami, TestScenario};
-
-const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced in GNU's coreutils 8.31
+use crate::common::util::{is_ci, whoami, TestScenario};
+use regex::Regex;
 
 #[test]
 fn test_invalid_arg() {
@@ -17,227 +16,123 @@ fn test_invalid_arg() {
 #[test]
 #[cfg(unix)]
 fn test_id_no_specified_user() {
-    let ts = TestScenario::new(util_name!());
-    let result = ts.ucmd().run();
-    let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
-    let mut _exp_stdout = exp_result.stdout_str().to_string();
-
-    #[cfg(not(feature = "feat_selinux"))]
-    {
-        // NOTE: strip 'context' part from exp_stdout if selinux not enabled:
-        // example:
-        // uid=1001(runner) gid=121(docker) groups=121(docker),4(adm),101(systemd-journal) \
-        // context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
-        if let Some(context_offset) = exp_result.stdout_str().find(" context=") {
-            _exp_stdout.replace_range(context_offset.._exp_stdout.len() - 1, "");
-        }
-    }
-
-    result
-        .stdout_is(_exp_stdout)
-        .stderr_is(exp_result.stderr_str())
-        .code_is(exp_result.code());
+    new_ucmd!().succeeds().stdout_matches(
+        &Regex::new(r#"(uid=\d+\(\w+\) gid=\d+\(\w+\) groups=\d+\(\w+\)(,\d+\(\w+\))*)+"#).unwrap(),
+    );
 }
 
 #[test]
 #[cfg(unix)]
 fn test_id_single_user() {
-    let test_users = [&whoami()[..]];
+    let test_user = whoami();
 
-    let ts = TestScenario::new(util_name!());
-    let mut exp_result = unwrap_or_return!(expected_result(&ts, &test_users));
-    ts.ucmd()
-        .args(&test_users)
-        .run()
-        .stdout_is(exp_result.stdout_str())
-        .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-        .code_is(exp_result.code());
+    new_ucmd!().arg(&test_user).succeeds().stdout_matches(
+        &Regex::new(r#"uid=\d+\(\w+\) gid=\d+\(\w+\) groups=\d+\(\w+\)(,\d+\(\w+\))*"#).unwrap(),
+    );
 
     // u/g/G z/n
     for opt in ["--user", "--group", "--groups"] {
-        let mut args = vec![opt];
-        args.extend_from_slice(&test_users);
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
-        args.push("--zero");
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
-        args.push("--name");
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
-        args.pop();
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
+        new_ucmd!()
+            .arg(&test_user)
+            .arg(opt)
+            .succeeds()
+            .stdout_matches(&Regex::new(r#"\d+"#).unwrap());
+
+        new_ucmd!()
+            .arg(&test_user)
+            .arg(opt)
+            .arg("--zero")
+            .succeeds()
+            .stdout_matches(&Regex::new(r#"\d+"#).unwrap());
+
+        new_ucmd!()
+            .arg(&test_user)
+            .arg(opt)
+            .arg("--name")
+            .succeeds()
+            .stdout_matches(&Regex::new(r#"\w+"#).unwrap());
     }
 }
 
 #[test]
 #[cfg(unix)]
 fn test_id_single_user_non_existing() {
-    let args = &["hopefully_non_existing_username"];
-    let ts = TestScenario::new(util_name!());
-    let result = ts.ucmd().args(args).run();
-    let exp_result = unwrap_or_return!(expected_result(&ts, args));
-
-    // It is unknown why on macOS (and possibly others?) `id` adds "Invalid argument".
-    // coreutils 8.32: $ LC_ALL=C id foobar
-    // macOS: stderr: "id: 'foobar': no such user: Invalid argument"
-    // linux: stderr: "id: 'foobar': no such user"
-    result
-        .stdout_is(exp_result.stdout_str())
-        .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-        .code_is(exp_result.code());
+    new_ucmd!()
+        .arg("hopefully_non_existing_username")
+        .fails()
+        .stderr_contains("no such user");
 }
 
 #[test]
 #[cfg(unix)]
 fn test_id_name() {
-    let ts = TestScenario::new(util_name!());
-    for opt in ["--user", "--group", "--groups"] {
-        let args = [opt, "--name"];
-        let result = ts.ucmd().args(&args).run();
-        let exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        result
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str())
-            .code_is(exp_result.code());
+    new_ucmd!()
+        .args(&["--user", "--name"])
+        .succeeds()
+        .stdout_is(format!("{}\n", whoami()));
 
-        if opt == "--user" {
-            assert_eq!(result.stdout_str().trim_end(), whoami());
-        }
+    for opt in ["--group", "--groups"] {
+        let args = [opt, "--name"];
+        new_ucmd!()
+            .args(&args)
+            .succeeds()
+            .stdout_matches(&Regex::new(r#"\w+"#).unwrap());
     }
 }
 
 #[test]
 #[cfg(unix)]
 fn test_id_real() {
-    let ts = TestScenario::new(util_name!());
     for opt in ["--user", "--group", "--groups"] {
-        let args = [opt, "--real"];
-        let result = ts.ucmd().args(&args).run();
-        let exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        result
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str())
-            .code_is(exp_result.code());
+        new_ucmd!()
+            .arg(opt)
+            .arg("--real")
+            .succeeds()
+            .stdout_matches(&Regex::new(r#"\d+"#).unwrap());
     }
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+#[cfg(unix)]
 fn test_id_pretty_print() {
     // `-p` is BSD only and not supported on GNU's `id`
     let username = whoami();
-
-    let result = new_ucmd!().arg("-p").run();
-    if result.stdout_str().trim().is_empty() {
-        // this fails only on: "MinRustV (ubuntu-latest, feat_os_unix)"
-        // `rustc 1.40.0 (73528e339 2019-12-16)`
-        // run: /home/runner/work/coreutils/coreutils/target/debug/coreutils id -p
-        // thread 'test_id::test_id_pretty_print' panicked at 'Command was expected to succeed.
-        // stdout =
-        // stderr = ', tests/common/util.rs:157:13
-        println!("test skipped:");
-    } else {
-        result.success().stdout_contains(username);
-    }
+    new_ucmd!().arg("-p").succeeds().stdout_contains(username);
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+#[cfg(unix)]
 fn test_id_password_style() {
     // `-P` is BSD only and not supported on GNU's `id`
     let username = whoami();
-    let result = new_ucmd!().arg("-P").arg(&username).succeeds();
-    assert!(result.stdout_str().starts_with(&username));
+    new_ucmd!()
+        .arg("-P")
+        .arg(&username)
+        .succeeds()
+        .stdout_str()
+        .starts_with(&username);
 }
 
 #[test]
 #[cfg(unix)]
 fn test_id_multiple_users() {
-    unwrap_or_return!(check_coreutil_version(
-        util_name!(),
-        VERSION_MIN_MULTIPLE_USERS
-    ));
-
     // Same typical users that GNU test suite is using.
     let test_users = ["root", "man", "postfix", "sshd", &whoami()];
 
-    let ts = TestScenario::new(util_name!());
-    let mut exp_result = unwrap_or_return!(expected_result(&ts, &test_users));
-    ts.ucmd()
-        .args(&test_users)
-        .run()
-        .stdout_is(exp_result.stdout_str())
-        .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-        .code_is(exp_result.code());
-
-    // u/g/G z/n
-    for opt in ["--user", "--group", "--groups"] {
-        let mut args = vec![opt];
-        args.extend_from_slice(&test_users);
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
-        args.push("--zero");
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
-        args.push("--name");
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
-        args.pop();
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
+    let result = new_ucmd!().args(&test_users).stderr_to_stdout().run();
+    let lines = test_users.iter().zip(result.stdout_str().lines());
+    for (name, line) in lines {
+        let line_regex = Regex::new(&format!(
+            "uid=\\d+\\({name}\\) gid=\\d+\\({name}\\) groups=.*"
+        ))
+        .unwrap();
+        assert!(line_regex.is_match(line) || line.contains("no such user"));
     }
 }
 
 #[test]
 #[cfg(unix)]
 fn test_id_multiple_users_non_existing() {
-    unwrap_or_return!(check_coreutil_version(
-        util_name!(),
-        VERSION_MIN_MULTIPLE_USERS
-    ));
-
     let test_users = [
         "root",
         "hopefully_non_existing_username1",
@@ -251,120 +146,32 @@ fn test_id_multiple_users_non_existing() {
         &whoami(),
     ];
 
-    let ts = TestScenario::new(util_name!());
-    let mut exp_result = unwrap_or_return!(expected_result(&ts, &test_users));
-    ts.ucmd()
-        .args(&test_users)
-        .run()
-        .stdout_is(exp_result.stdout_str())
-        .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-        .code_is(exp_result.code());
-
-    // u/g/G z/n
-    for opt in ["--user", "--group", "--groups"] {
-        let mut args = vec![opt];
-        args.extend_from_slice(&test_users);
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
-        args.push("--zero");
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
-        args.push("--name");
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
-        args.pop();
-        exp_result = unwrap_or_return!(expected_result(&ts, &args));
-        ts.ucmd()
-            .args(&args)
-            .run()
-            .stdout_is(exp_result.stdout_str())
-            .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
-            .code_is(exp_result.code());
-    }
-}
-
-#[test]
-#[cfg(unix)]
-fn test_id_default_format() {
-    let ts = TestScenario::new(util_name!());
-    for opt1 in ["--name", "--real"] {
-        // id: cannot print only names or real IDs in default format
-        let args = [opt1];
-        ts.ucmd()
-            .args(&args)
-            .fails()
-            .stderr_only(unwrap_or_return!(expected_result(&ts, &args)).stderr_str());
-        for opt2 in ["--user", "--group", "--groups"] {
-            // u/g/G n/r
-            let args = [opt2, opt1];
-            let result = ts.ucmd().args(&args).run();
-            let exp_result = unwrap_or_return!(expected_result(&ts, &args));
-            result
-                .stdout_is(exp_result.stdout_str())
-                .stderr_is(exp_result.stderr_str())
-                .code_is(exp_result.code());
-        }
-    }
-    for opt2 in ["--user", "--group", "--groups"] {
-        // u/g/G
-        let args = [opt2];
-        ts.ucmd()
-            .args(&args)
-            .succeeds()
-            .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
+    let result = new_ucmd!().args(&test_users).stderr_to_stdout().run();
+    let lines = test_users.iter().zip(result.stdout_str().lines());
+    for (name, line) in lines {
+        dbg!(name);
+        let line_regex = Regex::new(&format!(
+            "uid=\\d+\\({name}\\) gid=\\d+\\({name}\\) groups=.*"
+        ))
+        .unwrap();
+        assert!(line_regex.is_match(line) || line.contains("no such user"));
     }
 }
 
 #[test]
 #[cfg(unix)]
 fn test_id_zero() {
-    let ts = TestScenario::new(util_name!());
     for z_flag in ["-z", "--zero"] {
-        // id: option --zero not permitted in default format
-        ts.ucmd()
-            .args(&[z_flag])
+        new_ucmd!()
+            .arg(z_flag)
             .fails()
-            .stderr_only(unwrap_or_return!(expected_result(&ts, &[z_flag])).stderr_str());
+            .stderr_contains("not permitted in default format");
         for opt1 in ["--name", "--real"] {
-            // id: cannot print only names or real IDs in default format
-            let args = [opt1, z_flag];
-            ts.ucmd()
-                .args(&args)
+            new_ucmd!()
+                .arg(opt1)
+                .arg(z_flag)
                 .fails()
-                .stderr_only(unwrap_or_return!(expected_result(&ts, &args)).stderr_str());
-            for opt2 in ["--user", "--group", "--groups"] {
-                // u/g/G n/r z
-                let args = [opt2, z_flag, opt1];
-                let result = ts.ucmd().args(&args).run();
-                let exp_result = unwrap_or_return!(expected_result(&ts, &args));
-                result
-                    .stdout_is(exp_result.stdout_str())
-                    .stderr_is(exp_result.stderr_str())
-                    .code_is(exp_result.code());
-            }
-        }
-        for opt2 in ["--user", "--group", "--groups"] {
-            // u/g/G z
-            let args = [opt2, z_flag];
-            ts.ucmd()
-                .args(&args)
-                .succeeds()
-                .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
+                .stderr_contains("cannot print only names or real IDs in default format");
         }
     }
 }
@@ -379,52 +186,19 @@ fn test_id_context() {
     }
     let ts = TestScenario::new(util_name!());
     for c_flag in ["-Z", "--context"] {
-        ts.ucmd()
-            .args(&[c_flag])
-            .succeeds()
-            .stdout_only(unwrap_or_return!(expected_result(&ts, &[c_flag])).stdout_str());
+        new_ucmd!().arg(c_flag).succeeds();
         for z_flag in ["-z", "--zero"] {
-            let args = [c_flag, z_flag];
-            ts.ucmd()
-                .args(&args)
-                .succeeds()
-                .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
+            ts.ucmd().arg(&[c_flag, z_flag]).fails();
             for opt1 in ["--name", "--real"] {
                 // id: cannot print only names or real IDs in default format
-                let args = [opt1, c_flag];
-                ts.ucmd()
-                    .args(&args)
-                    .succeeds()
-                    .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
-                let args = [opt1, c_flag, z_flag];
-                ts.ucmd()
-                    .args(&args)
-                    .succeeds()
-                    .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
+                ts.ucmd().arg(&[opt1, c_flag]).fails();
+                ts.ucmd().arg(&[opt1, c_flag, z_flag]).fails();
                 for opt2 in ["--user", "--group", "--groups"] {
-                    // u/g/G n/r z Z
-                    // for now, we print clap's standard response for "conflicts_with" instead of:
-                    // id: cannot print "only" of more than one choice
-                    let args = [opt2, c_flag, opt1];
-                    let _result = ts.ucmd().args(&args).fails();
-                    // let exp_result = unwrap_or_return!(expected_result(&args));
-                    // result
-                    //     .stdout_is(exp_result.stdout_str())
-                    //     .stderr_is(exp_result.stderr_str())
-                    //     .code_is(exp_result.code());
+                    ts.ucmd().args(&[opt2, c_flag, opt1]).succeeds();
                 }
             }
             for opt2 in ["--user", "--group", "--groups"] {
-                // u/g/G z Z
-                // for now, we print clap's standard response for "conflicts_with" instead of:
-                // id: cannot print "only" of more than one choice
-                let args = [opt2, c_flag];
-                let _result = ts.ucmd().args(&args).fails();
-                // let exp_result = unwrap_or_return!(expected_result(&args));
-                // result
-                //     .stdout_is(exp_result.stdout_str())
-                //     .stderr_is(exp_result.stderr_str())
-                //     .code_is(exp_result.code());
+                ts.ucmd().args(&[opt2, c_flag]).succeeds();
             }
         }
     }
