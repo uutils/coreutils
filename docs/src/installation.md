@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda -->
+<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda winget -->
 
 # Installation
 
