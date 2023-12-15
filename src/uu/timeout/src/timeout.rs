@@ -107,8 +107,6 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
     let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     let config = Config::from(&matches)?;

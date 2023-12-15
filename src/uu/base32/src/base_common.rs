@@ -87,8 +87,7 @@ pub fn parse_base_cmd_args(
     usage: &str,
 ) -> UResult<Config> {
     let command = base_app(about, usage);
-    let arg_list = args.collect_lossy();
-    Config::from(&command.try_get_matches_from(arg_list)?)
+    Config::from(&command.try_get_matches_from(args)?)
 }
 
 pub fn base_app(about: &'static str, usage: &str) -> Command {
