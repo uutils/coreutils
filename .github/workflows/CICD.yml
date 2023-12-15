@@ -439,12 +439,12 @@ jobs:
         previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
         check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
     - name: Upload the individual size result
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: individual-size-result
         path: individual-size-result.json
     - name: Upload the size result
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: size-result
         path: size-result.json
@@ -673,7 +673,7 @@ jobs:
       env:
         RUST_BACKTRACE: "1"
     - name: Archive executable artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}
         path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}
@@ -784,17 +784,17 @@ jobs:
           HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
           echo "HASH=${HASH}" >> $GITHUB_OUTPUT
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload json results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: busybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
@@ -872,17 +872,17 @@ jobs:
         HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
           echo "HASH=${HASH}" >> $GITHUB_OUTPUT
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload json results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: toybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
