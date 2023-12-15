@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm
 
 use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
@@ -553,12 +553,43 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
     }
 }
 
+// Some env variables can be passed
+// For now, we are only verifying if empty or not and known for TERM
+fn is_color_compatible_term() -> bool {
+    let is_term_set = std::env::var("TERM").is_ok();
+    let is_colorterm_set = std::env::var("COLORTERM").is_ok();
+
+    let term = std::env::var("TERM").unwrap_or_default();
+    let colorterm = std::env::var("COLORTERM").unwrap_or_default();
+
+    // Search function to manage the "*" into the data structure
+    let term_matches = |term: &str| -> bool {
+        uucore::colors::TERMS.iter().any(|&pattern| {
+            term == pattern
+                || (pattern.ends_with('*') && term.starts_with(&pattern[..pattern.len() - 1]))
+        })
+    };
+
+    if is_term_set && colorterm.is_empty() && is_colorterm_set && term.is_empty() {
+        return false;
+    }
+
+    if !term.is_empty() && !term_matches(&term) {
+        return false;
+    }
+    true
+}
+
 /// Extracts the color option to use based on the options provided.
 ///
 /// # Returns
 ///
 /// A boolean representing whether or not to use color.
 fn extract_color(options: &clap::ArgMatches) -> bool {
+    if !is_color_compatible_term() {
+        return false;
+    }
+
     match options.get_one::<String>(options::COLOR) {
         None => options.contains_id(options::COLOR),
         Some(val) => match val.as_str() {
