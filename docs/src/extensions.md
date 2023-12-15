@@ -29,6 +29,14 @@ variables accordingly. This feature is adopted from `dotenv` style packages.
 
 `cp` can display a progress bar when the `-g`/`--progress` flag is set.
 
+## `id`
+
+`id` has several flags that are not available in GNU `id`, but are instead inspired by FreeBSD's `id`:
+
+- `-A`: Display the process audit user ID and other process audit properties, which is only available on BSD's.
+- `-p`: Makes the output more human-readable.
+- `-P`: Display the id as a password file entry.
+
 ## `mv`
 
 `mv` can display a progress bar when the `-g`/`--progress` flag is set.
