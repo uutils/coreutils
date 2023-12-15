@@ -30,8 +30,6 @@ const USAGE: &str = help_usage!("logname.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
     let _ = uu_app().try_get_matches_from(args)?;
 
     match get_userlogin() {

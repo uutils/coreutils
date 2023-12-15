@@ -118,7 +118,6 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<ControlFlow<
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
     let matches = uu_app().get_matches_from(args);
 
     let no_newline = matches.get_flag(options::NO_NEWLINE);
