@@ -8,8 +8,6 @@
 use std::io::{BufWriter, Stdout, Write};
 use std::{cmp, i64, mem};
 
-use uucore::crash;
-
 use crate::parasplit::{ParaWords, Paragraph, WordInfo};
 use crate::FmtOptions;
 
@@ -363,28 +361,26 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
 }
 
 fn build_best_path<'a>(paths: &[LineBreak<'a>], active: &[usize]) -> Vec<(&'a WordInfo<'a>, bool)> {
-    let mut breakwords = vec![];
     // of the active paths, we select the one with the fewest demerits
-    let mut best_idx = match active.iter().min_by_key(|&&a| paths[a].demerits) {
-        None => crash!(
-            1,
-            "Failed to find a k-p linebreak solution. This should never happen."
-        ),
-        Some(&s) => s,
-    };
-
-    // now, chase the pointers back through the break list, recording
-    // the words at which we should break
-    loop {
-        let next_best = &paths[best_idx];
-        match next_best.linebreak {
-            None => return breakwords,
-            Some(prev) => {
-                breakwords.push((prev, next_best.break_before));
-                best_idx = next_best.prev;
+    active
+        .iter()
+        .min_by_key(|&&a| paths[a].demerits)
+        .map(|&(mut best_idx)| {
+            let mut breakwords = vec![];
+            // now, chase the pointers back through the break list, recording
+            // the words at which we should break
+            loop {
+                let next_best = &paths[best_idx];
+                match next_best.linebreak {
+                    None => return breakwords,
+                    Some(prev) => {
+                        breakwords.push((prev, next_best.break_before));
+                        best_idx = next_best.prev;
+                    }
+                }
             }
-        }
-    }
+        })
+        .unwrap_or_default()
 }
 
 // "infinite" badness is more like (1+BAD_INFTY)^2 because of how demerits are computed
