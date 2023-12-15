@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda -->
+<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda winget -->
 
 # Installation
 
@@ -130,6 +130,12 @@ pkg install rust-coreutils
 ```
 
 ## Windows
+
+### Winget
+
+```shell
+winget install uutils.coreutils
+```
 
 ### Scoop
 
