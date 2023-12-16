@@ -1908,7 +1908,7 @@ impl PathData {
         }
     }
 
-    fn md(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
+    fn get_metadata(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
                 // check if we can use DirEntry metadata
@@ -1949,7 +1949,7 @@ impl PathData {
 
     fn file_type(&self, out: &mut BufWriter<Stdout>) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| self.md(out).map(|md| md.file_type()))
+            .get_or_init(|| self.get_metadata(out).map(|md| md.file_type()))
             .as_ref()
     }
 }
@@ -1982,7 +1982,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Proper GNU handling is don't show if dereferenced symlink DNE
         // but only for the base dir, for a child dir show, and print ?s
         // in long format
-        if path_data.md(&mut out).is_none() {
+        if path_data.get_metadata(&mut out).is_none() {
             continue;
         }
 
@@ -2070,12 +2070,14 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                k.md(out)
+                k.get_metadata(out)
                     .and_then(|md| get_system_time(md, config))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
-        Sort::Size => entries.sort_by_key(|k| Reverse(k.md(out).map(|md| md.len()).unwrap_or(0))),
+        Sort::Size => {
+            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map(|md| md.len()).unwrap_or(0)))
+        }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries.sort_by(|a, b| {
@@ -2305,7 +2307,7 @@ fn display_dir_entry_size(
     out: &mut BufWriter<std::io::Stdout>,
 ) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
-    if let Some(md) = entry.md(out) {
+    if let Some(md) = entry.get_metadata(out) {
         let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Device(major, minor) => (
                 (major.len() + minor.len() + 2usize),
@@ -2343,7 +2345,7 @@ fn return_total(
     let mut total_size = 0;
     for item in items {
         total_size += item
-            .md(out)
+            .get_metadata(out)
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
@@ -2367,7 +2369,7 @@ fn display_additional_leading_info(
     #[cfg(unix)]
     {
         if config.inode {
-            let i = if let Some(md) = item.md(out) {
+            let i = if let Some(md) = item.get_metadata(out) {
                 get_inode(md)
             } else {
                 "?".to_owned()
@@ -2377,7 +2379,7 @@ fn display_additional_leading_info(
     }
 
     if config.alloc_size {
-        let s = if let Some(md) = item.md(out) {
+        let s = if let Some(md) = item.get_metadata(out) {
             display_size(get_block_size(md, config), config)
         } else {
             "?".to_owned()
@@ -2592,7 +2594,7 @@ fn display_item_long(
     if config.dired {
         output_display += "  ";
     }
-    if let Some(md) = item.md(out) {
+    if let Some(md) = item.get_metadata(out) {
         write!(
             output_display,
             "{}{} {}",
@@ -3019,7 +3021,7 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
             } else if file_type.is_file()
                 // Safe unwrapping if the file was removed between listing and display
                 // See https://github.com/uutils/coreutils/issues/5371
-                && path.md(out).map(file_is_executable).unwrap_or_default()
+                && path.get_metadata(out).map(file_is_executable).unwrap_or_default()
             {
                 Some('*')
             } else {
@@ -3066,7 +3068,7 @@ fn display_item_name(
     }
 
     if let Some(ls_colors) = &config.color {
-        let md = path.md(out);
+        let md = path.get_metadata(out);
         name = if md.is_some() {
             color_name(name, &path.p_buf, md, ls_colors, style_manager)
         } else {
@@ -3143,7 +3145,7 @@ fn display_item_name(
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.md(out).is_none()
+                    if path.get_metadata(out).is_none()
                         && get_metadata(target_data.p_buf.as_path(), target_data.must_dereference)
                             .is_err()
                     {
@@ -3156,7 +3158,7 @@ fn display_item_name(
                             target_data.must_dereference,
                         ) {
                             Ok(md) => md,
-                            Err(_) => path.md(out).unwrap().clone(),
+                            Err(_) => path.get_metadata(out).unwrap().clone(),
                         };
 
                         name.push_str(&color_name(
@@ -3366,7 +3368,7 @@ fn calculate_padding_collection(
     for item in items {
         #[cfg(unix)]
         if config.inode {
-            let inode_len = if let Some(md) = item.md(out) {
+            let inode_len = if let Some(md) = item.get_metadata(out) {
                 display_inode(md).len()
             } else {
                 continue;
@@ -3375,7 +3377,7 @@ fn calculate_padding_collection(
         }
 
         if config.alloc_size {
-            if let Some(md) = item.md(out) {
+            if let Some(md) = item.get_metadata(out) {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
@@ -3425,7 +3427,7 @@ fn calculate_padding_collection(
 
     for item in items {
         if config.alloc_size {
-            if let Some(md) = item.md(out) {
+            if let Some(md) = item.get_metadata(out) {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
