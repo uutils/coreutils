@@ -31,8 +31,6 @@ fn get_long_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
     let matches = uu_app()
         .after_help(get_long_usage())
         .try_get_matches_from(args)?;
