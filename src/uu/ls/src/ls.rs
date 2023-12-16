@@ -1920,7 +1920,7 @@ impl PathData {
                 }
 
                 // if not, check if we can use Path metadata
-                match get_metadata(self.p_buf.as_path(), self.must_dereference) {
+                match get_metadata_with_deref_opt(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
                         out.flush().unwrap();
@@ -2118,7 +2118,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
             !match md {
                 None | Some(None) => {
                     // If it metadata cannot be determined, treat as a file.
-                    get_metadata(p.p_buf.as_path(), true)
+                    get_metadata_with_deref_opt(p.p_buf.as_path(), true)
                         .map_or_else(|_| false, |m| m.is_dir())
                 }
                 Some(Some(m)) => m.is_dir(),
@@ -2294,7 +2294,7 @@ fn enter_directory(
     Ok(())
 }
 
-fn get_metadata(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
+fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
         p_buf.metadata()
     } else {
@@ -3136,7 +3136,7 @@ fn display_item_name(
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
                     if path.get_metadata(out).is_none()
-                        && get_metadata(
+                        && get_metadata_with_deref_opt(
                             target_data.p_buf.as_path(),
                             target_data.must_dereference,
                         )
@@ -3278,7 +3278,7 @@ fn color_name(
         // should not exit with an err, if we are unable to obtain the target_metadata
 
         let target = target_symlink.unwrap_or(path);
-        let md = match get_metadata(target.p_buf.as_path(), path.must_dereference) {
+        let md = match get_metadata_with_deref_opt(target.p_buf.as_path(), path.must_dereference) {
             Ok(md) => md,
             Err(_) => target.get_metadata(out).unwrap().clone(),
         };
@@ -3329,7 +3329,7 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
     if must_dereference {
-        match get_metadata(p_buf, must_dereference) {
+        match get_metadata_with_deref_opt(p_buf, must_dereference) {
             Err(err) => {
                 // The Path couldn't be dereferenced, so return early and set exit code 1
                 // to indicate a minor error
