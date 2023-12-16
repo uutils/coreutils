@@ -3070,11 +3070,11 @@ fn display_item_name(
     if let Some(ls_colors) = &config.color {
         let md = path.get_metadata(out);
         name = if md.is_some() {
-            color_name(name, &path.p_buf, md, ls_colors, style_manager)
+            color_name(name, path, md, ls_colors, style_manager)
         } else {
             color_name(
                 name,
-                &path.p_buf,
+                path,
                 path.p_buf.symlink_metadata().ok().as_ref(),
                 ls_colors,
                 style_manager,
@@ -3163,7 +3163,7 @@ fn display_item_name(
 
                         name.push_str(&color_name(
                             escape_name(target.as_os_str(), &config.quoting_style),
-                            &target_data.p_buf,
+                            &target_data,
                             Some(&target_metadata),
                             ls_colors,
                             style_manager,
@@ -3266,12 +3266,12 @@ impl StyleManager {
 /// Colors the provided name based on the style determined for the given path.
 fn color_name(
     name: String,
-    path: &Path,
+    path: &PathData,
     md: Option<&Metadata>,
     ls_colors: &LsColors,
     style_manager: &mut StyleManager,
 ) -> String {
-    match ls_colors.style_for_path_with_metadata(path, md) {
+    match ls_colors.style_for_path_with_metadata(&path.p_buf, md) {
         Some(style) => style_manager.apply_style(style, &name),
         None => name,
     }
