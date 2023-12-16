@@ -61,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if let Some(first) = sets.get(0) {
+    if let Some(first) = sets.first() {
         if first.ends_with('\\') {
             show!(USimpleError::new(
                 0,
