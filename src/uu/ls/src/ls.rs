@@ -1812,6 +1812,7 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    // can be used to avoid reading the metadata. Can be also called d_type
     de: Option<DirEntry>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1911,6 +1912,7 @@ impl PathData {
         self.md
             .get_or_init(|| {
                 // check if we can use DirEntry metadata
+                // it will avoid a call to stat()
                 if !self.must_dereference {
                     if let Some(dir_entry) = &self.de {
                         return dir_entry.metadata().ok();
