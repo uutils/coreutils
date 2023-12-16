@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda -->
+<!-- spell-checker:ignore pacman pamac nixpkgs openmandriva conda winget -->
 
 # Installation
 
@@ -12,7 +12,7 @@ You can also [build uutils from source](build.md).
 
 ## Cargo
 
-[![crates.io package](https://repology.org/badge/version-for-repo/crates_io/uutils-coreutils.svg)](https://repology.org/project/uutils-coreutils/versions)
+[![crates.io package](https://repology.org/badge/version-for-repo/crates_io/uutils-coreutils.svg)](https://crates.io/crates/coreutils)
 
 ```shell
 # Linux
@@ -65,9 +65,9 @@ emerge -pv sys-apps/uutils-coreutils
 
 ### Manjaro
 
-![Manjaro Stable package](https://repology.org/badge/version-for-repo/manjaro_stable/uutils-coreutils.svg)
-[![Manjaro Testing package](https://repology.org/badge/version-for-repo/manjaro_testing/uutils-coreutils.svg)](https://repology.org/project/uutils-coreutils/versions)
-[![Manjaro Unstable package](https://repology.org/badge/version-for-repo/manjaro_unstable/uutils-coreutils.svg)](https://repology.org/project/uutils-coreutils/versions)
+[![Manjaro Stable package](https://repology.org/badge/version-for-repo/manjaro_stable/uutils-coreutils.svg)](https://packages.manjaro.org/?query=uutils-coreutils)
+[![Manjaro Testing package](https://repology.org/badge/version-for-repo/manjaro_testing/uutils-coreutils.svg)](https://packages.manjaro.org/?query=uutils-coreutils)
+[![Manjaro Unstable package](https://repology.org/badge/version-for-repo/manjaro_unstable/uutils-coreutils.svg)](https://packages.manjaro.org/?query=uutils-coreutils)
 
 ```shell
 pacman -S uutils-coreutils
@@ -77,7 +77,7 @@ pamac install uutils-coreutils
 
 ### NixOS
 
-[![nixpkgs unstable package](https://repology.org/badge/version-for-repo/nix_unstable/uutils-coreutils.svg)](https://repology.org/project/uutils-coreutils/versions)
+[![nixpkgs unstable package](https://repology.org/badge/version-for-repo/nix_unstable/uutils-coreutils.svg)](https://search.nixos.org/packages?query=uutils-coreutils)
 
 ```shell
 nix-env -iA nixos.uutils-coreutils
@@ -131,9 +131,15 @@ pkg install rust-coreutils
 
 ## Windows
 
+### Winget
+
+```shell
+winget install uutils.coreutils
+```
+
 ### Scoop
 
-[![Scoop package](https://repology.org/badge/version-for-repo/scoop/uutils-coreutils.svg)](https://scoop.sh/#/apps?q=uutils-coreutils&s=0&d=1&o=true)
+[Scoop package](https://scoop.sh/#/apps?q=uutils-coreutils&s=0&d=1&o=true)
 
 ```shell
 scoop install uutils-coreutils
@@ -146,7 +152,7 @@ scoop install uutils-coreutils
 [Conda package](https://anaconda.org/conda-forge/uutils-coreutils)
 
 ```
-conda install -c conda-forge uutils-coreutils 
+conda install -c conda-forge uutils-coreutils
 ```
 
 ## Non-standard packages

@@ -1029,7 +1029,6 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: &'static str) -> Ar
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
     let mut settings = GlobalSettings::default();
 
     let matches = match uu_app().try_get_matches_from(args) {

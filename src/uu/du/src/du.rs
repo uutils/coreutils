@@ -590,8 +590,6 @@ pub fn div_ceil(a: u64, b: u64) -> u64 {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     let summarize = matches.get_flag(options::SUMMARIZE);

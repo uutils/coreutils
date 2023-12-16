@@ -395,14 +395,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v2
+      uses: dawidd6/action-download-artifact@v3
       with:
         workflow: CICD.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v2
+      uses: dawidd6/action-download-artifact@v3
       with:
         workflow: CICD.yml
         name: size-result
@@ -439,12 +439,12 @@ jobs:
         previous_multisize=$(cat dl/size-result.json | jq -r '.[] | .multisize')
         check 'multicall binary' "$multisize" "$previous_multisize" 'size-result.json'
     - name: Upload the individual size result
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: individual-size-result
         path: individual-size-result.json
     - name: Upload the size result
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: size-result
         path: size-result.json
@@ -473,6 +473,7 @@ jobs:
           - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
+          - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer  , skip-tests: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_macos          , use-cross: use-cross, skip-tests: true} # Hopefully github provides free M1 runners soon...
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
@@ -525,7 +526,13 @@ jobs:
           i686-*) TARGET_ARCH=i686 ;;
           x86_64-*) TARGET_ARCH=x86_64 ;;
         esac;
-        unset TARGET_OS ; case '${{ matrix.job.target }}' in *-linux-*) TARGET_OS=linux ;; *-apple-*) TARGET_OS=macos ;; *-windows-*) TARGET_OS=windows ;; esac;
+        unset TARGET_OS
+        case '${{ matrix.job.target }}' in
+          *-linux-*) TARGET_OS=linux ;;
+          *-apple-*) TARGET_OS=macos ;;
+          *-windows-*) TARGET_OS=windows ;;
+          *-redox*) TARGET_OS=redox ;;
+        esac
         outputs TARGET_ARCH TARGET_OS
         # package name
         PKG_suffix=".tar.gz" ; case '${{ matrix.job.target }}' in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
@@ -560,8 +567,19 @@ jobs:
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features=${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
         # * CARGO_CMD
-        CARGO_CMD='cross' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) CARGO_CMD='cargo' ;; esac;
+        CARGO_CMD='cross'
+        CARGO_CMD_OPTIONS='+${{ env.RUST_MIN_SRV }}'
+        case '${{ matrix.job.use-cross }}' in
+          ''|0|f|false|n|no)
+            CARGO_CMD='cargo'
+            ;;
+          redoxer)
+            CARGO_CMD='redoxer'
+            CARGO_CMD_OPTIONS=''
+            ;;
+        esac
         outputs CARGO_CMD
+        outputs CARGO_CMD_OPTIONS
         # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
         if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
           printf "[build.env]\npassthrough = [\"CI\", \"RUST_BACKTRACE\", \"CARGO_TERM_COLOR\"]\n" > Cross.toml
@@ -595,6 +613,7 @@ jobs:
         case '${{ matrix.job.target }}' in
           arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
           aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
+          *-redox*) sudo apt-get -y update ; sudo apt-get -y install fuse3 libfuse-dev ;;
         esac
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
@@ -614,6 +633,10 @@ jobs:
             echo "foo" > /home/runner/.plan
             ;;
         esac
+    - uses: taiki-e/install-action@v2
+      if: steps.vars.outputs.CARGO_CMD == 'redoxer'
+      with:
+        tool: redoxer@0.2.37
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
@@ -652,14 +675,14 @@ jobs:
       shell: bash
       run: |
         ## Build
-        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} build --release \
+        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release \
         --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
     - name: Test
       if: matrix.job.skip-tests != true
       shell: bash
       run: |
         ## Test
-        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
+        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} test --target=${{ matrix.job.target }} \
         ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
       env:
         RUST_BACKTRACE: "1"
@@ -668,12 +691,12 @@ jobs:
       shell: bash
       run: |
         ## Test individual utilities
-        ${{ steps.vars.outputs.CARGO_CMD }} +${{ env.RUST_MIN_SRV }} test --target=${{ matrix.job.target }} \
+        ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} test --target=${{ matrix.job.target }} \
         ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
         RUST_BACKTRACE: "1"
     - name: Archive executable artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ env.PROJECT_NAME }}-${{ matrix.job.target }}
         path: target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}
@@ -784,17 +807,17 @@ jobs:
           HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
           echo "HASH=${HASH}" >> $GITHUB_OUTPUT
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: test-summary
+        name: busybox-test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload json results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: busybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}
@@ -872,17 +895,17 @@ jobs:
         HASH=$(sha1sum '${{ steps.vars.outputs.TEST_SUMMARY_FILE }}' | cut --delim=" " -f 1)
           echo "HASH=${HASH}" >> $GITHUB_OUTPUT
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: test-summary
+        name: toybox-test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload json results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: toybox-result.json
         path: ${{ steps.vars.outputs.TEST_SUMMARY_FILE }}

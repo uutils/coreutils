@@ -27,7 +27,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
     let matches = uu_app().get_matches_from(args);
 
     let format_string = matches
