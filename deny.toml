@@ -102,8 +102,6 @@ skip = [
   { name = "syn", version = "1.0.109" },
   # various crates
   { name = "bitflags", version = "1.3.2" },
-  # various crates
-  { name = "redox_syscall", version = "0.3.5" },
   # clap_builder, textwrap
   { name = "terminal_size", version = "0.2.6" },
 ]
