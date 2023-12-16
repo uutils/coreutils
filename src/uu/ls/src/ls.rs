@@ -3271,6 +3271,17 @@ fn color_name(
     ls_colors: &LsColors,
     style_manager: &mut StyleManager,
 ) -> String {
+    if !path.must_dereference {
+        // If we need to dereference (follow) a symlink, we will need to get the metadata
+        if let Some(de) = &path.de {
+            // There is a DirEntry, we don't need to get the metadata for the color
+            return match ls_colors.style_for(de) {
+                Some(style) => style_manager.apply_style(style, &name),
+                None => name,
+            };
+        }
+    }
+
     match ls_colors.style_for_path_with_metadata(&path.p_buf, md) {
         Some(style) => style_manager.apply_style(style, &name),
         None => name,
