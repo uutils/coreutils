@@ -53,8 +53,6 @@ apt install rust-coreutils
 export PATH=/usr/lib/cargo/bin/coreutils:$PATH
 ```
 
-> **Note**: Only available from Bookworm (Debian 12)
-
 ### Gentoo
 
 [![Gentoo package](https://repology.org/badge/version-for-repo/gentoo/uutils-coreutils.svg)](https://packages.gentoo.org/packages/sys-apps/uutils-coreutils)
@@ -100,8 +98,6 @@ apt install rust-coreutils
 # To use it:
 export PATH=/usr/lib/cargo/bin/coreutils:$PATH
 ```
-
-> **Note**: Only available from Kinetic (Ubuntu 22.10)
 
 ## MacOS
 
