@@ -116,7 +116,7 @@ jobs:
       run: |
         ## Build binaries
         cd '${{ steps.vars.outputs.path_UUTILS }}'
-        bash util/build-gnu.sh
+        bash util/build-gnu.sh --release-build
     - name: Run GNU tests
       shell: bash
       run: |
@@ -354,7 +354,7 @@ jobs:
       run: |
         ## Build binaries
         cd uutils
-        UU_MAKE_PROFILE=debug bash util/build-gnu.sh
+        bash util/build-gnu.sh
     - name: Run GNU tests
       run: bash uutils/util/run-gnu-test.sh
     - name: Generate coverage data (via `grcov`)

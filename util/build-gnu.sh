@@ -1,7 +1,6 @@
 #!/bin/bash
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
-# UU_MAKE_PROFILE == 'debug' | 'release' ## build profile for *uutils* build; may be supplied by caller, defaults to 'release'
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR vdir rcexp xpart dired
 
@@ -10,6 +9,19 @@ set -e
 ME="${0}"
 ME_dir="$(dirname -- "$(readlink -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
+
+# Default profile is 'debug'
+UU_MAKE_PROFILE='debug'
+
+for arg in "$@"
+do
+    if [ "$arg" == "--release-build" ]; then
+        UU_MAKE_PROFILE='release'
+        break
+    fi
+done
+
+echo "UU_MAKE_PROFILE='${UU_MAKE_PROFILE}'"
 
 ### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
 
@@ -55,9 +67,6 @@ echo "path_UUTILS='${path_UUTILS}'"
 echo "path_GNU='${path_GNU}'"
 
 ###
-
-UU_MAKE_PROFILE=${UU_MAKE_PROFILE:-release}
-echo "UU_MAKE_PROFILE='${UU_MAKE_PROFILE}'"
 
 UU_BUILD_DIR="${path_UUTILS}/target/${UU_MAKE_PROFILE}"
 echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
