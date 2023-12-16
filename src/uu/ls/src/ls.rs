@@ -2118,7 +2118,8 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
             !match md {
                 None | Some(None) => {
                     // If it metadata cannot be determined, treat as a file.
-                    get_metadata(p.p_buf.as_path(), true).map_or_else(|_| false, |m| m.is_dir())
+                    get_metadata(p.p_buf.as_path(), true)
+                        .map_or_else(|_| false, |m| m.is_dir())
                 }
                 Some(Some(m)) => m.is_dir(),
             }
@@ -3068,18 +3069,7 @@ fn display_item_name(
     }
 
     if let Some(ls_colors) = &config.color {
-        let md = path.get_metadata(out);
-        name = if md.is_some() {
-            color_name(name, path, md, ls_colors, style_manager)
-        } else {
-            color_name(
-                name,
-                path,
-                path.p_buf.symlink_metadata().ok().as_ref(),
-                ls_colors,
-                style_manager,
-            )
-        };
+        name = color_name(name, path, ls_colors, style_manager, out, false, None);
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -3146,27 +3136,22 @@ fn display_item_name(
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
                     if path.get_metadata(out).is_none()
-                        && get_metadata(target_data.p_buf.as_path(), target_data.must_dereference)
-                            .is_err()
+                        && get_metadata(
+                            target_data.p_buf.as_path(),
+                            target_data.must_dereference,
+                        )
+                        .is_err()
                     {
                         name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
                     } else {
-                        // Use fn get_metadata instead of md() here and above because ls
-                        // should not exit with an err, if we are unable to obtain the target_metadata
-                        let target_metadata = match get_metadata(
-                            target_data.p_buf.as_path(),
-                            target_data.must_dereference,
-                        ) {
-                            Ok(md) => md,
-                            Err(_) => path.get_metadata(out).unwrap().clone(),
-                        };
-
                         name.push_str(&color_name(
                             escape_name(target.as_os_str(), &config.quoting_style),
-                            &target_data,
-                            Some(&target_metadata),
+                            path,
                             ls_colors,
                             style_manager,
+                            out,
+                            true,
+                            Some(&target_data),
                         ));
                     }
                 } else {
@@ -3263,13 +3248,18 @@ impl StyleManager {
     }
 }
 
-/// Colors the provided name based on the style determined for the given path.
+/// Colors the provided name based on the style determined for the given path
+/// This function is quite long because it tries to leverage DirEntry to avoid
+/// unnecessary calls to stat()
+/// and manages the symlink errors
 fn color_name(
     name: String,
     path: &PathData,
-    md: Option<&Metadata>,
     ls_colors: &LsColors,
     style_manager: &mut StyleManager,
+    out: &mut BufWriter<Stdout>,
+    check_for_deref: bool,
+    target_symlink: Option<&PathData>,
 ) -> String {
     if !path.must_dereference {
         // If we need to dereference (follow) a symlink, we will need to get the metadata
@@ -3282,9 +3272,34 @@ fn color_name(
         }
     }
 
-    match ls_colors.style_for_path_with_metadata(&path.p_buf, md) {
-        Some(style) => style_manager.apply_style(style, &name),
-        None => name,
+    if check_for_deref {
+        // use the optional target_symlink
+        // Use fn get_metadata instead of md() here and above because ls
+        // should not exit with an err, if we are unable to obtain the target_metadata
+
+        let target = target_symlink.unwrap_or(path);
+        let md = match get_metadata(target.p_buf.as_path(), path.must_dereference) {
+            Ok(md) => md,
+            Err(_) => target.get_metadata(out).unwrap().clone(),
+        };
+        return match ls_colors.style_for_path_with_metadata(&path.p_buf, Some(&md)) {
+            Some(style) => style_manager.apply_style(style, &name),
+            None => name,
+        };
+    } else {
+        let md_option = path.get_metadata(out);
+        let symlink_metadata = path.p_buf.symlink_metadata().ok();
+
+        let md = if md_option.is_some() {
+            md_option
+        } else {
+            symlink_metadata.as_ref()
+        };
+
+        return match ls_colors.style_for_path_with_metadata(&path.p_buf, md) {
+            Some(style) => style_manager.apply_style(style, &name),
+            None => name,
+        };
     }
 }
 
