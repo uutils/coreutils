@@ -791,7 +791,7 @@ jobs:
     - name: Reserve test results summary
       uses: actions/upload-artifact@v4
       with:
-        name: test-summary
+        name: busybox-test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload json results
       uses: actions/upload-artifact@v4
@@ -879,7 +879,7 @@ jobs:
     - name: Reserve test results summary
       uses: actions/upload-artifact@v4
       with:
-        name: test-summary
+        name: toybox-test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Upload json results
       uses: actions/upload-artifact@v4
