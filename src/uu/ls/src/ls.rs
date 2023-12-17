@@ -3248,6 +3248,19 @@ impl StyleManager {
     }
 }
 
+fn apply_style_based_on_metadata(
+    path: &PathData,
+    md_option: Option<&Metadata>,
+    ls_colors: &LsColors,
+    style_manager: &mut StyleManager,
+    name: &str,
+) -> String {
+    match ls_colors.style_for_path_with_metadata(&path.p_buf, md_option) {
+        Some(style) => style_manager.apply_style(style, name),
+        None => name.to_owned(),
+    }
+}
+
 /// Colors the provided name based on the style determined for the given path
 /// This function is quite long because it tries to leverage DirEntry to avoid
 /// unnecessary calls to stat()
@@ -3276,30 +3289,17 @@ fn color_name(
         // use the optional target_symlink
         // Use fn get_metadata instead of md() here and above because ls
         // should not exit with an err, if we are unable to obtain the target_metadata
-
         let target = target_symlink.unwrap_or(path);
-        let md = match get_metadata_with_deref_opt(target.p_buf.as_path(), path.must_dereference) {
-            Ok(md) => md,
-            Err(_) => target.get_metadata(out).unwrap().clone(),
-        };
-        return match ls_colors.style_for_path_with_metadata(&path.p_buf, Some(&md)) {
-            Some(style) => style_manager.apply_style(style, &name),
-            None => name,
-        };
+        let md = get_metadata_with_deref_opt(target.p_buf.as_path(), path.must_dereference)
+            .unwrap_or_else(|_| target.get_metadata(out).unwrap().clone());
+
+        apply_style_based_on_metadata(path, Some(&md), ls_colors, style_manager, &name)
     } else {
         let md_option = path.get_metadata(out);
         let symlink_metadata = path.p_buf.symlink_metadata().ok();
+        let md = md_option.or(symlink_metadata.as_ref());
 
-        let md = if md_option.is_some() {
-            md_option
-        } else {
-            symlink_metadata.as_ref()
-        };
-
-        return match ls_colors.style_for_path_with_metadata(&path.p_buf, md) {
-            Some(style) => style_manager.apply_style(style, &name),
-            None => name,
-        };
+        apply_style_based_on_metadata(path, md, ls_colors, style_manager, &name)
     }
 }
 
