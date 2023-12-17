@@ -222,15 +222,19 @@ pub fn run_gnu_cmd(
     }
 }
 
+/// Compare results from two different implementations of a command.
+///
+/// # Arguments
+/// * `test_type` - The command.
+/// * `input` - The input provided to the command.
+/// * `rust_result` - The result of running the command with the Rust implementation.
+/// * `gnu_result` - The result of running the command with the GNU implementation.
+/// * `fail_on_stderr_diff` - Whether to fail the test if there is a difference in stderr output.
 pub fn compare_result(
     test_type: &str,
     input: &str,
-    rust_stdout: &str,
-    gnu_stdout: &str,
-    rust_stderr: &str,
-    gnu_stderr: &str,
-    rust_exit_code: i32,
-    gnu_exit_code: i32,
+    rust_result: &CommandResult,
+    gnu_result: &CommandResult,
     fail_on_stderr_diff: bool,
 ) {
     println!("Test Type: {}", test_type);
@@ -239,24 +243,24 @@ pub fn compare_result(
     let mut discrepancies = Vec::new();
     let mut should_panic = false;
 
-    if rust_stdout.trim() != gnu_stdout.trim() {
+    if rust_result.stdout.trim() != gnu_result.stdout.trim() {
         discrepancies.push("stdout differs");
-        println!("Rust stdout: {}", rust_stdout);
-        println!("GNU stdout: {}", gnu_stdout);
+        println!("Rust stdout: {}", rust_result.stdout);
+        println!("GNU stdout: {}", gnu_result.stdout);
         should_panic = true;
     }
-    if rust_stderr.trim() != gnu_stderr.trim() {
+    if rust_result.stderr.trim() != gnu_result.stderr.trim() {
         discrepancies.push("stderr differs");
-        println!("Rust stderr: {}", rust_stderr);
-        println!("GNU stderr: {}", gnu_stderr);
+        println!("Rust stderr: {}", rust_result.stderr);
+        println!("GNU stderr: {}", gnu_result.stderr);
         if fail_on_stderr_diff {
             should_panic = true;
         }
     }
-    if rust_exit_code != gnu_exit_code {
+    if rust_result.exit_code != gnu_result.exit_code {
         discrepancies.push("exit code differs");
-        println!("Rust exit code: {}", rust_exit_code);
-        println!("GNU exit code: {}", gnu_exit_code);
+        println!("Rust exit code: {}", rust_result.exit_code);
+        println!("GNU exit code: {}", gnu_result.exit_code);
         should_panic = true;
     }
 
