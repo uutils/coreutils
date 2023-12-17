@@ -391,7 +391,6 @@ fn unexpand_line(
     Ok(())
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn unexpand(options: &Options) -> UResult<()> {
     let mut output = BufWriter::new(stdout());
     let ts = &options.tabstops[..];
