@@ -570,7 +570,7 @@ fn is_color_compatible_term() -> bool {
         })
     };
 
-    if is_term_set && colorterm.is_empty() && is_colorterm_set && term.is_empty() {
+    if is_term_set && term.is_empty() && is_colorterm_set && colorterm.is_empty() {
         return false;
     }
 
