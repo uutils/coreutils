@@ -402,8 +402,7 @@ fn unexpand(options: &Options) -> UResult<()> {
         let mut fh = match open(file) {
             Ok(reader) => reader,
             Err(err) => {
-                let err = format!("{}", err);
-                return Err(USimpleError::new(1, err));
+                return Err(USimpleError::new(1, err.to_string()));
             }
         };
 
@@ -411,8 +410,7 @@ fn unexpand(options: &Options) -> UResult<()> {
             Ok(s) => s > 0,
             Err(_) => !buf.is_empty(),
         } {
-            unexpand_line(&mut buf, &mut output, options, lastcol, ts)
-                .map_err_context(|| "failed to write output".to_string())?;
+            unexpand_line(&mut buf, &mut output, options, lastcol, ts)?;
         }
     }
     Ok(())
