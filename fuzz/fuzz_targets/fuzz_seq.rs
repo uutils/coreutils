@@ -67,12 +67,8 @@ fuzz_target!(|_data: &[u8]| {
     compare_result(
         "seq",
         &format!("{:?}", &args[1..]),
-        &rust_result.stdout,
-        &gnu_result.stdout,
-        &rust_result.stderr,
-        &gnu_result.stderr,
-        rust_result.exit_code,
-        gnu_result.exit_code,
+        &rust_result,
+        &gnu_result,
         false, // Set to true if you want to fail on stderr diff
     );
 });
