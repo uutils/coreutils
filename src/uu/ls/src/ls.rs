@@ -562,7 +562,7 @@ fn is_color_compatible_term() -> bool {
     let term = std::env::var("TERM").unwrap_or_default();
     let colorterm = std::env::var("COLORTERM").unwrap_or_default();
 
-    // Search function to manage the "*" into the data structure
+    // Search function in the TERM struct to manage the wildcards
     let term_matches = |term: &str| -> bool {
         uucore::colors::TERMS.iter().any(|&pattern| {
             term == pattern
