@@ -10,6 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 libc = "0.2"
+tempfile = "3"
 rand = { version = "0.8", features = ["small_rng"] }
 
 uucore = { path = "../src/uucore/" }

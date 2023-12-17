@@ -59,9 +59,9 @@ fuzz_target!(|_data: &[u8]| {
     let echo_input = generate_echo();
     let mut args = vec![OsString::from("echo")];
     args.extend(echo_input.split_whitespace().map(OsString::from));
-    let rust_result = generate_and_run_uumain(&args, uumain);
+    let rust_result = generate_and_run_uumain(&args, uumain, None);
 
-    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false) {
+    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false, None) {
         Ok(result) => result,
         Err(error_result) => {
             eprintln!("Failed to run GNU command:");

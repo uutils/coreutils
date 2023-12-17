@@ -67,9 +67,9 @@ fuzz_target!(|_data: &[u8]| {
     // because uutils expr doesn't support localization yet
     // TODO remove once uutils expr supports localization
     env::set_var("LC_COLLATE", "C");
-    let rust_result = generate_and_run_uumain(&args, uumain);
+    let rust_result = generate_and_run_uumain(&args, uumain, None);
 
-    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false) {
+    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false, None) {
         Ok(result) => result,
         Err(error_result) => {
             eprintln!("Failed to run GNU command:");
