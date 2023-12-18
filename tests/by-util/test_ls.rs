@@ -3969,6 +3969,38 @@ fn test_ls_hyperlink() {
         .stdout_is(format!("{file}\n"));
 }
 
+// spell-checker: disable
+#[test]
+fn test_ls_hyperlink_encode_link() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        at.touch("back\\slash");
+        at.touch("ques?tion");
+    }
+    at.touch("encoded%3Fquestion");
+    at.touch("sp ace");
+
+    let result = ucmd.arg("--hyperlink").succeeds();
+    #[cfg(not(target_os = "windows"))]
+    {
+        assert!(result
+            .stdout_str()
+            .contains("back%5cslash\x07back\\slash\x1b]8;;\x07"));
+        assert!(result
+            .stdout_str()
+            .contains("ques%3ftion\x07ques?tion\x1b]8;;\x07"));
+    }
+    assert!(result
+        .stdout_str()
+        .contains("encoded%253Fquestion\x07encoded%3Fquestion\x1b]8;;\x07"));
+    assert!(result
+        .stdout_str()
+        .contains("sp%20ace\x07sp ace\x1b]8;;\x07"));
+}
+// spell-checker: enable
+
 #[test]
 fn test_ls_color_do_not_reset() {
     let scene: TestScenario = TestScenario::new(util_name!());
