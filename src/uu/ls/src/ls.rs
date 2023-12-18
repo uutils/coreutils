@@ -1926,8 +1926,14 @@ impl PathData {
     }
 }
 
-fn show_dir_name(dir: &Path, out: &mut BufWriter<Stdout>) {
-    write!(out, "{}:", dir.display()).unwrap();
+fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Config) {
+    if config.hyperlink {
+        let name = escape_name(&path_data.display_name, &config.quoting_style);
+        let hyperlink = create_hyperlink(&name, path_data);
+        write!(out, "{}:", hyperlink).unwrap();
+    } else {
+        write!(out, "{}:", path_data.p_buf.display()).unwrap();
+    }
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -1995,7 +2001,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 if config.dired {
                     dired::indent(&mut out)?;
                 }
-                show_dir_name(&path_data.p_buf, &mut out);
+                show_dir_name(path_data, &mut out, config);
                 writeln!(out)?;
                 if config.dired {
                     // First directory displayed
@@ -2007,7 +2013,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 }
             } else {
                 writeln!(out)?;
-                show_dir_name(&path_data.p_buf, &mut out);
+                show_dir_name(path_data, &mut out, config);
                 writeln!(out)?;
             }
         }
@@ -2232,7 +2238,7 @@ fn enter_directory(
                             dired::add_dir_name(dired, dir_name_size);
                         }
 
-                        show_dir_name(&e.p_buf, out);
+                        show_dir_name(e, out, config);
                         writeln!(out)?;
                         enter_directory(
                             e,
@@ -3047,31 +3053,7 @@ fn display_file_name(
     let mut width = name.width();
 
     if config.hyperlink {
-        let hostname = hostname::get().unwrap_or(OsString::from(""));
-        let hostname = hostname.to_string_lossy();
-
-        let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
-        let absolute_path = absolute_path.to_string_lossy();
-
-        #[cfg(not(target_os = "windows"))]
-        let unencoded_chars = "_-.:~/";
-        #[cfg(target_os = "windows")]
-        let unencoded_chars = "_-.:~/\\";
-
-        // percentage encoding of path
-        let absolute_path: String = absolute_path
-            .chars()
-            .map(|c| {
-                if c.is_alphanumeric() || unencoded_chars.contains(c) {
-                    c.to_string()
-                } else {
-                    format!("%{:02x}", c as u8)
-                }
-            })
-            .collect();
-
-        // \x1b = ESC, \x07 = BEL
-        name = format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07");
+        name = create_hyperlink(&name, path);
     }
 
     if let Some(ls_colors) = &config.color {
@@ -3206,6 +3188,34 @@ fn display_file_name(
         contents: name,
         width,
     }
+}
+
+fn create_hyperlink(name: &str, path: &PathData) -> String {
+    let hostname = hostname::get().unwrap_or(OsString::from(""));
+    let hostname = hostname.to_string_lossy();
+
+    let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
+    let absolute_path = absolute_path.to_string_lossy();
+
+    #[cfg(not(target_os = "windows"))]
+    let unencoded_chars = "_-.:~/";
+    #[cfg(target_os = "windows")]
+    let unencoded_chars = "_-.:~/\\";
+
+    // percentage encoding of path
+    let absolute_path: String = absolute_path
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || unencoded_chars.contains(c) {
+                c.to_string()
+            } else {
+                format!("%{:02x}", c as u8)
+            }
+        })
+        .collect();
+
+    // \x1b = ESC, \x07 = BEL
+    format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07")
 }
 
 /// We need this struct to be able to store the previous style.
