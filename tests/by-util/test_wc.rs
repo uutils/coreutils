@@ -725,3 +725,16 @@ fn files0_from_dir() {
         .fails()
         .stderr_only(dir_err!("-"));
 }
+
+#[test]
+fn test_args_override() {
+    new_ucmd!()
+        .args(&["-ll", "-l", "alice_in_wonderland.txt"])
+        .run()
+        .stdout_is("5 alice_in_wonderland.txt\n");
+
+    new_ucmd!()
+        .args(&["--total=always", "--total=never", "alice_in_wonderland.txt"])
+        .run()
+        .stdout_is("  5  57 302 alice_in_wonderland.txt\n");
+}
