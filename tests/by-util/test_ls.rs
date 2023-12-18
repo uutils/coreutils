@@ -4002,6 +4002,42 @@ fn test_ls_hyperlink_encode_link() {
 // spell-checker: enable
 
 #[test]
+fn test_ls_hyperlink_dirs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir_a = "a";
+    let dir_b = "b";
+
+    at.mkdir(dir_a);
+    at.mkdir(dir_b);
+
+    let path = at.root_dir_resolved();
+    let separator = std::path::MAIN_SEPARATOR_STR;
+
+    let result = scene
+        .ucmd()
+        .arg("--hyperlink")
+        .arg(dir_a)
+        .arg(dir_b)
+        .succeeds();
+
+    assert!(result.stdout_str().contains("\x1b]8;;file://"));
+    assert!(result
+        .stdout_str()
+        .lines()
+        .nth(0)
+        .unwrap()
+        .contains(&format!("{path}{separator}{dir_a}\x07{dir_a}\x1b]8;;\x07:")));
+    assert_eq!(result.stdout_str().lines().nth(1).unwrap(), "");
+    assert!(result
+        .stdout_str()
+        .lines()
+        .nth(2)
+        .unwrap()
+        .contains(&format!("{path}{separator}{dir_b}\x07{dir_b}\x1b]8;;\x07:")));
+}
+
+#[test]
 fn test_ls_color_do_not_reset() {
     let scene: TestScenario = TestScenario::new(util_name!());
     let at = &scene.fixtures;

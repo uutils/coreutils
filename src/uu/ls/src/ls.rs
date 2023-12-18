@@ -1926,8 +1926,14 @@ impl PathData {
     }
 }
 
-fn show_dir_name(dir: &Path, out: &mut BufWriter<Stdout>) {
-    write!(out, "{}:", dir.display()).unwrap();
+fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Config) {
+    if config.hyperlink {
+        let name = escape_name(&path_data.display_name, &config.quoting_style);
+        let hyperlink = create_hyperlink(&name, path_data);
+        write!(out, "{}:", hyperlink).unwrap();
+    } else {
+        write!(out, "{}:", path_data.p_buf.display()).unwrap();
+    }
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -1995,7 +2001,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 if config.dired {
                     dired::indent(&mut out)?;
                 }
-                show_dir_name(&path_data.p_buf, &mut out);
+                show_dir_name(path_data, &mut out, config);
                 writeln!(out)?;
                 if config.dired {
                     // First directory displayed
@@ -2007,7 +2013,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 }
             } else {
                 writeln!(out)?;
-                show_dir_name(&path_data.p_buf, &mut out);
+                show_dir_name(path_data, &mut out, config);
                 writeln!(out)?;
             }
         }
@@ -2232,7 +2238,7 @@ fn enter_directory(
                             dired::add_dir_name(dired, dir_name_size);
                         }
 
-                        show_dir_name(&e.p_buf, out);
+                        show_dir_name(e, out, config);
                         writeln!(out)?;
                         enter_directory(
                             e,
