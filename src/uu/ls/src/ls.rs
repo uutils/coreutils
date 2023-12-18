@@ -1812,7 +1812,8 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
-    // can be used to avoid reading the metadata. Can be also called d_type
+    // can be used to avoid reading the metadata. Can be also called d_type:
+    // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: Option<DirEntry>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
