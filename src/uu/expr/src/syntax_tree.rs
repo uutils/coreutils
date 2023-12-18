@@ -70,6 +70,8 @@ impl RelationOp {
             }
         } else {
             // These comparisons should be using locale settings
+            let a = a.eval_as_string();
+            let b = b.eval_as_string();
             match self {
                 Self::Lt => a < b,
                 Self::Leq => a <= b,
@@ -195,7 +197,7 @@ const PRECEDENCE: &[&[(&str, BinOp)]] = &[
     &[(":", BinOp::String(StringOp::Match))],
 ];
 
-#[derive(Debug, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Debug)]
 pub enum NumOrStr {
     Num(BigInt),
     Str(String),
