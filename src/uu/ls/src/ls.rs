@@ -3047,31 +3047,7 @@ fn display_file_name(
     let mut width = name.width();
 
     if config.hyperlink {
-        let hostname = hostname::get().unwrap_or(OsString::from(""));
-        let hostname = hostname.to_string_lossy();
-
-        let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
-        let absolute_path = absolute_path.to_string_lossy();
-
-        #[cfg(not(target_os = "windows"))]
-        let unencoded_chars = "_-.:~/";
-        #[cfg(target_os = "windows")]
-        let unencoded_chars = "_-.:~/\\";
-
-        // percentage encoding of path
-        let absolute_path: String = absolute_path
-            .chars()
-            .map(|c| {
-                if c.is_alphanumeric() || unencoded_chars.contains(c) {
-                    c.to_string()
-                } else {
-                    format!("%{:02x}", c as u8)
-                }
-            })
-            .collect();
-
-        // \x1b = ESC, \x07 = BEL
-        name = format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07");
+        name = create_hyperlink(&name, path);
     }
 
     if let Some(ls_colors) = &config.color {
@@ -3206,6 +3182,34 @@ fn display_file_name(
         contents: name,
         width,
     }
+}
+
+fn create_hyperlink(name: &str, path: &PathData) -> String {
+    let hostname = hostname::get().unwrap_or(OsString::from(""));
+    let hostname = hostname.to_string_lossy();
+
+    let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
+    let absolute_path = absolute_path.to_string_lossy();
+
+    #[cfg(not(target_os = "windows"))]
+    let unencoded_chars = "_-.:~/";
+    #[cfg(target_os = "windows")]
+    let unencoded_chars = "_-.:~/\\";
+
+    // percentage encoding of path
+    let absolute_path: String = absolute_path
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || unencoded_chars.contains(c) {
+                c.to_string()
+            } else {
+                format!("%{:02x}", c as u8)
+            }
+        })
+        .collect();
+
+    // \x1b = ESC, \x07 = BEL
+    format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07")
 }
 
 /// We need this struct to be able to store the previous style.
