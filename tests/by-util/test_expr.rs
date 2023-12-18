@@ -362,3 +362,11 @@ fn test_invalid_syntax() {
             .stderr_contains("syntax error");
     }
 }
+
+#[test]
+fn test_num_str_comparison() {
+    new_ucmd!()
+        .args(&["1a", "<", "1", "+", "1"])
+        .succeeds()
+        .stdout_is("1\n");
+}
