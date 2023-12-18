@@ -24,6 +24,7 @@ terminal_size = { workspace = true }
 glob = { workspace = true }
 lscolors = { workspace = true }
 uucore = { workspace = true, features = [
+  "colors",
   "entries",
   "fs",
   "quoting-style",

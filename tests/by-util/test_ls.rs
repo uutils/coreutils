@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -3986,5 +3986,64 @@ fn test_ls_color_do_not_reset() {
     assert_eq!(
         result.stdout_str().escape_default().to_string(),
         "\\u{1b}[0m\\u{1b}[01;34ma\\u{1b}[0m\\n\\u{1b}[01;34mb\\u{1b}[0m\\n"
+    );
+}
+
+#[cfg(all(unix, feature = "chmod"))]
+#[test]
+fn test_term_colorterm() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("exe");
+    scene.ccmd("chmod").arg("+x").arg("exe").succeeds();
+
+    // Should show colors
+    let result = scene
+        .ucmd()
+        .arg("--color=always")
+        .env("LS_COLORS", "")
+        .env("TERM", "")
+        .succeeds();
+    assert_eq!(
+        result.stdout_str().trim().escape_default().to_string(),
+        "\\u{1b}[0m\\u{1b}[01;32mexe\\u{1b}[0m"
+    );
+
+    // Should show colors
+    let result = scene
+        .ucmd()
+        .arg("--color=always")
+        .env("LS_COLORS", "")
+        .env("COLORTERM", "")
+        .succeeds();
+    assert_eq!(
+        result.stdout_str().trim().escape_default().to_string(),
+        "\\u{1b}[0m\\u{1b}[01;32mexe\\u{1b}[0m"
+    );
+
+    // No colors
+    let result = scene
+        .ucmd()
+        .arg("--color=always")
+        .env("LS_COLORS", "")
+        .env("TERM", "")
+        .env("COLORTERM", "")
+        .succeeds();
+    assert_eq!(
+        result.stdout_str().trim().escape_default().to_string(),
+        "exe"
+    );
+
+    // No colors
+    let result = scene
+        .ucmd()
+        .arg("--color=always")
+        .env("LS_COLORS", "")
+        .env("TERM", "dumb")
+        .env("COLORTERM", "")
+        .succeeds();
+    assert_eq!(
+        result.stdout_str().trim().escape_default().to_string(),
+        "exe"
     );
 }
