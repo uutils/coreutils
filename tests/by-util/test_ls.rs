@@ -3839,7 +3839,7 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
 
 #[cfg(all(unix, feature = "dd"))]
 #[test]
-fn test_posixly_correct() {
+fn test_posixly_correct_and_block_size_env_vars() {
     let scene = TestScenario::new(util_name!());
 
     scene
@@ -3852,16 +3852,42 @@ fn test_posixly_correct() {
 
     scene
         .ucmd()
-        .arg("-s")
+        .arg("-l")
         .succeeds()
-        .stdout_contains_line("total 4");
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1024 ");
 
     scene
         .ucmd()
-        .arg("-s")
+        .arg("-l")
         .env("POSIXLY_CORRECT", "some_value")
         .succeeds()
         .stdout_contains_line("total 8");
+    //.stdout_contains(" 1024 "); // TODO needs second internal blocksize
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .env("LS_BLOCK_SIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 8")
+        .stdout_contains(" 2 ");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .env("BLOCK_SIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 8")
+        .stdout_contains(" 2 ");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .env("BLOCKSIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 8");
+    //.stdout_contains(" 1024 "); // TODO needs second internal blocksize
 }
 
 #[test]
@@ -3880,6 +3906,7 @@ fn test_ls_invalid_block_size() {
 fn test_ls_invalid_block_size_in_env_var() {
     new_ucmd!().env("LS_BLOCK_SIZE", "invalid").succeeds();
     new_ucmd!().env("BLOCK_SIZE", "invalid").succeeds();
+    new_ucmd!().env("BLOCKSIZE", "invalid").succeeds();
 }
 
 #[cfg(all(unix, feature = "dd"))]
