@@ -1110,5 +1110,15 @@ mod tests {
         .unwrap();
 
         assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
+
+        let info = MountInfo::new(
+            LINUX_MTAB,
+            &r#"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,seclabel,relatime 0 0"#
+                .split_ascii_whitespace()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
     }
 }
