@@ -840,9 +840,14 @@ impl Config {
             match parse_size_u64(&raw_block_size.to_string_lossy()) {
                 Ok(size) => Some(size),
                 Err(_) => {
-                    return Err(Box::new(LsError::BlockSizeParseError(
-                        opt_block_size.unwrap().clone(),
-                    )));
+                    // only fail if invalid block size was specified with --block-size,
+                    // ignore invalid block size from env vars
+                    if let Some(invalid_block_size) = opt_block_size {
+                        return Err(Box::new(LsError::BlockSizeParseError(
+                            invalid_block_size.clone(),
+                        )));
+                    }
+                    None
                 }
             }
         } else if env_var_posixly_correct.is_some() {

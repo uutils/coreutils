@@ -3874,6 +3874,14 @@ fn test_ls_invalid_block_size() {
         .stderr_is("ls: invalid --block-size argument 'invalid'\n");
 }
 
+// TODO ensure the correct block size is used when using -l because
+// the output of "ls -l" and "BLOCK_SIZE=invalid ls -l" is different
+#[test]
+fn test_ls_invalid_block_size_in_env_var() {
+    new_ucmd!().env("LS_BLOCK_SIZE", "invalid").succeeds();
+    new_ucmd!().env("BLOCK_SIZE", "invalid").succeeds();
+}
+
 #[cfg(all(unix, feature = "dd"))]
 #[test]
 fn test_ls_block_size_override() {
