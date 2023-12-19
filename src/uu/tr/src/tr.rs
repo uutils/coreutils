@@ -5,7 +5,6 @@
 
 // spell-checker:ignore (ToDO) allocs bset dflag cflag sflag tflag
 
-mod convert;
 mod operation;
 mod unicode_table;
 
@@ -40,14 +39,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let squeeze_flag = matches.get_flag(options::SQUEEZE);
     let truncate_set1_flag = matches.get_flag(options::TRUNCATE_SET1);
 
-    let sets = matches
+    // Ultimately this should be OsString, but we might want to wait for the
+    // pattern API on OsStr
+    let sets: Vec<_> = matches
         .get_many::<String>(options::SETS)
-        .map(|v| {
-            v.map(ToString::to_string)
-                .map(|input| convert::reduce_octal_to_char(&input))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+        .into_iter()
+        .flatten()
+        .map(ToOwned::to_owned)
+        .collect();
+
     let sets_len = sets.len();
 
     if sets.is_empty() {
@@ -78,8 +78,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut sets_iter = sets.iter().map(|c| c.as_str());
     let (set1, set2) = Sequence::solve_set_characters(
-        sets_iter.next().unwrap_or_default(),
-        sets_iter.next().unwrap_or_default(),
+        sets_iter.next().unwrap_or_default().as_bytes(),
+        sets_iter.next().unwrap_or_default().as_bytes(),
         truncate_set1_flag,
     )?;
 
