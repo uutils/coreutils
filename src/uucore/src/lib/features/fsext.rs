@@ -1103,7 +1103,7 @@ mod tests {
     fn test_mountinfo_dir_special_chars() {
         let info = MountInfo::new(
             LINUX_MOUNTINFO,
-            &r#"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw,seclabel"#
+            &r#"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw"#
                 .split_ascii_whitespace()
                 .collect::<Vec<_>>(),
         )
@@ -1113,7 +1113,7 @@ mod tests {
 
         let info = MountInfo::new(
             LINUX_MTAB,
-            &r#"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,seclabel,relatime 0 0"#
+            &r#"/dev/loop0 /mnt/f\134\040\011oo ext4 rw,relatime 0 0"#
                 .split_ascii_whitespace()
                 .collect::<Vec<_>>(),
         )
