@@ -3033,6 +3033,7 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
 /// * `config.format` to display symlink targets if `Format::Long`. This function is also
 ///   responsible for coloring symlink target names if `config.color` is specified.
 /// * `config.context` to prepend security context to `name` if compiled with `feat_selinux`.
+/// * `config.hyperlink` decides whether to hyperlink the item
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
