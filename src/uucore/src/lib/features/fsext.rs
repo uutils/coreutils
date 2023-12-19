@@ -14,11 +14,23 @@ use time::UtcOffset;
 const LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
+#[cfg(unix)]
 static MOUNT_OPT_BIND: &str = "bind";
 #[cfg(windows)]
 const MAX_PATH: usize = 266;
-#[cfg(not(unix))]
+#[cfg(windows)]
 static EXIT_ERR: i32 = 1;
+
+#[cfg(any(
+    windows,
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use crate::crash;
+#[cfg(windows)]
+use crate::show_warning;
 
 #[cfg(windows)]
 use std::ffi::OsStr;
@@ -28,26 +40,11 @@ use std::os::windows::ffi::OsStrExt;
 use windows_sys::Win32::{
     Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
     Storage::FileSystem::{
-    FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
-    GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
+        GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
     },
     System::WindowsProgramming::DRIVE_REMOTE,
 };
-#[cfg(windows)]
-use windows_sys::Win32::System::WindowsProgramming::DRIVE_REMOTE;
-
-// Warning: the pointer has to be used *immediately* or the Vec
-// it points to will be dropped!
-#[cfg(windows)]
-macro_rules! String2LPWSTR {
-    ($str: expr) => {
-        OsStr::new(&$str)
-            .encode_wide()
-            .chain(Some(0))
-            .collect::<Vec<u16>>()
-            .as_ptr()
-    };
-}
 
 #[cfg(windows)]
 #[allow(non_snake_case)]
@@ -56,30 +53,28 @@ fn LPWSTR2String(buf: &[u16]) -> String {
     String::from_utf16(&buf[..len]).unwrap()
 }
 
+#[cfg(windows)]
+fn to_nul_terminated_wide_string(s: impl AsRef<OsStr>) -> Vec<u16> {
+    s.as_ref()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<u16>>()
+}
+
 #[cfg(unix)]
 use libc::{
     mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
 };
 use std::borrow::Cow;
 use std::convert::From;
-#[cfg(any(
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "linux",
-    target_os = "android",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_os = "redox",
-))]
+#[cfg(unix)]
 use std::ffi::CStr;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::ffi::CString;
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
-#[cfg(not(unix))]
+#[cfg(windows)]
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
@@ -228,8 +223,9 @@ impl MountInfo {
 
         let mut mount_root_buf = [0u16; MAX_PATH];
         let success = unsafe {
+            let volume_name = to_nul_terminated_wide_string(&volume_name);
             GetVolumePathNamesForVolumeNameW(
-                String2LPWSTR!(volume_name),
+                volume_name.as_ptr(),
                 mount_root_buf.as_mut_ptr(),
                 mount_root_buf.len() as u32,
                 ptr::null_mut(),
@@ -243,8 +239,9 @@ impl MountInfo {
 
         let mut fs_type_buf = [0u16; MAX_PATH];
         let success = unsafe {
+            let mount_root = to_nul_terminated_wide_string(&mount_root);
             GetVolumeInformationW(
-                String2LPWSTR!(mount_root),
+                mount_root.as_ptr(),
                 ptr::null_mut(),
                 0,
                 ptr::null_mut(),
@@ -259,7 +256,11 @@ impl MountInfo {
         } else {
             Some(LPWSTR2String(&fs_type_buf))
         };
-        let remote = DRIVE_REMOTE == unsafe { GetDriveTypeW(String2LPWSTR!(self.mount_root)) };
+        let remote = DRIVE_REMOTE
+            == unsafe {
+                let mount_root = to_nul_terminated_wide_string(&mount_root);
+                GetDriveTypeW(mount_root.as_ptr())
+            };
         Some(Self {
             dev_id: volume_name,
             dev_name,
@@ -300,11 +301,12 @@ impl From<StatFs> for MountInfo {
                 .into_owned()
         };
 
-        let dummy = is_dummy_filesystem(&fs_type, &mount_option);
+        let dev_id = mount_dev_id(&mount_dir);
+        let dummy = is_dummy_filesystem(&fs_type, "");
         let remote = is_remote_filesystem(&dev_name, &fs_type);
 
         Self {
-            dev_id: String::new(),
+            dev_id,
             dev_name,
             fs_type,
             mount_dir,
@@ -318,6 +320,7 @@ impl From<StatFs> for MountInfo {
 
 #[cfg(unix)]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
+    // spell-checker:disable
     match fs_type {
         "autofs" | "proc" | "subfs"
         // for Linux 2.6/3.x
@@ -331,6 +334,7 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
         _ => fs_type == "none"
             && !mount_option.contains(MOUNT_OPT_BIND)
     }
+    // spell-checker:enable
 }
 
 #[cfg(unix)]
@@ -344,7 +348,7 @@ fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
 fn mount_dev_id(mount_dir: &str) -> String {
     use std::os::unix::fs::MetadataExt;
 
-    if let Ok(stat) = std::fs::metadata(&mount_dir) {
+    if let Ok(stat) = std::fs::metadata(mount_dir) {
         // Why do we cast this to i32?
         (stat.dev() as i32).to_string()
     } else {
@@ -558,13 +562,14 @@ impl FsUsage {
             };
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     pub fn new(path: &Path) -> Self {
         let mut root_path = [0u16; MAX_PATH];
         let success = unsafe {
+            let path = to_nul_terminated_wide_string(path);
             GetVolumePathNamesForVolumeNameW(
                 //path_utf8.as_ptr(),
-                String2LPWSTR!(path.as_os_str()),
+                path.as_ptr(),
                 root_path.as_mut_ptr(),
                 root_path.len() as u32,
                 ptr::null_mut(),
@@ -584,8 +589,9 @@ impl FsUsage {
         let mut total_number_of_clusters = 0;
 
         let success = unsafe {
+            let path = to_nul_terminated_wide_string(path);
             GetDiskFreeSpaceW(
-                String2LPWSTR!(path.as_os_str()),
+                path.as_ptr(),
                 &mut sectors_per_cluster,
                 &mut bytes_per_sector,
                 &mut number_of_free_clusters,
