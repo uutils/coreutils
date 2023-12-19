@@ -169,7 +169,11 @@ impl MountInfo {
                 dev_name = raw[0].to_string();
                 fs_type = raw[2].to_string();
                 mount_root = String::new();
-                mount_dir = raw[1].to_string();
+                mount_dir = raw[1]
+                    .to_string()
+                    .replace(r#"\040"#, " ")
+                    .replace(r#"\011"#, "	")
+                    .replace(r#"\134"#, r#"\"#);
                 mount_option = raw[3].to_string();
             }
             _ => return None,
