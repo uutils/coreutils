@@ -158,7 +158,11 @@ impl MountInfo {
                 dev_name = raw[after_fields + 1].to_string();
                 fs_type = raw[after_fields].to_string();
                 mount_root = raw[3].to_string();
-                mount_dir = raw[4].to_string();
+                mount_dir = raw[4]
+                    .to_string()
+                    .replace(r#"\040"#, " ")
+                    .replace(r#"\011"#, "	")
+                    .replace(r#"\134"#, r#"\"#);
                 mount_option = raw[5].to_string();
             }
             LINUX_MTAB => {
