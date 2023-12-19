@@ -10,8 +10,6 @@
 use time::macros::format_description;
 use time::UtcOffset;
 
-pub use crate::*; // import macros from `../../macros.rs`
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -61,7 +59,7 @@ use libc::{
     mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
 };
 use std::borrow::Cow;
-use std::convert::{AsRef, From};
+use std::convert::From;
 #[cfg(any(
     target_vendor = "apple",
     target_os = "freebsd",
@@ -145,63 +143,27 @@ impl BirthTime for Metadata {
 
 #[derive(Debug, Clone)]
 pub struct MountInfo {
-    // it stores `volume_name` in windows platform and `dev_id` in unix platform
+    /// Stores `volume_name` in windows platform and `dev_id` in unix platform
     pub dev_id: String,
     pub dev_name: String,
     pub fs_type: String,
-    pub mount_dir: String,
-    pub mount_option: String, // we only care "bind" option
     pub mount_root: String,
+    pub mount_dir: String,
+    /// We only care whether this field contains "bind"
+    pub mount_option: String,
     pub remote: bool,
     pub dummy: bool,
 }
 
 impl MountInfo {
-    fn set_missing_fields(&mut self) {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            // We want to keep the dev_id on Windows
-            // but set dev_id
-            if let Ok(stat) = std::fs::metadata(&self.mount_dir) {
-                // Why do we cast this to i32?
-                self.dev_id = (stat.dev() as i32).to_string();
-            } else {
-                self.dev_id = String::new();
-            }
-        }
-        // set MountInfo::dummy
-        // spell-checker:disable
-        match self.fs_type.as_ref() {
-            "autofs" | "proc" | "subfs"
-            /* for Linux 2.6/3.x */
-            | "debugfs" | "devpts" | "fusectl" | "mqueue" | "rpc_pipefs" | "sysfs"
-            /* FreeBSD, Linux 2.4 */
-            | "devfs"
-            /* for NetBSD 3.0 */
-            | "kernfs"
-            /* for Irix 6.5 */
-            | "ignore" => self.dummy = true,
-            _ => self.dummy = self.fs_type == "none"
-                && !self.mount_option.contains(MOUNT_OPT_BIND)
-        }
-        // spell-checker:enable
-        // set MountInfo::remote
-        #[cfg(windows)]
-        {
-            self.remote = DRIVE_REMOTE == unsafe { GetDriveTypeW(String2LPWSTR!(self.mount_root)) };
-        }
-        #[cfg(unix)]
-        {
-            self.remote = self.dev_name.find(':').is_some()
-                || (self.dev_name.starts_with("//") && self.fs_type == "smbfs"
-                    || self.fs_type == "cifs")
-                || self.dev_name == "-hosts";
-        }
-    }
-
     #[cfg(any(target_os = "linux", target_os = "android"))]
     fn new(file_name: &str, raw: &[&str]) -> Option<Self> {
+        let dev_name;
+        let fs_type;
+        let mount_root;
+        let mount_dir;
+        let mount_option;
+
         match file_name {
             // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
@@ -211,36 +173,38 @@ impl MountInfo {
                 let after_fields = raw[FIELDS_OFFSET..].iter().position(|c| *c == "-").unwrap()
                     + FIELDS_OFFSET
                     + 1;
-                let mut m = Self {
-                    dev_id: String::new(),
-                    dev_name: raw[after_fields + 1].to_string(),
-                    fs_type: raw[after_fields].to_string(),
-                    mount_root: raw[3].to_string(),
-                    mount_dir: raw[4].to_string(),
-                    mount_option: raw[5].to_string(),
-                    remote: false,
-                    dummy: false,
-                };
-                m.set_missing_fields();
-                Some(m)
+                dev_name = raw[after_fields + 1].to_string();
+                fs_type = raw[after_fields].to_string();
+                mount_root = raw[3].to_string();
+                mount_dir = raw[4].to_string();
+                mount_option = raw[5].to_string();
             }
             LINUX_MTAB => {
-                let mut m = Self {
-                    dev_id: String::new(),
-                    dev_name: raw[0].to_string(),
-                    fs_type: raw[2].to_string(),
-                    mount_root: String::new(),
-                    mount_dir: raw[1].to_string(),
-                    mount_option: raw[3].to_string(),
-                    remote: false,
-                    dummy: false,
-                };
-                m.set_missing_fields();
-                Some(m)
+                dev_name = raw[0].to_string();
+                fs_type = raw[2].to_string();
+                mount_root = String::new();
+                mount_dir = raw[1].to_string();
+                mount_option = raw[3].to_string();
             }
-            _ => None,
-        }
+            _ => return None,
+        };
+
+        let dev_id = mount_dev_id(&mount_dir);
+        let dummy = is_dummy_filesystem(&fs_type, &mount_option);
+        let remote = is_remote_filesystem(&dev_name, &fs_type);
+
+        Some(Self {
+            dev_id,
+            dev_name,
+            fs_type,
+            mount_dir,
+            mount_option,
+            mount_root,
+            remote,
+            dummy,
+        })
     }
+
     #[cfg(windows)]
     fn new(mut volume_name: String) -> Option<Self> {
         let mut dev_name_buf = [0u16; MAX_PATH];
@@ -293,18 +257,17 @@ impl MountInfo {
         } else {
             Some(LPWSTR2String(&fs_type_buf))
         };
-        let mut mn_info = Self {
+        let remote = DRIVE_REMOTE == unsafe { GetDriveTypeW(String2LPWSTR!(self.mount_root)) };
+        Some(Self {
             dev_id: volume_name,
             dev_name,
             fs_type: fs_type.unwrap_or_default(),
             mount_root,
             mount_dir: String::new(),
             mount_option: String::new(),
-            remote: false,
+            remote,
             dummy: false,
-        };
-        mn_info.set_missing_fields();
-        Some(mn_info)
+        })
     }
 }
 
@@ -316,33 +279,74 @@ impl MountInfo {
 ))]
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
-        let mut info = Self {
+        let dev_name = unsafe {
+            // spell-checker:disable-next-line
+            CStr::from_ptr(&statfs.f_mntfromname[0])
+                .to_string_lossy()
+                .into_owned()
+        };
+        let fs_type = unsafe {
+            // spell-checker:disable-next-line
+            CStr::from_ptr(&statfs.f_fstypename[0])
+                .to_string_lossy()
+                .into_owned()
+        };
+        let mount_dir = unsafe {
+            // spell-checker:disable-next-line
+            CStr::from_ptr(&statfs.f_mntonname[0])
+                .to_string_lossy()
+                .into_owned()
+        };
+
+        let dummy = is_dummy_filesystem(&fs_type, &mount_option);
+        let remote = is_remote_filesystem(&dev_name, &fs_type);
+
+        Self {
             dev_id: String::new(),
-            dev_name: unsafe {
-                // spell-checker:disable-next-line
-                CStr::from_ptr(&statfs.f_mntfromname[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
-            fs_type: unsafe {
-                // spell-checker:disable-next-line
-                CStr::from_ptr(&statfs.f_fstypename[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
-            mount_dir: unsafe {
-                // spell-checker:disable-next-line
-                CStr::from_ptr(&statfs.f_mntonname[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
+            dev_name,
+            fs_type,
+            mount_dir,
             mount_root: String::new(),
             mount_option: String::new(),
-            remote: false,
-            dummy: false,
-        };
-        info.set_missing_fields();
-        info
+            remote,
+            dummy,
+        }
+    }
+}
+
+#[cfg(unix)]
+fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
+    match fs_type {
+        "autofs" | "proc" | "subfs"
+        // for Linux 2.6/3.x
+        | "debugfs" | "devpts" | "fusectl" | "mqueue" | "rpc_pipefs" | "sysfs"
+        // FreeBSD, Linux 2.4
+        | "devfs"
+        // for NetBSD 3.0
+        | "kernfs"
+        // for Irix 6.5
+        | "ignore" => true,
+        _ => fs_type == "none"
+            && !mount_option.contains(MOUNT_OPT_BIND)
+    }
+}
+
+#[cfg(unix)]
+fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
+    dev_name.find(':').is_some()
+        || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
+        || dev_name == "-hosts"
+}
+
+#[cfg(unix)]
+fn mount_dev_id(mount_dir: &str) -> String {
+    use std::os::unix::fs::MetadataExt;
+
+    if let Ok(stat) = std::fs::metadata(&mount_dir) {
+        // Why do we cast this to i32?
+        (stat.dev() as i32).to_string()
+    } else {
+        String::new()
     }
 }
 
