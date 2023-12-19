@@ -25,11 +25,13 @@ use std::ffi::OsStr;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE};
-#[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::{
+use windows_sys::Win32::{
+    Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
+    Storage::FileSystem::{
     FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
     GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+    },
+    System::WindowsProgramming::DRIVE_REMOTE,
 };
 #[cfg(windows)]
 use windows_sys::Win32::System::WindowsProgramming::DRIVE_REMOTE;
