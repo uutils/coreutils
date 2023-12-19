@@ -2413,7 +2413,7 @@ fn display_items(
 
         for i in items {
             let more_info = display_additional_leading_info(i, &padding, config, out)?;
-            let cell = display_file_name(i, config, prefix_context, more_info, out, style_manager);
+            let cell = display_item_name(i, config, prefix_context, more_info, out, style_manager);
             names_vec.push(cell);
         }
 
@@ -2544,11 +2544,11 @@ fn display_grid(
 /// * `author` ([`display_uname`], config-optional)
 /// * `size / rdev` ([`display_len_or_rdev`])
 /// * `system_time` ([`get_system_time`])
-/// * `file_name` ([`display_file_name`])
+/// * `item_name` ([`display_item_name`])
 ///
 /// This function needs to display information in columns:
 /// * permissions and system_time are already guaranteed to be pre-formatted in fixed length.
-/// * file_name is the last column and is left-aligned.
+/// * item_name is the last column and is left-aligned.
 /// * Everything else needs to be padded using [`pad_left`].
 ///
 /// That's why we have the parameters:
@@ -2661,17 +2661,17 @@ fn display_item_long(
 
         write!(output_display, " {} ", display_date(md, config)).unwrap();
 
-        let displayed_file =
-            display_file_name(item, config, None, String::new(), out, style_manager).contents;
+        let displayed_item =
+            display_item_name(item, config, None, String::new(), out, style_manager).contents;
         if config.dired {
             let (start, end) = dired::calculate_dired(
                 &dired.dired_positions,
                 output_display.len(),
-                displayed_file.len(),
+                displayed_item.len(),
             );
             dired::update_positions(dired, start, end);
         }
-        write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
+        write!(output_display, "{}{}", displayed_item, config.line_ending).unwrap();
     } else {
         #[cfg(unix)]
         let leading_char = {
@@ -2744,8 +2744,8 @@ fn display_item_long(
             write!(output_display, " {}", pad_right("?", padding.uname)).unwrap();
         }
 
-        let displayed_file =
-            display_file_name(item, config, None, String::new(), out, style_manager).contents;
+        let displayed_item =
+            display_item_name(item, config, None, String::new(), out, style_manager).contents;
         let date_len = 12;
 
         write!(
@@ -2760,10 +2760,10 @@ fn display_item_long(
             dired::calculate_and_update_positions(
                 dired,
                 output_display.len(),
-                displayed_file.trim().len(),
+                displayed_item.trim().len(),
             );
         }
-        write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
+        write!(output_display, "{}{}", displayed_item, config.line_ending).unwrap();
     }
     write!(out, "{}", output_display)?;
 
@@ -3033,11 +3033,12 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
 /// * `config.format` to display symlink targets if `Format::Long`. This function is also
 ///   responsible for coloring symlink target names if `config.color` is specified.
 /// * `config.context` to prepend security context to `name` if compiled with `feat_selinux`.
+/// * `config.hyperlink` decides whether to hyperlink the item
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
 #[allow(clippy::cognitive_complexity)]
-fn display_file_name(
+fn display_item_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
