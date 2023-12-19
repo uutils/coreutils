@@ -1115,4 +1115,18 @@ mod tests {
         assert_eq!(info.fs_type, "xfs");
         assert_eq!(info.dev_name, "/dev/fs0");
     }
+
+    #[test]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn test_mountinfo_dir_special_chars() {
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            &r#"317 61 7:0 / /mnt/f\134\040\011oo rw,relatime shared:641 - ext4 /dev/loop0 rw,seclabel"#
+                .split_ascii_whitespace()
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_dir, r#"/mnt/f\ 	oo"#);
+    }
 }
