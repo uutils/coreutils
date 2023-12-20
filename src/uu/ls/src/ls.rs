@@ -3288,7 +3288,7 @@ fn color_name(
 
     if check_for_deref {
         // use the optional target_symlink
-        // Use fn get_metadata instead of md() here and above because ls
+        // Use fn get_metadata_with_deref_opt instead of get_metadata() here because ls
         // should not exit with an err, if we are unable to obtain the target_metadata
         let target = target_symlink.unwrap_or(path);
         let md = get_metadata_with_deref_opt(target.p_buf.as_path(), path.must_dereference)
