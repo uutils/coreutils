@@ -62,7 +62,7 @@ tempfile = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi-util = { workspace = true, optional = true }
-windows-sys = { workspace = true, optional = true, default-features = false, features = [
+windows = { workspace = true, optional = true, default-features = false, features = [
   "Win32_Storage_FileSystem",
   "Win32_Foundation",
   "Win32_System_WindowsProgramming",
@@ -75,8 +75,8 @@ backup-control = []
 colors = []
 encoding = ["data-encoding", "data-encoding-macro", "z85", "thiserror"]
 entries = ["libc"]
-fs = ["dunce", "libc", "winapi-util", "windows-sys"]
-fsext = ["libc", "time", "windows-sys"]
+fs = ["dunce", "libc", "winapi-util", "windows"]
+fsext = ["libc", "time", "windows"]
 lines = []
 format = ["itertools"]
 mode = ["libc"]

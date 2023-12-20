@@ -20,7 +20,7 @@ use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show};
 #[cfg(windows)]
-use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
+use windows::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
 
 use uucore::shortcut_value_parser::ShortcutValueParser;
 
@@ -472,8 +472,9 @@ fn set_system_datetime(date: DateTime<Utc>) -> UResult<()> {
 
     let result = unsafe { SetSystemTime(&system_time) };
 
-    if result == 0 {
-        Err(std::io::Error::last_os_error().map_err_context(|| "cannot set date".to_string()))
+    if let Err(e) = result {
+        Err(std::io::Error::from_raw_os_error(e.code().0)
+            .map_err_context(|| "cannot set date".to_string()))
     } else {
         Ok(())
     }

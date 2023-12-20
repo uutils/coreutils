@@ -20,7 +20,7 @@ hostname = { workspace = true, features = ["set"] }
 uucore = { workspace = true, features = ["wide"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace = true, features = [
+windows = { workspace = true, features = [
   "Win32_Networking_WinSock",
   "Win32_Foundation",
 ] }

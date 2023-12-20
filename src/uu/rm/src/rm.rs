@@ -564,8 +564,8 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
 #[cfg(windows)]
 fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata) -> bool {
     use std::os::windows::prelude::MetadataExt;
-    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_READONLY;
-    let not_user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY) != 0;
+    use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_READONLY;
+    let not_user_writable = (metadata.file_attributes() & FILE_ATTRIBUTE_READONLY.0) != 0;
     if not_user_writable {
         prompt_yes!("remove write-protected directory {}?", path.quote())
     } else if options.interactive == InteractiveMode::Always {
@@ -606,8 +606,8 @@ fn is_symlink_dir(_metadata: &Metadata) -> bool {
 #[cfg(windows)]
 fn is_symlink_dir(metadata: &Metadata) -> bool {
     use std::os::windows::prelude::MetadataExt;
-    use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
+    use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
 
     metadata.file_type().is_symlink()
-        && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY) != 0)
+        && ((metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY.0) != 0)
 }

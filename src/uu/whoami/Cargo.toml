@@ -19,7 +19,7 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["entries"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace = true, features = [
+windows = { workspace = true, features = [
   "Win32_NetworkManagement_NetManagement",
   "Win32_System_WindowsProgramming",
   "Win32_Foundation",

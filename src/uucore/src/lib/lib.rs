@@ -7,8 +7,8 @@
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
 pub extern crate libc;
-#[cfg(all(feature = "windows-sys", target_os = "windows"))]
-pub extern crate windows_sys;
+#[cfg(all(feature = "windows", target_os = "windows"))]
+pub extern crate windows;
 
 //## internal modules
 

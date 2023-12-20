@@ -32,10 +32,10 @@ use uucore::parse_glob;
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_warning};
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::HANDLE;
+use windows::Win32::Foundation::HANDLE;
 #[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::{
-    FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_128, FILE_ID_INFO,
+use windows::Win32::Storage::FileSystem::{
+    FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_INFO,
     FILE_STANDARD_INFO,
 };
 
@@ -230,14 +230,14 @@ fn get_size_on_disk(path: &Path) -> u64 {
         let mut file_info: FILE_STANDARD_INFO = core::mem::zeroed();
         let file_info_ptr: *mut FILE_STANDARD_INFO = &mut file_info;
 
-        let success = GetFileInformationByHandleEx(
-            file.as_raw_handle() as HANDLE,
+        let result = GetFileInformationByHandleEx(
+            HANDLE(file.as_raw_handle() as isize),
             FileStandardInfo,
             file_info_ptr as _,
             std::mem::size_of::<FILE_STANDARD_INFO>() as u32,
         );
 
-        if success != 0 {
+        if result.is_ok() {
             size_on_disk = file_info.AllocationSize as u64;
         }
     }
@@ -247,33 +247,26 @@ fn get_size_on_disk(path: &Path) -> u64 {
 
 #[cfg(windows)]
 fn get_file_info(path: &Path) -> Option<FileInfo> {
-    let mut result = None;
+    let file = fs::File::open(path).ok()?;
 
-    let file = match fs::File::open(path) {
-        Ok(file) => file,
-        Err(_) => return result,
-    };
-
+    let mut file_info = FILE_ID_INFO::default();
+    let file_info_ptr: *mut FILE_ID_INFO = &mut file_info;
     unsafe {
-        let mut file_info: FILE_ID_INFO = core::mem::zeroed();
-        let file_info_ptr: *mut FILE_ID_INFO = &mut file_info;
-
-        let success = GetFileInformationByHandleEx(
-            file.as_raw_handle() as HANDLE,
+        GetFileInformationByHandleEx(
+            HANDLE(file.as_raw_handle() as isize),
             FileIdInfo,
             file_info_ptr as _,
             std::mem::size_of::<FILE_ID_INFO>() as u32,
-        );
+        ).ok()?
+    };
 
-        if success != 0 {
-            result = Some(FileInfo {
-                file_id: std::mem::transmute::<FILE_ID_128, u128>(file_info.FileId),
-                dev_id: file_info.VolumeSerialNumber,
-            });
-        }
-    }
-
-    result
+    // `from_le_bytes` won't be correct on all systems. However, we only care
+    // whether the value is unique for all files since it's only used to put
+    // the `FileInfo` in a `HashSet`.
+    Some(FileInfo {
+        file_id: u128::from_le_bytes(file_info.FileId.Identifier),
+        dev_id: file_info.VolumeSerialNumber,
+    })
 }
 
 fn read_block_size(s: Option<&str>) -> UResult<u64> {

@@ -25,7 +25,7 @@ same-file = { workspace = true }
 fundu = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = [
+windows = { workspace = true, features = [
   "Win32_System_Threading",
   "Win32_Foundation",
 ] }

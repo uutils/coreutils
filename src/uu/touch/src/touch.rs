@@ -454,15 +454,13 @@ fn pathbuf_from_stdout() -> UResult<PathBuf> {
     #[cfg(windows)]
     {
         use std::os::windows::prelude::AsRawHandle;
-        use windows_sys::Win32::Foundation::{
+        use windows::Win32::Foundation::{
             GetLastError, ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND,
-            HANDLE, MAX_PATH,
+            HANDLE, MAX_PATH, WIN32_ERROR,
         };
-        use windows_sys::Win32::Storage::FileSystem::{
-            GetFinalPathNameByHandleW, FILE_NAME_OPENED,
-        };
+        use windows::Win32::Storage::FileSystem::{GetFinalPathNameByHandleW, FILE_NAME_OPENED};
 
-        let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
+        let handle = HANDLE(std::io::stdout().lock().as_raw_handle() as isize);
         let mut file_path_buffer: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
 
         // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlea#examples
@@ -473,34 +471,30 @@ fn pathbuf_from_stdout() -> UResult<PathBuf> {
         // the buffer size is correct. We know the buffer size (MAX_PATH) at
         // compile time. MAX_PATH is a small number (260) so we can cast it
         // to a u32.
-        let ret = unsafe {
-            GetFinalPathNameByHandleW(
-                handle,
-                file_path_buffer.as_mut_ptr(),
-                file_path_buffer.len() as u32,
-                FILE_NAME_OPENED,
-            )
-        };
+        let ret =
+            unsafe { GetFinalPathNameByHandleW(handle, &mut file_path_buffer, FILE_NAME_OPENED) };
 
-        let buffer_size = match ret {
-            ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("GetFinalPathNameByHandleW failed with code {ret}"),
-                ))
-            }
-            0 => {
-                return Err(USimpleError::new(
-                    1,
-                    format!(
-                        "GetFinalPathNameByHandleW failed with code {}",
-                        // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
-                        unsafe { GetLastError() }
-                    ),
-                ));
-            }
-            e => e as usize,
-        };
+        if let ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER =
+            WIN32_ERROR(ret)
+        {
+            return Err(USimpleError::new(
+                1,
+                format!("GetFinalPathNameByHandleW failed with code {ret}"),
+            ));
+        }
+
+        if ret == 0 {
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "GetFinalPathNameByHandleW failed with code {}",
+                    // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
+                    unsafe { GetLastError() }.unwrap_err()
+                ),
+            ));
+        }
+
+        let buffer_size = ret as usize;
 
         // Don't include the null terminator
         Ok(String::from_utf16(&file_path_buffer[0..buffer_size])

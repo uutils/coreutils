@@ -73,26 +73,27 @@ mod platform {
     use std::path::Path;
     use uucore::crash;
     use uucore::wide::{FromWide, ToWide};
-    use windows_sys::Win32::Foundation::{
-        GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
+    use windows::Win32::Foundation::{
+        ERROR_NO_MORE_FILES, HANDLE, MAX_PATH,
     };
-    use windows_sys::Win32::Storage::FileSystem::{
+    use windows::Win32::Storage::FileSystem::{
         FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, FlushFileBuffers, GetDriveTypeW,
     };
-    use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
+    use windows::Win32::System::WindowsProgramming::DRIVE_FIXED;
+    use windows::core::{PCWSTR, Error};
 
     unsafe fn flush_volume(name: &str) {
         let name_wide = name.to_wide_null();
-        if GetDriveTypeW(name_wide.as_ptr()) == DRIVE_FIXED {
+        if GetDriveTypeW(PCWSTR::from_raw(name_wide.as_ptr())) == DRIVE_FIXED {
             let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
-                    if FlushFileBuffers(file.as_raw_handle() as HANDLE) == 0 {
-                        crash!(GetLastError() as i32, "failed to flush file buffer");
+                    if FlushFileBuffers(HANDLE(file.as_raw_handle() as isize)).is_err() {
+                        crash!(1, "failed to flush file buffer");
                     }
                 }
-                Err(e) => crash!(
-                    e.raw_os_error().unwrap_or(1),
+                Err(_) => crash!(
+                    1,
                     "failed to create volume handle"
                 ),
             }
@@ -101,10 +102,9 @@ mod platform {
 
     unsafe fn find_first_volume() -> (String, HANDLE) {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
-        let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
-        if handle == INVALID_HANDLE_VALUE {
-            crash!(GetLastError() as i32, "failed to find first volume");
-        }
+        let Ok(handle) = FindFirstVolumeW(&mut name) else {
+            crash!(1, "failed to find first volume");
+        };
         (String::from_wide_null(&name), handle)
     }
 
@@ -113,13 +113,12 @@ mod platform {
         let mut volumes = vec![first_volume];
         loop {
             let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
-            if FindNextVolumeW(next_volume_handle, name.as_mut_ptr(), name.len() as u32) == 0 {
-                match GetLastError() {
-                    ERROR_NO_MORE_FILES => {
-                        FindVolumeClose(next_volume_handle);
-                        return volumes;
-                    }
-                    err => crash!(err as i32, "failed to find next volume"),
+            if let Err(e) = FindNextVolumeW(next_volume_handle, &mut name) {
+                if e == Error::from(ERROR_NO_MORE_FILES) {
+                    let _ = FindVolumeClose(next_volume_handle);
+                    return volumes;
+                } else {
+                    crash!(1, "failed to find next volume");
                 }
             } else {
                 volumes.push(String::from_wide_null(&name));
