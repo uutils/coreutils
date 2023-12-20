@@ -275,6 +275,7 @@ pub fn uu_app() -> Command {
         .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::INITIAL)
                 .long(options::INITIAL)
