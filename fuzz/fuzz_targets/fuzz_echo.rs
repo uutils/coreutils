@@ -78,6 +78,7 @@ fuzz_target!(|_data: &[u8]| {
     compare_result(
         "echo",
         &format!("{:?}", &args[1..]),
+        None,
         &rust_result,
         &gnu_result,
         true,

@@ -99,6 +99,7 @@ fuzz_target!(|_data: &[u8]| {
     compare_result(
         "printf",
         &format!("{:?}", &args[1..]),
+        None,
         &rust_result,
         &gnu_result,
         false, // Set to true if you want to fail on stderr diff

@@ -293,12 +293,16 @@ pub fn run_gnu_cmd(
 pub fn compare_result(
     test_type: &str,
     input: &str,
+    pipe_input: Option<&str>,
     rust_result: &CommandResult,
     gnu_result: &CommandResult,
     fail_on_stderr_diff: bool,
 ) {
     println!("Test Type: {}", test_type);
     println!("Input: {}", input);
+    if let Some(pipe) = pipe_input {
+        println!("Pipe: {}", pipe);
+    }
 
     let mut discrepancies = Vec::new();
     let mut should_panic = false;
