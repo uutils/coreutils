@@ -9,13 +9,9 @@ use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::ffi::OsString;
 use std::io;
-use std::io::Seek;
-use std::io::SeekFrom;
-use std::io::Write;
-use std::os::fd::AsRawFd;
-use std::os::fd::RawFd;
-use std::process::Command;
-use std::process::Stdio;
+use std::io::{Seek, SeekFrom, Write};
+use std::os::fd::{AsRawFd, RawFd};
+use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicBool, Once};
 
@@ -67,8 +63,8 @@ where
     let original_stderr_fd = unsafe { dup(STDERR_FILENO) };
     if original_stdout_fd == -1 || original_stderr_fd == -1 {
         return CommandResult {
-            stdout: "Failed to duplicate STDOUT_FILENO or STDERR_FILENO".to_string(),
-            stderr: "".to_string(),
+            stdout: "".to_string(),
+            stderr: "Failed to duplicate STDOUT_FILENO or STDERR_FILENO".to_string(),
             exit_code: -1,
         };
     }
@@ -81,8 +77,8 @@ where
         || unsafe { pipe(pipe_stderr_fds.as_mut_ptr()) } == -1
     {
         return CommandResult {
-            stdout: "Failed to create pipes".to_string(),
-            stderr: "".to_string(),
+            stdout: "".to_string(),
+            stderr: "Failed to create pipes".to_string(),
             exit_code: -1,
         };
     }
@@ -98,8 +94,8 @@ where
             close(pipe_stderr_fds[1]);
         }
         return CommandResult {
-            stdout: "Failed to redirect STDOUT_FILENO or STDERR_FILENO".to_string(),
-            stderr: "".to_string(),
+            stdout: "".to_string(),
+            stderr: "Failed to redirect STDOUT_FILENO or STDERR_FILENO".to_string(),
             exit_code: -1,
         };
     }
@@ -114,8 +110,8 @@ where
         let original_stdin_fd = unsafe { dup(STDIN_FILENO) };
         if original_stdin_fd == -1 || unsafe { dup2(input_file.as_raw_fd(), STDIN_FILENO) } == -1 {
             return CommandResult {
-                stdout: "Failed to set up stdin redirection".to_string(),
-                stderr: "".to_string(),
+                stdout: "".to_string(),
+                stderr: "Failed to set up stdin redirection".to_string(),
                 exit_code: -1,
             };
         }
@@ -134,8 +130,8 @@ where
         || unsafe { dup2(original_stderr_fd, STDERR_FILENO) } == -1
     {
         return CommandResult {
-            stdout: "Failed to restore the original STDOUT_FILENO or STDERR_FILENO".to_string(),
-            stderr: "".to_string(),
+            stdout: "".to_string(),
+            stderr: "Failed to restore the original STDOUT_FILENO or STDERR_FILENO".to_string(),
             exit_code: -1,
         };
     }
@@ -151,8 +147,8 @@ where
     if let Some(fd) = original_stdin_fd {
         if unsafe { dup2(fd, STDIN_FILENO) } == -1 {
             return CommandResult {
-                stdout: "Failed to restore the original STDIN".to_string(),
-                stderr: "".to_string(),
+                stdout: "".to_string(),
+                stderr: "Failed to restore the original STDIN".to_string(),
                 exit_code: -1,
             };
         }
