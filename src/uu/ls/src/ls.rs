@@ -810,10 +810,6 @@ impl Config {
             || options.get_flag(options::size::HUMAN_READABLE);
         let opt_kb = options.get_flag(options::size::KIBIBYTES);
 
-        let env_var_block_size = std::env::var_os("BLOCK_SIZE");
-        let env_var_ls_block_size = std::env::var_os("LS_BLOCK_SIZE");
-        let env_var_posixly_correct = std::env::var_os("POSIXLY_CORRECT");
-
         let size_format = if opt_si {
             SizeFormat::Decimal
         } else if opt_hr {
@@ -822,6 +818,11 @@ impl Config {
             SizeFormat::Bytes
         };
 
+        let env_var_blocksize = std::env::var_os("BLOCKSIZE");
+        let env_var_block_size = std::env::var_os("BLOCK_SIZE");
+        let env_var_ls_block_size = std::env::var_os("LS_BLOCK_SIZE");
+        let env_var_posixly_correct = std::env::var_os("POSIXLY_CORRECT");
+
         let raw_block_size = if let Some(opt_block_size) = opt_block_size {
             OsString::from(opt_block_size)
         } else if !opt_kb {
@@ -829,6 +830,8 @@ impl Config {
                 env_var_ls_block_size
             } else if let Some(env_var_block_size) = env_var_block_size {
                 env_var_block_size
+            } else if let Some(env_var_blocksize) = env_var_blocksize {
+                env_var_blocksize
             } else {
                 OsString::from("")
             }
