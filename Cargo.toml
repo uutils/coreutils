@@ -315,7 +315,7 @@ regex = "1.10.2"
 rstest = "0.18.2"
 rust-ini = "0.19.0"
 same-file = "1.0.6"
-self_cell = "1.0.2"
+self_cell = "1.0.3"
 selinux = "0.4"
 signal-hook = "0.3.17"
 smallvec = { version = "1.11", features = ["union"] }
