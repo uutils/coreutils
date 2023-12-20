@@ -1280,6 +1280,7 @@ pub fn uu_app() -> Command {
         .infer_long_args(true)
         .disable_help_flag(true)
         .disable_version_flag(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
