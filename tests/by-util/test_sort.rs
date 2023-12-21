@@ -1184,8 +1184,5 @@ fn test_same_sort_mode_twice() {
 
 #[test]
 fn test_args_override() {
-    new_ucmd!()
-        .args(&["-f", "-f"])
-        .pipe_in("foo")
-        .succeeds();
+    new_ucmd!().args(&["-f", "-f"]).pipe_in("foo").succeeds();
 }
