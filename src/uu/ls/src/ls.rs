@@ -2480,14 +2480,10 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         match config.size_format {
             SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
             SizeFormat::Bytes => {
-                if cfg!(unix) {
-                    if let Some(user_block_size) = config.block_size {
-                        raw_blocks / user_block_size
-                    } else {
-                        raw_blocks / DEFAULT_BLOCK_SIZE
-                    }
+                if let Some(user_block_size) = config.block_size {
+                    raw_blocks / user_block_size
                 } else {
-                    raw_blocks
+                    raw_blocks / DEFAULT_BLOCK_SIZE
                 }
             }
         }
