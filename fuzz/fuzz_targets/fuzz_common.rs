@@ -3,14 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use libc::STDIN_FILENO;
 use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
 use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::ffi::OsString;
 use std::io;
-use std::io::Write;
-use std::os::fd::RawFd;
-use std::process::Command;
+use std::io::{Seek, SeekFrom, Write};
+use std::os::fd::{AsRawFd, RawFd};
+use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicBool, Once};
 
@@ -49,7 +50,11 @@ pub fn is_gnu_cmd(cmd_path: &str) -> Result<(), std::io::Error> {
     }
 }
 
-pub fn generate_and_run_uumain<F>(args: &[OsString], uumain_function: F) -> CommandResult
+pub fn generate_and_run_uumain<F>(
+    args: &[OsString],
+    uumain_function: F,
+    pipe_input: Option<&str>,
+) -> CommandResult
 where
     F: FnOnce(std::vec::IntoIter<OsString>) -> i32,
 {
@@ -58,8 +63,8 @@ where
     let original_stderr_fd = unsafe { dup(STDERR_FILENO) };
     if original_stdout_fd == -1 || original_stderr_fd == -1 {
         return CommandResult {
-            stdout: "Failed to duplicate STDOUT_FILENO or STDERR_FILENO".to_string(),
-            stderr: "".to_string(),
+            stdout: "".to_string(),
+            stderr: "Failed to duplicate STDOUT_FILENO or STDERR_FILENO".to_string(),
             exit_code: -1,
         };
     }
@@ -72,8 +77,8 @@ where
         || unsafe { pipe(pipe_stderr_fds.as_mut_ptr()) } == -1
     {
         return CommandResult {
-            stdout: "Failed to create pipes".to_string(),
-            stderr: "".to_string(),
+            stdout: "".to_string(),
+            stderr: "Failed to create pipes".to_string(),
             exit_code: -1,
         };
     }
@@ -89,11 +94,31 @@ where
             close(pipe_stderr_fds[1]);
         }
         return CommandResult {
-            stdout: "Failed to redirect STDOUT_FILENO or STDERR_FILENO".to_string(),
-            stderr: "".to_string(),
+            stdout: "".to_string(),
+            stderr: "Failed to redirect STDOUT_FILENO or STDERR_FILENO".to_string(),
             exit_code: -1,
         };
     }
+
+    let original_stdin_fd = if let Some(input_str) = pipe_input {
+        // we have pipe input
+        let mut input_file = tempfile::tempfile().unwrap();
+        write!(input_file, "{}", input_str).unwrap();
+        input_file.seek(SeekFrom::Start(0)).unwrap();
+
+        // Redirect stdin to read from the in-memory file
+        let original_stdin_fd = unsafe { dup(STDIN_FILENO) };
+        if original_stdin_fd == -1 || unsafe { dup2(input_file.as_raw_fd(), STDIN_FILENO) } == -1 {
+            return CommandResult {
+                stdout: "".to_string(),
+                stderr: "Failed to set up stdin redirection".to_string(),
+                exit_code: -1,
+            };
+        }
+        Some(original_stdin_fd)
+    } else {
+        None
+    };
 
     let uumain_exit_status = uumain_function(args.to_owned().into_iter());
 
@@ -105,8 +130,8 @@ where
         || unsafe { dup2(original_stderr_fd, STDERR_FILENO) } == -1
     {
         return CommandResult {
-            stdout: "Failed to restore the original STDOUT_FILENO or STDERR_FILENO".to_string(),
-            stderr: "".to_string(),
+            stdout: "".to_string(),
+            stderr: "Failed to restore the original STDOUT_FILENO or STDERR_FILENO".to_string(),
             exit_code: -1,
         };
     }
@@ -116,6 +141,18 @@ where
 
         close(pipe_stdout_fds[1]);
         close(pipe_stderr_fds[1]);
+    }
+
+    // Restore the original stdin if it was modified
+    if let Some(fd) = original_stdin_fd {
+        if unsafe { dup2(fd, STDIN_FILENO) } == -1 {
+            return CommandResult {
+                stdout: "".to_string(),
+                stderr: "Failed to restore the original STDIN".to_string(),
+                exit_code: -1,
+            };
+        }
+        unsafe { close(fd) };
     }
 
     let captured_stdout = read_from_fd(pipe_stdout_fds[0]).trim().to_string();
@@ -165,6 +202,7 @@ pub fn run_gnu_cmd(
     cmd_path: &str,
     args: &[OsString],
     check_gnu: bool,
+    pipe_input: Option<&str>,
 ) -> Result<CommandResult, CommandResult> {
     if check_gnu {
         match is_gnu_cmd(cmd_path) {
@@ -185,18 +223,40 @@ pub fn run_gnu_cmd(
         command.arg(arg);
     }
 
-    let output = match command.output() {
-        Ok(output) => output,
-        Err(e) => {
-            return Err(CommandResult {
-                stdout: String::new(),
-                stderr: e.to_string(),
-                exit_code: -1,
-            });
+    let output = if let Some(input_str) = pipe_input {
+        // We have an pipe input
+        command.stdin(Stdio::piped()).stdout(Stdio::piped());
+
+        let mut child = command.spawn().expect("Failed to execute command");
+        let child_stdin = child.stdin.as_mut().unwrap();
+        child_stdin
+            .write_all(input_str.as_bytes())
+            .expect("Failed to write to stdin");
+
+        match child.wait_with_output() {
+            Ok(output) => output,
+            Err(e) => {
+                return Err(CommandResult {
+                    stdout: String::new(),
+                    stderr: e.to_string(),
+                    exit_code: -1,
+                });
+            }
+        }
+    } else {
+        // Just run with args
+        match command.output() {
+            Ok(output) => output,
+            Err(e) => {
+                return Err(CommandResult {
+                    stdout: String::new(),
+                    stderr: e.to_string(),
+                    exit_code: -1,
+                });
+            }
         }
     };
     let exit_code = output.status.code().unwrap_or(-1);
-
     // Here we get stdout and stderr as Strings
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -233,12 +293,16 @@ pub fn run_gnu_cmd(
 pub fn compare_result(
     test_type: &str,
     input: &str,
+    pipe_input: Option<&str>,
     rust_result: &CommandResult,
     gnu_result: &CommandResult,
     fail_on_stderr_diff: bool,
 ) {
     println!("Test Type: {}", test_type);
     println!("Input: {}", input);
+    if let Some(pipe) = pipe_input {
+        println!("Pipe: {}", pipe);
+    }
 
     let mut discrepancies = Vec::new();
     let mut should_panic = false;
