@@ -23,7 +23,7 @@ uucore = { workspace = true, features = ["fs"] }
 libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
+windows = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 
 [[bin]]
 name = "rm"

@@ -25,7 +25,7 @@ parse_datetime = { workspace = true }
 libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = [
+windows = { workspace = true, features = [
   "Win32_Foundation",
   "Win32_System_SystemInformation",
 ] }

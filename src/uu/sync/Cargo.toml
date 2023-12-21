@@ -23,7 +23,7 @@ uucore = { workspace = true, features = ["wide"] }
 nix = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { workspace = true, features = [
+windows = { workspace = true, features = [
   "Win32_Storage_FileSystem",
   "Win32_System_WindowsProgramming",
   "Win32_Foundation",

@@ -5,49 +5,45 @@
 
 //! Set of functions to manage file systems
 
-// spell-checker:ignore DATETIME getmntinfo subsecond (arch) bitrig ; (fs) cifs smbfs
+// spell-checker:ignore DATETIME getmntinfo subsecond (arch) bitrig ; (fs) cifs smbfs HSTRING
 
 use time::macros::format_description;
 use time::UtcOffset;
-
-pub use crate::*; // import macros from `../../macros.rs`
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
+#[cfg(unix)]
 static MOUNT_OPT_BIND: &str = "bind";
+
 #[cfg(windows)]
 const MAX_PATH: usize = 266;
-#[cfg(not(unix))]
+#[cfg(windows)]
 static EXIT_ERR: i32 = 1;
 
+#[cfg(any(
+    windows,
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use crate::crash;
 #[cfg(windows)]
-use std::ffi::OsStr;
-#[cfg(windows)]
-use std::os::windows::ffi::OsStrExt;
-#[cfg(windows)]
-use windows_sys::Win32::Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE};
-#[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::{
-    FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
-    GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
-};
-#[cfg(windows)]
-use windows_sys::Win32::System::WindowsProgramming::DRIVE_REMOTE;
+use crate::show_warning;
 
-// Warning: the pointer has to be used *immediately* or the Vec
-// it points to will be dropped!
 #[cfg(windows)]
-macro_rules! String2LPWSTR {
-    ($str: expr) => {
-        OsStr::new(&$str)
-            .encode_wide()
-            .chain(Some(0))
-            .collect::<Vec<u16>>()
-            .as_ptr()
-    };
-}
+use windows::core::HSTRING;
+#[cfg(windows)]
+use windows::Win32::{
+    Foundation::ERROR_NO_MORE_FILES,
+    Storage::FileSystem::{
+        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
+        GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+    },
+    System::WindowsProgramming::DRIVE_REMOTE,
+};
 
 #[cfg(windows)]
 #[allow(non_snake_case)]
@@ -61,25 +57,15 @@ use libc::{
     mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
 };
 use std::borrow::Cow;
-use std::convert::{AsRef, From};
-#[cfg(any(
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "linux",
-    target_os = "android",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_os = "redox",
-))]
+use std::convert::From;
+#[cfg(unix)]
 use std::ffi::CStr;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::ffi::CString;
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
-#[cfg(not(unix))]
+#[cfg(windows)]
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
@@ -145,63 +131,27 @@ impl BirthTime for Metadata {
 
 #[derive(Debug, Clone)]
 pub struct MountInfo {
-    // it stores `volume_name` in windows platform and `dev_id` in unix platform
+    /// Stores `volume_name` in windows platform and `dev_id` in unix platform
     pub dev_id: String,
     pub dev_name: String,
     pub fs_type: String,
-    pub mount_dir: String,
-    pub mount_option: String, // we only care "bind" option
     pub mount_root: String,
+    pub mount_dir: String,
+    /// We only care whether this field contains "bind"
+    pub mount_option: String,
     pub remote: bool,
     pub dummy: bool,
 }
 
 impl MountInfo {
-    fn set_missing_fields(&mut self) {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            // We want to keep the dev_id on Windows
-            // but set dev_id
-            if let Ok(stat) = std::fs::metadata(&self.mount_dir) {
-                // Why do we cast this to i32?
-                self.dev_id = (stat.dev() as i32).to_string();
-            } else {
-                self.dev_id = String::new();
-            }
-        }
-        // set MountInfo::dummy
-        // spell-checker:disable
-        match self.fs_type.as_ref() {
-            "autofs" | "proc" | "subfs"
-            /* for Linux 2.6/3.x */
-            | "debugfs" | "devpts" | "fusectl" | "mqueue" | "rpc_pipefs" | "sysfs"
-            /* FreeBSD, Linux 2.4 */
-            | "devfs"
-            /* for NetBSD 3.0 */
-            | "kernfs"
-            /* for Irix 6.5 */
-            | "ignore" => self.dummy = true,
-            _ => self.dummy = self.fs_type == "none"
-                && !self.mount_option.contains(MOUNT_OPT_BIND)
-        }
-        // spell-checker:enable
-        // set MountInfo::remote
-        #[cfg(windows)]
-        {
-            self.remote = DRIVE_REMOTE == unsafe { GetDriveTypeW(String2LPWSTR!(self.mount_root)) };
-        }
-        #[cfg(unix)]
-        {
-            self.remote = self.dev_name.find(':').is_some()
-                || (self.dev_name.starts_with("//") && self.fs_type == "smbfs"
-                    || self.fs_type == "cifs")
-                || self.dev_name == "-hosts";
-        }
-    }
-
     #[cfg(any(target_os = "linux", target_os = "android"))]
     fn new(file_name: &str, raw: &[&str]) -> Option<Self> {
+        let dev_name;
+        let fs_type;
+        let mount_root;
+        let mount_dir;
+        let mount_option;
+
         match file_name {
             // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
@@ -211,100 +161,87 @@ impl MountInfo {
                 let after_fields = raw[FIELDS_OFFSET..].iter().position(|c| *c == "-").unwrap()
                     + FIELDS_OFFSET
                     + 1;
-                let mut m = Self {
-                    dev_id: String::new(),
-                    dev_name: raw[after_fields + 1].to_string(),
-                    fs_type: raw[after_fields].to_string(),
-                    mount_root: raw[3].to_string(),
-                    mount_dir: raw[4].to_string(),
-                    mount_option: raw[5].to_string(),
-                    remote: false,
-                    dummy: false,
-                };
-                m.set_missing_fields();
-                Some(m)
+                dev_name = raw[after_fields + 1].to_string();
+                fs_type = raw[after_fields].to_string();
+                mount_root = raw[3].to_string();
+                mount_dir = raw[4].to_string();
+                mount_option = raw[5].to_string();
             }
             LINUX_MTAB => {
-                let mut m = Self {
-                    dev_id: String::new(),
-                    dev_name: raw[0].to_string(),
-                    fs_type: raw[2].to_string(),
-                    mount_root: String::new(),
-                    mount_dir: raw[1].to_string(),
-                    mount_option: raw[3].to_string(),
-                    remote: false,
-                    dummy: false,
-                };
-                m.set_missing_fields();
-                Some(m)
+                dev_name = raw[0].to_string();
+                fs_type = raw[2].to_string();
+                mount_root = String::new();
+                mount_dir = raw[1].to_string();
+                mount_option = raw[3].to_string();
             }
-            _ => None,
-        }
+            _ => return None,
+        };
+
+        let dev_id = mount_dev_id(&mount_dir);
+        let dummy = is_dummy_filesystem(&fs_type, &mount_option);
+        let remote = is_remote_filesystem(&dev_name, &fs_type);
+
+        Some(Self {
+            dev_id,
+            dev_name,
+            fs_type,
+            mount_dir,
+            mount_option,
+            mount_root,
+            remote,
+            dummy,
+        })
     }
+
     #[cfg(windows)]
     fn new(mut volume_name: String) -> Option<Self> {
         let mut dev_name_buf = [0u16; MAX_PATH];
         volume_name.pop();
-        unsafe {
-            QueryDosDeviceW(
-                OsStr::new(&volume_name)
-                    .encode_wide()
-                    .chain(Some(0))
-                    .skip(4)
-                    .collect::<Vec<u16>>()
-                    .as_ptr(),
-                dev_name_buf.as_mut_ptr(),
-                dev_name_buf.len() as u32,
-            )
-        };
+        unsafe { QueryDosDeviceW(&HSTRING::from(&volume_name), Some(&mut dev_name_buf)) };
         volume_name.push('\\');
         let dev_name = LPWSTR2String(&dev_name_buf);
 
         let mut mount_root_buf = [0u16; MAX_PATH];
-        let success = unsafe {
+        let result = unsafe {
             GetVolumePathNamesForVolumeNameW(
-                String2LPWSTR!(volume_name),
-                mount_root_buf.as_mut_ptr(),
-                mount_root_buf.len() as u32,
+                &HSTRING::from(&volume_name),
+                Some(&mut mount_root_buf),
                 ptr::null_mut(),
             )
         };
-        if 0 == success {
+        if result.is_err() {
             // TODO: support the case when `GetLastError()` returns `ERROR_MORE_DATA`
             return None;
         }
         let mount_root = LPWSTR2String(&mount_root_buf);
 
         let mut fs_type_buf = [0u16; MAX_PATH];
-        let success = unsafe {
+        let result = unsafe {
             GetVolumeInformationW(
-                String2LPWSTR!(mount_root),
-                ptr::null_mut(),
-                0,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-                fs_type_buf.as_mut_ptr(),
-                fs_type_buf.len() as u32,
+                &HSTRING::from(&mount_root),
+                None,
+                None,
+                None,
+                None,
+                Some(&mut fs_type_buf),
             )
         };
-        let fs_type = if 0 == success {
+        let fs_type = if result.is_err() {
             None
         } else {
             Some(LPWSTR2String(&fs_type_buf))
         };
-        let mut mn_info = Self {
+        let remote = DRIVE_REMOTE == unsafe { GetDriveTypeW(&HSTRING::from(&mount_root)) };
+        Some(Self {
             dev_id: volume_name,
             dev_name,
             fs_type: fs_type.unwrap_or_default(),
             mount_root,
             mount_dir: String::new(),
             mount_option: String::new(),
-            remote: false,
+            remote,
             dummy: false,
-        };
-        mn_info.set_missing_fields();
-        Some(mn_info)
+        })
     }
 }
 
@@ -316,33 +253,77 @@ impl MountInfo {
 ))]
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
-        let mut info = Self {
-            dev_id: String::new(),
-            dev_name: unsafe {
-                // spell-checker:disable-next-line
-                CStr::from_ptr(&statfs.f_mntfromname[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
-            fs_type: unsafe {
-                // spell-checker:disable-next-line
-                CStr::from_ptr(&statfs.f_fstypename[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
-            mount_dir: unsafe {
-                // spell-checker:disable-next-line
-                CStr::from_ptr(&statfs.f_mntonname[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
+        let dev_name = unsafe {
+            // spell-checker:disable-next-line
+            CStr::from_ptr(&statfs.f_mntfromname[0])
+                .to_string_lossy()
+                .into_owned()
+        };
+        let fs_type = unsafe {
+            // spell-checker:disable-next-line
+            CStr::from_ptr(&statfs.f_fstypename[0])
+                .to_string_lossy()
+                .into_owned()
+        };
+        let mount_dir = unsafe {
+            // spell-checker:disable-next-line
+            CStr::from_ptr(&statfs.f_mntonname[0])
+                .to_string_lossy()
+                .into_owned()
+        };
+
+        let dev_id = mount_dev_id(&mount_dir);
+        let dummy = is_dummy_filesystem(&fs_type, "");
+        let remote = is_remote_filesystem(&dev_name, &fs_type);
+
+        Self {
+            dev_id,
+            dev_name,
+            fs_type,
+            mount_dir,
             mount_root: String::new(),
             mount_option: String::new(),
-            remote: false,
-            dummy: false,
-        };
-        info.set_missing_fields();
-        info
+            remote,
+            dummy,
+        }
+    }
+}
+
+#[cfg(unix)]
+fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
+    // spell-checker:disable
+    match fs_type {
+        "autofs" | "proc" | "subfs"
+        // for Linux 2.6/3.x
+        | "debugfs" | "devpts" | "fusectl" | "mqueue" | "rpc_pipefs" | "sysfs"
+        // FreeBSD, Linux 2.4
+        | "devfs"
+        // for NetBSD 3.0
+        | "kernfs"
+        // for Irix 6.5
+        | "ignore" => true,
+        _ => fs_type == "none"
+            && !mount_option.contains(MOUNT_OPT_BIND)
+    }
+    // spell-checker:enable
+}
+
+#[cfg(unix)]
+fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
+    dev_name.find(':').is_some()
+        || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
+        || dev_name == "-hosts"
+}
+
+#[cfg(unix)]
+fn mount_dev_id(mount_dir: &str) -> String {
+    use std::os::unix::fs::MetadataExt;
+
+    if let Ok(stat) = std::fs::metadata(mount_dir) {
+        // Why do we cast this to i32?
+        (stat.dev() as i32).to_string()
+    } else {
+        String::new()
     }
 }
 
@@ -438,15 +419,11 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
     {
         let mut volume_name_buf = [0u16; MAX_PATH];
         // As recommended in the MS documentation, retrieve the first volume before the others
-        let find_handle =
-            unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
-        if INVALID_HANDLE_VALUE == find_handle {
-            crash!(
-                EXIT_ERR,
-                "FindFirstVolumeW failed: {}",
-                IOError::last_os_error()
-            );
-        }
+        let result = unsafe { FindFirstVolumeW(&mut volume_name_buf) };
+        let find_handle = match result {
+            Ok(h) => h,
+            Err(err) => crash!(EXIT_ERR, "FindFirstVolumeW failed: {}", err),
+        };
         let mut mounts = Vec::<MountInfo>::new();
         loop {
             let volume_name = LPWSTR2String(&volume_name_buf);
@@ -457,22 +434,15 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
             if let Some(m) = MountInfo::new(volume_name) {
                 mounts.push(m);
             }
-            if 0 == unsafe {
-                FindNextVolumeW(
-                    find_handle,
-                    volume_name_buf.as_mut_ptr(),
-                    volume_name_buf.len() as u32,
-                )
-            } {
-                let err = IOError::last_os_error();
-                if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
+            if let Err(err) = unsafe { FindNextVolumeW(find_handle, &mut volume_name_buf) } {
+                if err != ERROR_NO_MORE_FILES.into() {
                     crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
                 }
                 break;
             }
         }
         unsafe {
-            FindVolumeClose(find_handle);
+            let _ = FindVolumeClose(find_handle);
         }
         Ok(mounts)
     }
@@ -552,19 +522,17 @@ impl FsUsage {
             };
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     pub fn new(path: &Path) -> Self {
         let mut root_path = [0u16; MAX_PATH];
-        let success = unsafe {
+        let result = unsafe {
             GetVolumePathNamesForVolumeNameW(
-                //path_utf8.as_ptr(),
-                String2LPWSTR!(path.as_os_str()),
-                root_path.as_mut_ptr(),
-                root_path.len() as u32,
+                &HSTRING::from(path),
+                Some(&mut root_path),
                 ptr::null_mut(),
             )
         };
-        if 0 == success {
+        if result.is_err() {
             crash!(
                 EXIT_ERR,
                 "GetVolumePathNamesForVolumeNameW failed: {}",
@@ -577,16 +545,16 @@ impl FsUsage {
         let mut number_of_free_clusters = 0;
         let mut total_number_of_clusters = 0;
 
-        let success = unsafe {
+        let result = unsafe {
             GetDiskFreeSpaceW(
-                String2LPWSTR!(path.as_os_str()),
-                &mut sectors_per_cluster,
-                &mut bytes_per_sector,
-                &mut number_of_free_clusters,
-                &mut total_number_of_clusters,
+                &HSTRING::from(path),
+                Some(&mut sectors_per_cluster),
+                Some(&mut bytes_per_sector),
+                Some(&mut number_of_free_clusters),
+                Some(&mut total_number_of_clusters),
             )
         };
-        if 0 == success {
+        if result.is_err() {
             // Fails in case of CD for example
             // crash!(
             //     EXIT_ERR,

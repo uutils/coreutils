@@ -78,14 +78,16 @@ impl FileInformation {
         {
             use std::fs::OpenOptions;
             use std::os::windows::prelude::*;
+            use windows::Win32::Storage::FileSystem::{
+                FILE_FLAGS_AND_ATTRIBUTES, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+            };
             let mut open_options = OpenOptions::new();
-            let mut custom_flags = 0;
+            let mut custom_flags = FILE_FLAGS_AND_ATTRIBUTES(0);
             if !dereference {
-                custom_flags |=
-                    windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT;
+                custom_flags |= FILE_FLAG_OPEN_REPARSE_POINT;
             }
-            custom_flags |= windows_sys::Win32::Storage::FileSystem::FILE_FLAG_BACKUP_SEMANTICS;
-            open_options.custom_flags(custom_flags);
+            custom_flags |= FILE_FLAG_BACKUP_SEMANTICS;
+            open_options.custom_flags(custom_flags.0);
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
