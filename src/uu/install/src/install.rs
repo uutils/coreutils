@@ -749,7 +749,21 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
-    match process::Command::new(&b.strip_program).arg(to).output() {
+    // Check if the filename starts with a hyphen and adjust it
+    let to = if to
+        .file_name()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap_or_default()
+        .starts_with('-')
+    {
+        let mut new_path = PathBuf::from(".");
+        new_path.push(to);
+        new_path
+    } else {
+        to.to_path_buf()
+    };
+    match process::Command::new(&b.strip_program).arg(&to).output() {
         Ok(o) => {
             if !o.status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
