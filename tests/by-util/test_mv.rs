@@ -906,6 +906,20 @@ fn test_mv_update_option() {
 }
 
 #[test]
+fn test_mv_update_with_dest_ending_with_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source";
+    let dest = "destination/";
+
+    at.mkdir("source");
+
+    ucmd.arg("--update").arg(source).arg(dest).succeeds();
+
+    assert!(!at.dir_exists(source));
+    assert!(at.dir_exists(dest));
+}
+
+#[test]
 fn test_mv_arg_update_none() {
     let (at, mut ucmd) = at_and_ucmd!();
 

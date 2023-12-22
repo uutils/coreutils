@@ -341,7 +341,11 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
 
     let target_is_dir = target.is_dir();
 
-    if path_ends_with_terminator(target) && !target_is_dir && !opts.no_target_dir {
+    if path_ends_with_terminator(target)
+        && !target_is_dir
+        && !opts.no_target_dir
+        && opts.update != UpdateMode::ReplaceIfOlder
+    {
         return Err(MvError::FailedToAccessNotADirectory(target.quote().to_string()).into());
     }
 
