@@ -3862,8 +3862,8 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("POSIXLY_CORRECT", "some_value")
         .succeeds()
-        .stdout_contains_line("total 8");
-    //.stdout_contains(" 1024 "); // TODO needs second internal blocksize
+        .stdout_contains_line("total 8")
+        .stdout_contains(" 1024 ");
 
     scene
         .ucmd()
@@ -3886,8 +3886,8 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("BLOCKSIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 8");
-    //.stdout_contains(" 1024 "); // TODO needs second internal blocksize
+        .stdout_contains_line("total 8")
+        .stdout_contains(" 1024 ");
 }
 
 #[test]
@@ -3900,13 +3900,42 @@ fn test_ls_invalid_block_size() {
         .stderr_is("ls: invalid --block-size argument 'invalid'\n");
 }
 
-// TODO ensure the correct block size is used when using -l because
-// the output of "ls -l" and "BLOCK_SIZE=invalid ls -l" is different
+#[cfg(all(unix, feature = "dd"))]
 #[test]
 fn test_ls_invalid_block_size_in_env_var() {
-    new_ucmd!().env("LS_BLOCK_SIZE", "invalid").succeeds();
-    new_ucmd!().env("BLOCK_SIZE", "invalid").succeeds();
-    new_ucmd!().env("BLOCKSIZE", "invalid").succeeds();
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ccmd("dd")
+        .arg("if=/dev/zero")
+        .arg("of=file")
+        .arg("bs=1024")
+        .arg("count=1")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-og")
+        .env("LS_BLOCK_SIZE", "invalid")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1 1 "); // hardlink count + file size
+
+    scene
+        .ucmd()
+        .arg("-og")
+        .env("BLOCK_SIZE", "invalid")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1 1 "); // hardlink count + file size
+
+    scene
+        .ucmd()
+        .arg("-og")
+        .env("BLOCKSIZE", "invalid")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1024 ");
 }
 
 #[cfg(all(unix, feature = "dd"))]
