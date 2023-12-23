@@ -677,7 +677,7 @@ fn test_install_and_strip_with_program() {
 #[cfg(all(unix, feature = "chmod"))]
 #[test]
 // FixME: Freebsd fails on 'No such file or directory'
-#[cfg(not(any(windows, target_os = "freebsd")))]
+#[cfg(not(target_os = "freebsd"))]
 fn test_install_and_strip_with_program_hyphen() {
     let scene = TestScenario::new(util_name!());
 
