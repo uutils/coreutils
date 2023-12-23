@@ -161,8 +161,8 @@ pub mod options {
 
 const DEFAULT_TERM_WIDTH: u16 = 80;
 const POSIXLY_CORRECT_BLOCK_SIZE: u64 = 512;
-#[cfg(unix)]
 const DEFAULT_BLOCK_SIZE: u64 = 1024;
+const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
 #[derive(Debug)]
 enum LsError {
@@ -409,7 +409,9 @@ pub struct Config {
     color: Option<LsColors>,
     long: LongFormat,
     alloc_size: bool,
-    block_size: Option<u64>,
+    file_size_block_size: u64,
+    #[allow(dead_code)]
+    block_size: u64, // is never read on Windows
     width: u16,
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
@@ -822,6 +824,7 @@ impl Config {
         let env_var_block_size = std::env::var_os("BLOCK_SIZE");
         let env_var_ls_block_size = std::env::var_os("LS_BLOCK_SIZE");
         let env_var_posixly_correct = std::env::var_os("POSIXLY_CORRECT");
+        let mut is_env_var_blocksize = false;
 
         let raw_block_size = if let Some(opt_block_size) = opt_block_size {
             OsString::from(opt_block_size)
@@ -831,6 +834,7 @@ impl Config {
             } else if let Some(env_var_block_size) = env_var_block_size {
                 env_var_block_size
             } else if let Some(env_var_blocksize) = env_var_blocksize {
+                is_env_var_blocksize = true;
                 env_var_blocksize
             } else {
                 OsString::from("")
@@ -839,9 +843,16 @@ impl Config {
             OsString::from("")
         };
 
-        let block_size: Option<u64> = if !opt_si && !opt_hr && !raw_block_size.is_empty() {
+        let (file_size_block_size, block_size) = if !opt_si && !opt_hr && !raw_block_size.is_empty()
+        {
             match parse_size_u64(&raw_block_size.to_string_lossy()) {
-                Ok(size) => Some(size),
+                Ok(size) => {
+                    if is_env_var_blocksize {
+                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, size)
+                    } else {
+                        (size, size)
+                    }
+                }
                 Err(_) => {
                     // only fail if invalid block size was specified with --block-size,
                     // ignore invalid block size from env vars
@@ -850,13 +861,19 @@ impl Config {
                             invalid_block_size.clone(),
                         )));
                     }
-                    None
+                    if is_env_var_blocksize {
+                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                    } else {
+                        (DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                    }
                 }
             }
         } else if env_var_posixly_correct.is_some() {
-            Some(POSIXLY_CORRECT_BLOCK_SIZE)
+            (DEFAULT_FILE_SIZE_BLOCK_SIZE, POSIXLY_CORRECT_BLOCK_SIZE)
+        } else if opt_si {
+            (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
         } else {
-            None
+            (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
         };
 
         let long = {
@@ -1062,6 +1079,7 @@ impl Config {
             inode: options.get_flag(options::INODE),
             long,
             alloc_size: options.get_flag(options::size::ALLOCATION_SIZE),
+            file_size_block_size,
             block_size,
             width,
             quoting_style,
@@ -2479,13 +2497,7 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         };
         match config.size_format {
             SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
-            SizeFormat::Bytes => {
-                if let Some(user_block_size) = config.block_size {
-                    raw_blocks / user_block_size
-                } else {
-                    raw_blocks / DEFAULT_BLOCK_SIZE
-                }
-            }
+            SizeFormat::Bytes => raw_blocks / config.block_size,
         }
     }
     #[cfg(not(unix))]
@@ -2955,26 +2967,16 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
-    // Reported file len only adjusted for block_size when block_size is set
-    if let Some(user_block_size) = config.block_size {
-        // ordinary division of unsigned integers rounds down,
-        // this is similar to the Rust API for division that rounds up,
-        // currently in nightly only, however once
-        // https://github.com/rust-lang/rust/pull/88582 : "div_ceil"
-        // is stable we should use that instead
-        let len_adjusted = {
-            let d = metadata.len() / user_block_size;
-            let r = metadata.len() % user_block_size;
-            if r == 0 {
-                d
-            } else {
-                d + 1
-            }
-        };
-        SizeOrDeviceId::Size(display_size(len_adjusted, config))
-    } else {
-        SizeOrDeviceId::Size(display_size(metadata.len(), config))
-    }
+    let len_adjusted = {
+        let d = metadata.len() / config.file_size_block_size;
+        let r = metadata.len() % config.file_size_block_size;
+        if r == 0 {
+            d
+        } else {
+            d + 1
+        }
+    };
+    SizeOrDeviceId::Size(display_size(len_adjusted, config))
 }
 
 fn display_size(size: u64, config: &Config) -> String {
