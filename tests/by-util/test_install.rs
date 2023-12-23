@@ -1566,3 +1566,27 @@ fn test_install_compare_option() {
         .code_is(1)
         .stderr_contains("Options --compare and --strip are mutually exclusive");
 }
+
+#[test]
+// Matches part of tests/install/basic-1
+fn test_t_exist_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source1 = "file";
+    let target_dir = "sub4/";
+    let target_file = "sub4/file_exists";
+
+    at.touch(source1);
+    at.mkdir(target_dir);
+    at.touch(target_file);
+
+    scene
+        .ucmd()
+        .arg("-t")
+        .arg(target_file)
+        .arg("-Dv")
+        .arg(source1)
+        .fails()
+        .stderr_contains("failed to access 'sub4/file_exists': Not a directory");
+}

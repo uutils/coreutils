@@ -66,6 +66,7 @@ enum InstallError {
     InvalidUser(String),
     InvalidGroup(String),
     OmittingDirectory(PathBuf),
+    NotADirectory(PathBuf),
 }
 
 impl UError for InstallError {
@@ -120,6 +121,9 @@ impl Display for InstallError {
             Self::InvalidUser(user) => write!(f, "invalid user: {}", user.quote()),
             Self::InvalidGroup(group) => write!(f, "invalid group: {}", group.quote()),
             Self::OmittingDirectory(dir) => write!(f, "omitting directory {}", dir.quote()),
+            Self::NotADirectory(dir) => {
+                write!(f, "failed to access {}: Not a directory", dir.quote())
+            }
         }
     }
 }
@@ -581,6 +585,13 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                 if let Err(e) = fs::create_dir_all(to_create) {
                     return Err(InstallError::CreateDirFailed(to_create.to_path_buf(), e).into());
                 }
+            }
+        }
+        if b.target_dir.is_some() {
+            let p = to_create.unwrap();
+
+            if !p.exists() || !p.is_dir() {
+                return Err(InstallError::NotADirectory(p.to_path_buf()).into());
             }
         }
     }
