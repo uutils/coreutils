@@ -10,6 +10,7 @@ mod error;
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -434,6 +435,9 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
 
 #[allow(clippy::cognitive_complexity)]
 fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> UResult<()> {
+    // remember the moved destinations for further usage
+    let mut moved_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
+
     if !target_dir.is_dir() {
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
@@ -470,6 +474,18 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
                 continue;
             }
         };
+
+        if moved_destinations.contains(&targetpath) && opts.backup != BackupMode::NumberedBackup {
+            // If the target file was already created in this mv call, do not overwrite
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "will not overwrite just-created '{}' with '{}'",
+                    targetpath.display(),
+                    sourcepath.display()
+                ),
+            ));
+        }
 
         // Check if we have mv dir1 dir2 dir2
         // And generate an error if this is the case
@@ -513,6 +529,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
         if let Some(ref pb) = count_progress {
             pb.inc(1);
         }
+        moved_destinations.insert(targetpath.clone());
     }
     Ok(())
 }
