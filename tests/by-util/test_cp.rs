@@ -3368,6 +3368,21 @@ fn test_cp_debug_sparse_reflink() {
 }
 
 #[test]
+fn test_cp_debug_no_update() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.touch("b");
+    ts.ucmd()
+        .arg("--debug")
+        .arg("--update=none")
+        .arg("a")
+        .arg("b")
+        .succeeds()
+        .stdout_contains("skipped 'b'");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_always() {
     let ts = TestScenario::new(util_name!());
