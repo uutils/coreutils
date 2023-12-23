@@ -1203,7 +1203,9 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             if fs::metadata(&dest).is_ok() && !fs::symlink_metadata(&dest)?.file_type().is_symlink()
             {
                 // There is already a file and it isn't a symlink (managed in a different place)
-                if copied_destinations.contains(&dest) {
+                if copied_destinations.contains(&dest)
+                    && options.backup != BackupMode::NumberedBackup
+                {
                     // If the target file was already created in this cp call, do not overwrite
                     return Err(Error::Error(format!(
                         "will not overwrite just-created '{}' with '{}'",
