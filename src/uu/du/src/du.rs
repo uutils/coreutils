@@ -296,104 +296,139 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
-// this takes `my_stat` to avoid having to stat files multiple times.
-#[allow(clippy::cognitive_complexity)]
-fn du(
-    mut my_stat: Stat,
-    options: &TraversalOptions,
-    depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
-    print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
-) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    if my_stat.is_dir {
-        let read = match fs::read_dir(&my_stat.path) {
-            Ok(read) => read,
+struct DuData<'a> {
+    print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
+    options: &'a TraversalOptions,
+    seen_inodes: &'a mut HashSet<FileInfo>,
+}
+
+impl DuData<'_> {
+
+    fn is_entry_excluded(&self,
+        entry: &fs::DirEntry,
+        entry_stat: &Stat
+    ) -> bool {
+        for pattern in &self.options.excludes {
+            // Look at all patterns with both short and long paths
+            // if we have 'du foo' but search to exclude 'foo/bar'
+            // we need the full path
+            if pattern.matches(&entry_stat.path.to_string_lossy())
+                || pattern.matches(&entry.file_name().into_string().unwrap())
+            {
+                // if the directory is ignored, leave early
+                if self.options.verbose {
+                    println!("{} ignored", &entry_stat.path.quote());
+                }
+                // Go to the next file
+                return true
+            }
+        }
+
+        false
+    }
+
+    fn du_handle_dir_entry(&mut self,
+        base_stat: &mut Stat,
+        depth: usize,
+        entry: &fs::DirEntry,
+        entry_stat: Stat,
+    ) -> Result<(), Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
+        // We have an exclude list
+        if self.is_entry_excluded(entry, &entry_stat) {
+            return Ok(())
+        }
+
+        // inode already seen due to symbolic or hard links?
+        if let Some(inode) = entry_stat.inode {
+            if self.seen_inodes.contains(&inode) {
+                if self.options.count_links {
+                    base_stat.inodes += 1;
+                }
+                return Ok(())
+            }
+            self.seen_inodes.insert(inode);
+        }
+
+        if entry_stat.is_dir {
+
+            if self.options.one_file_system {
+                if let (Some(this_inode), Some(my_inode)) =
+                    (entry_stat.inode, base_stat.inode)
+                {
+                    if this_inode.dev_id != my_inode.dev_id {
+                        return Ok(())
+                    }
+                }
+            }
+
+            let this_stat = self.du(entry_stat, depth + 1)?;
+
+            if !self.options.separate_dirs {
+                base_stat.size += this_stat.size;
+                base_stat.blocks += this_stat.blocks;
+                base_stat.inodes += this_stat.inodes;
+            }
+            self.print_tx.send(Ok(StatPrintInfo {
+                stat: this_stat,
+                depth: depth + 1,
+            }))?;
+        } else {
+            base_stat.size += entry_stat.size;
+            base_stat.blocks += entry_stat.blocks;
+            base_stat.inodes += 1;
+            if self.options.all {
+                self.print_tx.send(Ok(StatPrintInfo {
+                    stat: entry_stat,
+                    depth: depth + 1,
+                }))?;
+            }
+        }
+
+        Ok(())
+    }
+
+    // this takes `my_stat` to avoid having to stat files multiple times.
+    #[allow(clippy::cognitive_complexity)]
+    fn du(&mut self,
+        mut my_stat: Stat,
+        depth: usize,
+    ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> 
+    {
+        if !my_stat.is_dir {
+            return Ok(my_stat)
+        }
+    
+        let dir_iterator = match fs::read_dir(&my_stat.path) {
+            Ok(dir_iterator) => dir_iterator,
             Err(e) => {
-                print_tx.send(Err(e.map_err_context(|| {
+                self.print_tx.send(Err(e.map_err_context(|| {
                     format!("cannot read directory {}", my_stat.path.quote())
                 })))?;
                 return Ok(my_stat);
             }
         };
 
-        'file_loop: for f in read {
+        for f in dir_iterator {
             match f {
-                Ok(entry) => {
-                    match Stat::new(&entry.path(), options) {
+                Ok(directory_entry) => {
+                    match Stat::new(&directory_entry.path(), self.options) {
                         Ok(this_stat) => {
-                            // We have an exclude list
-                            for pattern in &options.excludes {
-                                // Look at all patterns with both short and long paths
-                                // if we have 'du foo' but search to exclude 'foo/bar'
-                                // we need the full path
-                                if pattern.matches(&this_stat.path.to_string_lossy())
-                                    || pattern.matches(&entry.file_name().into_string().unwrap())
-                                {
-                                    // if the directory is ignored, leave early
-                                    if options.verbose {
-                                        println!("{} ignored", &this_stat.path.quote());
-                                    }
-                                    // Go to the next file
-                                    continue 'file_loop;
-                                }
-                            }
-
-                            if let Some(inode) = this_stat.inode {
-                                if seen_inodes.contains(&inode) {
-                                    if options.count_links {
-                                        my_stat.inodes += 1;
-                                    }
-                                    continue;
-                                }
-                                seen_inodes.insert(inode);
-                            }
-                            if this_stat.is_dir {
-                                if options.one_file_system {
-                                    if let (Some(this_inode), Some(my_inode)) =
-                                        (this_stat.inode, my_stat.inode)
-                                    {
-                                        if this_inode.dev_id != my_inode.dev_id {
-                                            continue;
-                                        }
-                                    }
-                                }
-
-                                let this_stat =
-                                    du(this_stat, options, depth + 1, seen_inodes, print_tx)?;
-
-                                if !options.separate_dirs {
-                                    my_stat.size += this_stat.size;
-                                    my_stat.blocks += this_stat.blocks;
-                                    my_stat.inodes += this_stat.inodes;
-                                }
-                                print_tx.send(Ok(StatPrintInfo {
-                                    stat: this_stat,
-                                    depth: depth + 1,
-                                }))?;
-                            } else {
-                                my_stat.size += this_stat.size;
-                                my_stat.blocks += this_stat.blocks;
-                                my_stat.inodes += 1;
-                                if options.all {
-                                    print_tx.send(Ok(StatPrintInfo {
-                                        stat: this_stat,
-                                        depth: depth + 1,
-                                    }))?;
-                                }
-                            }
+                            self.du_handle_dir_entry(&mut my_stat, depth, &directory_entry, this_stat)?;
                         }
-                        Err(e) => print_tx.send(Err(e.map_err_context(|| {
-                            format!("cannot access {}", entry.path().quote())
+                        Err(e) => self.print_tx.send(Err(e.map_err_context(|| {
+                            format!("cannot access {}", directory_entry.path().quote())
                         })))?,
                     }
                 }
-                Err(error) => print_tx.send(Err(error.into()))?,
+                Err(error) => self.print_tx.send(Err(error.into()))?,
             }
         }
+
+        Ok(my_stat)
     }
 
-    Ok(my_stat)
 }
+
 
 #[derive(Debug)]
 enum DuError {
@@ -587,6 +622,84 @@ pub fn div_ceil(a: u64, b: u64) -> u64 {
     (a + b - 1) / b
 }
 
+struct UumainData
+{
+    traversal_options: TraversalOptions,
+}
+
+impl UumainData {
+
+    fn is_file_excluded(&self, path: &PathBuf) -> bool {
+        // Skip if we don't want to ignore anything
+        if !&self.traversal_options.excludes.is_empty() {
+            let path_string = path.to_string_lossy();
+            for pattern in &self.traversal_options.excludes {
+                if pattern.matches(&path_string) {
+                    // if the directory is ignored, leave early
+                    if self.traversal_options.verbose {
+                        println!("{} ignored", path_string.quote());
+                    }
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    fn handle_cmd_arg_file(&self,
+        stat: Stat, 
+        print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
+    ) -> UResult<()> {
+
+        let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
+        if let Some(inode) = stat.inode {
+            seen_inodes.insert(inode);
+        }
+
+        let mut data = DuData{print_tx, options: &self.traversal_options, seen_inodes: &mut seen_inodes};
+        let stat = data.du(stat, 0)
+            .map_err(|e| USimpleError::new(1, e.to_string()))?;
+
+        print_tx
+            .send(Ok(StatPrintInfo { stat, depth: 0 }))
+            .map_err(|e| USimpleError::new(1, e.to_string()))?;
+
+        Ok(())
+    }
+
+    fn uumain_cmd_arg_file_loop(&self,
+        files: Vec<PathBuf>, 
+        print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
+        
+    ) -> UResult<()> {
+        'loop_file: for path in files {
+            
+            if self.is_file_excluded(&path) {
+                continue 'loop_file
+            }
+
+            // Check existence of path provided in argument
+            if let Ok(stat) = Stat::new(&path, &self.traversal_options) {
+                // Kick off the computation of disk usage from the initial path
+                self.handle_cmd_arg_file(stat, print_tx)?;
+            } else {
+                print_tx
+                    .send(Err(USimpleError::new(
+                        1,
+                        format!(
+                            "{}: No such file or directory",
+                            path.to_string_lossy().maybe_quote()
+                        ),
+                    )))
+                    .map_err(|e| USimpleError::new(1, e.to_string()))?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -601,7 +714,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         summarize,
     )?;
 
-    let files = match matches.get_one::<String>(options::FILE) {
+    let cmd_arg_files = match matches.get_one::<String>(options::FILE) {
         Some(_) => matches
             .get_many::<String>(options::FILE)
             .unwrap()
@@ -645,7 +758,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Deref::All
         } else if matches.get_flag(options::DEREFERENCE_ARGS) {
             // We don't care about the cost of cloning as it is rarely used
-            Deref::Args(files.clone())
+            Deref::Args(cmd_arg_files.clone())
         } else {
             Deref::None
         },
@@ -685,46 +798,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (print_tx, rx) = mpsc::channel::<UResult<StatPrintInfo>>();
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
-    'loop_file: for path in files {
-        // Skip if we don't want to ignore anything
-        if !&traversal_options.excludes.is_empty() {
-            let path_string = path.to_string_lossy();
-            for pattern in &traversal_options.excludes {
-                if pattern.matches(&path_string) {
-                    // if the directory is ignored, leave early
-                    if traversal_options.verbose {
-                        println!("{} ignored", path_string.quote());
-                    }
-                    continue 'loop_file;
-                }
-            }
-        }
-
-        // Check existence of path provided in argument
-        if let Ok(stat) = Stat::new(&path, &traversal_options) {
-            // Kick off the computation of disk usage from the initial path
-            let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
-            if let Some(inode) = stat.inode {
-                seen_inodes.insert(inode);
-            }
-            let stat = du(stat, &traversal_options, 0, &mut seen_inodes, &print_tx)
-                .map_err(|e| USimpleError::new(1, e.to_string()))?;
-
-            print_tx
-                .send(Ok(StatPrintInfo { stat, depth: 0 }))
-                .map_err(|e| USimpleError::new(1, e.to_string()))?;
-        } else {
-            print_tx
-                .send(Err(USimpleError::new(
-                    1,
-                    format!(
-                        "{}: No such file or directory",
-                        path.to_string_lossy().maybe_quote()
-                    ),
-                )))
-                .map_err(|e| USimpleError::new(1, e.to_string()))?;
-        }
-    }
+    let data = UumainData{traversal_options};
+    data.uumain_cmd_arg_file_loop(cmd_arg_files, &print_tx)?;
 
     drop(print_tx);
 
