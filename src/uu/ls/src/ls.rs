@@ -828,17 +828,13 @@ impl Config {
 
         let raw_block_size = if let Some(opt_block_size) = opt_block_size {
             OsString::from(opt_block_size)
-        } else if !opt_kb {
-            if let Some(env_var_ls_block_size) = env_var_ls_block_size {
-                env_var_ls_block_size
-            } else if let Some(env_var_block_size) = env_var_block_size {
-                env_var_block_size
-            } else if let Some(env_var_blocksize) = env_var_blocksize {
-                is_env_var_blocksize = true;
-                env_var_blocksize
-            } else {
-                OsString::from("")
-            }
+        } else if let Some(env_var_ls_block_size) = env_var_ls_block_size {
+            env_var_ls_block_size
+        } else if let Some(env_var_block_size) = env_var_block_size {
+            env_var_block_size
+        } else if let Some(env_var_blocksize) = env_var_blocksize {
+            is_env_var_blocksize = true;
+            env_var_blocksize
         } else {
             OsString::from("")
         };
@@ -846,13 +842,19 @@ impl Config {
         let (file_size_block_size, block_size) = if !opt_si && !opt_hr && !raw_block_size.is_empty()
         {
             match parse_size_u64(&raw_block_size.to_string_lossy()) {
-                Ok(size) => {
-                    if is_env_var_blocksize {
-                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, size)
-                    } else {
-                        (size, size)
+                Ok(size) => match (is_env_var_blocksize, opt_kb) {
+                    (true, true) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE),
+                    (true, false) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
+                    (false, true) => {
+                        // --block-size overrides -k
+                        if opt_block_size.is_some() {
+                            (size, size)
+                        } else {
+                            (size, DEFAULT_BLOCK_SIZE)
+                        }
                     }
-                }
+                    (false, false) => (size, size),
+                },
                 Err(_) => {
                     // only fail if invalid block size was specified with --block-size,
                     // ignore invalid block size from env vars
@@ -869,7 +871,11 @@ impl Config {
                 }
             }
         } else if env_var_posixly_correct.is_some() {
-            (DEFAULT_FILE_SIZE_BLOCK_SIZE, POSIXLY_CORRECT_BLOCK_SIZE)
+            if opt_kb {
+                (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+            } else {
+                (DEFAULT_FILE_SIZE_BLOCK_SIZE, POSIXLY_CORRECT_BLOCK_SIZE)
+            }
         } else if opt_si {
             (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
         } else {
