@@ -674,6 +674,34 @@ fn test_install_and_strip_with_program() {
     assert!(!stdout.contains(STRIP_SOURCE_FILE_SYMBOL));
 }
 
+#[cfg(all(unix, feature = "chmod"))]
+#[test]
+// FixME: Freebsd fails on 'No such file or directory'
+#[cfg(not(target_os = "freebsd"))]
+fn test_install_and_strip_with_program_hyphen() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    let content = r#"#!/bin/sh
+    echo $1 &> /tmp/a.log
+    printf -- '%s\n' "$1" | grep '^[^-]'
+    "#;
+    at.write("no-hyphen", content);
+    scene.ccmd("chmod").arg("+x").arg("no-hyphen").succeeds();
+
+    at.touch("src");
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("./no-hyphen")
+        .arg("--")
+        .arg("src")
+        .arg("-dest")
+        .succeeds()
+        .no_stderr();
+}
+
 #[test]
 #[cfg(not(windows))]
 fn test_install_and_strip_with_invalid_program() {
