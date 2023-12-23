@@ -478,7 +478,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         if moved_destinations.contains(&targetpath) && options.backup != BackupMode::NumberedBackup
         {
             // If the target file was already created in this mv call, do not overwrite
-            return Err(USimpleError::new(
+            show!(USimpleError::new(
                 1,
                 format!(
                     "will not overwrite just-created '{}' with '{}'",
@@ -486,6 +486,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
                     sourcepath.display()
                 ),
             ));
+            continue;
         }
 
         // Check if we have mv dir1 dir2 dir2

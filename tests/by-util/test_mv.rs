@@ -1496,6 +1496,32 @@ fn test_mv_seen_file() {
 }
 
 #[test]
+fn test_mv_seen_multiple_files_to_directory() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+    at.write("b/g", "g");
+
+    ts.ucmd()
+        .arg("a/f")
+        .arg("b/f")
+        .arg("b/g")
+        .arg("c")
+        .fails()
+        .stderr_contains("will not overwrite just-created 'c/f' with 'b/f'");
+    assert!(!at.plus("a").join("f").exists());
+    assert!(at.plus("b").join("f").exists());
+    assert!(!at.plus("b").join("g").exists());
+    assert!(at.plus("c").join("f").exists());
+    assert!(at.plus("c").join("g").exists());
+}
+
+#[test]
 fn test_mv_dir_into_file_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
