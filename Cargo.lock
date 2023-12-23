@@ -806,6 +806,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6999dc1837253364c2ebb0704ba97994bd874e8f195d665c50b7548f6ea92764"
 
 [[package]]
+name = "fiemap"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "084632422a59165633e28f8436545a6694b3d659405ceb3be0a441d4bfbf25d1"
+dependencies = [
+ "bitflags 1.3.2",
+]
+
+[[package]]
 name = "file_diff"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2409,6 +2418,7 @@ version = "0.0.23"
 dependencies = [
  "chrono",
  "clap",
+ "fiemap",
  "glob",
  "uucore",
  "windows-sys 0.48.0",

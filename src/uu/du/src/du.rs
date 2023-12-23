@@ -6,7 +6,7 @@
 use chrono::{DateTime, Local};
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use glob::Pattern;
-use std::collections::HashSet;
+use std::collections::{HashSet, BTreeSet};
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
@@ -38,6 +38,7 @@ use windows_sys::Win32::Storage::FileSystem::{
     FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_128, FILE_ID_INFO,
     FILE_STANDARD_INFO,
 };
+use fiemap;
 
 mod options {
     pub const HELP: &str = "help";
@@ -296,13 +297,31 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
+#[derive(PartialEq, PartialOrd, Eq, Ord)]
+struct Range {
+    start: u64,
+    end: u64,
+}
+
+
 struct DuData<'a> {
     print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
     options: &'a TraversalOptions,
-    seen_inodes: &'a mut HashSet<FileInfo>,
+    seen_inodes: HashSet<FileInfo>,
+    seen_phys_ranges: BTreeSet<Range>,
 }
 
-impl DuData<'_> {
+impl<'a> DuData<'a> {
+
+    fn new<'b>(
+        print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
+        options: &'a TraversalOptions,
+    ) -> Self {
+        return DuData{print_tx, options, 
+            seen_inodes: HashSet::new(), 
+            seen_phys_ranges: BTreeSet::new()
+        }
+    }
 
     fn is_entry_excluded(&self,
         entry: &fs::DirEntry,
@@ -336,6 +355,31 @@ impl DuData<'_> {
         // We have an exclude list
         if self.is_entry_excluded(entry, &entry_stat) {
             return Ok(())
+        }
+
+        let extents = match fiemap::fiemap(entry.path()) {
+            Ok(result) => result,
+            Err(e) => { 
+                self.print_tx.send(Err(e.map_err_context(|| {
+                    format!("FIEMAP: cannot access {}", entry.path().quote())
+                })))?;
+                return Ok(());
+            },
+        };
+
+        for extent_result in extents {
+            if let Ok(extent) = extent_result {
+                let range = Range{
+                    start: extent.fe_physical, 
+                    end: extent.fe_physical + extent.fe_length,
+                };
+
+                if self.seen_phys_ranges.contains(&range) {
+                    return Ok(());
+                }
+
+                self.seen_phys_ranges.insert(range);
+            }
         }
 
         // inode already seen due to symbolic or hard links?
@@ -652,12 +696,12 @@ impl UumainData {
         print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     ) -> UResult<()> {
 
-        let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
+        let mut data = DuData::new(print_tx, &self.traversal_options);
+        
         if let Some(inode) = stat.inode {
-            seen_inodes.insert(inode);
+            data.seen_inodes.insert(inode);
         }
 
-        let mut data = DuData{print_tx, options: &self.traversal_options, seen_inodes: &mut seen_inodes};
         let stat = data.du(stat, 0)
             .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
