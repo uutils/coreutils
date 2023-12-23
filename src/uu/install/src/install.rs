@@ -749,7 +749,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
-    // Check if the filename starts with a hyphen and adjust it
+    // Check if the filename starts with a hyphen and adjust the path
     let to = if to
         .file_name()
         .unwrap_or_default()
