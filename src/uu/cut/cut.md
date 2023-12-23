@@ -3,7 +3,7 @@
 <!-- spell-checker:ignore sourcefile sourcefiles -->
 
 ```
-cut [-d|-w] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+
+cut OPTION... [FILE]...
 ```
 
 Prints specified byte or field columns from each line of stdin or the input files
