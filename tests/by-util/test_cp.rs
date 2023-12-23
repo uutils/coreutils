@@ -3559,3 +3559,22 @@ fn test_cp_attributes_only() {
     assert_eq!(mode_a, at.metadata(a).mode());
     assert_eq!(mode_b, at.metadata(b).mode());
 }
+
+#[test]
+fn test_cp_seen_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    ucmd.arg("a/f")
+        .arg("b/f")
+        .arg("c")
+        .fails()
+        .stderr_contains("will not overwrite just-created 'c/f' with 'b/f'");
+
+    assert!(at.plus("c").join("f").exists());
+}
