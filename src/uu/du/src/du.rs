@@ -603,8 +603,20 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
             ));
         }
 
-        // Read from a file
-        Box::new(BufReader::new(File::open(file_name)?))
+        // Attempt to open the file and handle the error if it does not exist
+        match File::open(file_name) {
+            Ok(file) => Box::new(BufReader::new(file)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "cannot open '{}' for reading: No such file or directory",
+                        file_name
+                    ),
+                ))
+            }
+            Err(e) => return Err(e),
+        }
     };
 
     let mut paths = Vec::new();
@@ -634,6 +646,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )?;
 
     let files = if let Some(file_from) = matches.get_one::<String>(options::FILES0_FROM) {
+        if file_from == "-" && matches.get_one::<String>(options::FILE).is_some() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "extra operand {}\nfile operands cannot be combined with --files0-from",
+                    matches.get_one::<String>(options::FILE).unwrap().quote()
+                ),
+            )
+            .into());
+        }
+
         // Read file paths from the specified file, separated by null characters
         read_files_from(file_from)?
     } else {
