@@ -6,7 +6,7 @@
 use chrono::{DateTime, Local};
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use glob::Pattern;
-use std::collections::{HashSet, BTreeSet};
+use std::collections::{HashSet, BTreeMap};
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
@@ -38,7 +38,6 @@ use windows_sys::Win32::Storage::FileSystem::{
     FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx, FILE_ID_128, FILE_ID_INFO,
     FILE_STANDARD_INFO,
 };
-use fiemap;
 
 mod options {
     pub const HELP: &str = "help";
@@ -298,17 +297,81 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
 }
 
 #[derive(PartialEq, PartialOrd, Eq, Ord)]
-struct Range {
-    start: u64,
-    end: u64,
+pub struct Range {
+    pub start: u64,
+    pub end: u64,
 }
 
+#[derive(Default)]
+struct DuplicateStatistics {
+    inode_count: u64,
+    extent_count: u64,
+    partial_extent_count: u64,
+    partial_extent_sum: u64,
+    inode_sum: u64,
+    extent_sum: u64,
+}
 
 struct DuData<'a> {
     print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
     options: &'a TraversalOptions,
     seen_inodes: HashSet<FileInfo>,
-    seen_phys_ranges: BTreeSet<Range>,
+    seen_phys_ranges: BTreeMap<u64, BTreeMap<u64, u64>>,
+    duplicate_stats: DuplicateStatistics,
+    log_infos: bool,
+    log_extent_cases: bool,
+    log_summary: bool,
+}
+
+pub fn get_overlapping_extent_amount(seen_phys_ranges: &mut BTreeMap<u64, u64>, range: &Range) -> u64 {
+
+    let mut same_or_before = seen_phys_ranges.range_mut(..range.start+1);
+
+    let mut need_new_entry = true;
+    let mut overlapping_sum: u64 = 0;
+    if let Some((_start, end)) = same_or_before.next_back() {
+        if *end >= range.end {
+            return range.end - range.start; // fully covered, no new entry needed
+        }
+        if *end >= range.start {
+            overlapping_sum += *end - range.start;
+            *end = range.end;     // partially covered from begin.
+                                  // Extend existing entry.
+            need_new_entry = false;
+        }
+    }
+
+    if need_new_entry {
+        seen_phys_ranges.insert(range.start, range.end);
+    }
+
+    let mut current_pos = range.start+1;
+    loop {
+        let mut after = 
+            seen_phys_ranges.range(current_pos..);
+
+        if let Some((&start, end)) = after.next() {
+            if start >= range.end {
+                return overlapping_sum; // fully outside, nothing to do
+            }
+
+            if *end > range.end {
+                overlapping_sum += range.end - start;
+                let new_start = range.end;
+                let new_end = *end;
+                seen_phys_ranges.insert(new_start, new_end);
+                seen_phys_ranges.remove(&start);
+                return overlapping_sum; // partially outside, done
+            }
+
+            overlapping_sum += *end - start; // fully inside, remove, continue
+            current_pos = *end;
+            seen_phys_ranges.remove(&start);
+        }
+        else {
+            return overlapping_sum;
+        }
+    }
 }
 
 impl<'a> DuData<'a> {
@@ -319,7 +382,11 @@ impl<'a> DuData<'a> {
     ) -> Self {
         return DuData{print_tx, options, 
             seen_inodes: HashSet::new(), 
-            seen_phys_ranges: BTreeSet::new()
+            seen_phys_ranges: BTreeMap::new(),
+            duplicate_stats: DuplicateStatistics::default(),
+            log_infos: false,
+            log_extent_cases: false,
+            log_summary: false,
         }
     }
 
@@ -357,30 +424,72 @@ impl<'a> DuData<'a> {
             return Ok(())
         }
 
-        let extents = match fiemap::fiemap(entry.path()) {
-            Ok(result) => result,
+        let extents_option = match fiemap::fiemap(entry.path()) {
+            Ok(result) => Some(result),
             Err(e) => { 
                 self.print_tx.send(Err(e.map_err_context(|| {
                     format!("FIEMAP: cannot access {}", entry.path().quote())
                 })))?;
-                return Ok(());
+                None
             },
         };
 
+        let mut extents_number = 0;
+        let mut total_overlapping: u64 = 0;
         let mut would_be_ignored_by_extents: bool = false;
-        for extent_result in extents {
-            if let Ok(extent) = extent_result {
-                let range = Range{
-                    start: extent.fe_physical, 
-                    end: extent.fe_physical + extent.fe_length,
-                };
+        if let Some(extents) = extents_option {
+            for extent_result in extents {
+                if let Ok(extent) = extent_result {
+                    let range = Range{
+                        start: extent.fe_physical, 
+                        end: extent.fe_physical + extent.fe_length,
+                    };
 
-                if self.seen_phys_ranges.contains(&range) {
-                    would_be_ignored_by_extents = true;
-                    break;
+                    let mut map_by_device = 
+                        self.seen_phys_ranges.entry(entry_stat.inode.unwrap().dev_id)
+                        .or_insert(BTreeMap::new());
+
+                    total_overlapping += get_overlapping_extent_amount(
+                        &mut map_by_device, &range);
+                    extents_number += 1;
+
+                    if self.log_infos {
+                        self.print_tx.send(Err(
+                            USimpleError::new(
+                                100,
+                                format!("extent: {}, sum:{}, extents: {}, range:{}..{}", 
+                                    entry.path().quote(), 
+                                    total_overlapping,
+                                    extents_number,
+                                    range.start,
+                                    range.end,
+                                )
+                            ))
+                        )?;
+                    }
                 }
+            }
+        }
 
-                self.seen_phys_ranges.insert(range);
+        if total_overlapping > 0 && total_overlapping >= entry_stat.size {
+            would_be_ignored_by_extents = true;
+        }
+        else if total_overlapping > 0
+        {
+            self.duplicate_stats.partial_extent_count += 1;
+            self.duplicate_stats.partial_extent_sum += total_overlapping;
+
+            if self.log_infos {
+                self.print_tx.send(Err(
+                    USimpleError::new(
+                        100,
+                        format!("partial extend overlap: {}, sum:{}, extents: {}", 
+                            entry.path().quote(), 
+                            total_overlapping,
+                            extents_number
+                        )
+                    ))
+                )?;
             }
         }
 
@@ -398,22 +507,68 @@ impl<'a> DuData<'a> {
             }
         }
 
+        if is_ignored_by_inode {
+            self.duplicate_stats.inode_count += 1;
+            self.duplicate_stats.inode_sum += entry_stat.size;
+
+            if self.log_extent_cases {
+                self.print_tx.send(Err(
+                    USimpleError::new(
+                        100,
+                        format!("ignore duplicate by inode: {}, inode:{}, extent: {}", 
+                            entry.path().quote(), 
+                            is_ignored_by_inode,
+                            would_be_ignored_by_extents
+                        )
+                    ))
+                )?;
+            }
+        }
+        else if would_be_ignored_by_extents {
+            self.duplicate_stats.extent_count += 1;
+            self.duplicate_stats.extent_sum += entry_stat.size;
+
+            if self.log_extent_cases {
+                self.print_tx.send(Err(
+                    USimpleError::new(
+                        100,
+                        format!("ignore duplicate by extent only: {}, inode:{}, extent: {}", 
+                            entry.path().quote(), 
+                            is_ignored_by_inode,
+                            would_be_ignored_by_extents
+                        )
+                    ))
+                )?;
+            }
+        }
+
         if is_ignored_by_inode || would_be_ignored_by_extents {
-            self.print_tx.send(Err(
-                USimpleError::new(
-                    100,
-                    format!("ignore duplicate: {}, inode:{}, extent: {}", 
-                        entry.path().quote(), 
-                        is_ignored_by_inode,
-                        would_be_ignored_by_extents
-                    )
-                ))
-            )?;
+            if self.log_infos {
+                self.print_tx.send(Err(
+                    USimpleError::new(
+                        100,
+                        format!("ignore duplicate: {}, inode:{}, extent: {}", 
+                            entry.path().quote(), 
+                            is_ignored_by_inode,
+                            would_be_ignored_by_extents
+                        )
+                    ))
+                )?;
+            }
             return Ok(());
         }
 
-        if entry_stat.is_dir {
-
+        if !entry_stat.is_dir {
+            base_stat.size += entry_stat.size - total_overlapping;
+            base_stat.blocks += entry_stat.blocks;
+            base_stat.inodes += 1;
+            if self.options.all {
+                self.print_tx.send(Ok(StatPrintInfo {
+                    stat: entry_stat,
+                    depth: depth + 1,
+                }))?;
+            }
+        } else {
             if self.options.one_file_system {
                 if let (Some(this_inode), Some(my_inode)) =
                     (entry_stat.inode, base_stat.inode)
@@ -435,17 +590,7 @@ impl<'a> DuData<'a> {
                 stat: this_stat,
                 depth: depth + 1,
             }))?;
-        } else {
-            base_stat.size += entry_stat.size;
-            base_stat.blocks += entry_stat.blocks;
-            base_stat.inodes += 1;
-            if self.options.all {
-                self.print_tx.send(Ok(StatPrintInfo {
-                    stat: entry_stat,
-                    depth: depth + 1,
-                }))?;
-            }
-        }
+        } 
 
         Ok(())
     }
@@ -727,6 +872,17 @@ impl UumainData {
         print_tx
             .send(Ok(StatPrintInfo { stat, depth: 0 }))
             .map_err(|e| USimpleError::new(1, e.to_string()))?;
+
+        let stats = &data.duplicate_stats;
+
+        if data.log_summary {
+            print_tx.send(Err(USimpleError::new(3000, 
+                format!("stats: inode_count:{}, inode_sum:{}, extent_count:{}, extent_sum:{}, partial_extent_count:{}, partial_extent_sum:{}",
+                    stats.inode_count, stats.inode_sum,
+                    stats.extent_count, stats.extent_sum,
+                    stats.partial_extent_count, stats.partial_extent_sum ))))
+                    .map_err(|e| USimpleError::new(1, e.to_string()))?;
+        }
 
         Ok(())
     }

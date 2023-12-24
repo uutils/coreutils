@@ -3,9 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use du::{get_overlapping_extent_amount, Range};
 // spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink
 #[cfg(not(windows))]
 use regex::Regex;
+use std::collections::BTreeMap;
 #[cfg(not(windows))]
 use std::io::Write;
 
@@ -934,4 +936,78 @@ fn test_du_symlink_multiple_fail() {
     let result = ts.ucmd().arg("-L").arg("target.txt").arg("file1").fails();
     assert_eq!(result.code(), 1);
     result.stdout_contains("4\tfile1\n");
+}
+
+#[test]
+fn test_du_overlapping_ranges() {
+    //let ts = TestScenario::new(util_name!());
+    //let at = &ts.fixtures;
+
+    let mut test_ra = BTreeMap::<u64, u64>::new();
+
+    assert_eq!(test_ra.len(), 0);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start:   0, end: 100}), 0);
+    assert_eq!(test_ra.len(), 1);
+    assert_eq!(*test_ra.entry(0).or_default(), 100);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 400, end: 500}), 0);
+    assert_eq!(test_ra.len(), 2);
+    assert_eq!(*test_ra.entry(0).or_default(), 100);
+    assert_eq!(*test_ra.entry(400).or_default(), 500);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start:   0, end: 100}), 100);
+    assert_eq!(test_ra.len(), 2);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 400, end: 500}), 100);
+    assert_eq!(test_ra.len(), 2);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 600, end: 700}), 0);
+    assert_eq!(test_ra.len(), 3);
+    assert_eq!(*test_ra.entry(0).or_default(), 100);
+    assert_eq!(*test_ra.entry(400).or_default(), 500);
+    assert_eq!(*test_ra.entry(600).or_default(), 700);
+
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start:   0, end:  50}), 50);
+    assert_eq!(test_ra.len(), 3);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 400, end: 450}), 50);
+    assert_eq!(test_ra.len(), 3);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 600, end: 650}), 50);
+    assert_eq!(test_ra.len(), 3);
+
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start:  50, end: 100}), 50);
+    assert_eq!(test_ra.len(), 3);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 450, end: 500}), 50);
+    assert_eq!(test_ra.len(), 3);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 650, end: 700}), 50);
+    assert_eq!(test_ra.len(), 3);
+}
+
+#[test]
+fn test_du_overlapping_ranges_and_extending() {
+    //let ts = TestScenario::new(util_name!());
+    //let at = &ts.fixtures;
+
+    let mut test_ra = BTreeMap::<u64, u64>::new();
+
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start:  50, end: 150}), 0);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 400, end: 500}), 0);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 600, end: 700}), 0);
+    assert_eq!(test_ra.len(), 3);
+    assert_eq!(*test_ra.entry( 50).or_default(), 150);
+    assert_eq!(*test_ra.entry(400).or_default(), 500);
+    assert_eq!(*test_ra.entry(600).or_default(), 700);
+
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 25, end: 100}), 50);
+    assert_eq!(test_ra.len(), 4);
+    assert_eq!(*test_ra.entry( 25).or_default(), 100);
+    assert_eq!(*test_ra.entry(100).or_default(), 150);
+    assert_eq!(*test_ra.entry(400).or_default(), 500);
+    assert_eq!(*test_ra.entry(600).or_default(), 700);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 125, end: 200}), 25);
+    assert_eq!(test_ra.len(), 4);
+    assert_eq!(*test_ra.entry( 25).or_default(), 100);
+    assert_eq!(*test_ra.entry(100).or_default(), 200);
+    assert_eq!(*test_ra.entry(400).or_default(), 500);
+    assert_eq!(*test_ra.entry(600).or_default(), 700);
+    assert_eq!(get_overlapping_extent_amount(&mut test_ra, &Range{start: 390, end: 800}), 200);
+    assert_eq!(test_ra.len(), 3);
+    assert_eq!(*test_ra.entry( 25).or_default(), 100);
+    assert_eq!(*test_ra.entry(100).or_default(), 200);
+    assert_eq!(*test_ra.entry(390).or_default(), 800);
 }
