@@ -367,6 +367,7 @@ impl<'a> DuData<'a> {
             },
         };
 
+        let mut would_be_ignored_by_extents: bool = false;
         for extent_result in extents {
             if let Ok(extent) = extent_result {
                 let range = Range{
@@ -375,7 +376,8 @@ impl<'a> DuData<'a> {
                 };
 
                 if self.seen_phys_ranges.contains(&range) {
-                    return Ok(());
+                    would_be_ignored_by_extents = true;
+                    break;
                 }
 
                 self.seen_phys_ranges.insert(range);
@@ -383,14 +385,31 @@ impl<'a> DuData<'a> {
         }
 
         // inode already seen due to symbolic or hard links?
+        let mut is_ignored_by_inode = false;
         if let Some(inode) = entry_stat.inode {
             if self.seen_inodes.contains(&inode) {
                 if self.options.count_links {
                     base_stat.inodes += 1;
                 }
-                return Ok(())
+                is_ignored_by_inode = true;
             }
-            self.seen_inodes.insert(inode);
+            else {
+                self.seen_inodes.insert(inode);
+            }
+        }
+
+        if is_ignored_by_inode || would_be_ignored_by_extents {
+            self.print_tx.send(Err(
+                USimpleError::new(
+                    100,
+                    format!("ignore duplicate: {}, inode:{}, extent: {}", 
+                        entry.path().quote(), 
+                        is_ignored_by_inode,
+                        would_be_ignored_by_extents
+                    )
+                ))
+            )?;
+            return Ok(());
         }
 
         if entry_stat.is_dir {
