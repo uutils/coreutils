@@ -435,7 +435,7 @@ fn wipe_file(
             let pass_name = pass_name(&pass_type);
             if total_passes < 10 {
                 show_error!(
-                    "{}: pass {}/{} ({})... ",
+                    "{}: pass {}/{} ({})...",
                     path.maybe_quote(),
                     i + 1,
                     total_passes,
@@ -443,7 +443,7 @@ fn wipe_file(
                 );
             } else {
                 show_error!(
-                    "{}: pass {:2.0}/{:2.0} ({})... ",
+                    "{}: pass {:2.0}/{:2.0} ({})...",
                     path.maybe_quote(),
                     i + 1,
                     total_passes,
@@ -522,7 +522,7 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                         show_error!(
                             "{}: renamed to {}",
                             last_path.maybe_quote(),
-                            new_path.quote()
+                            new_path.display()
                         );
                     }
 
