@@ -1815,7 +1815,13 @@ fn copy_file(
                             symlinked_files,
                         )?;
                     }
-                    update_control::UpdateMode::ReplaceNone => return Ok(()),
+                    update_control::UpdateMode::ReplaceNone => {
+                        if options.debug {
+                            println!("skipped {}", dest.quote());
+                        }
+
+                        return Ok(());
+                    }
                     update_control::UpdateMode::ReplaceIfOlder => {
                         let dest_metadata = fs::symlink_metadata(dest)?;
 
