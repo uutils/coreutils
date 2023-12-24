@@ -1480,12 +1480,16 @@ fn test_mv_seen_file() {
     at.write("a/f", "a");
     at.write("b/f", "b");
 
-    ts.ucmd()
-        .arg("a/f")
-        .arg("b/f")
-        .arg("c")
-        .fails()
-        .stderr_contains("will not overwrite just-created 'c/f' with 'b/f'");
+    let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
+
+    #[cfg(not(unix))]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    #[cfg(unix)]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
 
     // a/f has been moved into c/f
     assert!(at.plus("c").join("f").exists());
@@ -1507,13 +1511,16 @@ fn test_mv_seen_multiple_files_to_directory() {
     at.write("b/f", "b");
     at.write("b/g", "g");
 
-    ts.ucmd()
-        .arg("a/f")
-        .arg("b/f")
-        .arg("b/g")
-        .arg("c")
-        .fails()
-        .stderr_contains("will not overwrite just-created 'c/f' with 'b/f'");
+    let result = ts.ucmd().arg("a/f").arg("b/f").arg("b/g").arg("c").fails();
+    #[cfg(not(unix))]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    #[cfg(unix)]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+
     assert!(!at.plus("a").join("f").exists());
     assert!(at.plus("b").join("f").exists());
     assert!(!at.plus("b").join("g").exists());

@@ -3571,12 +3571,15 @@ fn test_cp_seen_file() {
     at.write("a/f", "a");
     at.write("b/f", "b");
 
-    ts.ucmd()
-        .arg("a/f")
-        .arg("b/f")
-        .arg("c")
-        .fails()
-        .stderr_contains("will not overwrite just-created 'c/f' with 'b/f'");
+    let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
+    #[cfg(not(unix))]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    #[cfg(unix)]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
 
     assert!(at.plus("c").join("f").exists());
 
