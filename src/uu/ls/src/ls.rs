@@ -3070,7 +3070,7 @@ fn display_item_name(
     }
 
     if let Some(ls_colors) = &config.color {
-        name = color_name(name, path, ls_colors, style_manager, out, false, None);
+        name = color_name(name, path, ls_colors, style_manager, out, None);
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -3151,7 +3151,6 @@ fn display_item_name(
                             ls_colors,
                             style_manager,
                             out,
-                            true,
                             Some(&target_data),
                         ));
                     }
@@ -3272,7 +3271,6 @@ fn color_name(
     ls_colors: &LsColors,
     style_manager: &mut StyleManager,
     out: &mut BufWriter<Stdout>,
-    check_for_deref: bool,
     target_symlink: Option<&PathData>,
 ) -> String {
     if !path.must_dereference {
@@ -3286,11 +3284,10 @@ fn color_name(
         }
     }
 
-    if check_for_deref {
+    if let Some(target) = target_symlink {
         // use the optional target_symlink
         // Use fn get_metadata_with_deref_opt instead of get_metadata() here because ls
         // should not exit with an err, if we are unable to obtain the target_metadata
-        let target = target_symlink.unwrap_or(path);
         let md = get_metadata_with_deref_opt(target.p_buf.as_path(), path.must_dereference)
             .unwrap_or_else(|_| target.get_metadata(out).unwrap().clone());
 
