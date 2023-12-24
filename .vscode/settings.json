@@ -1,1 +1,6 @@
-{ "cSpell.import": [".vscode/cspell.json"] }
+{
+    "cSpell.import": [
+        ".vscode/cspell.json"
+    ],
+    "cmake.configureOnOpen": false
+}
