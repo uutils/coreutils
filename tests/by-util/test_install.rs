@@ -683,7 +683,6 @@ fn test_install_and_strip_with_program_hyphen() {
 
     let at = &scene.fixtures;
     let content = r#"#!/bin/sh
-    echo $1 &> /tmp/a.log
     printf -- '%s\n' "$1" | grep '^[^-]'
     "#;
     at.write("no-hyphen", content);
