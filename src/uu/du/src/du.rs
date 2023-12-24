@@ -65,6 +65,7 @@ mod options {
     pub const INODES: &str = "inodes";
     pub const EXCLUDE: &str = "exclude";
     pub const EXCLUDE_FROM: &str = "exclude-from";
+    pub const FILES0_FROM: &str = "files0-from";
     pub const VERBOSE: &str = "verbose";
     pub const FILE: &str = "FILE";
 }
@@ -587,6 +588,37 @@ pub fn div_ceil(a: u64, b: u64) -> u64 {
     (a + b - 1) / b
 }
 
+fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
+    let reader: Box<dyn BufRead> = if file_name == "-" {
+        // Read from standard input
+        Box::new(BufReader::new(std::io::stdin()))
+    } else {
+        // First, check if the file_name is a directory
+        let path = PathBuf::from(file_name);
+        if path.is_dir() {
+            // Return an error if it's a directory
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("{}: read error: Is a directory", file_name),
+            ));
+        }
+
+        // Read from a file
+        Box::new(BufReader::new(File::open(file_name)?))
+    };
+
+    let mut paths = Vec::new();
+
+    for line in reader.split(b'\0') {
+        let path = line?;
+        if !path.is_empty() {
+            paths.push(PathBuf::from(String::from_utf8_lossy(&path).to_string()));
+        }
+    }
+
+    Ok(paths)
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -601,13 +633,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         summarize,
     )?;
 
-    let files = match matches.get_one::<String>(options::FILE) {
-        Some(_) => matches
-            .get_many::<String>(options::FILE)
-            .unwrap()
-            .map(PathBuf::from)
-            .collect(),
-        None => vec![PathBuf::from(".")],
+    let files = if let Some(file_from) = matches.get_one::<String>(options::FILES0_FROM) {
+        // Read file paths from the specified file, separated by null characters
+        read_files_from(file_from)?
+    } else {
+        match matches.get_one::<String>(options::FILE) {
+            Some(_) => matches
+                .get_many::<String>(options::FILE)
+                .unwrap()
+                .map(PathBuf::from)
+                .collect(),
+            None => vec![PathBuf::from(".")],
+        }
     };
 
     let time = matches.contains_id(options::TIME).then(|| {
@@ -952,6 +989,14 @@ pub fn uu_app() -> Command {
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .help("exclude files that match any pattern in FILE")
+                .action(ArgAction::Append)
+        )
+        .arg(
+            Arg::new(options::FILES0_FROM)
+                .long("files0-from")
+                .value_name("FILE")
+                .value_hint(clap::ValueHint::FilePath)
+                .help("summarize device usage of the NUL-terminated file names specified in file F; if F is -, then read names from standard input")
                 .action(ArgAction::Append)
         )
         .arg(

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink
+// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist testdir
 #[cfg(not(windows))]
 use regex::Regex;
 #[cfg(not(windows))]
@@ -990,4 +990,62 @@ fn test_du_symlink_multiple_fail() {
     let result = ts.ucmd().arg("-L").arg("target.txt").arg("file1").fails();
     assert_eq!(result.code(), 1);
     result.stdout_contains("4\tfile1\n");
+}
+
+#[test]
+// Disable on Windows because of different path separators and handling of null characters
+#[cfg(not(target_os = "windows"))]
+fn test_du_files0_from() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut file1 = at.make_file("testfile1");
+    file1.write_all(b"content1").unwrap();
+    let mut file2 = at.make_file("testfile2");
+    file2.write_all(b"content2").unwrap();
+
+    at.mkdir_all("testdir");
+    let mut file3 = at.make_file("testdir/testfile3");
+    file3.write_all(b"content3").unwrap();
+
+    let mut file_list = at.make_file("filelist");
+    write!(file_list, "testfile1\0testfile2\0testdir\0").unwrap();
+
+    ts.ucmd()
+        .arg("--files0-from=filelist")
+        .succeeds()
+        .stdout_contains("testfile1")
+        .stdout_contains("testfile2")
+        .stdout_contains("testdir");
+}
+
+#[test]
+fn test_du_files0_from_stdin() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let mut file1 = at.make_file("testfile1");
+    file1.write_all(b"content1").unwrap();
+    let mut file2 = at.make_file("testfile2");
+    file2.write_all(b"content2").unwrap();
+
+    let input = "testfile1\0testfile2\0";
+
+    ts.ucmd()
+        .arg("--files0-from=-")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_contains("testfile1")
+        .stdout_contains("testfile2");
+}
+
+#[test]
+fn test_du_files0_from_dir() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+
+    let result = ts.ucmd().arg("--files0-from=dir").fails();
+    assert_eq!(result.stderr_str(), "du: dir: read error: Is a directory\n");
 }
