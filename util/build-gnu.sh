@@ -115,6 +115,8 @@ else
     # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
     sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
     sed -i 's| tr | /usr/bin/tr |' tests/init.sh
+    # Use a better diff
+    sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
     make -j "$(nproc)"
     touch gnu-built
 fi
