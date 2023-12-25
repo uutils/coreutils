@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/* last synced with: whoami (GNU coreutils) 8.21 */
+use std::ffi::OsString;
 
 use clap::{crate_version, Command};
 
@@ -19,9 +19,14 @@ const USAGE: &str = help_usage!("whoami.md");
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().try_get_matches_from(args)?;
-    let username = platform::get_username().map_err_context(|| "failed to get username".into())?;
+    let username = whoami()?;
     println_verbatim(username).map_err_context(|| "failed to print username".into())?;
     Ok(())
+}
+
+/// Get the current username
+pub fn whoami() -> UResult<OsString> {
+    platform::get_username().map_err_context(|| "failed to get username".into())
 }
 
 pub fn uu_app() -> Command {

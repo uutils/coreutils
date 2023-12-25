@@ -2,14 +2,26 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+//
+// spell-checker:ignore mydir
 use crate::common::util::TestScenario;
 use filetime::FileTime;
 use std::thread::sleep;
 use std::time::Duration;
 
 #[test]
-fn test_invalid_arg() {
+fn test_mv_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
+fn test_mv_missing_dest() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "dir";
+
+    at.mkdir(dir);
+
+    ucmd.arg(dir).fails();
 }
 
 #[test]
@@ -23,16 +35,6 @@ fn test_mv_rename_dir() {
     ucmd.arg(dir1).arg(dir2).succeeds().no_stderr();
 
     assert!(at.dir_exists(dir2));
-}
-
-#[test]
-fn test_mv_fail() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let dir1 = "test_mv_rename_dir";
-
-    at.mkdir(dir1);
-
-    ucmd.arg(dir1).fails();
 }
 
 #[test]
@@ -904,6 +906,20 @@ fn test_mv_update_option() {
 }
 
 #[test]
+fn test_mv_update_with_dest_ending_with_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source";
+    let dest = "destination/";
+
+    at.mkdir("source");
+
+    ucmd.arg("--update").arg(source).arg(dest).succeeds();
+
+    assert!(!at.dir_exists(source));
+    assert!(at.dir_exists(dest));
+}
+
+#[test]
 fn test_mv_arg_update_none() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1157,6 +1173,32 @@ fn test_mv_overwrite_dir() {
 }
 
 #[test]
+fn test_mv_no_target_dir_with_dest_not_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "a";
+    let dir_b = "b";
+
+    at.mkdir(dir_a);
+    ucmd.arg("-T").arg(dir_a).arg(dir_b).succeeds().no_output();
+
+    assert!(!at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+}
+
+#[test]
+fn test_mv_no_target_dir_with_dest_not_existing_and_ending_with_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "a";
+    let dir_b = "b/";
+
+    at.mkdir(dir_a);
+    ucmd.arg("-T").arg(dir_a).arg(dir_b).succeeds().no_output();
+
+    assert!(!at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+}
+
+#[test]
 fn test_mv_overwrite_nonempty_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir_a = "test_mv_overwrite_nonempty_dir_a";
@@ -1323,7 +1365,7 @@ fn test_mv_interactive_error() {
 }
 
 #[test]
-fn test_mv_info_self() {
+fn test_mv_into_self() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dir1 = "dir1";
@@ -1350,7 +1392,7 @@ fn test_mv_arg_interactive_skipped() {
         .ignore_stdin_write_error()
         .fails()
         .stderr_is("mv: overwrite 'b'? ")
-        .stdout_is("skipped 'b'\n");
+        .no_stdout();
 }
 
 #[test]
@@ -1360,7 +1402,8 @@ fn test_mv_arg_interactive_skipped_vin() {
     at.touch("b");
     ucmd.args(&["-vin", "a", "b"])
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("mv: not replacing 'b'\n")
+        .no_stdout();
 }
 
 #[test]
@@ -1388,6 +1431,58 @@ fn test_mv_into_self_data() {
     assert!(at.file_exists(file2));
     assert!(!at.file_exists(file1));
 }
+
+#[test]
+fn test_mv_directory_into_subdirectory_of_itself_fails() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir1 = "mydir";
+    let dir2 = "mydir/mydir_2";
+    at.mkdir(dir1);
+    at.mkdir(dir2);
+    scene.ucmd().arg(dir1).arg(dir2).fails().stderr_contains(
+        "mv: cannot move 'mydir' to a subdirectory of itself, 'mydir/mydir_2/mydir'",
+    );
+
+    // check that it also errors out with /
+    scene
+        .ucmd()
+        .arg(format!("{}/", dir1))
+        .arg(dir2)
+        .fails()
+        .stderr_contains(
+            "mv: cannot move 'mydir/' to a subdirectory of itself, 'mydir/mydir_2/mydir/'",
+        );
+}
+
+#[test]
+fn test_mv_file_into_dir_where_both_are_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.touch("b");
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("b/")
+        .fails()
+        .stderr_contains("mv: failed to access 'b/': Not a directory");
+}
+
+#[test]
+fn test_mv_dir_into_file_where_both_are_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.touch("b");
+    scene
+        .ucmd()
+        .arg("a/")
+        .arg("b")
+        .fails()
+        .stderr_contains("mv: cannot stat 'a/': Not a directory");
+}
+
 // Todo:
 
 // $ at.touch a b

@@ -2,28 +2,22 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) istr chiter argptr ilen extendedbigdecimal extendedbigint numberparse
+// spell-checker:ignore (ToDO) extendedbigdecimal numberparse
 use std::io::{stdout, ErrorKind, Write};
-use std::process::exit;
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use num_traits::Zero;
+use num_traits::{ToPrimitive, Zero};
 
-use uucore::error::FromIo;
-use uucore::error::UResult;
-use uucore::memo::printf;
-use uucore::show;
+use uucore::error::{FromIo, UResult};
+use uucore::format::{num_format, Format};
 use uucore::{format_usage, help_about, help_usage};
 
 mod error;
 mod extendedbigdecimal;
-mod extendedbigint;
 mod number;
 mod numberparse;
 use crate::error::SeqError;
 use crate::extendedbigdecimal::ExtendedBigDecimal;
-use crate::extendedbigint::ExtendedBigInt;
-use crate::number::Number;
 use crate::number::PreciseNumber;
 
 const ABOUT: &str = help_about!("seq.md");
@@ -43,11 +37,6 @@ struct SeqOptions<'a> {
     equal_width: bool,
     format: Option<&'a str>,
 }
-
-/// A range of integers.
-///
-/// The elements are (first, increment, last).
-type RangeInt = (ExtendedBigInt, ExtendedBigInt, ExtendedBigInt);
 
 /// A range of floats.
 ///
@@ -119,32 +108,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .num_fractional_digits
         .max(increment.num_fractional_digits);
 
-    let result = match (first.number, increment.number, last.number) {
-        (Number::Int(first), Number::Int(increment), last) => {
-            let last = last.round_towards(&first);
-            print_seq_integers(
-                (first, increment, last),
-                &options.separator,
-                &options.terminator,
-                options.equal_width,
-                padding,
-                options.format,
-            )
+    let format = match options.format {
+        Some(f) => {
+            let f = Format::<num_format::Float>::parse(f)?;
+            Some(f)
         }
-        (first, increment, last) => print_seq(
-            (
-                first.into_extended_big_decimal(),
-                increment.into_extended_big_decimal(),
-                last.into_extended_big_decimal(),
-            ),
-            largest_dec,
-            &options.separator,
-            &options.terminator,
-            options.equal_width,
-            padding,
-            options.format,
-        ),
+        None => None,
     };
+    let result = print_seq(
+        (first.number, increment.number, last.number),
+        largest_dec,
+        &options.separator,
+        &options.terminator,
+        options.equal_width,
+        padding,
+        &format,
+    );
     match result {
         Ok(_) => Ok(()),
         Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
@@ -216,28 +195,6 @@ fn write_value_float(
     write!(writer, "{value_as_str}")
 }
 
-/// Write a big int formatted according to the given parameters.
-fn write_value_int(
-    writer: &mut impl Write,
-    value: &ExtendedBigInt,
-    width: usize,
-    pad: bool,
-) -> std::io::Result<()> {
-    let value_as_str = if pad {
-        if *value == ExtendedBigInt::MinusZero {
-            format!("{value:0<width$}")
-        } else {
-            format!("{value:>0width$}")
-        }
-    } else {
-        format!("{value}")
-    };
-    write!(writer, "{value_as_str}")
-}
-
-// TODO `print_seq()` and `print_seq_integers()` are nearly identical,
-// they could be refactored into a single more general function.
-
 /// Floating point based code path
 fn print_seq(
     range: RangeFloat,
@@ -246,13 +203,17 @@ fn print_seq(
     terminator: &str,
     pad: bool,
     padding: usize,
-    format: Option<&str>,
+    format: &Option<Format<num_format::Float>>,
 ) -> std::io::Result<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();
     let (first, increment, last) = range;
     let mut value = first;
-    let padding = if pad { padding + 1 + largest_dec } else { 0 };
+    let padding = if pad {
+        padding + if largest_dec > 0 { largest_dec + 1 } else { 0 }
+    } else {
+        0
+    };
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
@@ -270,13 +231,16 @@ fn print_seq(
         // it as a string and ultimately writing to `stdout`. We
         // shouldn't have to do so much converting back and forth via
         // strings.
-        match format {
+        match &format {
             Some(f) => {
-                let s = format!("{value}");
-                if let Err(x) = printf(f, &[s]) {
-                    show!(x);
-                    exit(1);
-                }
+                let float = match &value {
+                    ExtendedBigDecimal::BigDecimal(bd) => bd.to_f64().unwrap(),
+                    ExtendedBigDecimal::Infinity => f64::INFINITY,
+                    ExtendedBigDecimal::MinusInfinity => f64::NEG_INFINITY,
+                    ExtendedBigDecimal::MinusZero => -0.0,
+                    ExtendedBigDecimal::Nan => f64::NAN,
+                };
+                f.fmt(&mut stdout, float)?;
             }
             None => write_value_float(&mut stdout, &value, padding, largest_dec)?,
         }
@@ -288,64 +252,5 @@ fn print_seq(
         write!(stdout, "{terminator}")?;
     }
     stdout.flush()?;
-    Ok(())
-}
-
-/// Print an integer sequence.
-///
-/// This function prints a sequence of integers defined by `range`,
-/// which defines the first integer, last integer, and increment of the
-/// range. The `separator` is inserted between each integer and
-/// `terminator` is inserted at the end.
-///
-/// The `pad` parameter indicates whether to pad numbers to the width
-/// given in `padding`.
-///
-/// If `is_first_minus_zero` is `true`, then the `first` parameter is
-/// printed as if it were negative zero, even though no such number
-/// exists as an integer (negative zero only exists for floating point
-/// numbers). Only set this to `true` if `first` is actually zero.
-fn print_seq_integers(
-    range: RangeInt,
-    separator: &str,
-    terminator: &str,
-    pad: bool,
-    padding: usize,
-    format: Option<&str>,
-) -> std::io::Result<()> {
-    let stdout = stdout();
-    let mut stdout = stdout.lock();
-    let (first, increment, last) = range;
-    let mut value = first;
-    let mut is_first_iteration = true;
-    while !done_printing(&value, &increment, &last) {
-        if !is_first_iteration {
-            write!(stdout, "{separator}")?;
-        }
-        // If there was an argument `-f FORMAT`, then use that format
-        // template instead of the default formatting strategy.
-        //
-        // The `printf()` function takes in the template and
-        // the current value and writes the result to `stdout`.
-        //
-        // TODO See similar comment about formatting in `print_seq()`.
-        match format {
-            Some(f) => {
-                let s = format!("{value}");
-                if let Err(x) = printf(f, &[s]) {
-                    show!(x);
-                    exit(1);
-                }
-            }
-            None => write_value_int(&mut stdout, &value, padding, pad)?,
-        }
-        // TODO Implement augmenting addition.
-        value = value + increment.clone();
-        is_first_iteration = false;
-    }
-
-    if !is_first_iteration {
-        write!(stdout, "{terminator}")?;
-    }
     Ok(())
 }

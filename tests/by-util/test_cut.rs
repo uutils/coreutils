@@ -118,13 +118,30 @@ fn test_whitespace_with_char() {
 }
 
 #[test]
-fn test_specify_delimiter() {
+fn test_too_large() {
+    new_ucmd!()
+        .args(&["-b1-18446744073709551615", "/dev/null"])
+        .fails()
+        .code_is(1);
+}
+
+#[test]
+fn test_delimiter() {
     for param in ["-d", "--delimiter", "--del"] {
         new_ucmd!()
             .args(&[param, ":", "-f", COMPLEX_SEQUENCE.sequence, INPUT])
             .succeeds()
             .stdout_only_fixture("delimiter_specified.expected");
     }
+}
+
+#[test]
+fn test_delimiter_with_more_than_one_char() {
+    new_ucmd!()
+        .args(&["-d", "ab", "-f1"])
+        .fails()
+        .stderr_contains("cut: the delimiter must be a single character")
+        .no_stdout();
 }
 
 #[test]

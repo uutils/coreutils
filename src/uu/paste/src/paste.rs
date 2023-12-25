@@ -44,7 +44,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let files = matches
         .get_many::<String>(options::FILE)
         .unwrap()
-        .map(|s| s.to_owned())
+        .cloned()
         .collect();
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
 

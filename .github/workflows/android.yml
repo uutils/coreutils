@@ -2,7 +2,12 @@ name: Android
 
 # spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader dtolnay juliangruber
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
 
 permissions:
   contents: read # to fetch code (actions/checkout)

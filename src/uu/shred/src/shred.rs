@@ -16,8 +16,8 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::parse_size::parse_size;
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_if_err};
+use uucore::parse_size::parse_size_u64;
+use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
 
 const ABOUT: &str = help_about!("shred.md");
 const USAGE: &str = help_usage!("shred.md");
@@ -200,8 +200,6 @@ impl BytesWriter {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     if !matches.contains_id(options::FILE) {
@@ -319,7 +317,7 @@ pub fn uu_app() -> Command {
 fn get_size(size_str_opt: Option<String>) -> Option<u64> {
     size_str_opt
         .as_ref()
-        .and_then(|size| parse_size(size.as_str()).ok())
+        .and_then(|size| parse_size_u64(size.as_str()).ok())
         .or_else(|| {
             if let Some(size) = size_str_opt {
                 show_error!("invalid file size: {}", size.quote());
@@ -369,12 +367,12 @@ fn wipe_file(
         let metadata = fs::metadata(path).map_err_context(String::new)?;
         let mut perms = metadata.permissions();
         #[cfg(unix)]
-        #[allow(clippy::useless_conversion)]
+        #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
         {
             // NOTE: set_readonly(false) makes the file world-writable on Unix.
-            // NOTE: S_IWUSR type is u16 on macOS.
-            if (perms.mode() & u32::from(S_IWUSR)) == 0 {
-                perms.set_mode(u32::from(S_IWUSR));
+            // NOTE: S_IWUSR type is u16 on macOS, i32 on Redox.
+            if (perms.mode() & (S_IWUSR as u32)) == 0 {
+                perms.set_mode(S_IWUSR as u32);
             }
         }
         #[cfg(not(unix))]
@@ -437,7 +435,7 @@ fn wipe_file(
             let pass_name = pass_name(&pass_type);
             if total_passes < 10 {
                 show_error!(
-                    "{}: pass {}/{} ({})... ",
+                    "{}: pass {}/{} ({})...",
                     path.maybe_quote(),
                     i + 1,
                     total_passes,
@@ -445,7 +443,7 @@ fn wipe_file(
                 );
             } else {
                 show_error!(
-                    "{}: pass {:2.0}/{:2.0} ({})... ",
+                    "{}: pass {:2.0}/{:2.0} ({})...",
                     path.maybe_quote(),
                     i + 1,
                     total_passes,
@@ -524,7 +522,7 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                         show_error!(
                             "{}: renamed to {}",
                             last_path.maybe_quote(),
-                            new_path.quote()
+                            new_path.display()
                         );
                     }
 

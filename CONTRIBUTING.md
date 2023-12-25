@@ -1,242 +1,270 @@
-<!-- spell-checker:ignore reimplementing toybox RUNTEST CARGOFLAGS nextest -->
+<!-- spell-checker:ignore reimplementing toybox RUNTEST CARGOFLAGS nextest embeddable Rustonomicon rustdoc's -->
 
 # Contributing to coreutils
 
-Contributions are very welcome via Pull Requests. If you don't know where to
-start, take a look at the
-[`good-first-issues`](https://github.com/uutils/coreutils/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22).
-If you have any questions, feel free to ask them in the issues or on
-[Discord](https://discord.gg/wQVJbvJ).
+Hi! Welcome to uutils/coreutils!
 
-## Best practices
+Thanks for wanting to contribute to this project! This document explains
+everything you need to know to contribute. Before you start make sure to also
+check out these documents:
 
-1. Follow what GNU is doing in terms of options and behavior. It is recommended
-   to look at the GNU Coreutils manual ([on the
-   web](https://www.gnu.org/software/coreutils/manual/html_node/index.html), or
-   locally using `info <utility>`). It is more in depth than the man pages and
-   provides a good description of available features and their implementation
-   details.
-1. If possible, look at the GNU test suite execution in the CI and make the test
-   work if failing.
-1. Use clap for argument management.
-1. Make sure that the code coverage is covering all of the cases, including
-   errors.
-1. The code must be clippy-warning-free and rustfmt-compliant.
-1. Don't hesitate to move common functions into uucore if they can be reused by
-   other binaries.
-1. Unsafe code should be documented with Safety comments.
-1. uutils is original code. It cannot contain code from existing GNU or Unix-like
-   utilities, nor should it link to or reference GNU libraries.
+- Our community's [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
+- [DEVELOPMENT.md](./DEVELOPMENT.md) for setting up your development
+  environment.
+
+Now follows a very important warning:
+
+> [!WARNING]
+> uutils is original code and cannot contain any code from GNU or
+> other implementations. This means that **we cannot accept any changes based on
+> the GNU source code**. To make sure that cannot happen, **you cannot link to
+> the GNU source code** either.
+
+Finally, feel free to join our [Discord](https://discord.gg/wQVJbvJ)!
+
+## Getting Oriented
+
+uutils is a big project consisting of many parts. Here are the most important
+parts for getting started:
+
+- [`src/uu`](./src/uu/): The code for all utilities
+- [`src/uucore`](./src/uucore/): Crate containing all the shared code between
+  the utilities.
+- [`tests/by-util`](./tests/by-util/): The tests for all utilities.
+- [`src/bin/coreutils.rs`](./src/bin/coreutils.rs): Code for the multicall
+  binary.
+- [`docs`](./docs/src): the documentation for the website
+
+Each utility is defined as a separate crate. The structure of each of these
+crates is as follows:
+
+- `Cargo.toml`
+- `src/main.rs`: contains only a single macro call
+- `src/<util name>.rs`: the actual code for the utility
+- `<util name>.md`: the documentation for the utility
+
+We have separated repositories for crates that we maintain but also publish for
+use by others:
+
+- [uutils-term-grid](https://github.com/uutils/uutils-term-grid)
+- [parse_datetime](https://github.com/uutils/parse_datetime)
+
+## Design Goals
+
+We have the following goals with our development:
+
+- **Compatible**: The utilities should be a drop-in replacement for the GNU
+  coreutils.
+- **Cross-platform**: All utilities should run on as many of the supported
+  platforms as possible.
+- **Reliable**: The utilities should never unexpectedly fail.
+- **Performant**: Our utilities should be written in fast idiomatic Rust. We aim
+  to match or exceed the performance of the GNU utilities.
+- **Well-tested**: We should have a lot of tests to be able to guarantee
+  reliability and compatibility.
+
+## How to Help
+
+There are several ways to help and writing code is just one of them. Reporting
+issues and writing documentation are just as important as writing code.
+
+### Reporting Issues
+
+We can't fix bugs we don't know about, so good issues are super helpful! Here
+are some tips for writing good issues:
+
+- If you find a bug, make sure it's still a problem on the `main` branch.
+- Search through the existing issues to see whether it has already been
+  reported.
+- Make sure to include all relevant information, such as:
+  - Which version of uutils did you check?
+  - Which version of GNU coreutils are you comparing with?
+  - What platform are you on?
+- Provide a way to reliably reproduce the issue.
+- Be as specific as possible!
+
+### Writing Documentation
+
+There's never enough documentation. If you come across any documentation that
+could be improved, feel free to submit a PR for it!
+
+### Writing Code
+
+If you want to submit a PR, make sure that you've discussed the solution with
+the maintainers beforehand. We want to avoid situations where you put a lot of
+work into a fix that we can't merge! If there's no issue for what you're trying
+to fix yet, make one _before_ you start working on the PR.
+
+Generally, we try to follow what GNU is doing in terms of options and behavior.
+It is recommended to look at the GNU coreutils manual
+([on the web](https://www.gnu.org/software/coreutils/manual/html_node/index.html),
+or locally using `info <utility>`). It is more in depth than the man pages and
+provides a good description of available features and their implementation
+details. But remember, you cannot look at the GNU source code!
+
+Also remember that we can only merge PRs which pass our test suite, follow
+rustfmt, and do not have any warnings from clippy. See
+[DEVELOPMENT.md](./DEVELOPMENT.md) for more information. Be sure to also read
+about our [Rust style](#our-rust-style).
+
+## Our Rust Style
+
+We want uutils to be written in idiomatic Rust, so here are some guidelines to
+follow. Some of these are aspirational, meaning that we don't do them correctly
+everywhere in the code. If you find violations of the advice below, feel free to
+submit a patch!
+
+### Don't `panic!`
+
+The coreutils should be very reliable. This means that we should never `panic!`.
+Therefore, you should avoid using `.unwrap()` and `panic!`. Sometimes the use of
+`unreachable!` can be justified with a comment explaining why that code is
+unreachable.
+
+### Don't `exit`
+
+We want uutils to be embeddable in other programs. This means that no function
+in uutils should exit the program. Doing so would also lead to code with more
+confusing control flow. Avoid therefore `std::process::exit` and similar
+functions which exit the program early.
+
+### `unsafe`
+
+uutils cannot be entirely safe, because we have to call out to `libc` and do
+syscalls. However, we still want to limit our use of `unsafe`. We generally only
+accept `unsafe` for FFI, with very few exceptions. Note that performance is very
+rarely a valid argument for using `unsafe`.
+
+If you still need to write code with `unsafe`, make sure to read the
+[Rustonomicon](https://doc.rust-lang.org/nomicon/intro.html) and annotate the
+calls with `// SAFETY:` comments explaining why the use of `unsafe` is sound.
+
+### Macros
+
+Macros can be a great tool, but they are also usually hard to understand. They
+should be used sparingly. Make sure to explore simpler options before you reach
+for a solution involving macros.
+
+### `str`, `OsStr` & `Path`
+
+Rust has many string-like types, and sometimes it's hard to choose the right
+one. It's tempting to use `str` (and `String`) for everything, but that is not
+always the right choice for uutils, because we need to support invalid UTF-8,
+just like the GNU coreutils. For example, paths on Linux might not be valid
+UTF-8! Whenever we are dealing with paths, we should therefore stick with
+`OsStr` and `Path`. Make sure that you only convert to `str`/`String` if you
+know that something is always valid UTF-8. If you need more operations on
+`OsStr`, you can use the [`bstr`](https://docs.rs/bstr/latest/bstr/) crate.
+
+### Doc-comments
+
+We use rustdoc for our documentation, so it's best to follow
+[rustdoc's guidelines](https://doc.rust-lang.org/rustdoc/how-to-write-documentation.html#documenting-components).
+Make sure that your documentation is not just repeating the name of the
+function, but actually giving more useful information. Rustdoc recommends the
+following structure:
+
+```
+[short sentence explaining what it is]
+
+[more detailed explanation]
+
+[at least one code example that users can copy/paste to try it]
+
+[even more advanced explanations if necessary]
+```
+
+### Other comments
+
+Comments should be written to _explain_ the code, not to _describe_ the code.
+Try to focus on explaining _why_ the code is the way it is. If you feel like you
+have to describe the code, that's usually a sign that you could improve the
+naming of variables and functions.
+
+If you edit a piece of code, make sure to update any comments that need to
+change as a result. The only thing worse than having no comments is having
+outdated comments!
+
+## Git Etiquette
+
+To ensure easy collaboration, we have guidelines for using Git and GitHub.
+
+### Commits
+
+- Make small and atomic commits.
+- Keep a clean history of commits.
+- Write informative commit messages.
+- Annotate your commit message with the component you're editing. For example:
+  `cp: do not overwrite on with -i` or `uucore: add support for FreeBSD`.
+- Do not unnecessarily move items around in the code. This makes the changes
+  much harder to review. If you do need to move things around, do that in a
+  separate commit.
+
+### Commit messages
+
+You can read this section in the Git book to learn how to write good commit
+messages: https://git-scm.com/book/ch5-2.html.
+
+In addition, here are a few examples for a summary line when committing to
+uutils:
+
+- commit for a single utility
+
+```
+nohup: cleanup and refactor
+```
+
+- commit for a utility's tests
+
+```
+tests/rm: test new feature
+```
+
+Beyond changes to an individual utility or its tests, other summary lines for
+non-utility modules include:
+
+```
+README: add help
+uucore: add new modules
+uutils: add new utility
+gitignore: add temporary files
+```
+
+### PRs
+
+- Make the titles of PRs descriptive.
+  - This means describing the problem you solve. For example, do not write
+    `Fix #1234`, but `ls: fix version sort order`.
+  - You can prefix the title with the utility the PR concerns.
+- Keep PRs small and self-contained. A set of small PRs is much more likely to
+  get merged quickly than one large PR.
+- Make sure the CI passes (up to intermittently failing tests).
+- You know your code best, that's why it's best if you can solve merge conflicts
+  on your branch yourself.
+  - It's up to you whether you want to use `git merge main` or
+    `git rebase main`.
+  - Feel free to ask for help with merge conflicts.
+- You do not need to ping maintainers to request a review, but it's fine to do
+  so if you don't get a response within a few days.
 
 ## Platforms
 
 We take pride in supporting many operating systems and architectures. Any code
 you contribute must at least compile without warnings for all platforms in the
-CI. However, you can use `#[cfg(...)]` attributes to create platform dependent features.
+CI. However, you can use `#[cfg(...)]` attributes to create platform dependent
+features.
 
 **Tip:** For Windows, Microsoft provides some images (VMWare, Hyper-V,
 VirtualBox and Parallels) for development:
 <https://developer.microsoft.com/windows/downloads/virtual-machines/>
 
-## Tools
+## Improving the GNU compatibility
 
-We have an extensive CI that will check your code before it can be merged. This
-section explains how to run those checks locally to avoid waiting for the CI.
-
-### pre-commit hooks
-
-A configuration for `pre-commit` is provided in the repository. It allows
-automatically checking every git commit you make to ensure it compiles, and
-passes `clippy` and `rustfmt` without warnings.
-
-To use the provided hook:
-
-1. [Install `pre-commit`](https://pre-commit.com/#install)
-1. Run `pre-commit install` while in the repository directory
-
-Your git commits will then automatically be checked. If a check fails, an error
-message will explain why, and your commit will be canceled. You can then make
-the suggested changes, and run `git commit ...` again.
-
-### clippy
-
-```shell
-cargo clippy --all-targets --all-features
-```
-
-The `msrv` key in the clippy configuration file `clippy.toml` is used to disable
-lints pertaining to newer features by specifying the minimum supported Rust
-version (MSRV).
-
-### rustfmt
-
-```shell
-cargo fmt --all
-```
-
-### cargo-deny
-
-This project uses [cargo-deny](https://github.com/EmbarkStudios/cargo-deny/) to
-detect duplicate dependencies, checks licenses, etc. To run it locally, first
-install it and then run with:
-
-```
-cargo deny --all-features check all
-```
-
-### Markdown linter
-
-We use [markdownlint](https://github.com/DavidAnson/markdownlint) to lint the
-Markdown files in the repository.
-
-### Spell checker
-
-We use `cspell` as spell checker for all files in the project. If you are using
-VS Code, you can install the
-[code spell checker](https://marketplace.visualstudio.com/items?itemName=streetsidesoftware.code-spell-checker)
-extension to enable spell checking within your editor. Otherwise, you can
-install [cspell](https://cspell.org/) separately.
-
-If you want to make the spell checker ignore a word, you can add
-
-```rust
-// spell-checker:ignore word_to_ignore
-```
-
-at the top of the file.
-
-## Testing
-
-Testing can be done using either Cargo or `make`.
-
-### Testing with Cargo
-
-Just like with building, we follow the standard procedure for testing using
-Cargo:
-
-```shell
-cargo test
-```
-
-By default, `cargo test` only runs the common programs. To run also platform
-specific tests, run:
-
-```shell
-cargo test --features unix
-```
-
-If you would prefer to test a select few utilities:
-
-```shell
-cargo test --features "chmod mv tail" --no-default-features
-```
-
-If you also want to test the core utilities:
-
-```shell
-cargo test  -p uucore -p coreutils
-```
-
-Or to test the pure Rust tests in the utility itself:
-
-```shell
-cargo test -p uu_ls --lib
-```
-
-Running the complete test suite might take a while. We use [nextest](https://nexte.st/index.html) in
-the CI and you might want to try it out locally. It can speed up the execution time of the whole
-test run significantly if the cpu has multiple cores.
-
-```shell
-cargo nextest run --features unix --no-fail-fast
-```
-
-To debug:
-
-```shell
-gdb --args target/debug/coreutils ls
-(gdb) b ls.rs:79
-(gdb) run
-```
-
-### Testing with GNU Make
-
-To simply test all available utilities:
-
-```shell
-make test
-```
-
-To test all but a few of the available utilities:
-
-```shell
-make SKIP_UTILS='UTILITY_1 UTILITY_2' test
-```
-
-To test only a few of the available utilities:
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' test
-```
-
-To include tests for unimplemented behavior:
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
-```
-
-To run tests with `nextest` just use the nextest target. Note you'll need to
-[install](https://nexte.st/book/installation.html) `nextest` first. The `nextest` target accepts the
-same arguments like the default `test` target, so it's possible to pass arguments to `nextest run`
-via `CARGOFLAGS`:
-
-```shell
-make CARGOFLAGS='--no-fail-fast' UTILS='UTILITY_1 UTILITY_2' nextest
-```
-
-### Run Busybox Tests
-
-This testing functionality is only available on *nix operating systems and
-requires `make`.
-
-To run busybox tests for all utilities for which busybox has tests
-
-```shell
-make busytest
-```
-
-To run busybox tests for a few of the available utilities
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' busytest
-```
-
-To pass an argument like "-v" to the busybox test runtime
-
-```shell
-make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
-```
-
-### Comparing with GNU
-
-To run uutils against the GNU test suite locally, run the following commands:
-
-```shell
-bash util/build-gnu.sh
-# Build uutils without release optimizations
-UU_MAKE_PROFILE=debug bash util/build-gnu.sh
-bash util/run-gnu-test.sh
-# To run a single test:
-bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
-# To run several tests:
-bash util/run-gnu-test.sh tests/touch/not-owner.sh tests/rm/no-give-up.sh # for example
-# If this is a perl (.pl) test, to run in debug:
-DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
-```
-
-Note that it relies on individual utilities (not the multicall binary).
-
-### Improving the GNU compatibility
+Please make sure you have installed
+[GNU utils and prerequisites](DEVELOPMENT.md#gnu-utils-and-prerequisites) and
+can execute commands described in
+[Comparing with GNU](DEVELOPMENT.md#comparing-with-gnu) section of
+[DEVELOPMENT.md](DEVELOPMENT.md)
 
 The Python script `./util/remaining-gnu-error.py` shows the list of failing
 tests in the CI.
@@ -260,112 +288,28 @@ To improve the GNU compatibility, the following process is recommended:
 1. Start to modify the Rust implementation to match the expected behavior
 1. Add a test to make sure that we don't regress (our test suite is super quick)
 
-## Commit messages
-
-To help the project maintainers review pull requests from contributors across
-numerous utilities, the team has settled on conventions for commit messages.
-
-From <https://git-scm.com/book/ch5-2.html>:
-
-```
-Capitalized, short (50 chars or less) summary
-
-More detailed explanatory text, if necessary.  Wrap it to about 72
-characters or so.  In some contexts, the first line is treated as the
-subject of an email and the rest of the text as the body.  The blank
-line separating the summary from the body is critical (unless you omit
-the body entirely); tools like rebase will confuse you if you run the
-two together.
-
-Write your commit message in the imperative: "Fix bug" and not "Fixed bug"
-or "Fixes bug."  This convention matches up with commit messages generated
-by commands like git merge and git revert.
-
-Further paragraphs come after blank lines.
-
-  - Bullet points are okay, too
-
-  - Typically a hyphen or asterisk is used for the bullet, followed by a
-    single space, with blank lines in between, but conventions vary here
-
-  - Use a hanging indent
-```
-
-Furthermore, here are a few examples for a summary line:
-
-* commit for a single utility
-
-```
-nohup: cleanup and refactor
-```
-
-* commit for a utility's tests
-
-```
-tests/rm: test new feature
-```
-
-Beyond changes to an individual utility or its tests, other summary
-lines for non-utility modules include:
-
-```
-README: add help
-```
-
-```
-uucore: add new modules
-```
-
-```
-uutils: add new utility
-```
-
-```
-gitignore: add temporary files
-```
-
 ## Code coverage
 
-<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic -->
-
-Code coverage report can be generated using [grcov](https://github.com/mozilla/grcov).
-
-### Using Nightly Rust
-
-To generate [gcov-based](https://github.com/mozilla/grcov#example-how-to-generate-gcda-files-for-a-rust-project) coverage report
-
-```shell
-export CARGO_INCREMENTAL=0
-export RUSTFLAGS="-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
-export RUSTDOCFLAGS="-Cpanic=abort"
-cargo build <options...> # e.g., --features feat_os_unix
-cargo test <options...> # e.g., --features feat_os_unix test_pathchk
-grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-existing --ignore build.rs --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?\#\[derive\()" -o ./target/debug/coverage/
-# open target/debug/coverage/index.html in browser
-```
-
-if changes are not reflected in the report then run `cargo clean` and run the above commands.
-
-### Using Stable Rust
-
-If you are using stable version of Rust that doesn't enable code coverage instrumentation by default
-then add `-Z-Zinstrument-coverage` flag to `RUSTFLAGS` env variable specified above.
+To generate code coverage report locally please follow
+[Code coverage report](DEVELOPMENT.md#code-coverage-report) section of
+[DEVELOPMENT.md](DEVELOPMENT.md)
 
 ## Other implementations
 
-The Coreutils have different implementations, with different levels of completions:
+The Coreutils have different implementations, with different levels of
+completions:
 
-* [GNU's](https://git.savannah.gnu.org/gitweb/?p=coreutils.git)
-* [OpenBSD](https://github.com/openbsd/src/tree/master/bin)
-* [Busybox](https://github.com/mirror/busybox/tree/master/coreutils)
-* [Toybox (Android)](https://github.com/landley/toybox/tree/master/toys/posix)
-* [V lang](https://github.com/vlang/coreutils)
-* [SerenityOS](https://github.com/SerenityOS/serenity/tree/master/Userland/Utilities)
-* [Initial Unix](https://github.com/dspinellis/unix-history-repo)
-* [Perl Power Tools](https://metacpan.org/pod/PerlPowerTools)
+- [GNU's](https://git.savannah.gnu.org/gitweb/?p=coreutils.git)
+- [OpenBSD](https://github.com/openbsd/src/tree/master/bin)
+- [Busybox](https://github.com/mirror/busybox/tree/master/coreutils)
+- [Toybox (Android)](https://github.com/landley/toybox/tree/master/toys/posix)
+- [V lang](https://github.com/vlang/coreutils)
+- [SerenityOS](https://github.com/SerenityOS/serenity/tree/master/Userland/Utilities)
+- [Initial Unix](https://github.com/dspinellis/unix-history-repo)
+- [Perl Power Tools](https://metacpan.org/pod/PerlPowerTools)
 
-However, when reimplementing the tools/options in Rust, don't read their source codes
-when they are using reciprocal licenses (ex: GNU GPL, GNU LGPL, etc).
+However, when reimplementing the tools/options in Rust, don't read their source
+codes when they are using reciprocal licenses (ex: GNU GPL, GNU LGPL, etc).
 
 ## Licensing
 
@@ -380,17 +324,17 @@ If you wish to add or change dependencies as part of a contribution to the
 project, a tool like `cargo-license` can be used to show their license details.
 The following types of license are acceptable:
 
-* MIT License
-* Dual- or tri-license with an MIT License option ("Apache-2.0 or MIT" is a
+- MIT License
+- Dual- or tri-license with an MIT License option ("Apache-2.0 or MIT" is a
   popular combination)
-* "MIT equivalent" license (2-clause BSD, 3-clause BSD, ISC)
-* License less restrictive than the MIT License (CC0 1.0 Universal)
-* Apache License version 2.0
+- "MIT equivalent" license (2-clause BSD, 3-clause BSD, ISC)
+- License less restrictive than the MIT License (CC0 1.0 Universal)
+- Apache License version 2.0
 
 Licenses we will not use:
 
-* An ambiguous license, or no license
-* Strongly reciprocal licenses (GNU GPL, GNU LGPL)
+- An ambiguous license, or no license
+- Strongly reciprocal licenses (GNU GPL, GNU LGPL)
 
 If you wish to add a reference but it doesn't meet these requirements, please
 raise an issue to describe the dependency.

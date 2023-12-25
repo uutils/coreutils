@@ -15,7 +15,7 @@ use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::parse_size::{parse_size_u64, ParseSizeError};
 use uucore::{format_usage, help_about, help_usage, show_warning};
 
 const ABOUT: &str = help_about!("tail.md");
@@ -414,7 +414,7 @@ fn parse_num(src: &str) -> Result<Signum, ParseSizeError> {
         }
     }
 
-    match parse_size(size_string) {
+    match parse_size_u64(size_string) {
         Ok(n) => match (n, starting_with) {
             (0, true) => Ok(Signum::PlusZero),
             (0, false) => Ok(Signum::MinusZero),

@@ -9,7 +9,11 @@ name: GnuTests
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -73,7 +77,7 @@ jobs:
         ref: ${{ steps.vars.outputs.repo_GNU_ref }}
         submodules: recursive
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v2
+      uses: dawidd6/action-download-artifact@v3
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:
@@ -116,7 +120,7 @@ jobs:
       run: |
         ## Build binaries
         cd '${{ steps.vars.outputs.path_UUTILS }}'
-        bash util/build-gnu.sh
+        bash util/build-gnu.sh --release-build
     - uses: actions/cache/save@v3
       with:
         path: "${{ steps.vars.outputs.path_GNU }}"
@@ -183,22 +187,22 @@ jobs:
           # Compress logs before upload (fails otherwise)
           gzip ${{ steps.vars.outputs.TEST_LOGS_GLOB }}
     - name: Reserve SHA1/ID of 'test-summary'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: "${{ steps.summary.outputs.HASH }}"
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test results summary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-summary
         path: "${{ steps.vars.outputs.TEST_SUMMARY_FILE }}"
     - name: Reserve test logs
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-logs
         path: "${{ steps.vars.outputs.TEST_LOGS_GLOB }}"
     - name: Upload full json results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: gnu-full-result.json
         path: ${{ steps.vars.outputs.TEST_FULL_SUMMARY_FILE }}
@@ -292,7 +296,7 @@ jobs:
         if test -n "${have_new_failures}" ; then exit -1 ; fi
     - name: Upload comparison log (for GnuComment workflow)
       if: success() || failure() # run regardless of prior step success/failure
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: comment
         path: ${{ steps.vars.outputs.path_reference }}/comment/
@@ -364,7 +368,7 @@ jobs:
       run: |
         ## Build binaries
         cd uutils
-        UU_MAKE_PROFILE=debug bash util/build-gnu.sh
+        bash util/build-gnu.sh
     - uses: actions/cache/save@v3
       with:
         path: 'gnu'
