@@ -14,7 +14,6 @@ pub struct Range {
 pub struct SeenPhysicalExtents
 {
     pub ranges: BTreeMap<u64, u64>,
-    pub log_infos: bool,
 }
 
 impl SeenPhysicalExtents {
@@ -86,7 +85,7 @@ impl SeenPhysicalExtents {
 
         let mut total_overlapping: u64 = 0;
 
-        for (i, extent_result) in extents.enumerate()
+        for (_i, extent_result) in extents.enumerate()
         {
             let extent = match extent_result {
                 Err(e) => {
@@ -108,14 +107,6 @@ impl SeenPhysicalExtents {
                 };
 
                 total_overlapping += self.get_overlapping_and_insert(&range);
-
-                if self.log_infos {
-                    errors.push(USimpleError::new(0,
-                            format!("extent: {}, sum:{}, extents: {}, range:{}..{}, flags:{:#x}",
-                                path.quote(), total_overlapping,
-                                i,range.start,range.end,
-                                extent.fe_flags.bits())));
-                }
             }
         }
 
