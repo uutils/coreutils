@@ -22,24 +22,54 @@ const SUB_LINK: &str = "subdir/links/sublink.txt";
 
 #[test]
 fn test_du_basics() {
-    new_ucmd!().succeeds().no_stderr();
+    let ts = TestScenario::new(util_name!());
+
+    let result = ts.ucmd().succeeds();
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let result_reference = unwrap_or_return!(expected_result(&ts, &[]));
+        if result_reference.succeeded() {
+            assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            return;
+        }
+    }
+    _du_basics(result.stdout_str());
 }
+
 #[cfg(target_vendor = "apple")]
 fn _du_basics(s: &str) {
-    let answer = "32\t./subdir
-8\t./subdir/deeper
-24\t./subdir/links
-40\t.
-";
+    let answer = concat!(
+        "4\t./subdir/deeper/deeper_dir\n",
+        "8\t./subdir/deeper\n",
+        "12\t./subdir/links\n",
+        "20\t./subdir\n",
+        "24\t.\n"
+    );
     assert_eq!(s, answer);
 }
-#[cfg(not(target_vendor = "apple"))]
+
+#[cfg(target_os = "windows")]
 fn _du_basics(s: &str) {
-    let answer = "28\t./subdir
-8\t./subdir/deeper
-16\t./subdir/links
-36\t.
-";
+    let answer = concat!(
+        "0\t.\\subdir\\deeper\\deeper_dir\n",
+        "0\t.\\subdir\\deeper\n",
+        "8\t.\\subdir\\links\n",
+        "8\t.\\subdir\n",
+        "8\t.\n"
+    );
+    assert_eq!(s, answer);
+}
+
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows"),))]
+fn _du_basics(s: &str) {
+    let answer = concat!(
+        "8\t./subdir/deeper/deeper_dir\n",
+        "16\t./subdir/deeper\n",
+        "16\t./subdir/links\n",
+        "36\t./subdir\n",
+        "44\t.\n"
+    );
     assert_eq!(s, answer);
 }
 
