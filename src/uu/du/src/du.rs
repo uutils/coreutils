@@ -317,60 +317,69 @@ struct DuData<'a> {
     print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
     options: &'a TraversalOptions,
     seen_inodes: HashSet<FileInfo>,
-    seen_phys_ranges: BTreeMap<u64, BTreeMap<u64, u64>>,
+    seen_physical_extents: BTreeMap<u64, SeenPhysicalExtents>,
     duplicate_stats: DuplicateStatistics,
     log_infos: bool,
     log_extent_cases: bool,
     log_summary: bool,
 }
 
-pub fn get_overlapping_extent_amount(seen_phys_ranges: &mut BTreeMap<u64, u64>, range: &Range) -> u64 {
+#[derive(Default)]
+pub struct SeenPhysicalExtents
+{
+    pub ranges: BTreeMap<u64, u64>,
+}
 
-    let mut same_or_before = seen_phys_ranges.range_mut(..range.start+1);
+impl SeenPhysicalExtents {
 
-    let mut need_new_entry = true;
-    let mut overlapping_sum: u64 = 0;
-    if let Some((_start, end)) = same_or_before.next_back() {
-        if *end >= range.end {
-            return range.end - range.start; // fully covered, no new entry needed
-        }
-        if *end >= range.start {
-            overlapping_sum += *end - range.start;
-            *end = range.end;     // partially covered from begin.
-                                  // Extend existing entry.
-            need_new_entry = false;
-        }
-    }
+    pub fn get_overlapping_extent_amount(&mut self, range: &Range) -> u64 {
 
-    if need_new_entry {
-        seen_phys_ranges.insert(range.start, range.end);
-    }
+        let mut same_or_before = self.ranges.range_mut(..range.start+1);
 
-    let mut current_pos = range.start+1;
-    loop {
-        let mut after = 
-            seen_phys_ranges.range(current_pos..);
-
-        if let Some((&start, end)) = after.next() {
-            if start >= range.end {
-                return overlapping_sum; // fully outside, nothing to do
+        let mut need_new_entry = true;
+        let mut overlapping_sum: u64 = 0;
+        if let Some((_start, end)) = same_or_before.next_back() {
+            if *end >= range.end {
+                return range.end - range.start; // fully covered, no new entry needed
             }
-
-            if *end > range.end {
-                overlapping_sum += range.end - start;
-                let new_start = range.end;
-                let new_end = *end;
-                seen_phys_ranges.insert(new_start, new_end);
-                seen_phys_ranges.remove(&start);
-                return overlapping_sum; // partially outside, done
+            if *end >= range.start {
+                overlapping_sum += *end - range.start;
+                *end = range.end;     // partially covered from begin.
+                                    // Extend existing entry.
+                need_new_entry = false;
             }
-
-            overlapping_sum += *end - start; // fully inside, remove, continue
-            current_pos = *end;
-            seen_phys_ranges.remove(&start);
         }
-        else {
-            return overlapping_sum;
+
+        if need_new_entry {
+            self.ranges.insert(range.start, range.end);
+        }
+
+        let mut current_pos = range.start+1;
+        loop {
+            let mut after =
+                self.ranges.range(current_pos..);
+
+            if let Some((&start, end)) = after.next() {
+                if start >= range.end {
+                    return overlapping_sum; // fully outside, nothing to do
+                }
+
+                if *end > range.end {
+                    overlapping_sum += range.end - start;
+                    let new_start = range.end;
+                    let new_end = *end;
+                    self.ranges.insert(new_start, new_end);
+                    self.ranges.remove(&start);
+                    return overlapping_sum; // partially outside, done
+                }
+
+                overlapping_sum += *end - start; // fully inside, remove, continue
+                current_pos = *end;
+                self.ranges.remove(&start);
+            }
+            else {
+                return overlapping_sum;
+            }
         }
     }
 }
@@ -381,9 +390,9 @@ impl<'a> DuData<'a> {
         print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
         options: &'a TraversalOptions,
     ) -> Self {
-        return DuData{print_tx, options, 
-            seen_inodes: HashSet::new(), 
-            seen_phys_ranges: BTreeMap::new(),
+        return DuData{print_tx, options,
+            seen_inodes: HashSet::new(),
+            seen_physical_extents: BTreeMap::new(),
             duplicate_stats: DuplicateStatistics::default(),
             log_infos: false,
             log_extent_cases: false,
@@ -459,16 +468,16 @@ impl<'a> DuData<'a> {
                             extent.fe_flags.contains(FiemapExtentFlags::SHARED) // only with this bit set, extents are relevant for us
                         {
                             let range = Range{
-                                start: extent.fe_physical, 
+                                start: extent.fe_physical,
                                 end: extent.fe_physical + extent.fe_length,
                             };
 
-                            let mut map_by_device = 
-                                self.seen_phys_ranges.entry(entry_stat.inode.unwrap().dev_id)
-                                .or_insert(BTreeMap::new());
+                            let map_by_device =
+                                self.seen_physical_extents
+                                    .entry(entry_stat.inode.unwrap().dev_id)
+                                    .or_insert(SeenPhysicalExtents::default());
 
-                            total_overlapping += get_overlapping_extent_amount(
-                                &mut map_by_device, &range);
+                            total_overlapping += map_by_device.get_overlapping_extent_amount(&range);
                             extents_number += 1;
 
                             if self.log_infos {
@@ -476,7 +485,7 @@ impl<'a> DuData<'a> {
                                     USimpleError::new(
                                         100,
                                         format!("extent: {}, sum:{}, extents: {}, range:{}..{}, flags:{:#x}",
-                                            entry.path().quote(), 
+                                            entry.path().quote(),
                                             total_overlapping,
                                             extents_number,
                                             range.start,
@@ -488,7 +497,7 @@ impl<'a> DuData<'a> {
                             }
                         }
                     }
-                } 
+                }
             }
         }
 
@@ -504,8 +513,8 @@ impl<'a> DuData<'a> {
                 self.print_tx.send(Err(
                     USimpleError::new(
                         100,
-                        format!("partial extend overlap: {}, sum:{}, extents: {}", 
-                            entry.path().quote(), 
+                        format!("partial extend overlap: {}, sum:{}, extents: {}",
+                            entry.path().quote(),
                             total_overlapping,
                             extents_number
                         )
@@ -538,8 +547,8 @@ impl<'a> DuData<'a> {
                 self.print_tx.send(Err(
                     USimpleError::new(
                         100,
-                        format!("ignore duplicate by inode: {}, inode:{}, extent: {}", 
-                            entry.path().quote(), 
+                        format!("ignore duplicate by inode: {}, inode:{}, extent: {}",
+                            entry.path().quote(),
                             is_ignored_by_inode,
                             would_be_ignored_by_extents
                         )
@@ -555,8 +564,8 @@ impl<'a> DuData<'a> {
                 self.print_tx.send(Err(
                     USimpleError::new(
                         100,
-                        format!("ignore duplicate by extent only: {}, inode:{}, extent: {}", 
-                            entry.path().quote(), 
+                        format!("ignore duplicate by extent only: {}, inode:{}, extent: {}",
+                            entry.path().quote(),
                             is_ignored_by_inode,
                             would_be_ignored_by_extents
                         )
@@ -570,8 +579,8 @@ impl<'a> DuData<'a> {
                 self.print_tx.send(Err(
                     USimpleError::new(
                         100,
-                        format!("ignore duplicate: {}, inode:{}, extent: {}", 
-                            entry.path().quote(), 
+                        format!("ignore duplicate: {}, inode:{}, extent: {}",
+                            entry.path().quote(),
                             is_ignored_by_inode,
                             would_be_ignored_by_extents
                         )
@@ -618,7 +627,7 @@ impl<'a> DuData<'a> {
                 stat: this_stat,
                 depth: depth + 1,
             }))?;
-        } 
+        }
 
         Ok(())
     }
@@ -628,12 +637,12 @@ impl<'a> DuData<'a> {
     fn du(&mut self,
         mut my_stat: Stat,
         depth: usize,
-    ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> 
+    ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>>
     {
         if !my_stat.is_dir {
             return Ok(my_stat)
         }
-    
+
         let dir_iterator = match fs::read_dir(&my_stat.path) {
             Ok(dir_iterator) => dir_iterator,
             Err(e) => {
@@ -884,12 +893,12 @@ impl UumainData {
     }
 
     fn handle_cmd_arg_file(&self,
-        stat: Stat, 
+        stat: Stat,
         print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     ) -> UResult<()> {
 
         let mut data = DuData::new(print_tx, &self.traversal_options);
-        
+
         if let Some(inode) = stat.inode {
             data.seen_inodes.insert(inode);
         }
@@ -904,7 +913,7 @@ impl UumainData {
         let stats = &data.duplicate_stats;
 
         if data.log_summary {
-            print_tx.send(Err(USimpleError::new(3000, 
+            print_tx.send(Err(USimpleError::new(3000,
                 format!("stats: inode_count:{}, inode_sum:{}, extent_count:{}, extent_sum:{}, partial_extent_count:{}, partial_extent_sum:{}",
                     stats.inode_count, stats.inode_sum,
                     stats.extent_count, stats.extent_sum,
@@ -916,12 +925,12 @@ impl UumainData {
     }
 
     fn uumain_cmd_arg_file_loop(&self,
-        files: Vec<PathBuf>, 
+        files: Vec<PathBuf>,
         print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
-        
+
     ) -> UResult<()> {
         'loop_file: for path in files {
-            
+
             if self.is_file_excluded(&path) {
                 continue 'loop_file
             }
