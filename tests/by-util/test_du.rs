@@ -6,7 +6,6 @@
 // spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist testdir
 #[cfg(not(windows))]
 use regex::Regex;
-#[cfg(not(windows))]
 use std::io::Write;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
