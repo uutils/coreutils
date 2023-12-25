@@ -118,11 +118,24 @@ fn test_escape_newline() {
 }
 
 #[test]
+fn test_escape_override() {
+    new_ucmd!()
+        .args(&["-e", "-E", "\\na"])
+        .succeeds()
+        .stdout_only("\\na\n");
+
+    new_ucmd!()
+        .args(&["-E", "-e", "\\na"])
+        .succeeds()
+        .stdout_only("\na\n");
+}
+
+#[test]
 fn test_escape_no_further_output() {
     new_ucmd!()
         .args(&["-e", "a\\cb", "c"])
         .succeeds()
-        .stdout_only("a\n");
+        .stdout_only("a");
 }
 
 #[test]
@@ -235,4 +248,48 @@ fn test_hyphen_values_between() {
         .run()
         .success()
         .stdout_is("dumdum  dum dum dum -e dum\n");
+}
+
+#[test]
+fn wrapping_octal() {
+    // Some odd behavior of GNU. Values of \0400 and greater do not fit in the
+    // u8 that we write to stdout. So we test that it wraps:
+    //
+    // We give it this input:
+    //     \o501 = 1_0100_0001 (yes, **9** bits)
+    // This should be wrapped into:
+    //     \o101 = 'A' = 0100_0001,
+    // because we only write a single character
+    new_ucmd!()
+        .arg("-e")
+        .arg("\\0501")
+        .succeeds()
+        .stdout_is("A\n");
+}
+
+#[test]
+fn old_octal_syntax() {
+    new_ucmd!()
+        .arg("-e")
+        .arg("\\1foo")
+        .succeeds()
+        .stdout_is("\x01foo\n");
+
+    new_ucmd!()
+        .arg("-e")
+        .arg("\\43foo")
+        .succeeds()
+        .stdout_is("#foo\n");
+
+    new_ucmd!()
+        .arg("-e")
+        .arg("\\101 foo")
+        .succeeds()
+        .stdout_is("A foo\n");
+
+    new_ucmd!()
+        .arg("-e")
+        .arg("\\1011")
+        .succeeds()
+        .stdout_is("A1\n");
 }

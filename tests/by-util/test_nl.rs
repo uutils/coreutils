@@ -2,7 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid ninvalid vinvalid winvalid
+//
+// spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid
 use crate::common::util::TestScenario;
 
 #[test]
@@ -350,6 +351,19 @@ fn test_default_body_numbering_multiple_files() {
 }
 
 #[test]
+fn test_default_body_numbering_multiple_files_and_stdin() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("a.txt", "a");
+    at.write("c.txt", "c");
+
+    ucmd.args(&["a.txt", "-", "c.txt"])
+        .pipe_in("b")
+        .succeeds()
+        .stdout_is("     1\ta\n     2\tb\n     3\tc\n");
+}
+
+#[test]
 fn test_body_numbering_all_lines_without_delimiter() {
     for arg in ["-ba", "--body-numbering=a"] {
         new_ucmd!()
@@ -523,4 +537,100 @@ fn test_line_number_overflow() {
         .fails()
         .stdout_is(format!("{}\ta\n", i64::MIN))
         .stderr_is("nl: line number overflow\n");
+}
+
+#[test]
+fn test_line_number_no_overflow() {
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MAX))
+        .pipe_in("a\n\\:\\:\nb")
+        .succeeds()
+        .stdout_is(format!("{0}\ta\n\n{0}\tb\n", i64::MAX));
+
+    new_ucmd!()
+        .arg(format!("--starting-line-number={}", i64::MIN))
+        .arg("--line-increment=-1")
+        .pipe_in("a\n\\:\\:\nb")
+        .succeeds()
+        .stdout_is(format!("{0}\ta\n\n{0}\tb\n", i64::MIN));
+}
+
+#[test]
+fn test_section_delimiter() {
+    for arg in ["-dabc", "--section-delimiter=abc"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nabcabcabc\nb") // header section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nabcabc\nb") // body section
+            .succeeds()
+            .stdout_is("     1\ta\n\n     1\tb\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nabc\nb") // footer section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+    }
+}
+
+#[test]
+fn test_one_char_section_delimiter_expansion() {
+    for arg in ["-da", "--section-delimiter=a"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\na:a:a:\nb") // header section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\na:a:\nb") // body section
+            .succeeds()
+            .stdout_is("     1\ta\n\n     1\tb\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\na:\nb") // footer section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+    }
+}
+
+#[test]
+fn test_non_ascii_one_char_section_delimiter() {
+    for arg in ["-dä", "--section-delimiter=ä"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\näää\nb") // header section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nää\nb") // body section
+            .succeeds()
+            .stdout_is("     1\ta\n\n     1\tb\n");
+
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\nä\nb") // footer section
+            .succeeds()
+            .stdout_is("     1\ta\n\n       b\n");
+    }
+}
+
+#[test]
+fn test_empty_section_delimiter() {
+    for arg in ["-d ''", "--section-delimiter=''"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("a\n\nb")
+            .succeeds()
+            .stdout_is("     1\ta\n       \n     2\tb\n");
+    }
 }

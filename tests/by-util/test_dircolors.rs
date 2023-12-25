@@ -159,6 +159,18 @@ fn test_quoting() {
         .no_stderr();
 }
 
+/*
+#[test]
+fn test_print_ls_colors() {
+    new_ucmd!()
+        .pipe_in("OWT 40;33\n")
+        .args(&["--print-ls-colors"])
+        .succeeds()
+        .stdout_is("\x1B[40;33mtw\t40;33\x1B[0m\n")
+        .no_stderr();
+}
+*/
+
 #[test]
 fn test_extra_operand() {
     new_ucmd!()

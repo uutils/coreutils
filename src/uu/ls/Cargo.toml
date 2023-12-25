@@ -1,6 +1,6 @@
 [package]
 name = "uu_ls"
-version = "0.0.21"
+version = "0.0.23"
 authors = ["uutils developers"]
 license = "MIT"
 description = "ls ~ (uutils) display directory contents"
@@ -19,11 +19,12 @@ clap = { workspace = true, features = ["env"] }
 chrono = { workspace = true }
 unicode-width = { workspace = true }
 number_prefix = { workspace = true }
-term_grid = { workspace = true }
+uutils_term_grid = { workspace = true }
 terminal_size = { workspace = true }
 glob = { workspace = true }
 lscolors = { workspace = true }
 uucore = { workspace = true, features = [
+  "colors",
   "entries",
   "fs",
   "quoting-style",
@@ -31,6 +32,7 @@ uucore = { workspace = true, features = [
 ] }
 once_cell = { workspace = true }
 selinux = { workspace = true, optional = true }
+hostname = { workspace = true }
 
 [[bin]]
 name = "ls"

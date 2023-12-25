@@ -317,7 +317,7 @@ fn test_file_is_itself() {
 }
 
 #[test]
-#[cfg(not(any(target_env = "musl", target_os = "android")))]
+#[cfg(not(target_os = "android"))]
 fn test_file_is_newer_than_and_older_than_itself() {
     // odd but matches GNU
     new_ucmd!()
@@ -364,8 +364,7 @@ fn test_same_device_inode() {
 }
 
 #[test]
-#[cfg(not(any(target_env = "musl", target_os = "android")))]
-// musl: creation time is not available on this platform currently
+#[cfg(not(target_os = "android"))]
 fn test_newer_file() {
     let scenario = TestScenario::new(util_name!());
 
@@ -377,10 +376,21 @@ fn test_newer_file() {
         .ucmd()
         .args(&["newer_file", "-nt", "regular_file"])
         .succeeds();
+
+    scenario
+        .ucmd()
+        .args(&["regular_file", "-nt", "newer_file"])
+        .fails();
+
+    scenario
+        .ucmd()
+        .args(&["regular_file", "-ot", "newer_file"])
+        .succeeds();
+
     scenario
         .ucmd()
         .args(&["newer_file", "-ot", "regular_file"])
-        .succeeds();
+        .fails();
 }
 
 #[test]
@@ -543,7 +553,7 @@ fn test_nonexistent_file_is_not_symlink() {
 }
 
 #[test]
-// FixME: freebsd fails with 'chmod: sticky_file: Inappropriate file type or format'
+// Only the superuser is allowed to set the sticky bit on files on FreeBSD.
 // Windows has no concept of sticky bit
 #[cfg(not(any(windows, target_os = "freebsd")))]
 fn test_file_is_sticky() {

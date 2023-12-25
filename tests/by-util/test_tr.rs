@@ -29,12 +29,12 @@ fn test_small_set2() {
 }
 
 #[test]
-fn test_unicode() {
+fn test_invalid_unicode() {
     new_ucmd!()
-        .args(&[", ┬─┬", "╯︵┻━┻"])
-        .pipe_in("(,°□°）, ┬─┬")
-        .run()
-        .stdout_is("(╯°□°）╯︵┻━┻");
+        .args(&["-dc", "abc"])
+        .pipe_in([0o200, b'a', b'b', b'c'])
+        .succeeds()
+        .stdout_is("abc");
 }
 
 #[test]
@@ -733,10 +733,11 @@ fn check_against_gnu_tr_tests_w() {
     //  {IN=>"\300\301\377\345\345\350\345"},
     //  {OUT=>"\300\301\377\345"}],
     new_ucmd!()
-        .args(&["-ds", "\u{350}", "\u{345}"])
-        .pipe_in("\u{300}\u{301}\u{377}\u{345}\u{345}\u{350}\u{345}")
+        .arg("-ds")
+        .args(&["\\350", "\\345"])
+        .pipe_in([0o300, 0o301, 0o377, 0o345, 0o345, 0o350, 0o345])
         .succeeds()
-        .stdout_is("\u{300}\u{301}\u{377}\u{345}");
+        .stdout_is_bytes([0o300, 0o301, 0o377, 0o345]);
 }
 
 #[test]

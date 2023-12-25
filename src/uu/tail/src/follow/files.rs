@@ -40,7 +40,7 @@ impl FileHandling {
     pub fn insert(&mut self, k: &Path, v: PathData, update_last: bool) {
         let k = Self::canonicalize_path(k);
         if update_last {
-            self.last = Some(k.to_owned());
+            self.last = Some(k.clone());
         }
         let _ = self.map.insert(k, v);
     }

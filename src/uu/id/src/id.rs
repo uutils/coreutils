@@ -109,6 +109,7 @@ struct State {
 }
 
 #[uucore::main]
+#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
@@ -506,7 +507,7 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
 fn pline(possible_uid: Option<uid_t>) {
     let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
@@ -523,10 +524,10 @@ fn pline(possible_uid: Option<uid_t>) {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "openbsd"))]
 fn auditid() {}
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd")))]
 fn auditid() {
     use std::mem::MaybeUninit;
 
@@ -623,7 +624,7 @@ fn id_print(state: &State, groups: &[u32]) {
     }
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "openbsd")))]
 mod audit {
     use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t};
 

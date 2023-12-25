@@ -279,7 +279,7 @@ impl Observer {
                         if !path.is_file() {
                             continue;
                         }
-                        let mut path = path.to_owned();
+                        let mut path = path.clone();
                         if path.is_relative() {
                             path = std::env::current_dir()?.join(path);
                         }
@@ -345,7 +345,7 @@ impl Observer {
                                     show_error!("{}: file truncated", display_name);
                                     self.files.update_reader(event_path)?;
                                 }
-                                paths.push(event_path.to_owned());
+                                paths.push(event_path.clone());
                             } else if !is_tailable && old_md.is_tailable() {
                                 if pd.reader.is_some() {
                                     self.files.reset_reader(event_path);
@@ -359,7 +359,7 @@ impl Observer {
                         } else if is_tailable {
                                 show_error!( "{} has appeared;  following new file", display_name.quote());
                                 self.files.update_reader(event_path)?;
-                                paths.push(event_path.to_owned());
+                                paths.push(event_path.clone());
                             } else if settings.retry {
                                 if self.follow_descriptor() {
                                     show_error!(
@@ -403,7 +403,7 @@ impl Observer {
                                     "{} cannot be used, reverting to polling",
                                     text::BACKEND
                                 );
-                                self.orphans.push(event_path.to_owned());
+                                self.orphans.push(event_path.clone());
                                 let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
                             }
                         } else {
@@ -451,7 +451,7 @@ impl Observer {
 
                 if self.follow_descriptor() {
                     let new_path = event.paths.last().unwrap();
-                    paths.push(new_path.to_owned());
+                    paths.push(new_path.clone());
 
                     let new_data = PathData::from_other_with_path(self.files.remove(event_path), new_path);
                     self.files.insert(
@@ -479,8 +479,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
 
     let mut process = platform::ProcessChecker::new(observer.pid);
 
-    let mut _event_counter = 0;
-    let mut _timeout_counter = 0;
+    let mut timeout_counter = 0;
 
     // main follow loop
     loop {
@@ -529,8 +528,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             .receiver
             .recv_timeout(settings.sleep_sec);
         if rx_result.is_ok() {
-            _event_counter += 1;
-            _timeout_counter = 0;
+            timeout_counter = 0;
         }
 
         let mut paths = vec![]; // Paths worth checking for new content to print
@@ -569,7 +567,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             }
             Ok(Err(e)) => return Err(USimpleError::new(1, format!("NotifyError: {e}"))),
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                _timeout_counter += 1;
+                timeout_counter += 1;
             }
             Err(e) => return Err(USimpleError::new(1, format!("RecvTimeoutError: {e}"))),
         }
@@ -586,7 +584,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             _read_some = observer.files.tail_file(path, settings.verbose)?;
         }
 
-        if _timeout_counter == settings.max_unchanged_stats {
+        if timeout_counter == settings.max_unchanged_stats {
             /*
             TODO: [2021-10; jhscheer] implement timeout_counter for each file.
             ‘--max-unchanged-stats=n’

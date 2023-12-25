@@ -540,3 +540,15 @@ fn test_write_to_self() {
         "first_file_content.second_file_content."
     );
 }
+
+#[test]
+#[cfg(unix)]
+fn test_error_loop() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("2", "1");
+    at.symlink_file("3", "2");
+    at.symlink_file("1", "3");
+    ucmd.arg("1")
+        .fails()
+        .stderr_is("cat: 1: Too many levels of symbolic links\n");
+}

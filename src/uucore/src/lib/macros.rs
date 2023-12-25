@@ -91,6 +91,7 @@ pub static UTILITY_IS_SECOND_ARG: AtomicBool = AtomicBool::new(false);
 #[macro_export]
 macro_rules! show(
     ($err:expr) => ({
+        use $crate::error::UError;
         let e = $err;
         $crate::error::set_exit_code(e.code());
         eprintln!("{}: {}", $crate::util_name(), e);
@@ -131,7 +132,7 @@ macro_rules! show(
 macro_rules! show_if_err(
     ($res:expr) => ({
         if let Err(e) = $res {
-            show!(e);
+            $crate::show!(e);
         }
     })
 );

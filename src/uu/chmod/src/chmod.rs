@@ -335,9 +335,7 @@ impl Chmoder {
                 let mut new_mode = fperm;
                 let mut naively_expected_new_mode = new_mode;
                 for mode in cmode_unwrapped.split(',') {
-                    // cmode is guaranteed to be Some in this case
-                    let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-                    let result = if mode.contains(arr) {
+                    let result = if mode.chars().any(|c| c.is_ascii_digit()) {
                         mode::parse_numeric(new_mode, mode, file.is_dir()).map(|v| (v, v))
                     } else {
                         mode::parse_symbolic(new_mode, mode, get_umask(), file.is_dir()).map(|m| {
@@ -352,20 +350,22 @@ impl Chmoder {
                             (m, naive_mode)
                         })
                     };
+
                     match result {
                         Ok((mode, naive_mode)) => {
                             new_mode = mode;
                             naively_expected_new_mode = naive_mode;
                         }
                         Err(f) => {
-                            if self.quiet {
-                                return Err(ExitCode::new(1));
+                            return if self.quiet {
+                                Err(ExitCode::new(1))
                             } else {
-                                return Err(USimpleError::new(1, f));
-                            }
+                                Err(USimpleError::new(1, f))
+                            };
                         }
                     }
                 }
+
                 self.change_file(fperm, new_mode, file)?;
                 // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
                 if (new_mode & !naively_expected_new_mode) != 0 {

@@ -35,16 +35,18 @@ pub use crate::parser::shortcut_value_parser;
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
 pub use crate::features::backup_control;
+#[cfg(feature = "colors")]
+pub use crate::features::colors;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
+#[cfg(feature = "format")]
+pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
-#[cfg(feature = "memo")]
-pub use crate::features::memo;
 #[cfg(feature = "quoting-style")]
 pub use crate::features::quoting_style;
 #[cfg(feature = "ranges")]
@@ -77,6 +79,7 @@ pub use crate::features::signals;
     unix,
     not(target_os = "android"),
     not(target_os = "fuchsia"),
+    not(target_os = "openbsd"),
     not(target_os = "redox"),
     not(target_env = "musl"),
     feature = "utmpx"

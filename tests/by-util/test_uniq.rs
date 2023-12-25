@@ -80,12 +80,48 @@ fn test_stdin_skip_and_check_2_chars() {
 }
 
 #[test]
-fn test_stdin_skip_1_field() {
+fn test_stdin_skip_2_fields() {
     new_ucmd!()
         .args(&["-f2"])
         .pipe_in_fixture(SKIP_FIELDS)
         .run()
         .stdout_is_fixture("skip-2-fields.expected");
+}
+
+#[test]
+fn test_stdin_skip_2_fields_obsolete() {
+    new_ucmd!()
+        .args(&["-2"])
+        .pipe_in_fixture(SKIP_FIELDS)
+        .run()
+        .stdout_is_fixture("skip-2-fields.expected");
+}
+
+#[test]
+fn test_stdin_skip_21_fields() {
+    new_ucmd!()
+        .args(&["-f21"])
+        .pipe_in_fixture(SKIP_FIELDS)
+        .run()
+        .stdout_is_fixture("skip-21-fields.expected");
+}
+
+#[test]
+fn test_stdin_skip_21_fields_obsolete() {
+    new_ucmd!()
+        .args(&["-21"])
+        .pipe_in_fixture(SKIP_FIELDS)
+        .run()
+        .stdout_is_fixture("skip-21-fields.expected");
+}
+
+#[test]
+fn test_stdin_skip_invalid_fields_obsolete() {
+    new_ucmd!()
+        .args(&["-5deadbeef"])
+        .run()
+        .failure()
+        .stderr_only("uniq: Invalid argument for skip-fields: 5deadbeef\n");
 }
 
 #[test]
@@ -436,15 +472,15 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
-        // // Obsolete syntax for "-f 1"
-        // TestCase {
-        //     name: "obs30",
-        //     args: &["-1"],
-        //     input: "a a\nb a\n",
-        //     stdout: Some("a a\n"),
-        //     stderr: None,
-        //     exit: None,
-        // },
+        // Obsolete syntax for "-f 1"
+        TestCase {
+            name: "obs30",
+            args: &["-1"],
+            input: "a a\nb a\n",
+            stdout: Some("a a\n"),
+            stderr: None,
+            exit: None,
+        },
         TestCase {
             name: "31",
             args: &["-f", "1"],
@@ -518,23 +554,25 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
-        // // Obsolete syntax for "-s 1"
-        // TestCase {
-        //     name: "obs-plus44",
-        //     args: &["+1", "--"],
-        //     input: "aaa\naaa\n",
-        //     stdout: Some("aaa\n"),
-        //     stderr: None,
-        //     exit: None,
-        // },
-        // TestCase {
-        //     name: "obs-plus45",
-        //     args: &["+1", "--"],
-        //     input: "baa\naaa\n",
-        //     stdout: Some("baa\n"),
-        //     stderr: None,
-        //     exit: None,
-        // },
+        /*
+        // Obsolete syntax for "-s 1"
+        TestCase {
+            name: "obs-plus44",
+            args: &["+1", "--"],
+            input: "aaa\naaa\n",
+            stdout: Some("aaa\n"),
+            stderr: None,
+            exit: None,
+        },
+        TestCase {
+            name: "obs-plus45",
+            args: &["+1", "--"],
+            input: "baa\naaa\n",
+            stdout: Some("baa\n"),
+            stderr: None,
+            exit: None,
+        },
+        */
         TestCase {
             name: "50",
             args: &["-f", "1", "-s", "1"],
