@@ -747,7 +747,7 @@ fn test_ln_seen_file() {
     assert!(at.plus("c").join("f").exists());
     // b/f still exists
     assert!(at.plus("b").join("f").exists());
-    // a/f no longer exists
+    // a/f still exists
     assert!(at.plus("a").join("f").exists());
     #[cfg(unix)]
     {

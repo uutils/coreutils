@@ -342,7 +342,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             };
 
         if linked_destinations.contains(&targetpath) {
-            // If the target file was already created in this linked call, do not overwrite
+            // If the target file was already created in this ln call, do not overwrite
             show_error!(
                 "will not overwrite just-created '{}' with '{}'",
                 targetpath.display(),
