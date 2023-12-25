@@ -1065,6 +1065,29 @@ fn test_du_reflink_partial_copy_not_considered_as_extra_data() {
 }
 
 
+#[cfg(not(windows))]
+#[test]
+fn test_du_symlink_to_reflink_copy_do_not_omit_symlink_printing() {
+
+    let ts = create_fixture_in_btrfs();
+    let at = &ts.fixtures;
+
+    create_binary_file(&at, 1024*1024, "large_file1.bin");
+
+    ts.cmd("cp").arg("--reflink=always")
+        .arg("large_file1.bin")
+        .arg("large_file1_cp_reflink_always.bin").succeeds();
+
+    at.symlink_file("large_file1.bin", "large_file1_symlink.bin");
+
+    let result = ts.ucmd().args(&["--all", "--shared-extents"]).succeeds();
+    result.stdout_contains("1024\t./large_file1.bin\n");
+    result.stdout_contains("4\t./large_file1_symlink.bin\n");
+    //result.stdout_contains("0\t./large_file1_cp_reflink_always.bin\n");
+    result.stdout_contains("1028\t.\n");
+}
+
+
 #[test]
 fn test_du_overlapping_ranges() {
     //let ts = TestScenario::new(util_name!());
