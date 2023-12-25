@@ -2881,6 +2881,24 @@ fn test_cp_mode_hardlink_no_dereference() {
     assert_eq!(at.read_symlink("z"), "slink");
 }
 
+#[cfg(not(any(windows, target_os = "android")))]
+#[test]
+fn test_remove_destination_with_destination_being_a_hardlink_to_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let hardlink = "hardlink";
+
+    at.touch(file);
+    at.hard_link(file, hardlink);
+
+    ucmd.args(&["--remove-destination", file, hardlink])
+        .succeeds();
+
+    assert_eq!("", at.resolve_link(hardlink));
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(hardlink));
+}
+
 #[test]
 fn test_remove_destination_with_destination_being_a_symlink_to_source() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3573,4 +3591,37 @@ fn test_cp_attributes_only() {
     assert_eq!("b", at.read(b));
     assert_eq!(mode_a, at.metadata(a).mode());
     assert_eq!(mode_b, at.metadata(b).mode());
+}
+
+#[test]
+fn test_cp_seen_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
+    #[cfg(not(unix))]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    #[cfg(unix)]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+
+    assert!(at.plus("c").join("f").exists());
+
+    ts.ucmd()
+        .arg("--backup=numbered")
+        .arg("a/f")
+        .arg("b/f")
+        .arg("c")
+        .succeeds();
+    assert!(at.plus("c").join("f").exists());
+    assert!(at.plus("c").join("f.~1~").exists());
 }
