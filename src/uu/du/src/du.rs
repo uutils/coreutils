@@ -425,52 +425,70 @@ impl<'a> DuData<'a> {
             return Ok(())
         }
 
-        let extents_option = match fiemap::fiemap(entry.path()) {
-            Ok(result) => Some(result),
-            Err(e) => {
-                self.print_tx.send(Err(e.map_err_context(|| {
-                    format!("FIEMAP: cannot access {}", entry.path().quote())
-                })))?;
-                None
-            },
-        };
+        let extents_option =
+            if entry_stat.is_dir { None } else {
+                match fiemap::fiemap(entry.path()) {
+                    Ok(result) => Some(result),
+                    Err(e) => {
+                        self.print_tx.send(Err(e.map_err_context(|| {
+                            format!("FIEMAP: cannot access {}", entry.path().quote())
+                        })))?;
+                        None
+                    },
+                }
+            };
 
         let mut extents_number = 0;
         let mut total_overlapping: u64 = 0;
         let mut would_be_ignored_by_extents: bool = false;
         if let Some(extents) = extents_option {
             for extent_result in extents {
-                if let Ok(extent) = extent_result {
-                    if !extent.fe_flags.contains(FiemapExtentFlags::UNKNOWN) {
-                        let range = Range{
-                            start: extent.fe_physical, 
-                            end: extent.fe_physical + extent.fe_length,
-                        };
+                match extent_result {
+                    Err(e) => {
+                        self.print_tx.send(Err(
+                            USimpleError::new(100,
+                                format!("FIEMAP: extent error {}, {}",
+                                    entry.path().quote(), e)
+                                )
+                            )
+                        )?;
+                        break;
+                    }
+                    Ok(extent) => {
+                        if !extent.fe_flags.contains(FiemapExtentFlags::UNKNOWN) && // if this bit is set, the record doesn't contain valid information (yet)
+                            extent.fe_flags.contains(FiemapExtentFlags::SHARED) // only with this bit set, extents are relevant for us
+                        {
+                            let range = Range{
+                                start: extent.fe_physical, 
+                                end: extent.fe_physical + extent.fe_length,
+                            };
 
-                        let mut map_by_device = 
-                            self.seen_phys_ranges.entry(entry_stat.inode.unwrap().dev_id)
-                            .or_insert(BTreeMap::new());
+                            let mut map_by_device = 
+                                self.seen_phys_ranges.entry(entry_stat.inode.unwrap().dev_id)
+                                .or_insert(BTreeMap::new());
 
-                        total_overlapping += get_overlapping_extent_amount(
-                            &mut map_by_device, &range);
-                        extents_number += 1;
+                            total_overlapping += get_overlapping_extent_amount(
+                                &mut map_by_device, &range);
+                            extents_number += 1;
 
-                        if self.log_infos {
-                            self.print_tx.send(Err(
-                                USimpleError::new(
-                                    100,
-                                    format!("extent: {}, sum:{}, extents: {}, range:{}..{}", 
-                                        entry.path().quote(), 
-                                        total_overlapping,
-                                        extents_number,
-                                        range.start,
-                                        range.end,
-                                    )
-                                ))
-                            )?;
+                            if self.log_infos {
+                                self.print_tx.send(Err(
+                                    USimpleError::new(
+                                        100,
+                                        format!("extent: {}, sum:{}, extents: {}, range:{}..{}, flags:{:#x}",
+                                            entry.path().quote(), 
+                                            total_overlapping,
+                                            extents_number,
+                                            range.start,
+                                            range.end,
+                                            extent.fe_flags.bits()
+                                        )
+                                    ))
+                                )?;
+                            }
                         }
                     }
-                }
+                } 
             }
         }
 
@@ -564,12 +582,17 @@ impl<'a> DuData<'a> {
         }
 
         if !entry_stat.is_dir {
-            base_stat.size += entry_stat.size - total_overlapping;
-            base_stat.blocks += entry_stat.blocks;
+            let mut adapted: Stat = entry_stat;
+            adapted.size -= total_overlapping;
+            adapted.blocks -= total_overlapping / 512;
+
+            base_stat.size += adapted.size;
+            base_stat.blocks += adapted.blocks;
             base_stat.inodes += 1;
+
             if self.options.all {
                 self.print_tx.send(Ok(StatPrintInfo {
-                    stat: entry_stat,
+                    stat: adapted,
                     depth: depth + 1,
                 }))?;
             }

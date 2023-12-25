@@ -815,6 +815,11 @@ impl AtPath {
         File::open(self.plus(name)).unwrap()
     }
 
+    pub fn open_read_write(&self, name: &str) -> File {
+        log_info("open", self.plus_as_string(name));
+        File::options().read(true).write(true).open(self.plus(name)).unwrap()
+    }
+
     pub fn read(&self, name: &str) -> String {
         let mut f = self.open(name);
         let mut contents = String::new();

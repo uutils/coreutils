@@ -4,17 +4,20 @@
 // file that was distributed with this source code.
 
 use du::{get_overlapping_extent_amount, Range};
+use pretty_assertions::assert_eq;
 // spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink
 #[cfg(not(windows))]
 use regex::Regex;
 use std::collections::BTreeMap;
 #[cfg(not(windows))]
 use std::io::Write;
+use std::os::unix::fs::FileExt;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
 use crate::common::util::TESTS_BINARY;
+use crate::common::util::AtPath;
 
 extern crate alloc;
 
@@ -944,8 +947,6 @@ fn test_du_symlink_multiple_fail() {
 fn create_fixture_in_btrfs() -> TestScenario {
     use tempfile::TempDir;
 
-    use crate::common::util::AtPath;
-
     let path = alloc::rc::Rc::new(std::path::PathBuf::from("/mnt/btrfstest/atpath"));
     std::fs::create_dir_all(path.as_path()).unwrap();
     let tmpd = alloc::rc::Rc::new(TempDir::new_in(path.as_path()).unwrap());
@@ -960,18 +961,23 @@ fn create_fixture_in_btrfs() -> TestScenario {
     return ts;
 }
 
-#[cfg(not(windows))]
-#[test]
-fn test_du_symlink_multiple_fail_xxx() {
-    
-    let ts = create_fixture_in_btrfs();
-    let at = &ts.fixtures;
-
-    let mut file = at.make_file("large_file1.bin");
+fn create_large_binary_file(at: &AtPath, filename: &str) {
+    let mut file = at.make_file(filename);
     for _ in 0..1024*1024 {
         file.write_all(&[0,1,2,3,4,5,6,7,8,9]).unwrap();
     }
     file.flush().unwrap();
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_reflink_copy_not_considered_as_extra_data() {
+
+    let ts = create_fixture_in_btrfs();
+    let at = &ts.fixtures;
+
+    create_large_binary_file(&at, "large_file1.bin");
+
     ts.cmd("cp")
         .arg("--reflink=always")
         .arg("large_file1.bin")
@@ -980,8 +986,41 @@ fn test_du_symlink_multiple_fail_xxx() {
 
     let result = ts.ucmd().arg("--all").succeeds();
     result.stdout_contains("10240\t./large_file1.bin\n");
-    result.stdout_contains("0\t./large_file1_cp_reflink_always.bin\n");
+    //result.stdout_contains("0\t./large_file1_cp_reflink_always.bin\n");
+    result.stdout_contains("10240\t.\n");
 }
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_reflink_partial_copy_not_considered_as_extra_data() {
+
+    let ts = create_fixture_in_btrfs();
+    let at = &ts.fixtures;
+
+    create_large_binary_file(&at, "large_file1.bin");
+
+    ts.cmd("cp").arg("--reflink=always")
+        .arg("large_file1.bin")
+        .arg("large_file1_cp_reflink_always_partial.bin").succeeds();
+
+    let mut f = at.open_read_write("large_file1_cp_reflink_always_partial.bin");
+    f.write_at(&[99; 1000*1024], 1024*1024).unwrap();
+    f.flush().unwrap();
+    drop(f);
+
+    // force sync on filesystem, otherwise modifications are still pending
+    if false {
+        ts.cmd("btrfs").args(&["filesystem", "sync", "."]).succeeds();
+    } else {
+        ts.cmd("sync").args(&["-f", "."]).succeeds();
+    }
+
+    let result = ts.ucmd().arg("--all").succeeds();
+    result.stdout_contains("10240\t./large_file1.bin\n");
+    result.stdout_contains("1000\t./large_file1_cp_reflink_always_partial.bin\n");
+    result.stdout_contains("11240\t.\n");
+}
+
 
 #[test]
 fn test_du_overlapping_ranges() {
