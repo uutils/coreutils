@@ -985,10 +985,16 @@ fn test_du_reflink_copy_not_considered_as_extra_data() {
         .arg("large_file1_cp_reflink_always.bin")
         .succeeds();
 
-    let result = ts.ucmd().arg("--all").succeeds();
+    let result = ts.ucmd().args(&["--all", "--shared-extents"]).succeeds();
     result.stdout_contains("10240\t./large_file1.bin\n");
     //result.stdout_contains("0\t./large_file1_cp_reflink_always.bin\n");
     result.stdout_contains("10240\t.\n");
+
+    // same, but with disabled extend searching feature:
+    let result = ts.ucmd().args(&["--all"]).succeeds();
+    result.stdout_contains("10240\t./large_file1.bin\n");
+    result.stdout_contains("10240\t./large_file1_cp_reflink_always.bin\n");
+    result.stdout_contains("20480\t.\n");
 }
 
 #[cfg(not(windows))]
@@ -1006,7 +1012,7 @@ fn test_du_reflink_copy_of_very_small_files_considered_as_extra_data_as_its_part
         .arg("small_file1_cp_reflink_always.bin")
         .succeeds();
 
-    let result = ts.ucmd().args(&["--all", "-b"]).succeeds();
+    let result = ts.ucmd().args(&["--all", "-b", "--shared-extents"]).succeeds();
     result.stdout_contains("50\t./small_file1.bin\n");
     result.stdout_contains("50\t./small_file1_cp_reflink_always.bin\n");
     result.stdout_contains("100\t.\n");
@@ -1031,13 +1037,9 @@ fn test_du_reflink_partial_copy_not_considered_as_extra_data() {
     drop(f);
 
     // force sync on filesystem, otherwise modifications are still pending
-    if false {
-        ts.cmd("btrfs").args(&["filesystem", "sync", "."]).succeeds();
-    } else {
-        ts.cmd("sync").args(&["-f", "."]).succeeds();
-    }
+    ts.cmd("sync").args(&["-f", "."]).succeeds();
 
-    let result = ts.ucmd().arg("--all").succeeds();
+    let result = ts.ucmd().args(&["--all", "--shared-extents"]).succeeds();
     result.stdout_contains("10240\t./large_file1.bin\n");
     result.stdout_contains("1000\t./large_file1_cp_reflink_always_partial.bin\n");
     result.stdout_contains("11240\t.\n");

@@ -70,6 +70,7 @@ mod options {
     pub const EXCLUDE_FROM: &str = "exclude-from";
     pub const VERBOSE: &str = "verbose";
     pub const FILE: &str = "FILE";
+    pub const SHARED_EXTENTS: &str = "shared-extents";
 }
 
 const ABOUT: &str = help_about!("du.md");
@@ -84,6 +85,7 @@ struct TraversalOptions {
     separate_dirs: bool,
     one_file_system: bool,
     dereference: Deref,
+    shared_extents: bool,
     count_links: bool,
     verbose: bool,
     excludes: Vec<Pattern>,
@@ -131,6 +133,7 @@ struct FileInfo {
 struct Stat {
     path: PathBuf,
     is_dir: bool,
+    is_symlink: bool,
     size: u64,
     blocks: u64,
     inodes: u64,
@@ -167,6 +170,7 @@ impl Stat {
             Ok(Self {
                 path: path.to_path_buf(),
                 is_dir: metadata.is_dir(),
+                is_symlink: metadata.is_symlink(),
                 size: if path.is_dir() { 0 } else { metadata.len() },
                 blocks: metadata.blocks(),
                 inodes: 1,
@@ -371,7 +375,10 @@ impl<'a> DuData<'a> {
         }
 
         let total_overlapping_by_extents =
-            if !entry_stat.is_dir && entry_stat.inode.is_some() {
+            if self.options.shared_extents &&
+               !entry_stat.is_symlink && !entry_stat.is_dir &&
+               entry_stat.inode.is_some()
+            {
                 let map_by_device =
                     self.seen_physical_extents
                         .entry(entry_stat.inode.unwrap().dev_id)
@@ -904,6 +911,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             Deref::None
         },
+        shared_extents: matches.get_flag(options::SHARED_EXTENTS),
         count_links: matches.get_flag(options::COUNT_LINKS),
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
@@ -1089,7 +1097,7 @@ pub fn uu_app() -> Command {
                 .long(options::DEREFERENCE_ARGS)
                 .help("follow only symlinks that are listed on the command line")
                 .action(ArgAction::SetTrue)
-        )
+         )
          .arg(
              Arg::new(options::NO_DEREFERENCE)
                  .short('P')
@@ -1097,7 +1105,14 @@ pub fn uu_app() -> Command {
                  .help("don't follow any symbolic links (this is the default)")
                  .overrides_with(options::DEREFERENCE)
                  .action(ArgAction::SetTrue),
-         )
+        )
+        .arg(
+            Arg::new(options::SHARED_EXTENTS)
+                .short('e')
+                .long(options::SHARED_EXTENTS)
+                .help("search for shared file extents (e.g. on CoW filesystems)")
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(options::BLOCK_SIZE_1M)
                 .short('m')
