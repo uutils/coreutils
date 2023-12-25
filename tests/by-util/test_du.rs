@@ -134,6 +134,25 @@ fn test_du_basics_bad_name() {
 }
 
 #[test]
+fn test_du_soft_link_all() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.symlink_file(SUB_FILE, SUB_LINK);
+
+    let result = ts.ucmd().args(&[SUB_DIR_LINKS, "--all"]).succeeds();
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS, "--all"]));
+        if result_reference.succeeded() {
+            assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            return;
+        }
+    }
+}
+
+#[test]
 fn test_du_soft_link() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
