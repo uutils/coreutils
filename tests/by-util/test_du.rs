@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use du::{SeenPhysicalExtents, Range};
+use du::physical_extents::{SeenPhysicalExtents, Range};
 use pretty_assertions::assert_eq;
 // spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink
 #[cfg(not(windows))]

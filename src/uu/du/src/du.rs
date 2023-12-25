@@ -3,10 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+pub mod physical_extents;
+
 use chrono::{DateTime, Local};
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use fiemap::FiemapExtentFlags;
 use glob::Pattern;
+use physical_extents::SeenPhysicalExtents;
 use std::collections::{HashSet, BTreeMap};
 use std::env;
 use std::error::Error;
@@ -297,12 +299,6 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
-#[derive(PartialEq, PartialOrd, Eq, Ord)]
-pub struct Range {
-    pub start: u64,
-    pub end: u64,
-}
-
 #[derive(Default)]
 struct DuplicateStatistics {
     inode_count: u64,
@@ -322,66 +318,6 @@ struct DuData<'a> {
     log_infos: bool,
     log_extent_cases: bool,
     log_summary: bool,
-}
-
-#[derive(Default)]
-pub struct SeenPhysicalExtents
-{
-    pub ranges: BTreeMap<u64, u64>,
-}
-
-impl SeenPhysicalExtents {
-
-    pub fn get_overlapping_extent_amount(&mut self, range: &Range) -> u64 {
-
-        let mut same_or_before = self.ranges.range_mut(..range.start+1);
-
-        let mut need_new_entry = true;
-        let mut overlapping_sum: u64 = 0;
-        if let Some((_start, end)) = same_or_before.next_back() {
-            if *end >= range.end {
-                return range.end - range.start; // fully covered, no new entry needed
-            }
-            if *end >= range.start {
-                overlapping_sum += *end - range.start;
-                *end = range.end;     // partially covered from begin.
-                                    // Extend existing entry.
-                need_new_entry = false;
-            }
-        }
-
-        if need_new_entry {
-            self.ranges.insert(range.start, range.end);
-        }
-
-        let mut current_pos = range.start+1;
-        loop {
-            let mut after =
-                self.ranges.range(current_pos..);
-
-            if let Some((&start, end)) = after.next() {
-                if start >= range.end {
-                    return overlapping_sum; // fully outside, nothing to do
-                }
-
-                if *end > range.end {
-                    overlapping_sum += range.end - start;
-                    let new_start = range.end;
-                    let new_end = *end;
-                    self.ranges.insert(new_start, new_end);
-                    self.ranges.remove(&start);
-                    return overlapping_sum; // partially outside, done
-                }
-
-                overlapping_sum += *end - start; // fully inside, remove, continue
-                current_pos = *end;
-                self.ranges.remove(&start);
-            }
-            else {
-                return overlapping_sum;
-            }
-        }
-    }
 }
 
 impl<'a> DuData<'a> {
@@ -434,89 +370,39 @@ impl<'a> DuData<'a> {
             return Ok(())
         }
 
-        let extents_option =
-            if entry_stat.is_dir { None } else {
-                match fiemap::fiemap(entry.path()) {
-                    Ok(result) => Some(result),
-                    Err(e) => {
-                        self.print_tx.send(Err(e.map_err_context(|| {
-                            format!("FIEMAP: cannot access {}", entry.path().quote())
-                        })))?;
-                        None
-                    },
-                }
-            };
+        let total_overlapping_by_extents =
+            if !entry_stat.is_dir && entry_stat.inode.is_some() {
+                let map_by_device =
+                    self.seen_physical_extents
+                        .entry(entry_stat.inode.unwrap().dev_id)
+                        .or_insert(SeenPhysicalExtents::default());
 
-        let mut extents_number = 0;
-        let mut total_overlapping: u64 = 0;
+                let (total_overlapping, errors) =
+                    map_by_device.get_total_overlap(entry.path());
+
+                for error in errors {
+                    self.print_tx.send(Err(error))?;
+                }
+
+                total_overlapping
+            } else { 0 };
+
         let mut would_be_ignored_by_extents: bool = false;
-        if let Some(extents) = extents_option {
-            for extent_result in extents {
-                match extent_result {
-                    Err(e) => {
-                        self.print_tx.send(Err(
-                            USimpleError::new(100,
-                                format!("FIEMAP: extent error {}, {}",
-                                    entry.path().quote(), e)
-                                )
-                            )
-                        )?;
-                        break;
-                    }
-                    Ok(extent) => {
-                        if !extent.fe_flags.contains(FiemapExtentFlags::UNKNOWN) && // if this bit is set, the record doesn't contain valid information (yet)
-                            extent.fe_flags.contains(FiemapExtentFlags::SHARED) // only with this bit set, extents are relevant for us
-                        {
-                            let range = Range{
-                                start: extent.fe_physical,
-                                end: extent.fe_physical + extent.fe_length,
-                            };
-
-                            let map_by_device =
-                                self.seen_physical_extents
-                                    .entry(entry_stat.inode.unwrap().dev_id)
-                                    .or_insert(SeenPhysicalExtents::default());
-
-                            total_overlapping += map_by_device.get_overlapping_extent_amount(&range);
-                            extents_number += 1;
-
-                            if self.log_infos {
-                                self.print_tx.send(Err(
-                                    USimpleError::new(
-                                        100,
-                                        format!("extent: {}, sum:{}, extents: {}, range:{}..{}, flags:{:#x}",
-                                            entry.path().quote(),
-                                            total_overlapping,
-                                            extents_number,
-                                            range.start,
-                                            range.end,
-                                            extent.fe_flags.bits()
-                                        )
-                                    ))
-                                )?;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if total_overlapping > 0 && total_overlapping >= entry_stat.size {
+        if total_overlapping_by_extents > 0 && total_overlapping_by_extents >= entry_stat.size {
             would_be_ignored_by_extents = true;
         }
-        else if total_overlapping > 0
+        else if total_overlapping_by_extents > 0
         {
             self.duplicate_stats.partial_extent_count += 1;
-            self.duplicate_stats.partial_extent_sum += total_overlapping;
+            self.duplicate_stats.partial_extent_sum += total_overlapping_by_extents;
 
             if self.log_infos {
                 self.print_tx.send(Err(
                     USimpleError::new(
                         100,
-                        format!("partial extend overlap: {}, sum:{}, extents: {}",
+                        format!("partial extend overlap: {}, sum:{}",
                             entry.path().quote(),
-                            total_overlapping,
-                            extents_number
+                            total_overlapping_by_extents,
                         )
                     ))
                 )?;
@@ -592,8 +478,8 @@ impl<'a> DuData<'a> {
 
         if !entry_stat.is_dir {
             let mut adapted: Stat = entry_stat;
-            adapted.size -= total_overlapping;
-            adapted.blocks -= total_overlapping / 512;
+            adapted.size -= total_overlapping_by_extents;
+            adapted.blocks -= total_overlapping_by_extents / 512;
 
             base_stat.size += adapted.size;
             base_stat.blocks += adapted.blocks;
