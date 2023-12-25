@@ -723,6 +723,7 @@ fn test_symlink_remove_existing_same_src_and_dest() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_ln_seen_file() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
