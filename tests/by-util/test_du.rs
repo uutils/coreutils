@@ -119,6 +119,32 @@ fn test_du_invalid_size() {
 }
 
 #[test]
+fn test_du_with_posixly_correct() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_move_str();
+
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result);
+}
+
+#[test]
 fn test_du_basics_bad_name() {
     new_ucmd!()
         .arg("bad_name")
@@ -299,11 +325,13 @@ fn test_du_dereference_args() {
     file2.write_all(b"amaz?ng").unwrap();
     at.symlink_dir("subdir", "sublink");
 
-    let result = ts.ucmd().arg("-D").arg("-s").arg("sublink").succeeds();
-    let stdout = result.stdout_str();
+    for arg in ["-D", "-H", "--dereference-args"] {
+        let result = ts.ucmd().arg(arg).arg("-s").arg("sublink").succeeds();
+        let stdout = result.stdout_str();
 
-    assert!(!stdout.starts_with('0'));
-    assert!(stdout.contains("sublink"));
+        assert!(!stdout.starts_with('0'));
+        assert!(stdout.contains("sublink"));
+    }
 
     // Without the option
     let result = ts.ucmd().arg("-s").arg("sublink").succeeds();
@@ -363,12 +391,19 @@ fn test_du_no_dereference() {
             .stdout_does_not_contain(symlink);
 
         // ensure dereference "wins"
-        ts.ucmd()
-            .arg(arg)
-            .arg("--dereference")
-            .succeeds()
-            .stdout_contains(symlink)
-            .stdout_does_not_contain(dir);
+        let result = ts.ucmd().arg(arg).arg("--dereference").succeeds();
+
+        #[cfg(target_os = "linux")]
+        {
+            let result_reference = unwrap_or_return!(expected_result(&ts, &[arg, "--dereference"]));
+
+            if result_reference.succeeded() {
+                assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            }
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        result.stdout_contains(symlink).stdout_does_not_contain(dir);
     }
 }
 
@@ -436,6 +471,34 @@ fn test_du_inodes() {
         let result_reference =
             unwrap_or_return!(expected_result(&ts, &["--separate-dirs", "--inodes"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+#[test]
+fn test_du_inodes_with_count_links() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+    at.touch("dir/file");
+    at.hard_link("dir/file", "dir/hard_link_a");
+    at.hard_link("dir/file", "dir/hard_link_b");
+
+    // ensure the hard links are not counted without --count-links
+    ts.ucmd()
+        .arg("--inodes")
+        .arg("dir")
+        .succeeds()
+        .stdout_is("2\tdir\n");
+
+    for arg in ["-l", "--count-links"] {
+        ts.ucmd()
+            .arg("--inodes")
+            .arg(arg)
+            .arg("dir")
+            .succeeds()
+            .stdout_is("4\tdir\n");
     }
 }
 

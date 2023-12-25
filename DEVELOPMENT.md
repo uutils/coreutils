@@ -226,8 +226,8 @@ To run uutils against the GNU test suite locally, run the following commands:
 
 ```shell
 bash util/build-gnu.sh
-# Build uutils without release optimizations
-UU_MAKE_PROFILE=debug bash util/build-gnu.sh
+# Build uutils with release optimizations
+bash util/build-gnu.sh --release-build
 bash util/run-gnu-test.sh
 # To run a single test:
 bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example

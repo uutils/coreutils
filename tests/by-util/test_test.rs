@@ -553,7 +553,7 @@ fn test_nonexistent_file_is_not_symlink() {
 }
 
 #[test]
-// FixME: freebsd fails with 'chmod: sticky_file: Inappropriate file type or format'
+// Only the superuser is allowed to set the sticky bit on files on FreeBSD.
 // Windows has no concept of sticky bit
 #[cfg(not(any(windows, target_os = "freebsd")))]
 fn test_file_is_sticky() {
@@ -667,7 +667,7 @@ fn test_nonexistent_file_not_owned_by_euid() {
 }
 
 #[test]
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(not(windows))]
 fn test_file_not_owned_by_euid() {
     new_ucmd!()
         .args(&["-f", "/bin/sh", "-a", "!", "-O", "/bin/sh"])
@@ -675,9 +675,32 @@ fn test_file_not_owned_by_euid() {
 }
 
 #[test]
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(not(windows))]
 fn test_file_owned_by_egid() {
-    new_ucmd!().args(&["-G", "regular_file"]).succeeds();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // On some platforms (mostly the BSDs) the test fixture files copied to the
+    // /tmp directory will have a different gid than the current egid (due to
+    // the sticky bit set on the /tmp directory). Fix this before running the
+    // test command.
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::MetadataExt;
+    use uucore::process::getegid;
+
+    let metadata = at.metadata("regular_file");
+    let file_gid = metadata.gid();
+    let user_gid = getegid();
+
+    if user_gid != file_gid {
+        let file_uid = metadata.uid();
+        let path = CString::new(at.plus("regular_file").as_os_str().as_bytes()).expect("bad path");
+        let r = unsafe { libc::chown(path.as_ptr().into(), file_uid, user_gid) };
+        assert_ne!(r, -1);
+    }
+
+    scene.ucmd().args(&["-G", "regular_file"]).succeeds();
 }
 
 #[test]
@@ -690,10 +713,19 @@ fn test_nonexistent_file_not_owned_by_egid() {
 }
 
 #[test]
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(not(windows))]
 fn test_file_not_owned_by_egid() {
+    let target_file = if cfg!(target_os = "freebsd") {
+        // The coreutils test runner user has a primary group id of "wheel",
+        // which matches the gid of /bin/sh, so use /sbin/shutdown which has gid
+        // of "operator".
+        "/sbin/shutdown"
+    } else {
+        "/bin/sh"
+    };
+
     new_ucmd!()
-        .args(&["-f", "/bin/sh", "-a", "!", "-G", "/bin/sh"])
+        .args(&["-f", target_file, "-a", "!", "-G", target_file])
         .succeeds();
 }
 

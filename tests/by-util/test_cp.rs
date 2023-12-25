@@ -13,7 +13,7 @@ use std::os::unix::fs;
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
@@ -24,8 +24,6 @@ use std::path::PathBuf;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use rlimit::Resource;
 #[cfg(target_os = "linux")]
 use std::ffi::OsString;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -133,7 +131,9 @@ fn test_cp_directory_not_recursive() {
         .arg(TEST_COPY_TO_FOLDER)
         .arg(TEST_HELLO_WORLD_DEST)
         .fails()
-        .stderr_contains("omitting directory");
+        .stderr_is(format!(
+            "cp: -r not specified; omitting directory '{TEST_COPY_TO_FOLDER}'\n"
+        ));
 }
 
 #[test]
@@ -257,6 +257,8 @@ fn test_cp_target_directory_is_file() {
 }
 
 #[test]
+// FixMe: for FreeBSD, flaky test; track repair progress at GH:uutils/coreutils/issue/4725
+#[cfg(not(target_os = "freebsd"))]
 fn test_cp_arg_update_interactive() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
@@ -2120,10 +2122,11 @@ fn test_cp_reflink_insufficient_permission() {
         .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)\n");
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 #[test]
 fn test_closes_file_descriptors() {
     use procfs::process::Process;
+    use rlimit::Resource;
     let me = Process::myself().unwrap();
 
     // The test suite runs in parallel, we have pipe, sockets
@@ -2133,7 +2136,6 @@ fn test_closes_file_descriptors() {
     let limit_fd: u64 = number_file_already_opened + 9;
 
     // For debugging purposes:
-    #[cfg(not(target_os = "android"))]
     for f in me.fd().unwrap() {
         let fd = f.unwrap();
         println!("{:?} {:?}", fd, fd.mode());
@@ -2379,13 +2381,18 @@ fn test_copy_symlink_force() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 fn test_no_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
     use uucore::mode::get_umask;
 
-    const PERMS_ALL: u32 = 0o7777;
+    const PERMS_ALL: u32 = if cfg!(target_os = "freebsd") {
+        // Only the superuser can set the sticky bit on a file.
+        0o6777
+    } else {
+        0o7777
+    };
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -2405,11 +2412,16 @@ fn test_no_preserve_mode() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 fn test_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
-    const PERMS_ALL: u32 = 0o7777;
+    const PERMS_ALL: u32 = if cfg!(target_os = "freebsd") {
+        // Only the superuser can set the sticky bit on a file.
+        0o6777
+    } else {
+        0o7777
+    };
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -2867,6 +2879,24 @@ fn test_cp_mode_hardlink_no_dereference() {
     ucmd.args(&["--link", "-P", "slink2", "z"]).succeeds();
     assert!(at.symlink_exists("z"));
     assert_eq!(at.read_symlink("z"), "slink");
+}
+
+#[cfg(not(any(windows, target_os = "android")))]
+#[test]
+fn test_remove_destination_with_destination_being_a_hardlink_to_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let hardlink = "hardlink";
+
+    at.touch(file);
+    at.hard_link(file, hardlink);
+
+    ucmd.args(&["--remove-destination", file, hardlink])
+        .succeeds();
+
+    assert_eq!("", at.resolve_link(hardlink));
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(hardlink));
 }
 
 #[test]
@@ -3356,6 +3386,21 @@ fn test_cp_debug_sparse_reflink() {
 }
 
 #[test]
+fn test_cp_debug_no_update() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.touch("b");
+    ts.ucmd()
+        .arg("--debug")
+        .arg("--update=none")
+        .arg("a")
+        .arg("b")
+        .succeeds()
+        .stdout_contains("skipped 'b'");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_always() {
     let ts = TestScenario::new(util_name!());
@@ -3546,4 +3591,37 @@ fn test_cp_attributes_only() {
     assert_eq!("b", at.read(b));
     assert_eq!(mode_a, at.metadata(a).mode());
     assert_eq!(mode_b, at.metadata(b).mode());
+}
+
+#[test]
+fn test_cp_seen_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
+    #[cfg(not(unix))]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    #[cfg(unix)]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+
+    assert!(at.plus("c").join("f").exists());
+
+    ts.ucmd()
+        .arg("--backup=numbered")
+        .arg("a/f")
+        .arg("b/f")
+        .arg("c")
+        .succeeds();
+    assert!(at.plus("c").join("f").exists());
+    assert!(at.plus("c").join("f.~1~").exists());
 }

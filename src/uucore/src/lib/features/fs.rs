@@ -115,10 +115,12 @@ impl FileInformation {
             not(target_os = "android"),
             not(target_os = "freebsd"),
             not(target_os = "netbsd"),
+            not(target_os = "openbsd"),
             not(target_os = "illumos"),
             not(target_os = "solaris"),
             not(target_arch = "aarch64"),
             not(target_arch = "riscv64"),
+            not(target_arch = "loongarch64"),
             target_pointer_width = "64"
         ))]
         return self.0.st_nlink;
@@ -129,10 +131,12 @@ impl FileInformation {
                 target_os = "android",
                 target_os = "freebsd",
                 target_os = "netbsd",
+                target_os = "openbsd",
                 target_os = "illumos",
                 target_os = "solaris",
                 target_arch = "aarch64",
                 target_arch = "riscv64",
+                target_arch = "loongarch64",
                 not(target_pointer_width = "64")
             )
         ))]

@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use crate::common::util::TestScenario;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
 #[test]
@@ -718,4 +720,50 @@ fn test_symlink_remove_existing_same_src_and_dest() {
         .stderr_contains("'a' and 'a' are the same file");
     assert!(at.file_exists("a") && !at.symlink_exists("a"));
     assert_eq!(at.read("a"), "sample");
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_ln_seen_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
+
+    #[cfg(not(unix))]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    #[cfg(unix)]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+
+    assert!(at.plus("c").join("f").exists());
+    // b/f still exists
+    assert!(at.plus("b").join("f").exists());
+    // a/f still exists
+    assert!(at.plus("a").join("f").exists());
+    #[cfg(unix)]
+    {
+        // Check inode numbers
+        let inode_a_f = at.plus("a").join("f").metadata().unwrap().ino();
+        let inode_b_f = at.plus("b").join("f").metadata().unwrap().ino();
+        let inode_c_f = at.plus("c").join("f").metadata().unwrap().ino();
+
+        assert_eq!(
+            inode_a_f, inode_c_f,
+            "Inode numbers of a/f and c/f should be equal"
+        );
+        assert_ne!(
+            inode_b_f, inode_c_f,
+            "Inode numbers of b/f and c/f should not be equal"
+        );
+    }
 }

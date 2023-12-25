@@ -78,6 +78,9 @@ Fields
             second parameter is min-width, integer
             output below that width is padded with leading zeroes
 
+* `%q`:       ARGUMENT is printed in a format that can be reused as shell input, escaping non-printable
+            characters with the proposed POSIX $'' syntax.
+
 * `%f` or `%F`: decimal floating point value
 * `%e` or `%E`: scientific notation floating point value
 * `%g` or `%G`: shorter of specially interpreted decimal or SciNote floating point value.
@@ -180,6 +183,11 @@ All string fields have a 'max width' parameter
       instead of `\\NNN`. (Although, for legacy reasons, octal literals in the form of `\\NNN` will
       still be interpreted and not throw a warning, you will have problems if you use this for a
       literal whose code begins with zero, as it will be viewed as in `\\0NNN` form.)
+
+* `%q`:  escaped string - the string in a format that can be reused as input by most shells.
+      Non-printable characters are escaped with the POSIX proposed ‘$''’ syntax,
+      and shell meta-characters are quoted appropriately.
+      This is an equivalent format to ls --quoting=shell-escape output.
 
 #### CHAR SUBSTITUTIONS
 

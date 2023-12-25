@@ -1,7 +1,7 @@
 # spell-checker:ignore bigdecimal
 [package]
 name = "uu_seq"
-version = "0.0.22"
+version = "0.0.23"
 authors = ["uutils developers"]
 license = "MIT"
 description = "seq ~ (uutils) display a sequence of numbers"
@@ -20,7 +20,7 @@ bigdecimal = { workspace = true }
 clap = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-uucore = { workspace = true, features = ["memo"] }
+uucore = { workspace = true, features = ["format", "quoting-style"] }
 
 [[bin]]
 name = "seq"

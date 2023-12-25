@@ -66,6 +66,7 @@ enum InstallError {
     InvalidUser(String),
     InvalidGroup(String),
     OmittingDirectory(PathBuf),
+    NotADirectory(PathBuf),
 }
 
 impl UError for InstallError {
@@ -120,6 +121,9 @@ impl Display for InstallError {
             Self::InvalidUser(user) => write!(f, "invalid user: {}", user.quote()),
             Self::InvalidGroup(group) => write!(f, "invalid group: {}", group.quote()),
             Self::OmittingDirectory(dir) => write!(f, "omitting directory {}", dir.quote()),
+            Self::NotADirectory(dir) => {
+                write!(f, "failed to access {}: Not a directory", dir.quote())
+            }
         }
     }
 }
@@ -583,6 +587,13 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                 }
             }
         }
+        if b.target_dir.is_some() {
+            let p = to_create.unwrap();
+
+            if !p.exists() || !p.is_dir() {
+                return Err(InstallError::NotADirectory(p.to_path_buf()).into());
+            }
+        }
     }
 
     if sources.len() > 1 || is_potential_directory_path(&target) {
@@ -749,7 +760,21 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
-    match process::Command::new(&b.strip_program).arg(to).output() {
+    // Check if the filename starts with a hyphen and adjust the path
+    let to = if to
+        .file_name()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap_or_default()
+        .starts_with('-')
+    {
+        let mut new_path = PathBuf::from(".");
+        new_path.push(to);
+        new_path
+    } else {
+        to.to_path_buf()
+    };
+    match process::Command::new(&b.strip_program).arg(&to).output() {
         Ok(o) => {
             if !o.status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target

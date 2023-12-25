@@ -126,13 +126,22 @@ fn test_too_large() {
 }
 
 #[test]
-fn test_specify_delimiter() {
+fn test_delimiter() {
     for param in ["-d", "--delimiter", "--del"] {
         new_ucmd!()
             .args(&[param, ":", "-f", COMPLEX_SEQUENCE.sequence, INPUT])
             .succeeds()
             .stdout_only_fixture("delimiter_specified.expected");
     }
+}
+
+#[test]
+fn test_delimiter_with_more_than_one_char() {
+    new_ucmd!()
+        .args(&["-d", "ab", "-f1"])
+        .fails()
+        .stderr_contains("cut: the delimiter must be a single character")
+        .no_stdout();
 }
 
 #[test]

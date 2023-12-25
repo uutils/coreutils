@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) INFTY MULT PSKIP accum aftertab beforetab breakwords fmt's formatline linebreak linebreaking linebreaks linelen maxlength minlength nchars noformat noformatline ostream overlen parasplit pfxind plass pmatch poffset posn powf prefixindent punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen wordsplits xanti xprefix
+// spell-checker:ignore (ToDO) INFTY MULT PSKIP accum aftertab beforetab breakwords fmt's formatline linebreak linebreaking linebreaks linelen maxlength minlength nchars noformat noformatline ostream overlen parasplit plass pmatch poffset posn powf prefixindent punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen wordsplits xanti xprefix
 
 use std::io::{BufRead, Lines};
 use std::iter::Peekable;
@@ -52,18 +52,22 @@ impl Line {
     }
 }
 
-// each line's prefix has to be considered to know whether to merge it with
-// the next line or not
+/// Each line's prefix has to be considered to know whether to merge it with
+/// the next line or not
 #[derive(Debug)]
 pub struct FileLine {
     line: String,
-    indent_end: usize, // the end of the indent, always the start of the text
-    pfxind_end: usize, // the end of the PREFIX's indent, that is, the spaces before the prefix
-    indent_len: usize, // display length of indent taking into account tabs
-    prefix_len: usize, // PREFIX indent length taking into account tabs
+    /// The end of the indent, always the start of the text
+    indent_end: usize,
+    /// The end of the PREFIX's indent, that is, the spaces before the prefix
+    prefix_indent_end: usize,
+    /// Display length of indent taking into account tabs
+    indent_len: usize,
+    /// PREFIX indent length taking into account tabs
+    prefix_len: usize,
 }
 
-// iterator that produces a stream of Lines from a file
+/// Iterator that produces a stream of Lines from a file
 pub struct FileLines<'a> {
     opts: &'a FmtOptions,
     lines: Lines<&'a mut FileOrStdReader>,
@@ -74,26 +78,22 @@ impl<'a> FileLines<'a> {
         FileLines { opts, lines }
     }
 
-    // returns true if this line should be formatted
+    /// returns true if this line should be formatted
     fn match_prefix(&self, line: &str) -> (bool, usize) {
-        if !self.opts.use_prefix {
+        let Some(prefix) = &self.opts.prefix else {
             return (true, 0);
-        }
+        };
 
-        FileLines::match_prefix_generic(&self.opts.prefix[..], line, self.opts.xprefix)
+        FileLines::match_prefix_generic(prefix, line, self.opts.xprefix)
     }
 
-    // returns true if this line should be formatted
+    /// returns true if this line should be formatted
     fn match_anti_prefix(&self, line: &str) -> bool {
-        if !self.opts.use_anti_prefix {
+        let Some(anti_prefix) = &self.opts.anti_prefix else {
             return true;
-        }
+        };
 
-        match FileLines::match_prefix_generic(
-            &self.opts.anti_prefix[..],
-            line,
-            self.opts.xanti_prefix,
-        ) {
+        match FileLines::match_prefix_generic(anti_prefix, line, self.opts.xanti_prefix) {
             (true, _) => false,
             (_, _) => true,
         }
@@ -148,13 +148,7 @@ impl<'a> Iterator for FileLines<'a> {
     type Item = Line;
 
     fn next(&mut self) -> Option<Line> {
-        let n = match self.lines.next() {
-            Some(t) => match t {
-                Ok(tt) => tt,
-                Err(_) => return None,
-            },
-            None => return None,
-        };
+        let n = self.lines.next()?.ok()?;
 
         // if this line is entirely whitespace,
         // emit a blank line
@@ -178,7 +172,7 @@ impl<'a> Iterator for FileLines<'a> {
         // not truly blank we will not allow mail headers on the
         // following line)
         if pmatch
-            && n[poffset + self.opts.prefix.len()..]
+            && n[poffset + self.opts.prefix.as_ref().map_or(0, |s| s.len())..]
                 .chars()
                 .all(char::is_whitespace)
         {
@@ -192,37 +186,46 @@ impl<'a> Iterator for FileLines<'a> {
         }
 
         // figure out the indent, prefix, and prefixindent ending points
-        let prefix_end = poffset + self.opts.prefix.len();
+        let prefix_end = poffset + self.opts.prefix.as_ref().map_or(0, |s| s.len());
         let (indent_end, prefix_len, indent_len) = self.compute_indent(&n[..], prefix_end);
 
         Some(Line::FormatLine(FileLine {
             line: n,
             indent_end,
-            pfxind_end: poffset,
+            prefix_indent_end: poffset,
             indent_len,
             prefix_len,
         }))
     }
 }
 
-// a paragraph : a collection of FileLines that are to be formatted
-// plus info about the paragraph's indentation
-// (but we only retain the String from the FileLine; the other info
-// is only there to help us in deciding how to merge lines into Paragraphs
+/// A paragraph : a collection of FileLines that are to be formatted
+/// plus info about the paragraph's indentation
+///
+/// We only retain the String from the FileLine; the other info
+/// is only there to help us in deciding how to merge lines into Paragraphs
 #[derive(Debug)]
 pub struct Paragraph {
-    lines: Vec<String>,     // the lines of the file
-    pub init_str: String,   // string representing the init, that is, the first line's indent
-    pub init_len: usize,    // printable length of the init string considering TABWIDTH
-    init_end: usize,        // byte location of end of init in first line String
-    pub indent_str: String, // string representing indent
-    pub indent_len: usize,  // length of above
-    indent_end: usize, // byte location of end of indent (in crown and tagged mode, only applies to 2nd line and onward)
-    pub mail_header: bool, // we need to know if this is a mail header because we do word splitting differently in that case
+    /// the lines of the file
+    lines: Vec<String>,
+    /// string representing the init, that is, the first line's indent
+    pub init_str: String,
+    /// printable length of the init string considering TABWIDTH
+    pub init_len: usize,
+    /// byte location of end of init in first line String
+    init_end: usize,
+    /// string representing indent
+    pub indent_str: String,
+    /// length of above
+    pub indent_len: usize,
+    /// byte location of end of indent (in crown and tagged mode, only applies to 2nd line and onward)
+    indent_end: usize,
+    /// we need to know if this is a mail header because we do word splitting differently in that case
+    pub mail_header: bool,
 }
 
-// an iterator producing a stream of paragraphs from a stream of lines
-// given a set of options.
+/// An iterator producing a stream of paragraphs from a stream of lines
+/// given a set of options.
 pub struct ParagraphStream<'a> {
     lines: Peekable<FileLines<'a>>,
     next_mail: bool,
@@ -240,7 +243,7 @@ impl<'a> ParagraphStream<'a> {
         }
     }
 
-    // detect RFC822 mail header
+    /// Detect RFC822 mail header
     fn is_mail_header(line: &FileLine) -> bool {
         // a mail header begins with either "From " (envelope sender line)
         // or with a sequence of printable ASCII chars (33 to 126, inclusive,
@@ -276,12 +279,9 @@ impl<'a> Iterator for ParagraphStream<'a> {
     #[allow(clippy::cognitive_complexity)]
     fn next(&mut self) -> Option<Result<Paragraph, String>> {
         // return a NoFormatLine in an Err; it should immediately be output
-        let noformat = match self.lines.peek() {
-            None => return None,
-            Some(l) => match *l {
-                Line::FormatLine(_) => false,
-                Line::NoFormatLine(_, _) => true,
-            },
+        let noformat = match self.lines.peek()? {
+            Line::FormatLine(_) => false,
+            Line::NoFormatLine(_, _) => true,
         };
 
         // found a NoFormatLine, immediately dump it out
@@ -299,100 +299,94 @@ impl<'a> Iterator for ParagraphStream<'a> {
         let mut indent_end = 0;
         let mut indent_len = 0;
         let mut prefix_len = 0;
-        let mut pfxind_end = 0;
+        let mut prefix_indent_end = 0;
         let mut p_lines = Vec::new();
 
         let mut in_mail = false;
         let mut second_done = false; // for when we use crown or tagged mode
         loop {
-            {
-                // peek ahead
-                // need to explicitly force fl out of scope before we can call self.lines.next()
-                let fl = match self.lines.peek() {
-                    None => break,
-                    Some(l) => match *l {
-                        Line::FormatLine(ref x) => x,
-                        Line::NoFormatLine(..) => break,
-                    },
-                };
+            // peek ahead
+            // need to explicitly force fl out of scope before we can call self.lines.next()
+            let Some(Line::FormatLine(fl)) = self.lines.peek() else {
+                break;
+            };
 
-                if p_lines.is_empty() {
-                    // first time through the loop, get things set up
-                    // detect mail header
-                    if self.opts.mail && self.next_mail && ParagraphStream::is_mail_header(fl) {
-                        in_mail = true;
-                        // there can't be any indent or pfxind because otherwise is_mail_header
-                        // would fail since there cannot be any whitespace before the colon in a
-                        // valid header field
-                        indent_str.push_str("  ");
-                        indent_len = 2;
+            if p_lines.is_empty() {
+                // first time through the loop, get things set up
+                // detect mail header
+                if self.opts.mail && self.next_mail && ParagraphStream::is_mail_header(fl) {
+                    in_mail = true;
+                    // there can't be any indent or prefixindent because otherwise is_mail_header
+                    // would fail since there cannot be any whitespace before the colon in a
+                    // valid header field
+                    indent_str.push_str("  ");
+                    indent_len = 2;
+                } else {
+                    if self.opts.crown || self.opts.tagged {
+                        init_str.push_str(&fl.line[..fl.indent_end]);
+                        init_len = fl.indent_len;
+                        init_end = fl.indent_end;
                     } else {
-                        if self.opts.crown || self.opts.tagged {
-                            init_str.push_str(&fl.line[..fl.indent_end]);
-                            init_len = fl.indent_len;
-                            init_end = fl.indent_end;
-                        } else {
-                            second_done = true;
-                        }
-
-                        // these will be overwritten in the 2nd line of crown or tagged mode, but
-                        // we are not guaranteed to get to the 2nd line, e.g., if the next line
-                        // is a NoFormatLine or None. Thus, we set sane defaults the 1st time around
-                        indent_str.push_str(&fl.line[..fl.indent_end]);
-                        indent_len = fl.indent_len;
-                        indent_end = fl.indent_end;
-
-                        // save these to check for matching lines
-                        prefix_len = fl.prefix_len;
-                        pfxind_end = fl.pfxind_end;
-
-                        // in tagged mode, add 4 spaces of additional indenting by default
-                        // (gnu fmt's behavior is different: it seems to find the closest column to
-                        // indent_end that is divisible by 3. But honestly that behavior seems
-                        // pretty arbitrary.
-                        // Perhaps a better default would be 1 TABWIDTH? But ugh that's so big.
-                        if self.opts.tagged {
-                            indent_str.push_str("    ");
-                            indent_len += 4;
-                        }
-                    }
-                } else if in_mail {
-                    // lines following mail headers must begin with spaces
-                    if fl.indent_end == 0 || (self.opts.use_prefix && fl.pfxind_end == 0) {
-                        break; // this line does not begin with spaces
-                    }
-                } else if !second_done {
-                    // now we have enough info to handle crown margin and tagged mode
-
-                    // in both crown and tagged modes we require that prefix_len is the same
-                    if prefix_len != fl.prefix_len || pfxind_end != fl.pfxind_end {
-                        break;
+                        second_done = true;
                     }
 
-                    // in tagged mode, indent has to be *different* on following lines
-                    if self.opts.tagged
-                        && indent_len - 4 == fl.indent_len
-                        && indent_end == fl.indent_end
-                    {
-                        break;
-                    }
-
-                    // this is part of the same paragraph, get the indent info from this line
-                    indent_str.clear();
+                    // these will be overwritten in the 2nd line of crown or tagged mode, but
+                    // we are not guaranteed to get to the 2nd line, e.g., if the next line
+                    // is a NoFormatLine or None. Thus, we set sane defaults the 1st time around
                     indent_str.push_str(&fl.line[..fl.indent_end]);
                     indent_len = fl.indent_len;
                     indent_end = fl.indent_end;
 
-                    second_done = true;
-                } else {
-                    // detect mismatch
-                    if indent_end != fl.indent_end
-                        || pfxind_end != fl.pfxind_end
-                        || indent_len != fl.indent_len
-                        || prefix_len != fl.prefix_len
-                    {
-                        break;
+                    // save these to check for matching lines
+                    prefix_len = fl.prefix_len;
+                    prefix_indent_end = fl.prefix_indent_end;
+
+                    // in tagged mode, add 4 spaces of additional indenting by default
+                    // (gnu fmt's behavior is different: it seems to find the closest column to
+                    // indent_end that is divisible by 3. But honestly that behavior seems
+                    // pretty arbitrary.
+                    // Perhaps a better default would be 1 TABWIDTH? But ugh that's so big.
+                    if self.opts.tagged {
+                        indent_str.push_str("    ");
+                        indent_len += 4;
                     }
+                }
+            } else if in_mail {
+                // lines following mail headers must begin with spaces
+                if fl.indent_end == 0 || (self.opts.prefix.is_some() && fl.prefix_indent_end == 0) {
+                    break; // this line does not begin with spaces
+                }
+            } else if !second_done {
+                // now we have enough info to handle crown margin and tagged mode
+
+                // in both crown and tagged modes we require that prefix_len is the same
+                if prefix_len != fl.prefix_len || prefix_indent_end != fl.prefix_indent_end {
+                    break;
+                }
+
+                // in tagged mode, indent has to be *different* on following lines
+                if self.opts.tagged
+                    && indent_len - 4 == fl.indent_len
+                    && indent_end == fl.indent_end
+                {
+                    break;
+                }
+
+                // this is part of the same paragraph, get the indent info from this line
+                indent_str.clear();
+                indent_str.push_str(&fl.line[..fl.indent_end]);
+                indent_len = fl.indent_len;
+                indent_end = fl.indent_end;
+
+                second_done = true;
+            } else {
+                // detect mismatch
+                if indent_end != fl.indent_end
+                    || prefix_indent_end != fl.prefix_indent_end
+                    || indent_len != fl.indent_len
+                    || prefix_len != fl.prefix_len
+                {
+                    break;
                 }
             }
 
@@ -429,7 +423,7 @@ pub struct ParaWords<'a> {
 }
 
 impl<'a> ParaWords<'a> {
-    pub fn new<'b>(opts: &'b FmtOptions, para: &'b Paragraph) -> ParaWords<'b> {
+    pub fn new(opts: &'a FmtOptions, para: &'a Paragraph) -> Self {
         let mut pw = ParaWords {
             opts,
             para,

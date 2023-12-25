@@ -1,7 +1,6 @@
 #!/bin/bash
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
-# UU_MAKE_PROFILE == 'debug' | 'release' ## build profile for *uutils* build; may be supplied by caller, defaults to 'release'
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR vdir rcexp xpart dired
 
@@ -10,6 +9,19 @@ set -e
 ME="${0}"
 ME_dir="$(dirname -- "$(readlink -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
+
+# Default profile is 'debug'
+UU_MAKE_PROFILE='debug'
+
+for arg in "$@"
+do
+    if [ "$arg" == "--release-build" ]; then
+        UU_MAKE_PROFILE='release'
+        break
+    fi
+done
+
+echo "UU_MAKE_PROFILE='${UU_MAKE_PROFILE}'"
 
 ### * config (from environment with fallback defaults); note: GNU is expected to be a sibling repo directory
 
@@ -55,9 +67,6 @@ echo "path_UUTILS='${path_UUTILS}'"
 echo "path_GNU='${path_GNU}'"
 
 ###
-
-UU_MAKE_PROFILE=${UU_MAKE_PROFILE:-release}
-echo "UU_MAKE_PROFILE='${UU_MAKE_PROFILE}'"
 
 UU_BUILD_DIR="${path_UUTILS}/target/${UU_MAKE_PROFILE}"
 echo "UU_BUILD_DIR='${UU_BUILD_DIR}'"
@@ -106,6 +115,8 @@ else
     # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
     sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
     sed -i 's| tr | /usr/bin/tr |' tests/init.sh
+    # Use a better diff
+    sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
     make -j "$(nproc)"
     touch gnu-built
 fi
@@ -263,6 +274,9 @@ sed -i -Ez "s/\n([^\n#]*pad-3\.2[^\n]*)\n([^\n]*)\n([^\n]*)/\n# uutils\/numfmt s
 sed -i -e "s/\$prog: multiple field specifications/error: The argument '--field <FIELDS>' was provided more than once, but cannot be used multiple times\n\nUsage: numfmt [OPTION]... [NUMBER]...\n\n\nFor more information try '--help'/g" tests/misc/numfmt.pl
 sed -i -e "s/Try 'mv --help' for more information/For more information, try '--help'/g" -e "s/mv: missing file operand/error: the following required arguments were not provided:\n  <files>...\n\nUsage: mv [OPTION]... [-T] SOURCE DEST\n       mv [OPTION]... SOURCE... DIRECTORY\n       mv [OPTION]... -t DIRECTORY SOURCE...\n/g" -e "s/mv: missing destination file operand after 'no-file'/error: The argument '<files>...' requires at least 2 values, but only 1 was provided\n\nUsage: mv [OPTION]... [-T] SOURCE DEST\n       mv [OPTION]... SOURCE... DIRECTORY\n       mv [OPTION]... -t DIRECTORY SOURCE...\n/g" tests/mv/diag.sh
 
+# our error message is better
+sed -i -e "s|mv: cannot overwrite 'a/t': Directory not empty|mv: cannot move 'b/t' to 'a/t': Directory not empty|" tests/mv/dir2dir.sh
+
 # GNU doesn't support width > INT_MAX
 # disable these test cases
 sed -i -E "s|^([^#]*2_31.*)$|#\1|g" tests/printf/printf-cov.pl
@@ -282,3 +296,9 @@ ls: invalid --time-style argument 'XX'\nPossible values are: [\"full-iso\", \"lo
 # "hostid BEFORE --help" doesn't fail for GNU. we fail. we are probably doing better
 # "hostid BEFORE --help AFTER " same for this
 sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/help/help-version-getopt.sh
+
+# Add debug info + we have less syscall then GNU's. Adjust our check.
+sed -i -e '/test \$n_stat1 = \$n_stat2 \\/c\
+echo "n_stat1 = \$n_stat1"\n\
+echo "n_stat2 = \$n_stat2"\n\
+test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh

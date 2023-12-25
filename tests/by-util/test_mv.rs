@@ -11,8 +11,18 @@ use std::thread::sleep;
 use std::time::Duration;
 
 #[test]
-fn test_invalid_arg() {
+fn test_mv_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
+}
+
+#[test]
+fn test_mv_missing_dest() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "dir";
+
+    at.mkdir(dir);
+
+    ucmd.arg(dir).fails();
 }
 
 #[test]
@@ -26,16 +36,6 @@ fn test_mv_rename_dir() {
     ucmd.arg(dir1).arg(dir2).succeeds().no_stderr();
 
     assert!(at.dir_exists(dir2));
-}
-
-#[test]
-fn test_mv_fail() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let dir1 = "test_mv_rename_dir";
-
-    at.mkdir(dir1);
-
-    ucmd.arg(dir1).fails();
 }
 
 #[test]
@@ -907,6 +907,20 @@ fn test_mv_update_option() {
 }
 
 #[test]
+fn test_mv_update_with_dest_ending_with_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source";
+    let dest = "destination/";
+
+    at.mkdir("source");
+
+    ucmd.arg("--update").arg(source).arg(dest).succeeds();
+
+    assert!(!at.dir_exists(source));
+    assert!(at.dir_exists(dest));
+}
+
+#[test]
 fn test_mv_arg_update_none() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1154,6 +1168,32 @@ fn test_mv_overwrite_dir() {
     at.mkdir(dir_a);
     at.mkdir(dir_b);
     ucmd.arg("-T").arg(dir_a).arg(dir_b).succeeds().no_stderr();
+
+    assert!(!at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+}
+
+#[test]
+fn test_mv_no_target_dir_with_dest_not_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "a";
+    let dir_b = "b";
+
+    at.mkdir(dir_a);
+    ucmd.arg("-T").arg(dir_a).arg(dir_b).succeeds().no_output();
+
+    assert!(!at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+}
+
+#[test]
+fn test_mv_no_target_dir_with_dest_not_existing_and_ending_with_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "a";
+    let dir_b = "b/";
+
+    at.mkdir(dir_a);
+    ucmd.arg("-T").arg(dir_a).arg(dir_b).succeeds().no_output();
 
     assert!(!at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
@@ -1417,6 +1457,20 @@ fn test_mv_directory_into_subdirectory_of_itself_fails() {
 }
 
 #[test]
+fn test_mv_dir_into_dir_with_source_name_a_prefix_of_target_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "test";
+    let target = "test2";
+
+    at.mkdir(source);
+    at.mkdir(target);
+
+    ucmd.arg(source).arg(target).succeeds().no_output();
+
+    assert!(at.dir_exists(&format!("{target}/{source}")));
+}
+
+#[test]
 fn test_mv_file_into_dir_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1428,6 +1482,65 @@ fn test_mv_file_into_dir_where_both_are_files() {
         .arg("b/")
         .fails()
         .stderr_contains("mv: failed to access 'b/': Not a directory");
+}
+
+#[test]
+fn test_mv_seen_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
+
+    #[cfg(not(unix))]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    #[cfg(unix)]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+
+    // a/f has been moved into c/f
+    assert!(at.plus("c").join("f").exists());
+    // b/f still exists
+    assert!(at.plus("b").join("f").exists());
+    // a/f no longer exists
+    assert!(!at.plus("a").join("f").exists());
+}
+
+#[test]
+fn test_mv_seen_multiple_files_to_directory() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+    at.write("b/g", "g");
+
+    let result = ts.ucmd().arg("a/f").arg("b/f").arg("b/g").arg("c").fails();
+    #[cfg(not(unix))]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    #[cfg(unix)]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+
+    assert!(!at.plus("a").join("f").exists());
+    assert!(at.plus("b").join("f").exists());
+    assert!(!at.plus("b").join("g").exists());
+    assert!(at.plus("c").join("f").exists());
+    assert!(at.plus("c").join("g").exists());
 }
 
 #[test]

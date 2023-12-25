@@ -3,14 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl
+// spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl boop
 
 use nom::{
     branch::alt,
-    bytes::complete::tag,
-    character::complete::{anychar, digit1},
-    combinator::{map, peek, value},
-    multi::many0,
+    bytes::complete::{tag, take},
+    character::complete::{digit1, one_of},
+    combinator::{map, map_opt, peek, recognize, value},
+    multi::{many0, many_m_n},
     sequence::{delimited, preceded, separated_pair},
     IResult,
 };
@@ -62,10 +62,10 @@ impl UError for BadSequence {}
 
 #[derive(Debug, Clone, Copy)]
 pub enum Sequence {
-    Char(char),
-    CharRange(u32, u32),
-    CharStar(char),
-    CharRepeat(char, usize),
+    Char(u8),
+    CharRange(u8, u8),
+    CharStar(u8),
+    CharRepeat(u8, usize),
     Alnum,
     Alpha,
     Blank,
@@ -81,21 +81,17 @@ pub enum Sequence {
 }
 
 impl Sequence {
-    pub fn flatten(&self) -> Box<dyn Iterator<Item = char>> {
+    pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
         match self {
             Self::Char(c) => Box::new(std::iter::once(*c)),
-            Self::CharRange(l, r) => Box::new((*l..=*r).flat_map(std::char::from_u32)),
+            Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
-            Self::Alnum => Box::new(('0'..='9').chain('A'..='Z').chain('a'..='z')),
-            Self::Alpha => Box::new(('A'..='Z').chain('a'..='z')),
+            Self::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
+            Self::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
             Self::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
-            Self::Control => Box::new(
-                (0..=31)
-                    .chain(std::iter::once(127))
-                    .flat_map(std::char::from_u32),
-            ),
-            Self::Digit => Box::new('0'..='9'),
+            Self::Control => Box::new((0..=31).chain(std::iter::once(127))),
+            Self::Digit => Box::new(b'0'..=b'9'),
             Self::Graph => Box::new(
                 (48..=57) // digit
                     .chain(65..=90) // uppercase
@@ -105,10 +101,9 @@ impl Sequence {
                     .chain(58..=64)
                     .chain(91..=96)
                     .chain(123..=126)
-                    .chain(std::iter::once(32)) // space
-                    .flat_map(std::char::from_u32),
+                    .chain(std::iter::once(32)), // space
             ),
-            Self::Lower => Box::new('a'..='z'),
+            Self::Lower => Box::new(b'a'..=b'z'),
             Self::Print => Box::new(
                 (48..=57) // digit
                     .chain(65..=90) // uppercase
@@ -117,29 +112,22 @@ impl Sequence {
                     .chain(33..=47)
                     .chain(58..=64)
                     .chain(91..=96)
-                    .chain(123..=126)
-                    .flat_map(std::char::from_u32),
+                    .chain(123..=126),
             ),
-            Self::Punct => Box::new(
-                (33..=47)
-                    .chain(58..=64)
-                    .chain(91..=96)
-                    .chain(123..=126)
-                    .flat_map(std::char::from_u32),
-            ),
+            Self::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
             Self::Space => Box::new(unicode_table::SPACES.iter().cloned()),
-            Self::Upper => Box::new('A'..='Z'),
-            Self::Xdigit => Box::new(('0'..='9').chain('A'..='F').chain('a'..='f')),
+            Self::Upper => Box::new(b'A'..=b'Z'),
+            Self::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
         }
     }
 
     // Hide all the nasty sh*t in here
     // TODO: Make the 2 set lazily generate the character mapping as necessary.
     pub fn solve_set_characters(
-        set1_str: &str,
-        set2_str: &str,
+        set1_str: &[u8],
+        set2_str: &[u8],
         truncate_set1_flag: bool,
-    ) -> Result<(Vec<char>, Vec<char>), BadSequence> {
+    ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
         let set1 = Self::from_str(set1_str)?;
         let set2 = Self::from_str(set2_str)?;
 
@@ -164,7 +152,7 @@ impl Sequence {
                     .count();
                 let star_compensate_len = set1_len.saturating_sub(set2_len);
                 let (left, right) = (partition.next(), partition.next());
-                let set2_solved: Vec<char> = match (left, right) {
+                let set2_solved: Vec<_> = match (left, right) {
                     (None, None) => match char_star {
                         Some(c) => std::iter::repeat(*c).take(star_compensate_len).collect(),
                         None => std::iter::empty().collect(),
@@ -201,7 +189,7 @@ impl Sequence {
                             .collect(),
                     },
                 };
-                let mut set1_solved: Vec<char> = set1.iter().flat_map(Self::flatten).collect();
+                let mut set1_solved: Vec<_> = set1.iter().flat_map(Self::flatten).collect();
                 if truncate_set1_flag {
                     set1_solved.truncate(set2_solved.len());
                 }
@@ -216,7 +204,7 @@ impl Sequence {
 }
 
 impl Sequence {
-    pub fn from_str(input: &str) -> Result<Vec<Self>, BadSequence> {
+    pub fn from_str(input: &[u8]) -> Result<Vec<Self>, BadSequence> {
         many0(alt((
             Self::parse_char_range,
             Self::parse_char_star,
@@ -232,27 +220,38 @@ impl Sequence {
         .collect::<Result<Vec<_>, _>>()
     }
 
-    fn parse_backslash(input: &str) -> IResult<&str, char> {
-        preceded(tag("\\"), anychar)(input).map(|(l, a)| {
+    fn parse_octal(input: &[u8]) -> IResult<&[u8], u8> {
+        map_opt(
+            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
+            |out: &[u8]| u8::from_str_radix(std::str::from_utf8(out).expect("boop"), 8).ok(),
+        )(input)
+    }
+
+    fn parse_backslash(input: &[u8]) -> IResult<&[u8], u8> {
+        preceded(tag("\\"), Self::single_char)(input).map(|(l, a)| {
             let c = match a {
-                'a' => unicode_table::BEL,
-                'b' => unicode_table::BS,
-                'f' => unicode_table::FF,
-                'n' => unicode_table::LF,
-                'r' => unicode_table::CR,
-                't' => unicode_table::HT,
-                'v' => unicode_table::VT,
+                b'a' => unicode_table::BEL,
+                b'b' => unicode_table::BS,
+                b'f' => unicode_table::FF,
+                b'n' => unicode_table::LF,
+                b'r' => unicode_table::CR,
+                b't' => unicode_table::HT,
+                b'v' => unicode_table::VT,
                 x => x,
             };
             (l, c)
         })
     }
 
-    fn parse_backslash_or_char(input: &str) -> IResult<&str, char> {
-        alt((Self::parse_backslash, anychar))(input)
+    fn parse_backslash_or_char(input: &[u8]) -> IResult<&[u8], u8> {
+        alt((Self::parse_octal, Self::parse_backslash, Self::single_char))(input)
     }
 
-    fn parse_char_range(input: &str) -> IResult<&str, Result<Self, BadSequence>> {
+    fn single_char(input: &[u8]) -> IResult<&[u8], u8> {
+        take(1usize)(input).map(|(l, a)| (l, a[0]))
+    }
+
+    fn parse_char_range(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
         separated_pair(
             Self::parse_backslash_or_char,
             tag("-"),
@@ -261,41 +260,42 @@ impl Sequence {
         .map(|(l, (a, b))| {
             (l, {
                 let (start, end) = (u32::from(a), u32::from(b));
-                Ok(Self::CharRange(start, end))
+                Ok(Self::CharRange(start as u8, end as u8))
             })
         })
     }
 
-    fn parse_char_star(input: &str) -> IResult<&str, Result<Self, BadSequence>> {
+    fn parse_char_star(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
         delimited(tag("["), Self::parse_backslash_or_char, tag("*]"))(input)
             .map(|(l, a)| (l, Ok(Self::CharStar(a))))
     }
 
-    fn parse_char_repeat(input: &str) -> IResult<&str, Result<Self, BadSequence>> {
+    fn parse_char_repeat(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
         delimited(
             tag("["),
             separated_pair(Self::parse_backslash_or_char, tag("*"), digit1),
             tag("]"),
         )(input)
         .map(|(l, (c, cnt_str))| {
-            let result = if cnt_str.starts_with('0') {
-                match usize::from_str_radix(cnt_str, 8) {
+            let s = String::from_utf8_lossy(cnt_str);
+            let result = if cnt_str.starts_with(b"0") {
+                match usize::from_str_radix(&s, 8) {
                     Ok(0) => Ok(Self::CharStar(c)),
                     Ok(count) => Ok(Self::CharRepeat(c, count)),
-                    Err(_) => Err(BadSequence::InvalidRepeatCount(cnt_str.to_string())),
+                    Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
                 }
             } else {
-                match cnt_str.parse::<usize>() {
+                match s.parse::<usize>() {
                     Ok(0) => Ok(Self::CharStar(c)),
                     Ok(count) => Ok(Self::CharRepeat(c, count)),
-                    Err(_) => Err(BadSequence::InvalidRepeatCount(cnt_str.to_string())),
+                    Err(_) => Err(BadSequence::InvalidRepeatCount(s.to_string())),
                 }
             };
             (l, result)
         })
     }
 
-    fn parse_class(input: &str) -> IResult<&str, Result<Self, BadSequence>> {
+    fn parse_class(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
         delimited(
             tag("[:"),
             alt((
@@ -322,7 +322,7 @@ impl Sequence {
         )(input)
     }
 
-    fn parse_char_equal(input: &str) -> IResult<&str, Result<Self, BadSequence>> {
+    fn parse_char_equal(input: &[u8]) -> IResult<&[u8], Result<Self, BadSequence>> {
         delimited(
             tag("[="),
             alt((
@@ -338,17 +338,17 @@ impl Sequence {
 }
 
 pub trait SymbolTranslator {
-    fn translate(&mut self, current: char) -> Option<char>;
+    fn translate(&mut self, current: u8) -> Option<u8>;
 }
 
 #[derive(Debug)]
 pub struct DeleteOperation {
-    set: Vec<char>,
+    set: Vec<u8>,
     complement_flag: bool,
 }
 
 impl DeleteOperation {
-    pub fn new(set: Vec<char>, complement_flag: bool) -> Self {
+    pub fn new(set: Vec<u8>, complement_flag: bool) -> Self {
         Self {
             set,
             complement_flag,
@@ -357,8 +357,8 @@ impl DeleteOperation {
 }
 
 impl SymbolTranslator for DeleteOperation {
-    fn translate(&mut self, current: char) -> Option<char> {
-        let found = self.set.iter().any(|sequence| sequence.eq(&current));
+    fn translate(&mut self, current: u8) -> Option<u8> {
+        let found = self.set.iter().any(|sequence| *sequence == current);
         if self.complement_flag == found {
             Some(current)
         } else {
@@ -368,15 +368,15 @@ impl SymbolTranslator for DeleteOperation {
 }
 
 pub struct TranslateOperationComplement {
-    iter: u32,
+    iter: u8,
     set2_iter: usize,
-    set1: Vec<char>,
-    set2: Vec<char>,
-    translation_map: HashMap<char, char>,
+    set1: Vec<u8>,
+    set2: Vec<u8>,
+    translation_map: HashMap<u8, u8>,
 }
 
 impl TranslateOperationComplement {
-    fn new(set1: Vec<char>, set2: Vec<char>) -> Self {
+    fn new(set1: Vec<u8>, set2: Vec<u8>) -> Self {
         Self {
             iter: 0,
             set2_iter: 0,
@@ -389,11 +389,11 @@ impl TranslateOperationComplement {
 
 #[derive(Debug)]
 pub struct TranslateOperationStandard {
-    translation_map: HashMap<char, char>,
+    translation_map: HashMap<u8, u8>,
 }
 
 impl TranslateOperationStandard {
-    fn new(set1: Vec<char>, set2: Vec<char>) -> Result<Self, BadSequence> {
+    fn new(set1: Vec<u8>, set2: Vec<u8>) -> Result<Self, BadSequence> {
         if let Some(fallback) = set2.last().copied() {
             Ok(Self {
                 translation_map: set1
@@ -417,18 +417,17 @@ pub enum TranslateOperation {
 }
 
 impl TranslateOperation {
-    fn next_complement_char(iter: u32, ignore_list: &[char]) -> (u32, char) {
+    fn next_complement_char(iter: u8, ignore_list: &[u8]) -> (u8, u8) {
         (iter..)
-            .filter_map(std::char::from_u32)
-            .filter(|c| !ignore_list.iter().any(|s| s.eq(c)))
-            .map(|c| (u32::from(c) + 1, c))
+            .filter(|c| !ignore_list.iter().any(|s| s == c))
+            .map(|c| (c + 1, c))
             .next()
             .expect("exhausted all possible characters")
     }
 }
 
 impl TranslateOperation {
-    pub fn new(set1: Vec<char>, set2: Vec<char>, complement: bool) -> Result<Self, BadSequence> {
+    pub fn new(set1: Vec<u8>, set2: Vec<u8>, complement: bool) -> Result<Self, BadSequence> {
         if complement {
             Ok(Self::Complement(TranslateOperationComplement::new(
                 set1, set2,
@@ -440,7 +439,7 @@ impl TranslateOperation {
 }
 
 impl SymbolTranslator for TranslateOperation {
-    fn translate(&mut self, current: char) -> Option<char> {
+    fn translate(&mut self, current: u8) -> Option<u8> {
         match self {
             Self::Standard(TranslateOperationStandard { translation_map }) => Some(
                 translation_map
@@ -482,13 +481,13 @@ impl SymbolTranslator for TranslateOperation {
 
 #[derive(Debug, Clone)]
 pub struct SqueezeOperation {
-    set1: HashSet<char>,
+    set1: HashSet<u8>,
     complement: bool,
-    previous: Option<char>,
+    previous: Option<u8>,
 }
 
 impl SqueezeOperation {
-    pub fn new(set1: Vec<char>, complement: bool) -> Self {
+    pub fn new(set1: Vec<u8>, complement: bool) -> Self {
         Self {
             set1: set1.into_iter().collect(),
             complement,
@@ -498,7 +497,7 @@ impl SqueezeOperation {
 }
 
 impl SymbolTranslator for SqueezeOperation {
-    fn translate(&mut self, current: char) -> Option<char> {
+    fn translate(&mut self, current: u8) -> Option<u8> {
         if self.complement {
             let next = if self.set1.contains(&current) {
                 Some(current)
@@ -537,15 +536,15 @@ where
     R: BufRead,
     W: Write,
 {
-    let mut buf = String::new();
-    let mut output_buf = String::new();
-    while let Ok(length) = input.read_line(&mut buf) {
+    let mut buf = Vec::new();
+    let mut output_buf = Vec::new();
+    while let Ok(length) = input.read_until(b'\n', &mut buf) {
         if length == 0 {
             break;
         } else {
-            let filtered = buf.chars().filter_map(|c| translator.translate(c));
+            let filtered = buf.iter().filter_map(|c| translator.translate(*c));
             output_buf.extend(filtered);
-            output.write_all(output_buf.as_bytes()).unwrap();
+            output.write_all(&output_buf).unwrap();
         }
         buf.clear();
         output_buf.clear();
