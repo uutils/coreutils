@@ -3890,6 +3890,56 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .stdout_contains(" 1024 ");
 }
 
+#[cfg(all(unix, feature = "dd"))]
+#[test]
+fn test_posixly_correct_and_block_size_env_vars_with_k() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ccmd("dd")
+        .arg("if=/dev/zero")
+        .arg("of=file")
+        .arg("bs=1024")
+        .arg("count=1")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("-k")
+        .env("POSIXLY_CORRECT", "some_value")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1024 ");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("-k")
+        .env("LS_BLOCK_SIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 2 ");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("-k")
+        .env("BLOCK_SIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 2 ");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("-k")
+        .env("BLOCKSIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1024 ");
+}
+
 #[test]
 fn test_ls_invalid_block_size() {
     new_ucmd!()
