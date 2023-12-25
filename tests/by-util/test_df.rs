@@ -422,7 +422,11 @@ fn test_total_label_in_correct_column() {
 #[test]
 fn test_use_percentage() {
     let output = new_ucmd!()
-        .args(&["--total", "--output=used,avail,pcent"])
+        // set block size = 1, otherwise the returned values for
+        // "used" and "avail" will be rounded. And using them to calculate
+        // the "percentage" values might lead to a mismatch with the returned
+        // "percentage" values.
+        .args(&["--total", "--output=used,avail,pcent", "--block-size=1"])
         .succeeds()
         .stdout_move_str();
 

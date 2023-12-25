@@ -244,6 +244,14 @@ fn test_single_only_lines() {
 }
 
 #[test]
+fn test_single_only_bytes() {
+    new_ucmd!()
+        .args(&["-c", "lorem_ipsum.txt"])
+        .run()
+        .stdout_is("772 lorem_ipsum.txt\n");
+}
+
+#[test]
 fn test_single_all_counts() {
     new_ucmd!()
         .args(&["-c", "-l", "-L", "-m", "-w", "alice_in_wonderland.txt"])
@@ -419,11 +427,24 @@ fn test_files_from_pseudo_filesystem() {
     use pretty_assertions::assert_ne;
     let result = new_ucmd!().arg("-c").arg("/proc/cpuinfo").succeeds();
     assert_ne!(result.stdout_str(), "0 /proc/cpuinfo\n");
+
+    // the following block fails on Android with a "Permission denied" error
+    #[cfg(target_os = "linux")]
+    {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let result = ucmd.arg("-c").arg("/sys/kernel/profiling").succeeds();
+        let actual = at.read("/sys/kernel/profiling").len();
+        assert_eq!(
+            result.stdout_str(),
+            format!("{} /sys/kernel/profiling\n", actual)
+        );
+    }
 }
 
 #[test]
 fn test_files0_disabled_files_argument() {
-    const MSG: &str = "file operands cannot be combined with --files0-from";
+    const MSG: &str =
+        "extra operand 'lorem_ipsum.txt'\nfile operands cannot be combined with --files0-from";
     new_ucmd!()
         .args(&["--files0-from=files0_list.txt"])
         .arg("lorem_ipsum.txt")
@@ -707,4 +728,17 @@ fn files0_from_dir() {
         .set_stdin(std::fs::File::open(".").unwrap())
         .fails()
         .stderr_only(dir_err!("-"));
+}
+
+#[test]
+fn test_args_override() {
+    new_ucmd!()
+        .args(&["-ll", "-l", "alice_in_wonderland.txt"])
+        .run()
+        .stdout_is("5 alice_in_wonderland.txt\n");
+
+    new_ucmd!()
+        .args(&["--total=always", "--total=never", "alice_in_wonderland.txt"])
+        .run()
+        .stdout_is("  5  57 302 alice_in_wonderland.txt\n");
 }

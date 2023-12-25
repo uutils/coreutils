@@ -2,12 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::extra_unused_lifetimes)]
 
 use quick_error::quick_error;
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -41,8 +40,8 @@ use uucore::{backup_control, update_control};
 // requires these enum.
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
-    crash, format_usage, help_about, help_section, help_usage, prompt_yes, show_error,
-    show_warning, util_name,
+    format_usage, help_about, help_section, help_usage, prompt_yes, show_error, show_warning,
+    util_name,
 };
 
 use crate::copydir::copy_directory;
@@ -144,6 +143,7 @@ pub enum SparseMode {
 }
 
 /// The expected file type of copy target
+#[derive(Copy, Clone)]
 pub enum TargetType {
     Directory,
     File,
@@ -184,7 +184,9 @@ pub struct Attributes {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Preserve {
-    No,
+    // explicit means whether the --no-preserve flag is used or not to distinguish out the default value.
+    // e.g. --no-preserve=mode means mode = No { explicit = true }
+    No { explicit: bool },
     Yes { required: bool },
 }
 
@@ -197,9 +199,9 @@ impl PartialOrd for Preserve {
 impl Ord for Preserve {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Self::No, Self::No) => Ordering::Equal,
-            (Self::Yes { .. }, Self::No) => Ordering::Greater,
-            (Self::No, Self::Yes { .. }) => Ordering::Less,
+            (Self::No { .. }, Self::No { .. }) => Ordering::Equal,
+            (Self::Yes { .. }, Self::No { .. }) => Ordering::Greater,
+            (Self::No { .. }, Self::Yes { .. }) => Ordering::Less,
             (
                 Self::Yes { required: req_self },
                 Self::Yes {
@@ -800,7 +802,7 @@ impl Attributes {
             }
             #[cfg(not(feature = "feat_selinux"))]
             {
-                Preserve::No
+                Preserve::No { explicit: false }
             }
         },
         links: Preserve::Yes { required: true },
@@ -809,12 +811,12 @@ impl Attributes {
 
     pub const NONE: Self = Self {
         #[cfg(unix)]
-        ownership: Preserve::No,
-        mode: Preserve::No,
-        timestamps: Preserve::No,
-        context: Preserve::No,
-        links: Preserve::No,
-        xattr: Preserve::No,
+        ownership: Preserve::No { explicit: false },
+        mode: Preserve::No { explicit: false },
+        timestamps: Preserve::No { explicit: false },
+        context: Preserve::No { explicit: false },
+        links: Preserve::No { explicit: false },
+        xattr: Preserve::No { explicit: false },
     };
 
     // TODO: ownership is required if the user is root, for non-root users it's not required.
@@ -931,23 +933,35 @@ impl Options {
         };
 
         // Parse attributes to preserve
-        let attributes = if let Some(attribute_strs) = matches.get_many::<String>(options::PRESERVE)
-        {
-            if attribute_strs.len() == 0 {
+        let mut attributes =
+            if let Some(attribute_strs) = matches.get_many::<String>(options::PRESERVE) {
+                if attribute_strs.len() == 0 {
+                    Attributes::DEFAULT
+                } else {
+                    Attributes::parse_iter(attribute_strs)?
+                }
+            } else if matches.get_flag(options::ARCHIVE) {
+                // --archive is used. Same as --preserve=all
+                Attributes::ALL
+            } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
+                Attributes::LINKS
+            } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
                 Attributes::DEFAULT
             } else {
-                Attributes::parse_iter(attribute_strs)?
+                Attributes::NONE
+            };
+
+        // handling no-preserve options and adjusting the attributes
+        if let Some(attribute_strs) = matches.get_many::<String>(options::NO_PRESERVE) {
+            if attribute_strs.len() > 0 {
+                let no_preserve_attributes = Attributes::parse_iter(attribute_strs)?;
+                if matches!(no_preserve_attributes.links, Preserve::Yes { .. }) {
+                    attributes.links = Preserve::No { explicit: true };
+                } else if matches!(no_preserve_attributes.mode, Preserve::Yes { .. }) {
+                    attributes.mode = Preserve::No { explicit: true };
+                }
             }
-        } else if matches.get_flag(options::ARCHIVE) {
-            // --archive is used. Same as --preserve=all
-            Attributes::ALL
-        } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
-            Attributes::LINKS
-        } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
-            Attributes::DEFAULT
-        } else {
-            Attributes::NONE
-        };
+        }
 
         #[cfg(not(feature = "feat_selinux"))]
         if let Preserve::Yes { required } = attributes.context {
@@ -1040,8 +1054,19 @@ impl Options {
 
     fn preserve_hard_links(&self) -> bool {
         match self.attributes.links {
-            Preserve::No => false,
+            Preserve::No { .. } => false,
             Preserve::Yes { .. } => true,
+        }
+    }
+
+    #[cfg(unix)]
+    fn preserve_mode(&self) -> (bool, bool) {
+        match self.attributes.mode {
+            Preserve::No { explicit } => match explicit {
+                true => (false, true),
+                false => (false, false),
+            },
+            Preserve::Yes { .. } => (true, false),
         }
     }
 
@@ -1170,7 +1195,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             &progress_bar,
             source,
             target,
-            &target_type,
+            target_type,
             options,
             &mut symlinked_files,
             &mut copied_files,
@@ -1195,7 +1220,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
 fn construct_dest_path(
     source_path: &Path,
     target: &Path,
-    target_type: &TargetType,
+    target_type: TargetType,
     options: &Options,
 ) -> CopyResult<PathBuf> {
     if options.no_target_dir && target.is_dir() {
@@ -1210,7 +1235,7 @@ fn construct_dest_path(
         return Err("with --parents, the destination must be a directory".into());
     }
 
-    Ok(match *target_type {
+    Ok(match target_type {
         TargetType::Directory => {
             let root = if options.parents {
                 Path::new("")
@@ -1227,7 +1252,7 @@ fn copy_source(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
     target: &Path,
-    target_type: &TargetType,
+    target_type: TargetType,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
@@ -1266,23 +1291,16 @@ fn copy_source(
 }
 
 impl OverwriteMode {
-    fn verify(&self, path: &Path, verbose: bool) -> CopyResult<()> {
+    fn verify(&self, path: &Path) -> CopyResult<()> {
         match *self {
             Self::NoClobber => {
-                if verbose {
-                    println!("skipped {}", path.quote());
-                } else {
-                    eprintln!("{}: not replacing {}", util_name(), path.quote());
-                }
+                eprintln!("{}: not replacing {}", util_name(), path.quote());
                 Err(Error::NotAllFilesCopied)
             }
             Self::Interactive(_) => {
                 if prompt_yes!("overwrite {}?", path.quote()) {
                     Ok(())
                 } else {
-                    if verbose {
-                        println!("skipped {}", path.quote());
-                    }
                     Err(Error::Skipped)
                 }
             }
@@ -1296,7 +1314,7 @@ impl OverwriteMode {
 /// If it's required, then the error is thrown.
 fn handle_preserve<F: Fn() -> CopyResult<()>>(p: &Preserve, f: F) -> CopyResult<()> {
     match p {
-        Preserve::No => {}
+        Preserve::No { .. } => {}
         Preserve::Yes { required } => {
             let result = f();
             if *required {
@@ -1490,7 +1508,7 @@ fn handle_existing_dest(
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
-    options.overwrite.verify(dest, options.verbose)?;
+    options.overwrite.verify(dest)?;
 
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
@@ -1644,6 +1662,14 @@ fn copy_file(
                 dest.display()
             )));
         }
+        if paths_refer_to_same_file(source, dest, true)
+            && matches!(
+                options.overwrite,
+                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+            )
+        {
+            fs::remove_file(dest)?;
+        }
     }
 
     if file_or_link_exists(dest) {
@@ -1725,15 +1751,10 @@ fn copy_file(
         let mut permissions = source_metadata.permissions();
         #[cfg(unix)]
         {
-            use uucore::mode::get_umask;
-
-            let mut mode = permissions.mode();
-
-            // remove sticky bit, suid and gid bit
-            const SPECIAL_PERMS_MASK: u32 = 0o7000;
-            mode &= !SPECIAL_PERMS_MASK;
+            let mut mode = handle_no_preserve_mode(options, permissions.mode());
 
             // apply umask
+            use uucore::mode::get_umask;
             mode &= !get_umask();
 
             permissions.set_mode(mode);
@@ -1794,7 +1815,13 @@ fn copy_file(
                             symlinked_files,
                         )?;
                     }
-                    update_control::UpdateMode::ReplaceNone => return Ok(()),
+                    update_control::UpdateMode::ReplaceNone => {
+                        if options.debug {
+                            println!("skipped {}", dest.quote());
+                        }
+
+                        return Ok(());
+                    }
                     update_control::UpdateMode::ReplaceIfOlder => {
                         let dest_metadata = fs::symlink_metadata(dest)?;
 
@@ -1862,6 +1889,51 @@ fn copy_file(
     Ok(())
 }
 
+#[cfg(unix)]
+fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
+    let (is_preserve_mode, is_explicit_no_preserve_mode) = options.preserve_mode();
+    if !is_preserve_mode {
+        use libc::{
+            S_IRGRP, S_IROTH, S_IRUSR, S_IRWXG, S_IRWXO, S_IRWXU, S_IWGRP, S_IWOTH, S_IWUSR,
+        };
+
+        #[cfg(not(any(
+            target_os = "android",
+            target_os = "macos",
+            target_os = "macos-12",
+            target_os = "freebsd",
+            target_os = "redox",
+        )))]
+        {
+            const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+            const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
+            match is_explicit_no_preserve_mode {
+                true => return MODE_RW_UGO,
+                false => return org_mode & S_IRWXUGO,
+            };
+        }
+
+        #[cfg(any(
+            target_os = "android",
+            target_os = "macos",
+            target_os = "macos-12",
+            target_os = "freebsd",
+            target_os = "redox",
+        ))]
+        {
+            const MODE_RW_UGO: u32 =
+                (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+            const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
+            match is_explicit_no_preserve_mode {
+                true => return MODE_RW_UGO,
+                false => return org_mode & S_IRWXUGO,
+            };
+        }
+    }
+
+    org_mode
+}
+
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
 fn copy_helper(
@@ -1885,7 +1957,7 @@ fn copy_helper(
         File::create(dest).context(dest.display().to_string())?;
     } else if source_is_fifo && options.recursive && !options.copy_contents {
         #[cfg(unix)]
-        copy_fifo(dest, options.overwrite, options.verbose)?;
+        copy_fifo(dest, options.overwrite)?;
     } else if source_is_symlink {
         copy_link(source, dest, symlinked_files)?;
     } else {
@@ -1910,9 +1982,9 @@ fn copy_helper(
 // "Copies" a FIFO by creating a new one. This workaround is because Rust's
 // built-in fs::copy does not handle FIFOs (see rust-lang/rust/issues/79390).
 #[cfg(unix)]
-fn copy_fifo(dest: &Path, overwrite: OverwriteMode, verbose: bool) -> CopyResult<()> {
+fn copy_fifo(dest: &Path, overwrite: OverwriteMode) -> CopyResult<()> {
     if dest.exists() {
-        overwrite.verify(dest, verbose)?;
+        overwrite.verify(dest)?;
         fs::remove_file(dest)?;
     }
 
@@ -1931,24 +2003,12 @@ fn copy_link(
 ) -> CopyResult<()> {
     // Here, we will copy the symlink itself (actually, just recreate it)
     let link = fs::read_link(source)?;
-    let dest: Cow<'_, Path> = if dest.is_dir() {
-        match source.file_name() {
-            Some(name) => dest.join(name).into(),
-            None => crash!(
-                EXIT_ERR,
-                "cannot stat {}: No such file or directory",
-                source.quote()
-            ),
-        }
-    } else {
-        // we always need to remove the file to be able to create a symlink,
-        // even if it is writeable.
-        if dest.is_symlink() || dest.is_file() {
-            fs::remove_file(dest)?;
-        }
-        dest.into()
-    };
-    symlink_file(&link, &dest, &context_for(&link, &dest), symlinked_files)
+    // we always need to remove the file to be able to create a symlink,
+    // even if it is writeable.
+    if dest.is_symlink() || dest.is_file() {
+        fs::remove_file(dest)?;
+    }
+    symlink_file(&link, dest, &context_for(&link, dest), symlinked_files)
 }
 
 /// Generate an error message if `target` is not the correct `target_type`

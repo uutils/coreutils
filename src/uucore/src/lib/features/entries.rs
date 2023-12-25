@@ -35,7 +35,6 @@
 #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
 use libc::time_t;
 use libc::{c_char, c_int, gid_t, uid_t};
-#[cfg(not(target_os = "redox"))]
 use libc::{getgrgid, getgrnam, getgroups};
 use libc::{getpwnam, getpwuid, group, passwd};
 
@@ -67,7 +66,6 @@ extern "C" {
 /// > supplementary group IDs for the process is returned.  This allows
 /// > the caller to determine the size of a dynamically allocated list
 /// > to be used in a further call to getgroups().
-#[cfg(not(target_os = "redox"))]
 pub fn get_groups() -> IOResult<Vec<gid_t>> {
     let mut groups = Vec::new();
     loop {
@@ -337,7 +335,6 @@ macro_rules! f {
 }
 
 f!(getpwnam, getpwuid, uid_t, Passwd);
-#[cfg(not(target_os = "redox"))]
 f!(getgrnam, getgrgid, gid_t, Group);
 
 #[inline]
@@ -345,7 +342,6 @@ pub fn uid2usr(id: uid_t) -> IOResult<String> {
     Passwd::locate(id).map(|p| p.name)
 }
 
-#[cfg(not(target_os = "redox"))]
 #[inline]
 pub fn gid2grp(id: gid_t) -> IOResult<String> {
     Group::locate(id).map(|p| p.name)
@@ -356,7 +352,6 @@ pub fn usr2uid(name: &str) -> IOResult<uid_t> {
     Passwd::locate(name).map(|p| p.uid)
 }
 
-#[cfg(not(target_os = "redox"))]
 #[inline]
 pub fn grp2gid(name: &str) -> IOResult<gid_t> {
     Group::locate(name).map(|p| p.gid)

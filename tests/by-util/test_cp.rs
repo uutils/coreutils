@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile uufs
 
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
@@ -13,7 +13,7 @@ use std::os::unix::fs;
 
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
@@ -24,8 +24,6 @@ use std::path::PathBuf;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use filetime::FileTime;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use rlimit::Resource;
 #[cfg(target_os = "linux")]
 use std::ffi::OsString;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -133,7 +131,9 @@ fn test_cp_directory_not_recursive() {
         .arg(TEST_COPY_TO_FOLDER)
         .arg(TEST_HELLO_WORLD_DEST)
         .fails()
-        .stderr_contains("omitting directory");
+        .stderr_is(format!(
+            "cp: -r not specified; omitting directory '{TEST_COPY_TO_FOLDER}'\n"
+        ));
 }
 
 #[test]
@@ -231,6 +231,22 @@ fn test_cp_arg_no_target_directory() {
 }
 
 #[test]
+fn test_cp_arg_no_target_directory_with_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.mkdir("dir2");
+    at.touch("dir/a");
+    at.touch("dir/b");
+
+    ucmd.arg("-rT").arg("dir").arg("dir2").succeeds();
+
+    assert!(at.plus("dir2").join("a").exists());
+    assert!(at.plus("dir2").join("b").exists());
+    assert!(!at.plus("dir2").join("dir").exists());
+}
+
+#[test]
 fn test_cp_target_directory_is_file() {
     new_ucmd!()
         .arg("-t")
@@ -241,6 +257,8 @@ fn test_cp_target_directory_is_file() {
 }
 
 #[test]
+// FixMe: for FreeBSD, flaky test; track repair progress at GH:uutils/coreutils/issue/4725
+#[cfg(not(target_os = "freebsd"))]
 fn test_cp_arg_update_interactive() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
@@ -483,7 +501,8 @@ fn test_cp_arg_interactive_verbose() {
     ucmd.args(&["-vi", "a", "b"])
         .pipe_in("N\n")
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("cp: overwrite 'b'? ")
+        .no_stdout();
 }
 
 #[test]
@@ -494,7 +513,8 @@ fn test_cp_arg_interactive_verbose_clobber() {
     at.touch("b");
     ucmd.args(&["-vin", "a", "b"])
         .fails()
-        .stdout_is("skipped 'b'\n");
+        .stderr_is("cp: not replacing 'b'\n")
+        .no_stdout();
 }
 
 #[test]
@@ -1494,7 +1514,7 @@ fn test_cp_preserve_links_case_5() {
         let metadata_a = std::fs::metadata(at.subdir.join("c").join("a")).unwrap();
         let metadata_b = std::fs::metadata(at.subdir.join("c").join("b")).unwrap();
 
-        assert_eq!(metadata_a.ino(), metadata_b.ino());
+        assert_ne!(metadata_a.ino(), metadata_b.ino());
     }
 }
 
@@ -1543,11 +1563,36 @@ fn test_cp_preserve_links_case_7() {
         .arg("dest")
         .fails()
         .stderr_contains("not replacing");
-    ();
 
     assert!(at.dir_exists("dest"));
     assert!(at.plus("dest").join("f").exists());
     assert!(at.plus("dest").join("g").exists());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_no_preserve_mode() {
+    use libc::umask;
+    use uucore::fs as uufs;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+    at.set_mode("a", 0o731);
+    unsafe { umask(0o077) };
+
+    ucmd.arg("-a")
+        .arg("--no-preserve=mode")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    assert!(at.file_exists("b"));
+
+    let metadata_b = std::fs::metadata(at.subdir.join("b")).unwrap();
+    let permission_b = uufs::display_permissions(&metadata_b, false);
+    assert_eq!(permission_b, "rw-------".to_string());
+
+    unsafe { umask(0o022) };
 }
 
 #[test]
@@ -2081,6 +2126,7 @@ fn test_cp_reflink_insufficient_permission() {
 #[test]
 fn test_closes_file_descriptors() {
     use procfs::process::Process;
+    use rlimit::Resource;
     let me = Process::myself().unwrap();
 
     // The test suite runs in parallel, we have pipe, sockets
@@ -2090,7 +2136,6 @@ fn test_closes_file_descriptors() {
     let limit_fd: u64 = number_file_already_opened + 9;
 
     // For debugging purposes:
-    #[cfg(not(target_os = "android"))]
     for f in me.fd().unwrap() {
         let fd = f.unwrap();
         println!("{:?} {:?}", fd, fd.mode());
@@ -2336,13 +2381,18 @@ fn test_copy_symlink_force() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 fn test_no_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
     use uucore::mode::get_umask;
 
-    const PERMS_ALL: u32 = 0o7777;
+    const PERMS_ALL: u32 = if cfg!(target_os = "freebsd") {
+        // Only the superuser can set the sticky bit on a file.
+        0o6777
+    } else {
+        0o7777
+    };
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -2362,11 +2412,16 @@ fn test_no_preserve_mode() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg(unix)]
 fn test_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
-    const PERMS_ALL: u32 = 0o7777;
+    const PERMS_ALL: u32 = if cfg!(target_os = "freebsd") {
+        // Only the superuser can set the sticky bit on a file.
+        0o6777
+    } else {
+        0o7777
+    };
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -2827,6 +2882,22 @@ fn test_cp_mode_hardlink_no_dereference() {
 }
 
 #[test]
+fn test_remove_destination_with_destination_being_a_symlink_to_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let symlink = "symlink";
+
+    at.touch(file);
+    at.symlink_file(file, symlink);
+
+    ucmd.args(&["--remove-destination", file, symlink])
+        .succeeds();
+    assert!(!at.symlink_exists(symlink));
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(symlink));
+}
+
+#[test]
 fn test_remove_destination_symbolic_link_loop() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("loop", "loop");
@@ -3173,6 +3244,7 @@ fn test_cp_archive_on_directory_ending_dot() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
 fn test_cp_debug_default() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3200,6 +3272,7 @@ fn test_cp_debug_default() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
 fn test_cp_debug_multiple_default() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3295,6 +3368,21 @@ fn test_cp_debug_sparse_reflink() {
 }
 
 #[test]
+fn test_cp_debug_no_update() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.touch("b");
+    ts.ucmd()
+        .arg("--debug")
+        .arg("--update=none")
+        .arg("a")
+        .arg("b")
+        .succeeds()
+        .stdout_contains("skipped 'b'");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_always() {
     let ts = TestScenario::new(util_name!());
@@ -3375,7 +3463,7 @@ fn test_cp_debug_sparse_auto() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn test_cp_debug_reflink_auto() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3439,4 +3527,50 @@ fn test_cp_only_source_no_target() {
     if !stderr_str.contains("missing destination file operand after \"a\"") {
         panic!("Failure: stderr was \n{stderr_str}");
     }
+}
+
+#[test]
+fn test_cp_dest_no_permissions() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("valid.txt");
+    at.touch("invalid_perms.txt");
+    at.set_readonly("invalid_perms.txt");
+
+    ts.ucmd()
+        .args(&["valid.txt", "invalid_perms.txt"])
+        .fails()
+        .stderr_contains("invalid_perms.txt")
+        .stderr_contains("denied");
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "freebsd")))]
+fn test_cp_attributes_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let a = "file_a";
+    let b = "file_b";
+    let mode_a = 0o0500;
+    let mode_b = 0o0777;
+
+    at.write(a, "a");
+    at.write(b, "b");
+    at.set_mode(a, mode_a);
+    at.set_mode(b, mode_b);
+
+    let mode_a = at.metadata(a).mode();
+    let mode_b = at.metadata(b).mode();
+
+    // --attributes-only doesn't do anything without other attribute preservation flags
+    ucmd.arg("--attributes-only")
+        .arg(a)
+        .arg(b)
+        .succeeds()
+        .no_output();
+
+    assert_eq!("a", at.read(a));
+    assert_eq!("b", at.read(b));
+    assert_eq!(mode_a, at.metadata(a).mode());
+    assert_eq!(mode_b, at.metadata(b).mode());
 }

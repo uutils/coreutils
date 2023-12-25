@@ -103,6 +103,7 @@ fn test_status_level_none() {
 }
 
 #[test]
+#[allow(clippy::cognitive_complexity)]
 fn test_all_top_level_args_no_leading_dashes() {
     let args = &[
         "if=foo.file",
@@ -357,6 +358,7 @@ fn parse_icf_tokens_remaining() {
                 fsync: true,
                 ..Default::default()
             },
+            is_conv_specified: true,
             ..Default::default()
         })
     );

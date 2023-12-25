@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore extendedbigdecimal extendedbigint bigdecimal numberparse
+// spell-checker:ignore extendedbigdecimal bigdecimal numberparse
 //! Parsing numbers for use in `seq`.
 //!
 //! This module provides an implementation of [`FromStr`] for the
@@ -16,8 +16,6 @@ use num_traits::Num;
 use num_traits::Zero;
 
 use crate::extendedbigdecimal::ExtendedBigDecimal;
-use crate::extendedbigint::ExtendedBigInt;
-use crate::number::Number;
 use crate::number::PreciseNumber;
 
 /// An error returned when parsing a number fails.
@@ -29,8 +27,8 @@ pub enum ParseNumberError {
 }
 
 /// Decide whether a given string and its parsed `BigInt` is negative zero.
-fn is_minus_zero_int(s: &str, n: &BigInt) -> bool {
-    s.starts_with('-') && n == &BigInt::zero()
+fn is_minus_zero_int(s: &str, n: &BigDecimal) -> bool {
+    s.starts_with('-') && n == &BigDecimal::zero()
 }
 
 /// Decide whether a given string and its parsed `BigDecimal` is negative zero.
@@ -53,19 +51,19 @@ fn is_minus_zero_float(s: &str, x: &BigDecimal) -> bool {
 /// assert_eq!(actual, expected);
 /// ```
 fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberError> {
-    match s.parse::<BigInt>() {
+    match s.parse::<BigDecimal>() {
         Ok(n) => {
             // If `s` is '-0', then `parse()` returns `BigInt::zero()`,
             // but we need to return `Number::MinusZeroInt` instead.
             if is_minus_zero_int(s, &n) {
                 Ok(PreciseNumber::new(
-                    Number::Int(ExtendedBigInt::MinusZero),
+                    ExtendedBigDecimal::MinusZero,
                     s.len(),
                     0,
                 ))
             } else {
                 Ok(PreciseNumber::new(
-                    Number::Int(ExtendedBigInt::BigInt(n)),
+                    ExtendedBigDecimal::BigDecimal(n),
                     s.len(),
                     0,
                 ))
@@ -73,30 +71,13 @@ fn parse_no_decimal_no_exponent(s: &str) -> Result<PreciseNumber, ParseNumberErr
         }
         Err(_) => {
             // Possibly "NaN" or "inf".
-            //
-            // TODO In Rust v1.53.0, this change
-            // https://github.com/rust-lang/rust/pull/78618 improves the
-            // parsing of floats to include being able to parse "NaN"
-            // and "inf". So when the minimum version of this crate is
-            // increased to 1.53.0, we should just use the built-in
-            // `f32` parsing instead.
-            if s.eq_ignore_ascii_case("inf") {
-                Ok(PreciseNumber::new(
-                    Number::Float(ExtendedBigDecimal::Infinity),
-                    0,
-                    0,
-                ))
-            } else if s.eq_ignore_ascii_case("-inf") {
-                Ok(PreciseNumber::new(
-                    Number::Float(ExtendedBigDecimal::MinusInfinity),
-                    0,
-                    0,
-                ))
-            } else if s.eq_ignore_ascii_case("nan") || s.eq_ignore_ascii_case("-nan") {
-                Err(ParseNumberError::Nan)
-            } else {
-                Err(ParseNumberError::Float)
-            }
+            let float_val = match s.to_ascii_lowercase().as_str() {
+                "inf" | "infinity" => ExtendedBigDecimal::Infinity,
+                "-inf" | "-infinity" => ExtendedBigDecimal::MinusInfinity,
+                "nan" | "-nan" => return Err(ParseNumberError::Nan),
+                _ => return Err(ParseNumberError::Float),
+            };
+            Ok(PreciseNumber::new(float_val, 0, 0))
         }
     }
 }
@@ -142,13 +123,13 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     if exponent < 0 {
         if is_minus_zero_float(s, &x) {
             Ok(PreciseNumber::new(
-                Number::Float(ExtendedBigDecimal::MinusZero),
+                ExtendedBigDecimal::MinusZero,
                 num_integral_digits,
                 num_fractional_digits,
             ))
         } else {
             Ok(PreciseNumber::new(
-                Number::Float(ExtendedBigDecimal::BigDecimal(x)),
+                ExtendedBigDecimal::BigDecimal(x),
                 num_integral_digits,
                 num_fractional_digits,
             ))
@@ -186,13 +167,13 @@ fn parse_decimal_no_exponent(s: &str, i: usize) -> Result<PreciseNumber, ParseNu
     let num_fractional_digits = s.len() - (i + 1);
     if is_minus_zero_float(s, &x) {
         Ok(PreciseNumber::new(
-            Number::Float(ExtendedBigDecimal::MinusZero),
+            ExtendedBigDecimal::MinusZero,
             num_integral_digits,
             num_fractional_digits,
         ))
     } else {
         Ok(PreciseNumber::new(
-            Number::Float(ExtendedBigDecimal::BigDecimal(x)),
+            ExtendedBigDecimal::BigDecimal(x),
             num_integral_digits,
             num_fractional_digits,
         ))
@@ -256,7 +237,7 @@ fn parse_decimal_and_exponent(
     if num_digits_between_decimal_point_and_e <= exponent {
         if is_minus_zero_float(s, &val) {
             Ok(PreciseNumber::new(
-                Number::Int(ExtendedBigInt::MinusZero),
+                ExtendedBigDecimal::MinusZero,
                 num_integral_digits,
                 num_fractional_digits,
             ))
@@ -268,23 +249,23 @@ fn parse_decimal_and_exponent(
             );
             let expanded = [&s[0..i], &s[i + 1..j], &zeros].concat();
             let n = expanded
-                .parse::<BigInt>()
+                .parse::<BigDecimal>()
                 .map_err(|_| ParseNumberError::Float)?;
             Ok(PreciseNumber::new(
-                Number::Int(ExtendedBigInt::BigInt(n)),
+                ExtendedBigDecimal::BigDecimal(n),
                 num_integral_digits,
                 num_fractional_digits,
             ))
         }
     } else if is_minus_zero_float(s, &val) {
         Ok(PreciseNumber::new(
-            Number::Float(ExtendedBigDecimal::MinusZero),
+            ExtendedBigDecimal::MinusZero,
             num_integral_digits,
             num_fractional_digits,
         ))
     } else {
         Ok(PreciseNumber::new(
-            Number::Float(ExtendedBigDecimal::BigDecimal(val)),
+            ExtendedBigDecimal::BigDecimal(val),
             num_integral_digits,
             num_fractional_digits,
         ))
@@ -320,20 +301,17 @@ fn parse_hexadecimal(s: &str) -> Result<PreciseNumber, ParseNumberError> {
     }
 
     let num = BigInt::from_str_radix(s, 16).map_err(|_| ParseNumberError::Hex)?;
+    let num = BigDecimal::from(num);
 
-    match (is_neg, num == BigInt::zero()) {
-        (true, true) => Ok(PreciseNumber::new(
-            Number::Int(ExtendedBigInt::MinusZero),
-            2,
-            0,
-        )),
+    match (is_neg, num == BigDecimal::zero()) {
+        (true, true) => Ok(PreciseNumber::new(ExtendedBigDecimal::MinusZero, 2, 0)),
         (true, false) => Ok(PreciseNumber::new(
-            Number::Int(ExtendedBigInt::BigInt(-num)),
+            ExtendedBigDecimal::BigDecimal(-num),
             0,
             0,
         )),
         (false, _) => Ok(PreciseNumber::new(
-            Number::Int(ExtendedBigInt::BigInt(num)),
+            ExtendedBigDecimal::BigDecimal(num),
             0,
             0,
         )),
@@ -381,19 +359,14 @@ impl FromStr for PreciseNumber {
 
 #[cfg(test)]
 mod tests {
-
     use bigdecimal::BigDecimal;
-    use num_bigint::BigInt;
-    use num_traits::Zero;
 
     use crate::extendedbigdecimal::ExtendedBigDecimal;
-    use crate::extendedbigint::ExtendedBigInt;
-    use crate::number::Number;
     use crate::number::PreciseNumber;
     use crate::numberparse::ParseNumberError;
 
     /// Convenience function for parsing a [`Number`] and unwrapping.
-    fn parse(s: &str) -> Number {
+    fn parse(s: &str) -> ExtendedBigDecimal {
         s.parse::<PreciseNumber>().unwrap().number
     }
 
@@ -409,40 +382,37 @@ mod tests {
 
     #[test]
     fn test_parse_minus_zero_int() {
-        assert_eq!(parse("-0e0"), Number::Int(ExtendedBigInt::MinusZero));
-        assert_eq!(parse("-0e-0"), Number::Int(ExtendedBigInt::MinusZero));
-        assert_eq!(parse("-0e1"), Number::Int(ExtendedBigInt::MinusZero));
-        assert_eq!(parse("-0e+1"), Number::Int(ExtendedBigInt::MinusZero));
-        assert_eq!(parse("-0.0e1"), Number::Int(ExtendedBigInt::MinusZero));
-        assert_eq!(parse("-0x0"), Number::Int(ExtendedBigInt::MinusZero));
+        assert_eq!(parse("-0e0"), ExtendedBigDecimal::MinusZero);
+        assert_eq!(parse("-0e-0"), ExtendedBigDecimal::MinusZero);
+        assert_eq!(parse("-0e1"), ExtendedBigDecimal::MinusZero);
+        assert_eq!(parse("-0e+1"), ExtendedBigDecimal::MinusZero);
+        assert_eq!(parse("-0.0e1"), ExtendedBigDecimal::MinusZero);
+        assert_eq!(parse("-0x0"), ExtendedBigDecimal::MinusZero);
     }
 
     #[test]
     fn test_parse_minus_zero_float() {
-        assert_eq!(parse("-0.0"), Number::Float(ExtendedBigDecimal::MinusZero));
-        assert_eq!(parse("-0e-1"), Number::Float(ExtendedBigDecimal::MinusZero));
-        assert_eq!(
-            parse("-0.0e-1"),
-            Number::Float(ExtendedBigDecimal::MinusZero)
-        );
+        assert_eq!(parse("-0.0"), ExtendedBigDecimal::MinusZero);
+        assert_eq!(parse("-0e-1"), ExtendedBigDecimal::MinusZero);
+        assert_eq!(parse("-0.0e-1"), ExtendedBigDecimal::MinusZero);
     }
 
     #[test]
     fn test_parse_big_int() {
-        assert_eq!(parse("0"), Number::Int(ExtendedBigInt::zero()));
-        assert_eq!(parse("0.1e1"), Number::Int(ExtendedBigInt::one()));
+        assert_eq!(parse("0"), ExtendedBigDecimal::zero());
+        assert_eq!(parse("0.1e1"), ExtendedBigDecimal::one());
         assert_eq!(
             parse("1.0e1"),
-            Number::Int(ExtendedBigInt::BigInt("10".parse::<BigInt>().unwrap()))
+            ExtendedBigDecimal::BigDecimal("10".parse::<BigDecimal>().unwrap())
         );
     }
 
     #[test]
     fn test_parse_hexadecimal_big_int() {
-        assert_eq!(parse("0x0"), Number::Int(ExtendedBigInt::zero()));
+        assert_eq!(parse("0x0"), ExtendedBigDecimal::zero());
         assert_eq!(
             parse("0x10"),
-            Number::Int(ExtendedBigInt::BigInt("16".parse::<BigInt>().unwrap()))
+            ExtendedBigDecimal::BigDecimal("16".parse::<BigDecimal>().unwrap())
         );
     }
 
@@ -450,44 +420,34 @@ mod tests {
     fn test_parse_big_decimal() {
         assert_eq!(
             parse("0.0"),
-            Number::Float(ExtendedBigDecimal::BigDecimal(
-                "0.0".parse::<BigDecimal>().unwrap()
-            ))
+            ExtendedBigDecimal::BigDecimal("0.0".parse::<BigDecimal>().unwrap())
         );
         assert_eq!(
             parse(".0"),
-            Number::Float(ExtendedBigDecimal::BigDecimal(
-                "0.0".parse::<BigDecimal>().unwrap()
-            ))
+            ExtendedBigDecimal::BigDecimal("0.0".parse::<BigDecimal>().unwrap())
         );
         assert_eq!(
             parse("1.0"),
-            Number::Float(ExtendedBigDecimal::BigDecimal(
-                "1.0".parse::<BigDecimal>().unwrap()
-            ))
+            ExtendedBigDecimal::BigDecimal("1.0".parse::<BigDecimal>().unwrap())
         );
         assert_eq!(
             parse("10e-1"),
-            Number::Float(ExtendedBigDecimal::BigDecimal(
-                "1.0".parse::<BigDecimal>().unwrap()
-            ))
+            ExtendedBigDecimal::BigDecimal("1.0".parse::<BigDecimal>().unwrap())
         );
         assert_eq!(
             parse("-1e-3"),
-            Number::Float(ExtendedBigDecimal::BigDecimal(
-                "-0.001".parse::<BigDecimal>().unwrap()
-            ))
+            ExtendedBigDecimal::BigDecimal("-0.001".parse::<BigDecimal>().unwrap())
         );
     }
 
     #[test]
     fn test_parse_inf() {
-        assert_eq!(parse("inf"), Number::Float(ExtendedBigDecimal::Infinity));
-        assert_eq!(parse("+inf"), Number::Float(ExtendedBigDecimal::Infinity));
-        assert_eq!(
-            parse("-inf"),
-            Number::Float(ExtendedBigDecimal::MinusInfinity)
-        );
+        assert_eq!(parse("inf"), ExtendedBigDecimal::Infinity);
+        assert_eq!(parse("infinity"), ExtendedBigDecimal::Infinity);
+        assert_eq!(parse("+inf"), ExtendedBigDecimal::Infinity);
+        assert_eq!(parse("+infinity"), ExtendedBigDecimal::Infinity);
+        assert_eq!(parse("-inf"), ExtendedBigDecimal::MinusInfinity);
+        assert_eq!(parse("-infinity"), ExtendedBigDecimal::MinusInfinity);
     }
 
     #[test]
@@ -543,6 +503,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_num_integral_digits() {
         // no decimal, no exponent
         assert_eq!(num_integral_digits("123"), 3);
@@ -583,6 +544,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)]
     fn test_num_fractional_digits() {
         // no decimal, no exponent
         assert_eq!(num_fractional_digits("123"), 0);

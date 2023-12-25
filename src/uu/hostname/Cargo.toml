@@ -1,6 +1,6 @@
 [package]
 name = "uu_hostname"
-version = "0.0.21"
+version = "0.0.23"
 authors = ["uutils developers"]
 license = "MIT"
 description = "hostname ~ (uutils) display or set the host name of the current host"
@@ -16,7 +16,7 @@ path = "src/hostname.rs"
 
 [dependencies]
 clap = { workspace = true }
-hostname = { version = "0.3", features = ["set"] }
+hostname = { workspace = true, features = ["set"] }
 uucore = { workspace = true, features = ["wide"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

@@ -19,9 +19,9 @@ use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UError, UResult, USimpleError};
+use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
-use uucore::{crash, crash_if_err, format_usage, help_about, help_usage};
+use uucore::{crash_if_err, format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("join.md");
 const USAGE: &str = help_usage!("join.md");
@@ -334,37 +334,30 @@ impl<'a> State<'a> {
         key: usize,
         line_ending: LineEnding,
         print_unpaired: bool,
-    ) -> State<'a> {
-        let f = if name == "-" {
+    ) -> UResult<State<'a>> {
+        let file_buf = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
         } else {
-            match File::open(name) {
-                Ok(file) => Box::new(BufReader::new(file)) as Box<dyn BufRead>,
-                Err(err) => crash!(1, "{}: {}", name.maybe_quote(), err),
-            }
+            let file = File::open(name).map_err_context(|| format!("{}", name.maybe_quote()))?;
+            Box::new(BufReader::new(file)) as Box<dyn BufRead>
         };
 
-        State {
+        Ok(State {
             key,
             file_name: name,
             file_num,
             print_unpaired,
-            lines: f.split(line_ending as u8),
+            lines: file_buf.split(line_ending as u8),
             max_len: 1,
             seq: Vec::new(),
             line_num: 0,
             has_failed: false,
             has_unpaired: false,
-        }
+        })
     }
 
     /// Skip the current unpaired line.
-    fn skip_line(
-        &mut self,
-        writer: &mut impl Write,
-        input: &Input,
-        repr: &Repr,
-    ) -> Result<(), JoinError> {
+    fn skip_line(&mut self, writer: &mut impl Write, input: &Input, repr: &Repr) -> UResult<()> {
         if self.print_unpaired {
             self.print_first_line(writer, repr)?;
         }
@@ -375,7 +368,7 @@ impl<'a> State<'a> {
 
     /// Keep reading line sequence until the key does not change, return
     /// the first line whose key differs.
-    fn extend(&mut self, input: &Input) -> Result<Option<Line>, JoinError> {
+    fn extend(&mut self, input: &Input) -> UResult<Option<Line>> {
         while let Some(line) = self.next_line(input)? {
             let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
@@ -484,12 +477,7 @@ impl<'a> State<'a> {
         0
     }
 
-    fn finalize(
-        &mut self,
-        writer: &mut impl Write,
-        input: &Input,
-        repr: &Repr,
-    ) -> Result<(), JoinError> {
+    fn finalize(&mut self, writer: &mut impl Write, input: &Input, repr: &Repr) -> UResult<()> {
         if self.has_line() {
             if self.print_unpaired {
                 self.print_first_line(writer, repr)?;
@@ -591,20 +579,38 @@ impl<'a> State<'a> {
     }
 }
 
-#[uucore::main]
-#[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+fn parse_separator(value_os: &OsString) -> UResult<Sep> {
+    #[cfg(unix)]
+    let value = value_os.as_bytes();
+    #[cfg(not(unix))]
+    let value = match value_os.to_str() {
+        Some(value) => value.as_bytes(),
+        None => {
+            return Err(USimpleError::new(
+                1,
+                "unprintable field separators are only supported on unix-like platforms",
+            ));
+        }
+    };
+    match value.len() {
+        0 => Ok(Sep::Line),
+        1 => Ok(Sep::Char(value[0])),
+        2 if value[0] == b'\\' && value[1] == b'0' => Ok(Sep::Char(0)),
+        _ => Err(USimpleError::new(
+            1,
+            format!("multi-character tab {}", value_os.to_string_lossy()),
+        )),
+    }
+}
 
-    let keys = parse_field_number_option(matches.get_one::<String>("j").map(|s| s.as_str()))?;
-    let key1 = parse_field_number_option(matches.get_one::<String>("1").map(|s| s.as_str()))?;
-    let key2 = parse_field_number_option(matches.get_one::<String>("2").map(|s| s.as_str()))?;
-
-    let mut settings = Settings::default();
+fn parse_print_settings(matches: &clap::ArgMatches) -> UResult<(bool, bool, bool)> {
+    let mut print_joined = true;
+    let mut print_unpaired1 = false;
+    let mut print_unpaired2 = false;
 
     let v_values = matches.get_many::<String>("v");
     if v_values.is_some() {
-        settings.print_joined = false;
+        print_joined = false;
     }
 
     let unpaired = v_values
@@ -612,41 +618,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .chain(matches.get_many("a").unwrap_or_default());
     for file_num in unpaired {
         match parse_file_number(file_num)? {
-            FileNum::File1 => settings.print_unpaired1 = true,
-            FileNum::File2 => settings.print_unpaired2 = true,
+            FileNum::File1 => print_unpaired1 = true,
+            FileNum::File2 => print_unpaired2 = true,
         }
     }
+
+    Ok((print_joined, print_unpaired1, print_unpaired2))
+}
+
+fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<Option<usize>> {
+    let value = matches.get_one::<String>(key).map(|s| s.as_str());
+    parse_field_number_option(value)
+}
+
+/// Parses the command-line arguments and constructs a `Settings` struct.
+///
+/// This function takes the matches from the command-line arguments, processes them,
+/// and returns a `Settings` struct that encapsulates the configuration for the program.
+#[allow(clippy::field_reassign_with_default)]
+fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
+    let keys = get_and_parse_field_number(matches, "j")?;
+    let key1 = get_and_parse_field_number(matches, "1")?;
+    let key2 = get_and_parse_field_number(matches, "2")?;
+
+    let (print_joined, print_unpaired1, print_unpaired2) = parse_print_settings(matches)?;
+
+    let mut settings = Settings::default();
+
+    settings.print_joined = print_joined;
+    settings.print_unpaired1 = print_unpaired1;
+    settings.print_unpaired2 = print_unpaired2;
 
     settings.ignore_case = matches.get_flag("i");
     settings.key1 = get_field_number(keys, key1)?;
     settings.key2 = get_field_number(keys, key2)?;
-
     if let Some(value_os) = matches.get_one::<OsString>("t") {
-        #[cfg(unix)]
-        let value = value_os.as_bytes();
-        #[cfg(not(unix))]
-        let value = match value_os.to_str() {
-            Some(value) => value.as_bytes(),
-            None => {
-                return Err(USimpleError::new(
-                    1,
-                    "unprintable field separators are only supported on unix-like platforms",
-                ))
-            }
-        };
-        settings.separator = match value.len() {
-            0 => Sep::Line,
-            1 => Sep::Char(value[0]),
-            2 if value[0] == b'\\' && value[1] == b'0' => Sep::Char(0),
-            _ => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("multi-character tab {}", value_os.to_string_lossy()),
-                ))
-            }
-        };
+        settings.separator = parse_separator(value_os)?;
     }
-
     if let Some(format) = matches.get_one::<String>("o") {
         if format == "auto" {
             settings.autoformat = true;
@@ -677,6 +685,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.line_ending = LineEnding::from_zero_flag(matches.get_flag("z"));
 
+    Ok(settings)
+}
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uu_app().try_get_matches_from(args)?;
+
+    let settings = parse_settings(&matches)?;
+
     let file1 = matches.get_one::<String>("file1").unwrap();
     let file2 = matches.get_one::<String>("file2").unwrap();
 
@@ -684,10 +701,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(USimpleError::new(1, "both files cannot be standard input"));
     }
 
-    match exec(file1, file2, settings) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(USimpleError::new(1, format!("{e}"))),
-    }
+    exec(file1, file2, settings)
 }
 
 pub fn uu_app() -> Command {
@@ -808,7 +822,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         )
 }
 
-fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
+fn exec(file1: &str, file2: &str, settings: Settings) -> UResult<()> {
     let stdin = stdin();
 
     let mut state1 = State::new(
@@ -818,7 +832,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
         settings.key1,
         settings.line_ending,
         settings.print_unpaired1,
-    );
+    )?;
 
     let mut state2 = State::new(
         FileNum::File2,
@@ -827,7 +841,7 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> Result<(), JoinError> {
         settings.key2,
         settings.line_ending,
         settings.print_unpaired2,
-    );
+    )?;
 
     let input = Input::new(
         settings.separator,

@@ -33,8 +33,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
     let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
 
     let default_shell: &'static str = "/bin/sh";
@@ -253,7 +251,7 @@ fn set_main_group(group: &str) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "openbsd"))]
 fn set_groups(groups: &[libc::gid_t]) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
 }

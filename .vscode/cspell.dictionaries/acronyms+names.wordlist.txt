@@ -37,6 +37,7 @@ aarch
 flac
 impls
 lzma
+loongarch
 
 # * names
 BusyBox

@@ -22,8 +22,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     if matches.contains_id(options::CONTEXT) {
@@ -42,7 +40,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let fifos: Vec<String> = match matches.get_many::<String>(options::FIFO) {
-        Some(v) => v.clone().map(|s| s.to_owned()).collect(),
+        Some(v) => v.cloned().collect(),
         None => return Err(USimpleError::new(1, "missing operand")),
     };
 
