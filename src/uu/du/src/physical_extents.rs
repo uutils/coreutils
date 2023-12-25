@@ -78,7 +78,7 @@ impl SeenPhysicalExtents {
             match fiemap::fiemap(path.clone()) {
                 Ok(result) => result,
                 Err(e) => {
-                    errors.push(USimpleError::new(1000,
+                    errors.push(USimpleError::new(1,
                         format!("FIEMAP: cannot access {}, e: {}", path.quote(), e)));
                     return (0, errors);
                 }
@@ -90,7 +90,7 @@ impl SeenPhysicalExtents {
         {
             let extent = match extent_result {
                 Err(e) => {
-                    errors.push(USimpleError::new(100,
+                    errors.push(USimpleError::new(1,
                                 format!("FIEMAP: extent error {}, {}",
                                 path.quote(), e)));
                     return (0, errors);
@@ -109,7 +109,7 @@ impl SeenPhysicalExtents {
                 total_overlapping += self.get_overlapping_and_insert(&range);
 
                 if self.log_infos {
-                    errors.push(USimpleError::new(100,
+                    errors.push(USimpleError::new(0,
                             format!("extent: {}, sum:{}, extents: {}, range:{}..{}, flags:{:#x}",
                                 path.quote(), total_overlapping,
                                 i,range.start,range.end,

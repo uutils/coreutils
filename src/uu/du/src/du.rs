@@ -799,7 +799,7 @@ impl UumainData {
         let stats = &data.duplicate_stats;
 
         if data.log_summary {
-            print_tx.send(Err(USimpleError::new(3000,
+            print_tx.send(Err(USimpleError::new(0,
                 format!("stats: inode_count:{}, inode_sum:{}, extent_count:{}, extent_sum:{}, partial_extent_count:{}, partial_extent_sum:{}",
                     stats.inode_count, stats.inode_sum,
                     stats.extent_count, stats.extent_sum,
