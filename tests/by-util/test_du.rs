@@ -960,9 +960,9 @@ fn create_fixture_in_btrfs() -> TestScenario {
     return ts;
 }
 
-fn create_large_binary_file(at: &AtPath, filename: &str) {
+fn create_binary_file(at: &AtPath, size_in_bytes: u64, filename: &str) {
     let mut file = at.make_file(filename);
-    for _ in 0..1024*1024 {
+    for _ in 0..size_in_bytes {
         file.write_all(&[0,1,2,3,4,5,6,7,8,9]).unwrap();
     }
     file.flush().unwrap();
@@ -975,7 +975,7 @@ fn test_du_reflink_copy_not_considered_as_extra_data() {
     let ts = create_fixture_in_btrfs();
     let at = &ts.fixtures;
 
-    create_large_binary_file(&at, "large_file1.bin");
+    create_binary_file(&at, 1024*1024, "large_file1.bin");
 
     ts.cmd("cp")
         .arg("--reflink=always")
@@ -991,12 +991,33 @@ fn test_du_reflink_copy_not_considered_as_extra_data() {
 
 #[cfg(not(windows))]
 #[test]
+fn test_du_reflink_copy_of_very_small_files_considered_as_extra_data_as_its_part_of_metadata() {
+
+    let ts = create_fixture_in_btrfs();
+    let at = &ts.fixtures;
+
+    create_binary_file(&at, 50, "small_file1.bin");
+
+    ts.cmd("cp")
+        .arg("--reflink=always")
+        .arg("small_file1.bin")
+        .arg("small_file1_cp_reflink_always.bin")
+        .succeeds();
+
+    let result = ts.ucmd().args(&["--all", "-b"]).succeeds();
+    result.stdout_contains("500\t./small_file1.bin\n");
+    result.stdout_contains("500\t./small_file1_cp_reflink_always.bin\n");
+    result.stdout_contains("1000\t.\n");
+}
+
+#[cfg(not(windows))]
+#[test]
 fn test_du_reflink_partial_copy_not_considered_as_extra_data() {
 
     let ts = create_fixture_in_btrfs();
     let at = &ts.fixtures;
 
-    create_large_binary_file(&at, "large_file1.bin");
+    create_binary_file(&at, 1024*1024, "large_file1.bin");
 
     ts.cmd("cp").arg("--reflink=always")
         .arg("large_file1.bin")

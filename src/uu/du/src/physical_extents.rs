@@ -98,7 +98,8 @@ impl SeenPhysicalExtents {
                 Ok(extent) => extent,
             };
 
-            if !extent.fe_flags.contains(FiemapExtentFlags::UNKNOWN) && // if this bit is set, the record doesn't contain valid information (yet)
+            if !extent.fe_flags.contains(FiemapExtentFlags::UNKNOWN) && // the record doesn't contain valid information (yet)
+               !extent.fe_flags.contains(FiemapExtentFlags::DATA_INLINE) && // the data so less that is put as part of the metadata, fe invalid
                 extent.fe_flags.contains(FiemapExtentFlags::SHARED) // performance: only with this bit set, extents are relevant for us
             {
                 let range = Range{
