@@ -1029,35 +1029,35 @@ fn test_du_overlapping_ranges() {
     let mut uut = SeenPhysicalExtents::default();
 
     assert_eq!(uut.ranges.len(), 0);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start:   0, end: 100}), 0);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start:   0, end: 100}), 0);
     assert_eq!(uut.ranges.len(), 1);
     assert_eq!(*uut.ranges.entry(0).or_default(), 100);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 400, end: 500}), 0);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 400, end: 500}), 0);
     assert_eq!(uut.ranges.len(), 2);
     assert_eq!(*uut.ranges.entry(0).or_default(), 100);
     assert_eq!(*uut.ranges.entry(400).or_default(), 500);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start:   0, end: 100}), 100);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start:   0, end: 100}), 100);
     assert_eq!(uut.ranges.len(), 2);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 400, end: 500}), 100);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 400, end: 500}), 100);
     assert_eq!(uut.ranges.len(), 2);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 600, end: 700}), 0);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 600, end: 700}), 0);
     assert_eq!(uut.ranges.len(), 3);
     assert_eq!(*uut.ranges.entry(0).or_default(), 100);
     assert_eq!(*uut.ranges.entry(400).or_default(), 500);
     assert_eq!(*uut.ranges.entry(600).or_default(), 700);
 
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start:   0, end:  50}), 50);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start:   0, end:  50}), 50);
     assert_eq!(uut.ranges.len(), 3);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 400, end: 450}), 50);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 400, end: 450}), 50);
     assert_eq!(uut.ranges.len(), 3);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 600, end: 650}), 50);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 600, end: 650}), 50);
     assert_eq!(uut.ranges.len(), 3);
 
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start:  50, end: 100}), 50);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start:  50, end: 100}), 50);
     assert_eq!(uut.ranges.len(), 3);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 450, end: 500}), 50);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 450, end: 500}), 50);
     assert_eq!(uut.ranges.len(), 3);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 650, end: 700}), 50);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 650, end: 700}), 50);
     assert_eq!(uut.ranges.len(), 3);
 }
 
@@ -1068,27 +1068,27 @@ fn test_du_overlapping_ranges_and_extending() {
 
     let mut uut = SeenPhysicalExtents::default();
 
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start:  50, end: 150}), 0);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 400, end: 500}), 0);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 600, end: 700}), 0);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start:  50, end: 150}), 0);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 400, end: 500}), 0);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 600, end: 700}), 0);
     assert_eq!(uut.ranges.len(), 3);
     assert_eq!(*uut.ranges.entry( 50).or_default(), 150);
     assert_eq!(*uut.ranges.entry(400).or_default(), 500);
     assert_eq!(*uut.ranges.entry(600).or_default(), 700);
 
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 25, end: 100}), 50);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 25, end: 100}), 50);
     assert_eq!(uut.ranges.len(), 4);
     assert_eq!(*uut.ranges.entry( 25).or_default(), 100);
     assert_eq!(*uut.ranges.entry(100).or_default(), 150);
     assert_eq!(*uut.ranges.entry(400).or_default(), 500);
     assert_eq!(*uut.ranges.entry(600).or_default(), 700);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 125, end: 200}), 25);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 125, end: 200}), 25);
     assert_eq!(uut.ranges.len(), 4);
     assert_eq!(*uut.ranges.entry( 25).or_default(), 100);
     assert_eq!(*uut.ranges.entry(100).or_default(), 200);
     assert_eq!(*uut.ranges.entry(400).or_default(), 500);
     assert_eq!(*uut.ranges.entry(600).or_default(), 700);
-    assert_eq!(uut.get_overlapping_extent_amount(&Range{start: 390, end: 800}), 200);
+    assert_eq!(uut.get_overlapping_and_insert(&Range{start: 390, end: 800}), 200);
     assert_eq!(uut.ranges.len(), 3);
     assert_eq!(*uut.ranges.entry( 25).or_default(), 100);
     assert_eq!(*uut.ranges.entry(100).or_default(), 200);

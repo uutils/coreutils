@@ -19,7 +19,7 @@ pub struct SeenPhysicalExtents
 
 impl SeenPhysicalExtents {
 
-    pub fn get_overlapping_extent_amount(&mut self, range: &Range) -> u64 {
+    pub fn get_overlapping_and_insert(&mut self, range: &Range) -> u64 {
 
         let mut same_or_before = self.ranges.range_mut(..range.start+1);
 
@@ -32,23 +32,23 @@ impl SeenPhysicalExtents {
             if *end >= range.start {
                 overlapping_sum += *end - range.start;
                 *end = range.end;     // partially covered from begin.
-                                    // Extend existing entry.
+                                      // Extend existing entry.
                 need_new_entry = false;
             }
         }
 
         if need_new_entry {
+            // element before doesn't exist or doesn't overlap, insert new
             self.ranges.insert(range.start, range.end);
         }
 
         let mut current_pos = range.start+1;
         loop {
-            let mut after =
-                self.ranges.range(current_pos..);
+            let mut after = self.ranges.range(current_pos..);
 
             if let Some((&start, end)) = after.next() {
                 if start >= range.end {
-                    return overlapping_sum; // fully outside, nothing to do
+                    return overlapping_sum; // fully outside, done
                 }
 
                 if *end > range.end {
@@ -57,7 +57,7 @@ impl SeenPhysicalExtents {
                     let new_end = *end;
                     self.ranges.insert(new_start, new_end);
                     self.ranges.remove(&start);
-                    return overlapping_sum; // partially outside, done
+                    return overlapping_sum; // partially outside, adapt, done
                 }
 
                 overlapping_sum += *end - start; // fully inside, remove, continue
@@ -70,7 +70,7 @@ impl SeenPhysicalExtents {
         }
     }
 
-    pub fn get_total_overlap(&mut self, path: PathBuf) -> (u64, Vec<Box<dyn UError>>) {
+    pub fn get_total_overlap_and_insert(&mut self, path: PathBuf) -> (u64, Vec<Box<dyn UError>>) {
 
         let mut errors = Vec::new();
 
@@ -99,14 +99,14 @@ impl SeenPhysicalExtents {
             };
 
             if !extent.fe_flags.contains(FiemapExtentFlags::UNKNOWN) && // if this bit is set, the record doesn't contain valid information (yet)
-                extent.fe_flags.contains(FiemapExtentFlags::SHARED) // only with this bit set, extents are relevant for us
+                extent.fe_flags.contains(FiemapExtentFlags::SHARED) // performance: only with this bit set, extents are relevant for us
             {
                 let range = Range{
                     start: extent.fe_physical,
                     end: extent.fe_physical + extent.fe_length,
                 };
 
-                total_overlapping += self.get_overlapping_extent_amount(&range);
+                total_overlapping += self.get_overlapping_and_insert(&range);
 
                 if self.log_infos {
                     errors.push(USimpleError::new(100,

@@ -378,7 +378,7 @@ impl<'a> DuData<'a> {
                         .or_insert(SeenPhysicalExtents::default());
 
                 let (total_overlapping, errors) =
-                    map_by_device.get_total_overlap(entry.path());
+                    map_by_device.get_total_overlap_and_insert(entry.path());
 
                 for error in errors {
                     self.print_tx.send(Err(error))?;
