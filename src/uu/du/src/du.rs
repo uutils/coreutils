@@ -303,176 +303,176 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
-struct DuData<'a> {
+struct DiskUsageCalculator<'a> {
     print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
     options: &'a TraversalOptions,
     seen_inodes: HashSet<FileInfo>,
     seen_physical_extents: BTreeMap<u64, SeenPhysicalExtents>,
 }
 
-impl<'a> DuData<'a> {
+impl<'a> DiskUsageCalculator<'a> {
 
-fn new<'b>(
-    print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
-    options: &'a TraversalOptions,
-) -> Self {
-    return DuData{print_tx, options,
-        seen_inodes: HashSet::new(),
-        seen_physical_extents: BTreeMap::new(),
-    }
-}
-
-fn is_entry_excluded(&self,
-    entry: &fs::DirEntry,
-    entry_stat: &Stat
-) -> bool {
-    for pattern in &self.options.excludes {
-        // Look at all patterns with both short and long paths
-        // if we have 'du foo' but search to exclude 'foo/bar'
-        // we need the full path
-        if pattern.matches(&entry_stat.path.to_string_lossy())
-            || pattern.matches(&entry.file_name().into_string().unwrap())
-        {
-            // if the directory is ignored, leave early
-            if self.options.verbose {
-                println!("{} ignored", &entry_stat.path.quote());
-            }
-            // Go to the next file
-            return true
+    fn new<'b>(
+        print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
+        options: &'a TraversalOptions,
+    ) -> Self {
+        return DiskUsageCalculator{print_tx, options,
+            seen_inodes: HashSet::new(),
+            seen_physical_extents: BTreeMap::new(),
         }
     }
 
-    false
-}
+    fn is_entry_excluded(&self,
+        entry: &fs::DirEntry,
+        entry_stat: &Stat
+    ) -> bool {
+        for pattern in &self.options.excludes {
+            // Look at all patterns with both short and long paths
+            // if we have 'du foo' but search to exclude 'foo/bar'
+            // we need the full path
+            if pattern.matches(&entry_stat.path.to_string_lossy())
+                || pattern.matches(&entry.file_name().into_string().unwrap())
+            {
+                // if the directory is ignored, leave early
+                if self.options.verbose {
+                    println!("{} ignored", &entry_stat.path.quote());
+                }
+                // Go to the next file
+                return true
+            }
+        }
 
-fn du_handle_dir_entry(&mut self,
-    base_stat: &mut Stat,
-    depth: usize,
-    entry: &fs::DirEntry,
-    entry_stat: Stat,
-) -> Result<(), Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    // We have an exclude list
-    if self.is_entry_excluded(entry, &entry_stat) {
-        return Ok(())
+        false
     }
 
-    let total_overlapping_by_extents =
-        if self.options.shared_extents &&
-            !entry_stat.is_symlink && !entry_stat.is_dir &&
-            entry_stat.inode.is_some()
-        {
-            let map_by_device =
-                self.seen_physical_extents
-                    .entry(entry_stat.inode.unwrap().dev_id)
-                    .or_insert(SeenPhysicalExtents::default());
+    fn du_handle_dir_entry(&mut self,
+        base_stat: &mut Stat,
+        depth: usize,
+        entry: &fs::DirEntry,
+        entry_stat: Stat,
+    ) -> Result<(), Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
+        // We have an exclude list
+        if self.is_entry_excluded(entry, &entry_stat) {
+            return Ok(())
+        }
 
-            let (total_overlapping, errors) =
-                map_by_device.get_total_overlap_and_insert(entry.path());
+        let total_overlapping_by_extents =
+            if self.options.shared_extents &&
+                !entry_stat.is_symlink && !entry_stat.is_dir &&
+                entry_stat.inode.is_some()
+            {
+                let map_by_device =
+                    self.seen_physical_extents
+                        .entry(entry_stat.inode.unwrap().dev_id)
+                        .or_insert(SeenPhysicalExtents::default());
 
-            for error in errors {
-                self.print_tx.send(Err(error))?;
-            }
+                let (total_overlapping, errors) =
+                    map_by_device.get_total_overlap_and_insert(entry.path());
 
-            total_overlapping
-        } else { 0 };
+                for error in errors {
+                    self.print_tx.send(Err(error))?;
+                }
 
-    let is_ignored_by_extents: bool =
-        total_overlapping_by_extents > 0 && total_overlapping_by_extents >= entry_stat.size;
-    if is_ignored_by_extents {
-        return Ok(());
-    }
+                total_overlapping
+            } else { 0 };
 
-    if let Some(inode) = entry_stat.inode {
-        if self.seen_inodes.contains(&inode) {
-            if self.options.count_links {
-                base_stat.inodes += 1;
-            }
+        let is_ignored_by_extents: bool =
+            total_overlapping_by_extents > 0 && total_overlapping_by_extents >= entry_stat.size;
+        if is_ignored_by_extents {
             return Ok(());
         }
-        self.seen_inodes.insert(inode);
-    }
 
-    if entry_stat.is_dir {
-        if self.options.one_file_system {
-            if let (Some(this_inode), Some(my_inode)) =
-                (entry_stat.inode, base_stat.inode)
-            {
-                if this_inode.dev_id != my_inode.dev_id {
-                    return Ok(())
+        if let Some(inode) = entry_stat.inode {
+            if self.seen_inodes.contains(&inode) {
+                if self.options.count_links {
+                    base_stat.inodes += 1;
+                }
+                return Ok(());
+            }
+            self.seen_inodes.insert(inode);
+        }
+
+        if entry_stat.is_dir {
+            if self.options.one_file_system {
+                if let (Some(this_inode), Some(my_inode)) =
+                    (entry_stat.inode, base_stat.inode)
+                {
+                    if this_inode.dev_id != my_inode.dev_id {
+                        return Ok(())
+                    }
                 }
             }
-        }
 
-        let this_stat = self.du(entry_stat, depth + 1)?;
+            let this_stat = self.run(entry_stat, depth + 1)?;
 
-        if !self.options.separate_dirs {
-            base_stat.size += this_stat.size;
-            base_stat.blocks += this_stat.blocks;
-            base_stat.inodes += this_stat.inodes;
-        }
-        self.print_tx.send(Ok(StatPrintInfo {
-            stat: this_stat,
-            depth: depth + 1,
-        }))?;
-    } else {
-        let mut adapted: Stat = entry_stat;
-        adapted.size -= total_overlapping_by_extents;
-        adapted.blocks -= total_overlapping_by_extents / 512;
-
-        base_stat.size += adapted.size;
-        base_stat.blocks += adapted.blocks;
-        base_stat.inodes += 1;
-
-        if self.options.all {
+            if !self.options.separate_dirs {
+                base_stat.size += this_stat.size;
+                base_stat.blocks += this_stat.blocks;
+                base_stat.inodes += this_stat.inodes;
+            }
             self.print_tx.send(Ok(StatPrintInfo {
-                stat: adapted,
+                stat: this_stat,
                 depth: depth + 1,
             }))?;
-        }
-    }
+        } else {
+            let mut adapted: Stat = entry_stat;
+            adapted.size -= total_overlapping_by_extents;
+            adapted.blocks -= total_overlapping_by_extents / 512;
 
-    Ok(())
-}
+            base_stat.size += adapted.size;
+            base_stat.blocks += adapted.blocks;
+            base_stat.inodes += 1;
 
-// this takes `my_stat` to avoid having to stat files multiple times.
-#[allow(clippy::cognitive_complexity)]
-fn du(&mut self,
-    mut my_stat: Stat,
-    depth: usize,
-) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>>
-{
-    if !my_stat.is_dir {
-        return Ok(my_stat)
-    }
-
-    let dir_iterator = match fs::read_dir(&my_stat.path) {
-        Ok(dir_iterator) => dir_iterator,
-        Err(e) => {
-            self.print_tx.send(Err(e.map_err_context(|| {
-                format!("cannot read directory {}", my_stat.path.quote())
-            })))?;
-            return Ok(my_stat);
-        }
-    };
-
-    for f in dir_iterator {
-        match f {
-            Ok(directory_entry) => {
-                match Stat::new(&directory_entry.path(), self.options) {
-                    Ok(this_stat) => {
-                        self.du_handle_dir_entry(&mut my_stat, depth, &directory_entry, this_stat)?;
-                    }
-                    Err(e) => self.print_tx.send(Err(e.map_err_context(|| {
-                        format!("cannot access {}", directory_entry.path().quote())
-                    })))?,
-                }
+            if self.options.all {
+                self.print_tx.send(Ok(StatPrintInfo {
+                    stat: adapted,
+                    depth: depth + 1,
+                }))?;
             }
-            Err(error) => self.print_tx.send(Err(error.into()))?,
         }
+
+        Ok(())
     }
 
-    Ok(my_stat)
-}
+    // this takes `my_stat` to avoid having to stat files multiple times.
+    #[allow(clippy::cognitive_complexity)]
+    fn run(&mut self,
+        mut my_stat: Stat,
+        depth: usize,
+    ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>>
+    {
+        if !my_stat.is_dir {
+            return Ok(my_stat)
+        }
+
+        let dir_iterator = match fs::read_dir(&my_stat.path) {
+            Ok(dir_iterator) => dir_iterator,
+            Err(e) => {
+                self.print_tx.send(Err(e.map_err_context(|| {
+                    format!("cannot read directory {}", my_stat.path.quote())
+                })))?;
+                return Ok(my_stat);
+            }
+        };
+
+        for f in dir_iterator {
+            match f {
+                Ok(directory_entry) => {
+                    match Stat::new(&directory_entry.path(), self.options) {
+                        Ok(this_stat) => {
+                            self.du_handle_dir_entry(&mut my_stat, depth, &directory_entry, this_stat)?;
+                        }
+                        Err(e) => self.print_tx.send(Err(e.map_err_context(|| {
+                            format!("cannot access {}", directory_entry.path().quote())
+                        })))?,
+                    }
+                }
+                Err(error) => self.print_tx.send(Err(error.into()))?,
+            }
+        }
+
+        Ok(my_stat)
+    }
 
 }
 
@@ -787,11 +787,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if let Ok(stat) = Stat::new(&path, &traversal_options) {
 
             // Kick off the computation of disk usage from the initial path
-            let mut data = DuData::new(&print_tx, &traversal_options);
+            let mut du_calc = DiskUsageCalculator::new(&print_tx, &traversal_options);
             if let Some(inode) = stat.inode {
-                data.seen_inodes.insert(inode);
+                du_calc.seen_inodes.insert(inode);
             }
-            let stat = data.du(stat, 0)
+            let stat = du_calc.run(stat, 0)
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
             print_tx
