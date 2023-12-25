@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::parse_size::{parse_size_u64, ParseSizeError};
 
 pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
     let mut start = 0;
@@ -15,7 +15,7 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
     } else if s.starts_with('0') {
         radix = 8;
     } else {
-        return parse_size(&s[start..]);
+        return parse_size_u64(&s[start..]);
     }
 
     let mut ends_with = s.chars().rev();
@@ -79,6 +79,7 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
 }
 
 #[test]
+#[allow(clippy::cognitive_complexity)]
 fn test_parse_number_of_bytes() {
     // octal input
     assert_eq!(8, parse_number_of_bytes("010").unwrap());

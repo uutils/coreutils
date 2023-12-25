@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/* last synced with: unlink (GNU coreutils) 8.21 */
-
 use std::ffi::OsString;
 use std::fs::remove_file;
 use std::path::Path;

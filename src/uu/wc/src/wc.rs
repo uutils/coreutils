@@ -167,7 +167,9 @@ impl<'a> Inputs<'a> {
                     None => Ok(Self::Files0From(input)),
                 }
             }
-            (Some(_), Some(_)) => Err(WcError::FilesDisabled.into()),
+            (Some(mut files), Some(_)) => {
+                Err(WcError::files_disabled(files.next().unwrap()).into())
+            }
         }
     }
 
@@ -342,8 +344,8 @@ impl TotalWhen {
 
 #[derive(Debug, Error)]
 enum WcError {
-    #[error("file operands cannot be combined with --files0-from")]
-    FilesDisabled,
+    #[error("extra operand '{extra}'\nfile operands cannot be combined with --files0-from")]
+    FilesDisabled { extra: Cow<'static, str> },
     #[error("when reading file names from stdin, no file name of '-' allowed")]
     StdinReprNotAllowed,
     #[error("invalid zero-length file name")]
@@ -365,11 +367,15 @@ impl WcError {
             None => Self::ZeroLengthFileName,
         }
     }
+    fn files_disabled(first_extra: &OsString) -> Self {
+        let extra = first_extra.to_string_lossy().into_owned().into();
+        Self::FilesDisabled { extra }
+    }
 }
 
 impl UError for WcError {
     fn usage(&self) -> bool {
-        matches!(self, Self::FilesDisabled)
+        matches!(self, Self::FilesDisabled { .. })
     }
 }
 
@@ -389,6 +395,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::BYTES)
                 .short('c')

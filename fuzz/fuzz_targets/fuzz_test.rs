@@ -13,7 +13,10 @@ use rand::Rng;
 use std::ffi::OsString;
 
 mod fuzz_common;
-use crate::fuzz_common::{generate_and_run_uumain, run_gnu_cmd};
+use crate::fuzz_common::CommandResult;
+use crate::fuzz_common::{
+    compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd,
+};
 
 #[derive(PartialEq, Debug, Clone)]
 enum ArgType {
@@ -27,29 +30,6 @@ enum ArgType {
 }
 
 static CMD_PATH: &str = "test";
-
-fn generate_random_string(max_length: usize) -> String {
-    let mut rng = rand::thread_rng();
-    let valid_utf8: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-        .chars()
-        .collect();
-    let invalid_utf8 = [0xC3, 0x28]; // Invalid UTF-8 sequence
-    let mut result = String::new();
-
-    for _ in 0..rng.gen_range(1..=max_length) {
-        if rng.gen_bool(0.9) {
-            let ch = valid_utf8.choose(&mut rng).unwrap();
-            result.push(*ch);
-        } else {
-            let ch = invalid_utf8.choose(&mut rng).unwrap();
-            if let Some(c) = char::from_u32(*ch as u32) {
-                result.push(c);
-            }
-        }
-    }
-
-    result
-}
 
 #[derive(Debug, Clone)]
 struct TestArg {
@@ -204,31 +184,28 @@ fuzz_target!(|_data: &[u8]| {
         args.push(OsString::from(generate_test_arg()));
     }
 
-    let (rust_output, uumain_exit_status) = generate_and_run_uumain(&args, uumain);
+    let rust_result = generate_and_run_uumain(&args, uumain, None);
 
-    // Run GNU test with the provided arguments and compare the output
-    match run_gnu_cmd(CMD_PATH, &args[1..], false) {
-        Ok((gnu_output, gnu_exit_status)) => {
-            let gnu_output = gnu_output.trim().to_owned();
-            println!("gnu_exit_status {}", gnu_exit_status);
-            println!("uumain_exit_status {}", uumain_exit_status);
-            if rust_output != gnu_output || uumain_exit_status != gnu_exit_status {
-                println!("Discrepancy detected!");
-                println!("Test: {:?}", &args[1..]);
-                println!("My output: {}", rust_output);
-                println!("GNU output: {}", gnu_output);
-                println!("My exit status: {}", uumain_exit_status);
-                println!("GNU exit status: {}", gnu_exit_status);
-                panic!();
-            } else {
-                println!(
-                    "Outputs and exit statuses matched for expression {:?}",
-                    &args[1..]
-                );
+    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false, None) {
+        Ok(result) => result,
+        Err(error_result) => {
+            eprintln!("Failed to run GNU command:");
+            eprintln!("Stderr: {}", error_result.stderr);
+            eprintln!("Exit Code: {}", error_result.exit_code);
+            CommandResult {
+                stdout: String::new(),
+                stderr: error_result.stderr,
+                exit_code: error_result.exit_code,
             }
         }
-        Err(_) => {
-            println!("GNU test execution failed for expression {:?}", &args[1..]);
-        }
-    }
+    };
+
+    compare_result(
+        "test",
+        &format!("{:?}", &args[1..]),
+        None,
+        &rust_result,
+        &gnu_result,
+        false, // Set to true if you want to fail on stderr diff
+    );
 });

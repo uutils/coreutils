@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/* last synced with: whoami (GNU coreutils) 8.21 */
-
 use std::ffi::OsString;
 
 use clap::{crate_version, Command};

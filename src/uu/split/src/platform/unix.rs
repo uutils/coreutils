@@ -7,9 +7,10 @@ use std::io::Write;
 use std::io::{BufWriter, Error, ErrorKind, Result};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
-use uucore::crash;
+use uucore::error::USimpleError;
 use uucore::fs;
 use uucore::fs::FileInformation;
+use uucore::show;
 
 /// A writer that writes to a shell_process' stdin
 ///
@@ -101,10 +102,13 @@ impl Drop for FilterWriter {
             .expect("Couldn't wait for child process");
         if let Some(return_code) = exit_status.code() {
             if return_code != 0 {
-                crash!(1, "Shell process returned {}", return_code);
+                show!(USimpleError::new(
+                    1,
+                    format!("Shell process returned {}", return_code)
+                ));
             }
         } else {
-            crash!(1, "Shell process terminated by signal")
+            show!(USimpleError::new(1, "Shell process terminated by signal"));
         }
     }
 }
@@ -113,22 +117,37 @@ impl Drop for FilterWriter {
 pub fn instantiate_current_writer(
     filter: &Option<String>,
     filename: &str,
+    is_new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {
     match filter {
-        None => Ok(BufWriter::new(Box::new(
-            // write to the next file
-            std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(std::path::Path::new(&filename))
-                .map_err(|_| {
-                    Error::new(
-                        ErrorKind::Other,
-                        format!("unable to open '{filename}'; aborting"),
-                    )
-                })?,
-        ) as Box<dyn Write>)),
+        None => {
+            let file = if is_new {
+                // create new file
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(std::path::Path::new(&filename))
+                    .map_err(|_| {
+                        Error::new(
+                            ErrorKind::Other,
+                            format!("unable to open '{filename}'; aborting"),
+                        )
+                    })?
+            } else {
+                // re-open file that we previously created to append to it
+                std::fs::OpenOptions::new()
+                    .append(true)
+                    .open(std::path::Path::new(&filename))
+                    .map_err(|_| {
+                        Error::new(
+                            ErrorKind::Other,
+                            format!("unable to re-open '{filename}'; aborting"),
+                        )
+                    })?
+            };
+            Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
+        }
         Some(ref filter_command) => Ok(BufWriter::new(Box::new(
             // spawn a shell command and write to it
             FilterWriter::new(filter_command, filename)?,

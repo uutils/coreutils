@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/* last synced with: yes (GNU coreutils) 8.13 */
-
 // cSpell:ignore strs
 
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, Command};

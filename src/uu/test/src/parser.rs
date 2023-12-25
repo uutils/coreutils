@@ -164,7 +164,7 @@ impl Parser {
     /// The stream is unchanged and will return the same Symbol on subsequent
     /// calls to `next()` or `peek()`.
     fn peek(&mut self) -> Symbol {
-        Symbol::new(self.tokens.peek().map(|s| s.to_os_string()))
+        Symbol::new(self.tokens.peek().cloned())
     }
 
     /// Test if the next token in the stream is a BOOLOP (-a or -o), without

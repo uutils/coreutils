@@ -47,8 +47,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     let mode = if let Some(args) = matches.get_many::<String>(options::ECHO) {
@@ -75,7 +73,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let headcounts = matches
                 .get_many::<String>(options::HEAD_COUNT)
                 .unwrap_or_default()
-                .map(|s| s.to_owned())
+                .cloned()
                 .collect();
             match parse_head_count(headcounts) {
                 Ok(val) => val,

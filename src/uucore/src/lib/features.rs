@@ -6,16 +6,18 @@
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
+#[cfg(feature = "colors")]
+pub mod colors;
 #[cfg(feature = "encoding")]
 pub mod encoding;
+#[cfg(feature = "format")]
+pub mod format;
 #[cfg(feature = "fs")]
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;
 #[cfg(feature = "lines")]
 pub mod lines;
-#[cfg(feature = "memo")]
-pub mod memo;
 #[cfg(feature = "quoting-style")]
 pub mod quoting_style;
 #[cfg(feature = "ranges")]
@@ -24,8 +26,6 @@ pub mod ranges;
 pub mod ringbuffer;
 #[cfg(feature = "sum")]
 pub mod sum;
-#[cfg(feature = "memo")]
-mod tokenize;
 #[cfg(feature = "update-control")]
 pub mod update_control;
 #[cfg(feature = "version-cmp")]
@@ -52,6 +52,7 @@ pub mod signals;
     unix,
     not(target_os = "android"),
     not(target_os = "fuchsia"),
+    not(target_os = "openbsd"),
     not(target_os = "redox"),
     not(target_env = "musl"),
     feature = "utmpx"

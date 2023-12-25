@@ -336,7 +336,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, opt: &Options) -> Vec<MountInfo> {
 fn get_all_filesystems(opt: &Options) -> Result<Vec<Filesystem>, std::io::Error> {
     // Run a sync call before any operation if so instructed.
     if opt.sync {
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, target_os = "redox")))]
         unsafe {
             #[cfg(not(target_os = "android"))]
             uucore::libc::sync();
