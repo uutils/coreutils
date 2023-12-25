@@ -1171,6 +1171,9 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     //
     // key is the source file's information and the value is the destination filepath.
     let mut copied_files: HashMap<FileInformation, PathBuf> = HashMap::with_capacity(sources.len());
+    // remember the copied destinations for further usage.
+    // we can't use copied_files as it is because the key is the source file's information.
+    let mut copied_destinations: HashSet<PathBuf> = HashSet::with_capacity(sources.len());
 
     let progress_bar = if options.progress_bar {
         let pb = ProgressBar::new(disk_usage(sources, options.recursive)?)
@@ -1191,17 +1194,38 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
         if seen_sources.contains(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
             show_warning!("source {} specified more than once", source.quote());
-        } else if let Err(error) = copy_source(
-            &progress_bar,
-            source,
-            target,
-            target_type,
-            options,
-            &mut symlinked_files,
-            &mut copied_files,
-        ) {
-            show_error_if_needed(&error);
-            non_fatal_errors = true;
+        } else {
+            let dest = construct_dest_path(source, target, target_type, options)
+                .unwrap_or_else(|_| target.to_path_buf());
+
+            if fs::metadata(&dest).is_ok() && !fs::symlink_metadata(&dest)?.file_type().is_symlink()
+            {
+                // There is already a file and it isn't a symlink (managed in a different place)
+                if copied_destinations.contains(&dest)
+                    && options.backup != BackupMode::NumberedBackup
+                {
+                    // If the target file was already created in this cp call, do not overwrite
+                    return Err(Error::Error(format!(
+                        "will not overwrite just-created '{}' with '{}'",
+                        dest.display(),
+                        source.display()
+                    )));
+                }
+            }
+
+            if let Err(error) = copy_source(
+                &progress_bar,
+                source,
+                target,
+                target_type,
+                options,
+                &mut symlinked_files,
+                &mut copied_files,
+            ) {
+                show_error_if_needed(&error);
+                non_fatal_errors = true;
+            }
+            copied_destinations.insert(dest.clone());
         }
         seen_sources.insert(source);
     }

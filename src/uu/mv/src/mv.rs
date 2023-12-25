@@ -10,6 +10,7 @@ mod error;
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -433,7 +434,10 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> UResult<()> {
+fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) -> UResult<()> {
+    // remember the moved destinations for further usage
+    let mut moved_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
+
     if !target_dir.is_dir() {
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
@@ -442,7 +446,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
         .canonicalize()
         .unwrap_or_else(|_| target_dir.to_path_buf());
 
-    let multi_progress = opts.progress_bar.then(MultiProgress::new);
+    let multi_progress = options.progress_bar.then(MultiProgress::new);
 
     let count_progress = if let Some(ref multi_progress) = multi_progress {
         if files.len() > 1 {
@@ -471,6 +475,20 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
             }
         };
 
+        if moved_destinations.contains(&targetpath) && options.backup != BackupMode::NumberedBackup
+        {
+            // If the target file was already created in this mv call, do not overwrite
+            show!(USimpleError::new(
+                1,
+                format!(
+                    "will not overwrite just-created '{}' with '{}'",
+                    targetpath.display(),
+                    sourcepath.display()
+                ),
+            ));
+            continue;
+        }
+
         // Check if we have mv dir1 dir2 dir2
         // And generate an error if this is the case
         if let Ok(canonicalized_source) = sourcepath.canonicalize() {
@@ -493,7 +511,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
             }
         }
 
-        match rename(sourcepath, &targetpath, opts, multi_progress.as_ref()) {
+        match rename(sourcepath, &targetpath, options, multi_progress.as_ref()) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 let e = e.map_err_context(|| {
@@ -513,6 +531,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
         if let Some(ref pb) = count_progress {
             pb.inc(1);
         }
+        moved_destinations.insert(targetpath.clone());
     }
     Ok(())
 }
