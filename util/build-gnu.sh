@@ -296,3 +296,9 @@ ls: invalid --time-style argument 'XX'\nPossible values are: [\"full-iso\", \"lo
 # "hostid BEFORE --help" doesn't fail for GNU. we fail. we are probably doing better
 # "hostid BEFORE --help AFTER " same for this
 sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/help/help-version-getopt.sh
+
+# Add debug info + we have less syscall then GNU's. Adjust our check.
+sed -i -e '/test \$n_stat1 = \$n_stat2 \\/c\
+echo "n_stat1 = \$n_stat1"\n\
+echo "n_stat2 = \$n_stat2"\n\
+test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh

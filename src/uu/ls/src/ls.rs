@@ -1812,6 +1812,8 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    // can be used to avoid reading the metadata. Can be also called d_type:
+    // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: Option<DirEntry>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1907,10 +1909,11 @@ impl PathData {
         }
     }
 
-    fn md(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
+    fn get_metadata(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
                 // check if we can use DirEntry metadata
+                // it will avoid a call to stat()
                 if !self.must_dereference {
                     if let Some(dir_entry) = &self.de {
                         return dir_entry.metadata().ok();
@@ -1918,7 +1921,7 @@ impl PathData {
                 }
 
                 // if not, check if we can use Path metadata
-                match get_metadata(self.p_buf.as_path(), self.must_dereference) {
+                match get_metadata_with_deref_opt(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
                         out.flush().unwrap();
@@ -1947,7 +1950,7 @@ impl PathData {
 
     fn file_type(&self, out: &mut BufWriter<Stdout>) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| self.md(out).map(|md| md.file_type()))
+            .get_or_init(|| self.get_metadata(out).map(|md| md.file_type()))
             .as_ref()
     }
 }
@@ -1980,7 +1983,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Proper GNU handling is don't show if dereferenced symlink DNE
         // but only for the base dir, for a child dir show, and print ?s
         // in long format
-        if path_data.md(&mut out).is_none() {
+        if path_data.get_metadata(&mut out).is_none() {
             continue;
         }
 
@@ -2068,12 +2071,14 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                k.md(out)
+                k.get_metadata(out)
                     .and_then(|md| get_system_time(md, config))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
-        Sort::Size => entries.sort_by_key(|k| Reverse(k.md(out).map(|md| md.len()).unwrap_or(0))),
+        Sort::Size => {
+            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map(|md| md.len()).unwrap_or(0)));
+        }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries.sort_by(|a, b| {
@@ -2114,7 +2119,8 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
             !match md {
                 None | Some(None) => {
                     // If it metadata cannot be determined, treat as a file.
-                    get_metadata(p.p_buf.as_path(), true).map_or_else(|_| false, |m| m.is_dir())
+                    get_metadata_with_deref_opt(p.p_buf.as_path(), true)
+                        .map_or_else(|_| false, |m| m.is_dir())
                 }
                 Some(Some(m)) => m.is_dir(),
             }
@@ -2289,7 +2295,7 @@ fn enter_directory(
     Ok(())
 }
 
-fn get_metadata(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
+fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
         p_buf.metadata()
     } else {
@@ -2303,7 +2309,7 @@ fn display_dir_entry_size(
     out: &mut BufWriter<std::io::Stdout>,
 ) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
-    if let Some(md) = entry.md(out) {
+    if let Some(md) = entry.get_metadata(out) {
         let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Device(major, minor) => (
                 (major.len() + minor.len() + 2usize),
@@ -2341,7 +2347,7 @@ fn return_total(
     let mut total_size = 0;
     for item in items {
         total_size += item
-            .md(out)
+            .get_metadata(out)
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
@@ -2365,7 +2371,7 @@ fn display_additional_leading_info(
     #[cfg(unix)]
     {
         if config.inode {
-            let i = if let Some(md) = item.md(out) {
+            let i = if let Some(md) = item.get_metadata(out) {
                 get_inode(md)
             } else {
                 "?".to_owned()
@@ -2375,7 +2381,7 @@ fn display_additional_leading_info(
     }
 
     if config.alloc_size {
-        let s = if let Some(md) = item.md(out) {
+        let s = if let Some(md) = item.get_metadata(out) {
             display_size(get_block_size(md, config), config)
         } else {
             "?".to_owned()
@@ -2590,7 +2596,7 @@ fn display_item_long(
     if config.dired {
         output_display += "  ";
     }
-    if let Some(md) = item.md(out) {
+    if let Some(md) = item.get_metadata(out) {
         write!(
             output_display,
             "{}{} {}",
@@ -3017,7 +3023,7 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
             } else if file_type.is_file()
                 // Safe unwrapping if the file was removed between listing and display
                 // See https://github.com/uutils/coreutils/issues/5371
-                && path.md(out).map(file_is_executable).unwrap_or_default()
+                && path.get_metadata(out).map(file_is_executable).unwrap_or_default()
             {
                 Some('*')
             } else {
@@ -3064,18 +3070,7 @@ fn display_item_name(
     }
 
     if let Some(ls_colors) = &config.color {
-        let md = path.md(out);
-        name = if md.is_some() {
-            color_name(name, &path.p_buf, md, ls_colors, style_manager)
-        } else {
-            color_name(
-                name,
-                &path.p_buf,
-                path.p_buf.symlink_metadata().ok().as_ref(),
-                ls_colors,
-                style_manager,
-            )
-        };
+        name = color_name(name, path, ls_colors, style_manager, out, None);
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -3141,28 +3136,22 @@ fn display_item_name(
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.md(out).is_none()
-                        && get_metadata(target_data.p_buf.as_path(), target_data.must_dereference)
-                            .is_err()
+                    if path.get_metadata(out).is_none()
+                        && get_metadata_with_deref_opt(
+                            target_data.p_buf.as_path(),
+                            target_data.must_dereference,
+                        )
+                        .is_err()
                     {
                         name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
                     } else {
-                        // Use fn get_metadata instead of md() here and above because ls
-                        // should not exit with an err, if we are unable to obtain the target_metadata
-                        let target_metadata = match get_metadata(
-                            target_data.p_buf.as_path(),
-                            target_data.must_dereference,
-                        ) {
-                            Ok(md) => md,
-                            Err(_) => path.md(out).unwrap().clone(),
-                        };
-
                         name.push_str(&color_name(
                             escape_name(target.as_os_str(), &config.quoting_style),
-                            &target_data.p_buf,
-                            Some(&target_metadata),
+                            path,
                             ls_colors,
                             style_manager,
+                            out,
+                            Some(&target_data),
                         ));
                     }
                 } else {
@@ -3259,17 +3248,56 @@ impl StyleManager {
     }
 }
 
-/// Colors the provided name based on the style determined for the given path.
-fn color_name(
-    name: String,
-    path: &Path,
-    md: Option<&Metadata>,
+fn apply_style_based_on_metadata(
+    path: &PathData,
+    md_option: Option<&Metadata>,
     ls_colors: &LsColors,
     style_manager: &mut StyleManager,
+    name: &str,
 ) -> String {
-    match ls_colors.style_for_path_with_metadata(path, md) {
-        Some(style) => style_manager.apply_style(style, &name),
-        None => name,
+    match ls_colors.style_for_path_with_metadata(&path.p_buf, md_option) {
+        Some(style) => style_manager.apply_style(style, name),
+        None => name.to_owned(),
+    }
+}
+
+/// Colors the provided name based on the style determined for the given path
+/// This function is quite long because it tries to leverage DirEntry to avoid
+/// unnecessary calls to stat()
+/// and manages the symlink errors
+fn color_name(
+    name: String,
+    path: &PathData,
+    ls_colors: &LsColors,
+    style_manager: &mut StyleManager,
+    out: &mut BufWriter<Stdout>,
+    target_symlink: Option<&PathData>,
+) -> String {
+    if !path.must_dereference {
+        // If we need to dereference (follow) a symlink, we will need to get the metadata
+        if let Some(de) = &path.de {
+            // There is a DirEntry, we don't need to get the metadata for the color
+            return match ls_colors.style_for(de) {
+                Some(style) => style_manager.apply_style(style, &name),
+                None => name,
+            };
+        }
+    }
+
+    if let Some(target) = target_symlink {
+        // use the optional target_symlink
+        // Use fn get_metadata_with_deref_opt instead of get_metadata() here because ls
+        // should not exit with an err, if we are unable to obtain the target_metadata
+        let md = get_metadata_with_deref_opt(target.p_buf.as_path(), path.must_dereference)
+            .unwrap_or_else(|_| target.get_metadata(out).unwrap().clone());
+
+        apply_style_based_on_metadata(path, Some(&md), ls_colors, style_manager, &name)
+    } else {
+        let md_option = path.get_metadata(out);
+        let symlink_metadata = path.p_buf.symlink_metadata().ok();
+        let md = md_option.or(symlink_metadata.as_ref());
+
+        apply_style_based_on_metadata(path, md, ls_colors, style_manager, &name)
     }
 }
 
@@ -3299,7 +3327,7 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
     if must_dereference {
-        match get_metadata(p_buf, must_dereference) {
+        match get_metadata_with_deref_opt(p_buf, must_dereference) {
             Err(err) => {
                 // The Path couldn't be dereferenced, so return early and set exit code 1
                 // to indicate a minor error
@@ -3364,7 +3392,7 @@ fn calculate_padding_collection(
     for item in items {
         #[cfg(unix)]
         if config.inode {
-            let inode_len = if let Some(md) = item.md(out) {
+            let inode_len = if let Some(md) = item.get_metadata(out) {
                 display_inode(md).len()
             } else {
                 continue;
@@ -3373,7 +3401,7 @@ fn calculate_padding_collection(
         }
 
         if config.alloc_size {
-            if let Some(md) = item.md(out) {
+            if let Some(md) = item.get_metadata(out) {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
@@ -3423,7 +3451,7 @@ fn calculate_padding_collection(
 
     for item in items {
         if config.alloc_size {
-            if let Some(md) = item.md(out) {
+            if let Some(md) = item.get_metadata(out) {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
