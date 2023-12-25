@@ -14,6 +14,9 @@ use std::io::Write;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
+use crate::common::util::TESTS_BINARY;
+
+extern crate alloc;
 
 const SUB_DIR: &str = "subdir/deeper";
 const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";
@@ -936,6 +939,48 @@ fn test_du_symlink_multiple_fail() {
     let result = ts.ucmd().arg("-L").arg("target.txt").arg("file1").fails();
     assert_eq!(result.code(), 1);
     result.stdout_contains("4\tfile1\n");
+}
+
+fn create_fixture_in_btrfs() -> TestScenario {
+    use tempfile::TempDir;
+
+    use crate::common::util::AtPath;
+
+    let path = alloc::rc::Rc::new(std::path::PathBuf::from("/mnt/btrfstest/atpath"));
+    std::fs::create_dir_all(path.as_path()).unwrap();
+    let tmpd = alloc::rc::Rc::new(TempDir::new_in(path.as_path()).unwrap());
+
+    let ts = TestScenario {
+        bin_path: std::path::PathBuf::from(TESTS_BINARY),
+        util_name: alloc::string::String::from(util_name!()),
+        fixtures: AtPath::new(tmpd.path()),
+        tmpd,
+    };
+
+    return ts;
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_symlink_multiple_fail_xxx() {
+    
+    let ts = create_fixture_in_btrfs();
+    let at = &ts.fixtures;
+
+    let mut file = at.make_file("large_file1.bin");
+    for _ in 0..1024*1024 {
+        file.write_all(&[0,1,2,3,4,5,6,7,8,9]).unwrap();
+    }
+    file.flush().unwrap();
+    ts.cmd("cp")
+        .arg("--reflink=always")
+        .arg("large_file1.bin")
+        .arg("large_file1_cp_reflink_always.bin")
+        .succeeds();
+
+    let result = ts.ucmd().arg("--all").succeeds();
+    result.stdout_contains("10240\t./large_file1.bin\n");
+    result.stdout_contains("0\t./large_file1_cp_reflink_always.bin\n");
 }
 
 #[test]

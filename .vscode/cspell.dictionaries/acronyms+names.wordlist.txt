@@ -4,6 +4,7 @@ aarch
 AIX
 ASLR # address space layout randomization
 AST # abstract syntax tree
+btrfs
 BusyBox
 BusyTest
 CICD # continuous integration/deployment
