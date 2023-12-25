@@ -111,12 +111,20 @@ jobs:
         sudo update-locale
         echo "After:"
         locale -a
+    - uses: actions/cache/restore@v3
+      with:
+        path: "${{ steps.vars.outputs.path_GNU }}"
+        key: gnu-${{ steps.vars.outputs.repo_GNU_ref }}-${{ hashFiles('./uutils/util/build-gnu.sh') }}
     - name: Build binaries
       shell: bash
       run: |
         ## Build binaries
         cd '${{ steps.vars.outputs.path_UUTILS }}'
         bash util/build-gnu.sh --release-build
+    - uses: actions/cache/save@v3
+      with:
+        path: "${{ steps.vars.outputs.path_GNU }}"
+        key: gnu-${{ steps.vars.outputs.repo_GNU_ref }}-${{ hashFiles('./uutils/util/build-gnu.sh') }}
     - name: Run GNU tests
       shell: bash
       run: |
@@ -309,6 +317,8 @@ jobs:
   gnu_coverage:
     name: Run GNU tests with coverage
     runs-on: ubuntu-20.04
+    env:
+      GNU_REF: "v9.4"
     steps:
     - name: Checkout code uutil
       uses: actions/checkout@v4
@@ -319,7 +329,7 @@ jobs:
       with:
         repository: 'coreutils/coreutils'
         path: 'gnu'
-        ref: 'v9.4'
+        ref: '${{ env.GNU_REF }}'
         submodules: recursive
     - uses: dtolnay/rust-toolchain@master
       with:
@@ -347,6 +357,10 @@ jobs:
         sudo update-locale
         echo "After:"
         locale -a
+    - uses: actions/cache/restore@v3
+      with:
+        path: 'gnu'
+        key: gnu_coverage-${{ env.GNU_REF }}-${{ hashFiles('./uutils/util/build-gnu.sh') }}
     - name: Build binaries
       env:
         RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
@@ -355,6 +369,10 @@ jobs:
         ## Build binaries
         cd uutils
         bash util/build-gnu.sh
+    - uses: actions/cache/save@v3
+      with:
+        path: 'gnu'
+        key: gnu_coverage-${{ env.GNU_REF }}-${{ hashFiles('./uutils/util/build-gnu.sh') }}
     - name: Run GNU tests
       run: bash uutils/util/run-gnu-test.sh
     - name: Generate coverage data (via `grcov`)
