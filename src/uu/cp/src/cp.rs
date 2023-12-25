@@ -32,8 +32,8 @@ use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
-    canonicalize, is_symlink_loop, paths_refer_to_same_file, FileInformation, MissingHandling,
-    ResolveMode,
+    are_hardlinks_to_same_file, canonicalize, is_symlink_loop, paths_refer_to_same_file,
+    FileInformation, MissingHandling, ResolveMode,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -1670,6 +1670,15 @@ fn copy_file(
         {
             fs::remove_file(dest)?;
         }
+    }
+
+    if are_hardlinks_to_same_file(source, dest)
+        && matches!(
+            options.overwrite,
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+        )
+    {
+        fs::remove_file(dest)?;
     }
 
     if file_or_link_exists(dest) {

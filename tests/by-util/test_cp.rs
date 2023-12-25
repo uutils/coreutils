@@ -2881,6 +2881,24 @@ fn test_cp_mode_hardlink_no_dereference() {
     assert_eq!(at.read_symlink("z"), "slink");
 }
 
+#[cfg(not(any(windows, target_os = "android")))]
+#[test]
+fn test_remove_destination_with_destination_being_a_hardlink_to_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let hardlink = "hardlink";
+
+    at.touch(file);
+    at.hard_link(file, hardlink);
+
+    ucmd.args(&["--remove-destination", file, hardlink])
+        .succeeds();
+
+    assert_eq!("", at.resolve_link(hardlink));
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(hardlink));
+}
+
 #[test]
 fn test_remove_destination_with_destination_being_a_symlink_to_source() {
     let (at, mut ucmd) = at_and_ucmd!();
