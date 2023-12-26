@@ -596,7 +596,6 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
         // First, check if the file_name is a directory
         let path = PathBuf::from(file_name);
         if path.is_dir() {
-            // Return an error if it's a directory
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("{}: read error: Is a directory", file_name),
