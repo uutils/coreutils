@@ -1048,3 +1048,16 @@ fn test_du_files0_from_dir() {
     let result = ts.ucmd().arg("--files0-from=dir").fails();
     assert_eq!(result.stderr_str(), "du: dir: read error: Is a directory\n");
 }
+
+#[test]
+fn test_du_files0_from_combined() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+
+    let result = ts.ucmd().arg("--files0-from=-").arg("foo").fails();
+    let stderr = result.stderr_str();
+
+    assert!(stderr.contains("file operands cannot be combined with --files0-from"));
+}

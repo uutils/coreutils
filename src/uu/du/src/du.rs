@@ -588,6 +588,7 @@ pub fn div_ceil(a: u64, b: u64) -> u64 {
     (a + b - 1) / b
 }
 
+// Read file paths from the specified file, separated by null characters
 fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
     let reader: Box<dyn BufRead> = if file_name == "-" {
         // Read from standard input
@@ -656,7 +657,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .into());
         }
 
-        // Read file paths from the specified file, separated by null characters
         read_files_from(file_from)?
     } else {
         match matches.get_one::<String>(options::FILE) {
