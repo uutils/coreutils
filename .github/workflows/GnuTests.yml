@@ -230,12 +230,16 @@ jobs:
           local test_type=$3  # "standard" or "root"
 
           if test -f "${ref_log_file}"; then
-            echo "Reference ${test_type} test log SHA1/ID: $(sha1sum -- "${ref_log_file}")"
+            echo "Reference ${test_type} test log SHA1/ID: $(sha1sum -- "${ref_log_file}") - ${test_type}"
             REF_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
             NEW_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
             REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
             NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
-
+            echo "Detailled information:"
+            echo "REF_ERROR = ${REF_ERROR}"
+            echo "NEW_ERROR = ${NEW_ERROR}"
+            echo "REF_FAILING = ${REF_FAILING}"
+            echo "NEW_FAILING = ${NEW_FAILING}"
             # Compare failing and error tests
             for LINE in ${NEW_FAILING}
             do
