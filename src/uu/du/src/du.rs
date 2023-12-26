@@ -356,6 +356,16 @@ impl<'a> DiskUsageCalculator<'a> {
             return Ok(())
         }
 
+        if let Some(inode) = entry_stat.inode {
+            if self.seen_inodes.contains(&inode) {
+                if self.options.count_links {
+                    base_stat.inodes += 1;
+                }
+                return Ok(());
+            }
+            self.seen_inodes.insert(inode);
+        }
+
         let total_overlapping_by_extents =
             if self.options.shared_extents &&
                 !entry_stat.is_symlink && !entry_stat.is_dir &&
@@ -380,16 +390,6 @@ impl<'a> DiskUsageCalculator<'a> {
             total_overlapping_by_extents > 0 && total_overlapping_by_extents >= entry_stat.size;
         if is_ignored_by_extents {
             return Ok(());
-        }
-
-        if let Some(inode) = entry_stat.inode {
-            if self.seen_inodes.contains(&inode) {
-                if self.options.count_links {
-                    base_stat.inodes += 1;
-                }
-                return Ok(());
-            }
-            self.seen_inodes.insert(inode);
         }
 
         if entry_stat.is_dir {
