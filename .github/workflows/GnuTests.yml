@@ -232,16 +232,16 @@ jobs:
           if test -f "${ref_log_file}"; then
             echo "Reference ${test_type} test log SHA1/ID: $(sha1sum -- "${ref_log_file}") - ${test_type}"
             REF_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
-            NEW_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
+            CURRENT_RUN_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
             REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
-            NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
+            CURRENT_RUN_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
             echo "Detailled information:"
             echo "REF_ERROR = ${REF_ERROR}"
-            echo "NEW_ERROR = ${NEW_ERROR}"
+            echo "CURRENT_RUN_ERROR = ${CURRENT_RUN_ERROR}"
             echo "REF_FAILING = ${REF_FAILING}"
-            echo "NEW_FAILING = ${NEW_FAILING}"
+            echo "CURRENT_RUN_FAILING = ${CURRENT_RUN_FAILING}"
             # Compare failing and error tests
-            for LINE in ${NEW_FAILING}
+            for LINE in ${CURRENT_RUN_FAILING}
             do
               if ! grep -Fxq ${LINE}<<<"${REF_FAILING}"
               then
@@ -262,7 +262,7 @@ jobs:
 
             for LINE in ${REF_FAILING}
             do
-              if ! grep -Fxq ${LINE}<<<"${NEW_FAILING}"
+              if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_FAILING}"
               then
                 if ! grep ${LINE} ${IGNORE_INTERMITTENT}
                 then
@@ -278,7 +278,7 @@ jobs:
               fi
             done
 
-            for LINE in ${NEW_ERROR}
+            for LINE in ${CURRENT_RUN_ERROR}
             do
               if ! grep -Fxq ${LINE}<<<"${REF_ERROR}"
               then
@@ -291,7 +291,7 @@ jobs:
 
             for LINE in ${REF_ERROR}
             do
-              if ! grep -Fxq ${LINE}<<<"${NEW_ERROR}"
+              if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_ERROR}"
               then
                 MSG="Congrats! The gnu test ${LINE} is no longer ERROR!"
                 echo "::warning ::$MSG"
