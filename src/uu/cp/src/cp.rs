@@ -40,11 +40,11 @@ use uucore::fs::{
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enum.
+use crate::copydir::copy_directory;
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
-use uucore::{prompt_yes, show_error, show_warning, util_name};
 #[cfg(feature = "cli-parser")]
 use uucore::{format_usage, help_about, help_section, help_usage};
-use crate::copydir::copy_directory;
+use uucore::{prompt_yes, show_error, show_warning, util_name};
 
 mod copydir;
 mod platform;
