@@ -2,7 +2,11 @@ name: Code Quality
 
 # spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader dtolnay juliangruber
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - main
 
 env:
   # * style job configuration
@@ -117,7 +121,7 @@ jobs:
       run: |
         ## `cargo clippy` lint testing
         unset fault
-        CLIPPY_FLAGS="-W clippy::default_trait_access -W clippy::manual_string_new -W clippy::cognitive_complexity"
+        CLIPPY_FLAGS="-W clippy::default_trait_access -W clippy::manual_string_new -W clippy::cognitive_complexity -W clippy::implicit_clone"
         fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
         fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>

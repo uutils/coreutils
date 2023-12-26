@@ -3,13 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
 
 mod error;
 
 use clap::builder::ValueParser;
 use clap::{crate_version, error::ErrorKind, Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use std::collections::HashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -19,12 +20,14 @@ use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
-pub use uucore::backup_control::BackupMode;
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file};
-use uucore::update_control::{self, UpdateMode};
+use uucore::update_control;
+// These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
+// requires these enums
+pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show};
 
 use fs_extra::dir::{
@@ -101,6 +104,25 @@ static OPT_VERBOSE: &str = "verbose";
 static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
 
+/// Returns true if the passed `path` ends with a path terminator.
+#[cfg(unix)]
+fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::unix::prelude::OsStrExt;
+    path.as_os_str()
+        .as_bytes()
+        .last()
+        .map_or(false, |&byte| byte == b'/' || byte == b'\\')
+}
+
+#[cfg(windows)]
+fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::windows::prelude::OsStrExt;
+    path.as_os_str()
+        .encode_wide()
+        .last()
+        .map_or(false, |wide| wide == b'/'.into() || wide == b'\\'.into())
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut app = uu_app();
@@ -125,7 +147,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let files: Vec<OsString> = matches
         .get_many::<OsString>(ARG_FILES)
         .unwrap_or_default()
-        .map(|v| v.to_os_string())
+        .cloned()
         .collect();
 
     let overwrite_mode = determine_overwrite_mode(&matches);
@@ -297,7 +319,11 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         .into());
     }
     if source.symlink_metadata().is_err() {
-        return Err(MvError::NoSuchFile(source.quote().to_string()).into());
+        return Err(if path_ends_with_terminator(source) {
+            MvError::CannotStatNotADirectory(source.quote().to_string()).into()
+        } else {
+            MvError::NoSuchFile(source.quote().to_string()).into()
+        });
     }
 
     if (source.eq(target)
@@ -314,7 +340,17 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         }
     }
 
-    if target.is_dir() {
+    let target_is_dir = target.is_dir();
+
+    if path_ends_with_terminator(target)
+        && !target_is_dir
+        && !opts.no_target_dir
+        && opts.update != UpdateMode::ReplaceIfOlder
+    {
+        return Err(MvError::FailedToAccessNotADirectory(target.quote().to_string()).into());
+    }
+
+    if target_is_dir {
         if opts.no_target_dir {
             if source.is_dir() {
                 rename(source, target, opts, None).map_err_context(|| {
@@ -323,6 +359,14 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
             } else {
                 Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
             }
+        // Check that source & target do not contain same subdir/dir when both exist
+        // mkdir dir1/dir2; mv dir1 dir1/dir2
+        } else if target.starts_with(source) {
+            Err(MvError::SelfTargetSubdirectory(
+                source.display().to_string(),
+                target.display().to_string(),
+            )
+            .into())
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
@@ -376,16 +420,19 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> UResult<()> {
+fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) -> UResult<()> {
+    // remember the moved destinations for further usage
+    let mut moved_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
+
     if !target_dir.is_dir() {
         return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
 
-    let canonized_target_dir = target_dir
+    let canonicalized_target_dir = target_dir
         .canonicalize()
         .unwrap_or_else(|_| target_dir.to_path_buf());
 
-    let multi_progress = opts.progress_bar.then(MultiProgress::new);
+    let multi_progress = options.progress_bar.then(MultiProgress::new);
 
     let count_progress = if let Some(ref multi_progress) = multi_progress {
         if files.len() > 1 {
@@ -414,10 +461,24 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
             }
         };
 
+        if moved_destinations.contains(&targetpath) && options.backup != BackupMode::NumberedBackup
+        {
+            // If the target file was already created in this mv call, do not overwrite
+            show!(USimpleError::new(
+                1,
+                format!(
+                    "will not overwrite just-created '{}' with '{}'",
+                    targetpath.display(),
+                    sourcepath.display()
+                ),
+            ));
+            continue;
+        }
+
         // Check if we have mv dir1 dir2 dir2
         // And generate an error if this is the case
-        if let Ok(canonized_source) = sourcepath.canonicalize() {
-            if canonized_source == canonized_target_dir {
+        if let Ok(canonicalized_source) = sourcepath.canonicalize() {
+            if canonicalized_source == canonicalized_target_dir {
                 // User tried to move directory to itself, warning is shown
                 // and process of moving files is continued.
                 show!(USimpleError::new(
@@ -426,7 +487,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
                         "cannot move '{}' to a subdirectory of itself, '{}/{}'",
                         sourcepath.display(),
                         target_dir.display(),
-                        canonized_target_dir.components().last().map_or_else(
+                        canonicalized_target_dir.components().last().map_or_else(
                             || target_dir.display().to_string(),
                             |dir| { PathBuf::from(dir.as_os_str()).display().to_string() }
                         )
@@ -436,7 +497,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
             }
         }
 
-        match rename(sourcepath, &targetpath, opts, multi_progress.as_ref()) {
+        match rename(sourcepath, &targetpath, options, multi_progress.as_ref()) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
                 let e = e.map_err_context(|| {
@@ -456,6 +517,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, opts: &Options) -> 
         if let Some(ref pb) = count_progress {
             pb.inc(1);
         }
+        moved_destinations.insert(targetpath.clone());
     }
     Ok(())
 }

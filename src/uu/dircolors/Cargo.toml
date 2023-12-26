@@ -1,6 +1,6 @@
 [package]
 name = "uu_dircolors"
-version = "0.0.22"
+version = "0.0.23"
 authors = ["uutils developers"]
 license = "MIT"
 description = "dircolors ~ (uutils) display commands to set LS_COLORS"
@@ -16,7 +16,7 @@ path = "src/dircolors.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["colors"] }
 
 [[bin]]
 name = "dircolors"

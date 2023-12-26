@@ -19,11 +19,11 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
         settings.section_delimiter = if delimiter.len() == 1 {
             format!("{delimiter}:")
         } else {
-            delimiter.to_owned()
+            delimiter.clone()
         };
     }
     if let Some(val) = opts.get_one::<String>(options::NUMBER_SEPARATOR) {
-        settings.number_separator = val.to_owned();
+        settings.number_separator = val.clone();
     }
     settings.number_format = opts
         .get_one::<String>(options::NUMBER_FORMAT)

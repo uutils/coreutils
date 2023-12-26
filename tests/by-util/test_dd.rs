@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname
 
 #[cfg(unix)]
 use crate::common::util::run_ucmd_as_root_with_stdin_stdout;
@@ -15,7 +15,12 @@ use regex::Regex;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+#[cfg(all(
+    unix,
+    not(target_os = "macos"),
+    not(target_os = "freebsd"),
+    feature = "printf"
+))]
 use std::process::{Command, Stdio};
 #[cfg(not(windows))]
 use std::thread::sleep;
@@ -1459,74 +1464,48 @@ fn test_sparse() {
     assert_eq!(at.metadata("infile").len(), at.metadata("outfile").len());
 }
 
-// TODO These FIFO tests should work on macos, but some issue is
-// causing our implementation of dd to wait indefinitely when it
-// shouldn't.
-
 /// Test that a seek on an output FIFO results in a read.
 #[test]
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+#[cfg(unix)]
 fn test_seek_output_fifo() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
 
-    // TODO When `dd` is a bit more advanced, we could use the uutils
-    // version of dd here as well.
-    let child = Command::new("dd")
-        .current_dir(&at.subdir)
-        .args([
-            "count=1",
-            "if=/dev/zero",
-            &format!("of={}", at.plus_as_string("fifo")),
-            "status=noxfer",
-        ])
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to execute child process");
-
-    ts.ucmd()
+    let mut ucmd = ts.ucmd();
+    let child = ucmd
         .args(&["count=0", "seek=1", "of=fifo", "status=noxfer"])
-        .succeeds()
-        .stderr_only("0+0 records in\n0+0 records out\n");
+        .run_no_wait();
 
-    let output = child.wait_with_output().unwrap();
-    assert!(output.status.success());
-    assert!(output.stdout.is_empty());
-    assert_eq!(&output.stderr, b"1+0 records in\n1+0 records out\n");
+    std::fs::write(at.plus("fifo"), vec![0; 512]).unwrap();
+
+    child
+        .wait()
+        .unwrap()
+        .success()
+        .stderr_only("0+0 records in\n0+0 records out\n");
 }
 
 /// Test that a skip on an input FIFO results in a read.
 #[test]
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+#[cfg(unix)]
 fn test_skip_input_fifo() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     at.mkfifo("fifo");
 
-    // TODO When `dd` is a bit more advanced, we could use the uutils
-    // version of dd here as well.
-    let child = Command::new("dd")
-        .current_dir(&at.subdir)
-        .args([
-            "count=1",
-            "if=/dev/zero",
-            &format!("of={}", at.plus_as_string("fifo")),
-            "status=noxfer",
-        ])
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("failed to execute child process");
-
-    ts.ucmd()
+    let mut ucmd = ts.ucmd();
+    let child = ucmd
         .args(&["count=0", "skip=1", "if=fifo", "status=noxfer"])
-        .succeeds()
-        .stderr_only("0+0 records in\n0+0 records out\n");
+        .run_no_wait();
 
-    let output = child.wait_with_output().unwrap();
-    assert!(output.status.success());
-    assert!(output.stdout.is_empty());
-    assert_eq!(&output.stderr, b"1+0 records in\n1+0 records out\n");
+    std::fs::write(at.plus("fifo"), vec![0; 512]).unwrap();
+
+    child
+        .wait()
+        .unwrap()
+        .success()
+        .stderr_only("0+0 records in\n0+0 records out\n");
 }
 
 /// Test for reading part of stdin from each of two child processes.
@@ -1609,4 +1588,88 @@ fn test_seek_past_dev() {
     } else {
         print!("TEST SKIPPED");
     }
+}
+
+#[test]
+#[cfg(all(
+    unix,
+    not(target_os = "macos"),
+    not(target_os = "freebsd"),
+    feature = "printf"
+))]
+fn test_reading_partial_blocks_from_fifo() {
+    // Create the FIFO.
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures.clone();
+    at.mkfifo("fifo");
+    let fifoname = at.plus_as_string("fifo");
+
+    // Start a `dd` process that reads from the fifo (so it will wait
+    // until the writer process starts).
+    let mut reader_command = Command::new(TESTS_BINARY);
+    let child = reader_command
+        .args(["dd", "ibs=3", "obs=3", &format!("if={}", fifoname)])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    // Start different processes to write to the FIFO, with a small
+    // pause in between.
+    let mut writer_command = Command::new("sh");
+    writer_command
+        .args([
+            "-c",
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {}", fifoname),
+        ])
+        .spawn()
+        .unwrap();
+
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.stdout, b"abcd");
+    let expected = b"0+2 records in\n1+1 records out\n4 bytes copied";
+    assert!(output.stderr.starts_with(expected));
+}
+
+#[test]
+#[cfg(all(
+    unix,
+    not(target_os = "macos"),
+    not(target_os = "freebsd"),
+    feature = "printf"
+))]
+fn test_reading_partial_blocks_from_fifo_unbuffered() {
+    // Create the FIFO.
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures.clone();
+    at.mkfifo("fifo");
+    let fifoname = at.plus_as_string("fifo");
+
+    // Start a `dd` process that reads from the fifo (so it will wait
+    // until the writer process starts).
+    //
+    // `bs=N` takes precedence over `ibs=N` and `obs=N`.
+    let mut reader_command = Command::new(TESTS_BINARY);
+    let child = reader_command
+        .args(["dd", "bs=3", "ibs=1", "obs=1", &format!("if={}", fifoname)])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    // Start different processes to write to the FIFO, with a small
+    // pause in between.
+    let mut writer_command = Command::new("sh");
+    writer_command
+        .args([
+            "-c",
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {}", fifoname),
+        ])
+        .spawn()
+        .unwrap();
+
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.stdout, b"abcd");
+    let expected = b"0+2 records in\n0+2 records out\n4 bytes copied";
+    assert!(output.stderr.starts_with(expected));
 }

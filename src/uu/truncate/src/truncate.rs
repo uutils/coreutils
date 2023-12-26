@@ -12,7 +12,7 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::parse_size::{parse_size_u64, ParseSizeError};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -380,7 +380,7 @@ fn is_modifier(c: char) -> bool {
 
 /// Parse a size string with optional modifier symbol as its first character.
 ///
-/// A size string is as described in [`parse_size`]. The first character
+/// A size string is as described in [`parse_size_u64`]. The first character
 /// of `size_string` might be a modifier symbol, like `'+'` or
 /// `'<'`. The first element of the pair returned by this function
 /// indicates which modifier symbol was present, or
@@ -406,7 +406,7 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
         if is_modifier(c) {
             size_string = &size_string[1..];
         }
-        parse_size(size_string).map(match c {
+        parse_size_u64(size_string).map(match c {
             '+' => TruncateMode::Extend,
             '-' => TruncateMode::Reduce,
             '<' => TruncateMode::AtMost,

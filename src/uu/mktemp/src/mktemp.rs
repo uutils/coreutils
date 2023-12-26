@@ -12,6 +12,7 @@ use uucore::{format_usage, help_about, help_usage};
 
 use std::env;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::ErrorKind;
 use std::iter;
@@ -115,29 +116,30 @@ impl Display for MkTempError {
 /// This provides a layer of indirection between the application logic
 /// and the argument parsing library `clap`, allowing each to vary
 /// independently.
-struct Options {
+#[derive(Clone)]
+pub struct Options {
     /// Whether to create a temporary directory instead of a file.
-    directory: bool,
+    pub directory: bool,
 
     /// Whether to just print the name of a file that would have been created.
-    dry_run: bool,
+    pub dry_run: bool,
 
     /// Whether to suppress file creation error messages.
-    quiet: bool,
+    pub quiet: bool,
 
     /// The directory in which to create the temporary file.
     ///
     /// If `None`, the file will be created in the current directory.
-    tmpdir: Option<PathBuf>,
+    pub tmpdir: Option<PathBuf>,
 
     /// The suffix to append to the temporary file, if any.
-    suffix: Option<String>,
+    pub suffix: Option<String>,
 
     /// Whether to treat the template argument as a single file path component.
-    treat_as_template: bool,
+    pub treat_as_template: bool,
 
     /// The template to use for the name of the temporary file.
-    template: String,
+    pub template: String,
 }
 
 impl Options {
@@ -192,7 +194,7 @@ impl Options {
 /// `num_rand_chars`.
 struct Params {
     /// The directory that will contain the temporary file.
-    directory: String,
+    directory: PathBuf,
 
     /// The (non-random) prefix of the temporary file.
     prefix: String,
@@ -297,7 +299,7 @@ impl Params {
         let num_rand_chars = j - i;
 
         Ok(Self {
-            directory,
+            directory: directory.into(),
             prefix,
             num_rand_chars,
             suffix,
@@ -307,8 +309,7 @@ impl Params {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
+    let args: Vec<_> = args.collect();
     let matches = match uu_app().try_get_matches_from(&args) {
         Ok(m) => m,
         Err(e) => {
@@ -332,7 +333,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
         if matches.contains_id(ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.
-            if args.last().unwrap() != &options.template {
+            if args.last().unwrap() != OsStr::new(&options.template) {
                 return Err(Box::new(MkTempError::TooManyTemplates));
             }
         }
@@ -357,12 +358,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         exec(&tmpdir, &prefix, rand, &suffix, make_dir)
     };
 
-    if suppress_file_err {
+    let res = if suppress_file_err {
         // Mapping all UErrors to ExitCodes prevents the errors from being printed
         res.map_err(|e| e.code().into())
     } else {
         res
-    }
+    };
+    println_verbatim(res?).map_err_context(|| "failed to print directory name".to_owned())
 }
 
 pub fn uu_app() -> Command {
@@ -441,7 +443,7 @@ pub fn uu_app() -> Command {
         .arg(Arg::new(ARG_TEMPLATE).num_args(..=1))
 }
 
-pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<()> {
+fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let len = prefix.len() + suffix.len() + rand;
     let mut buf = Vec::with_capacity(len);
     buf.extend(prefix.as_bytes());
@@ -462,7 +464,7 @@ pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResul
     // We guarantee utf8.
     let buf = String::from_utf8(buf).unwrap();
     let tmpdir = Path::new(tmpdir).join(buf);
-    println_verbatim(tmpdir).map_err_context(|| "failed to print directory name".to_owned())
+    Ok(tmpdir)
 }
 
 /// Create a temporary directory with the given parameters.
@@ -476,7 +478,7 @@ pub fn dry_exec(tmpdir: &str, prefix: &str, rand: usize, suffix: &str) -> UResul
 ///
 /// If the temporary directory could not be written to disk or if the
 /// given directory `dir` does not exist.
-fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
+fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
     match builder.tempdir_in(dir) {
@@ -508,7 +510,7 @@ fn make_temp_dir(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<
 ///
 /// If the file could not be written to disk or if the directory does
 /// not exist.
-fn make_temp_file(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
+fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
     let mut builder = Builder::new();
     builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
     match builder.tempfile_in(dir) {
@@ -527,7 +529,7 @@ fn make_temp_file(dir: &str, prefix: &str, rand: usize, suffix: &str) -> UResult
     }
 }
 
-fn exec(dir: &str, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
+fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<PathBuf> {
     let path = if make_dir {
         make_temp_dir(dir, prefix, rand, suffix)?
     } else {
@@ -546,7 +548,27 @@ fn exec(dir: &str, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> U
     // relative path.
     let path = Path::new(dir).join(filename);
 
-    println_verbatim(path).map_err_context(|| "failed to print directory name".to_owned())
+    Ok(path)
+}
+
+/// Create a temporary file or directory
+///
+/// Behavior is determined by the `options` parameter, see [`Options`] for details.
+pub fn mktemp(options: &Options) -> UResult<PathBuf> {
+    // Parse file path parameters from the command-line options.
+    let Params {
+        directory: tmpdir,
+        prefix,
+        num_rand_chars: rand,
+        suffix,
+    } = Params::from(options.clone())?;
+
+    // Create the temporary file or directory, or simulate creating it.
+    if options.dry_run {
+        dry_exec(&tmpdir, &prefix, rand, &suffix)
+    } else {
+        exec(&tmpdir, &prefix, rand, &suffix, options.directory)
+    }
 }
 
 #[cfg(test)]

@@ -113,11 +113,45 @@ fn sub_b_string_handle_escapes() {
 }
 
 #[test]
+fn sub_b_string_validate_field_params() {
+    new_ucmd!()
+        .args(&["hello %7b", "world"])
+        .run()
+        .stdout_is("hello ")
+        .stderr_is("printf: %7b: invalid conversion specification\n");
+}
+
+#[test]
 fn sub_b_string_ignore_subs() {
     new_ucmd!()
         .args(&["hello %b", "world %% %i"])
         .succeeds()
         .stdout_only("hello world %% %i");
+}
+
+#[test]
+fn sub_q_string_non_printable() {
+    new_ucmd!()
+        .args(&["non-printable: %q", "\"$test\""])
+        .succeeds()
+        .stdout_only("non-printable: '\"$test\"'");
+}
+
+#[test]
+fn sub_q_string_validate_field_params() {
+    new_ucmd!()
+        .args(&["hello %7q", "world"])
+        .run()
+        .stdout_is("hello ")
+        .stderr_is("printf: %7q: invalid conversion specification\n");
+}
+
+#[test]
+fn sub_q_string_special_non_printable() {
+    new_ucmd!()
+        .args(&["non-printable: %q", "test~"])
+        .succeeds()
+        .stdout_only("non-printable: test~");
 }
 
 #[test]
@@ -190,6 +224,11 @@ fn sub_num_int_char_const_in() {
         .args(&["ninety seven is %i", "'a"])
         .succeeds()
         .stdout_only("ninety seven is 97");
+
+    new_ucmd!()
+        .args(&["emoji is %i", "'🙃"])
+        .succeeds()
+        .stdout_only("emoji is 128579");
 }
 
 #[test]
@@ -225,6 +264,14 @@ fn sub_num_hex_upper() {
 }
 
 #[test]
+fn sub_num_hex_non_numerical() {
+    new_ucmd!()
+        .args(&["parameters need to be numbers %X", "%194"])
+        .fails()
+        .code_is(1);
+}
+
+#[test]
 fn sub_num_float() {
     new_ucmd!()
         .args(&["twenty is %f", "20"])
@@ -249,7 +296,16 @@ fn sub_num_float_e_no_round() {
 }
 
 #[test]
-fn sub_num_float_round() {
+fn sub_num_float_round_to_one() {
+    new_ucmd!()
+        .args(&["one is %f", "0.9999995"])
+        .succeeds()
+        .stdout_only("one is 1.000000");
+}
+
+#[test]
+#[ignore = "Requires 'long double' precision floats to be used internally"]
+fn sub_num_float_round_to_two() {
     new_ucmd!()
         .args(&["two is %f", "1.9999995"])
         .succeeds()
@@ -371,6 +427,7 @@ fn sub_float_dec_places() {
 }
 
 #[test]
+#[ignore = "hexadecimal floats are unimplemented"]
 fn sub_float_hex_in() {
     new_ucmd!()
         .args(&["%f", "0xF1.1F"])

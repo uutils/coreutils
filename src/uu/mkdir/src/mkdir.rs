@@ -16,7 +16,7 @@ use uucore::error::{UResult, USimpleError};
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_if_err};
+use uucore::{format_usage, help_about, help_section, help_usage, show_if_err};
 
 static DEFAULT_PERM: u32 = 0o777;
 

@@ -14,9 +14,10 @@ use uucore::fs;
 pub fn instantiate_current_writer(
     _filter: &Option<String>,
     filename: &str,
+    is_new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {
-    Ok(BufWriter::new(Box::new(
-        // write to the next file
+    let file = if is_new {
+        // create new file
         std::fs::OpenOptions::new()
             .write(true)
             .create(true)
@@ -25,10 +26,22 @@ pub fn instantiate_current_writer(
             .map_err(|_| {
                 Error::new(
                     ErrorKind::Other,
-                    format!("'{filename}' would overwrite input; aborting"),
+                    format!("unable to open '{filename}'; aborting"),
                 )
-            })?,
-    ) as Box<dyn Write>))
+            })?
+    } else {
+        // re-open file that we previously created to append to it
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(std::path::Path::new(&filename))
+            .map_err(|_| {
+                Error::new(
+                    ErrorKind::Other,
+                    format!("unable to re-open '{filename}'; aborting"),
+                )
+            })?
+    };
+    Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
 }
 
 pub fn paths_refer_to_same_file(p1: &str, p2: &str) -> bool {

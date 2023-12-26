@@ -118,6 +118,19 @@ fn test_escape_newline() {
 }
 
 #[test]
+fn test_escape_override() {
+    new_ucmd!()
+        .args(&["-e", "-E", "\\na"])
+        .succeeds()
+        .stdout_only("\\na\n");
+
+    new_ucmd!()
+        .args(&["-E", "-e", "\\na"])
+        .succeeds()
+        .stdout_only("\na\n");
+}
+
+#[test]
 fn test_escape_no_further_output() {
     new_ucmd!()
         .args(&["-e", "a\\cb", "c"])

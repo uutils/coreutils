@@ -77,4 +77,5 @@ third way: `--long`.
 
 ## `du`
 
-`du` allows `birth` and `creation` as values for the `--time` argument to show the creation time.
+`du` allows `birth` and `creation` as values for the `--time` argument to show the creation time. It
+also provides a `-v`/`--verbose` flag.

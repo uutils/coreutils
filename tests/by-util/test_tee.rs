@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use crate::common::util::TestScenario;
+#[cfg(target_os = "linux")]
 use std::fmt::Write;
 
 // tests for basic tee functionality.

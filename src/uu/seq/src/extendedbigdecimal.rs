@@ -25,12 +25,7 @@ use std::fmt::Display;
 use std::ops::Add;
 
 use bigdecimal::BigDecimal;
-use num_bigint::BigInt;
-use num_bigint::ToBigInt;
-use num_traits::One;
 use num_traits::Zero;
-
-use crate::extendedbigint::ExtendedBigInt;
 
 #[derive(Debug, Clone)]
 pub enum ExtendedBigDecimal {
@@ -72,53 +67,14 @@ pub enum ExtendedBigDecimal {
     Nan,
 }
 
-/// The smallest integer greater than or equal to this number.
-fn ceil(x: BigDecimal) -> BigInt {
-    if x.is_integer() {
-        // Unwrapping the Option because it always returns Some
-        x.to_bigint().unwrap()
-    } else {
-        (x + BigDecimal::one().half()).round(0).to_bigint().unwrap()
-    }
-}
-
-/// The largest integer less than or equal to this number.
-fn floor(x: BigDecimal) -> BigInt {
-    if x.is_integer() {
-        // Unwrapping the Option because it always returns Some
-        x.to_bigint().unwrap()
-    } else {
-        (x - BigDecimal::one().half()).round(0).to_bigint().unwrap()
-    }
-}
-
 impl ExtendedBigDecimal {
-    /// The smallest integer greater than or equal to this number.
-    pub fn ceil(self) -> ExtendedBigInt {
-        match self {
-            Self::BigDecimal(x) => ExtendedBigInt::BigInt(ceil(x)),
-            other => From::from(other),
-        }
+    #[cfg(test)]
+    pub fn zero() -> Self {
+        Self::BigDecimal(0.into())
     }
 
-    /// The largest integer less than or equal to this number.
-    pub fn floor(self) -> ExtendedBigInt {
-        match self {
-            Self::BigDecimal(x) => ExtendedBigInt::BigInt(floor(x)),
-            other => From::from(other),
-        }
-    }
-}
-
-impl From<ExtendedBigInt> for ExtendedBigDecimal {
-    fn from(big_int: ExtendedBigInt) -> Self {
-        match big_int {
-            ExtendedBigInt::BigInt(n) => Self::BigDecimal(BigDecimal::from(n)),
-            ExtendedBigInt::Infinity => Self::Infinity,
-            ExtendedBigInt::MinusInfinity => Self::MinusInfinity,
-            ExtendedBigInt::MinusZero => Self::MinusZero,
-            ExtendedBigInt::Nan => Self::Nan,
-        }
+    pub fn one() -> Self {
+        Self::BigDecimal(1.into())
     }
 }
 

@@ -7,6 +7,14 @@
 use crate::common::util::TestScenario;
 
 #[test]
+fn test_no_arguments() {
+    new_ucmd!()
+        .fails()
+        .code_is(2)
+        .usage_error("missing operand");
+}
+
+#[test]
 fn test_simple_values() {
     // null or 0 => EXIT_VALUE == 1
     new_ucmd!().args(&[""]).fails().code_is(1).stdout_only("\n");
@@ -100,6 +108,12 @@ fn test_parenthesis() {
         .args(&["(", "1", "+", "1", ")", "*", "2"])
         .succeeds()
         .stdout_only("4\n");
+
+    new_ucmd!()
+        .args(&["1", "(", ")"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: unexpected argument '('\n");
 }
 
 #[test]
@@ -143,6 +157,14 @@ fn test_or() {
         .args(&["12", "|", "9a", "+", "1"])
         .succeeds()
         .stdout_only("12\n");
+
+    new_ucmd!().args(&["", "|", ""]).run().stdout_only("0\n");
+
+    new_ucmd!().args(&["", "|", "0"]).run().stdout_only("0\n");
+
+    new_ucmd!().args(&["", "|", "00"]).run().stdout_only("0\n");
+
+    new_ucmd!().args(&["", "|", "-0"]).run().stdout_only("0\n");
 }
 
 #[test]
@@ -152,14 +174,20 @@ fn test_and() {
         .succeeds()
         .stdout_only("foo\n");
 
-    new_ucmd!().args(&["", "&", "1"]).run().stdout_is("0\n");
-
-    new_ucmd!().args(&["14", "&", "1"]).run().stdout_is("14\n");
+    new_ucmd!()
+        .args(&["14", "&", "1"])
+        .succeeds()
+        .stdout_only("14\n");
 
     new_ucmd!()
         .args(&["-14", "&", "1"])
-        .run()
-        .stdout_is("-14\n");
+        .succeeds()
+        .stdout_only("-14\n");
+
+    new_ucmd!()
+        .args(&["-1", "&", "10", "/", "5"])
+        .succeeds()
+        .stdout_only("-1\n");
 
     new_ucmd!()
         .args(&["0", "&", "a", "/", "5"])
@@ -171,10 +199,9 @@ fn test_and() {
         .run()
         .stdout_only("0\n");
 
-    new_ucmd!()
-        .args(&["-1", "&", "10", "/", "5"])
-        .succeeds()
-        .stdout_only("-1\n");
+    new_ucmd!().args(&["", "&", "1"]).run().stdout_only("0\n");
+
+    new_ucmd!().args(&["", "&", ""]).run().stdout_only("0\n");
 }
 
 #[test]
@@ -208,6 +235,12 @@ fn test_index() {
         .args(&["index", "αbcdef_f", "f"])
         .succeeds()
         .stdout_only("6\n");
+
+    new_ucmd!()
+        .args(&["αbcdef", "index", "α"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: unexpected argument 'index'\n");
 }
 
 #[test]
@@ -221,6 +254,12 @@ fn test_length() {
         .args(&["length", "abcdef"])
         .succeeds()
         .stdout_only("6\n");
+
+    new_ucmd!()
+        .args(&["abcdef", "length"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: unexpected argument 'length'\n");
 }
 
 #[test]
@@ -250,6 +289,10 @@ fn test_regex() {
         .args(&["-5", ":", "-\\{0,1\\}[0-9]*$"])
         .succeeds()
         .stdout_only("2\n");
+    new_ucmd!()
+        .args(&["abc", ":", "bc"])
+        .fails()
+        .stdout_only("0\n");
 }
 
 #[test]
@@ -258,6 +301,12 @@ fn test_substr() {
         .args(&["substr", "abc", "1", "1"])
         .succeeds()
         .stdout_only("a\n");
+
+    new_ucmd!()
+        .args(&["abc", "substr", "1", "1"])
+        .fails()
+        .code_is(2)
+        .stderr_only("expr: syntax error: unexpected argument 'substr'\n");
 }
 
 #[test]
@@ -312,4 +361,12 @@ fn test_invalid_syntax() {
             .code_is(2)
             .stderr_contains("syntax error");
     }
+}
+
+#[test]
+fn test_num_str_comparison() {
+    new_ucmd!()
+        .args(&["1a", "<", "1", "+", "1"])
+        .succeeds()
+        .stdout_is("1\n");
 }
