@@ -6,7 +6,6 @@
 // spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist testdir testfile
 #[cfg(not(windows))]
 use regex::Regex;
-use std::io::Write;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::common::util::expected_result;
@@ -347,12 +346,10 @@ fn test_du_dereference_args() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    at.mkdir_all("subdir");
-    let mut file1 = at.make_file("subdir/file-ignore1");
-    file1.write_all(b"azeaze").unwrap();
-    let mut file2 = at.make_file("subdir/file-ignore1");
-    file2.write_all(b"amaz?ng").unwrap();
-    at.symlink_dir("subdir", "sublink");
+    at.mkdir("dir");
+    at.write("dir/file-ignore1", "azeaze");
+    at.write("dir/file-ignore2", "amaz?ng");
+    at.symlink_dir("dir", "sublink");
 
     for arg in ["-D", "-H", "--dereference-args"] {
         let result = ts.ucmd().arg(arg).arg("-s").arg("sublink").succeeds();
@@ -455,12 +452,13 @@ fn test_du_inodes_basic() {
 fn _du_inodes_basic(s: &str) {
     assert_eq!(
         s,
-        "2\t.\\subdir\\deeper\\deeper_dir
-4\t.\\subdir\\deeper
-3\t.\\subdir\\links
-8\t.\\subdir
-11\t.
-"
+        concat!(
+            "2\t.\\subdir\\deeper\\deeper_dir\n",
+            "4\t.\\subdir\\deeper\n",
+            "3\t.\\subdir\\links\n",
+            "8\t.\\subdir\n",
+            "11\t.\n",
+        )
     );
 }
 
@@ -468,12 +466,13 @@ fn _du_inodes_basic(s: &str) {
 fn _du_inodes_basic(s: &str) {
     assert_eq!(
         s,
-        "2\t./subdir/deeper/deeper_dir
-4\t./subdir/deeper
-3\t./subdir/links
-8\t./subdir
-11\t.
-"
+        concat!(
+            "2\t./subdir/deeper/deeper_dir\n",
+            "4\t./subdir/deeper\n",
+            "3\t./subdir/links\n",
+            "8\t./subdir\n",
+            "11\t.\n",
+        )
     );
 }
 
@@ -848,10 +847,8 @@ fn test_du_exclude_mix() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    let mut file1 = at.make_file("file-ignore1");
-    file1.write_all(b"azeaze").unwrap();
-    let mut file2 = at.make_file("file-ignore2");
-    file2.write_all(b"amaz?ng").unwrap();
+    at.write("file-ignore1", "azeaze");
+    at.write("file-ignore2", "amaz?ng");
 
     at.mkdir_all("azerty/xcwww/azeaze");
     at.mkdir_all("azerty/xcwww/qzerty");
@@ -983,8 +980,7 @@ fn test_du_symlink_multiple_fail() {
     let at = &ts.fixtures;
 
     at.symlink_file("non-existing.txt", "target.txt");
-    let mut file1 = at.make_file("file1");
-    file1.write_all(b"azeaze").unwrap();
+    at.write("file1", "azeaze");
 
     let result = ts.ucmd().arg("-L").arg("target.txt").arg("file1").fails();
     assert_eq!(result.code(), 1);
@@ -998,17 +994,13 @@ fn test_du_files0_from() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    let mut file1 = at.make_file("testfile1");
-    file1.write_all(b"content1").unwrap();
-    let mut file2 = at.make_file("testfile2");
-    file2.write_all(b"content2").unwrap();
+    at.write("testfile1", "content1");
+    at.write("testfile2", "content2");
 
     at.mkdir("testdir");
-    let mut file3 = at.make_file("testdir/testfile3");
-    file3.write_all(b"content3").unwrap();
+    at.write("testdir/testfile3", "content3");
 
-    let mut file_list = at.make_file("filelist");
-    write!(file_list, "testfile1\0testfile2\0testdir\0").unwrap();
+    at.write("filelist", "testfile1\0testfile2\0testdir\0");
 
     ts.ucmd()
         .arg("--files0-from=filelist")
@@ -1023,10 +1015,8 @@ fn test_du_files0_from_stdin() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    let mut file1 = at.make_file("testfile1");
-    file1.write_all(b"content1").unwrap();
-    let mut file2 = at.make_file("testfile2");
-    file2.write_all(b"content2").unwrap();
+    at.write("testfile1", "content1");
+    at.write("testfile2", "content2");
 
     let input = "testfile1\0testfile2\0";
 
