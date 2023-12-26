@@ -1706,6 +1706,12 @@ fn copy_file(
     }
 
     if file_or_link_exists(dest) {
+        if are_hardlinks_to_same_file(source, dest)
+            && !options.force()
+            && options.backup == BackupMode::NoBackup
+        {
+            return Ok(());
+        }
         handle_existing_dest(source, dest, options, source_in_command_line)?;
     }
 
