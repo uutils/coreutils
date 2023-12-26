@@ -240,6 +240,7 @@ jobs:
             echo "CURRENT_RUN_ERROR = ${CURRENT_RUN_ERROR}"
             echo "REF_FAILING = ${REF_FAILING}"
             echo "CURRENT_RUN_FAILING = ${CURRENT_RUN_FAILING}"
+
             # Compare failing and error tests
             for LINE in ${CURRENT_RUN_FAILING}
             do
@@ -252,7 +253,7 @@ jobs:
                   echo $MSG >> ${COMMENT_LOG}
                   have_new_failures="true"
                 else
-                  MSG="Skip an intermittent issue ${LINE}"
+                  MSG="Skip an intermittent issue ${LINE} (fails in this run but passes in the 'main' branch)"
                   echo "::warning ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                   echo ""
@@ -270,7 +271,7 @@ jobs:
                   echo "::warning ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                 else
-                  MSG="Skipping an intermittent issue ${LINE}"
+                  MSG="Skipping an intermittent issue ${LINE} (passes in this run but fails in the 'main' branch)"
                   echo "::warning ::$MSG"
                   echo $MSG >> ${COMMENT_LOG}
                   echo ""
