@@ -2,20 +2,38 @@
 {
   // version of the setting file
   "version": "0.2",
-
   // spelling language
   "language": "en",
-
   // custom dictionaries
-  "dictionaries": ["acronyms+names", "jargon", "people", "shell", "workspace"],
-  "dictionaryDefinitions": [
-    { "name": "acronyms+names", "path": "./cspell.dictionaries/acronyms+names.wordlist.txt" },
-    { "name": "jargon", "path": "./cspell.dictionaries/jargon.wordlist.txt" },
-    { "name": "people", "path": "./cspell.dictionaries/people.wordlist.txt" },
-    { "name": "shell", "path": "./cspell.dictionaries/shell.wordlist.txt" },
-    { "name": "workspace", "path": "./cspell.dictionaries/workspace.wordlist.txt" }
+  "dictionaries": [
+    "acronyms+names",
+    "jargon",
+    "people",
+    "shell",
+    "workspace"
   ],
-
+  "dictionaryDefinitions": [
+    {
+      "name": "acronyms+names",
+      "path": "./cspell.dictionaries/acronyms+names.wordlist.txt"
+    },
+    {
+      "name": "jargon",
+      "path": "./cspell.dictionaries/jargon.wordlist.txt"
+    },
+    {
+      "name": "people",
+      "path": "./cspell.dictionaries/people.wordlist.txt"
+    },
+    {
+      "name": "shell",
+      "path": "./cspell.dictionaries/shell.wordlist.txt"
+    },
+    {
+      "name": "workspace",
+      "path": "./cspell.dictionaries/workspace.wordlist.txt"
+    }
+  ],
   // files to ignore (globs supported)
   "ignorePaths": [
     "Cargo.lock",
@@ -26,10 +44,10 @@
     "vendor/**",
     "**/*.svg"
   ],
-
   // words to ignore (even if they are in the flagWords)
   "ignoreWords": [],
-
   // words to always consider correct
-  "words": []
+  "words": [
+    "udisksctl"
+  ]
 }
