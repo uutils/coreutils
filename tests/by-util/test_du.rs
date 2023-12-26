@@ -452,12 +452,13 @@ fn test_du_inodes_basic() {
 fn _du_inodes_basic(s: &str) {
     assert_eq!(
         s,
-        "2\t.\\subdir\\deeper\\deeper_dir
-4\t.\\subdir\\deeper
-3\t.\\subdir\\links
-8\t.\\subdir
-11\t.
-"
+        concat!(
+            "2\t.\\subdir\\deeper\\deeper_dir\n",
+            "4\t.\\subdir\\deeper\n",
+            "3\t.\\subdir\\links\n",
+            "8\t.\\subdir\n",
+            "11\t.\n",
+        )
     );
 }
 
@@ -465,12 +466,13 @@ fn _du_inodes_basic(s: &str) {
 fn _du_inodes_basic(s: &str) {
     assert_eq!(
         s,
-        "2\t./subdir/deeper/deeper_dir
-4\t./subdir/deeper
-3\t./subdir/links
-8\t./subdir
-11\t.
-"
+        concat!(
+            "2\t./subdir/deeper/deeper_dir\n",
+            "4\t./subdir/deeper\n",
+            "3\t./subdir/links\n",
+            "8\t./subdir\n",
+            "11\t.\n",
+        )
     );
 }
 
