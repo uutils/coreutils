@@ -1003,7 +1003,7 @@ fn test_du_files0_from() {
     let mut file2 = at.make_file("testfile2");
     file2.write_all(b"content2").unwrap();
 
-    at.mkdir_all("testdir");
+    at.mkdir("testdir");
     let mut file3 = at.make_file("testdir/testfile3");
     file3.write_all(b"content3").unwrap();
 
