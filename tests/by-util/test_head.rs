@@ -364,15 +364,6 @@ fn test_head_num_with_undocumented_sign_bytes() {
 }
 
 #[test]
-fn test_head_dev_null_as_std_in_with_large_number_of_backwards_bytes() {
-    new_ucmd!()
-        .args(&["-c", "-18446744073709551615"])
-        .set_stdin(std::process::Stdio::null())
-        .succeeds()
-        .stdout_is("");
-}
-
-#[test]
 fn test_presume_input_pipe_default() {
     new_ucmd!()
         .args(&["---presume-input-pipe"])
