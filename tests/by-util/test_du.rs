@@ -1096,8 +1096,7 @@ impl BtrfsFilesystemTmp {
             .succeeds();
 
         ts.fixtures.mkdir_all("btrfs_template/home");
-        let result = ts
-            .cmd("/usr/sbin/mkfs.btrfs")
+        ts.cmd("/usr/sbin/mkfs.btrfs")
             .args(&["--rootdir", "btrfs_template", "small_btrfs.img"])
             .succeeds();
 
