@@ -271,12 +271,8 @@ fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io
 
         if total_read <= n {
             // Fill the ring buffer without exceeding n bytes
-            if total_read < n {
-                ring_buffer.extend_from_slice(&buffer[..read]);
-            } else {
-                let overflow = total_read - n;
-                ring_buffer.extend_from_slice(&buffer[..read - overflow]);
-            }
+            let overflow = total_read - n;
+            ring_buffer.extend_from_slice(&buffer[..read - overflow]);
         } else {
             // Write the ring buffer and the part of the buffer that exceeds n
             stdout.write_all(&ring_buffer)?;
