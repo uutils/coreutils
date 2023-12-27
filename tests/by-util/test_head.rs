@@ -393,7 +393,11 @@ fn run_and_compare_with_gnu_live_reference(ts: &TestScenario, args: &[&str]) {
     }
 }
 
-#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "macos"),
+    not(target_os = "freebsd")
+))]
 #[test]
 fn test_read_backwards_proc_fs_version() {
     let ts = TestScenario::new(util_name!());
@@ -402,7 +406,11 @@ fn test_read_backwards_proc_fs_version() {
     run_and_compare_with_gnu_live_reference(&ts, &args);
 }
 
-#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "macos"),
+    not(target_os = "freebsd")
+))]
 #[test]
 fn test_read_backwards_proc_fs_modules() {
     let ts = TestScenario::new(util_name!());
