@@ -1496,7 +1496,11 @@ fn context_for(src: &Path, dest: &Path) -> String {
 /// Implements a simple backup copy for the destination file.
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
 fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
-    fs::copy(dest, backup_path)?;
+    if dest.is_symlink() {
+        fs::rename(dest, backup_path)?;
+    } else {
+        fs::copy(dest, backup_path)?;
+    }
     Ok(backup_path.into())
 }
 
