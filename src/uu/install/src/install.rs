@@ -869,7 +869,6 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
 ///
 fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     if b.compare && !need_copy(from, to, b)? {
-        println!("no need to copy");
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
@@ -938,7 +937,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
     let all_modes: u32 = 0o7777;
 
     // Check if any special mode bits are set in the specified mode,
-    // source file mode, or destination file mode. If so, copy is needed.
+    // source file mode, or destination file mode.
     if b.specified_mode.unwrap_or(0) & extra_mode != 0
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
