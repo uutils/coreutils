@@ -20,6 +20,8 @@ chrono = { workspace = true }
 glob = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true }
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
 fiemap = "0.1.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
