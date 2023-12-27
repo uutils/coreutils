@@ -381,6 +381,7 @@ fn test_presume_input_pipe_5_chars() {
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 fn run_and_compare_with_gnu_live_reference(ts: &TestScenario, args: &[&str]) {
     let result = ts.ucmd().args(&args).succeeds();
     let result_reference = unwrap_or_return!(expected_result(&ts, &args));
