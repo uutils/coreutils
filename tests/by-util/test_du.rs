@@ -5,6 +5,8 @@
 
 use du::physical_extents::{Range, SeenPhysicalExtents};
 use pretty_assertions::assert_eq;
+use std::io::Write;
+
 // spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist testdir testfile
 #[cfg(not(windows))]
 use regex::Regex;
