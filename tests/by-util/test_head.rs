@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 
-use crate::common::util::TestScenario;
+use crate::common::util::{expected_result, TestScenario};
 
 static INPUT: &str = "lorem_ipsum.txt";
 
@@ -377,4 +377,33 @@ fn test_presume_input_pipe_5_chars() {
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
+}
+
+fn run_and_compare_with_gnu_live_reference(ts: &TestScenario, args: &[&str]) {
+    let result = ts.ucmd().args(&args).succeeds();
+    let result_reference = unwrap_or_return!(expected_result(&ts, &args));
+    if result_reference.succeeded() {
+        let result_str = result.stdout_str();
+        let reference_str = result_reference.stdout_str();
+        assert_eq!(result_str, reference_str);
+        return;
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn test_read_backwards_proc_fs_version() {
+    let ts = TestScenario::new(util_name!());
+
+    let args = ["-c", "-1", "/proc/version"];
+    run_and_compare_with_gnu_live_reference(&ts, &args);
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn test_read_backwards_proc_fs_modules() {
+    let ts = TestScenario::new(util_name!());
+
+    let args = ["-c", "-1", "/proc/modules"];
+    run_and_compare_with_gnu_live_reference(&ts, &args);
 }

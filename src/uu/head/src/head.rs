@@ -6,6 +6,7 @@
 // spell-checker:ignore (vars) BUFWRITER seekable
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
@@ -380,7 +381,66 @@ where
     }
 }
 
+fn is_seekable(input: &mut std::fs::File) -> bool {
+    let current_pos = input.stream_position();
+    current_pos.is_ok()
+        && input.seek(SeekFrom::End(0)).is_ok()
+        && input.seek(SeekFrom::Start(current_pos.unwrap())).is_ok()
+}
+
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
+    let seekable = is_seekable(input);
+    if seekable {
+        return head_backwards_on_seekable_file(input, options);
+    }
+
+    head_backwards_on_non_seekable_file(input, options)
+}
+
+fn head_backwards_on_non_seekable_file(
+    input: &mut std::fs::File,
+    options: &HeadOptions,
+) -> std::io::Result<()> {
+    let reader = &mut std::io::BufReader::with_capacity(BUF_SIZE, &*input);
+
+    match options.mode {
+        Mode::AllButLastBytes(n) => {
+            let buffer_capacity =
+                std::cmp::max::<usize>(1024 + n as usize, (n * 2).try_into().unwrap());
+            let mut ringbuffer = VecDeque::<u8>::with_capacity(buffer_capacity);
+
+            loop {
+                {
+                    let data_to_read = buffer_capacity - ringbuffer.len();
+                    let writer = &mut std::io::BufWriter::new(&mut ringbuffer);
+                    let mut limited_reader = reader.take(data_to_read as u64);
+                    while std::io::copy(&mut limited_reader, writer)? != 0 {}
+                }
+
+                let data_amount = ringbuffer.len() as u64;
+                let to_flush_amount = if data_amount > n { data_amount - n } else { 0 };
+
+                if to_flush_amount > 0 {
+                    read_n_bytes(&mut ringbuffer, to_flush_amount)?;
+                } else {
+                    break; // done!
+                }
+            }
+        }
+        Mode::AllButLastLines(_n) => {
+            // not yet implemented, try existing implementation:
+            return head_backwards_on_seekable_file(input, options);
+        }
+        _ => unreachable!(),
+    }
+
+    Ok(())
+}
+
+fn head_backwards_on_seekable_file(
+    input: &mut std::fs::File,
+    options: &HeadOptions,
+) -> std::io::Result<()> {
     match options.mode {
         Mode::AllButLastBytes(n) => {
             let size = input.metadata()?.len();
