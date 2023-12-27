@@ -6,7 +6,6 @@
 // spell-checker:ignore (vars) BUFWRITER seekable
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
@@ -244,11 +243,22 @@ fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, separator: u8) -> std
     Ok(())
 }
 
-fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<()> {
+fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: u64) -> std::io::Result<()> {
     if n == 0 {
         //prints everything
         return read_n_bytes(input, std::u64::MAX);
     }
+
+    let n = match usize::try_from(n) {
+        Ok(value) => value,
+        Err(e) => {
+            show!(USimpleError::new(
+                1,
+                format!("{e}: number of bytes is too large")
+            ));
+            return Ok(());
+        }
+    };
 
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
@@ -294,9 +304,20 @@ fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io
 
 fn read_but_last_n_lines(
     input: impl std::io::BufRead,
-    n: usize,
+    n: u64,
     separator: u8,
 ) -> std::io::Result<()> {
+    let n = match usize::try_from(n) {
+        Ok(value) => value,
+        Err(e) => {
+            show!(USimpleError::new(
+                1,
+                format!("{e}: number of bytes is too large")
+            ));
+            return Ok(());
+        }
+    };
+
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
     for bytes in take_all_but(lines(input, separator), n) {
@@ -404,33 +425,8 @@ fn head_backwards_on_non_seekable_file(
     let reader = &mut std::io::BufReader::with_capacity(BUF_SIZE, &*input);
 
     match options.mode {
-        Mode::AllButLastBytes(n) => {
-            let buffer_capacity =
-                std::cmp::max::<usize>(1024 + n as usize, (n * 2).try_into().unwrap());
-            let mut ringbuffer = VecDeque::<u8>::with_capacity(buffer_capacity);
-
-            loop {
-                {
-                    let data_to_read = buffer_capacity - ringbuffer.len();
-                    let writer = &mut std::io::BufWriter::new(&mut ringbuffer);
-                    let mut limited_reader = reader.take(data_to_read as u64);
-                    while std::io::copy(&mut limited_reader, writer)? != 0 {}
-                }
-
-                let data_amount = ringbuffer.len() as u64;
-                let to_flush_amount = if data_amount > n { data_amount - n } else { 0 };
-
-                if to_flush_amount > 0 {
-                    read_n_bytes(&mut ringbuffer, to_flush_amount)?;
-                } else {
-                    break; // done!
-                }
-            }
-        }
-        Mode::AllButLastLines(_n) => {
-            // not yet implemented, try existing implementation:
-            return head_backwards_on_seekable_file(input, options);
-        }
+        Mode::AllButLastBytes(n) => read_but_last_n_bytes(reader, n)?,
+        Mode::AllButLastLines(n) => read_but_last_n_lines(reader, n, options.line_ending.into())?,
         _ => unreachable!(),
     }
 
@@ -510,16 +506,12 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 match options.mode {
                     Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
                     // unwrap is guaranteed to succeed because we checked the value of n above
-                    Mode::AllButLastBytes(n) => {
-                        read_but_last_n_bytes(&mut stdin, n.try_into().unwrap())
-                    }
+                    Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
                     Mode::FirstLines(n) => read_n_lines(&mut stdin, n, options.line_ending.into()),
                     // unwrap is guaranteed to succeed because we checked the value of n above
-                    Mode::AllButLastLines(n) => read_but_last_n_lines(
-                        &mut stdin,
-                        n.try_into().unwrap(),
-                        options.line_ending.into(),
-                    ),
+                    Mode::AllButLastLines(n) => {
+                        read_but_last_n_lines(&mut stdin, n, options.line_ending.into())
+                    }
                 }
             }
             (name, false) => {
