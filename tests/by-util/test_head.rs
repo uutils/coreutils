@@ -379,12 +379,6 @@ fn test_presume_input_pipe_5_chars() {
         .stdout_is_fixture("lorem_ipsum_5_chars.expected");
 }
 
-#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-fn run_and_check_if_it_outputs_something(ts: &TestScenario, args: &[&str]) {
-    let result = ts.ucmd().args(&args).succeeds();
-    assert!(result.stdout().len() > 0);
-}
-
 #[cfg(all(
     not(target_os = "windows"),
     not(target_os = "macos"),
@@ -395,7 +389,8 @@ fn test_read_backwards_bytes_proc_fs_version() {
     let ts = TestScenario::new(util_name!());
 
     let args = ["-c", "-1", "/proc/version"];
-    run_and_check_if_it_outputs_something(&ts, &args);
+    let result = ts.ucmd().args(&args).succeeds();
+    assert!(result.stdout().len() > 0);
 }
 
 #[cfg(all(
@@ -408,7 +403,8 @@ fn test_read_backwards_bytes_proc_fs_modules() {
     let ts = TestScenario::new(util_name!());
 
     let args = ["-c", "-1", "/proc/modules"];
-    run_and_check_if_it_outputs_something(&ts, &args);
+    let result = ts.ucmd().args(&args).succeeds();
+    assert!(result.stdout().len() > 0);
 }
 
 #[cfg(all(
@@ -421,5 +417,6 @@ fn test_read_backwards_lines_proc_fs_modules() {
     let ts = TestScenario::new(util_name!());
 
     let args = ["--lines", "-1", "/proc/modules"];
-    run_and_check_if_it_outputs_something(&ts, &args);
+    let result = ts.ucmd().args(&args).succeeds();
+    assert!(result.stdout().len() > 0);
 }
