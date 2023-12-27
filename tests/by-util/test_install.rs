@@ -1589,3 +1589,27 @@ fn test_t_exist_dir() {
         .fails()
         .stderr_contains("failed to access 'sub4/file_exists': Not a directory");
 }
+
+#[test]
+fn test_target_file_ends_with_slash() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let target_dir = "dir";
+    let target_file = "dir/target_file";
+    let target_file_slash = format!("{}/", target_file);
+
+    at.touch(source);
+    at.mkdir(target_dir);
+    at.touch(target_file);
+
+    scene
+        .ucmd()
+        .arg("-t")
+        .arg(target_file_slash)
+        .arg("-D")
+        .arg(source)
+        .fails()
+        .stderr_contains("failed to access 'dir/target_file/': Not a directory");
+}
