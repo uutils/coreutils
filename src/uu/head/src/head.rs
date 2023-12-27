@@ -490,25 +490,10 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 let stdin = std::io::stdin();
                 let mut stdin = stdin.lock();
 
-                // Outputting "all-but-last" requires us to use a ring buffer with size n, so n
-                // must be converted from u64 to usize to fit in memory. If such conversion fails,
-                // it means the platform doesn't have enough memory to hold the buffer, so we fail.
-                if let Mode::AllButLastLines(n) | Mode::AllButLastBytes(n) = options.mode {
-                    if let Err(e) = usize::try_from(n) {
-                        show!(USimpleError::new(
-                            1,
-                            format!("{e}: number of bytes is too large")
-                        ));
-                        continue;
-                    };
-                };
-
                 match options.mode {
                     Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
-                    // unwrap is guaranteed to succeed because we checked the value of n above
                     Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
                     Mode::FirstLines(n) => read_n_lines(&mut stdin, n, options.line_ending.into()),
-                    // unwrap is guaranteed to succeed because we checked the value of n above
                     Mode::AllButLastLines(n) => {
                         read_but_last_n_lines(&mut stdin, n, options.line_ending.into())
                     }
