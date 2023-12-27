@@ -954,7 +954,10 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
         if owner_id != to_meta.uid() {
             return Ok(true);
         }
-    } else if let Some(group_id) = b.group_id {
+    }
+
+    // Check if the group ID is specified and differs from the destination file's group.
+    if let Some(group_id) = b.group_id {
         if group_id != to_meta.gid() {
             return Ok(true);
         }
