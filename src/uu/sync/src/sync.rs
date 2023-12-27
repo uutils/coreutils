@@ -122,7 +122,7 @@ mod platform {
                         FindVolumeClose(next_volume_handle);
                         return volumes;
                     }
-                    err => show!(err as i32, "failed to find next volume"),
+                    err => show!(USimpleError::new(err as i32, "failed to find next volume")),
                 }
             } else {
                 volumes.push(String::from_wide_null(&name));
