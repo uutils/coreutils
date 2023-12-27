@@ -71,7 +71,7 @@ mod platform {
     use std::fs::OpenOptions;
     use std::os::windows::prelude::*;
     use std::path::Path;
-    use uucore::crash;
+    use uucore::show;
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
         GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
@@ -88,13 +88,16 @@ mod platform {
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
                     if FlushFileBuffers(file.as_raw_handle() as HANDLE) == 0 {
-                        crash!(GetLastError() as i32, "failed to flush file buffer");
+                        show!(USimpleError::new(
+                            GetLastError() as i32,
+                            "failed to flush file buffer"
+                        ));
                     }
                 }
-                Err(e) => crash!(
-                    e.raw_os_error().unwrap_or(1),
-                    "failed to create volume handle"
-                ),
+                Err(e) => show!(USimpleError::new(
+                             e.raw_os_error().unwrap_or(1),
+                             "failed to create volume handle"
+                        )),
             }
         }
     }
@@ -103,7 +106,7 @@ mod platform {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
         let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
         if handle == INVALID_HANDLE_VALUE {
-            crash!(GetLastError() as i32, "failed to find first volume");
+            show!(USimpleError::new(GetLastError() as i32, "failed to find first volume"));
         }
         (String::from_wide_null(&name), handle)
     }
@@ -119,7 +122,7 @@ mod platform {
                         FindVolumeClose(next_volume_handle);
                         return volumes;
                     }
-                    err => crash!(err as i32, "failed to find next volume"),
+                    err => show!(err as i32, "failed to find next volume"),
                 }
             } else {
                 volumes.push(String::from_wide_null(&name));
