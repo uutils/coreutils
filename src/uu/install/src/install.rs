@@ -569,9 +569,9 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         };
 
         if let Some(to_create) = to_create {
-            // if path ends in /, remove the slash
-            let to_create = if to_create.as_os_str().as_bytes().last() == Some(&b'/') {
-                to_create.parent().unwrap()
+            // if the path ends in /, remove it
+            let to_create = if to_create.to_string_lossy().ends_with("/") {
+                Path::new(to_create.to_str().unwrap().trim_end_matches('/'))
             } else {
                 to_create
             };
