@@ -5,9 +5,9 @@
 
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 
-use crate::common::util::TestScenario;
 #[cfg(not(target_os = "windows"))]
 use crate::common::util::expected_result;
+use crate::common::util::TestScenario;
 
 static INPUT: &str = "lorem_ipsum.txt";
 
