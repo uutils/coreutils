@@ -9,7 +9,7 @@ use chrono::{DateTime, Local};
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use glob::Pattern;
 use physical_extents::SeenPhysicalExtents;
-use std::collections::{HashSet, BTreeMap};
+use std::collections::{BTreeMap, HashSet};
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
@@ -312,21 +312,19 @@ struct DiskUsageCalculator<'a> {
 }
 
 impl<'a> DiskUsageCalculator<'a> {
-
     fn new<'b>(
         print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
         options: &'a TraversalOptions,
     ) -> Self {
-        return DiskUsageCalculator{print_tx, options,
+        return DiskUsageCalculator {
+            print_tx,
+            options,
             seen_inodes: HashSet::new(),
             seen_physical_extents: BTreeMap::new(),
-        }
+        };
     }
 
-    fn is_entry_excluded(&self,
-        entry: &fs::DirEntry,
-        entry_stat: &Stat
-    ) -> bool {
+    fn is_entry_excluded(&self, entry: &fs::DirEntry, entry_stat: &Stat) -> bool {
         for pattern in &self.options.excludes {
             // Look at all patterns with both short and long paths
             // if we have 'du foo' but search to exclude 'foo/bar'
@@ -339,14 +337,15 @@ impl<'a> DiskUsageCalculator<'a> {
                     println!("{} ignored", &entry_stat.path.quote());
                 }
                 // Go to the next file
-                return true
+                return true;
             }
         }
 
         false
     }
 
-    fn du_handle_dir_entry(&mut self,
+    fn du_handle_dir_entry(
+        &mut self,
         base_stat: &mut Stat,
         depth: usize,
         entry: &fs::DirEntry,
@@ -354,7 +353,7 @@ impl<'a> DiskUsageCalculator<'a> {
     ) -> Result<(), Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
         // We have an exclude list
         if self.is_entry_excluded(entry, &entry_stat) {
-            return Ok(())
+            return Ok(());
         }
 
         if let Some(inode) = entry_stat.inode {
@@ -367,25 +366,27 @@ impl<'a> DiskUsageCalculator<'a> {
             self.seen_inodes.insert(inode);
         }
 
-        let total_overlapping_by_extents =
-            if self.options.shared_extents &&
-                !entry_stat.is_symlink && !entry_stat.is_dir &&
-                entry_stat.inode.is_some()
-            {
-                let map_by_device =
-                    self.seen_physical_extents
-                        .entry(entry_stat.inode.unwrap().dev_id)
-                        .or_insert(SeenPhysicalExtents::default());
+        let total_overlapping_by_extents = if self.options.shared_extents
+            && !entry_stat.is_symlink
+            && !entry_stat.is_dir
+            && entry_stat.inode.is_some()
+        {
+            let map_by_device = self
+                .seen_physical_extents
+                .entry(entry_stat.inode.unwrap().dev_id)
+                .or_insert(SeenPhysicalExtents::default());
 
-                let (total_overlapping, errors) =
-                    map_by_device.get_total_overlap_and_insert(entry.path());
+            let (total_overlapping, errors) =
+                map_by_device.get_total_overlap_and_insert(entry.path());
 
-                for error in errors {
-                    self.print_tx.send(Err(error))?;
-                }
+            for error in errors {
+                self.print_tx.send(Err(error))?;
+            }
 
-                total_overlapping
-            } else { 0 };
+            total_overlapping
+        } else {
+            0
+        };
 
         let is_ignored_by_extents: bool =
             total_overlapping_by_extents > 0 && total_overlapping_by_extents >= entry_stat.size;
@@ -395,11 +396,9 @@ impl<'a> DiskUsageCalculator<'a> {
 
         if entry_stat.is_dir {
             if self.options.one_file_system {
-                if let (Some(this_inode), Some(my_inode)) =
-                    (entry_stat.inode, base_stat.inode)
-                {
+                if let (Some(this_inode), Some(my_inode)) = (entry_stat.inode, base_stat.inode) {
                     if this_inode.dev_id != my_inode.dev_id {
-                        return Ok(())
+                        return Ok(());
                     }
                 }
             }
@@ -437,13 +436,13 @@ impl<'a> DiskUsageCalculator<'a> {
 
     // this takes `my_stat` to avoid having to stat files multiple times.
     #[allow(clippy::cognitive_complexity)]
-    fn run(&mut self,
+    fn run(
+        &mut self,
         mut my_stat: Stat,
         depth: usize,
-    ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>>
-    {
+    ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
         if !my_stat.is_dir {
-            return Ok(my_stat)
+            return Ok(my_stat);
         }
 
         let dir_iterator = match fs::read_dir(&my_stat.path) {
@@ -458,25 +457,21 @@ impl<'a> DiskUsageCalculator<'a> {
 
         for f in dir_iterator {
             match f {
-                Ok(directory_entry) => {
-                    match Stat::new(&directory_entry.path(), self.options) {
-                        Ok(this_stat) => {
-                            self.du_handle_dir_entry(&mut my_stat, depth, &directory_entry, this_stat)?;
-                        }
-                        Err(e) => self.print_tx.send(Err(e.map_err_context(|| {
-                            format!("cannot access {}", directory_entry.path().quote())
-                        })))?,
+                Ok(directory_entry) => match Stat::new(&directory_entry.path(), self.options) {
+                    Ok(this_stat) => {
+                        self.du_handle_dir_entry(&mut my_stat, depth, &directory_entry, this_stat)?;
                     }
-                }
+                    Err(e) => self.print_tx.send(Err(e.map_err_context(|| {
+                        format!("cannot access {}", directory_entry.path().quote())
+                    })))?,
+                },
                 Err(error) => self.print_tx.send(Err(error.into()))?,
             }
         }
 
         Ok(my_stat)
     }
-
 }
-
 
 #[derive(Debug)]
 enum DuError {
@@ -844,13 +839,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         // Check existence of path provided in argument
         if let Ok(stat) = Stat::new(&path, &traversal_options) {
-
             // Kick off the computation of disk usage from the initial path
             let mut du_calc = DiskUsageCalculator::new(&print_tx, &traversal_options);
             if let Some(inode) = stat.inode {
                 du_calc.seen_inodes.insert(inode);
             }
-            let stat = du_calc.run(stat, 0)
+            let stat = du_calc
+                .run(stat, 0)
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
             print_tx

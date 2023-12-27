@@ -11,16 +11,13 @@ pub struct Range {
 }
 
 #[derive(Default)]
-pub struct SeenPhysicalExtents
-{
+pub struct SeenPhysicalExtents {
     pub ranges: BTreeMap<u64, u64>,
 }
 
 impl SeenPhysicalExtents {
-
     pub fn get_overlapping_and_insert(&mut self, range: &Range) -> u64 {
-
-        let mut same_or_before = self.ranges.range_mut(..range.start+1);
+        let mut same_or_before = self.ranges.range_mut(..range.start + 1);
 
         let mut need_new_entry = true;
         let mut overlapping_sum: u64 = 0;
@@ -30,8 +27,8 @@ impl SeenPhysicalExtents {
             }
             if *end >= range.start {
                 overlapping_sum += *end - range.start;
-                *end = range.end;     // partially covered from begin.
-                                      // Extend existing entry.
+                *end = range.end; // partially covered from begin.
+                                  // Extend existing entry.
                 need_new_entry = false;
             }
         }
@@ -41,7 +38,7 @@ impl SeenPhysicalExtents {
             self.ranges.insert(range.start, range.end);
         }
 
-        let mut current_pos = range.start+1;
+        let mut current_pos = range.start + 1;
         loop {
             let mut after = self.ranges.range(current_pos..);
 
@@ -62,36 +59,35 @@ impl SeenPhysicalExtents {
                 overlapping_sum += *end - start; // fully inside, remove, continue
                 current_pos = *end;
                 self.ranges.remove(&start);
-            }
-            else {
+            } else {
                 return overlapping_sum;
             }
         }
     }
 
     pub fn get_total_overlap_and_insert(&mut self, path: PathBuf) -> (u64, Vec<Box<dyn UError>>) {
-
         let mut errors = Vec::new();
 
-        let extents =
-            match fiemap::fiemap(path.clone()) {
-                Ok(result) => result,
-                Err(e) => {
-                    errors.push(USimpleError::new(1,
-                        format!("FIEMAP: cannot access {}, e: {}", path.quote(), e)));
-                    return (0, errors);
-                }
-            };
+        let extents = match fiemap::fiemap(path.clone()) {
+            Ok(result) => result,
+            Err(e) => {
+                errors.push(USimpleError::new(
+                    1,
+                    format!("FIEMAP: cannot access {}, e: {}", path.quote(), e),
+                ));
+                return (0, errors);
+            }
+        };
 
         let mut total_overlapping: u64 = 0;
 
-        for (_i, extent_result) in extents.enumerate()
-        {
+        for (_i, extent_result) in extents.enumerate() {
             let extent = match extent_result {
                 Err(e) => {
-                    errors.push(USimpleError::new(1,
-                                format!("FIEMAP: extent error {}, {}",
-                                path.quote(), e)));
+                    errors.push(USimpleError::new(
+                        1,
+                        format!("FIEMAP: extent error {}, {}", path.quote(), e),
+                    ));
                     return (0, errors);
                 }
                 Ok(extent) => extent,
@@ -99,9 +95,10 @@ impl SeenPhysicalExtents {
 
             if !extent.fe_flags.contains(FiemapExtentFlags::UNKNOWN) && // the record doesn't contain valid information (yet)
                !extent.fe_flags.contains(FiemapExtentFlags::DATA_INLINE) && // the data so less that is put as part of the metadata, fe invalid
-                extent.fe_flags.contains(FiemapExtentFlags::SHARED) // performance: only with this bit set, extents are relevant for us
+                extent.fe_flags.contains(FiemapExtentFlags::SHARED)
+            // performance: only with this bit set, extents are relevant for us
             {
-                let range = Range{
+                let range = Range {
                     start: extent.fe_physical,
                     end: extent.fe_physical + extent.fe_length,
                 };
