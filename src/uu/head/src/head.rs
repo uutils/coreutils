@@ -243,63 +243,69 @@ fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, separator: u8) -> std
     Ok(())
 }
 
+fn checked_convert_to_usize_or_print_error(n: u64) -> Option<usize> {
+    match usize::try_from(n) {
+        Ok(value) => Some(value),
+        Err(e) => {
+            show!(USimpleError::new(
+                1,
+                format!("{e}: number of bytes is too large")
+            ));
+            None
+        }
+    }
+}
+
 fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: u64) -> std::io::Result<()> {
     if n == 0 {
         //prints everything
         return read_n_bytes(input, std::u64::MAX);
     }
 
-    let n = match usize::try_from(n) {
-        Ok(value) => value,
-        Err(e) => {
-            show!(USimpleError::new(
-                1,
-                format!("{e}: number of bytes is too large")
-            ));
-            return Ok(());
+    if let Some(n) = checked_convert_to_usize_or_print_error(n) {
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+
+        let mut ring_buffer = vec![0u8; n];
+
+        // first we fill the ring buffer
+        if let Err(e) = input.read_exact(&mut ring_buffer) {
+            if e.kind() == ErrorKind::UnexpectedEof {
+                return Ok(());
+            } else {
+                return Err(e);
+            }
         }
-    };
-
-    let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-
-    let mut ring_buffer = vec![0u8; n];
-
-    // first we fill the ring buffer
-    if let Err(e) = input.read_exact(&mut ring_buffer) {
-        if e.kind() == ErrorKind::UnexpectedEof {
-            return Ok(());
-        } else {
-            return Err(e);
-        }
-    }
-    let mut buffer = [0u8; BUF_SIZE];
-    loop {
-        let read = loop {
-            match input.read(&mut buffer) {
-                Ok(n) => break n,
-                Err(e) => match e.kind() {
-                    ErrorKind::Interrupted => {}
-                    _ => return Err(e),
-                },
+        let mut buffer = [0u8; BUF_SIZE];
+        loop {
+            let read = loop {
+                match input.read(&mut buffer) {
+                    Ok(n) => break n,
+                    Err(e) => match e.kind() {
+                        ErrorKind::Interrupted => {}
+                        _ => return Err(e),
+                    },
+                }
+            };
+            if read == 0 {
+                return Ok(());
+            } else if read >= n {
+                stdout.write_all(&ring_buffer)?;
+                stdout.write_all(&buffer[..read - n])?;
+                for i in 0..n {
+                    ring_buffer[i] = buffer[read - n + i];
+                }
+            } else {
+                stdout.write_all(&ring_buffer[..read])?;
+                for i in 0..n - read {
+                    ring_buffer[i] = ring_buffer[read + i];
+                }
+                ring_buffer[n - read..].copy_from_slice(&buffer[..read]);
             }
-        };
-        if read == 0 {
-            return Ok(());
-        } else if read >= n {
-            stdout.write_all(&ring_buffer)?;
-            stdout.write_all(&buffer[..read - n])?;
-            for i in 0..n {
-                ring_buffer[i] = buffer[read - n + i];
-            }
-        } else {
-            stdout.write_all(&ring_buffer[..read])?;
-            for i in 0..n - read {
-                ring_buffer[i] = ring_buffer[read + i];
-            }
-            ring_buffer[n - read..].copy_from_slice(&buffer[..read]);
         }
     }
+
+    Ok(())
 }
 
 fn read_but_last_n_lines(
@@ -307,21 +313,12 @@ fn read_but_last_n_lines(
     n: u64,
     separator: u8,
 ) -> std::io::Result<()> {
-    let n = match usize::try_from(n) {
-        Ok(value) => value,
-        Err(e) => {
-            show!(USimpleError::new(
-                1,
-                format!("{e}: number of bytes is too large")
-            ));
-            return Ok(());
+    if let Some(n) = checked_convert_to_usize_or_print_error(n) {
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        for bytes in take_all_but(lines(input, separator), n) {
+            stdout.write_all(&bytes?)?;
         }
-    };
-
-    let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-    for bytes in take_all_but(lines(input, separator), n) {
-        stdout.write_all(&bytes?)?;
     }
     Ok(())
 }
