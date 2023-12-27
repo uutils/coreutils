@@ -7,10 +7,9 @@ use std::ffi::OsString;
 use std::io;
 
 use uucore::entries::uid2usr;
+use uucore::process::geteuid;
 
 pub fn get_username() -> io::Result<OsString> {
-    // SAFETY: getuid() does nothing with memory and is always successful.
-    let uid = unsafe { libc::geteuid() };
     // uid2usr should arguably return an OsString but currently doesn't
-    uid2usr(uid).map(Into::into)
+    uid2usr(geteuid()).map(Into::into)
 }
