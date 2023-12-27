@@ -65,7 +65,7 @@ impl SeenPhysicalExtents {
         }
     }
 
-    pub fn get_total_overlap_and_insert(&mut self, path: PathBuf) -> (u64, Vec<Box<dyn UError>>) {
+    pub fn get_total_overlap_and_insert(&mut self, path: &PathBuf) -> (u64, Vec<Box<dyn UError>>) {
         let mut errors = Vec::new();
 
         let extents = match fiemap::fiemap(path.clone()) {
@@ -107,6 +107,6 @@ impl SeenPhysicalExtents {
             }
         }
 
-        return (total_overlapping, errors);
+        (total_overlapping, errors)
     }
 }

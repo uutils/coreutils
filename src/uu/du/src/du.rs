@@ -312,16 +312,16 @@ struct DiskUsageCalculator<'a> {
 }
 
 impl<'a> DiskUsageCalculator<'a> {
-    fn new<'b>(
+    fn new(
         print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
         options: &'a TraversalOptions,
     ) -> Self {
-        return DiskUsageCalculator {
+        DiskUsageCalculator {
             print_tx,
             options,
             seen_inodes: HashSet::new(),
             seen_physical_extents: BTreeMap::new(),
-        };
+        }
     }
 
     fn is_entry_excluded(&self, entry: &fs::DirEntry, entry_stat: &Stat) -> bool {
@@ -374,10 +374,10 @@ impl<'a> DiskUsageCalculator<'a> {
             let map_by_device = self
                 .seen_physical_extents
                 .entry(entry_stat.inode.unwrap().dev_id)
-                .or_insert(SeenPhysicalExtents::default());
+                .or_default();
 
             let (total_overlapping, errors) =
-                map_by_device.get_total_overlap_and_insert(entry.path());
+                map_by_device.get_total_overlap_and_insert(&entry.path());
 
             for error in errors {
                 self.print_tx.send(Err(error))?;
