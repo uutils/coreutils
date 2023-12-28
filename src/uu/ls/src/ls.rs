@@ -2414,14 +2414,10 @@ fn display_items(
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
 
-    let mut quoted = false;
-    for item in items {
-        let name =
-            display_item_name(item, config, None, String::new(), out, style_manager).contents;
-        if name.contains('\'') {
-            quoted = true;
-        }
-    }
+    let quoted = items.iter().any(|item| {
+        let name = escape_name(&item.display_name, &config.quoting_style);
+        name.starts_with('\'')
+    });
 
     if config.format == Format::Long {
         let padding_collection = calculate_padding_collection(items, config, out);
@@ -2565,12 +2561,16 @@ fn display_grid(
         let filling = Filling::Spaces(2);
         let mut grid = Grid::new(GridOptions { filling, direction });
 
-        for mut name in names {
-            if quoted && !name.contents.starts_with('\'') {
-                name.contents = format!(" {}", name.contents);
-            }
-
-            grid.add(name);
+        for name in names {
+            let formatted_name = Cell {
+                contents: if quoted && !name.contents.starts_with('\'') {
+                    format!(" {}", name.contents)
+                } else {
+                    name.contents
+                },
+                width: name.width,
+            };
+            grid.add(formatted_name);
         }
 
         match grid.fit_into_width(width as usize) {
