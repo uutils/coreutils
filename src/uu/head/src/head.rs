@@ -243,13 +243,13 @@ fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, separator: u8) -> std
     Ok(())
 }
 
-fn checked_convert_to_usize_or_print_error(n: u64) -> Option<usize> {
+fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
     match usize::try_from(n) {
         Ok(value) => Some(value),
         Err(e) => {
             show!(USimpleError::new(
                 1,
-                format!("{e}: number of bytes is too large")
+                format!("{e}: number of -bytes or -lines is too large")
             ));
             None
         }
@@ -262,7 +262,7 @@ fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: u64) -> std::io::
         return read_n_bytes(input, std::u64::MAX);
     }
 
-    if let Some(n) = checked_convert_to_usize_or_print_error(n) {
+    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
 
@@ -305,7 +305,7 @@ fn read_but_last_n_lines(
     n: u64,
     separator: u8,
 ) -> std::io::Result<()> {
-    if let Some(n) = checked_convert_to_usize_or_print_error(n) {
+    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
         for bytes in take_all_but(lines(input, separator), n) {
