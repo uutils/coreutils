@@ -869,6 +869,7 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
 ///
 fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     if b.compare && !need_copy(from, to, b)? {
+        println!("no need to copy");
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
@@ -916,40 +917,53 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
 /// Crashes the program if a nonexistent owner or group is specified in _b_.
 ///
 fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
+    // Attempt to retrieve metadata for the source file.
+    // If this fails, assume the file needs to be copied.
     let from_meta = match fs::metadata(from) {
         Ok(meta) => meta,
         Err(_) => return Ok(true),
     };
+
+    // Attempt to retrieve metadata for the destination file.
+    // If this fails, assume the file needs to be copied.
     let to_meta = match fs::metadata(to) {
         Ok(meta) => meta,
         Err(_) => return Ok(true),
     };
 
-    // setuid || setgid || sticky
+    // Define special file mode bits (setuid, setgid, sticky).
     let extra_mode: u32 = 0o7000;
+    // Define all file mode bits (including permissions).
     // setuid || setgid || sticky || permissions
     let all_modes: u32 = 0o7777;
 
+    // Check if any special mode bits are set in the specified mode,
+    // source file mode, or destination file mode. If so, copy is needed.
     if b.specified_mode.unwrap_or(0) & extra_mode != 0
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
     {
         return Ok(true);
     }
+
+    // Check if the mode of the destination file differs from the specified mode.
     if b.mode() != to_meta.mode() & all_modes {
         return Ok(true);
     }
 
+    // Check if either the source or destination is not a file.
     if !from_meta.is_file() || !to_meta.is_file() {
         return Ok(true);
     }
 
+    // Check if the file sizes differ.
     if from_meta.len() != to_meta.len() {
         return Ok(true);
     }
 
     // TODO: if -P (#1809) and from/to contexts mismatch, return true.
 
+    // Check if the owner ID is specified and differs from the destination file's owner.
     if let Some(owner_id) = b.owner_id {
         if owner_id != to_meta.uid() {
             return Ok(true);
@@ -963,11 +977,14 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
         }
     } else {
         #[cfg(not(target_os = "windows"))]
+        // Check if the destination file's owner or group
+        // differs from the effective user/group ID of the process.
         if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
             return Ok(true);
         }
     }
 
+    // Check if the contents of the source and destination files differ.
     if !diff(from.to_str().unwrap(), to.to_str().unwrap()) {
         return Ok(true);
     }
