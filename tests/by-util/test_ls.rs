@@ -4139,7 +4139,7 @@ fn test_ls_hyperlink_dirs() {
     assert!(result
         .stdout_str()
         .lines()
-        .nth(0)
+        .next()
         .unwrap()
         .contains(&format!("{path}{separator}{dir_a}\x07{dir_a}\x1b]8;;\x07:")));
     assert_eq!(result.stdout_str().lines().nth(1).unwrap(), "");
