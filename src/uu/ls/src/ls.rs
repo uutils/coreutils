@@ -2414,6 +2414,15 @@ fn display_items(
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
 
+    let mut quoted = false;
+    for item in items {
+        let name =
+            display_item_name(item, config, None, String::new(), out, style_manager).contents;
+        if name.contains('\'') {
+            quoted = true;
+        }
+    }
+
     if config.format == Format::Long {
         let padding_collection = calculate_padding_collection(items, config, out);
 
@@ -2431,7 +2440,15 @@ fn display_items(
                     display_additional_leading_info(item, &padding_collection, config, out)?;
                 write!(out, "{more_info}")?;
             }
-            display_item_long(item, &padding_collection, config, out, dired, style_manager)?;
+            display_item_long(
+                item,
+                &padding_collection,
+                config,
+                out,
+                dired,
+                style_manager,
+                quoted,
+            )?;
         }
     } else {
         let mut longest_context_len = 1;
@@ -2448,13 +2465,9 @@ fn display_items(
         let padding = calculate_padding_collection(items, config, out);
 
         let mut names_vec = Vec::new();
-        let mut quoted: bool = false;
         for i in items {
             let more_info = display_additional_leading_info(i, &padding, config, out)?;
             let cell = display_item_name(i, config, prefix_context, more_info, out, style_manager);
-            if cell.contents.starts_with('\'') {
-                quoted = true;
-            }
             names_vec.push(cell);
         }
 
@@ -2609,6 +2622,7 @@ fn display_item_long(
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
     style_manager: &mut StyleManager,
+    quoted: bool,
 ) -> UResult<()> {
     let mut output_display: String = String::new();
     if config.dired {
@@ -2701,8 +2715,19 @@ fn display_item_long(
 
         write!(output_display, " {} ", display_date(md, config)).unwrap();
 
-        let displayed_item =
+        let item_name =
             display_item_name(item, config, None, String::new(), out, style_manager).contents;
+
+        let displayed_item = if quoted {
+            if item_name.starts_with('\'') {
+                item_name
+            } else {
+                format!(" {}", item_name)
+            }
+        } else {
+            item_name
+        };
+
         if config.dired {
             let (start, end) = dired::calculate_dired(
                 &dired.dired_positions,
