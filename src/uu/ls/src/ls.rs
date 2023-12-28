@@ -2462,10 +2462,10 @@ fn display_items(
 
         match config.format {
             Format::Columns => {
-                display_grid(names, config.width, Direction::TopToBottom, quoted, out)?;
+                display_grid(names, config.width, Direction::TopToBottom, out, quoted)?;
             }
             Format::Across => {
-                display_grid(names, config.width, Direction::LeftToRight, quoted, out)?;
+                display_grid(names, config.width, Direction::LeftToRight, out, quoted)?;
             }
             Format::Commas => {
                 let mut current_col = 0;
@@ -2530,8 +2530,8 @@ fn display_grid(
     names: impl Iterator<Item = Cell>,
     width: u16,
     direction: Direction,
-    quoted: bool,
     out: &mut BufWriter<Stdout>,
+    quoted: bool,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
