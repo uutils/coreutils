@@ -1521,6 +1521,7 @@ fn is_forbidden_copy_to_same_file(
         options.dereference(source_in_command_line) || !source.is_symlink();
     paths_refer_to_same_file(source, dest, dereference_to_compare)
         && !(options.force() && options.backup != BackupMode::NoBackup)
+        && !(dest.is_symlink() && options.backup != BackupMode::NoBackup)
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
