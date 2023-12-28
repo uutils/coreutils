@@ -2448,18 +2448,25 @@ fn display_items(
         let padding = calculate_padding_collection(items, config, out);
 
         let mut names_vec = Vec::new();
-
+        let mut quoted: bool = false;
         for i in items {
             let more_info = display_additional_leading_info(i, &padding, config, out)?;
             let cell = display_item_name(i, config, prefix_context, more_info, out, style_manager);
+            if cell.contents.starts_with('\'') {
+                quoted = true;
+            }
             names_vec.push(cell);
         }
 
         let names = names_vec.into_iter();
 
         match config.format {
-            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out)?,
-            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out)?,
+            Format::Columns => {
+                display_grid(names, config.width, Direction::TopToBottom, quoted, out)?;
+            }
+            Format::Across => {
+                display_grid(names, config.width, Direction::LeftToRight, quoted, out)?;
+            }
             Format::Commas => {
                 let mut current_col = 0;
                 let mut names = names;
@@ -2523,6 +2530,7 @@ fn display_grid(
     names: impl Iterator<Item = Cell>,
     width: u16,
     direction: Direction,
+    quoted: bool,
     out: &mut BufWriter<Stdout>,
 ) -> UResult<()> {
     if width == 0 {
@@ -2544,7 +2552,11 @@ fn display_grid(
         let filling = Filling::Spaces(2);
         let mut grid = Grid::new(GridOptions { filling, direction });
 
-        for name in names {
+        for mut name in names {
+            if quoted && !name.contents.starts_with('\'') {
+                name.contents = format!(" {}", name.contents);
+            }
+
             grid.add(name);
         }
 
