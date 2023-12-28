@@ -732,6 +732,25 @@ fn test_cp_arg_backup_with_dest_a_symlink() {
 }
 
 #[test]
+fn test_cp_arg_backup_with_dest_a_symlink_to_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source";
+    let source_content = "content";
+    let symlink = "symlink";
+    let backup = "symlink~";
+
+    at.write(source, source_content);
+    at.symlink_file(source, symlink);
+
+    ucmd.arg("-b").arg(source).arg(symlink).succeeds();
+
+    assert!(!at.symlink_exists(symlink));
+    assert_eq!(source_content, at.read(symlink));
+    assert!(at.symlink_exists(backup));
+    assert_eq!(source, at.resolve_link(backup));
+}
+
+#[test]
 fn test_cp_arg_backup_with_other_args() {
     let (at, mut ucmd) = at_and_ucmd!();
 
