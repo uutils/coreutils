@@ -10,15 +10,6 @@ mod mode;
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
-use uucore::backup_control::{self, BackupMode};
-use uucore::display::Quotable;
-use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
-use uucore::fs::dir_strip_dot_for_creation;
-use uucore::mode::get_umask;
-use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
-use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
-
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::fs;
@@ -28,8 +19,15 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process;
-#[cfg(not(target_os = "windows"))]
+use uucore::backup_control::{self, BackupMode};
+use uucore::display::Quotable;
+use uucore::entries::{grp2gid, usr2uid};
+use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
+use uucore::fs::dir_strip_dot_for_creation;
+use uucore::mode::get_umask;
+use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 use uucore::process::{getegid, geteuid};
+use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -665,6 +663,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
 /// Handle incomplete user/group parings for chown.
 ///
 /// Returns a Result type with the Err variant containing the error message.
+/// If the user is root, revert the uid & gid
 ///
 /// # Parameters
 ///
@@ -676,23 +675,31 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
 /// return an empty error value.
 ///
 fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
-    if b.owner_id.is_some() || b.group_id.is_some() {
-        let meta = match fs::metadata(path) {
-            Ok(meta) => meta,
-            Err(e) => return Err(InstallError::MetadataFailed(e).into()),
-        };
+    // GNU coreutils doesn't print chown operations during install with verbose flag.
+    let verbosity = Verbosity {
+        groups_only: b.owner_id.is_none(),
+        level: VerbosityLevel::Normal,
+    };
 
-        // GNU coreutils doesn't print chown operations during install with verbose flag.
-        let verbosity = Verbosity {
-            groups_only: b.owner_id.is_none(),
-            level: VerbosityLevel::Normal,
-        };
+    // Determine the owner and group IDs to be used for chown.
+    let (owner_id, group_id) = if b.owner_id.is_some() || b.group_id.is_some() {
+        (b.owner_id, b.group_id)
+    } else if geteuid() == 0 {
+        // Special case for root user.
+        (Some(0), Some(0))
+    } else {
+        // No chown operation needed.
+        return Ok(());
+    };
 
-        match wrap_chown(path, &meta, b.owner_id, b.group_id, false, verbosity) {
-            Ok(msg) if b.verbose && !msg.is_empty() => println!("chown: {msg}"),
-            Ok(_) => {}
-            Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
-        }
+    let meta = match fs::metadata(path) {
+        Ok(meta) => meta,
+        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
+    };
+    match wrap_chown(path, &meta, owner_id, group_id, false, verbosity) {
+        Ok(msg) if b.verbose && !msg.is_empty() => println!("chown: {msg}"),
+        Ok(_) => {}
+        Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
     }
 
     Ok(())
