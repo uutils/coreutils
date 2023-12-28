@@ -17,6 +17,8 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
+#[cfg(not(windows))]
+use uucore::process::{getegid, geteuid};
 use uucore::{format_usage, help_about, help_section};
 
 const ABOUT: &str = help_about!("test.md");
@@ -276,7 +278,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 
     let geteuid = || {
         #[cfg(not(target_os = "redox"))]
-        let euid = unsafe { libc::geteuid() };
+        let euid = geteuid();
         #[cfg(target_os = "redox")]
         let euid = syscall::geteuid().unwrap() as u32;
 
@@ -285,7 +287,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 
     let getegid = || {
         #[cfg(not(target_os = "redox"))]
-        let egid = unsafe { libc::getegid() };
+        let egid = getegid();
         #[cfg(target_os = "redox")]
         let egid = syscall::getegid().unwrap() as u32;
 

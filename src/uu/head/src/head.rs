@@ -266,41 +266,33 @@ fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: u64) -> std::io::
         let stdout = std::io::stdout();
         let mut stdout = stdout.lock();
 
-        let mut ring_buffer = vec![0u8; n];
+        let mut ring_buffer = Vec::new();
 
-        // first we fill the ring buffer
-        if let Err(e) = input.read_exact(&mut ring_buffer) {
-            if e.kind() == ErrorKind::UnexpectedEof {
-                return Ok(());
-            } else {
-                return Err(e);
-            }
-        }
         let mut buffer = [0u8; BUF_SIZE];
+        let mut total_read = 0;
+
         loop {
-            let read = loop {
-                match input.read(&mut buffer) {
-                    Ok(n) => break n,
-                    Err(e) => match e.kind() {
-                        ErrorKind::Interrupted => {}
-                        _ => return Err(e),
-                    },
-                }
+            let read = match input.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(read) => read,
+                Err(e) => match e.kind() {
+                    ErrorKind::Interrupted => continue,
+                    _ => return Err(e),
+                },
             };
-            if read == 0 {
-                return Ok(());
-            } else if read >= n {
-                stdout.write_all(&ring_buffer)?;
-                stdout.write_all(&buffer[..read - n])?;
-                for i in 0..n {
-                    ring_buffer[i] = buffer[read - n + i];
-                }
+
+            total_read += read;
+
+            if total_read <= n {
+                // Fill the ring buffer without exceeding n bytes
+                let overflow = total_read - n;
+                ring_buffer.extend_from_slice(&buffer[..read - overflow]);
             } else {
-                stdout.write_all(&ring_buffer[..read])?;
-                for i in 0..n - read {
-                    ring_buffer[i] = ring_buffer[read + i];
-                }
-                ring_buffer[n - read..].copy_from_slice(&buffer[..read]);
+                // Write the ring buffer and the part of the buffer that exceeds n
+                stdout.write_all(&ring_buffer)?;
+                stdout.write_all(&buffer[..read - n + ring_buffer.len()])?;
+                ring_buffer.clear();
+                ring_buffer.extend_from_slice(&buffer[read - n + ring_buffer.len()..read]);
             }
         }
     }

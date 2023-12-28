@@ -19,7 +19,6 @@ use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
 
-use libc::{getegid, geteuid};
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::fs;
@@ -29,6 +28,8 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process;
+#[cfg(not(target_os = "windows"))]
+use uucore::process::{getegid, geteuid};
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -959,10 +960,8 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
         }
     } else {
         #[cfg(not(target_os = "windows"))]
-        unsafe {
-            if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
-                return Ok(true);
-            }
+        if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
+            return Ok(true);
         }
     }
 
