@@ -400,19 +400,17 @@ fn is_seekable(input: &mut std::fs::File) -> bool {
 }
 
 fn sanity_limited_blksize(st_blksize: u64) -> u64 {
-
     const DEFAULT: u64 = 512;
     const MAX: u64 = usize::MAX as u64 / 8 + 1;
 
     match st_blksize {
         0 => DEFAULT,
-        1..=MAX  => st_blksize,
+        1..=MAX => st_blksize,
         _ => DEFAULT,
     }
 }
 
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
-
     let st = input.metadata()?;
     let seekable = is_seekable(input);
     let sanity_limit = sanity_limited_blksize(st.blksize());
