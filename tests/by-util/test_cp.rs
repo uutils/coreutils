@@ -111,7 +111,9 @@ fn test_cp_duplicate_files() {
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
         .succeeds()
-        .stderr_contains("specified more than once");
+        .stderr_contains(format!(
+            "source file '{TEST_HELLO_WORLD_SOURCE}' specified more than once"
+        ));
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
 }
 
