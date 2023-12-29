@@ -413,8 +413,8 @@ fn sanity_limited_blksize(st_blksize: u64) -> u64 {
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
     let st = input.metadata()?;
     let seekable = is_seekable(input);
-    let sanity_limit = sanity_limited_blksize(st.blksize());
-    if !seekable || st.size() <= sanity_limit {
+    let blksize_limit = sanity_limited_blksize(st.blksize());
+    if !seekable || st.size() <= blksize_limit {
         return head_backwards_without_seek_file(input, options);
     }
 
