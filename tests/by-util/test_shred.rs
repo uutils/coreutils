@@ -72,7 +72,7 @@ fn test_random_source() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let file = "test_random_source";
-    
+
     at.touch(file);
 
     ucmd.arg("--random-source").arg(file).succeeds();
