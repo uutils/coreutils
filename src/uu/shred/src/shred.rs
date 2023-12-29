@@ -316,19 +316,17 @@ pub fn uu_app() -> Command {
                 .help("add a final overwrite with zeros to hide shredding")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(options::RANDOM_SOURCE)
+                .long(options::RANDOM_SOURCE)
+                .help("get random bytes from FILE")
+                .action(ArgAction::SetFalse),
+        )
         // Positional arguments
         .arg(
             Arg::new(options::FILE)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::RANDOM_SOURCE)
-                .long(options::RANDOM_SOURCE)
-                .value_name("FILE")
-                .help("get random bytes from FILE")
-                .value_hint(clap::ValueHint::FilePath)
-                .action(ArgAction::Append),
         )
 }
 
@@ -475,16 +473,17 @@ fn wipe_file(
         show_if_err!(do_pass(&mut file, &pass_type, exact, size)
             .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
     }
+    
+    if random_source {
+        random_bytes_from_file(path_str)
+            .map_err_context(|| format!("{}: failed to read random bytes", path.maybe_quote()))?;
+    }
 
     if remove {
         do_remove(path, path_str, verbose)
             .map_err_context(|| format!("{}: failed to remove file", path.maybe_quote()))?;
     }
 
-    if random_source {
-        random_bytes_from_file(path_str)
-            .map_err_context(|| format!("{}: failed to read random bytes", path.maybe_quote()))?;
-    }
 
     Ok(())
 }
