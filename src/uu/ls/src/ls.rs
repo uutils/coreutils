@@ -2718,12 +2718,8 @@ fn display_item_long(
         let item_name =
             display_item_name(item, config, None, String::new(), out, style_manager).contents;
 
-        let displayed_item = if quoted {
-            if item_name.starts_with('\'') {
-                item_name
-            } else {
-                format!(" {}", item_name)
-            }
+        let displayed_item = if quoted && !item_name.starts_with('\'') {
+            format!(" {}", item_name)
         } else {
             item_name
         };
