@@ -420,3 +420,19 @@ fn test_read_backwards_lines_proc_fs_modules() {
     let result = ts.ucmd().args(&args).succeeds();
     assert!(result.stdout().len() > 0);
 }
+
+#[cfg(all(
+    not(target_os = "windows"),
+    not(target_os = "macos"),
+    not(target_os = "freebsd")
+))]
+#[test]
+fn test_read_backwards_lines_sys_kernel_profiling() {
+    let ts = TestScenario::new(util_name!());
+
+    let args = ["-c", "-1", "/sys/kernel/profiling"];
+    let result = ts.ucmd().args(&args).succeeds();
+    let stdout_str = result.stdout_str();
+    assert_eq!(stdout_str.len(), 1);
+    assert!(stdout_str == "0" || stdout_str == "1");
+}

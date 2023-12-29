@@ -8,6 +8,7 @@
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
@@ -398,16 +399,31 @@ fn is_seekable(input: &mut std::fs::File) -> bool {
         && input.seek(SeekFrom::Start(current_pos.unwrap())).is_ok()
 }
 
-fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
-    let seekable = is_seekable(input);
-    if seekable {
-        return head_backwards_on_seekable_file(input, options);
-    }
+fn sanity_limited_blksize(st_blksize: u64) -> u64 {
 
-    head_backwards_on_non_seekable_file(input, options)
+    const DEFAULT: u64 = 512;
+    const MAX: u64 = usize::MAX as u64 / 8 + 1;
+
+    match st_blksize {
+        0 => DEFAULT,
+        1..=MAX  => st_blksize,
+        _ => DEFAULT,
+    }
 }
 
-fn head_backwards_on_non_seekable_file(
+fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
+
+    let st = input.metadata()?;
+    let seekable = is_seekable(input);
+    let sanity_limit = sanity_limited_blksize(st.blksize());
+    if !seekable || st.size() <= sanity_limit {
+        return head_backwards_without_seek_file(input, options);
+    }
+
+    head_backwards_on_seekable_file(input, options)
+}
+
+fn head_backwards_without_seek_file(
     input: &mut std::fs::File,
     options: &HeadOptions,
 ) -> std::io::Result<()> {
