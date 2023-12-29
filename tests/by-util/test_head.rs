@@ -427,7 +427,7 @@ fn test_read_backwards_lines_proc_fs_modules() {
     not(target_os = "freebsd")
 ))]
 #[test]
-fn test_read_backwards_lines_sys_kernel_profiling() {
+fn test_read_backwards_bytes_sys_kernel_profiling() {
     let ts = TestScenario::new(util_name!());
 
     let args = ["-c", "-1", "/sys/kernel/profiling"];
