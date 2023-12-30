@@ -330,7 +330,7 @@ fn test_head_invalid_num() {
             new_ucmd!()
                 .args(&["-c", size])
                 .fails()
-                .stderr_is("head: out of range integral type conversion attempted: number of bytes is too large\n");
+                .stderr_is("head: out of range integral type conversion attempted: number of -bytes or -lines is too large\n");
         }
     }
     new_ucmd!()
