@@ -7,7 +7,9 @@
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
+use std::fs::Metadata;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+#[cfg(not(target_os = "windows"))]
 use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -399,22 +401,32 @@ fn is_seekable(input: &mut std::fs::File) -> bool {
         && input.seek(SeekFrom::Start(current_pos.unwrap())).is_ok()
 }
 
-fn sanity_limited_blksize(st_blksize: u64) -> u64 {
-    const DEFAULT: u64 = 512;
-    const MAX: u64 = usize::MAX as u64 / 8 + 1;
+fn sanity_limited_blksize(_st: &Metadata) -> u64 {
 
-    match st_blksize {
-        0 => DEFAULT,
-        1..=MAX => st_blksize,
-        _ => DEFAULT,
+    #[cfg(not(target_os = "windows"))]
+    {
+        const DEFAULT: u64 = 512;
+        const MAX: u64 = usize::MAX as u64 / 8 + 1;
+
+        let st_blksize: u64 = _st.blksize();
+        match st_blksize {
+            0 => DEFAULT,
+            1..=MAX => st_blksize,
+            _ => DEFAULT,
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        512
     }
 }
 
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
     let st = input.metadata()?;
     let seekable = is_seekable(input);
-    let blksize_limit = sanity_limited_blksize(st.blksize());
-    if !seekable || st.size() <= blksize_limit {
+    let blksize_limit = sanity_limited_blksize(&st);
+    if !seekable || st.len() <= blksize_limit {
         return head_backwards_without_seek_file(input, options);
     }
 
