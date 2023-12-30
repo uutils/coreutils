@@ -402,7 +402,6 @@ fn is_seekable(input: &mut std::fs::File) -> bool {
 }
 
 fn sanity_limited_blksize(_st: &Metadata) -> u64 {
-
     #[cfg(not(target_os = "windows"))]
     {
         const DEFAULT: u64 = 512;
