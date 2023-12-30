@@ -228,3 +228,37 @@ fn test_untagged_algorithm_stdin() {
             .stdout_is_fixture(format!("untagged/{algo}_stdin.expected"));
     }
 }
+
+#[test]
+fn test_length_with_wrong_algorithm() {
+    new_ucmd!()
+        .arg("--length=16")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b")
+        .code_is(1);
+}
+
+#[test]
+fn test_length_not_supported() {
+    new_ucmd!()
+        .arg("--length=15")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_is_fixture("unsupported_length.expected")
+        .code_is(1);
+}
+
+#[test]
+fn test_length() {
+    new_ucmd!()
+        .arg("--length=16")
+        .arg("--algorithm=blake2b")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .stdout_is_fixture("supported_length.expected");
+}
