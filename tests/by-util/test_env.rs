@@ -6,8 +6,11 @@
 
 use crate::common::util::TestScenario;
 use std::env;
+use std::fmt::Debug;
 use std::path::Path;
+use tail::args::parse_args;
 use tempfile::tempdir;
+use uucore::error::UResult;
 
 #[test]
 fn test_invalid_arg() {
@@ -244,4 +247,137 @@ fn test_fail_change_directory() {
         .fails()
         .stderr_move_str();
     assert!(out.contains("env: cannot change directory to "));
+}
+
+#[test]
+fn test_split_string_into_args_one_argument_no_quotes() {
+    let scene = TestScenario::new(util_name!());
+
+    let out = scene
+        .ucmd()
+        .arg("-S echo hello world")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(out, "hello world\n");
+}
+
+#[test]
+fn test_split_string_into_args_one_argument() {
+    let scene = TestScenario::new(util_name!());
+
+    let out = scene
+        .ucmd()
+        .arg("-S echo \"hello world\"")
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(out, "hello world\n");
+}
+
+#[test]
+fn test_split_string_into_args_s_in_separate_argument() {
+    let scene = TestScenario::new(util_name!());
+
+    let out = scene
+        .ucmd()
+        .args(&["-S", "echo \"hello world\""])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(out, "hello world\n");
+}
+
+#[test]
+fn test_split_string_into_args_s_escaping_challenge() {
+    let scene = TestScenario::new(util_name!());
+
+    let out = scene
+        .ucmd()
+        .args(&[r#"-S echo "hello \"great\" world""#])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(out, "hello \"great\" world\n");
+}
+
+#[test]
+fn test_split_string_into_args_s_escaped_c_not_allowed() {
+    let scene = TestScenario::new(util_name!());
+
+    let out = scene
+        .ucmd()
+        .args(&[r#"-S'"\\c"'"#])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(out, "\n");
+}
+
+fn assert_eq_and_print(reference: &str, value: &str) {
+    println!("reference:\n{}", reference);
+    println!("value:\n{}", value);
+    assert_eq!(reference, value);
+}
+
+fn assert_eq_and_pretty_print<TR: Debug + std::cmp::PartialEq<TV>, TV: Debug>(
+    reference: TR,
+    value: TV,
+) {
+    println!("reference:\n{:?}", reference);
+    println!("value:\n{:?}", value);
+    assert_eq!(reference, value);
+}
+
+#[test]
+fn test_split_string_into_fff() {
+    //let scene = TestScenario::new(util_name!());
+
+    use ::env::parse_args_from_str;
+    use ::env::test_quoted_string;
+
+    assert_eq_and_print(
+        "quoted",
+        test_quoted_string(r#""quoted""#).unwrap().as_ref(),
+    );
+    assert_eq_and_print(
+        "quoted with spaces",
+        test_quoted_string(r#""quoted with spaces""#)
+            .unwrap()
+            .as_ref(),
+    );
+    assert_eq_and_print(
+        r#"quoted with spacesrandnquoted "name name2" end"#,
+        test_quoted_string(r#""quoted with spaces\rand\nquoted \"name name2\" end""#)
+            .unwrap()
+            .as_ref(),
+    );
+
+    assert_eq_and_pretty_print(
+        vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"],
+        parse_args_from_str(r#"A=B FOO=AR  sh -c "echo \$A\$FOO""#).0,
+    );
+    assert_eq_and_print(
+        "echo $A$FOO",
+        test_quoted_string(r#""echo \$A\$FOO""#).unwrap().as_ref(),
+    );
+
+    assert_eq_and_pretty_print(
+        vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"],
+        parse_args_from_str(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#).0,
+    );
+    assert_eq_and_pretty_print(
+        vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"],
+        parse_args_from_str(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#).0,
+    );
+
+    assert_eq_and_pretty_print(
+        vec!["-i", "A=B \\' C"],
+        parse_args_from_str(r#"-i A='B \' C'"#).0,
+    );
+}
+
+
+#[test]
+fn test_split_string_into_fffgg() {
+
+    assert_eq_and_pretty_print(
+        vec!["FOO=BAR", "sh", "-c", "echo xBARx =$FOO="],
+        ::env::parse_args_from_str(r#"FOO=BAR sh -c "echo x${FOO}x =\$FOO=""#).0,
+    );
 }
