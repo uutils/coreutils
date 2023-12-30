@@ -250,7 +250,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let input_length = matches.get_one::<usize>(options::LENGTH);
     let length = if let Some(length) = input_length {
-        
         if length % 8 != 0 {
             // GNU's implementation seem to use these quotation marks
             // in their error messages, so we do the same.
@@ -260,15 +259,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 "length is not a multiple of 8",
             )
             .into());
-    }
+        }
 
-    if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "--length is only supported with --algorithm=blake2b",
-        )
-        .into());
-    }
+        if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--length is only supported with --algorithm=blake2b",
+            )
+            .into());
+        }
 
         // Divide by 8, as our blake2b implementation expects bytes
         // instead of bits.
