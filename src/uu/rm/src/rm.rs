@@ -490,16 +490,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
                             }
                         }
                         Err(e) => {
-                            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                // GNU compatibility (rm/fail-eacces.sh)
-                                show_error!(
-                                    "cannot remove {}: {}",
-                                    path.quote(),
-                                    "Permission denied"
-                                );
-                            } else {
-                                show_error!("cannot remove {}: {}", path.quote(), e);
-                            }
+                            show_error!("cannot remove {}: {}", path.quote(), format_io_error(&e));
                             return true;
                         }
                     }
@@ -532,12 +523,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                 }
             }
             Err(e) => {
-                if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    // GNU compatibility (rm/fail-eacces.sh)
-                    show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
-                } else {
-                    show_error!("cannot remove {}: {}", path.quote(), e);
-                }
+                show_error!("cannot remove {}: {}", path.quote(), format_io_error(&e));
                 return true;
             }
         }
