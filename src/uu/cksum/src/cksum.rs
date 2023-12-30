@@ -245,7 +245,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let input_length = matches.get_one::<usize>(options::LENGTH);
     let length = if let Some(length) = input_length {
         match length.to_owned() {
-            n if n == 0 => None,
+            0 => None,
             n if n % 8 != 0 => {
                 // GNU's implementation seem to use these quotation marks
                 // in their error messages, so we do the same.
