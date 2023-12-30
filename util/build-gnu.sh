@@ -210,6 +210,10 @@ sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
 
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
+# our error message is better
+sed -i 's|rm: cannot remove '\''b'\'': Permission denied|rm: cannot remove '\''b/a/p'\'': Permission denied\nrm: cannot remove '\''b/a'\'': Directory not empty\nrm: cannot remove '\''b'\'': Directory not empty|' tests/rm/rm1.sh
+#sed -i 's|rm: cannot remove '\''e'\'': Permission denied|rm: cannot remove '\''e/slink'\'': Permission denied\nrm: cannot remove '\''e'\'': Directory not empty|'  tests/rm/fail-eacces.sh
+
 # 'rel' doesn't exist. Our implementation is giving a better message.
 sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
 
