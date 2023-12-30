@@ -6,7 +6,6 @@
 //! Set of functions to manage file systems
 
 // spell-checker:ignore DATETIME getmntinfo subsecond (arch) bitrig ; (fs) cifs smbfs
-
 use time::macros::format_description;
 use time::UtcOffset;
 
@@ -18,7 +17,13 @@ const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 static MOUNT_OPT_BIND: &str = "bind";
 #[cfg(windows)]
 const MAX_PATH: usize = 266;
-#[cfg(windows)]
+#[cfg(any(
+    windows,
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 static EXIT_ERR: i32 = 1;
 
 #[cfg(any(
@@ -28,7 +33,7 @@ static EXIT_ERR: i32 = 1;
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
-use crate::crash;
+use crate::error::USimpleError;
 #[cfg(windows)]
 use crate::show_warning;
 
@@ -436,7 +441,7 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
         let len = unsafe { get_mount_info(&mut mount_buffer_ptr, 1_i32) };
         if len < 0 {
-            crash!(1, "get_mount_info() failed");
+            Err(USimpleError::new(EXIT_ERR, "get_mount_info() failed"));
         }
         let mounts = unsafe { slice::from_raw_parts(mount_buffer_ptr, len as usize) };
         Ok(mounts
@@ -451,11 +456,10 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         let find_handle =
             unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
         if INVALID_HANDLE_VALUE == find_handle {
-            crash!(
+            Err::<T, Box<dyn UError>>(USimpleError::new(
                 EXIT_ERR,
-                "FindFirstVolumeW failed: {}",
-                IOError::last_os_error()
-            );
+                format!("FindFirstVolumeW failed: {}", IOError::last_os_error()),
+            ));
         }
         let mut mounts = Vec::<MountInfo>::new();
         loop {
@@ -476,7 +480,10 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
             } {
                 let err = IOError::last_os_error();
                 if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
-                    crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
+                    Err(USimpleError::new(
+                        EXIT_ERR,
+                        format!("FindNextVolumeW failed: {}", err),
+                    ));
                 }
                 break;
             }
@@ -576,11 +583,13 @@ impl FsUsage {
             )
         };
         if 0 == success {
-            crash!(
+            Err::<T, Box<dyn UError>>(USimpleError::new(
                 EXIT_ERR,
-                "GetVolumePathNamesForVolumeNameW failed: {}",
-                IOError::last_os_error()
-            );
+                format!(
+                    "GetVolumePathNamesForVolumeNameW failed: {}",
+                    IOError::last_os_error()
+                ),
+            ));
         }
 
         let mut sectors_per_cluster = 0;
@@ -600,11 +609,10 @@ impl FsUsage {
         };
         if 0 == success {
             // Fails in case of CD for example
-            // crash!(
-            //     EXIT_ERR,
-            //     "GetDiskFreeSpaceW failed: {}",
-            //     IOError::last_os_error()
-            // );
+            Err(USimpleError::new(
+                EXIT_ERR,
+                format!("GetDiskFreeSpaceW failed: {}", IOError::last_os_error()),
+            ));
         }
 
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
