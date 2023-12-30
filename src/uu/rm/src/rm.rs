@@ -344,8 +344,14 @@ fn remove_dir_all_recursive_continue(path: &Path) -> Result<(), bool> {
     let mut had_err = false;
 
     for child in fs::read_dir(path).map_err(|e| {
-        show_error!("cannot remove {}: {}", path.quote(), format_io_error(&e));
-        true
+        if e.kind() == std::io::ErrorKind::PermissionDenied {
+            // we will be able to manage it later with remove_dir
+            // so, no need to show an error
+            false
+        } else {
+            show_error!("cannot remove {}: {}", path.quote(), format_io_error(&e));
+            true
+        }
     })? {
         match child {
             Ok(child) => {

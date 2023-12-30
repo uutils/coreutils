@@ -205,6 +205,7 @@ sed -i -e "s|rm: cannot remove 'a/b'|rm: cannot remove 'a'|g" tests/rm/fail-2epe
 sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
 
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
+sed -i "s|\$prog: cannot remove '\$d': Permission denied\\\n||" tests/rm/unreadable.pl
 
 # our error messages are better
 if ! grep -q "rm: cannot remove 'b'" tests/rm/rm1.sh; then
