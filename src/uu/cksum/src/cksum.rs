@@ -244,28 +244,41 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let input_length = matches.get_one::<usize>(options::LENGTH);
     let length = if let Some(length) = input_length {
-        if length % 8 != 0 {
-            // GNU's implementation seem to use these quotation marks
-            // in their error messages, so we do the same.
-            uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "length is not a multiple of 8",
-            )
-            .into());
-        }
+        match length.to_owned() {
+            n if n == 0 => None,
+            n if n % 8 != 0 => {
+                // GNU's implementation seem to use these quotation marks
+                // in their error messages, so we do the same.
+                uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "length is not a multiple of 8",
+                )
+                .into());
+            }
+            n if n > 512 => {
+                uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
 
-        if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "--length is only supported with --algorithm=blake2b",
-            )
-            .into());
-        }
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
+                )
+                .into());
+            }
+            n => {
+                if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--length is only supported with --algorithm=blake2b",
+                    )
+                    .into());
+                }
 
-        // Divide by 8, as our blake2b implementation expects bytes
-        // instead of bits.
-        Some(length / 8)
+                // Divide by 8, as our blake2b implementation expects bytes
+                // instead of bits.
+                Some(n / 8)
+            }
+        }
     } else {
         None
     };
