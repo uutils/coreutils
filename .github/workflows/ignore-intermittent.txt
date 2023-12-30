@@ -1,3 +1,2 @@
 tests/tail/inotify-dir-recreate
 tests/misc/timeout
-tests/rm/rm1

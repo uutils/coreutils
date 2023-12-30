@@ -698,3 +698,28 @@ fn test_non_utf8() {
     ucmd.arg(file).succeeds();
     assert!(!at.file_exists(file));
 }
+
+#[cfg(feature = "chmod")]
+#[test]
+fn test_rm_recursive_with_permission_denied() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir_all("b/a/p");
+    at.mkdir_all("b/c");
+    at.mkdir_all("b/d");
+
+    // Change permissions to make 'b/a' write-protected
+    scene.ccmd("chmod").arg("ug-w").arg("b/a").succeeds();
+
+    let result = scene.ucmd().arg("-rf").arg("b").fails();
+
+    assert!(result
+        .stderr_str()
+        .contains("rm: cannot remove 'b/a/p': Permission denied"));
+    assert!(result
+        .stderr_str()
+        .contains("rm: cannot remove 'b/a': Directory not empty"));
+    assert!(!at.dir_exists("b/d"));
+    assert!(at.dir_exists("b/a"));
+}

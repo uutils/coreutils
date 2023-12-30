@@ -9,6 +9,7 @@ use clap::{builder::ValueParser, crate_version, parser::ValueSource, Arg, ArgAct
 use std::collections::VecDeque;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, Metadata};
+use std::io;
 use std::io::ErrorKind;
 use std::ops::BitOr;
 use std::path::{Path, PathBuf};
@@ -322,6 +323,86 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     had_err
 }
 
+// Custom function to format io::Error messages
+fn format_io_error(err: &io::Error) -> String {
+    match err.kind() {
+        std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
+        std::io::ErrorKind::NotFound => "File or directory not found".to_string(),
+        _ => {
+            if err.raw_os_error() == Some(39) {
+                "Directory not empty".to_string()
+            } else {
+                format!("{}", err)
+            }
+        }
+    }
+}
+
+/// remove_dir_all implementation in std rust doesn't continue when hitting an error
+/// This is a implementation of remove_all_dir that continues
+fn remove_dir_all_recursive_continue(path: &Path) -> Result<(), bool> {
+    let mut had_err = false;
+
+    for child in fs::read_dir(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::PermissionDenied {
+            // we will be able to manage it later with remove_dir
+            // so, no need to show an error
+            false
+        } else {
+            show_error!("cannot remove {}: {}", path.quote(), format_io_error(&e));
+            true
+        }
+    })? {
+        match child {
+            Ok(child) => {
+                let is_dir = child
+                    .file_type()
+                    .map_err(|e| {
+                        show_error!(
+                            "cannot read file type for {}: {}",
+                            child.path().quote(),
+                            format_io_error(&e)
+                        );
+                        true
+                    })?
+                    .is_dir();
+
+                if is_dir {
+                    if remove_dir_all_recursive_continue(&child.path()).is_err() {
+                        had_err = true;
+                    }
+                } else if let Err(e) = fs::remove_file(&child.path()) {
+                    show_error!(
+                        "cannot remove {}: {}",
+                        child.path().quote(),
+                        format_io_error(&e)
+                    );
+                    had_err = true;
+                }
+            }
+            Err(e) => {
+                show_error!(
+                    "error processing child of {}: {}",
+                    path.quote(),
+                    format_io_error(&e)
+                );
+                had_err = true;
+            }
+        }
+    }
+
+    if let Err(e) = fs::remove_dir(path) {
+        show_error!("cannot remove {}: {}", path.quote(), format_io_error(&e));
+        had_err = true;
+    }
+
+    if had_err {
+        Err(had_err)
+    } else {
+        Ok(())
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn handle_dir(path: &Path, options: &Options) -> bool {
     let mut had_err = false;
@@ -329,22 +410,12 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
         if options.interactive != InteractiveMode::Always && !options.verbose {
-            if let Err(e) = fs::remove_dir_all(path) {
-                // GNU compatibility (rm/empty-inacc.sh)
-                // remove_dir_all failed. maybe it is because of the permissions
-                // but if the directory is empty, remove_dir might work.
-                // So, let's try that before failing for real
-                if let Err(_e) = fs::remove_dir(path) {
-                    had_err = true;
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        // GNU compatibility (rm/fail-eacces.sh)
-                        // here, GNU doesn't use some kind of remove_dir_all
-                        // It will show directory+file
-                        show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
-                    } else {
-                        show_error!("cannot remove {}: {}", path.quote(), e);
-                    }
-                }
+            // GNU compatibility (rm/empty-inacc.sh)
+            // remove_dir_all_recursive_continue failed. maybe it is because of the permissions
+            // but if the directory is empty, remove_dir might work.
+            // So, let's try that before failing for real
+            if remove_dir_all_recursive_continue(path).is_err() && fs::remove_dir(path).is_err() {
+                had_err = true;
             }
         } else {
             let mut dirs: VecDeque<DirEntry> = VecDeque::new();
@@ -421,16 +492,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
                             }
                         }
                         Err(e) => {
-                            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                // GNU compatibility (rm/fail-eacces.sh)
-                                show_error!(
-                                    "cannot remove {}: {}",
-                                    path.quote(),
-                                    "Permission denied"
-                                );
-                            } else {
-                                show_error!("cannot remove {}: {}", path.quote(), e);
-                            }
+                            show_error!("cannot remove {}: {}", path.quote(), format_io_error(&e));
                             return true;
                         }
                     }
@@ -463,12 +525,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                 }
             }
             Err(e) => {
-                if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    // GNU compatibility (rm/fail-eacces.sh)
-                    show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
-                } else {
-                    show_error!("cannot remove {}: {}", path.quote(), e);
-                }
+                show_error!("cannot remove {}: {}", path.quote(), format_io_error(&e));
                 return true;
             }
         }
