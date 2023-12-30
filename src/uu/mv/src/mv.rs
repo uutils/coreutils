@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized ENOTEMPTY  EEXIST  EISDIR  ENOSPC  EMLINK  ETXTBSY
 
 mod error;
 
@@ -24,6 +24,7 @@ use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
 use uucore::fs::{are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file};
+use uucore::libc;
 use uucore::update_control;
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
@@ -500,17 +501,38 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         match rename(sourcepath, &targetpath, options, multi_progress.as_ref()) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
-                let e = e.map_err_context(|| {
-                    format!(
-                        "cannot move {} to {}",
-                        sourcepath.quote(),
-                        targetpath.quote()
-                    )
-                });
-                match multi_progress {
-                    Some(ref pb) => pb.suspend(|| show!(e)),
-                    None => show!(e),
-                };
+                match e.raw_os_error() {
+                    Some(
+                        libc::ENOTEMPTY
+                        | libc::EEXIST
+                        | libc::EISDIR
+                        | libc::ENOSPC
+                        | libc::EMLINK
+                        | libc::ETXTBSY,
+                    ) => {
+                        // The error message was changed to match GNU's decision
+                        // when an issue was filed. These will match when merged upstream.
+                        let e = e
+                            .map_err_context(|| format!("cannot overwrite {}", targetpath.quote()));
+                        match multi_progress {
+                            Some(ref pb) => pb.suspend(|| show!(e)),
+                            None => show!(e),
+                        };
+                    }
+                    _ => {
+                        let e = e.map_err_context(|| {
+                            format!(
+                                "cannot move {} to {}",
+                                sourcepath.quote(),
+                                targetpath.quote()
+                            )
+                        });
+                        match multi_progress {
+                            Some(ref pb) => pb.suspend(|| show!(e)),
+                            None => show!(e),
+                        };
+                    }
+                }
             }
             Ok(()) => (),
         }
@@ -574,7 +596,9 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
+                // TODO: change when 'io::Error::DirectoryNotEmpty' is stabilized.
+                // https://github.com/rust-lang/rust/issues/86442
+                return Err(io::Error::from_raw_os_error(libc::ENOTEMPTY));
             }
         }
     }
