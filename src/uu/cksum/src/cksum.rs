@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) fname, algo
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use hex::encode;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -36,7 +36,12 @@ const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
 const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
 const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 
-fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize) {
+// enum CksumError
+
+fn detect_algo(
+    program: &str,
+    length: Option<usize>,
+) -> (&'static str, Box<dyn Digest + 'static>, usize) {
     match program {
         ALGORITHM_OPTIONS_SYSV => (
             ALGORITHM_OPTIONS_SYSV,
@@ -85,7 +90,11 @@ fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize
         ),
         ALGORITHM_OPTIONS_BLAKE2B => (
             ALGORITHM_OPTIONS_BLAKE2B,
-            Box::new(Blake2b::new()) as Box<dyn Digest>,
+            Box::new(if let Some(length) = length {
+                Blake2b::with_output_bytes(length)
+            } else {
+                Blake2b::new()
+            }) as Box<dyn Digest>,
             512,
         ),
         ALGORITHM_OPTIONS_SM3 => (
@@ -115,6 +124,10 @@ fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
 {
+    // if options.length != None && options.algo_name != ALGORITHM_OPTIONS_BLAKE2B {
+    //     return UError;
+    // }
+
     for filename in files {
         let filename = Path::new(filename);
         let stdin_buf;
@@ -217,6 +230,7 @@ mod options {
     pub const ALGORITHM: &str = "algorithm";
     pub const FILE: &str = "file";
     pub const UNTAGGED: &str = "untagged";
+    pub const LENGTH: &str = "length";
 }
 
 #[uucore::main]
@@ -228,7 +242,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => ALGORITHM_OPTIONS_CRC,
     };
 
-    let (name, algo, bits) = detect_algo(algo_name);
+    let input_length = matches.get_one::<usize>(options::LENGTH);
+    let length = if let Some(length) = input_length {
+        if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "--length is only supported with --algorithm=blake2b",
+            )
+            .into());
+        }
+
+        if length % 8 != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                // TODO: Fix formatting for this error message
+                // GNU has the executable path/name on both lines
+                format!("invalid length {length}\nlength is not a multiple of 8"),
+            )
+            .into());
+        }
+
+        Some(length / 8)
+    } else {
+        None
+    };
+
+    let (name, algo, bits) = detect_algo(algo_name, length);
+
     let opts = Options {
         algo_name: name,
         digest: algo,
@@ -281,6 +321,14 @@ pub fn uu_app() -> Command {
                 .long(options::UNTAGGED)
                 .help("create a reversed style checksum, without digest type")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::LENGTH)
+                .long(options::LENGTH)
+                .value_parser(value_parser!(usize))
+                .short('l')
+                .help("digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8")
+                .action(ArgAction::Set),
         )
         .after_help(AFTER_HELP)
 }
