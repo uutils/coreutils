@@ -2414,6 +2414,11 @@ fn display_items(
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
 
+    let quoted = items.iter().any(|item| {
+        let name = escape_name(&item.display_name, &config.quoting_style);
+        name.starts_with('\'')
+    });
+
     if config.format == Format::Long {
         let padding_collection = calculate_padding_collection(items, config, out);
 
@@ -2431,7 +2436,15 @@ fn display_items(
                     display_additional_leading_info(item, &padding_collection, config, out)?;
                 write!(out, "{more_info}")?;
             }
-            display_item_long(item, &padding_collection, config, out, dired, style_manager)?;
+            display_item_long(
+                item,
+                &padding_collection,
+                config,
+                out,
+                dired,
+                style_manager,
+                quoted,
+            )?;
         }
     } else {
         let mut longest_context_len = 1;
@@ -2448,7 +2461,6 @@ fn display_items(
         let padding = calculate_padding_collection(items, config, out);
 
         let mut names_vec = Vec::new();
-
         for i in items {
             let more_info = display_additional_leading_info(i, &padding, config, out)?;
             let cell = display_item_name(i, config, prefix_context, more_info, out, style_manager);
@@ -2458,8 +2470,12 @@ fn display_items(
         let names = names_vec.into_iter();
 
         match config.format {
-            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out)?,
-            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out)?,
+            Format::Columns => {
+                display_grid(names, config.width, Direction::TopToBottom, out, quoted)?;
+            }
+            Format::Across => {
+                display_grid(names, config.width, Direction::LeftToRight, out, quoted)?;
+            }
             Format::Commas => {
                 let mut current_col = 0;
                 let mut names = names;
@@ -2524,6 +2540,7 @@ fn display_grid(
     width: u16,
     direction: Direction,
     out: &mut BufWriter<Stdout>,
+    quoted: bool,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
@@ -2545,7 +2562,15 @@ fn display_grid(
         let mut grid = Grid::new(GridOptions { filling, direction });
 
         for name in names {
-            grid.add(name);
+            let formatted_name = Cell {
+                contents: if quoted && !name.contents.starts_with('\'') {
+                    format!(" {}", name.contents)
+                } else {
+                    name.contents
+                },
+                width: name.width,
+            };
+            grid.add(formatted_name);
         }
 
         match grid.fit_into_width(width as usize) {
@@ -2597,6 +2622,7 @@ fn display_item_long(
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
     style_manager: &mut StyleManager,
+    quoted: bool,
 ) -> UResult<()> {
     let mut output_display: String = String::new();
     if config.dired {
@@ -2689,8 +2715,15 @@ fn display_item_long(
 
         write!(output_display, " {} ", display_date(md, config)).unwrap();
 
-        let displayed_item =
+        let item_name =
             display_item_name(item, config, None, String::new(), out, style_manager).contents;
+
+        let displayed_item = if quoted && !item_name.starts_with('\'') {
+            format!(" {}", item_name)
+        } else {
+            item_name
+        };
+
         if config.dired {
             let (start, end) = dired::calculate_dired(
                 &dired.dired_positions,
