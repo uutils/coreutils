@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) fname, algo
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use hex::encode;
 use std::ffi::OsStr;
 use std::fs::File;
@@ -36,7 +36,10 @@ const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
 const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
 const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 
-fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize) {
+fn detect_algo(
+    program: &str,
+    length: Option<usize>,
+) -> (&'static str, Box<dyn Digest + 'static>, usize) {
     match program {
         ALGORITHM_OPTIONS_SYSV => (
             ALGORITHM_OPTIONS_SYSV,
@@ -85,7 +88,11 @@ fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize
         ),
         ALGORITHM_OPTIONS_BLAKE2B => (
             ALGORITHM_OPTIONS_BLAKE2B,
-            Box::new(Blake2b::new()) as Box<dyn Digest>,
+            Box::new(if let Some(length) = length {
+                Blake2b::with_output_bytes(length)
+            } else {
+                Blake2b::new()
+            }) as Box<dyn Digest>,
             512,
         ),
         ALGORITHM_OPTIONS_SM3 => (
@@ -102,6 +109,7 @@ struct Options {
     digest: Box<dyn Digest + 'static>,
     output_bits: usize,
     untagged: bool,
+    length: Option<usize>,
 }
 
 /// Calculate checksum
@@ -161,7 +169,12 @@ where
             (ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
             (ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
             (ALGORITHM_OPTIONS_BLAKE2B, _) if !options.untagged => {
-                println!("BLAKE2b ({}) = {sum}", filename.display());
+                if let Some(length) = options.length {
+                    // Multiply by 8 here, as we want to print the length in bits.
+                    println!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());
+                } else {
+                    println!("BLAKE2b ({}) = {sum}", filename.display());
+                }
             }
             _ => {
                 if options.untagged {
@@ -217,6 +230,7 @@ mod options {
     pub const ALGORITHM: &str = "algorithm";
     pub const FILE: &str = "file";
     pub const UNTAGGED: &str = "untagged";
+    pub const LENGTH: &str = "length";
 }
 
 #[uucore::main]
@@ -228,11 +242,54 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => ALGORITHM_OPTIONS_CRC,
     };
 
-    let (name, algo, bits) = detect_algo(algo_name);
+    let input_length = matches.get_one::<usize>(options::LENGTH);
+    let length = if let Some(length) = input_length {
+        match length.to_owned() {
+            0 => None,
+            n if n % 8 != 0 => {
+                // GNU's implementation seem to use these quotation marks
+                // in their error messages, so we do the same.
+                uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "length is not a multiple of 8",
+                )
+                .into());
+            }
+            n if n > 512 => {
+                uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
+
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
+                )
+                .into());
+            }
+            n => {
+                if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--length is only supported with --algorithm=blake2b",
+                    )
+                    .into());
+                }
+
+                // Divide by 8, as our blake2b implementation expects bytes
+                // instead of bits.
+                Some(n / 8)
+            }
+        }
+    } else {
+        None
+    };
+
+    let (name, algo, bits) = detect_algo(algo_name, length);
+
     let opts = Options {
         algo_name: name,
         digest: algo,
         output_bits: bits,
+        length,
         untagged: matches.get_flag(options::UNTAGGED),
     };
 
@@ -281,6 +338,14 @@ pub fn uu_app() -> Command {
                 .long(options::UNTAGGED)
                 .help("create a reversed style checksum, without digest type")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::LENGTH)
+                .long(options::LENGTH)
+                .value_parser(value_parser!(usize))
+                .short('l')
+                .help("digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8")
+                .action(ArgAction::Set),
         )
         .after_help(AFTER_HELP)
 }
