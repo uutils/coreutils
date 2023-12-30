@@ -262,3 +262,27 @@ fn test_length() {
         .succeeds()
         .stdout_is_fixture("supported_length.expected");
 }
+
+#[test]
+fn test_length_greater_than_512() {
+    new_ucmd!()
+        .arg("--length=1024")
+        .arg("--algorithm=blake2b")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .fails()
+        .no_stdout()
+        .stderr_is_fixture("length_larger_than_512.expected");
+}
+
+#[test]
+fn test_length_is_zero() {
+    new_ucmd!()
+        .arg("--length=0")
+        .arg("--algorithm=blake2b")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_fixture("length_is_zero.expected");
+}
