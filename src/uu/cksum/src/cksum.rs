@@ -36,8 +36,6 @@ const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
 const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
 const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 
-// enum CksumError
-
 fn detect_algo(
     program: &str,
     length: Option<usize>,
@@ -125,10 +123,6 @@ fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
 {
-    // if options.length != None && options.algo_name != ALGORITHM_OPTIONS_BLAKE2B {
-    //     return UError;
-    // }
-
     for filename in files {
         let filename = Path::new(filename);
         let stdin_buf;
