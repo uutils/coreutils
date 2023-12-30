@@ -344,11 +344,7 @@ fn remove_dir_all_recursive_continue(path: &Path) -> Result<(), bool> {
     let mut had_err = false;
 
     for child in fs::read_dir(path).map_err(|e| {
-        show_error!(
-            "cannot read directory {}: {}",
-            path.quote(),
-            format_io_error(&e)
-        );
+        show_error!("cannot remove {}: {}", path.quote(), format_io_error(&e));
         true
     })? {
         match child {

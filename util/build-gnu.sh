@@ -202,17 +202,27 @@ sed -i -e "s|rm: cannot remove 'e/slink'|rm: cannot remove 'e'|g" tests/rm/fail-
 
 sed -i -e "s|rm: cannot remove 'a/b'|rm: cannot remove 'a'|g" tests/rm/fail-2eperm.sh
 
-sed -i -e "s|rm: cannot remove 'a/b/file'|rm: cannot remove 'a'|g" tests/rm/cycle.sh
-
-sed -i -e "s|rm: cannot remove directory 'b/a/p'|rm: cannot remove 'b'|g" tests/rm/rm1.sh
-
 sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
 
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
-# our error message is better
-sed -i 's|rm: cannot remove '\''b'\'': Permission denied|rm: cannot remove '\''b/a/p'\'': Permission denied\nrm: cannot remove '\''b/a'\'': Directory not empty\nrm: cannot remove '\''b'\'': Directory not empty|' tests/rm/rm1.sh
-#sed -i 's|rm: cannot remove '\''e'\'': Permission denied|rm: cannot remove '\''e/slink'\'': Permission denied\nrm: cannot remove '\''e'\'': Directory not empty|'  tests/rm/fail-eacces.sh
+# our error messages are better
+if ! grep -q "rm: cannot remove 'b'" tests/rm/rm1.sh; then
+# to make sure the modification is done only once
+sed -i 's|rm: cannot remove '\''b/a/p'\'': Permission denied|rm: cannot remove '\''b/a/p'\'': Permission denied\nrm: cannot remove '\''b/a'\'': Directory not empty\nrm: cannot remove '\''b'\'': Directory not empty|' tests/rm/rm1.sh
+fi
+
+sed -i 's|rm: cannot remove '\''e'\'': Permission denied|rm: cannot remove '\''e/slink'\'': Permission denied\nrm: cannot remove '\''e'\'': Directory not empty|' tests/rm/fail-eacces.sh
+
+if ! grep -q "rm: cannot remove 'a'" tests/rm/cycle.sh; then
+# to make sure the modification is done only once
+sed -i '/rm: cannot remove '\''a\/b\/file'\''$/{
+N
+/\nrm: cannot remove '\''a\/b'\''\n rm: cannot remove '\''a'\''/!{
+s|rm: cannot remove '\''a\/b\/file'\''|&\nrm: cannot remove '\''a/b'\''\nrm: cannot remove '\''a'\''|g
+}
+}' tests/rm/cycle.sh
+fi
 
 # 'rel' doesn't exist. Our implementation is giving a better message.
 sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
