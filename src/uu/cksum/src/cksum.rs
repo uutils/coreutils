@@ -111,6 +111,7 @@ struct Options {
     digest: Box<dyn Digest + 'static>,
     output_bits: usize,
     untagged: bool,
+    length: Option<usize>,
 }
 
 /// Calculate checksum
@@ -174,7 +175,12 @@ where
             (ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
             (ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
             (ALGORITHM_OPTIONS_BLAKE2B, _) if !options.untagged => {
-                println!("BLAKE2b ({}) = {sum}", filename.display());
+                if let Some(length) = options.length {
+                    // Multiply by 8 here, as we want to print the length in bits.
+                    println!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());
+                } else {
+                    println!("BLAKE2b ({}) = {sum}", filename.display());
+                }
             }
             _ => {
                 if options.untagged {
@@ -244,24 +250,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let input_length = matches.get_one::<usize>(options::LENGTH);
     let length = if let Some(length) = input_length {
-        if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "--length is only supported with --algorithm=blake2b",
-            )
-            .into());
-        }
-
+        
         if length % 8 != 0 {
+            // GNU's implementation seem to use these quotation marks
+            // in their error messages, so we do the same.
+            uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                // TODO: Fix formatting for this error message
-                // GNU has the executable path/name on both lines
-                format!("invalid length {length}\nlength is not a multiple of 8"),
+                "length is not a multiple of 8",
             )
             .into());
-        }
+    }
 
+    if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--length is only supported with --algorithm=blake2b",
+        )
+        .into());
+    }
+
+        // Divide by 8, as our blake2b implementation expects bytes
+        // instead of bits.
         Some(length / 8)
     } else {
         None
@@ -273,6 +283,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         algo_name: name,
         digest: algo,
         output_bits: bits,
+        length,
         untagged: matches.get_flag(options::UNTAGGED),
     };
 
