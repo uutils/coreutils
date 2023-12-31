@@ -817,15 +817,17 @@ pub fn run_env(args: impl uucore::Args) -> UResult<()> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let result = run_env(args);
 
-    match &result {
-        Ok(()) => {},
-        Err(e) => {
-            let s = format!("{:?}", e);
-            if s != "" {
-                uucore::show_error!("{}", s);
-            }
-            if e.usage() {
-                eprintln!("Try '{} --help' for more information.", uucore::execution_phrase());
+    if false {
+        match &result {
+            Ok(()) => {},
+            Err(e) => {
+                let s = format!("{:?}", e);
+                if s != "" {
+                    uucore::show_error!("{}", s);
+                }
+                if e.usage() {
+                    eprintln!("Try '{} --help' for more information.", uucore::execution_phrase());
+                }
             }
         }
     }
