@@ -118,6 +118,20 @@ fn test_cp_duplicate_files() {
 }
 
 #[test]
+fn test_cp_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "a";
+
+    at.touch(file);
+
+    ucmd.arg(file)
+        .arg(file)
+        .fails()
+        .code_is(1)
+        .stderr_contains(format!("'{file}' and '{file}' are the same file"));
+}
+
+#[test]
 fn test_cp_multiple_files_target_is_file() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
