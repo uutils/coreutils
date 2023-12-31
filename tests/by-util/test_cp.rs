@@ -2937,6 +2937,19 @@ fn test_cp_mode_hardlink_no_dereference() {
     assert_eq!(at.read_symlink("z"), "slink");
 }
 
+#[test]
+fn test_remove_destination_with_destination_being_same_file_as_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+
+    at.touch(file);
+
+    ucmd.args(&["--remove-destination", file, file])
+        .fails()
+        .stderr_contains(format!("'{file}' and '{file}' are the same file"));
+    assert!(at.file_exists(file));
+}
+
 #[cfg(not(any(windows, target_os = "android")))]
 #[test]
 fn test_remove_destination_with_destination_being_a_hardlink_to_source() {

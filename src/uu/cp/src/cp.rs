@@ -1706,7 +1706,11 @@ fn copy_file(
             OverwriteMode::Clobber(ClobberMode::RemoveDestination)
         )
     {
-        fs::remove_file(dest)?;
+        if source == dest {
+            handle_existing_dest(source, dest, options, source_in_command_line)?;
+        } else {
+            fs::remove_file(dest)?;
+        }
     }
 
     if file_or_link_exists(dest) {
