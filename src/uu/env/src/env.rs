@@ -604,8 +604,12 @@ fn run_env_intern(args: &Vec<OsString>) -> UResult<()>
                 }
                 for part in arg_strings {
 
-                    if part.contains("\\c") {
-                        return Err(USimpleError::new(125, "'\\c' must not appear in double-quoted -S string"));
+                    match part {
+                        s if s.contains(r"\c") => return Err(USimpleError::new(
+                            125, "'\\c' must not appear in double-quoted -S string")),
+                        s if s.contains(r"\q") => return Err(USimpleError::new(
+                                125, "invalid sequence '\\q' in -S")),
+                        _ => {}
                     }
 
                     all_args.push(OsString::from(part));
