@@ -107,7 +107,7 @@ if test -f gnu-built; then
     echo "Note: the customization of the tests will still happen"
 else
     ./bootstrap --skip-po
-    ./configure --quiet --disable-gcc-warnings
+    ./configure --quiet --disable-gcc-warnings --disable-nls --disable-dependency-tracking --disable-bold-man-page-references
     #Add timeout to to protect against hangs
     sed -i 's|^"\$@|'"${SYSTEM_TIMEOUT}"' 600 "\$@|' build-aux/test-driver
     # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
