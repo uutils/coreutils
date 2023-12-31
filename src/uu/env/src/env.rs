@@ -21,10 +21,11 @@ use std::ffi::OsString;
 use std::fmt::format;
 use std::io::{self, Write};
 use std::iter::Iterator;
+use std::ops::Deref;
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
-use std::path::Path;
+use std::path::{Path, Prefix};
 use std::process::{self, CommandArgs};
 use std::{env, string};
 use uucore::display::Quotable;
@@ -178,6 +179,13 @@ pub fn uu_app() -> Command {
                 .value_name("NAME")
                 .action(ArgAction::Append)
                 .help("remove variable from the environment"),
+        )
+        .arg(
+            Arg::new("debug")
+                .short('v')
+                .long("debug")
+                .action(ArgAction::SetTrue)
+                .help("print verbose information for each processing step"),
         )
         .arg(
             Arg::new("split-string")
@@ -571,50 +579,51 @@ fn remove_env_vars()
     }
 }
 
+fn handle_arg(bytes: &[u8], prefix_to_test: &str, all_args: &mut Vec<std::ffi::OsString>) -> UResult<bool>
+{
+    if !bytes.starts_with(prefix_to_test.as_bytes()) {
+        return Ok(false);
+    }
+
+    let remaining_bytes = bytes.get(prefix_to_test.len()..).unwrap();
+
+    if remaining_bytes.ends_with("\\".as_bytes()) &&
+        !remaining_bytes.ends_with("\\\\".as_bytes()) {
+        return Err(USimpleError::new(125, "invalid backslash at end of string in -S"));
+    }
+
+    let string = String::from_utf8(remaining_bytes.to_owned()).unwrap();
+
+    let (arg_strings, result) = parse_args_from_str(string.as_str());
+    if result.is_err() {
+        return Err(result.unwrap_err())
+    }
+    for part in arg_strings {
+
+        match part {
+            s if s.contains(r"\c") => return Err(USimpleError::new(
+                125, "'\\c' must not appear in double-quoted -S string")),
+            s if s.contains(r"\q") => return Err(USimpleError::new(
+                    125, "invalid sequence '\\q' in -S")),
+            _ => {}
+        }
+
+        all_args.push(OsString::from(part));
+    }
+
+    Ok(true)
+}
+
 #[allow(clippy::cognitive_complexity)]
-fn run_env_intern(args: &Vec<OsString>) -> UResult<()>
+fn run_env_intern(original_args: &Vec<OsString>) -> UResult<()>
 {
     let mut all_args: Vec<std::ffi::OsString> = Vec::new();
-    'argloop: for arg in args
+    for arg in original_args
     {
-        let mut bytes = arg.as_bytes();
-        match bytes {
-            /*
-            s if s.starts_with("-i".as_bytes()) ||
-                        s.starts_with("--ignore-environment".as_bytes()) => {
-                remove_env_vars();
-            },*/
-            s if s.starts_with("-S".as_bytes()) ||
-                        s.starts_with("--split-string".as_bytes()) =>
-            {
-                let remaining_bytes =
-                    if s.starts_with("-S".as_bytes()) { s.get(2..).unwrap() }
-                    else { s.get(14..).unwrap() };
-
-                if remaining_bytes.ends_with("\\".as_bytes()) &&
-                    !remaining_bytes.ends_with("\\\\".as_bytes()) {
-                    return Err(USimpleError::new(125, "invalid backslash at end of string in -S"));
-                }
-
-                let string = String::from_utf8(remaining_bytes.to_owned()).unwrap();
-
-                let (arg_strings, result) = parse_args_from_str(string.as_str());
-                if result.is_err() {
-                    return Err(result.unwrap_err())
-                }
-                for part in arg_strings {
-
-                    match part {
-                        s if s.contains(r"\c") => return Err(USimpleError::new(
-                            125, "'\\c' must not appear in double-quoted -S string")),
-                        s if s.contains(r"\q") => return Err(USimpleError::new(
-                                125, "invalid sequence '\\q' in -S")),
-                        _ => {}
-                    }
-
-                    all_args.push(OsString::from(part));
-                }
-            },
+        match arg.as_bytes() {
+            b if handle_arg(b, "-S", &mut all_args)? => {}
+            b if handle_arg(b, "-vS", &mut all_args)? => {}
+            b if handle_arg(b, "--split-string", &mut all_args)? => {}
             _ => { all_args.push(OsString::from(arg)); }
         }
     }
@@ -625,6 +634,15 @@ fn run_env_intern(args: &Vec<OsString>) -> UResult<()>
     let matches = app.try_get_matches_from(args).with_exit_code(125)?;
 
     let ignore_env = matches.get_flag("ignore-environment");
+    let _debug_print = matches.get_flag("debug");
+
+    if _debug_print {
+        eprintln!("input args:");
+        for (i, arg) in original_args.iter().enumerate() {
+            eprintln!("arg[{}]: {}", i, arg.to_string_lossy());
+        }
+    }
+
     let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
     let running_directory = matches.get_one::<String>("chdir").map(|s| s.as_str());
     let files = match matches.get_many::<String>("file") {
@@ -773,6 +791,13 @@ fn run_env_intern(args: &Vec<OsString>) -> UResult<()>
         #[cfg(not(windows))]
         let (prog, args) = build_command(&opts.program);
 
+        if _debug_print {
+            eprintln!("executable: {}", prog);
+            for (i, arg) in args.iter().enumerate() {
+                eprintln!("arg[{}]: {}", i, arg);
+            }
+        }
+
         /*
          * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp
          * (which ends up calling clone). Keep using the current process would be ideal, but the
@@ -810,7 +835,8 @@ fn run_env_intern(args: &Vec<OsString>) -> UResult<()>
                 #[cfg(not(unix))]
                 return Err(exit.code().unwrap().into());
             }
-            Err(ref err) if err.kind() == io::ErrorKind::NotFound => return Err(127.into()),
+            Err(ref err) if err.kind() == io::ErrorKind::NotFound =>
+                return Err(USimpleError::new(127, format!("'{}': No such file or directory", prog.deref()))),
             Err(_) => return Err(126.into()),
             Ok(_) => (),
         }
