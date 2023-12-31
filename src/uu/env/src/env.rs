@@ -475,6 +475,18 @@ pub fn parse_args_from_str(text: &str) -> (Vec<String>, UResult<()>) {
             nsh::parser::ParseError::Empty => {
                 return (Vec::default(), UResult::Ok(()));
             },
+            nsh::parser::ParseError::Fatal(s)
+                if s.contains("expected command_span, backtick_span, expr_span, param_ex_span, param_span, or literal_in_double_quoted_span")
+                    || s.contains("expected literal_in_single_quoted_span")
+                 => {
+                    return (
+                        Vec::default(),
+                        Err(USimpleError::new(
+                            125,
+                            "no terminating quote in -S string"
+                        ))
+                    )
+                },
             _ => {
                 return (
                     Vec::default(),
