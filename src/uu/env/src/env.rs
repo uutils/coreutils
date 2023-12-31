@@ -468,13 +468,21 @@ pub fn parse_args_from_str(text: &str) -> (Vec<String>, UResult<()>) {
             )),
         );
     } else {
-        return (
-            Vec::default(),
-            Err(USimpleError::new(
-                1,
-                format!("parser error: {:?}", result.unwrap_err()),
-            )),
-        );
+        let e = result.unwrap_err();
+        match e {
+            nsh::parser::ParseError::Empty => {
+                return (Vec::default(), UResult::Ok(()));
+            },
+            _ => {
+                return (
+                    Vec::default(),
+                    Err(USimpleError::new(
+                        1,
+                        format!("parser error: {:?}", e),
+                    ))
+                )
+            }
+        };
     };
 }
 
@@ -576,7 +584,9 @@ fn run_env_intern(args: &Vec<OsString>) -> UResult<()>
                     return Err(result.unwrap_err())
                 }
                 for part in arg_strings {
-                    all_args.push(OsString::from(part));
+                    if part.len() > 0 {
+                        all_args.push(OsString::from(part));
+                    }
                 }
             },
             _ => { all_args.push(OsString::from(arg)); }
@@ -805,5 +815,20 @@ pub fn run_env(args: impl uucore::Args) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    run_env(args)
+    let result = run_env(args);
+
+    match &result {
+        Ok(()) => {},
+        Err(e) => {
+            let s = format!("{:?}", e);
+            if s != "" {
+                uucore::show_error!("{}", s);
+            }
+            if e.usage() {
+                eprintln!("Try '{} --help' for more information.", uucore::execution_phrase());
+            }
+        }
+    }
+
+    result
 }
