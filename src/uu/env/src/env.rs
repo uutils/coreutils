@@ -576,10 +576,15 @@ fn run_env_intern(args: &Vec<OsString>) -> UResult<()>
                         s.starts_with("--split-string".as_bytes()) =>
             {
                 let remaining_bytes =
-                    if s.starts_with("-S".as_bytes()) { s.get(2..) }
-                    else { s.get(14..) };
+                    if s.starts_with("-S".as_bytes()) { s.get(2..).unwrap() }
+                    else { s.get(14..).unwrap() };
 
-                let string = String::from_utf8(remaining_bytes.unwrap().to_owned()).unwrap();
+                if remaining_bytes.ends_with("\\".as_bytes()) &&
+                    !remaining_bytes.ends_with("\\\\".as_bytes()) {
+                    return Err(USimpleError::new(125, "invalid backslash at end of string in -S"));
+                }
+
+                let string = String::from_utf8(remaining_bytes.to_owned()).unwrap();
 
                 let (arg_strings, result) = parse_args_from_str(string.as_str());
                 if result.is_err() {
