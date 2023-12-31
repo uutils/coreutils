@@ -392,12 +392,14 @@ fn command_to_argvec(
     let mut get_assignment_strings = |assignments: &Vec<parser::Assignment>| -> UResult<Vec<String>> {
         let mut assignment_strings = Vec::new();
         for assignment in assignments {
+            let name = nsh::eval::evaluate_initializer_string(shell, &assignment.name)
+                .expect("failed to evaluate the name");
             let value = nsh::eval::evaluate_initializer(shell, &assignment.initializer)
                 .expect("failed to evaluate the initializer");
             match value {
                 nsh::variable::Value::String(s) => {
-                    std::env::set_var(&assignment.name, &s);
-                    assignment_strings.push(format!("{}={}", &assignment.name, s));
+                    std::env::set_var(&name, &s);
+                    assignment_strings.push(format!("{}={}", &name, s));
                 }
                 nsh::variable::Value::Array(_) => {
                     return Err((USimpleError::new(
@@ -584,9 +586,7 @@ fn run_env_intern(args: &Vec<OsString>) -> UResult<()>
                     return Err(result.unwrap_err())
                 }
                 for part in arg_strings {
-                    if part.len() > 0 {
-                        all_args.push(OsString::from(part));
-                    }
+                    all_args.push(OsString::from(part));
                 }
             },
             _ => { all_args.push(OsString::from(arg)); }
