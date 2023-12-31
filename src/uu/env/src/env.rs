@@ -491,7 +491,7 @@ pub fn parse_args_from_str(text: &str) -> (Vec<String>, UResult<()>) {
                 return (
                     Vec::default(),
                     Err(USimpleError::new(
-                        1,
+                        125,
                         format!("parser error: {:?}", e),
                     ))
                 )
