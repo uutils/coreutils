@@ -8,12 +8,13 @@ use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
 use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::ffi::OsString;
-use std::io;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::{AsRawFd, RawFd};
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
+use std::sync::mpsc;
 use std::sync::{atomic::AtomicBool, Once};
+use std::{io, thread};
 
 /// Represents the result of running a command, including its standard output,
 /// standard error, and exit code.
@@ -56,7 +57,7 @@ pub fn generate_and_run_uumain<F>(
     pipe_input: Option<&str>,
 ) -> CommandResult
 where
-    F: FnOnce(std::vec::IntoIter<OsString>) -> i32,
+    F: FnOnce(std::vec::IntoIter<OsString>) -> i32 + Send + 'static,
 {
     // Duplicate the stdout and stderr file descriptors
     let original_stdout_fd = unsafe { dup(STDOUT_FILENO) };
@@ -68,6 +69,8 @@ where
             exit_code: -1,
         };
     }
+
+    let args_clone = args.to_owned();
     println!("Running test {:?}", &args[0..]);
     let mut pipe_stdout_fds = [-1; 2];
     let mut pipe_stderr_fds = [-1; 2];
@@ -120,7 +123,26 @@ where
         None
     };
 
-    let uumain_exit_status = uumain_function(args.to_owned().into_iter());
+    // Channels to communicate between threads
+    let (stdout_sender, stdout_receiver) = mpsc::channel();
+    let (stderr_sender, stderr_receiver) = mpsc::channel();
+
+    // Spawn a thread to run the uumain_function
+    let uumain_thread = thread::spawn(move || uumain_function(args_clone.into_iter()));
+
+    // Spawn threads to capture stdout and stderr
+    thread::spawn(move || {
+        let captured_stdout = read_from_fd(pipe_stdout_fds[0]);
+        stdout_sender.send(captured_stdout).unwrap();
+    });
+
+    thread::spawn(move || {
+        let captured_stderr = read_from_fd(pipe_stderr_fds[0]);
+        stderr_sender.send(captured_stderr).unwrap();
+    });
+
+    // Wait for the uumain thread to finish
+    let uumain_exit_status = uumain_thread.join().unwrap();
 
     io::stdout().flush().unwrap();
     io::stderr().flush().unwrap();
@@ -155,9 +177,11 @@ where
         unsafe { close(fd) };
     }
 
-    let captured_stdout = read_from_fd(pipe_stdout_fds[0]).trim().to_string();
-    let captured_stderr = read_from_fd(pipe_stderr_fds[0]).to_string();
-    let captured_stderr = captured_stderr
+    // Wait for the output capture threads and collect their outputs
+    let captured_stdout = stdout_receiver.recv().unwrap().trim().to_string();
+    let captured_stderr = stderr_receiver
+        .recv()
+        .unwrap()
         .split_once(':')
         .map(|x| x.1)
         .unwrap_or("")
