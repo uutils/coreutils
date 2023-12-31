@@ -111,7 +111,9 @@ fn test_cp_duplicate_files() {
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
         .succeeds()
-        .stderr_contains("specified more than once");
+        .stderr_contains(format!(
+            "source file '{TEST_HELLO_WORLD_SOURCE}' specified more than once"
+        ));
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
 }
 
@@ -479,7 +481,7 @@ fn test_cp_arg_interactive() {
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "freebsd")))]
 fn test_cp_arg_interactive_update() {
     // -u -i won't show the prompt to validate the override or not
     // Therefore, the error code will be 0

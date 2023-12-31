@@ -1,7 +1,7 @@
 # basenc
 
 ```
-basenc [OPTION]... [FILE]"
+basenc [OPTION]... [FILE]
 ```
 
 Encode/decode data and print to standard output

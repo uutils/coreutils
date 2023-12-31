@@ -1,7 +1,7 @@
 # sum
 
 ```
-sum [OPTION]... [FILE]..."
+sum [OPTION]... [FILE]...
 ```
 
 Checksum and count the blocks in a file.

@@ -29,10 +29,11 @@ const ABOUT: &str = help_about!("test.md");
 // So, we use test or [ instead of {} so that the usage string is correct.
 const USAGE: &str = "\
 test EXPRESSION
-test
+[
 [ EXPRESSION ]
 [ ]
-[ OPTION";
+[ OPTION
+]";
 
 // We use after_help so that this comes after the usage string (it would come before if we used about)
 const AFTER_HELP: &str = help_section!("after help", "test.md");
