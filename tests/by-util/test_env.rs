@@ -309,6 +309,18 @@ fn test_split_string_into_args_s_escaped_c_not_allowed() {
     assert_eq!(out, "\n");
 }
 
+#[test]
+fn test_split_string_into_args_s_whitespace_handling() {
+    let scene = TestScenario::new(util_name!());
+
+    let out = scene
+        .ucmd()
+        .args(&["-Sprintf x%sx\\n A \t B \x0B\x0C\r\n"])
+        .succeeds()
+        .stdout_move_str();
+    assert_eq!(out, "\n");
+}
+
 fn assert_eq_and_print(reference: &str, value: &str) {
     println!("reference:\n{}", reference);
     println!("value:\n{}", value);
