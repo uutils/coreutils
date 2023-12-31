@@ -586,6 +586,11 @@ fn run_env_intern(args: &Vec<OsString>) -> UResult<()>
                     return Err(result.unwrap_err())
                 }
                 for part in arg_strings {
+
+                    if part.contains("\\c") {
+                        return Err(USimpleError::new(125, "'\\c' must not appear in double-quoted -S string"));
+                    }
+
                     all_args.push(OsString::from(part));
                 }
             },
