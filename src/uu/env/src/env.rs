@@ -804,9 +804,11 @@ pub fn run_env(args: impl uucore::Args) -> UResult<()> {
 
     let result = run_env_intern(&args_vec);
 
-    if let Err(_) = result {
-        for arg in args_vec {
-            println!("input: {}", arg.to_str().unwrap());
+    if false {
+        if let Err(_) = result {
+            for arg in args_vec {
+                println!("input: {}", arg.to_str().unwrap());
+            }
         }
     }
 
