@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
