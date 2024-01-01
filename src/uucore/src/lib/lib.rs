@@ -105,9 +105,15 @@ macro_rules! bin {
     ($util:ident) => {
         pub fn main() {
             use std::io::Write;
-            uucore::panic::mute_sigpipe_panic(); // suppress extraneous error output for SIGPIPE failures/panics
-            let code = $util::uumain(uucore::args_os()); // execute utility code
-            std::io::stdout().flush().expect("could not flush stdout"); // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
+            // suppress extraneous error output for SIGPIPE failures/panics
+            uucore::panic::mute_sigpipe_panic();
+            // execute utility code
+            let code = $util::uumain(uucore::args_os());
+            // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
+            if let Err(e) = std::io::stdout().flush() {
+                eprintln!("Error flushing stdout: {}", e);
+            }
+
             std::process::exit(code);
         }
     };
