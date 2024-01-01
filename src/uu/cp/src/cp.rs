@@ -150,6 +150,7 @@ pub enum TargetType {
 }
 
 /// Copy action to perform
+#[derive(PartialEq)]
 pub enum CopyMode {
     Link,
     SymLink,
@@ -1714,6 +1715,7 @@ fn copy_file(
             && !options.force()
             && options.backup == BackupMode::NoBackup
             && source != dest
+            || (source == dest && options.copy_mode == CopyMode::Link)
         {
             return Ok(());
         }
