@@ -128,13 +128,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut app = uu_app();
     let matches = app.try_get_matches_from_mut(args)?;
 
-    if !matches.contains_id(OPT_TARGET_DIRECTORY)
-        && matches
-            .get_many::<OsString>(ARG_FILES)
-            .map(|f| f.len())
-            .unwrap_or(0)
-            == 1
-    {
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(ARG_FILES)
+        .unwrap_or_default()
+        .cloned()
+        .collect();
+
+    if files.len() == 1 && !matches.contains_id(OPT_TARGET_DIRECTORY) {
         app.error(
             ErrorKind::TooFewValues,
             format!(
@@ -143,12 +143,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         )
         .exit();
     }
-
-    let files: Vec<OsString> = matches
-        .get_many::<OsString>(ARG_FILES)
-        .unwrap_or_default()
-        .cloned()
-        .collect();
 
     let overwrite_mode = determine_overwrite_mode(&matches);
     let backup_mode = backup_control::determine_backup_mode(&matches)?;
