@@ -6,7 +6,6 @@
 
 use crate::common::util::TestScenario;
 use std::env;
-use std::fmt::Debug;
 use std::path::Path;
 use tempfile::tempdir;
 
@@ -331,33 +330,24 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
     assert_eq!(out.stderr_str(), "input args:\narg[0]: env\narg[1]: -vS printf x%sx\\n A \t B \u{b}\u{c}\r\n\nexecutable: printf\narg[0]: x%sx\n\narg[1]: A\narg[2]: B\n");
 }
 
-fn assert_eq_and_pretty_print<TR: Debug + std::cmp::PartialEq<TV>, TV: Debug>(
-    reference: TR,
-    value: TV,
-) {
-    println!("reference:\n{:?}", reference);
-    println!("value:\n{:?}", value);
-    assert_eq!(reference, value);
-}
-
 #[test]
 fn test_split_string_misc() {
     use ::env::parse_args_from_str;
 
-    assert_eq_and_pretty_print(
+    assert_eq!(
         vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"],
         parse_args_from_str(r#"A=B FOO=AR  sh -c "echo \$A\$FOO""#).0,
     );
-    assert_eq_and_pretty_print(
+    assert_eq!(
         vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"],
         parse_args_from_str(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#).0,
     );
-    assert_eq_and_pretty_print(
+    assert_eq!(
         vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"],
         parse_args_from_str(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#).0,
     );
 
-    assert_eq_and_pretty_print(
+    assert_eq!(
         vec!["-i", "A=B ' C"],
         parse_args_from_str(r#"-i A='B \' C'"#).0,
     );
@@ -365,7 +355,7 @@ fn test_split_string_misc() {
 
 #[test]
 fn test_split_string_environment_vars_test() {
-    /*assert_eq_and_pretty_print(
+    /*assert_eq!(
         vec!["FOO=BAR", "sh", "-c", "echo xBARx =$FOO="],
         ::env::parse_args_from_str(r#"FOO=BAR sh -c "echo x${FOO}x =\$FOO=""#).0,
     );*/
