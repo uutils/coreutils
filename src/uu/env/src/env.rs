@@ -314,7 +314,7 @@ pub fn parse_args_from_str(text: &str) -> (Vec<String>, UResult<()>) {
     };
 }
 
-fn handle_arg(
+fn check_and_handle_string_args(
     bytes: &[u8],
     prefix_to_test: &str,
     all_args: &mut Vec<std::ffi::OsString>,
@@ -360,13 +360,17 @@ fn handle_arg(
 
 #[allow(clippy::cognitive_complexity)]
 fn run_env(original_args: impl uucore::Args) -> UResult<()> {
+
+    let mut do_debug_printing = false;
     let original_args: Vec<_> = original_args.collect();
     let mut all_args: Vec<std::ffi::OsString> = Vec::new();
     for arg in &original_args {
         match arg.as_bytes() {
-            b if handle_arg(b, "-S", &mut all_args)? => {}
-            b if handle_arg(b, "-vS", &mut all_args)? => {}
-            b if handle_arg(b, "--split-string", &mut all_args)? => {}
+            b if check_and_handle_string_args(b, "-S", &mut all_args)? => {}
+            b if check_and_handle_string_args(b, "-vS", &mut all_args)? => {
+                do_debug_printing = true;
+            }
+            b if check_and_handle_string_args(b, "--split-string", &mut all_args)? => {}
             _ => {
                 all_args.push(OsString::from(arg));
             }
@@ -395,8 +399,8 @@ fn run_env(original_args: impl uucore::Args) -> UResult<()> {
         })?;
 
     let ignore_env = matches.get_flag("ignore-environment");
-    let _debug_print = matches.get_flag("debug");
-    if _debug_print {
+    let do_debug_printing = do_debug_printing || matches.get_flag("debug");
+    if do_debug_printing {
         eprintln!("input args:");
         for (i, arg) in original_args.iter().enumerate() {
             eprintln!("arg[{}]: {}", i, arg.to_string_lossy());
@@ -532,7 +536,7 @@ fn run_env(original_args: impl uucore::Args) -> UResult<()> {
         #[cfg(not(windows))]
         let (prog, args) = build_command(&opts.program);
 
-        if _debug_print {
+        if do_debug_printing {
             eprintln!("executable: {}", prog);
             for (i, arg) in args.iter().enumerate() {
                 eprintln!("arg[{}]: {}", i, arg);
