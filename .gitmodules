@@ -1,0 +1,4 @@
+[submodule "src/nsh"]
+	path = src/nsh
+	url = git@github.com:cre4ture/nsh.git
+	branch = feature/coreutils_env_split_string
