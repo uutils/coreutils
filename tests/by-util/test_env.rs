@@ -358,8 +358,9 @@ fn test_split_string_misc() {
 
 #[test]
 fn test_split_string_environment_vars_test() {
-    /*assert_eq!(
-        vec!["FOO=BAR", "sh", "-c", "echo xBARx =$FOO="],
-        ::env::parse_args_from_str(r#"FOO=BAR sh -c "echo x${FOO}x =\$FOO=""#).unwrap(),
-    );*/
+    std::env::set_var("FOO", "BAR");
+    assert_eq!(
+        vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="],
+        ::env::parse_args_from_str(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#).unwrap(),
+    );
 }
