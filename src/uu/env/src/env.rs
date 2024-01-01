@@ -257,7 +257,7 @@ pub fn parse_args_from_str(text: &str) -> UResult<Vec<String>> {
         let mut shell = nsh::shell::Shell::new(Path::new(""));
         // Import environment variables.
         for (key, value) in std::env::vars() {
-            shell.set(&key, nsh::variable::Value::String(value.to_owned()), false);
+            shell.set(&key, &nsh::variable::Value::String(value.to_owned()), false);
         }
 
         if let Some(term) = ast.terms.first() {
