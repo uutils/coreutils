@@ -241,16 +241,14 @@ fn command_to_argvec(
             assignment_strings.append(&mut argv_strings);
             Ok(assignment_strings)
         }
-        _ => {
-            Err(USimpleError::new(
-                1,
-                format!("unexpected command type: {:?}", command),
-            ))
-        }
+        _ => Err(USimpleError::new(
+            1,
+            format!("unexpected command type: {:?}", command),
+        )),
     }
 }
 
-pub fn parse_args_from_str(text: &str) -> (Vec<String>, UResult<()>) {
+pub fn parse_args_from_str(text: &str) -> UResult<Vec<String>> {
     use nsh::parser;
 
     let mut parser = parser::ShellParser::new();
@@ -266,49 +264,36 @@ pub fn parse_args_from_str(text: &str) -> (Vec<String>, UResult<()>) {
         for term in &ast.terms {
             for pipeline in &term.pipelines {
                 for command in &pipeline.commands {
-                    let arg_vec = command_to_argvec(&mut shell, &command);
-                    if arg_vec.is_ok() {
-                        return (arg_vec.unwrap(), UResult::Ok(()));
-                    } else {
-                        return (Vec::default(), Err(arg_vec.unwrap_err()));
-                    }
+                    let arg_vec = command_to_argvec(&mut shell, &command)?;
+                    return Ok(arg_vec);
                 }
             }
         }
 
-        return (
-            Vec::default(),
-            Err(USimpleError::new(
-                1,
-                format!("no elements in ast: {:?}", ast),
-            )),
-        );
+        return Err(USimpleError::new(
+            1,
+            format!("no elements in ast: {:?}", ast),
+        ));
     } else {
         let e = result.unwrap_err();
         match e {
             nsh::parser::ParseError::Empty => {
-                return (Vec::default(), UResult::Ok(()));
+                return Ok(Vec::default());
             },
             nsh::parser::ParseError::Fatal(s)
                 if s.contains("expected command_span, backtick_span, expr_span, param_ex_span, param_span, or literal_in_double_quoted_span")
                     || s.contains("expected literal_in_single_quoted_span")
                  => {
-                    return (
-                        Vec::default(),
-                        Err(USimpleError::new(
+                    return Err(USimpleError::new(
                             125,
                             "no terminating quote in -S string"
-                        ))
-                    )
+                        ));
                 },
             nsh::parser::ParseError::Fatal(s) => {
-                    return (
-                        Vec::default(),
-                        Err(USimpleError::new(
+                    return Err(USimpleError::new(
                             125,
                             format!("parsing failed: {}", s),
-                        ))
-                    )
+                        ));
                 },
         };
     };
@@ -334,10 +319,7 @@ fn check_and_handle_string_args(
 
     let string = String::from_utf8(remaining_bytes.to_owned()).unwrap();
 
-    let (arg_strings, result) = parse_args_from_str(string.as_str());
-    if result.is_err() {
-        return Err(result.unwrap_err());
-    }
+    let arg_strings = parse_args_from_str(string.as_str())?;
     for part in arg_strings {
         match part {
             s if s.contains(r"\c") => {

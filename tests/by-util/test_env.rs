@@ -339,20 +339,20 @@ fn test_split_string_misc() {
 
     assert_eq!(
         vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"],
-        parse_args_from_str(r#"A=B FOO=AR  sh -c "echo \$A\$FOO""#).0,
+        parse_args_from_str(r#"A=B FOO=AR  sh -c "echo \$A\$FOO""#).unwrap(),
     );
     assert_eq!(
         vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"],
-        parse_args_from_str(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#).0,
+        parse_args_from_str(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#).unwrap(),
     );
     assert_eq!(
         vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"],
-        parse_args_from_str(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#).0,
+        parse_args_from_str(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#).unwrap(),
     );
 
     assert_eq!(
         vec!["-i", "A=B ' C"],
-        parse_args_from_str(r#"-i A='B \' C'"#).0,
+        parse_args_from_str(r#"-i A='B \' C'"#).unwrap(),
     );
 }
 
@@ -360,6 +360,6 @@ fn test_split_string_misc() {
 fn test_split_string_environment_vars_test() {
     /*assert_eq!(
         vec!["FOO=BAR", "sh", "-c", "echo xBARx =$FOO="],
-        ::env::parse_args_from_str(r#"FOO=BAR sh -c "echo x${FOO}x =\$FOO=""#).0,
+        ::env::parse_args_from_str(r#"FOO=BAR sh -c "echo x${FOO}x =\$FOO=""#).unwrap(),
     );*/
 }
