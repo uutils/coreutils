@@ -567,6 +567,22 @@ fn test_cp_arg_link_with_dest_hardlink_to_source() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_cp_arg_link_with_same_file() {
+    use std::os::linux::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+
+    at.touch(file);
+
+    ucmd.args(&["--link", file, file]).succeeds();
+
+    assert_eq!(at.metadata(file).st_nlink(), 1);
+    assert!(at.file_exists(file));
+}
+
+#[test]
 fn test_cp_arg_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
