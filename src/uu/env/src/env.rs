@@ -29,13 +29,15 @@ use std::path::{Path, Prefix};
 use std::process::{self, CommandArgs};
 use std::{env, string};
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UClapError, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{set_exit_code, UClapError, UError, UResult, USimpleError, UUsageError, ExitCode};
 use uucore::line_ending::LineEnding;
 use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 
 const ABOUT: &str = help_about!("env.md");
 const USAGE: &str = help_usage!("env.md");
 const AFTER_HELP: &str = help_section!("after help", "env.md");
+
+const ERROR_MSG_S_SHEBANG: &str = "use -[v]S to pass options in shebang lines";
 
 struct Options<'a> {
     ignore_env: bool,
@@ -495,6 +497,15 @@ pub fn parse_args_from_str(text: &str) -> (Vec<String>, UResult<()>) {
                         ))
                     )
                 },
+            nsh::parser::ParseError::Fatal(s) => {
+                    return (
+                        Vec::default(),
+                        Err(USimpleError::new(
+                            125,
+                            format!("parsing failed: {}", s),
+                        ))
+                    )
+                },
             _ => {
                 return (
                     Vec::default(),
@@ -631,7 +642,14 @@ fn run_env_intern(original_args: &Vec<OsString>) -> UResult<()>
     let args = all_args;
 
     let app = uu_app();
-    let matches = app.try_get_matches_from(args).with_exit_code(125)?;
+    let matches = app.try_get_matches_from(args).with_exit_code(125).map_err(|e| {
+        let s = format!("{}", e);
+        if s != "" {
+            uucore::show_error!("{}", s);
+        }
+        uucore::show_error!("{}", ERROR_MSG_S_SHEBANG);
+        e.code()
+    })?;
 
     let ignore_env = matches.get_flag("ignore-environment");
     let _debug_print = matches.get_flag("debug");
@@ -835,8 +853,11 @@ fn run_env_intern(original_args: &Vec<OsString>) -> UResult<()>
                 #[cfg(not(unix))]
                 return Err(exit.code().unwrap().into());
             }
-            Err(ref err) if err.kind() == io::ErrorKind::NotFound =>
-                return Err(USimpleError::new(127, format!("'{}': No such file or directory", prog.deref()))),
+            Err(ref err) if err.kind() == io::ErrorKind::NotFound => {
+                uucore::show_error!("'{}': No such file or directory", prog.deref());
+                uucore::show_error!("{}", ERROR_MSG_S_SHEBANG);
+                return Err(ExitCode::new(127));
+                },
             Err(_) => return Err(126.into()),
             Ok(_) => (),
         }
@@ -869,7 +890,24 @@ pub fn run_env(args: impl uucore::Args) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+
     let result = run_env(args);
+
+    // replace the default error handling and printing mechanism:
+    /*let err_code = match &result {
+        Err(e) => {
+            let s = format!("{}", e);
+            if s != "" {
+                uucore::show_error!("{}", s);
+            }
+            if e.usage() {
+                eprintln!("env: use -S or -vS to pass options in shebang lines");       // for this customized line
+                eprintln!("Try '{} --help' for more information.", uucore::execution_phrase());
+            }
+            e.code()
+        }
+        _ => { uucore::error::get_exit_code() }
+    };*/
 
     if false {
         match &result {
@@ -886,5 +924,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+
     result
+    /*return if err_code != 0 {
+        Err(uucore::error::ExitCode::new(err_code))
+    } else {
+        Ok(())
+    }*/
 }
