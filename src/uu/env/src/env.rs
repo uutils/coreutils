@@ -209,7 +209,6 @@ fn command_to_arg_vec(
                     .expect("failed to evaluate the initializer");
                 match value {
                     nsh::variable::Value::String(s) => {
-                        std::env::set_var(&name, &s);
                         assignment_strings.push(format!("{}={}", &name, s));
                     }
                     nsh::variable::Value::Array(_) => {
