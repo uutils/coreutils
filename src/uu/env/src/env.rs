@@ -215,7 +215,7 @@ fn command_to_argvec(
                     nsh::variable::Value::Array(_) => {
                         return Err(USimpleError::new(
                             1,
-                            format!("Array assignments in a command is not supported."),
+                            "Array assignments in a command is not supported.",
                         ));
                     }
                     nsh::variable::Value::Function(_) => (),
@@ -227,7 +227,7 @@ fn command_to_argvec(
     match command {
         parser::Command::Assignment { assignments } => {
             let assignment_strings = get_assignment_strings(assignments)?;
-            return Ok(assignment_strings);
+            Ok(assignment_strings)
         }
         parser::Command::SimpleCommand {
             argv,
@@ -239,13 +239,13 @@ fn command_to_argvec(
             let mut argv_strings = expand::expand_words(shell, argv.as_slice()).unwrap();
 
             assignment_strings.append(&mut argv_strings);
-            return Ok(assignment_strings);
+            Ok(assignment_strings)
         }
         _ => {
-            return Err(USimpleError::new(
+            Err(USimpleError::new(
                 1,
                 format!("unexpected command type: {:?}", command),
-            ));
+            ))
         }
     }
 }
@@ -360,7 +360,6 @@ fn check_and_handle_string_args(
 
 #[allow(clippy::cognitive_complexity)]
 fn run_env(original_args: impl uucore::Args) -> UResult<()> {
-
     let mut do_debug_printing = false;
     let original_args: Vec<_> = original_args.collect();
     let mut all_args: Vec<std::ffi::OsString> = Vec::new();
@@ -380,23 +379,23 @@ fn run_env(original_args: impl uucore::Args) -> UResult<()> {
     let args = all_args;
 
     let app = uu_app();
-    let matches = app
-        .try_get_matches_from(args)
-        .map_err(|e| -> Box<dyn UError> {
-            match e.kind() {
-                clap::error::ErrorKind::DisplayHelp |
-                clap::error::ErrorKind::DisplayVersion => e.into(),
-                _ => {
-                    let s = format!("{}", e);
-                    if s != "" {
-                        let s = s.trim_end();
-                        uucore::show_error!("{}", s);
+    let matches =
+        app.try_get_matches_from(args)
+            .map_err(|e| -> Box<dyn UError> {
+                match e.kind() {
+                    clap::error::ErrorKind::DisplayHelp
+                    | clap::error::ErrorKind::DisplayVersion => e.into(),
+                    _ => {
+                        let s = format!("{}", e);
+                        if s != "" {
+                            let s = s.trim_end();
+                            uucore::show_error!("{}", s);
+                        }
+                        uucore::show_error!("{}", ERROR_MSG_S_SHEBANG);
+                        uucore::error::ExitCode::new(125)
                     }
-                    uucore::show_error!("{}", ERROR_MSG_S_SHEBANG);
-                    uucore::error::ExitCode::new(125)
                 }
-            }
-        })?;
+            })?;
 
     let ignore_env = matches.get_flag("ignore-environment");
     let do_debug_printing = do_debug_printing || matches.get_flag("debug");

@@ -291,7 +291,10 @@ fn test_split_string_into_args_s_escaped_c_not_allowed() {
         .args(&[r#"-S'"\\c"'"#])
         .fails()
         .stderr_move_str();
-    assert_eq!(out, "env: '\\c' must not appear in double-quoted -S string\n");
+    assert_eq!(
+        out,
+        "env: '\\c' must not appear in double-quoted -S string\n"
+    );
 }
 
 #[test]
