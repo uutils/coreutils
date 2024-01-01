@@ -383,7 +383,11 @@ fn format_float_shortest(
     }
 
     let mut exponent = f.log10().floor() as i32;
-    if f != 0.0 && exponent <= -4 || exponent > precision as i32 {
+
+    // Special handling for precision zero
+    if precision == 0 {
+        format!("d{:0>24}", f as i64)
+    } else if f != 0.0 && (exponent <= -4 || exponent > precision as i32) {
         // Scientific-ish notation (with a few differences)
         let mut normalized = f / 10.0_f64.powi(exponent);
 

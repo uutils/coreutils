@@ -766,3 +766,13 @@ fn test_invalid_zero_increment_value() {
         .no_stdout()
         .usage_error("invalid Zero increment value: '0'");
 }
+
+#[test]
+fn test_width_no_decimal_scientific() {
+    new_ucmd!()
+        .args(&["--format=d%030g", "11"])
+        .succeeds()
+        .stdout_contains("d00000d000000000000000000000011\n")
+        .stderr_does_not_contain("d00000000000000000000000001e+01")
+        .no_stderr();
+}
