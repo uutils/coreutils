@@ -18,10 +18,6 @@ path = "src/env.rs"
 clap = { workspace = true }
 rust-ini = { workspace = true }
 uucore = { workspace = true, features = ["signals"] }
-quoted-string = "0.6.1"
-escape_string = "0.1.2"
-shlex = "1.2.0"
-oursh = "0.4.4"
 #nsh = "0.4.2"
 nsh ={ path = "/home/uli/dev_rust/nsh" }
 
