@@ -192,7 +192,7 @@ pub fn uu_app() -> Command {
         .arg(Arg::new("vars").action(ArgAction::Append))
 }
 
-fn command_to_argvec(
+fn command_to_arg_vec(
     shell: &mut nsh::shell::Shell,
     command: &nsh::parser::Command,
 ) -> UResult<Vec<String>> {
@@ -261,42 +261,42 @@ pub fn parse_args_from_str(text: &str) -> UResult<Vec<String>> {
             shell.set(&key, nsh::variable::Value::String(value.to_owned()), false);
         }
 
-        for term in &ast.terms {
-            for pipeline in &term.pipelines {
-                for command in &pipeline.commands {
-                    let arg_vec = command_to_argvec(&mut shell, &command)?;
+        if let Some(term) = ast.terms.first() {
+            if let Some(pipeline) = term.pipelines.first() {
+                if let Some(command) = pipeline.commands.first() {
+                    let arg_vec = command_to_arg_vec(&mut shell, command)?;
                     return Ok(arg_vec);
                 }
             }
         }
 
-        return Err(USimpleError::new(
+        Err(USimpleError::new(
             1,
             format!("no elements in ast: {:?}", ast),
-        ));
+        ))
     } else {
         let e = result.unwrap_err();
         match e {
             nsh::parser::ParseError::Empty => {
-                return Ok(Vec::default());
+                Ok(Vec::default())
             },
             nsh::parser::ParseError::Fatal(s)
                 if s.contains("expected command_span, backtick_span, expr_span, param_ex_span, param_span, or literal_in_double_quoted_span")
                     || s.contains("expected literal_in_single_quoted_span")
                  => {
-                    return Err(USimpleError::new(
+                    Err(USimpleError::new(
                             125,
                             "no terminating quote in -S string"
-                        ));
+                        ))
                 },
             nsh::parser::ParseError::Fatal(s) => {
-                    return Err(USimpleError::new(
+                    Err(USimpleError::new(
                             125,
                             format!("parsing failed: {}", s),
-                        ));
+                        ))
                 },
-        };
-    };
+        }
+    }
 }
 
 fn check_and_handle_string_args(
@@ -369,7 +369,7 @@ fn run_env(original_args: impl uucore::Args) -> UResult<()> {
                     | clap::error::ErrorKind::DisplayVersion => e.into(),
                     _ => {
                         let s = format!("{}", e);
-                        if s != "" {
+                        if !s.is_empty() {
                             let s = s.trim_end();
                             uucore::show_error!("{}", s);
                         }
