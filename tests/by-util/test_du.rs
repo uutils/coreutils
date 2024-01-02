@@ -1011,6 +1011,24 @@ fn test_du_files0_from() {
 }
 
 #[test]
+fn test_du_files0_from_with_invalid_zero_length_file_names() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("testfile");
+
+    at.write("filelist", "\0testfile\0\0");
+
+    ts.ucmd()
+        .arg("--files0-from=filelist")
+        .fails()
+        .code_is(1)
+        .stdout_contains("testfile")
+        .stderr_contains("filelist:1: invalid zero-length file name")
+        .stderr_contains("filelist:3: invalid zero-length file name");
+}
+
+#[test]
 fn test_du_files0_from_stdin() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1026,6 +1044,17 @@ fn test_du_files0_from_stdin() {
         .succeeds()
         .stdout_contains("testfile1")
         .stdout_contains("testfile2");
+}
+
+#[test]
+fn test_du_files0_from_stdin_with_invalid_zero_length_file_names() {
+    new_ucmd!()
+        .arg("--files0-from=-")
+        .pipe_in("\0\0")
+        .fails()
+        .code_is(1)
+        .stderr_contains("-:1: invalid zero-length file name")
+        .stderr_contains("-:2: invalid zero-length file name");
 }
 
 #[test]

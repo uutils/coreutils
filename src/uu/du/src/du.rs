@@ -26,11 +26,11 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use uucore::display::{print_verbatim, Quotable};
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_warning};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -621,9 +621,14 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
 
     let mut paths = Vec::new();
 
-    for line in reader.split(b'\0') {
+    for (i, line) in reader.split(b'\0').enumerate() {
         let path = line?;
-        if !path.is_empty() {
+
+        if path.is_empty() {
+            let line_number = i + 1;
+            show_error!("{file_name}:{line_number}: invalid zero-length file name");
+            set_exit_code(1);
+        } else {
             paths.push(PathBuf::from(String::from_utf8_lossy(&path).to_string()));
         }
     }
