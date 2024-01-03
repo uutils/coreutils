@@ -18,6 +18,7 @@ use std::io;
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::prelude::FileExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::string::ToString;
 
@@ -355,8 +356,20 @@ fn show_debug(copy_debug: &CopyDebug) {
 const ABOUT: &str = help_about!("cp.md");
 const USAGE: &str = help_usage!("cp.md");
 const AFTER_HELP: &str = help_section!("after help", "cp.md");
+// Considering 4 Kb as block size for a standard file system, multiply it by 4 to make it 16 kb
+const BUFFER_SIZE: usize = 4096 * 4;
+const BUFFER_SIZE_U64: u64 = BUFFER_SIZE as u64;
 
 static EXIT_ERR: i32 = 1;
+
+fn get_size_limit_for_normal_copy() -> u64 {
+    const DEFAULT: u64 = 524_288_000; // 500 Mb
+
+    std::env::var("CP_SIZE_LIMIT_FOR_NORMAL_COPY")
+        .ok()
+        .and_then(|val| val.parse().ok())
+        .unwrap_or(DEFAULT)
+}
 
 // Argument constants
 mod options {
@@ -1806,6 +1819,19 @@ fn copy_file(
         permissions
     };
 
+    let source_size = source_metadata.len();
+    let mut use_copy_with_intermediate_progress = false;
+    if source_size >= get_size_limit_for_normal_copy()
+        && !source_is_symlink
+        && !source_is_fifo
+        && symlinked_files.is_empty()
+        && matches!(options.copy_mode, CopyMode::Copy)
+        && progress_bar.is_some()
+    {
+        // When we are dealing with a large file with a progress bar, show the progress of its copy too
+        use_copy_with_intermediate_progress = true;
+    }
+
     match options.copy_mode {
         CopyMode::Link => {
             if dest.exists() {
@@ -1829,15 +1855,19 @@ fn copy_file(
             .context(context)?;
         }
         CopyMode::Copy => {
-            copy_helper(
-                source,
-                dest,
-                options,
-                context,
-                source_is_symlink,
-                source_is_fifo,
-                symlinked_files,
-            )?;
+            if use_copy_with_intermediate_progress {
+                copy_with_intermediate_progress(source, dest, progress_bar)?;
+            } else {
+                copy_helper(
+                    source,
+                    dest,
+                    options,
+                    context,
+                    source_is_symlink,
+                    source_is_fifo,
+                    symlinked_files,
+                )?;
+            }
         }
         CopyMode::SymLink => {
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
@@ -2017,6 +2047,47 @@ fn copy_helper(
 
         if !options.attributes_only && options.debug {
             show_debug(&copy_debug);
+        }
+    }
+
+    Ok(())
+}
+
+/// Copy the file from `source` to `dest` by reading into and writing from a buffer.
+/// Increment the progress bar on each write to show the intermediate progress
+/// and show any errors that will occur because this is a large file.
+pub fn copy_with_intermediate_progress(
+    source: &Path,
+    dest: &Path,
+    progress_bar: &Option<ProgressBar>,
+) -> CopyResult<()> {
+    let metadata = fs::metadata(source)?;
+    let source_file = OpenOptions::new().read(true).open(source)?;
+    let dest_file = OpenOptions::new()
+        .append(true)
+        .write(true)
+        .create_new(true)
+        .open(dest)
+        .unwrap();
+    let source_size = metadata.len() as usize;
+    if let Some(bar) = progress_bar.as_ref() {
+        bar.tick();
+    }
+    let mut written = 0;
+    // while source still has bytes to be read
+    while written < source_size {
+        let mut buffer = [0; BUFFER_SIZE];
+        // read from source
+        let read = source_file.read_at(&mut buffer, written as u64)?;
+        if read == 0 {
+            return Err("No bytes to read".to_string().into());
+        }
+        // write to destination
+        let bytes_written = dest_file.write_at(&buffer[..read], written as u64)?;
+        written += bytes_written;
+        if let Some(bar) = progress_bar.as_ref() {
+            // show progress
+            bar.inc(BUFFER_SIZE_U64);
         }
     }
 
