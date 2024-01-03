@@ -1011,6 +1011,21 @@ fn test_du_files0_from() {
 }
 
 #[test]
+fn test_du_files0_from_ignore_duplicate_file_names() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file = "testfile";
+
+    at.touch(file);
+    at.write("filelist", &format!("{file}\0{file}\0"));
+
+    ts.ucmd()
+        .arg("--files0-from=filelist")
+        .succeeds()
+        .stdout_is(format!("0\t{file}\n"));
+}
+
+#[test]
 fn test_du_files0_from_with_invalid_zero_length_file_names() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1044,6 +1059,23 @@ fn test_du_files0_from_stdin() {
         .succeeds()
         .stdout_contains("testfile1")
         .stdout_contains("testfile2");
+}
+
+#[test]
+fn test_du_files0_from_stdin_ignore_duplicate_file_names() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file = "testfile";
+
+    at.touch(file);
+
+    let input = format!("{file}\0{file}");
+
+    ts.ucmd()
+        .arg("--files0-from=-")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(format!("0\t{file}\n"));
 }
 
 #[test]
