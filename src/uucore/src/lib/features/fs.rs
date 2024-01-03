@@ -714,6 +714,25 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
     source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
 }
 
+/// Returns true if the passed `path` ends with a path terminator.
+#[cfg(unix)]
+pub fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::unix::prelude::OsStrExt;
+    path.as_os_str()
+        .as_bytes()
+        .last()
+        .map_or(false, |&byte| byte == b'/' || byte == b'\\')
+}
+
+#[cfg(windows)]
+pub fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::windows::prelude::OsStrExt;
+    path.as_os_str()
+        .encode_wide()
+        .last()
+        .map_or(false, |wide| wide == b'/'.into() || wide == b'\\'.into())
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
