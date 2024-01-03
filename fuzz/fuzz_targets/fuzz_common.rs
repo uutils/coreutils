@@ -12,7 +12,6 @@ use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::{AsRawFd, RawFd};
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
-use std::sync::mpsc;
 use std::sync::{atomic::AtomicBool, Once};
 use std::{io, thread};
 
