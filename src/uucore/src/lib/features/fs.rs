@@ -715,7 +715,16 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 }
 
 /// Returns true if the passed `path` ends with a path terminator.
+///
+/// This function examines the last character of the path to determine
+/// if it is a directory separator. It supports both Unix-style (`/`)
+/// and Windows-style (`\`) separators.
+///
+/// # Arguments
+///
+/// * `path` - A reference to the path to be checked.
 #[cfg(unix)]
+
 pub fn path_ends_with_terminator(path: &Path) -> bool {
     use std::os::unix::prelude::OsStrExt;
     path.as_os_str()
@@ -939,5 +948,25 @@ mod tests {
         assert_eq!(get_file_display(S_IFLNK | 0o777), 'l');
         assert_eq!(get_file_display(S_IFSOCK | 0o600), 's');
         assert_eq!(get_file_display(0o777), '?');
+    }
+
+    #[test]
+    fn test_path_ends_with_terminator() {
+        // Path ends with a forward slash
+        assert!(path_ends_with_terminator(Path::new("/some/path/")));
+
+        // Path ends with a backslash
+        assert!(path_ends_with_terminator(Path::new("C:\\some\\path\\")));
+
+        // Path does not end with a terminator
+        assert!(!path_ends_with_terminator(Path::new("/some/path")));
+        assert!(!path_ends_with_terminator(Path::new("C:\\some\\path")));
+
+        // Empty path
+        assert!(!path_ends_with_terminator(Path::new("")));
+
+        // Root path
+        assert!(path_ends_with_terminator(Path::new("/")));
+        assert!(path_ends_with_terminator(Path::new("C:\\")));
     }
 }
