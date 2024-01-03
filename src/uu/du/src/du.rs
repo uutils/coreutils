@@ -629,7 +629,10 @@ fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
             show_error!("{file_name}:{line_number}: invalid zero-length file name");
             set_exit_code(1);
         } else {
-            paths.push(PathBuf::from(String::from_utf8_lossy(&path).to_string()));
+            let p = PathBuf::from(String::from_utf8_lossy(&path).to_string());
+            if !paths.contains(&p) {
+                paths.push(p);
+            }
         }
     }
 
