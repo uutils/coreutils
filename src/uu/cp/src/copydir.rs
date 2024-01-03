@@ -17,7 +17,9 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use indicatif::ProgressBar;
 use uucore::display::Quotable;
 use uucore::error::UIoError;
-use uucore::fs::{canonicalize, FileInformation, MissingHandling, ResolveMode};
+use uucore::fs::{
+    canonicalize, path_ends_with_terminator, FileInformation, MissingHandling, ResolveMode,
+};
 use uucore::show;
 use uucore::show_error;
 use uucore::uio_error;
@@ -170,7 +172,14 @@ impl Entry {
         let mut descendant =
             get_local_to_root_parent(&source_absolute, context.root_parent.as_deref())?;
         if no_target_dir {
-            descendant = descendant.strip_prefix(context.root)?.to_path_buf();
+            let source_is_dir: bool = direntry.path().is_dir();
+            if path_ends_with_terminator(context.target) && source_is_dir {
+                if let Err(e) = std::fs::create_dir_all(context.target) {
+                    eprintln!("Failed to create directory: {}", e);
+                }
+            } else {
+                descendant = descendant.strip_prefix(context.root)?.to_path_buf();
+            }
         }
 
         let local_to_target = context.target.join(descendant);
