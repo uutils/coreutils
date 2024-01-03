@@ -118,6 +118,20 @@ fn test_cp_duplicate_files() {
 }
 
 #[test]
+fn test_cp_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "a";
+
+    at.touch(file);
+
+    ucmd.arg(file)
+        .arg(file)
+        .fails()
+        .code_is(1)
+        .stderr_contains(format!("'{file}' and '{file}' are the same file"));
+}
+
+#[test]
 fn test_cp_multiple_files_target_is_file() {
     new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
@@ -481,7 +495,7 @@ fn test_cp_arg_interactive() {
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "freebsd")))]
 fn test_cp_arg_interactive_update() {
     // -u -i won't show the prompt to validate the override or not
     // Therefore, the error code will be 0

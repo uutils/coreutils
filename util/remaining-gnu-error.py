@@ -33,9 +33,20 @@ def show_list(l):
     tests = list(filter(lambda k: "factor" not in k, l))
 
     for f in reversed(tests):
-        print("%s: %s" % (f, os.stat(f).st_size))
+        if contains_require_root(f):
+            print("%s: %s / require_root" % (f, os.stat(f).st_size))
+        else:
+            print("%s: %s" % (f, os.stat(f).st_size))
     print("")
     print("%s tests remaining" % len(tests))
+
+
+def contains_require_root(file_path):
+    try:
+        with open(file_path, "r") as file:
+            return "require_root_" in file.read()
+    except IOError:
+        return False
 
 
 with open("result.json", "r") as json_file:

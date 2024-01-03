@@ -1,9 +1,19 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-# spell-checker:ignore (vars) OSID binfmt
+# spell-checker:ignore (vars) OSID OSTYPE binfmt greadlink
+
+# Use GNU coreutils for readlink on *BSD
+case "$OSTYPE" in
+    *bsd*)
+        READLINK="greadlink"
+        ;;
+    *)
+        READLINK="readlink"
+        ;;
+esac
 
 ME="${0}"
-ME_dir="$(dirname -- "$(readlink -fm -- "${ME}")")"
+ME_dir="$(dirname -- "$("${READLINK}" -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
 
 export COVERAGE_REPORT_DIR="${REPO_main_dir}/target/debug/coverage-nix"

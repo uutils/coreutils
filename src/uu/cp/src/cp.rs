@@ -1713,6 +1713,7 @@ fn copy_file(
         if are_hardlinks_to_same_file(source, dest)
             && !options.force()
             && options.backup == BackupMode::NoBackup
+            && source != dest
         {
             return Ok(());
         }

@@ -70,7 +70,6 @@ where
         };
     }
 
-    let args_clone = args.to_owned();
     println!("Running test {:?}", &args[0..]);
     let mut pipe_stdout_fds = [-1; 2];
     let mut pipe_stderr_fds = [-1; 2];
@@ -123,29 +122,20 @@ where
         None
     };
 
-    // Channels to communicate between threads
-    let (stdout_sender, stdout_receiver) = mpsc::channel();
-    let (stderr_sender, stderr_receiver) = mpsc::channel();
-
-    // Spawn a thread to run the uumain_function
-    let uumain_thread = thread::spawn(move || uumain_function(args_clone.into_iter()));
-
-    // Spawn threads to capture stdout and stderr
-    thread::spawn(move || {
-        let captured_stdout = read_from_fd(pipe_stdout_fds[0]);
-        stdout_sender.send(captured_stdout).unwrap();
+    let (uumain_exit_status, captured_stdout, captured_stderr) = thread::scope(|s| {
+        let out = s.spawn(|| read_from_fd(pipe_stdout_fds[0]));
+        let err = s.spawn(|| read_from_fd(pipe_stderr_fds[0]));
+        let status = uumain_function(args.to_owned().into_iter());
+        io::stdout().flush().unwrap();
+        io::stderr().flush().unwrap();
+        unsafe {
+            close(pipe_stdout_fds[1]);
+            close(pipe_stderr_fds[1]);
+            close(STDOUT_FILENO);
+            close(STDERR_FILENO);
+        }
+        (status, out.join().unwrap(), err.join().unwrap())
     });
-
-    thread::spawn(move || {
-        let captured_stderr = read_from_fd(pipe_stderr_fds[0]);
-        stderr_sender.send(captured_stderr).unwrap();
-    });
-
-    // Wait for the uumain thread to finish
-    let uumain_exit_status = uumain_thread.join().unwrap();
-
-    io::stdout().flush().unwrap();
-    io::stderr().flush().unwrap();
 
     // Restore the original stdout and stderr
     if unsafe { dup2(original_stdout_fd, STDOUT_FILENO) } == -1
@@ -156,13 +146,6 @@ where
             stderr: "Failed to restore the original STDOUT_FILENO or STDERR_FILENO".to_string(),
             exit_code: -1,
         };
-    }
-    unsafe {
-        close(original_stdout_fd);
-        close(original_stderr_fd);
-
-        close(pipe_stdout_fds[1]);
-        close(pipe_stderr_fds[1]);
     }
 
     // Restore the original stdin if it was modified
@@ -177,20 +160,14 @@ where
         unsafe { close(fd) };
     }
 
-    // Wait for the output capture threads and collect their outputs
-    let captured_stdout = stdout_receiver.recv().unwrap().trim().to_string();
-    let captured_stderr = stderr_receiver
-        .recv()
-        .unwrap()
-        .split_once(':')
-        .map(|x| x.1)
-        .unwrap_or("")
-        .trim()
-        .to_string();
-
     CommandResult {
         stdout: captured_stdout,
-        stderr: captured_stderr,
+        stderr: captured_stderr
+            .split_once(':')
+            .map(|x| x.1)
+            .unwrap_or("")
+            .trim()
+            .to_string(),
         exit_code: uumain_exit_status,
     }
 }
