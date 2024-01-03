@@ -25,7 +25,7 @@ fn generate_wc_args() -> String {
     for _ in 0..arg_count {
         // Introduce a chance to add invalid arguments
         if rng.gen_bool(0.1) {
-            args.push(generate_random_string(rng.gen_range(1..=20))); // Random invalid string
+            args.push(generate_random_string(rng.gen_range(1..=20)));
         } else {
             match rng.gen_range(0..=5) {
                 0 => args.push(String::from("-c")),
