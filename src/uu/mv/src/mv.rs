@@ -334,10 +334,11 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         }
     }
 
-    let target_is_dir = target.is_dir();
+    let target_is_dir: bool = target.is_dir();
+    let source_is_dir: bool = source.is_dir();
 
     if path_ends_with_terminator(target)
-        && !target_is_dir
+        && (!target_is_dir && !source_is_dir)
         && !opts.no_target_dir
         && opts.update != UpdateMode::ReplaceIfOlder
     {
