@@ -34,7 +34,6 @@ fn generate_wc_args() -> String {
                 5 => {
                     args.push(String::from("--files0-from"));
                     if rng.gen_bool(0.5) {
-                        // 50% chance to add an invalid file name
                         args.push(generate_random_string(50)); // Longer invalid file name
                     } else {
                         args.push(generate_random_string(5));
