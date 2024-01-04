@@ -16,6 +16,7 @@ use crate::fuzz_common::{
     compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd, CommandResult,
 };
 static CMD_PATH: &str = "split";
+
 fn generate_split_args() -> String {
     let mut rng = rand::thread_rng();
     let mut args = Vec::new();
