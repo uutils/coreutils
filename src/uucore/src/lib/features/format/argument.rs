@@ -41,14 +41,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         match next {
             FormatArgument::Char(c) => *c,
             FormatArgument::Unparsed(s) => {
-                let mut chars = s.chars();
-                let Some(c) = chars.next() else {
-                    return '\0';
-                };
-                let None = chars.next() else {
-                    return '\0';
-                };
-                c
+                s.chars().next().unwrap_or('\0')
             }
             _ => '\0',
         }

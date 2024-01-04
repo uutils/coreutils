@@ -163,6 +163,14 @@ fn sub_char() {
 }
 
 #[test]
+fn sub_char_from_string() {
+    new_ucmd!()
+        .args(&["%c%c%c", "five", "%", "oval"])
+        .succeeds()
+        .stdout_only("f%o");
+}
+
+#[test]
 fn sub_num_int() {
     new_ucmd!()
         .args(&["twenty is %i", "20"])
