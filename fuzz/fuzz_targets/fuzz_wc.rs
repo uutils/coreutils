@@ -30,6 +30,9 @@ fn generate_wc_args() -> String {
             match rng.gen_range(0..=5) {
                 0 => args.push(String::from("-c")),
                 1 => args.push(String::from("-m")),
+                2 => args.push(String::from("-l")),
+                3 => args.push(String::from("-L")),
+                4 => args.push(String::from("-w")),
                 // TODO
                 5 => {
                     args.push(String::from("--files0-from"));
