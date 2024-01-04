@@ -77,7 +77,7 @@ fuzz_target!(|_data: &[u8]| {
     };
 
     compare_result(
-        "wc",
+        "cut",
         &format!("{:?}", &args[1..]),
         Some(&input_lines),
         &rust_result,
