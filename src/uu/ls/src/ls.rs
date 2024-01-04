@@ -709,17 +709,16 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
             }
         }
 
-        // By default, `ls` uses Literal quoting when
-        // writing to a non-terminal file descriptor
-        if !std::io::stdout().is_terminal() {
-            QuotingStyle::Literal { show_control }
-        } else {
-            // TODO: use environment variable if available
+        // By default, `ls` uses Shell escape quoting style when writing to a terminal file
+        // descriptor and Literal otherwise.
+        if std::io::stdout().is_terminal() {
             QuotingStyle::Shell {
                 escape: true,
                 always_quote: false,
                 show_control,
             }
+        } else {
+            QuotingStyle::Literal { show_control }
         }
     }
 }
