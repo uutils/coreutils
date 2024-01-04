@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable occured sysconf
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable occurred sysconf
 // spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGPIPE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX AIOCANCEL XRES RTMIN RTMAX
 #[cfg(unix)]
 use nix::errno::Errno;
@@ -207,7 +207,7 @@ pub static ALL_SIGNALS: [&str; 33] = [
      SIGPWR       19      power-fail restart
      SIGWINCH     20      window size change
      SIGURG       21      urgent socket condition
-     SIGPOLL      22      pollable event occured
+     SIGPOLL      22      pollable event occurred
      SIGIO        SIGPOLL socket I/O possible (SIGPOLL alias)
      SIGSTOP      23      stop (cannot be caught or ignored)
      SIGTSTP      24      user stop requested from tty
