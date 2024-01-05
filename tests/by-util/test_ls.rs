@@ -2648,7 +2648,7 @@ fn test_ls_quoting_style_arg_overrides_env_var() {
     at.touch(at.plus_as_string("bar-2"));
 
     // The quoting style given by the env variable should be
-    // overriden by any escape style provided by argument.
+    // overridden by any escape style provided by argument.
     for (arg, correct) in [
         ("--quoting-style=literal", "foo-1"),
         ("-N", "foo-1"),
@@ -2684,7 +2684,6 @@ fn test_ls_quoting_style_arg_overrides_env_var() {
             .succeeds()
             .stdout_only(format!("{correct}\n"));
     }
-
 }
 
 #[test]
