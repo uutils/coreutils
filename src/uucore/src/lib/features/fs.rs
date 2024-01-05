@@ -878,7 +878,7 @@ mod tests {
         let path1 = temp_file.path();
         let path2 = temp_file.path();
 
-        assert!(are_hardlinks_to_same_file(&path1, &path2));
+        assert!(are_hardlinks_to_same_file(path1, path2));
     }
 
     #[cfg(unix)]
@@ -893,7 +893,7 @@ mod tests {
         let path1 = temp_file1.path();
         let path2 = temp_file2.path();
 
-        assert!(!are_hardlinks_to_same_file(&path1, &path2));
+        assert!(!are_hardlinks_to_same_file(path1, path2));
     }
 
     #[cfg(unix)]
@@ -904,9 +904,9 @@ mod tests {
         let path1 = temp_file.path();
 
         let path2 = temp_file.path().with_extension("hardlink");
-        fs::hard_link(&path1, &path2).unwrap();
+        fs::hard_link(path1, &path2).unwrap();
 
-        assert!(are_hardlinks_to_same_file(&path1, &path2));
+        assert!(are_hardlinks_to_same_file(path1, &path2));
     }
 
     #[cfg(unix)]
