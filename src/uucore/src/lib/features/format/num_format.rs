@@ -425,7 +425,7 @@ fn format_float_shortest(
         //  - The precision works differently and specifies the total number
         //    of digits instead of the digits in the fractional part.
         //  - If we don't force the decimal, '0' and `.` are trimmed.
-        let decimal_places = (precision as i32).saturating_sub(exponent) as usize;
+        let decimal_places = (precision as i32 - exponent) as usize;
         let mut formatted = if decimal_places == 0 && force_decimal == ForceDecimal::Yes {
             format!("{f:.0}.")
         } else {
