@@ -49,7 +49,7 @@ impl SplitName {
             None => Box::new(move |n: usize| -> String { format!("{prefix}{n:0n_digits$}") }),
             Some(custom) => {
                 let spec =
-                    Regex::new(r"(?P<ALL>%((?P<FLAG>[0#-])(?P<WIDTH>\d+)?)?(?P<TYPE>[diuoxX]))")
+                    Regex::new(r"(?P<ALL>%(?P<FLAGS>[#0-]*)(?P<WIDTH>[0-9]+)?(.(?P<PRECISION>[0-9]?))?(?P<CONVERSION>[diuoxX]))")
                         .unwrap();
                 let mut captures_iter = spec.captures_iter(&custom);
                 let custom_fn: Box<dyn Fn(usize) -> String> = match captures_iter.next() {
@@ -61,7 +61,8 @@ impl SplitName {
                             None => 0,
                             Some(m) => m.as_str().parse::<usize>().unwrap(),
                         };
-                        match (captures.name("FLAG"), captures.name("TYPE")) {
+
+                        match (captures.name("FLAGS"), captures.name("CONVERSION")) {
                             (None, Some(ref t)) => match t.as_str() {
                                 "d" | "i" | "u" => Box::new(move |n: usize| -> String {
                                     format!("{prefix}{before}{n}{after}")
@@ -77,66 +78,143 @@ impl SplitName {
                                 }),
                                 _ => return Err(CsplitError::SuffixFormatIncorrect),
                             },
-                            (Some(ref f), Some(ref t)) => {
-                                match (f.as_str(), t.as_str()) {
-                                    /*
-                                     * zero padding
-                                     */
-                                    // decimal
-                                    ("0", "d" | "i" | "u") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:0width$}{after}")
-                                    }),
-                                    // octal
-                                    ("0", "o") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:0width$o}{after}")
-                                    }),
-                                    // lower hexadecimal
-                                    ("0", "x") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:0width$x}{after}")
-                                    }),
-                                    // upper hexadecimal
-                                    ("0", "X") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:0width$X}{after}")
-                                    }),
+                            (Some(matched_flags), Some(ref matched_conversion)) => {
+                                let flags = matched_flags.as_str().to_owned();
+                                let conversion = matched_conversion.as_str().to_owned();
 
-                                    /*
-                                     * Alternate form
-                                     */
-                                    // octal
-                                    ("#", "o") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:>#width$o}{after}")
-                                    }),
-                                    // lower hexadecimal
-                                    ("#", "x") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:>#width$x}{after}")
-                                    }),
-                                    // upper hexadecimal
-                                    ("#", "X") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:>#width$X}{after}")
-                                    }),
-
-                                    /*
-                                     * Left adjusted
-                                     */
-                                    // decimal
-                                    ("-", "d" | "i" | "u") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:<#width$}{after}")
-                                    }),
-                                    // octal
-                                    ("-", "o") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:<#width$o}{after}")
-                                    }),
-                                    // lower hexadecimal
-                                    ("-", "x") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:<#width$x}{after}")
-                                    }),
-                                    // upper hexadecimal
-                                    ("-", "X") => Box::new(move |n: usize| -> String {
-                                        format!("{prefix}{before}{n:<#width$X}{after}")
-                                    }),
-
-                                    _ => return Err(CsplitError::SuffixFormatIncorrect),
+                                let mut flag_alternative = false;
+                                let mut flag_zero = false;
+                                let mut flag_minus = false;
+                                for char in flags.chars() {
+                                    match char {
+                                        '#' => flag_alternative = true,
+                                        '0' => flag_zero = true,
+                                        '-' => flag_minus = true,
+                                        _ => unreachable!(
+                                            "Flags should be already filtered by the regex: received {char}"
+                                        ),
+                                    }
                                 }
+
+                                // Interaction between flags: minus cancels zero
+                                if flag_minus {
+                                    flag_zero = false;
+                                }
+
+                                // Alternative flag is not compatible with decimal conversions
+                                if (conversion == "d" || conversion == "i" || conversion == "u")
+                                    && flag_alternative
+                                {
+                                    return Err(CsplitError::SuffixFormatIncorrect);
+                                }
+
+                                let precision = match captures.name("PRECISION") {
+                                    Some(m) => {
+                                        // precision cancels the flag_zero
+                                        flag_zero = false;
+                                        let precision_str = m.as_str();
+                                        // only one dot could be given
+                                        // in this case, default precision becomes 0
+                                        if precision_str.is_empty() {
+                                            0
+                                        } else {
+                                            precision_str.parse::<usize>().unwrap()
+                                        }
+                                    }
+                                    None => {
+                                        //default precision is 1 for d,i,u,o,x,X
+                                        1
+                                    }
+                                };
+
+                                Box::new(move |n: usize| -> String {
+                                    // First step: Formatting the number with precision, zeros, alternative style...
+                                    let precision_formatted = if n == 0
+                                        && precision == 0
+                                        && !flag_alternative
+                                    {
+                                        // erasing zero if explicitly asked for a zero precision
+                                        String::new()
+                                    } else {
+                                        match conversion.as_str() {
+                                            "d" | "i" | "u" => {
+                                                format!("{n:0size$}", size = precision)
+                                            }
+                                            "o" => {
+                                                if flag_alternative {
+                                                    if n == 0 {
+                                                        format!("{n:0size$o}", size = precision)
+                                                    } else {
+                                                        // could just be
+                                                        // format!("0{n:0size$o}", size = 1.max(precision) - 1)
+                                                        if precision == 0 {
+                                                            format!("0{n:o}")
+                                                        } else {
+                                                            format!(
+                                                                "0{n:0size$o}",
+                                                                size = precision - 1
+                                                            )
+                                                        }
+                                                    }
+                                                } else {
+                                                    format!("{n:0size$o}", size = precision)
+                                                }
+                                            }
+                                            "x" => {
+                                                if flag_alternative {
+                                                    if n == 0 {
+                                                        if precision == 0 {
+                                                            String::new()
+                                                        } else {
+                                                            format!("{n:0size$x}", size = precision)
+                                                        }
+                                                    } else {
+                                                        format!(
+                                                            "{n:#0size$x}",
+                                                            size = precision + 2
+                                                        )
+                                                    }
+                                                } else {
+                                                    format!("{n:size$x}", size = precision)
+                                                }
+                                            }
+                                            "X" => {
+                                                if flag_alternative {
+                                                    if n == 0 {
+                                                        if precision == 0 {
+                                                            String::new()
+                                                        } else {
+                                                            format!("{n:0size$X}", size = precision)
+                                                        }
+                                                    } else {
+                                                        format!(
+                                                            "{n:#0size$X}",
+                                                            size = precision + 2
+                                                        )
+                                                    }
+                                                } else {
+                                                    format!("{n:size$X}", size = precision)
+                                                }
+                                            }
+                                            _ => unreachable!("Conversion are filtered by the regex : received {conversion}"),
+                                        }
+                                    };
+
+                                    // second step : Fit the number in the width with correct padding and filling
+                                    let width_formatted = if flag_minus {
+                                        if flag_zero {
+                                            format!("{precision_formatted:0<width$}", width = width)
+                                        } else {
+                                            format!("{precision_formatted:<width$}", width = width)
+                                        }
+                                    } else if flag_zero {
+                                        format!("{precision_formatted:0>width$}", width = width)
+                                    } else {
+                                        format!("{precision_formatted:>width$}", width = width)
+                                    };
+
+                                    format!("{prefix}{before}{width_formatted}{after}")
+                                })
                             }
                             _ => return Err(CsplitError::SuffixFormatIncorrect),
                         }
@@ -401,7 +479,6 @@ mod tests {
     #[test]
     fn left_adjusted_octal() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10o-")), None).unwrap();
-        // assert_eq!(split_name.get(42), "xxcst-0o52      -");
         assert_eq!(split_name.get(42), "xxcst-52        -");
     }
 
@@ -409,7 +486,6 @@ mod tests {
     fn left_adjusted_lower_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10x-")), None).unwrap();
         assert_eq!(split_name.get(42), "xxcst-2a        -");
-        // assert_eq!(split_name.get(42), "xxcst-0x2a      -");
     }
 
     #[test]
@@ -519,5 +595,38 @@ mod tests {
         let split_name = SplitName::new(None, Some(String::from("%#6.3o")), None).unwrap();
         assert_eq!(split_name.get(0), "xx   000");
         assert_eq!(split_name.get(1), "xx   001");
+    }
+
+    #[test]
+    fn precision_only_dot_decimal() {
+        // if only one dot is given, precision becomes 0
+        let split_name = SplitName::new(None, Some(String::from("%.u")), None).unwrap();
+        assert_eq!(split_name.get(0), "xx");
+        assert_eq!(split_name.get(1), "xx1");
+        assert_eq!(split_name.get(42), "xx42");
+    }
+    #[test]
+    fn precision_only_dot_octal() {
+        // if only one dot is given, precision becomes 0
+        let split_name = SplitName::new(None, Some(String::from("%.o")), None).unwrap();
+        assert_eq!(split_name.get(0), "xx");
+        assert_eq!(split_name.get(1), "xx1");
+        assert_eq!(split_name.get(42), "xx52");
+    }
+    #[test]
+    fn precision_only_dot_lower_hex() {
+        // if only one dot is given, precision becomes 0
+        let split_name = SplitName::new(None, Some(String::from("%.x")), None).unwrap();
+        assert_eq!(split_name.get(0), "xx");
+        assert_eq!(split_name.get(1), "xx1");
+        assert_eq!(split_name.get(42), "xx2a");
+    }
+    #[test]
+    fn precision_only_dot_upper_hex() {
+        // if only one dot is given, precision becomes 0
+        let split_name = SplitName::new(None, Some(String::from("%.X")), None).unwrap();
+        assert_eq!(split_name.get(0), "xx");
+        assert_eq!(split_name.get(1), "xx1");
+        assert_eq!(split_name.get(42), "xx2A");
     }
 }
