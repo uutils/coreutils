@@ -339,3 +339,18 @@ sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #
 echo "n_stat1 = \$n_stat1"\n\
 echo "n_stat2 = \$n_stat2"\n\
 test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
+
+# Adjust the cut test to match our output
+sed -i "s/\$prog: fields are numbered from 1\\\\n\$try/\$prog: range '0-2' was invalid: fields and positions are numbered from 1\\\\n/" tests/cut/cut.pl
+sed -i "s/\$prog: byte\/character positions are numbered from 1\\\\n\$try/\$prog: range '0-' was invalid: fields and positions are numbered from 1\\\\n/" tests/cut/cut.pl
+sed -i "s/\$prog: invalid field range\\\\n\$try/\$prog: range '0-' was invalid: fields and positions are numbered from 1\\\\n/" tests/cut/cut.pl
+sed -i "s/\$prog: invalid byte or character range\\\\n\$try/\$prog: range '--' was invalid: failed to parse range\\\\n/" tests/cut/cut.pl
+sed -i "s/\$prog: invalid range with no endpoint: -\\\\n\$try/\$prog: range '-' was invalid: invalid range with no endpoint\\\\n/" tests/cut/cut.pl
+sed -i "s/\$prog: an input delimiter may be specified only when /{N;s/\$prog: an input delimiter may be specified only when .\n              operating on fields\\\\n\$try/\$prog: invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields\\\\n/}" tests/cut/cut.pl
+sed -i "s/\['zero-1', '-b0',   {ERR=>\$from_pos1}, {EXIT => 1} \]/\['zero-1', '-b0',   {ERR=>\"\$prog: range '0' was invalid: fields and positions are numbered from 1\\\\n\"}, {EXIT => 1} \]/" tests/cut/cut.pl
+sed -i "s/\['zero-3f', '-f0-', {ERR=>\$from_field1}, {EXIT => 1} \]/\['zero-3f', '-f0-', {ERR=>\"\$prog: range '0-' was invalid: fields and positions are numbered from 1\\\\n\"}, {EXIT => 1} \]/" tests/cut/cut.pl
+sed -i "s/{ERR=>\"\$prog: invalid decreasing range\\\\n\$try\"}/{ERR=>\"\$prog: range '2-0' was invalid: fields and positions are numbered from 1\\\\n\"}/" tests/cut/cut.pl
+sed -i "s/{ERR=>\"\$prog: suppressing non-delimited lines makes sense\\\\n\"/{N;s/{ERR=>\"\$prog: suppressing non-delimited lines makes sense\\\\n\".\n    \\\\\"\\\\tonly when operating on fields\\\\n\$try\"}/{ERR=>\"cut: invalid input: The '--only-delimited' ('-s') option only usable if printing a sequence of fields\\\\n\"}/}" tests/cut/cut.pl
+sed -i "s/{ERR=>\"\$prog: you must specify a list of bytes, characters, or fields\\\\n\$try\"}/{ERR=>\"\$prog: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\\\\n\"}/" tests/cut/cut.pl
+sed -i "s/{ERR=>\$from_field1}/{ERR=>\"cut: range '' was invalid: failed to parse range\\\\n\"}/" tests/cut/cut.pl
+sed -i "s/\['empty-bl', qw(-b ''), {IN=>\":\\\\n\"}, {OUT=>\"\"}, {EXIT=>1}, {ERR=>\$from_pos1}\]/\['empty-bl', qw(-b ''), {IN=>\":\\\\n\"}, {OUT=>\"\"}, {EXIT=>1}, {ERR=>\"cut: range '' was invalid: failed to parse range\\\\n\"}\]/" tests/cut/cut.pl
