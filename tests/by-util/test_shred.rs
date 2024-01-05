@@ -18,11 +18,6 @@ fn test_invalid_remove_arg() {
 }
 
 #[test]
-fn test_missing_remove_arg() {
-    new_ucmd!().arg("--remove").fails().code_is(1);
-}
-
-#[test]
 fn test_shred() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -37,6 +32,19 @@ fn test_shred() {
     assert!(at.file_exists(file));
     // File is obfuscated
     assert!(at.read_bytes(file) != file_original_content.as_bytes());
+}
+
+#[test]
+fn test_shred_remove() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "test_shred_remove";
+    at.touch(file);
+
+    ucmd.arg("--remove").arg(file).succeeds();
+
+    // File was deleted
+    assert!(!at.file_exists(file));
 }
 
 #[test]

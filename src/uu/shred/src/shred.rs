@@ -33,6 +33,12 @@ pub mod options {
     pub const VERBOSE: &str = "verbose";
     pub const EXACT: &str = "exact";
     pub const ZERO: &str = "zero";
+
+    pub mod remove {
+        pub const UNLINK: &str = "unlink";
+        pub const WIPE: &str = "wipe";
+        pub const WIPESYNC: &str = "wipesync";
+    }
 }
 
 // This block size seems to match GNU (2^16 = 65536)
@@ -237,9 +243,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .get_one::<String>(options::REMOVE)
             .map(AsRef::as_ref)
         {
-            Some("unlink") => RemoveMethod::Unlink,
-            Some("wipe") => RemoveMethod::Wipe,
-            Some("wipesync") => RemoveMethod::WipeSync,
+            Some(options::remove::UNLINK) => RemoveMethod::Unlink,
+            Some(options::remove::WIPE) => RemoveMethod::Wipe,
+            Some(options::remove::WIPESYNC) => RemoveMethod::WipeSync,
             _ => unreachable!("should be caught by clap"),
         }
     } else {
@@ -309,8 +315,14 @@ pub fn uu_app() -> Command {
             Arg::new(options::REMOVE)
                 .long(options::REMOVE)
                 .value_name("HOW")
+                .value_parser([
+                    options::remove::UNLINK,
+                    options::remove::WIPE,
+                    options::remove::WIPESYNC,
+                ])
+                .num_args(0..=1)
                 .require_equals(true)
-                .value_parser(["unlink", "wipe", "wipesync"])
+                .default_missing_value(options::remove::WIPESYNC)
                 .help("like -u but give control on HOW to delete;  See below")
                 .action(ArgAction::Set),
         )
