@@ -149,6 +149,10 @@ where
             exit_code: -1,
         };
     }
+    unsafe {
+        close(original_stdout_fd);
+        close(original_stderr_fd);
+    }
 
     // Restore the original stdin if it was modified
     if let Some(fd) = original_stdin_fd {
