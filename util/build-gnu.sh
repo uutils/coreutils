@@ -206,6 +206,9 @@ sed -i "s|cp: target directory 'symlink': Permission denied|cp: 'symlink' is not
 # to transform an ERROR into FAIL
 sed -i 's|xargs mkdir )|xargs mkdir -p )|' tests/cp/link-heap.sh
 
+# Our message is a bit better
+sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is not a directory|" tests/mv/trailing-slash.sh
+
 sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
 sed -i 's|paste |/usr/bin/paste |' tests/od/od-endian.sh
 sed -i 's|timeout |'"${SYSTEM_TIMEOUT}"' |' tests/tail/follow-stdin.sh

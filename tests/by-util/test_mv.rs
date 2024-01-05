@@ -1556,6 +1556,19 @@ fn test_mv_dir_into_file_where_both_are_files() {
         .stderr_contains("mv: cannot stat 'a/': Not a directory");
 }
 
+#[test]
+fn test_mv_dir_into_path_slash() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a");
+    scene.ucmd().arg("a").arg("e/").succeeds();
+    assert!(at.dir_exists("e"));
+    at.mkdir("b");
+    at.mkdir("f");
+    scene.ucmd().arg("b").arg("f/").succeeds();
+    assert!(at.dir_exists("f/b"));
+}
+
 // Todo:
 
 // $ at.touch a b
