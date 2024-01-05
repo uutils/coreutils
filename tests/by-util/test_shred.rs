@@ -10,7 +10,73 @@ fn test_invalid_arg() {
 }
 
 #[test]
-fn test_shred_remove() {
+fn test_invalid_remove_arg() {
+    new_ucmd!().arg("--remove=unknown").fails().code_is(1);
+}
+
+#[test]
+fn test_missing_remove_arg() {
+    new_ucmd!().arg("--remove").fails().code_is(1);
+}
+
+#[test]
+fn test_shred() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "test_shred";
+    let file_original_content = "test_shred file content";
+
+    at.write(file, file_original_content);
+
+    ucmd.arg(file).succeeds();
+
+    // File exists
+    assert!(at.file_exists(file));
+    // File is obfuscated
+    assert!(at.read_bytes(file) != file_original_content.as_bytes());
+}
+
+#[test]
+fn test_shred_remove_unlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "test_shred_remove_unlink";
+    at.touch(file);
+
+    ucmd.arg("--remove=unlink").arg(file).succeeds();
+
+    // File was deleted
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_shred_remove_wipe() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "test_shred_remove_wipe";
+    at.touch(file);
+
+    ucmd.arg("--remove=wipe").arg(file).succeeds();
+
+    // File was deleted
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_shred_remove_wipesync() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "test_shred_remove_wipesync";
+    at.touch(file);
+
+    ucmd.arg("--remove=wipesync").arg(file).succeeds();
+
+    // File was deleted
+    assert!(!at.file_exists(file));
+}
+
+#[test]
+fn test_shred_u() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
