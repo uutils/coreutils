@@ -172,7 +172,7 @@ impl Entry {
         let mut descendant =
             get_local_to_root_parent(&source_absolute, context.root_parent.as_deref())?;
         if no_target_dir {
-            let source_is_dir: bool = direntry.path().is_dir();
+            let source_is_dir = direntry.path().is_dir();
             if path_ends_with_terminator(context.target) && source_is_dir {
                 if let Err(e) = std::fs::create_dir_all(context.target) {
                     eprintln!("Failed to create directory: {}", e);

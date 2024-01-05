@@ -724,7 +724,6 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 ///
 /// * `path` - A reference to the path to be checked.
 #[cfg(unix)]
-
 pub fn path_ends_with_terminator(path: &Path) -> bool {
     use std::os::unix::prelude::OsStrExt;
     path.as_os_str()
