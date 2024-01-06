@@ -129,88 +129,45 @@ impl SplitName {
 
                                 Box::new(move |n: usize| -> String {
                                     // First step: Formatting the number with precision, zeros, alternative style...
-                                    let precision_formatted = if n == 0
-                                        && precision == 0
-                                        && !flag_alternative
-                                    {
-                                        // erasing zero if explicitly asked for a zero precision
-                                        String::new()
-                                    } else {
-                                        match conversion.as_str() {
-                                            "d" | "i" | "u" => {
-                                                format!("{n:0size$}", size = precision)
+                                    let precision_formatted =  match conversion.as_str() {
+                                            "d" | "i" | "u" => match (n, precision) {
+                                                (0, 0) => String::new(),
+                                                (_, _) => format!("{n:0precision$}")
                                             }
-                                            "o" => {
-                                                if flag_alternative {
-                                                    if n == 0 {
-                                                        format!("{n:0size$o}", size = precision)
-                                                    } else {
-                                                        // could just be
-                                                        // format!("0{n:0size$o}", size = 1.max(precision) - 1)
-                                                        if precision == 0 {
-                                                            format!("0{n:o}")
-                                                        } else {
-                                                            format!(
-                                                                "0{n:0size$o}",
-                                                                size = precision - 1
-                                                            )
-                                                        }
-                                                    }
-                                                } else {
-                                                    format!("{n:0size$o}", size = precision)
-                                                }
+                                            "o" => match (n, flag_alternative, precision) {
+                                                (0, true, _) => format!("{n:0>precision$o}"),
+                                                (0, false, 0) => String::new(),
+                                                (_, true, 0) => format!("0{n:o}"),
+                                                (_, true, _) => format!(
+                                                        "{:0>precision$}",
+                                                        format!("0{n:o}")
+                                                ),
+                                                (_, false, _) => format!("{n:0precision$o}"),
                                             }
-                                            "x" => {
-                                                if flag_alternative {
-                                                    if n == 0 {
-                                                        if precision == 0 {
-                                                            String::new()
-                                                        } else {
-                                                            format!("{n:0size$x}", size = precision)
-                                                        }
-                                                    } else {
-                                                        format!(
-                                                            "{n:#0size$x}",
-                                                            size = precision + 2
-                                                        )
-                                                    }
-                                                } else {
-                                                    format!("{n:size$x}", size = precision)
-                                                }
+                                            "x" => match (n, flag_alternative, precision) {
+                                                (0, _, 0) => String::new(),
+                                                (0, true, _) => format!("{n:0precision$x}"),
+                                                ( _,true, _) => format!("{n:#0size$x}", size = precision + 2 ),
+                                                ( _,false, 0) => format!("{n:precision$x}"),
+                                                (_, _, _) => format!("{n:0precision$x}")
                                             }
-                                            "X" => {
-                                                if flag_alternative {
-                                                    if n == 0 {
-                                                        if precision == 0 {
-                                                            String::new()
-                                                        } else {
-                                                            format!("{n:0size$X}", size = precision)
-                                                        }
-                                                    } else {
-                                                        format!(
-                                                            "{n:#0size$X}",
-                                                            size = precision + 2
-                                                        )
-                                                    }
-                                                } else {
-                                                    format!("{n:size$X}", size = precision)
-                                                }
+                                            "X" => match (n, flag_alternative, precision) {
+                                                (0, _, 0) => String::new(),
+                                                (0, true, _) => format!("{n:0precision$X}"),
+                                                ( _,true, _) => format!("{n:#0size$X}", size = precision + 2 ),
+                                                ( _,false, 0) => format!("{n:precision$X}"),
+                                                (_, _, _) => format!("{n:0precision$X}")
                                             }
                                             _ => unreachable!("Conversion are filtered by the regex : received {conversion}"),
                                         }
-                                    };
+                                    ;
 
                                     // second step : Fit the number in the width with correct padding and filling
-                                    let width_formatted = if flag_minus {
-                                        if flag_zero {
-                                            format!("{precision_formatted:0<width$}", width = width)
-                                        } else {
-                                            format!("{precision_formatted:<width$}", width = width)
-                                        }
-                                    } else if flag_zero {
-                                        format!("{precision_formatted:0>width$}", width = width)
-                                    } else {
-                                        format!("{precision_formatted:>width$}", width = width)
+                                    let width_formatted = match (flag_minus, flag_zero) {
+                                        (true, true) => format!("{precision_formatted:0<width$}"),
+                                        (true, false) => format!("{precision_formatted:<width$}"),
+                                        (false, true) => format!("{precision_formatted:0>width$}"),
+                                        (false, false) => format!("{precision_formatted:>width$}"),
                                     };
 
                                     format!("{prefix}{before}{width_formatted}{after}")
@@ -544,6 +501,48 @@ mod tests {
     #[test]
     fn precision_octal3() {
         let split_name = SplitName::new(None, Some(String::from("%.3o")), None).unwrap();
+        assert_eq!(split_name.get(0), "xx000");
+        assert_eq!(split_name.get(1), "xx001");
+    }
+
+    #[test]
+    fn precision_lower_hex0() {
+        let split_name = SplitName::new(None, Some(String::from("%.0x")), None).unwrap();
+        assert_eq!(split_name.get(0), "xx");
+        assert_eq!(split_name.get(1), "xx1");
+    }
+
+    #[test]
+    fn precision_lower_hex1() {
+        let split_name = SplitName::new(None, Some(String::from("%.1x")), None).unwrap();
+        assert_eq!(split_name.get(0), "xx0");
+        assert_eq!(split_name.get(1), "xx1");
+    }
+
+    #[test]
+    fn precision_lower_hex3() {
+        let split_name = SplitName::new(None, Some(String::from("%.3x")), None).unwrap();
+        assert_eq!(split_name.get(0), "xx000");
+        assert_eq!(split_name.get(1), "xx001");
+    }
+
+    #[test]
+    fn precision_upper_hex0() {
+        let split_name = SplitName::new(None, Some(String::from("%.0x")), None).unwrap();
+        assert_eq!(split_name.get(0), "xx");
+        assert_eq!(split_name.get(1), "xx1");
+    }
+
+    #[test]
+    fn precision_upper_hex1() {
+        let split_name = SplitName::new(None, Some(String::from("%.1x")), None).unwrap();
+        assert_eq!(split_name.get(0), "xx0");
+        assert_eq!(split_name.get(1), "xx1");
+    }
+
+    #[test]
+    fn precision_upper_hex3() {
+        let split_name = SplitName::new(None, Some(String::from("%.3x")), None).unwrap();
         assert_eq!(split_name.get(0), "xx000");
         assert_eq!(split_name.get(1), "xx001");
     }
