@@ -3681,3 +3681,23 @@ fn test_cp_seen_file() {
     assert!(at.plus("c").join("f").exists());
     assert!(at.plus("c").join("f.~1~").exists());
 }
+
+#[test]
+fn test_cp_path_ends_with_terminator() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("a");
+    ts.ucmd().arg("-r").arg("-T").arg("a").arg("e/").succeeds();
+}
+
+#[test]
+fn test_cp_no_such() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("b");
+    ts.ucmd()
+        .arg("b")
+        .arg("no-such/")
+        .fails()
+        .stderr_is("cp: 'no-such/' is not a directory\n");
+}

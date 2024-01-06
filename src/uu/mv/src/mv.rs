@@ -23,7 +23,10 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, source_is_target_backup};
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError, UUsageError};
-use uucore::fs::{are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file};
+use uucore::fs::{
+    are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
+    path_ends_with_terminator,
+};
 use uucore::update_control;
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
@@ -103,25 +106,6 @@ static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
 static OPT_VERBOSE: &str = "verbose";
 static OPT_PROGRESS: &str = "progress";
 static ARG_FILES: &str = "files";
-
-/// Returns true if the passed `path` ends with a path terminator.
-#[cfg(unix)]
-fn path_ends_with_terminator(path: &Path) -> bool {
-    use std::os::unix::prelude::OsStrExt;
-    path.as_os_str()
-        .as_bytes()
-        .last()
-        .map_or(false, |&byte| byte == b'/' || byte == b'\\')
-}
-
-#[cfg(windows)]
-fn path_ends_with_terminator(path: &Path) -> bool {
-    use std::os::windows::prelude::OsStrExt;
-    path.as_os_str()
-        .encode_wide()
-        .last()
-        .map_or(false, |wide| wide == b'/'.into() || wide == b'\\'.into())
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -335,9 +319,10 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     }
 
     let target_is_dir = target.is_dir();
+    let source_is_dir = source.is_dir();
 
     if path_ends_with_terminator(target)
-        && !target_is_dir
+        && (!target_is_dir && !source_is_dir)
         && !opts.no_target_dir
         && opts.update != UpdateMode::ReplaceIfOlder
     {

@@ -786,3 +786,17 @@ fn test_default_g_precision() {
         .succeeds()
         .stdout_only("000001e+06\n");
 }
+
+#[test]
+fn test_invalid_format() {
+    new_ucmd!()
+        .args(&["-f", "%%g", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("format '%%g' has no % directive");
+    new_ucmd!()
+        .args(&["-f", "%g%g", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("format '%g%g' has too many % directives");
+}
