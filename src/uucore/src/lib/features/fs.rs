@@ -121,6 +121,7 @@ impl FileInformation {
             not(target_arch = "aarch64"),
             not(target_arch = "riscv64"),
             not(target_arch = "loongarch64"),
+            not(target_arch = "sparc64"),
             target_pointer_width = "64"
         ))]
         return self.0.st_nlink;
@@ -137,6 +138,7 @@ impl FileInformation {
                 target_arch = "aarch64",
                 target_arch = "riscv64",
                 target_arch = "loongarch64",
+                target_arch = "sparc64",
                 not(target_pointer_width = "64")
             )
         ))]
