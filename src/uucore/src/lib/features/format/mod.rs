@@ -79,7 +79,6 @@ impl Display for FormatError {
                 "%{}: invalid conversion specification",
                 String::from_utf8_lossy(s)
             ),
-            // TODO: The next two should print the spec as well
             Self::TooManySpecs(s) => write!(
                 f,
                 "format '{}' has too many % directives",
