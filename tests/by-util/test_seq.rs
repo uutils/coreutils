@@ -766,3 +766,17 @@ fn test_invalid_zero_increment_value() {
         .no_stdout()
         .usage_error("invalid Zero increment value: '0'");
 }
+
+#[test]
+fn test_invalid_format() {
+    new_ucmd!()
+        .args(&["-f", "%%g", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("format '%%g' has no % directive");
+    new_ucmd!()
+        .args(&["-f", "%g%g", "1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("format '%g%g' has too many % directives");
+}
