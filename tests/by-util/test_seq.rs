@@ -768,6 +768,26 @@ fn test_invalid_zero_increment_value() {
 }
 
 #[test]
+fn test_power_of_ten_display() {
+    new_ucmd!()
+        .args(&["-f", "%.2g", "10", "10"])
+        .succeeds()
+        .stdout_only("10\n");
+}
+
+#[test]
+fn test_default_g_precision() {
+    new_ucmd!()
+        .args(&["-f", "%010g", "1e5", "1e5"])
+        .succeeds()
+        .stdout_only("0000100000\n");
+    new_ucmd!()
+        .args(&["-f", "%010g", "1e6", "1e6"])
+        .succeeds()
+        .stdout_only("000001e+06\n");
+}
+
+#[test]
 fn test_invalid_format() {
     new_ucmd!()
         .args(&["-f", "%%g", "1"])
