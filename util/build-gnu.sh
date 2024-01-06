@@ -202,10 +202,6 @@ sed -i 's|ln -|/usr/bin/ln -|' tests/cp/link-deref.sh
 sed -i "s|cannot stat 'symlink': Permission denied|not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
 sed -i "s|cp: target directory 'symlink': Permission denied|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
 
-# Workaround https://github.com/uutils/coreutils/issues/5766
-# to transform an ERROR into FAIL
-sed -i 's|xargs mkdir )|xargs mkdir -p )|' tests/cp/link-heap.sh
-
 # Our message is a bit better
 sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is not a directory|" tests/mv/trailing-slash.sh
 
