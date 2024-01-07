@@ -39,6 +39,7 @@ ringbuffer
 rlimit
 rstest
 smallvec
+sysinfo
 tempdir
 tempfile
 termion
