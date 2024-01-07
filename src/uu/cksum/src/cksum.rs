@@ -8,11 +8,13 @@ use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use hex::encode;
 use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{self, stdin, BufReader, Read};
+use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
+use std::error::Error;
+use std::fmt::Display;
 use uucore::{
-    error::{FromIo, UResult},
+    error::{FromIo, UResult, UError},
     format_usage, help_about, help_section, help_usage,
     sum::{
         div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
@@ -35,6 +37,32 @@ const ALGORITHM_OPTIONS_SHA384: &str = "sha384";
 const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
 const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
 const ALGORITHM_OPTIONS_SM3: &str = "sm3";
+
+#[derive(Debug)]
+enum CkSumError {
+    RawMultipleFiles,
+}
+
+impl UError for CkSumError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::RawMultipleFiles => 1,
+        }
+    }
+}
+
+impl Error for CkSumError {
+}
+
+impl Display for CkSumError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RawMultipleFiles => {
+                write!(f, "the --raw option is not supported with multiple files")
+            }
+        }
+    }
+}
 
 fn detect_algo(
     program: &str,
@@ -110,6 +138,7 @@ struct Options {
     output_bits: usize,
     untagged: bool,
     length: Option<usize>,
+    raw: bool,
 }
 
 /// Calculate checksum
@@ -123,7 +152,12 @@ fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
 {
-    for filename in files {
+    let files_vec:Vec<_> = files.collect();
+    if options.raw && files_vec.len() > 1 {
+        return Err(Box::new(CkSumError::RawMultipleFiles));
+    }
+
+    for filename in files_vec {
         let filename = Path::new(filename);
         let stdin_buf;
         let file_buf;
@@ -140,7 +174,12 @@ where
         });
         let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
-
+        
+        if options.raw {
+            let bytes_str = sum.parse::<u32>().unwrap().to_be_bytes();
+            stdout().write_all(&bytes_str)?;
+            return Ok(());
+        }
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
         match (options.algo_name, not_file) {
@@ -231,6 +270,7 @@ mod options {
     pub const FILE: &str = "file";
     pub const UNTAGGED: &str = "untagged";
     pub const LENGTH: &str = "length";
+    pub const RAW: &str = "raw";
 }
 
 #[uucore::main]
@@ -291,6 +331,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         output_bits: bits,
         length,
         untagged: matches.get_flag(options::UNTAGGED),
+        raw: matches.get_flag(options::RAW), 
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -346,6 +387,12 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .help("digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8")
                 .action(ArgAction::Set),
+        )       
+        .arg(
+            Arg::new(options::RAW)
+            .long(options::RAW)
+            .help("emit a raw binary digest, not hexadecimal")
+            .action(ArgAction::SetTrue),
         )
         .after_help(AFTER_HELP)
 }
