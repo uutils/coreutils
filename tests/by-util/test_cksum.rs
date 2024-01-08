@@ -286,3 +286,17 @@ fn test_length_is_zero() {
         .no_stderr()
         .stdout_is_fixture("length_is_zero.expected");
 }
+
+#[test]
+fn test_blake2b_fail_on_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let folder_name = "a_folder";
+    at.mkdir(folder_name);
+
+    ucmd.arg("--algorithm=blake2b")
+        .arg(folder_name)
+        .fails()
+        .no_stdout()
+        .stderr_contains(format!("cksum: {folder_name}: Is a directory"));
+}
