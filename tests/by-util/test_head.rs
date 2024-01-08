@@ -382,6 +382,7 @@ fn test_presume_input_pipe_5_chars() {
 #[cfg(all(
     not(target_os = "windows"),
     not(target_os = "macos"),
+    not(target_os = "android"),
     not(target_os = "freebsd")
 ))]
 #[test]
@@ -396,6 +397,7 @@ fn test_read_backwards_bytes_proc_fs_version() {
 #[cfg(all(
     not(target_os = "windows"),
     not(target_os = "macos"),
+    not(target_os = "android"),
     not(target_os = "freebsd")
 ))]
 #[test]
@@ -410,6 +412,7 @@ fn test_read_backwards_bytes_proc_fs_modules() {
 #[cfg(all(
     not(target_os = "windows"),
     not(target_os = "macos"),
+    not(target_os = "android"),
     not(target_os = "freebsd")
 ))]
 #[test]
@@ -424,6 +427,7 @@ fn test_read_backwards_lines_proc_fs_modules() {
 #[cfg(all(
     not(target_os = "windows"),
     not(target_os = "macos"),
+    not(target_os = "android"),
     not(target_os = "freebsd")
 ))]
 #[test]
