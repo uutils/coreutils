@@ -294,7 +294,7 @@ fn test_raw_single_file() {
         .arg("lorem_ipsum.txt")
         .succeeds()
         .no_stderr()
-        .stdout_is_fixture("raw_single_file.expected");
+        .stdout_is_fixture_bytes("raw_single_file.expected");
 }
 
 #[test]
