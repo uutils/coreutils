@@ -435,7 +435,6 @@ fn sub_float_dec_places() {
 }
 
 #[test]
-#[ignore = "hexadecimal floats are unimplemented"]
 fn sub_float_hex_in() {
     new_ucmd!()
         .args(&["%f", "0xF1.1F"])
@@ -598,4 +597,45 @@ fn sub_general_round_float_leading_zeroes() {
         .args(&["%g", "1.000009"])
         .succeeds()
         .stdout_only("1.00001");
+}
+
+#[test]
+fn partial_float() {
+    new_ucmd!()
+        .args(&["%.2f is %s", "42.03x", "a lot"])
+        .fails()
+        .code_is(1)
+        .stdout_is("42.03 is a lot")
+        .stderr_is("printf: '42.03x': value not completely converted\n");
+}
+
+#[test]
+fn partial_integer() {
+    new_ucmd!()
+        .args(&["%d is %s", "42x23", "a lot"])
+        .fails()
+        .code_is(1)
+        .stdout_is("42 is a lot")
+        .stderr_is("printf: '42x23': value not completely converted\n");
+}
+
+#[test]
+fn test_overflow() {
+    new_ucmd!()
+        .args(&["%d", "36893488147419103232"])
+        .fails()
+        .code_is(1)
+        .stderr_is("printf: '36893488147419103232': Numerical result out of range\n");
+}
+
+#[test]
+fn partial_char() {
+    new_ucmd!()
+        .args(&["%d", "'abc"])
+        .fails()
+        .code_is(1)
+        .stdout_is("97")
+        .stderr_is(
+            "printf: warning: bc: character(s) following character constant have been ignored\n",
+        );
 }
