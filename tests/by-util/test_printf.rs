@@ -639,3 +639,29 @@ fn partial_char() {
             "printf: warning: bc: character(s) following character constant have been ignored\n",
         );
 }
+
+#[test]
+fn sub_alternative_lower_hex_0() {
+    new_ucmd!().args(&["%#x", "0"]).succeeds().stdout_only("0");
+}
+
+#[test]
+fn sub_alternative_lower_hex() {
+    new_ucmd!()
+        .args(&["%#x", "42"])
+        .succeeds()
+        .stdout_only("0x2a");
+}
+
+#[test]
+fn sub_alternative_upper_hex_0() {
+    new_ucmd!().args(&["%#X", "0"]).succeeds().stdout_only("0");
+}
+
+#[test]
+fn sub_alternative_upper_hex() {
+    new_ucmd!()
+        .args(&["%#X", "42"])
+        .succeeds()
+        .stdout_only("0x2A");
+}
