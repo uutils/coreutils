@@ -308,3 +308,17 @@ fn test_raw_multiple_files() {
         .stderr_contains("cksum: the --raw option is not supported with multiple files")
         .code_is(1);
 }
+
+#[test]
+fn test_blake2b_fail_on_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let folder_name = "a_folder";
+    at.mkdir(folder_name);
+
+    ucmd.arg("--algorithm=blake2b")
+        .arg(folder_name)
+        .fails()
+        .no_stdout()
+        .stderr_contains(format!("cksum: {folder_name}: Is a directory"));
+}

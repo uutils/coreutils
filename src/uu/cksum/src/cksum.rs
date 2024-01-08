@@ -207,6 +207,13 @@ where
             (ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
             (ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
             (ALGORITHM_OPTIONS_BLAKE2B, _) if !options.untagged => {
+                if filename.is_dir() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("{}: Is a directory", filename.display()),
+                    )
+                    .into());
+                }
                 if let Some(length) = options.length {
                     // Multiply by 8 here, as we want to print the length in bits.
                     println!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());
