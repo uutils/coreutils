@@ -265,3 +265,12 @@ fn test_multiple() {
     assert_eq!(result.stdout_str(), "b\n");
     assert_eq!(result.stderr_str(), "");
 }
+
+#[test]
+fn test_newline_delimited() {
+    new_ucmd!()
+        .args(&["-f", "1", "-d", "\n"])
+        .pipe_in("a:1\nb:")
+        .succeeds()
+        .stdout_only_bytes("a:1\n");
+}
