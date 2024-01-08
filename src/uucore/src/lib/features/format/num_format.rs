@@ -156,13 +156,21 @@ impl Formatter for UnsignedInt {
                 format!("{x:x}")
             }
             UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes) => {
-                format!("{x:#x}")
+                if x == 0 {
+                    "0".to_string()
+                } else {
+                    format!("{x:#x}")
+                }
             }
             UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::No) => {
                 format!("{x:X}")
             }
             UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes) => {
-                format!("{x:#X}")
+                if x == 0 {
+                    "0".to_string()
+                } else {
+                    format!("{x:#X}")
+                }
             }
         };
 
