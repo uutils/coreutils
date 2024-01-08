@@ -286,3 +286,25 @@ fn test_length_is_zero() {
         .no_stderr()
         .stdout_is_fixture("length_is_zero.expected");
 }
+
+#[test]
+fn test_raw_single_file() {
+    new_ucmd!()
+        .arg("--raw")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_fixture("raw_single_file.expected");
+}
+
+#[test]
+fn test_raw_multiple_files() {
+    new_ucmd!()
+        .arg("--raw")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: the --raw option is not supported with multiple files")
+        .code_is(1);
+}

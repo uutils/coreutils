@@ -6,15 +6,15 @@
 // spell-checker:ignore (ToDO) fname, algo
 use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use hex::encode;
+use std::error::Error;
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
-use std::error::Error;
-use std::fmt::Display;
 use uucore::{
-    error::{FromIo, UResult, UError},
+    error::{FromIo, UError, UResult},
     format_usage, help_about, help_section, help_usage,
     sum::{
         div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
@@ -51,8 +51,7 @@ impl UError for CkSumError {
     }
 }
 
-impl Error for CkSumError {
-}
+impl Error for CkSumError {}
 
 impl Display for CkSumError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -152,7 +151,7 @@ fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
 {
-    let files_vec:Vec<_> = files.collect();
+    let files_vec: Vec<_> = files.collect();
     if options.raw && files_vec.len() > 1 {
         return Err(Box::new(CkSumError::RawMultipleFiles));
     }
@@ -174,7 +173,7 @@ where
         });
         let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
-        
+
         if options.raw {
             let bytes_str = sum.parse::<u32>().unwrap().to_be_bytes();
             stdout().write_all(&bytes_str)?;
@@ -331,7 +330,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         output_bits: bits,
         length,
         untagged: matches.get_flag(options::UNTAGGED),
-        raw: matches.get_flag(options::RAW), 
+        raw: matches.get_flag(options::RAW),
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -387,7 +386,7 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .help("digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8")
                 .action(ArgAction::Set),
-        )       
+        )
         .arg(
             Arg::new(options::RAW)
             .long(options::RAW)
