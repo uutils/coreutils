@@ -141,7 +141,17 @@ impl Formatter for UnsignedInt {
         let mut s = match self.variant {
             UnsignedIntVariant::Decimal => format!("{x}"),
             UnsignedIntVariant::Octal(Prefix::No) => format!("{x:o}"),
-            UnsignedIntVariant::Octal(Prefix::Yes) => format!("{x:#o}"),
+            UnsignedIntVariant::Octal(Prefix::Yes) => {
+                // The prefix that rust uses is `0o`, but GNU uses `0`.
+                // We also need to take into account that 0 should not be 00
+                // Since this is an unsigned int, we do not need to take the minus
+                // sign into account.
+                if x != 0 {
+                    format!("0{x:o}")
+                } else {
+                    format!("{x:o}")
+                }
+            }
             UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::No) => {
                 format!("{x:x}")
             }
@@ -486,6 +496,27 @@ fn strip_fractional_zeroes_and_dot(s: &mut String) {
 #[cfg(test)]
 mod test {
     use crate::format::num_format::{Case, ForceDecimal};
+
+    #[test]
+    fn unsigned_octal() {
+        use super::{Formatter, NumberAlignment, Prefix, UnsignedInt, UnsignedIntVariant};
+        let f = |x| {
+            let mut s = Vec::new();
+            UnsignedInt {
+                variant: UnsignedIntVariant::Octal(Prefix::Yes),
+                width: 0,
+                precision: 0,
+                alignment: NumberAlignment::Left,
+            }
+            .fmt(&mut s, x)
+            .unwrap();
+            String::from_utf8(s).unwrap()
+        };
+
+        assert_eq!(f(0), "0");
+        assert_eq!(f(5), "05");
+        assert_eq!(f(8), "010");
+    }
 
     #[test]
     fn decimal_float() {
