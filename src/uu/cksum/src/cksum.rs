@@ -137,7 +137,7 @@ where
             file_buf =
             match File::open(filename){
                 Ok(file) => file,
-                Err(err) => { println!("{:?} file dosen't exist",filename); continue;}
+                Err(err) => { continue;}
             };
             Box::new(file_buf) as Box<dyn Read>
         });
