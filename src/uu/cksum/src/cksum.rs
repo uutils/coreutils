@@ -140,7 +140,13 @@ where
         });
         let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
-
+        if filename.is_dir() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{}: Is a directory", filename.display()),
+            )
+            .into());
+        }
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
         match (options.algo_name, not_file) {
@@ -169,13 +175,6 @@ where
             (ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
             (ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
             (ALGORITHM_OPTIONS_BLAKE2B, _) if !options.untagged => {
-                if filename.is_dir() {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!("{}: Is a directory", filename.display()),
-                    )
-                    .into());
-                }
                 if let Some(length) = options.length {
                     // Multiply by 8 here, as we want to print the length in bits.
                     println!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());
