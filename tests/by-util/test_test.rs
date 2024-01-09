@@ -696,7 +696,7 @@ fn test_file_owned_by_egid() {
     if user_gid != file_gid {
         let file_uid = metadata.uid();
         let path = CString::new(at.plus("regular_file").as_os_str().as_bytes()).expect("bad path");
-        let r = unsafe { libc::chown(path.as_ptr().into(), file_uid, user_gid) };
+        let r = unsafe { libc::chown(path.as_ptr(), file_uid, user_gid) };
         assert_ne!(r, -1);
     }
 

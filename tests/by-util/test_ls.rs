@@ -2623,6 +2623,70 @@ fn test_ls_quoting_style() {
 }
 
 #[test]
+fn test_ls_quoting_style_env_var_default() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(at.plus_as_string("foo-1"));
+    at.touch(at.plus_as_string("bar-2"));
+
+    // If no quoting style argument is provided, the QUOTING_STYLE environment variable
+    // shall be used.
+
+    let correct_c = "\"bar-2\"\n\"foo-1\"";
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "c")
+        .succeeds()
+        .stdout_only(format!("{correct_c}\n"));
+}
+
+#[test]
+fn test_ls_quoting_style_arg_overrides_env_var() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(at.plus_as_string("foo-1"));
+    at.touch(at.plus_as_string("bar-2"));
+
+    // The quoting style given by the env variable should be
+    // overridden by any escape style provided by argument.
+    for (arg, correct) in [
+        ("--quoting-style=literal", "foo-1"),
+        ("-N", "foo-1"),
+        ("--quoting-style=escape", "foo-1"),
+        ("-b", "foo-1"),
+        ("--quoting-style=shell-escape", "foo-1"),
+        ("--quoting-style=shell-escape-always", "'foo-1'"),
+        ("--quoting-style=shell", "foo-1"),
+        ("--quoting-style=shell-always", "'foo-1'"),
+    ] {
+        scene
+            .ucmd()
+            .env("QUOTING_STYLE", "c")
+            .arg("--hide-control-chars")
+            .arg(arg)
+            .arg("foo-1")
+            .succeeds()
+            .stdout_only(format!("{correct}\n"));
+    }
+
+    // Another loop to check for the C quoting style that is used as a default above.
+    for (arg, correct) in [
+        ("--quoting-style=c", "\"foo-1\""),
+        ("-Q", "\"foo-1\""),
+        ("--quote-name", "\"foo-1\""),
+    ] {
+        scene
+            .ucmd()
+            .env("QUOTING_STYLE", "literal")
+            .arg("--hide-control-chars")
+            .arg(arg)
+            .arg("foo-1")
+            .succeeds()
+            .stdout_only(format!("{correct}\n"));
+    }
+}
+
+#[test]
 fn test_ls_quoting_and_color() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4139,7 +4203,7 @@ fn test_ls_hyperlink_dirs() {
     assert!(result
         .stdout_str()
         .lines()
-        .nth(0)
+        .next()
         .unwrap()
         .contains(&format!("{path}{separator}{dir_a}\x07{dir_a}\x1b]8;;\x07:")));
     assert_eq!(result.stdout_str().lines().nth(1).unwrap(), "");

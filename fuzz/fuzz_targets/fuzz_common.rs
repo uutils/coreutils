@@ -8,12 +8,12 @@ use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
 use rand::prelude::SliceRandom;
 use rand::Rng;
 use std::ffi::OsString;
-use std::io;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::{AsRawFd, RawFd};
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicBool, Once};
+use std::{io, thread};
 
 /// Represents the result of running a command, including its standard output,
 /// standard error, and exit code.
@@ -56,7 +56,7 @@ pub fn generate_and_run_uumain<F>(
     pipe_input: Option<&str>,
 ) -> CommandResult
 where
-    F: FnOnce(std::vec::IntoIter<OsString>) -> i32,
+    F: FnOnce(std::vec::IntoIter<OsString>) -> i32 + Send + 'static,
 {
     // Duplicate the stdout and stderr file descriptors
     let original_stdout_fd = unsafe { dup(STDOUT_FILENO) };
@@ -68,6 +68,7 @@ where
             exit_code: -1,
         };
     }
+
     println!("Running test {:?}", &args[0..]);
     let mut pipe_stdout_fds = [-1; 2];
     let mut pipe_stderr_fds = [-1; 2];
@@ -120,10 +121,23 @@ where
         None
     };
 
-    let uumain_exit_status = uumain_function(args.to_owned().into_iter());
-
-    io::stdout().flush().unwrap();
-    io::stderr().flush().unwrap();
+    let (uumain_exit_status, captured_stdout, captured_stderr) = thread::scope(|s| {
+        let out = s.spawn(|| read_from_fd(pipe_stdout_fds[0]));
+        let err = s.spawn(|| read_from_fd(pipe_stderr_fds[0]));
+        let status = uumain_function(args.to_owned().into_iter());
+        // Reset the exit code global variable in case we run another test after this one
+        // See https://github.com/uutils/coreutils/issues/5777
+        uucore::error::set_exit_code(0);
+        io::stdout().flush().unwrap();
+        io::stderr().flush().unwrap();
+        unsafe {
+            close(pipe_stdout_fds[1]);
+            close(pipe_stderr_fds[1]);
+            close(STDOUT_FILENO);
+            close(STDERR_FILENO);
+        }
+        (status, out.join().unwrap(), err.join().unwrap())
+    });
 
     // Restore the original stdout and stderr
     if unsafe { dup2(original_stdout_fd, STDOUT_FILENO) } == -1
@@ -138,9 +152,6 @@ where
     unsafe {
         close(original_stdout_fd);
         close(original_stderr_fd);
-
-        close(pipe_stdout_fds[1]);
-        close(pipe_stderr_fds[1]);
     }
 
     // Restore the original stdin if it was modified
@@ -155,18 +166,14 @@ where
         unsafe { close(fd) };
     }
 
-    let captured_stdout = read_from_fd(pipe_stdout_fds[0]).trim().to_string();
-    let captured_stderr = read_from_fd(pipe_stderr_fds[0]).to_string();
-    let captured_stderr = captured_stderr
-        .split_once(':')
-        .map(|x| x.1)
-        .unwrap_or("")
-        .trim()
-        .to_string();
-
     CommandResult {
         stdout: captured_stdout,
-        stderr: captured_stderr,
+        stderr: captured_stderr
+            .split_once(':')
+            .map(|x| x.1)
+            .unwrap_or("")
+            .trim()
+            .to_string(),
         exit_code: uumain_exit_status,
     }
 }

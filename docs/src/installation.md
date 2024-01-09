@@ -119,7 +119,7 @@ port install coreutils-uutils
 
 ## FreeBSD
 
-[![FreeBSD port](https://repology.org/badge/version-for-repo/freebsd/uutils-coreutils.svg)](https://repology.org/project/uutils-coreutils/versions)
+[![FreeBSD port](https://repology.org/badge/version-for-repo/freebsd/rust-coreutils.svg)](https://repology.org/project/rust-coreutils/versions)
 
 ```sh
 pkg install rust-coreutils

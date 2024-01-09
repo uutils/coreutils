@@ -32,8 +32,8 @@ use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, is_symlink_loop, paths_refer_to_same_file,
-    FileInformation, MissingHandling, ResolveMode,
+    are_hardlinks_to_same_file, canonicalize, is_symlink_loop, path_ends_with_terminator,
+    paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -1193,7 +1193,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     for source in sources {
         if seen_sources.contains(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
-            show_warning!("source {} specified more than once", source.quote());
+            show_warning!("source file {} specified more than once", source.quote());
         } else {
             let dest = construct_dest_path(source, target, target_type, options)
                 .unwrap_or_else(|_| target.to_path_buf());
@@ -1713,6 +1713,7 @@ fn copy_file(
         if are_hardlinks_to_same_file(source, dest)
             && !options.force()
             && options.backup == BackupMode::NoBackup
+            && source != dest
         {
             return Ok(());
         }
@@ -1991,6 +1992,10 @@ fn copy_helper(
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
         fs::create_dir_all(parent)?;
+    }
+
+    if path_ends_with_terminator(dest) && !dest.is_dir() {
+        return Err(Error::NotADirectory(dest.to_path_buf()));
     }
 
     if source.as_os_str() == "/dev/null" {

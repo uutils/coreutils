@@ -71,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             table();
             Ok(())
         }
-        Mode::List => list(pids_or_signals.get(0)),
+        Mode::List => list(pids_or_signals.first()),
     }
 }
 

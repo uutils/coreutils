@@ -28,11 +28,18 @@ pub mod options {
     pub const FILE: &str = "file";
     pub const ITERATIONS: &str = "iterations";
     pub const SIZE: &str = "size";
+    pub const WIPESYNC: &str = "u";
     pub const REMOVE: &str = "remove";
     pub const VERBOSE: &str = "verbose";
     pub const EXACT: &str = "exact";
     pub const ZERO: &str = "zero";
     pub const RANDOM_SOURCE: &str = "random-source";
+
+    pub mod remove {
+        pub const UNLINK: &str = "unlink";
+        pub const WIPE: &str = "wipe";
+        pub const WIPESYNC: &str = "wipesync";
+    }
 }
 
 // This block size seems to match GNU (2^16 = 65536)
@@ -80,6 +87,14 @@ enum Pattern {
 enum PassType {
     Pattern(Pattern),
     Random,
+}
+
+#[derive(PartialEq, Clone, Copy)]
+enum RemoveMethod {
+    None,     // Default method. Only obfuscate the file data
+    Unlink,   // The same as 'None' + unlink the file
+    Wipe,     // The same as 'Unlink' + obfuscate the file name before unlink
+    WipeSync, // The same as 'Wipe' sync the file name changes
 }
 
 /// Iterates over all possible filenames of a certain length using NAME_CHARSET as an alphabet
@@ -220,17 +235,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => unreachable!(),
     };
 
-    // TODO: implement --remove HOW
-    //       The optional HOW parameter indicates how to remove a directory entry:
-    //         - 'unlink' => use a standard unlink call.
-    //         - 'wipe' => also first obfuscate bytes in the name.
-    //         - 'wipesync' => also sync each obfuscated byte to disk.
-    //       The default mode is 'wipesync', but note it can be expensive.
-
     // TODO: implement --random-source
 
+    let remove_method = if matches.get_flag(options::WIPESYNC) {
+        RemoveMethod::WipeSync
+    } else if matches.contains_id(options::REMOVE) {
+        match matches
+            .get_one::<String>(options::REMOVE)
+            .map(AsRef::as_ref)
+        {
+            Some(options::remove::UNLINK) => RemoveMethod::Unlink,
+            Some(options::remove::WIPE) => RemoveMethod::Wipe,
+            Some(options::remove::WIPESYNC) => RemoveMethod::WipeSync,
+            _ => unreachable!("should be caught by clap"),
+        }
+    } else {
+        RemoveMethod::None
+    };
+
     let force = matches.get_flag(options::FORCE);
-    let remove = matches.get_flag(options::REMOVE);
     let size_arg = matches
         .get_one::<String>(options::SIZE)
         .map(|s| s.to_string());
@@ -244,7 +267,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         show_if_err!(wipe_file(
             path_str,
             iterations,
-            remove,
+            remove_method,
             size,
             exact,
             zero,
@@ -286,11 +309,25 @@ pub fn uu_app() -> Command {
                 .help("shred this many bytes (suffixes like K, M, G accepted)"),
         )
         .arg(
-            Arg::new(options::REMOVE)
+            Arg::new(options::WIPESYNC)
                 .short('u')
-                .long(options::REMOVE)
-                .help("truncate and remove file after overwriting;  See below")
+                .help("deallocate and remove file after overwriting")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::REMOVE)
+                .long(options::REMOVE)
+                .value_name("HOW")
+                .value_parser([
+                    options::remove::UNLINK,
+                    options::remove::WIPE,
+                    options::remove::WIPESYNC,
+                ])
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value(options::remove::WIPESYNC)
+                .help("like -u but give control on HOW to delete;  See below")
+                .action(ArgAction::Set),
         )
         .arg(
             Arg::new(options::VERBOSE)
@@ -356,7 +393,7 @@ fn pass_name(pass_type: &PassType) -> String {
 fn wipe_file(
     path_str: &str,
     n_passes: usize,
-    remove: bool,
+    remove_method: RemoveMethod,
     size: Option<u64>,
     exact: bool,
     zero: bool,
@@ -479,8 +516,8 @@ fn wipe_file(
             .map_err_context(|| format!("{}: failed to read random bytes", path.maybe_quote()))?;
     }
 
-    if remove {
-        do_remove(path, path_str, verbose)
+    if remove_method != RemoveMethod::None {
+        do_remove(path, path_str, verbose, remove_method)
             .map_err_context(|| format!("{}: failed to remove file", path.maybe_quote()))?;
     }
 
@@ -524,7 +561,7 @@ fn get_file_size(path: &Path) -> Result<u64, io::Error> {
 
 // Repeatedly renames the file with strings of decreasing length (most likely all 0s)
 // Return the path of the file after its last renaming or None if error
-fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
+fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Option<PathBuf> {
     let file_name_len = orig_path.file_name().unwrap().to_str().unwrap().len();
 
     let mut last_path = PathBuf::from(orig_path);
@@ -549,12 +586,14 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                         );
                     }
 
-                    // Sync every file rename
-                    let new_file = OpenOptions::new()
-                        .write(true)
-                        .open(new_path.clone())
-                        .expect("Failed to open renamed file for syncing");
-                    new_file.sync_all().expect("Failed to sync renamed file");
+                    if remove_method == RemoveMethod::WipeSync {
+                        // Sync every file rename
+                        let new_file = OpenOptions::new()
+                            .write(true)
+                            .open(new_path.clone())
+                            .expect("Failed to open renamed file for syncing");
+                        new_file.sync_all().expect("Failed to sync renamed file");
+                    }
 
                     last_path = new_path;
                     break;
@@ -575,12 +614,23 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
     Some(last_path)
 }
 
-fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::Error> {
+fn do_remove(
+    path: &Path,
+    orig_filename: &str,
+    verbose: bool,
+    remove_method: RemoveMethod,
+) -> Result<(), io::Error> {
     if verbose {
         show_error!("{}: removing", orig_filename.maybe_quote());
     }
 
-    if let Some(rp) = wipe_name(path, verbose) {
+    let remove_path = if remove_method == RemoveMethod::Unlink {
+        Some(path.with_file_name(orig_filename))
+    } else {
+        wipe_name(path, verbose, remove_method)
+    };
+
+    if let Some(rp) = remove_path {
         fs::remove_file(rp)?;
     }
 

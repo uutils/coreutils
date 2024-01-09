@@ -286,7 +286,13 @@ impl Formatter for Float {
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => x,
-            None => 0,
+            None => {
+                if matches!(variant, FloatVariant::Shortest) {
+                    6
+                } else {
+                    0
+                }
+            }
             Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
         };
 
@@ -405,7 +411,7 @@ fn format_float_shortest(
         let mut normalized = format!("{normalized:.*}", precision);
 
         if force_decimal == ForceDecimal::No {
-            strip_zeros_and_dot(&mut normalized);
+            strip_fractional_zeroes_and_dot(&mut normalized);
         }
 
         let exp_char = match case {
@@ -418,8 +424,9 @@ fn format_float_shortest(
         // Decimal-ish notation with a few differences:
         //  - The precision works differently and specifies the total number
         //    of digits instead of the digits in the fractional part.
-        //  - If we don't force the decimal, '0' and `.` are trimmed.
-        let decimal_places = (precision as i32).saturating_sub(exponent) as usize;
+        //  - If we don't force the decimal, `.` and trailing `0` in the fractional part
+        //    are trimmed.
+        let decimal_places = (precision as i32 - exponent) as usize;
         let mut formatted = if decimal_places == 0 && force_decimal == ForceDecimal::Yes {
             format!("{f:.0}.")
         } else {
@@ -427,7 +434,7 @@ fn format_float_shortest(
         };
 
         if force_decimal == ForceDecimal::No {
-            strip_zeros_and_dot(&mut formatted);
+            strip_fractional_zeroes_and_dot(&mut formatted);
         }
 
         formatted
@@ -463,12 +470,16 @@ fn format_float_hexadecimal(
     s
 }
 
-fn strip_zeros_and_dot(s: &mut String) {
-    while s.ends_with('0') {
-        s.pop();
-    }
-    if s.ends_with('.') {
-        s.pop();
+fn strip_fractional_zeroes_and_dot(s: &mut String) {
+    let mut trim_to = s.len();
+    for (pos, c) in s.char_indices().rev() {
+        if pos + c.len_utf8() == trim_to && (c == '0' || c == '.') {
+            trim_to = pos;
+        }
+        if c == '.' {
+            s.truncate(trim_to);
+            break;
+        }
     }
 }
 
@@ -573,5 +584,19 @@ mod test {
         assert_eq!(f(12.3456789), "1.e+01");
         assert_eq!(f(1000000.0), "1.e+06");
         assert_eq!(f(99999999.0), "1.e+08");
+    }
+
+    #[test]
+    fn strip_insignificant_end() {
+        use super::strip_fractional_zeroes_and_dot;
+        let f = |s| {
+            let mut s = String::from(s);
+            strip_fractional_zeroes_and_dot(&mut s);
+            s
+        };
+        assert_eq!(&f("1000"), "1000");
+        assert_eq!(&f("1000."), "1000");
+        assert_eq!(&f("1000.02030"), "1000.0203");
+        assert_eq!(&f("1000.00000"), "1000");
     }
 }

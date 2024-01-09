@@ -621,7 +621,52 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
     }
 }
 
+/// Match the argument given to --quoting-style or the QUOTING_STYLE env variable.
+///
+/// # Arguments
+///
+/// * `style`: the actual argument string
+/// * `show_control` - A boolean value representing whether or not to show control characters.
+///
+/// # Returns
+///
+/// * An option with None if the style string is invalid, or a `QuotingStyle` wrapped in `Some`.
+fn match_quoting_style_name(style: &str, show_control: bool) -> Option<QuotingStyle> {
+    match style {
+        "literal" => Some(QuotingStyle::Literal { show_control }),
+        "shell" => Some(QuotingStyle::Shell {
+            escape: false,
+            always_quote: false,
+            show_control,
+        }),
+        "shell-always" => Some(QuotingStyle::Shell {
+            escape: false,
+            always_quote: true,
+            show_control,
+        }),
+        "shell-escape" => Some(QuotingStyle::Shell {
+            escape: true,
+            always_quote: false,
+            show_control,
+        }),
+        "shell-escape-always" => Some(QuotingStyle::Shell {
+            escape: true,
+            always_quote: true,
+            show_control,
+        }),
+        "c" => Some(QuotingStyle::C {
+            quotes: quoting_style::Quotes::Double,
+        }),
+        "escape" => Some(QuotingStyle::C {
+            quotes: quoting_style::Quotes::None,
+        }),
+        _ => None,
+    }
+}
+
 /// Extracts the quoting style to use based on the options provided.
+/// If no options are given, it looks if a default quoting style is provided
+/// through the QUOTING_STYLE environment variable.
 ///
 /// # Arguments
 ///
@@ -632,38 +677,12 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
 ///
 /// A QuotingStyle variant representing the quoting style to use.
 fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> QuotingStyle {
-    let opt_quoting_style = options.get_one::<String>(options::QUOTING_STYLE).cloned();
+    let opt_quoting_style = options.get_one::<String>(options::QUOTING_STYLE);
 
     if let Some(style) = opt_quoting_style {
-        match style.as_str() {
-            "literal" => QuotingStyle::Literal { show_control },
-            "shell" => QuotingStyle::Shell {
-                escape: false,
-                always_quote: false,
-                show_control,
-            },
-            "shell-always" => QuotingStyle::Shell {
-                escape: false,
-                always_quote: true,
-                show_control,
-            },
-            "shell-escape" => QuotingStyle::Shell {
-                escape: true,
-                always_quote: false,
-                show_control,
-            },
-            "shell-escape-always" => QuotingStyle::Shell {
-                escape: true,
-                always_quote: true,
-                show_control,
-            },
-            "c" => QuotingStyle::C {
-                quotes: quoting_style::Quotes::Double,
-            },
-            "escape" => QuotingStyle::C {
-                quotes: quoting_style::Quotes::None,
-            },
-            _ => unreachable!("Should have been caught by Clap"),
+        match match_quoting_style_name(style, show_control) {
+            Some(qs) => qs,
+            None => unreachable!("Should have been caught by Clap"),
         }
     } else if options.get_flag(options::quoting::LITERAL) {
         QuotingStyle::Literal { show_control }
@@ -675,16 +694,31 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
         QuotingStyle::C {
             quotes: quoting_style::Quotes::Double,
         }
-    } else if options.get_flag(options::DIRED) || !std::io::stdout().is_terminal() {
-        // By default, `ls` uses Literal quoting when
-        // writing to a non-terminal file descriptor
+    } else if options.get_flag(options::DIRED) {
         QuotingStyle::Literal { show_control }
     } else {
-        // TODO: use environment variable if available
-        QuotingStyle::Shell {
-            escape: true,
-            always_quote: false,
-            show_control,
+        // If set, the QUOTING_STYLE environment variable specifies a default style.
+        if let Ok(style) = std::env::var("QUOTING_STYLE") {
+            match match_quoting_style_name(style.as_str(), show_control) {
+                Some(qs) => return qs,
+                None => eprintln!(
+                    "{}: Ignoring invalid value of environment variable QUOTING_STYLE: '{}'",
+                    std::env::args().next().unwrap_or("ls".to_string()),
+                    style
+                ),
+            }
+        }
+
+        // By default, `ls` uses Shell escape quoting style when writing to a terminal file
+        // descriptor and Literal otherwise.
+        if std::io::stdout().is_terminal() {
+            QuotingStyle::Shell {
+                escape: true,
+                always_quote: false,
+                show_control,
+            }
+        } else {
+            QuotingStyle::Literal { show_control }
         }
     }
 }
@@ -2414,6 +2448,11 @@ fn display_items(
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
 
+    let quoted = items.iter().any(|item| {
+        let name = escape_name(&item.display_name, &config.quoting_style);
+        name.starts_with('\'')
+    });
+
     if config.format == Format::Long {
         let padding_collection = calculate_padding_collection(items, config, out);
 
@@ -2431,7 +2470,15 @@ fn display_items(
                     display_additional_leading_info(item, &padding_collection, config, out)?;
                 write!(out, "{more_info}")?;
             }
-            display_item_long(item, &padding_collection, config, out, dired, style_manager)?;
+            display_item_long(
+                item,
+                &padding_collection,
+                config,
+                out,
+                dired,
+                style_manager,
+                quoted,
+            )?;
         }
     } else {
         let mut longest_context_len = 1;
@@ -2448,7 +2495,6 @@ fn display_items(
         let padding = calculate_padding_collection(items, config, out);
 
         let mut names_vec = Vec::new();
-
         for i in items {
             let more_info = display_additional_leading_info(i, &padding, config, out)?;
             let cell = display_item_name(i, config, prefix_context, more_info, out, style_manager);
@@ -2458,8 +2504,12 @@ fn display_items(
         let names = names_vec.into_iter();
 
         match config.format {
-            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out)?,
-            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out)?,
+            Format::Columns => {
+                display_grid(names, config.width, Direction::TopToBottom, out, quoted)?;
+            }
+            Format::Across => {
+                display_grid(names, config.width, Direction::LeftToRight, out, quoted)?;
+            }
             Format::Commas => {
                 let mut current_col = 0;
                 let mut names = names;
@@ -2524,6 +2574,7 @@ fn display_grid(
     width: u16,
     direction: Direction,
     out: &mut BufWriter<Stdout>,
+    quoted: bool,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
@@ -2545,7 +2596,15 @@ fn display_grid(
         let mut grid = Grid::new(GridOptions { filling, direction });
 
         for name in names {
-            grid.add(name);
+            let formatted_name = Cell {
+                contents: if quoted && !name.contents.starts_with('\'') {
+                    format!(" {}", name.contents)
+                } else {
+                    name.contents
+                },
+                width: name.width,
+            };
+            grid.add(formatted_name);
         }
 
         match grid.fit_into_width(width as usize) {
@@ -2597,6 +2656,7 @@ fn display_item_long(
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
     style_manager: &mut StyleManager,
+    quoted: bool,
 ) -> UResult<()> {
     let mut output_display: String = String::new();
     if config.dired {
@@ -2689,8 +2749,15 @@ fn display_item_long(
 
         write!(output_display, " {} ", display_date(md, config)).unwrap();
 
-        let displayed_item =
+        let item_name =
             display_item_name(item, config, None, String::new(), out, style_manager).contents;
+
+        let displayed_item = if quoted && !item_name.starts_with('\'') {
+            format!(" {}", item_name)
+        } else {
+            item_name
+        };
+
         if config.dired {
             let (start, end) = dired::calculate_dired(
                 &dired.dired_positions,
