@@ -2,15 +2,14 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-#![allow(unused_must_use)] // because we of writeln!
 
 // spell-checker:ignore (ToDO) lstat
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs;
-use std::io::{ErrorKind, Write};
+use std::io::ErrorKind;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult, UUsageError};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::{format_usage, help_about, help_usage, show, show_if_err};
 
 // operating mode
 enum Mode {
@@ -31,7 +30,7 @@ mod options {
 }
 
 // a few global constants as used in the GNU implementation
-const POSIX_PATH_MAX: usize = 256;
+const POSIX_PATH_MAX: usize = 255;
 const POSIX_NAME_MAX: usize = 14;
 
 #[uucore::main]
@@ -61,19 +60,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // free strings are path operands
     // FIXME: TCS, seems inefficient and overly verbose (?)
-    let mut res = true;
     for p in paths.unwrap() {
         let mut path = Vec::new();
         for path_segment in p.split('/') {
             path.push(path_segment.to_string());
         }
-        res &= check_path(&mode, &path);
+        show_if_err!(check_path(&mode, &path));
     }
 
-    // determine error code
-    if !res {
-        set_exit_code(1);
-    }
     Ok(())
 }
 
@@ -110,86 +104,83 @@ pub fn uu_app() -> Command {
 }
 
 // check a path, given as a slice of it's components and an operating mode
-fn check_path(mode: &Mode, path: &[String]) -> bool {
+fn check_path(mode: &Mode, path: &[String]) -> UResult<()> {
     match *mode {
         Mode::Basic => check_basic(path),
-        Mode::Extra => check_default(path) && check_extra(path),
-        Mode::Both => check_basic(path) && check_extra(path),
-        _ => check_default(path),
+        Mode::Extra => check_default(path).and_then(|_| check_extra(path)),
+        Mode::Both => check_basic(path).and_then(|_| check_extra(path)),
+        Mode::Default => check_default(path),
     }
 }
 
 // check a path in basic compatibility mode
-fn check_basic(path: &[String]) -> bool {
+fn check_basic(path: &[String]) -> UResult<()> {
     let joined_path = path.join("/");
     let total_len = joined_path.len();
     // path length
     if total_len > POSIX_PATH_MAX {
-        writeln!(
-            std::io::stderr(),
-            "limit {POSIX_PATH_MAX} exceeded by length {total_len} of file name {joined_path}"
-        );
-        return false;
+        return Err(USimpleError::new(
+            1,
+            format!(
+                "limit {POSIX_PATH_MAX} exceeded by length {total_len} of file name {joined_path}"
+            ),
+        ));
     } else if total_len == 0 {
-        writeln!(std::io::stderr(), "empty file name");
-        return false;
+        return Err(USimpleError::new(1, "empty file name"));
     }
     // components: character portability and length
     for p in path {
         let component_len = p.len();
         if component_len > POSIX_NAME_MAX {
-            writeln!(
-                std::io::stderr(),
-                "limit {} exceeded by length {} of file name component {}",
-                POSIX_NAME_MAX,
-                component_len,
-                p.quote()
-            );
-            return false;
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "limit {} exceeded by length {} of file name component {}",
+                    POSIX_NAME_MAX,
+                    component_len,
+                    p.quote()
+                ),
+            ));
         }
-        if !check_portable_chars(p) {
-            return false;
-        }
+        check_portable_chars(p)?;
     }
     // permission checks
     check_searchable(&joined_path)
 }
 
 // check a path in extra compatibility mode
-fn check_extra(path: &[String]) -> bool {
+fn check_extra(path: &[String]) -> UResult<()> {
     // components: leading hyphens
     for p in path {
         if p.starts_with('-') {
-            writeln!(
-                std::io::stderr(),
-                "leading hyphen in file name component {}",
-                p.quote()
-            );
-            return false;
+            return Err(USimpleError::new(
+                1,
+                format!("leading '-' in a component of file name {}", p.quote()),
+            ));
         }
     }
     // path length
     if path.join("/").is_empty() {
-        writeln!(std::io::stderr(), "empty file name");
-        return false;
+        return Err(USimpleError::new(1, "empty file name"));
     }
-    true
+    Ok(())
 }
 
 // check a path in default mode (using the file system)
-fn check_default(path: &[String]) -> bool {
+fn check_default(path: &[String]) -> UResult<()> {
     let joined_path = path.join("/");
     let total_len = joined_path.len();
     // path length
     if total_len > libc::PATH_MAX as usize {
-        writeln!(
-            std::io::stderr(),
-            "limit {} exceeded by length {} of file name {}",
-            libc::PATH_MAX,
-            total_len,
-            joined_path.quote()
-        );
-        return false;
+        return Err(USimpleError::new(
+            1,
+            format!(
+                "limit {} exceeded by length {} of file name {}",
+                libc::PATH_MAX,
+                total_len,
+                joined_path.quote()
+            ),
+        ));
     }
     if total_len == 0 {
         // Check whether a file name component is in a directory that is not searchable,
@@ -206,50 +197,52 @@ fn check_default(path: &[String]) -> bool {
     for p in path {
         let component_len = p.len();
         if component_len > libc::FILENAME_MAX as usize {
-            writeln!(
-                std::io::stderr(),
-                "limit {} exceeded by length {} of file name component {}",
-                libc::FILENAME_MAX,
-                component_len,
-                p.quote()
-            );
-            return false;
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "limit {} exceeded by length {} of file name component {}",
+                    libc::FILENAME_MAX,
+                    component_len,
+                    p.quote()
+                ),
+            ));
         }
     }
+
     // permission checks
     check_searchable(&joined_path)
 }
 
 // check whether a path is or if other problems arise
-fn check_searchable(path: &str) -> bool {
+fn check_searchable(path: &str) -> UResult<()> {
     // we use lstat, just like the original implementation
     match fs::symlink_metadata(path) {
-        Ok(_) => true,
+        Ok(_) => Ok(()),
         Err(e) => {
             if e.kind() == ErrorKind::NotFound {
-                true
+                Ok(())
             } else {
-                writeln!(std::io::stderr(), "{e}");
-                false
+                Err(USimpleError::new(1, e.to_string()))
             }
         }
     }
 }
 
 // check whether a path segment contains only valid (read: portable) characters
-fn check_portable_chars(path_segment: &str) -> bool {
+fn check_portable_chars(path_segment: &str) -> UResult<()> {
     const VALID_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
     for (i, ch) in path_segment.as_bytes().iter().enumerate() {
         if !VALID_CHARS.contains(ch) {
             let invalid = path_segment[i..].chars().next().unwrap();
-            writeln!(
-                std::io::stderr(),
-                "nonportable character '{}' in file name component {}",
-                invalid,
-                path_segment.quote()
-            );
-            return false;
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "nonportable character '{}' in file name {}",
+                    invalid,
+                    path_segment.quote()
+                ),
+            ));
         }
     }
-    true
+    Ok(())
 }
