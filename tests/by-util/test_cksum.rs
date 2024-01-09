@@ -289,14 +289,16 @@ fn test_length_is_zero() {
 
 #[test]
 fn test_raw_single_file() {
-    new_ucmd!()
-        .arg("--raw")
-        .arg("lorem_ipsum.txt")
-        .succeeds()
-        .no_stderr()
-        .stdout_is_fixture_bytes("raw_single_file.expected");
+    for algo in ALGOS {
+        new_ucmd!()
+            .arg("--raw")
+            .arg("lorem_ipsum.txt")
+            .arg(format!("--algorithm={algo}"))
+            .succeeds()
+            .no_stderr()
+            .stdout_is_fixture_bytes(format!("raw/{algo}_single_file.expected"));
+    }
 }
-
 #[test]
 fn test_raw_multiple_files() {
     new_ucmd!()

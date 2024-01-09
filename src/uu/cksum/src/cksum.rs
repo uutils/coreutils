@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) fname, algo
 use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use hex::decode;
 use hex::encode;
 use std::error::Error;
 use std::ffi::OsStr;
@@ -151,12 +152,12 @@ fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
 {
-    let files_vec: Vec<_> = files.collect();
-    if options.raw && files_vec.len() > 1 {
+    let files: Vec<_> = files.collect();
+    if options.raw && files.len() > 1 {
         return Err(Box::new(CkSumError::RawMultipleFiles));
     }
 
-    for filename in files_vec {
+    for filename in files {
         let filename = Path::new(filename);
         let stdin_buf;
         let file_buf;
@@ -175,8 +176,16 @@ where
             .map_err_context(|| "failed to read input".to_string())?;
 
         if options.raw {
-            let bytes_str = sum.parse::<u32>().unwrap().to_be_bytes();
-            stdout().write_all(&bytes_str)?;
+            match decode(sum.clone()) {
+                Ok(bytes) => {
+                    stdout().write_all(&bytes)?;
+                }
+                Err(_) => {
+                    //bsd, sysv and crc have output generated without encode()
+                    let bytes = sum.parse::<u32>().unwrap().to_be_bytes();
+                    stdout().write_all(&bytes)?;
+                }
+            }
             return Ok(());
         }
         // The BSD checksum output is 5 digit integer
