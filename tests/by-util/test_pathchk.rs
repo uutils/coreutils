@@ -19,8 +19,6 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_default_mode() {
-    // test the default mode
-
     // accept some reasonable default
     new_ucmd!().args(&["dir/file"]).succeeds().no_stdout();
 
@@ -56,8 +54,6 @@ fn test_default_mode() {
 
 #[test]
 fn test_posix_mode() {
-    // test the posix mode
-
     // accept some reasonable default
     new_ucmd!().args(&["-p", "dir/file"]).succeeds().no_stdout();
 
@@ -82,8 +78,6 @@ fn test_posix_mode() {
 
 #[test]
 fn test_posix_special() {
-    // test the posix special mode
-
     // accept some reasonable default
     new_ucmd!().args(&["-P", "dir/file"]).succeeds().no_stdout();
 
@@ -123,8 +117,6 @@ fn test_posix_special() {
 
 #[test]
 fn test_posix_all() {
-    // test the posix special mode
-
     // accept some reasonable default
     new_ucmd!()
         .args(&["-p", "-P", "dir/file"])
