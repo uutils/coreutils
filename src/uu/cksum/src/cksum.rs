@@ -136,7 +136,7 @@ where
         } else {
             file_buf = match File::open(filename) {
                 Ok(file) => file,
-                Err(err) => {
+                Err(_) => {
                     continue;
                 }
             };
