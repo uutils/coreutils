@@ -615,6 +615,8 @@ jobs:
           arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
           aarch64-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
           *-redox*) sudo apt-get -y update ; sudo apt-get -y install fuse3 libfuse-dev ;;
+          # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
+          x86_64-pc-windows-gnu) C:/msys64/usr/bin/pacman.exe -Syu --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
         esac
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
@@ -983,6 +985,10 @@ jobs:
             touch /home/runner/.project
             echo "foo" > /home/runner/.plan
             ;;
+        esac
+        case '${{ matrix.job.os }}' in
+          # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
+          windows-latest) C:/msys64/usr/bin/pacman.exe -Syu --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
         esac
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
