@@ -639,3 +639,8 @@ fn partial_char() {
             "printf: warning: bc: character(s) following character constant have been ignored\n",
         );
 }
+
+#[test]
+fn char_as_byte() {
+    new_ucmd!().args(&["%c", "🙃"]).succeeds().stdout_only("ð");
+}
