@@ -177,18 +177,11 @@ where
 
         if options.raw {
             let bytes = match options.algo_name {
-                ALGORITHM_OPTIONS_CRC => {
-                    let bytes = sum.parse::<u32>().unwrap().to_be_bytes();
-                    bytes.to_vec()
-                }
+                ALGORITHM_OPTIONS_CRC => sum.parse::<u32>().unwrap().to_be_bytes().to_vec(),
                 ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => {
-                    let bytes = sum.parse::<u16>().unwrap().to_be_bytes();
-                    bytes.to_vec()
+                    sum.parse::<u16>().unwrap().to_be_bytes().to_vec()
                 }
-                _ => {
-                    let bytes = decode(sum).unwrap();
-                    bytes
-                }
+                _ => decode(sum).unwrap(),
             };
             stdout().write_all(&bytes)?;
             return Ok(());
