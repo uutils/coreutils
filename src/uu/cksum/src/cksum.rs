@@ -176,27 +176,21 @@ where
             .map_err_context(|| "failed to read input".to_string())?;
 
         if options.raw {
-            match options.algo_name  {
-                ALGORITHM_OPTIONS_CRC 
-                | ALGORITHM_OPTIONS_SYSV
-                | ALGORITHM_OPTIONS_BSD => {
+            let bytes = match options.algo_name {
+                ALGORITHM_OPTIONS_CRC => {
                     let bytes = sum.parse::<u32>().unwrap().to_be_bytes();
-                    let mut first_nonzero = 0;
-                    for byte in bytes {
-                        if byte != 0 {
-                            break;
-                        }
-                        first_nonzero += 1;
-                    }
-                    stdout().write_all(&bytes[first_nonzero..])?;
+                    bytes.to_vec()
                 }
-                _ =>{
+                ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => {
+                    let bytes = sum.parse::<u16>().unwrap().to_be_bytes();
+                    bytes.to_vec()
+                }
+                _ => {
                     let bytes = decode(sum).unwrap();
-                    stdout().write_all(&bytes)?;
+                    bytes
                 }
-
-            }
-
+            };
+            stdout().write_all(&bytes)?;
             return Ok(());
         }
         // The BSD checksum output is 5 digit integer
