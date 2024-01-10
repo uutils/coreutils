@@ -11,8 +11,9 @@ use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
 use std::iter;
 use std::path::Path;
+use uucore::show;
 use uucore::{
-    error::{FromIo, set_exit_code, UResult},
+    error::{FromIo, UResult},
     format_usage, help_about, help_section, help_usage,
     sum::{
         div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
@@ -136,9 +137,8 @@ where
         } else {
             file_buf = match File::open(filename) {
                 Ok(file) => file,
-                Err(_) => {
-                    eprintln!("cksum: {}: No such file or directory", filename.display());
-                    set_exit_code(1);
+                Err(err) => {
+                    show!(err.map_err_context(|| filename.to_string_lossy().to_string()));
                     continue;
                 }
             };
