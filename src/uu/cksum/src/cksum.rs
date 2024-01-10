@@ -6,6 +6,7 @@
 // spell-checker:ignore (ToDO) fname, algo
 use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use hex::encode;
+use uucore::error::set_exit_code;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
@@ -137,6 +138,8 @@ where
             file_buf = match File::open(filename) {
                 Ok(file) => file,
                 Err(_) => {
+                    eprintln!("cksum: {}: No such file or directory", filename.display());
+                    set_exit_code(1);
                     continue;
                 }
             };
