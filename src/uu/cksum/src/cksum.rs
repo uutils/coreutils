@@ -6,14 +6,13 @@
 // spell-checker:ignore (ToDO) fname, algo
 use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use hex::encode;
-use uucore::error::set_exit_code;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
 use std::iter;
 use std::path::Path;
 use uucore::{
-    error::{FromIo, UResult},
+    error::{FromIo, set_exit_code, UResult},
     format_usage, help_about, help_section, help_usage,
     sum::{
         div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
