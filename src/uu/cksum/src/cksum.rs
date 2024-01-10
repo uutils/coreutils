@@ -134,10 +134,11 @@ where
         } else if filename.is_dir() {
             Box::new(BufReader::new(io::empty())) as Box<dyn Read>
         } else {
-            file_buf =
-            match File::open(filename){
+            file_buf = match File::open(filename) {
                 Ok(file) => file,
-                Err(err) => { continue;}
+                Err(err) => {
+                    continue;
+                }
             };
             Box::new(file_buf) as Box<dyn Read>
         });
