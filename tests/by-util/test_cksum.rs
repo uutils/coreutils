@@ -276,6 +276,30 @@ fn test_length_is_zero() {
 }
 
 #[test]
+fn test_raw_single_file() {
+    for algo in ALGOS {
+        new_ucmd!()
+            .arg("--raw")
+            .arg("lorem_ipsum.txt")
+            .arg(format!("--algorithm={algo}"))
+            .succeeds()
+            .no_stderr()
+            .stdout_is_fixture_bytes(format!("raw/{algo}_single_file.expected"));
+    }
+}
+#[test]
+fn test_raw_multiple_files() {
+    new_ucmd!()
+        .arg("--raw")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: the --raw option is not supported with multiple files")
+        .code_is(1);
+}
+
+#[test]
 fn test_fail_on_folder() {
     let (at, mut ucmd) = at_and_ucmd!();
 
