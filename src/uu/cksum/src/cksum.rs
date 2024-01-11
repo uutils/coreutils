@@ -15,8 +15,8 @@ use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
 use uucore::{
-    error::{FromIo, UError, UResult},
-    format_usage, help_about, help_section, help_usage,
+    error::{FromIo, UError, UResult, USimpleError},
+    format_usage, help_about, help_section, help_usage, show,
     sum::{
         div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
         BSD, CRC, SYSV,
@@ -175,12 +175,12 @@ where
         let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
         if filename.is_dir() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("{}: Is a directory", filename.display()),
-            )
-            .into());
-
+            show!(USimpleError::new(
+                1,
+                format!("{}: Is a directory", filename.display())
+            ));
+            continue;
+        }
         if options.raw {
             let bytes = match options.algo_name {
                 ALGORITHM_OPTIONS_CRC => sum.parse::<u32>().unwrap().to_be_bytes().to_vec(),

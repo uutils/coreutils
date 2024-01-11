@@ -331,3 +331,21 @@ fn test_all_algorithms_fail_on_folder() {
             .stderr_contains(format!("cksum: {folder_name}: Is a directory"));
     }
 }
+
+#[test]
+fn test_folder_and_file() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    let folder_name = "a_folder";
+    at.mkdir(folder_name);
+
+    scene
+        .ucmd()
+        .arg(folder_name)
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .stderr_contains(format!("cksum: {folder_name}: Is a directory"))
+        .stdout_is_fixture("crc_single_file.expected");
+}
