@@ -37,6 +37,11 @@ fn escaped_slash() {
 }
 
 #[test]
+fn unescaped_double_quote() {
+    new_ucmd!().args(&["\\\""]).succeeds().stdout_only("\"");
+}
+
+#[test]
 fn escaped_hex() {
     new_ucmd!().args(&["\\x41"]).succeeds().stdout_only("A");
 }
