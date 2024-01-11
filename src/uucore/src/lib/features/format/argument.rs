@@ -45,7 +45,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::Char(c) => *c,
-            FormatArgument::Unparsed(s) => s.chars().next().unwrap_or('\0'),
+            FormatArgument::Unparsed(s) => s.bytes().next().map_or('\0', char::from),
             _ => '\0',
         }
     }
