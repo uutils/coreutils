@@ -649,3 +649,8 @@ fn partial_char() {
 fn char_as_byte() {
     new_ucmd!().args(&["%c", "🙃"]).succeeds().stdout_only("ð");
 }
+
+#[test]
+fn no_infinite_loop() {
+    new_ucmd!().args(&["a", "b"]).succeeds().stdout_only("a");
+}
