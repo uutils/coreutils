@@ -11,7 +11,7 @@ use std::ops::ControlFlow;
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::error::{UResult, UUsageError};
-use uucore::format::{parse_spec_and_escape, FormatArgument};
+use uucore::format::{parse_spec_and_escape, FormatArgument, FormatItem};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const VERSION: &str = "version";
@@ -44,6 +44,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ControlFlow::Continue(()) => {}
             ControlFlow::Break(()) => return Ok(()),
         };
+    }
+
+    // See #5815 - We don't need to iter on args if no format string seen
+    let format_seen = parse_spec_and_escape(format_string.as_ref())
+        .into_iter()
+        .any(|r| matches!(r, Ok(FormatItem::Spec(_))));
+    if !format_seen {
+        return Ok(());
     }
 
     while args.peek().is_some() {
