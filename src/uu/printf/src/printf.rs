@@ -38,17 +38,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => vec![],
     };
 
+    let mut format_seen = false;
     let mut args = values.iter().peekable();
     for item in parse_spec_and_escape(format_string.as_ref()) {
+        if let Ok(FormatItem::Spec(_)) = item {
+            format_seen = true;
+        }
         match item?.write(stdout(), &mut args)? {
             ControlFlow::Continue(()) => {}
             ControlFlow::Break(()) => return Ok(()),
         };
     }
 
-    // See #5815 - We don't need to iter on args if no format string seen
-    let format_seen =
-        parse_spec_and_escape(format_string.as_ref()).any(|r| matches!(r, Ok(FormatItem::Spec(_))));
+    // Without format specs in the string, the iter would not consume any args,
+    // leading to an infinite loop. Thus, we exit early.
     if !format_seen {
         return Ok(());
     }
