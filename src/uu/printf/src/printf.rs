@@ -47,9 +47,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     // See #5815 - We don't need to iter on args if no format string seen
-    let format_seen = parse_spec_and_escape(format_string.as_ref())
-        .into_iter()
-        .any(|r| matches!(r, Ok(FormatItem::Spec(_))));
+    let format_seen =
+        parse_spec_and_escape(format_string.as_ref()).any(|r| matches!(r, Ok(FormatItem::Spec(_))));
     if !format_seen {
         return Ok(());
     }
