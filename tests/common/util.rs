@@ -756,6 +756,26 @@ pub fn get_root_path() -> &'static str {
     }
 }
 
+/// Compares the extended attributes (xattrs) of two files or directories.
+///
+/// # Returns
+///
+/// `true` if both paths have the same set of extended attributes, `false` otherwise.
+#[cfg(all(unix, not(target_os = "macos")))]
+pub fn compare_xattrs<P: AsRef<std::path::Path>>(path1: P, path2: P) -> bool {
+    let get_sorted_xattrs = |path: P| {
+        xattr::list(path)
+            .map(|attrs| {
+                let mut attrs = attrs.collect::<Vec<_>>();
+                attrs.sort();
+                attrs
+            })
+            .unwrap_or_else(|_| Vec::new())
+    };
+
+    get_sorted_xattrs(path1) == get_sorted_xattrs(path2)
+}
+
 /// Object-oriented path struct that represents and operates on
 /// paths relative to the directory it was constructed for.
 #[derive(Clone)]
@@ -3374,5 +3394,27 @@ mod tests {
             command.args.make_contiguous()
         );
         assert!(command.tmpd.is_some());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn test_compare_xattrs() {
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let file_path1 = temp_dir.path().join("test_file1.txt");
+        let file_path2 = temp_dir.path().join("test_file2.txt");
+
+        File::create(&file_path1).unwrap();
+        File::create(&file_path2).unwrap();
+
+        let test_attr = "user.test_attr";
+        let test_value = b"test value";
+        xattr::set(&file_path1, test_attr, test_value).unwrap();
+
+        assert!(!compare_xattrs(&file_path1, &file_path2));
+
+        xattr::set(&file_path2, test_attr, test_value).unwrap();
+        assert!(compare_xattrs(&file_path1, &file_path2));
     }
 }
