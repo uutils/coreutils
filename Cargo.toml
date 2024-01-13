@@ -288,7 +288,7 @@ half = "2.3"
 hostname = "0.3"
 indicatif = "0.17"
 itertools = "0.12.0"
-libc = "0.2.151"
+libc = "0.2.152"
 lscolors = { version = "0.16.0", default-features = false, features = [
   "gnu_legacy",
 ] }
@@ -319,7 +319,7 @@ self_cell = "1.0.3"
 selinux = "0.4"
 signal-hook = "0.3.17"
 smallvec = { version = "1.11", features = ["union"] }
-tempfile = "3.8.1"
+tempfile = "3.9.0"
 uutils_term_grid = "0.3"
 terminal_size = "0.3.0"
 textwrap = { version = "0.16.0", features = ["terminal_size"] }
