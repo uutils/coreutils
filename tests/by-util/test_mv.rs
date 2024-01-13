@@ -1569,6 +1569,47 @@ fn test_mv_dir_into_path_slash() {
     assert!(at.dir_exists("f/b"));
 }
 
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl() {
+    use std::process::Command;
+
+    use crate::common::util::compare_xattrs;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let path1 = "a";
+    let path2 = "b";
+    let file = "a/file";
+    let file_target = "b/file";
+    at.mkdir(path1);
+    at.mkdir(path2);
+    at.touch(file);
+
+    let path = at.plus_as_string(file);
+    // calling the command directly. xattr requires some dev packages to be installed
+    // and it adds a complex dependency just for a test
+    match Command::new("setfacl")
+        .args(["-m", "group::rwx", &path1])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {}", e);
+            return;
+        }
+    }
+
+    scene.ucmd().arg(&path).arg(path2).succeeds();
+
+    assert!(compare_xattrs(&file, &file_target));
+}
+
 // Todo:
 
 // $ at.touch a b
