@@ -825,6 +825,7 @@ impl Attributes {
         ownership: Preserve::Yes { required: true },
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
+        xattr: Preserve::Yes { required: true },
         ..Self::NONE
     };
 
@@ -1440,7 +1441,7 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "android")))]
         {
             let xattrs = xattr::list(source)?;
             for attr in xattrs {
@@ -1449,7 +1450,7 @@ pub(crate) fn copy_attributes(
                 }
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(all(unix, not(target_os = "android"))))]
         {
             // The documentation for GNU cp states:
             //

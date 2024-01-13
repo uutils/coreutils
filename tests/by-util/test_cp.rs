@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile uufs
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile uufs xattrs
 
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
@@ -56,6 +56,8 @@ static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 #[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
+#[cfg(all(unix, not(target_os = "macos")))]
+use xattr;
 
 /// Assert that mode, ownership, and permissions of two metadata objects match.
 #[cfg(all(not(windows), not(target_os = "freebsd")))]
@@ -3700,4 +3702,58 @@ fn test_cp_no_such() {
         .arg("no-such/")
         .fails()
         .stderr_is("cp: 'no-such/' is not a directory\n");
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn compare_xattrs<P: AsRef<Path>>(path1: P, path2: P) -> bool {
+    let get_sorted_xattrs = |path: P| {
+        xattr::list(path)
+            .map(|attrs| {
+                let mut attrs = attrs.collect::<Vec<_>>();
+                attrs.sort();
+                attrs
+            })
+            .unwrap_or_else(|_| Vec::new())
+    };
+
+    get_sorted_xattrs(path1) == get_sorted_xattrs(path2)
+}
+
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[test]
+fn test_acl_preserve() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let path1 = "a";
+    let path2 = "b";
+    let file = "a/file";
+    let file_target = "b/file";
+    at.mkdir(path1);
+    at.mkdir(path2);
+    at.touch(file);
+
+    let path = at.plus_as_string(file);
+    // calling the command directly. xattr requires some dev packages to be installed
+    // and it adds a complex dependency just for a test
+    match Command::new("setfacl")
+        .args(["-m", "group::rwx", &file])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {}", e);
+            return;
+        }
+    }
+
+    scene.ucmd().args(&["-p", &path, path2]).succeeds();
+
+    assert!(compare_xattrs(&file, &file_target));
 }

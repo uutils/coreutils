@@ -500,6 +500,7 @@ rlimit = "0.10.1"
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["process", "signal", "user"] }
 rand_pcg = "0.3"
+xattr = { workspace = true }
 
 [build-dependencies]
 phf_codegen = { workspace = true }
