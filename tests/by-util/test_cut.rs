@@ -255,3 +255,13 @@ fn test_equal_as_delimiter3() {
         .succeeds()
         .stdout_only_bytes("abZcd\n");
 }
+
+#[test]
+fn test_multiple() {
+    let result = new_ucmd!()
+        .args(&["-f2", "-d:", "-d="])
+        .pipe_in("a=b\n")
+        .succeeds();
+    assert_eq!(result.stdout_str(), "b\n");
+    assert_eq!(result.stderr_str(), "");
+}
