@@ -80,18 +80,6 @@ fn test_nonexisting_file() {
         .stderr_contains(format!("cksum: {file_name}: No such file or directory"));
 }
 
-#[test]
-fn test_folder() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    let folder_name = "a_folder";
-    at.mkdir(folder_name);
-
-    ucmd.arg(folder_name)
-        .succeeds()
-        .stdout_only(format!("4294967295 0 {folder_name}\n"));
-}
-
 // Make sure crc is correct for files larger than 32 bytes
 // but <128 bytes (1 fold pclmul) // spell-checker:disable-line
 #[test]
@@ -312,15 +300,52 @@ fn test_raw_multiple_files() {
 }
 
 #[test]
-fn test_blake2b_fail_on_directory() {
+fn test_fail_on_folder() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let folder_name = "a_folder";
     at.mkdir(folder_name);
 
-    ucmd.arg("--algorithm=blake2b")
-        .arg(folder_name)
+    ucmd.arg(folder_name)
         .fails()
         .no_stdout()
         .stderr_contains(format!("cksum: {folder_name}: Is a directory"));
+}
+
+#[test]
+fn test_all_algorithms_fail_on_folder() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    let folder_name = "a_folder";
+    at.mkdir(folder_name);
+
+    for algo in ALGOS {
+        scene
+            .ucmd()
+            .arg(format!("--algorithm={algo}"))
+            .arg(folder_name)
+            .fails()
+            .no_stdout()
+            .stderr_contains(format!("cksum: {folder_name}: Is a directory"));
+    }
+}
+
+#[test]
+fn test_folder_and_file() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    let folder_name = "a_folder";
+    at.mkdir(folder_name);
+
+    scene
+        .ucmd()
+        .arg(folder_name)
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .stderr_contains(format!("cksum: {folder_name}: Is a directory"))
+        .stdout_is_fixture("crc_single_file.expected");
 }
