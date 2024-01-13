@@ -43,8 +43,6 @@ pub use crate::features::encoding;
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
-#[cfg(feature = "fsext")]
-pub use crate::features::fsext;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
 #[cfg(feature = "quoting-style")]
@@ -88,6 +86,12 @@ pub use crate::features::utmpx;
 // ** windows-only
 #[cfg(all(windows, feature = "wide"))]
 pub use crate::features::wide;
+
+#[cfg(feature = "fsext")]
+pub use crate::features::fsext;
+
+#[cfg(all(unix, not(target_os = "macos"), feature = "fsxattr"))]
+pub use crate::features::fsxattr;
 
 //## core functions
 
