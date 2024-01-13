@@ -3209,6 +3209,7 @@ dependencies = [
  "wild",
  "winapi-util",
  "windows-sys 0.48.0",
+ "xattr",
  "z85",
 ]
 
