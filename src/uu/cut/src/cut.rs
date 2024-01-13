@@ -510,6 +510,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::BYTES)
                 .short('b')
