@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore (words) drwxrwxr
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use libc::{mode_t, umask};
@@ -285,4 +286,39 @@ fn test_umask_compliance() {
         // tests all permission combinations
         test_single_case(i as mode_t);
     }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl() {
+    use std::fs;
+    use std::process::Command;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "d";
+    let subdir = "d/e";
+    at.mkdir(dir);
+    let dir = at.plus_as_string(dir);
+
+    let status = Command::new("setfacl")
+        .args(["-d", "-m", "group::rwx", &dir])
+        .status()
+        .expect("failed to execute setfacl");
+    assert!(status.success(), "setfacl command failed");
+
+    // Set umask (which should be ignored)
+    unsafe { libc::umask(0o077) };
+
+    scene.ucmd().arg("--parents").arg(subdir).succeeds();
+
+    let subdir = at.plus_as_string(subdir);
+    let metadata = fs::metadata(subdir).expect("failed to retrieve metadata");
+    let permissions = metadata.permissions().mode();
+    // Should be drwxrwxr-x
+    let expected_permissions = 0o40775;
+
+    assert_eq!(
+        permissions, expected_permissions,
+        "Directory permissions do not match expected permissions"
+    );
 }

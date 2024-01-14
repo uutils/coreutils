@@ -13,6 +13,8 @@ use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+use uucore::fsxattr::has_acl;
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
@@ -166,6 +168,14 @@ pub fn mkdir(path: &Path, recursive: bool, mode: u32, verbose: bool) -> UResult<
     let path = path_buf.as_path();
 
     create_dir(path, recursive, verbose, false)?;
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    if has_acl(path) {
+        // The path has extended attributes, don't set the mode
+        Ok(())
+    } else {
+        chmod(path, mode)
+    }
+    #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
     chmod(path, mode)
 }
 
