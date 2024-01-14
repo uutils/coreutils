@@ -1487,9 +1487,8 @@ fn test_du_overlapping_ranges_and_extending() {
         }),
         50
     );
-    assert_eq!(uut.ranges.len(), 4);
-    assert_eq!(*uut.ranges.entry(25).or_default(), 100);
-    assert_eq!(*uut.ranges.entry(100).or_default(), 150);
+    assert_eq!(uut.ranges.len(), 3);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 150);
     assert_eq!(*uut.ranges.entry(400).or_default(), 500);
     assert_eq!(*uut.ranges.entry(600).or_default(), 700);
     assert_eq!(
@@ -1499,9 +1498,8 @@ fn test_du_overlapping_ranges_and_extending() {
         }),
         25
     );
-    assert_eq!(uut.ranges.len(), 4);
-    assert_eq!(*uut.ranges.entry(25).or_default(), 100);
-    assert_eq!(*uut.ranges.entry(100).or_default(), 200);
+    assert_eq!(uut.ranges.len(), 3);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 200);
     assert_eq!(*uut.ranges.entry(400).or_default(), 500);
     assert_eq!(*uut.ranges.entry(600).or_default(), 700);
     assert_eq!(
@@ -1511,8 +1509,54 @@ fn test_du_overlapping_ranges_and_extending() {
         }),
         200
     );
-    assert_eq!(uut.ranges.len(), 3);
-    assert_eq!(*uut.ranges.entry(25).or_default(), 100);
-    assert_eq!(*uut.ranges.entry(100).or_default(), 200);
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 200);
     assert_eq!(*uut.ranges.entry(390).or_default(), 800);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 200,
+            end: 210
+        }),
+        0
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 210);
+    assert_eq!(*uut.ranges.entry(390).or_default(), 800);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 380,
+            end: 390
+        }),
+        0
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 210);
+    assert_eq!(*uut.ranges.entry(380).or_default(), 800);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range { start: 25, end: 50 }),
+        25
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 210);
+    assert_eq!(*uut.ranges.entry(380).or_default(), 800);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 100,
+            end: 210
+        }),
+        110
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 210);
+    assert_eq!(*uut.ranges.entry(380).or_default(), 800);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 25,
+            end: 210
+        }),
+        185
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 210);
+    assert_eq!(*uut.ranges.entry(380).or_default(), 800);
 }

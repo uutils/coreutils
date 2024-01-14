@@ -4,7 +4,7 @@ use fiemap::FiemapExtentFlags;
 use uucore::display::Quotable;
 use uucore::error::{UError, USimpleError};
 
-#[derive(PartialEq, PartialOrd, Eq, Ord)]
+#[derive(PartialEq, PartialOrd, Eq, Ord, Clone)]
 pub struct Range {
     pub start: u64,
     pub end: u64,
@@ -16,53 +16,68 @@ pub struct SeenPhysicalExtents {
 }
 
 impl SeenPhysicalExtents {
-    pub fn get_overlapping_and_insert(&mut self, range: &Range) -> u64 {
-        let mut same_or_before = self.ranges.range_mut(..range.start + 1);
-
-        let mut need_new_entry = true;
+    fn check_end(&mut self, range: &mut Range) -> u64 {
         let mut overlapping_sum: u64 = 0;
-        if let Some((_start, end)) = same_or_before.next_back() {
-            if *end >= range.end {
-                return range.end - range.start; // fully covered, no new entry needed
-            }
-            if *end >= range.start {
-                overlapping_sum += *end - range.start;
-                *end = range.end; // partially covered from begin.
-                                  // Extend existing entry.
-                need_new_entry = false;
-            }
-        }
-
-        if need_new_entry {
-            // element before doesn't exist or doesn't overlap, insert new
-            self.ranges.insert(range.start, range.end);
-        }
-
         let mut current_pos = range.start + 1;
         loop {
             let mut after = self.ranges.range(current_pos..);
 
-            if let Some((&start, end)) = after.next() {
-                if start >= range.end {
+            if let Some((&start, &end)) = after.next() {
+                if start > range.end {
                     return overlapping_sum; // fully outside, done
                 }
 
-                if *end > range.end {
+                if end >= range.end {
                     overlapping_sum += range.end - start;
-                    let new_start = range.end;
-                    let new_end = *end;
-                    self.ranges.insert(new_start, new_end);
+                    let new_end = end;
+                    range.end = new_end;
                     self.ranges.remove(&start);
-                    return overlapping_sum; // partially outside, adapt, done
+                    return overlapping_sum; // partially outside, adapt, replace, done
                 }
 
-                overlapping_sum += *end - start; // fully inside, remove, continue
-                current_pos = *end;
+                overlapping_sum += end - start; // fully inside, remove, continue
+                current_pos = end;
                 self.ranges.remove(&start);
             } else {
                 return overlapping_sum;
             }
         }
+    }
+
+    pub fn get_overlapping_and_insert(&mut self, range: &Range) -> u64 {
+        let mut same_start_or_start_before = self.ranges.range(..range.start + 1);
+
+        let mut overlapping_sum: u64 = 0;
+        let mut new_range;
+        if let Some((&same_or_before_start, &end)) = same_start_or_start_before.next_back() {
+            if end >= range.end {
+                return range.end - range.start; // fully covered, no new entry needed, done
+            }
+            if end >= range.start {
+                // partially covered from begin.
+                // Replace entry with new
+                overlapping_sum += end - range.start;
+
+                let new_start = same_or_before_start;
+                new_range = Range {
+                    start: new_start,
+                    end: range.end,
+                };
+                self.ranges.remove(&same_or_before_start);
+            } else {
+                // not at all covered from begin. Next: check end
+                new_range = range.clone();
+            }
+        } else {
+            // not at all covered from begin. Next: check end
+            new_range = range.clone();
+        }
+
+        overlapping_sum += self.check_end(&mut new_range);
+        // no overlap exists or partially overlapping ranges where included
+        self.ranges.insert(new_range.start, new_range.end);
+
+        overlapping_sum
     }
 
     pub fn get_total_overlap_and_insert(&mut self, path: &PathBuf) -> (u64, Vec<Box<dyn UError>>) {
