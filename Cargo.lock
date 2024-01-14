@@ -2616,6 +2616,7 @@ dependencies = [
  "unicode-width",
  "uucore",
  "uutils_term_grid",
+ "xattr",
 ]
 
 [[package]]

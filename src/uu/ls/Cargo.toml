@@ -34,6 +34,9 @@ once_cell = { workspace = true }
 selinux = { workspace = true, optional = true }
 hostname = { workspace = true }
 
+[target.'cfg(unix)'.dependencies]
+xattr = { workspace = true }
+
 [[bin]]
 name = "ls"
 path = "src/main.rs"
