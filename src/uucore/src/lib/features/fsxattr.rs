@@ -66,6 +66,26 @@ pub fn apply_xattrs<P: AsRef<Path>>(
     Ok(())
 }
 
+/// Checks if a file has an Access Control List (ACL) based on its extended attributes.
+///
+/// # Arguments
+///
+/// * `file` - A reference to the path of the file.
+///
+/// # Returns
+///
+/// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
+pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
+    // don't use exacl here, it is doing more getxattr call then needed
+    match xattr::list(file) {
+        Ok(acl) => {
+            // if we have extra attributes, we have an acl
+            acl.count() > 0
+        }
+        Err(_) => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,5 +132,21 @@ mod tests {
                 .unwrap(),
             test_value
         );
+    }
+
+    #[test]
+    fn test_file_has_acl() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+
+        File::create(&file_path).unwrap();
+
+        assert!(!has_acl(&file_path));
+
+        let test_attr = "user.test_acl";
+        let test_value = b"test value";
+        xattr::set(&file_path, test_attr, test_value).unwrap();
+
+        assert!(has_acl(&file_path));
     }
 }
