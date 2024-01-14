@@ -4293,3 +4293,39 @@ fn test_term_colorterm() {
         "exe"
     );
 }
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl_display() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let path = "a42";
+    at.mkdir(path);
+
+    let path = at.plus_as_string(path);
+    // calling the command directly. xattr requires some dev packages to be installed
+    // and it adds a complex dependency just for a test
+    match Command::new("setfacl")
+        .args(["-d", "-m", "group::rwx", &path])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {}", e);
+            return;
+        }
+    }
+
+    scene
+        .ucmd()
+        .args(&["-lda", &path])
+        .succeeds()
+        .stdout_contains("+");
+}
