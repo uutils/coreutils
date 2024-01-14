@@ -620,7 +620,8 @@ jobs:
             sudo apt-get -y update
             sudo apt-get -y install gcc-aarch64-linux-gnu
           ;;
-          *-redox*) sudo apt-get -y update
+          *-redox*) 
+            sudo apt-get -y update
             sudo apt-get -y install fuse3 libfuse-dev
           ;;
           # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
