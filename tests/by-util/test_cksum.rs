@@ -349,3 +349,20 @@ fn test_folder_and_file() {
         .stderr_contains(format!("cksum: {folder_name}: Is a directory"))
         .stdout_is_fixture("crc_single_file.expected");
 }
+
+#[test]
+fn test_one_nonexisting_file(){
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("abc.txt");
+    at.touch("xyz.txt");
+
+    ucmd
+        .arg("abc.txt")
+        .arg("asdf.txt")
+        .arg("xyz.txt")
+        .fails()
+        .stdout_contains_line("4294967295 0 xyz.txt")
+        .stderr_contains("asdf.txt: No such file or directory")
+        .stdout_contains_line("4294967295 0 abc.txt");
+}

@@ -14,7 +14,6 @@ use std::fs::File;
 use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
-use uucore::show;
 use uucore::{
     error::{FromIo, UError, UResult, USimpleError},
     format_usage, help_about, help_section, help_usage, show,
