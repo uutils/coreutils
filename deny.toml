@@ -62,7 +62,7 @@ skip = [
   { name = "linux-raw-sys", version = "0.3.8" },
   # terminal_size
   { name = "rustix", version = "0.37.26" },
-  # various crates
+  # notify
   { name = "windows-sys", version = "0.45.0" },
   # various crates
   { name = "windows-sys", version = "0.48.0" },

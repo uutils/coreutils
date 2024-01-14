@@ -232,7 +232,10 @@ pub fn run_gnu_cmd(
 
     let output = if let Some(input_str) = pipe_input {
         // We have an pipe input
-        command.stdin(Stdio::piped()).stdout(Stdio::piped());
+        command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
         let mut child = command.spawn().expect("Failed to execute command");
         let child_stdin = child.stdin.as_mut().unwrap();

@@ -3,9 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use crate::{
+    error::set_exit_code,
+    features::format::num_parser::{ParseError, ParsedNumber},
+    quoting_style::{escape_name, Quotes, QuotingStyle},
+    show_error, show_warning,
+};
 use os_display::Quotable;
-
-use crate::{error::set_exit_code, show_warning};
+use std::ffi::OsStr;
 
 /// An argument for formatting
 ///
@@ -40,16 +45,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::Char(c) => *c,
-            FormatArgument::Unparsed(s) => {
-                let mut chars = s.chars();
-                let Some(c) = chars.next() else {
-                    return '\0';
-                };
-                let None = chars.next() else {
-                    return '\0';
-                };
-                c
-            }
+            FormatArgument::Unparsed(s) => s.bytes().next().map_or('\0', char::from),
             _ => '\0',
         }
     }
@@ -60,25 +56,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::UnsignedInt(n) => *n,
-            FormatArgument::Unparsed(s) => {
-                let opt = if let Some(s) = s.strip_prefix("0x") {
-                    u64::from_str_radix(s, 16).ok()
-                } else if let Some(s) = s.strip_prefix('0') {
-                    u64::from_str_radix(s, 8).ok()
-                } else if let Some(s) = s.strip_prefix('\'') {
-                    s.chars().next().map(|c| c as u64)
-                } else {
-                    s.parse().ok()
-                };
-                match opt {
-                    Some(n) => n,
-                    None => {
-                        show_warning!("{}: expected a numeric value", s.quote());
-                        set_exit_code(1);
-                        0
-                    }
-                }
-            }
+            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_u64(s), s),
             _ => 0,
         }
     }
@@ -89,29 +67,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::SignedInt(n) => *n,
-            FormatArgument::Unparsed(s) => {
-                // For hex, we parse `u64` because we do not allow another
-                // minus sign. We might need to do more precise parsing here.
-                let opt = if let Some(s) = s.strip_prefix("-0x") {
-                    u64::from_str_radix(s, 16).ok().map(|x| -(x as i64))
-                } else if let Some(s) = s.strip_prefix("0x") {
-                    u64::from_str_radix(s, 16).ok().map(|x| x as i64)
-                } else if s.starts_with("-0") || s.starts_with('0') {
-                    i64::from_str_radix(s, 8).ok()
-                } else if let Some(s) = s.strip_prefix('\'') {
-                    s.chars().next().map(|x| x as i64)
-                } else {
-                    s.parse().ok()
-                };
-                match opt {
-                    Some(n) => n,
-                    None => {
-                        show_warning!("{}: expected a numeric value", s.quote());
-                        set_exit_code(1);
-                        0
-                    }
-                }
-            }
+            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_i64(s), s),
             _ => 0,
         }
     }
@@ -122,23 +78,7 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         };
         match next {
             FormatArgument::Float(n) => *n,
-            FormatArgument::Unparsed(s) => {
-                let opt = if s.starts_with("0x") || s.starts_with("-0x") {
-                    unimplemented!("Hexadecimal floats are unimplemented!")
-                } else if let Some(s) = s.strip_prefix('\'') {
-                    s.chars().next().map(|x| x as u64 as f64)
-                } else {
-                    s.parse().ok()
-                };
-                match opt {
-                    Some(n) => n,
-                    None => {
-                        show_warning!("{}: expected a numeric value", s.quote());
-                        set_exit_code(1);
-                        0.0
-                    }
-                }
-            }
+            FormatArgument::Unparsed(s) => extract_value(ParsedNumber::parse_f64(s), s),
             _ => 0.0,
         }
     }
@@ -147,6 +87,42 @@ impl<'a, T: Iterator<Item = &'a FormatArgument>> ArgumentIter<'a> for T {
         match self.next() {
             Some(FormatArgument::Unparsed(s) | FormatArgument::String(s)) => s,
             _ => "",
+        }
+    }
+}
+
+fn extract_value<T: Default>(p: Result<T, ParseError<'_, T>>, input: &str) -> T {
+    match p {
+        Ok(v) => v,
+        Err(e) => {
+            set_exit_code(1);
+            let input = escape_name(
+                OsStr::new(input),
+                &QuotingStyle::C {
+                    quotes: Quotes::None,
+                },
+            );
+            match e {
+                ParseError::Overflow => {
+                    show_error!("{}: Numerical result out of range", input.quote());
+                    Default::default()
+                }
+                ParseError::NotNumeric => {
+                    show_error!("{}: expected a numeric value", input.quote());
+                    Default::default()
+                }
+                ParseError::PartialMatch(v, rest) => {
+                    if input.starts_with('\'') {
+                        show_warning!(
+                            "{}: character(s) following character constant have been ignored",
+                            &rest,
+                        );
+                    } else {
+                        show_error!("{}: value not completely converted", input.quote());
+                    }
+                    v
+                }
+            }
         }
     }
 }
