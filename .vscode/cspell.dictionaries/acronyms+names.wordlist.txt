@@ -1,69 +1,71 @@
 # * abbreviations / acronyms
-# * names
-aarch
 AIX
 ASLR # address space layout randomization
 AST # abstract syntax tree
-btrfs
-BusyBox
-BusyTest
 CICD # continuous integration/deployment
-Codacy
 CPU
 CPUs
-Cygwin
-Deno
 DevOps
-EditorConfig
 Ext3
-fiemap
 FIFO
 FIFOs
-flac
 FQDN # fully qualified domain name
-FreeBSD
 GID # group ID
 GIDs
-Gmail
 GNU
 GNUEABI
 GNUEABIhf
-Illumos
-impls
-Irix
 JFS
-libfuzzer
-loongarch
-lzma
-MacOS
-MinGW
-Minix
-MS-DOS
-MSDOS
 MSRV # minimum supported rust version
 MSVC
-NetBSD
 NixOS
-Novell
-Nushell
-OpenBSD
 POSIX
 POSIXLY
-PowerPC
-ReiserFS
 RISC
 RISCV
 RNG # random number generator
 RNGs
-SELinux
-SkyPack
+ReiserFS
 Solaris
-SysV
 UID # user ID
 UIDs
 UUID # universally unique identifier
 WASI
 WASM
-Xenix
 XFS
+aarch
+flac
+impls
+lzma
+loongarch
+
+# * names
+BusyBox
+BusyTest
+Codacy
+Cygwin
+Deno
+EditorConfig
+FreeBSD
+Gmail
+GNU
+Illumos
+Irix
+libfuzzer
+MS-DOS
+MSDOS
+MacOS
+MinGW
+Minix
+NetBSD
+Novell
+Nushell
+OpenBSD
+POSIX
+PowerPC
+SELinux
+SkyPack
+Solaris
+SysV
+Xenix
 Yargs
