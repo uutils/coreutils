@@ -1565,7 +1565,7 @@ fn test_skip_past_dev() {
         result.stderr_contains("0+0 records out");
         result.code_is(1);
     } else {
-        print!("TEST SKIPPED");
+        print!("Test skipped; requires root user");
     }
 }
 
@@ -1586,7 +1586,7 @@ fn test_seek_past_dev() {
         result.stderr_contains("0+0 records out");
         result.code_is(1);
     } else {
-        print!("TEST SKIPPED");
+        print!("Test skipped; requires root user");
     }
 }
 

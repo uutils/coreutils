@@ -4,9 +4,10 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) helloworld nodir objdump n'source
 
-use crate::common::util::{is_ci, TestScenario};
+use crate::common::util::{is_ci, run_ucmd_as_root, TestScenario};
 use filetime::FileTime;
-use std::os::unix::fs::PermissionsExt;
+use std::fs;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(any(windows, target_os = "freebsd")))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1588,4 +1589,57 @@ fn test_t_exist_dir() {
         .arg(source1)
         .fails()
         .stderr_contains("failed to access 'sub4/file_exists': Not a directory");
+}
+
+#[test]
+fn test_target_file_ends_with_slash() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let target_dir = "dir";
+    let target_file = "dir/target_file";
+    let target_file_slash = format!("{}/", target_file);
+
+    at.touch(source);
+    at.mkdir(target_dir);
+    at.touch(target_file);
+
+    scene
+        .ucmd()
+        .arg("-t")
+        .arg(target_file_slash)
+        .arg("-D")
+        .arg(source)
+        .fails()
+        .stderr_contains("failed to access 'dir/target_file/': Not a directory");
+}
+
+#[test]
+fn test_install_root_combined() {
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures.clone();
+    at.touch("a");
+    at.touch("c");
+
+    let run_and_check = |args: &[&str], target: &str, expected_uid: u32, expected_gid: u32| {
+        if let Ok(result) = run_ucmd_as_root(&ts, args) {
+            result.success();
+            assert!(at.file_exists(target));
+
+            let metadata = fs::metadata(at.plus(target)).unwrap();
+            assert_eq!(metadata.uid(), expected_uid);
+            assert_eq!(metadata.gid(), expected_gid);
+        } else {
+            print!("Test skipped; requires root user");
+        }
+    };
+
+    run_and_check(&["-Cv", "-o1", "-g1", "a", "b"], "b", 1, 1);
+    run_and_check(&["-Cv", "-o2", "-g1", "a", "b"], "b", 2, 1);
+    run_and_check(&["-Cv", "-o2", "-g2", "a", "b"], "b", 2, 2);
+
+    run_and_check(&["-Cv", "-o2", "c", "d"], "d", 2, 0);
+    run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
+    run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
 }

@@ -111,8 +111,24 @@ fn test_cp_duplicate_files() {
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
         .succeeds()
-        .stderr_contains("specified more than once");
+        .stderr_contains(format!(
+            "source file '{TEST_HELLO_WORLD_SOURCE}' specified more than once"
+        ));
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
+}
+
+#[test]
+fn test_cp_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "a";
+
+    at.touch(file);
+
+    ucmd.arg(file)
+        .arg(file)
+        .fails()
+        .code_is(1)
+        .stderr_contains(format!("'{file}' and '{file}' are the same file"));
 }
 
 #[test]
@@ -479,7 +495,7 @@ fn test_cp_arg_interactive() {
 }
 
 #[test]
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "freebsd")))]
 fn test_cp_arg_interactive_update() {
     // -u -i won't show the prompt to validate the override or not
     // Therefore, the error code will be 0
@@ -676,6 +692,27 @@ fn test_cp_arg_backup() {
         at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
         "How are you?\n"
     );
+}
+
+#[test]
+fn test_cp_arg_backup_with_dest_a_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source";
+    let source_content = "content";
+    let symlink = "symlink";
+    let original = "original";
+    let backup = "symlink~";
+
+    at.write(source, source_content);
+    at.write(original, "original");
+    at.symlink_file(original, symlink);
+
+    ucmd.arg("-b").arg(source).arg(symlink).succeeds();
+
+    assert!(!at.symlink_exists(symlink));
+    assert_eq!(source_content, at.read(symlink));
+    assert!(at.symlink_exists(backup));
+    assert_eq!(original, at.resolve_link(backup));
 }
 
 #[test]
@@ -3643,4 +3680,24 @@ fn test_cp_seen_file() {
         .succeeds();
     assert!(at.plus("c").join("f").exists());
     assert!(at.plus("c").join("f.~1~").exists());
+}
+
+#[test]
+fn test_cp_path_ends_with_terminator() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("a");
+    ts.ucmd().arg("-r").arg("-T").arg("a").arg("e/").succeeds();
+}
+
+#[test]
+fn test_cp_no_such() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("b");
+    ts.ucmd()
+        .arg("b")
+        .arg("no-such/")
+        .fails()
+        .stderr_is("cp: 'no-such/' is not a directory\n");
 }

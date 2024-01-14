@@ -7,7 +7,10 @@
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
+use std::fs::Metadata;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
+#[cfg(not(target_os = "windows"))]
+use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
@@ -243,63 +246,74 @@ fn read_n_lines(input: &mut impl std::io::BufRead, n: u64, separator: u8) -> std
     Ok(())
 }
 
-fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<()> {
+fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> {
+    match usize::try_from(n) {
+        Ok(value) => Some(value),
+        Err(e) => {
+            show!(USimpleError::new(
+                1,
+                format!("{e}: number of -bytes or -lines is too large")
+            ));
+            None
+        }
+    }
+}
+
+fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: u64) -> std::io::Result<()> {
     if n == 0 {
         //prints everything
         return read_n_bytes(input, std::u64::MAX);
     }
 
-    let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
+    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
 
-    let mut ring_buffer = vec![0u8; n];
+        let mut ring_buffer = Vec::new();
 
-    // first we fill the ring buffer
-    if let Err(e) = input.read_exact(&mut ring_buffer) {
-        if e.kind() == ErrorKind::UnexpectedEof {
-            return Ok(());
-        } else {
-            return Err(e);
-        }
-    }
-    let mut buffer = [0u8; BUF_SIZE];
-    loop {
-        let read = loop {
-            match input.read(&mut buffer) {
-                Ok(n) => break n,
+        let mut buffer = [0u8; BUF_SIZE];
+        let mut total_read = 0;
+
+        loop {
+            let read = match input.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(read) => read,
                 Err(e) => match e.kind() {
-                    ErrorKind::Interrupted => {}
+                    ErrorKind::Interrupted => continue,
                     _ => return Err(e),
                 },
+            };
+
+            total_read += read;
+
+            if total_read <= n {
+                // Fill the ring buffer without exceeding n bytes
+                let overflow = total_read - n;
+                ring_buffer.extend_from_slice(&buffer[..read - overflow]);
+            } else {
+                // Write the ring buffer and the part of the buffer that exceeds n
+                stdout.write_all(&ring_buffer)?;
+                stdout.write_all(&buffer[..read - n + ring_buffer.len()])?;
+                ring_buffer.clear();
+                ring_buffer.extend_from_slice(&buffer[read - n + ring_buffer.len()..read]);
             }
-        };
-        if read == 0 {
-            return Ok(());
-        } else if read >= n {
-            stdout.write_all(&ring_buffer)?;
-            stdout.write_all(&buffer[..read - n])?;
-            for i in 0..n {
-                ring_buffer[i] = buffer[read - n + i];
-            }
-        } else {
-            stdout.write_all(&ring_buffer[..read])?;
-            for i in 0..n - read {
-                ring_buffer[i] = ring_buffer[read + i];
-            }
-            ring_buffer[n - read..].copy_from_slice(&buffer[..read]);
         }
     }
+
+    Ok(())
 }
 
 fn read_but_last_n_lines(
     input: impl std::io::BufRead,
-    n: usize,
+    n: u64,
     separator: u8,
 ) -> std::io::Result<()> {
-    let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-    for bytes in take_all_but(lines(input, separator), n) {
-        stdout.write_all(&bytes?)?;
+    if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        for bytes in take_all_but(lines(input, separator), n) {
+            stdout.write_all(&bytes?)?;
+        }
     }
     Ok(())
 }
@@ -380,7 +394,63 @@ where
     }
 }
 
+fn is_seekable(input: &mut std::fs::File) -> bool {
+    let current_pos = input.stream_position();
+    current_pos.is_ok()
+        && input.seek(SeekFrom::End(0)).is_ok()
+        && input.seek(SeekFrom::Start(current_pos.unwrap())).is_ok()
+}
+
+fn sanity_limited_blksize(_st: &Metadata) -> u64 {
+    #[cfg(not(target_os = "windows"))]
+    {
+        const DEFAULT: u64 = 512;
+        const MAX: u64 = usize::MAX as u64 / 8 + 1;
+
+        let st_blksize: u64 = _st.blksize();
+        match st_blksize {
+            0 => DEFAULT,
+            1..=MAX => st_blksize,
+            _ => DEFAULT,
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        512
+    }
+}
+
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
+    let st = input.metadata()?;
+    let seekable = is_seekable(input);
+    let blksize_limit = sanity_limited_blksize(&st);
+    if !seekable || st.len() <= blksize_limit {
+        return head_backwards_without_seek_file(input, options);
+    }
+
+    head_backwards_on_seekable_file(input, options)
+}
+
+fn head_backwards_without_seek_file(
+    input: &mut std::fs::File,
+    options: &HeadOptions,
+) -> std::io::Result<()> {
+    let reader = &mut std::io::BufReader::with_capacity(BUF_SIZE, &*input);
+
+    match options.mode {
+        Mode::AllButLastBytes(n) => read_but_last_n_bytes(reader, n)?,
+        Mode::AllButLastLines(n) => read_but_last_n_lines(reader, n, options.line_ending.into())?,
+        _ => unreachable!(),
+    }
+
+    Ok(())
+}
+
+fn head_backwards_on_seekable_file(
+    input: &mut std::fs::File,
+    options: &HeadOptions,
+) -> std::io::Result<()> {
     match options.mode {
         Mode::AllButLastBytes(n) => {
             let size = input.metadata()?.len();
@@ -434,32 +504,13 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 let stdin = std::io::stdin();
                 let mut stdin = stdin.lock();
 
-                // Outputting "all-but-last" requires us to use a ring buffer with size n, so n
-                // must be converted from u64 to usize to fit in memory. If such conversion fails,
-                // it means the platform doesn't have enough memory to hold the buffer, so we fail.
-                if let Mode::AllButLastLines(n) | Mode::AllButLastBytes(n) = options.mode {
-                    if let Err(e) = usize::try_from(n) {
-                        show!(USimpleError::new(
-                            1,
-                            format!("{e}: number of bytes is too large")
-                        ));
-                        continue;
-                    };
-                };
-
                 match options.mode {
                     Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
-                    // unwrap is guaranteed to succeed because we checked the value of n above
-                    Mode::AllButLastBytes(n) => {
-                        read_but_last_n_bytes(&mut stdin, n.try_into().unwrap())
-                    }
+                    Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
                     Mode::FirstLines(n) => read_n_lines(&mut stdin, n, options.line_ending.into()),
-                    // unwrap is guaranteed to succeed because we checked the value of n above
-                    Mode::AllButLastLines(n) => read_but_last_n_lines(
-                        &mut stdin,
-                        n.try_into().unwrap(),
-                        options.line_ending.into(),
-                    ),
+                    Mode::AllButLastLines(n) => {
+                        read_but_last_n_lines(&mut stdin, n, options.line_ending.into())
+                    }
                 }
             }
             (name, false) => {

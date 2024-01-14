@@ -5,3 +5,6 @@ version = "0.0.23"
 edition = "2021"
 license = "MIT"
 description = "A collection of functions to parse the markdown code of help files"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uuhelp_parser"

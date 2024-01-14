@@ -4,15 +4,18 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) fname, algo
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{crate_version, value_parser, Arg, ArgAction, Command};
+use hex::decode;
 use hex::encode;
+use std::error::Error;
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, stdin, BufReader, Read};
+use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
 use uucore::{
-    error::{FromIo, UResult},
+    error::{FromIo, UError, UResult},
     format_usage, help_about, help_section, help_usage,
     sum::{
         div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
@@ -36,7 +39,35 @@ const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
 const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
 const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 
-fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize) {
+#[derive(Debug)]
+enum CkSumError {
+    RawMultipleFiles,
+}
+
+impl UError for CkSumError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::RawMultipleFiles => 1,
+        }
+    }
+}
+
+impl Error for CkSumError {}
+
+impl Display for CkSumError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RawMultipleFiles => {
+                write!(f, "the --raw option is not supported with multiple files")
+            }
+        }
+    }
+}
+
+fn detect_algo(
+    program: &str,
+    length: Option<usize>,
+) -> (&'static str, Box<dyn Digest + 'static>, usize) {
     match program {
         ALGORITHM_OPTIONS_SYSV => (
             ALGORITHM_OPTIONS_SYSV,
@@ -85,7 +116,11 @@ fn detect_algo(program: &str) -> (&'static str, Box<dyn Digest + 'static>, usize
         ),
         ALGORITHM_OPTIONS_BLAKE2B => (
             ALGORITHM_OPTIONS_BLAKE2B,
-            Box::new(Blake2b::new()) as Box<dyn Digest>,
+            Box::new(if let Some(length) = length {
+                Blake2b::with_output_bytes(length)
+            } else {
+                Blake2b::new()
+            }) as Box<dyn Digest>,
             512,
         ),
         ALGORITHM_OPTIONS_SM3 => (
@@ -102,6 +137,8 @@ struct Options {
     digest: Box<dyn Digest + 'static>,
     output_bits: usize,
     untagged: bool,
+    length: Option<usize>,
+    raw: bool,
 }
 
 /// Calculate checksum
@@ -115,6 +152,11 @@ fn cksum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
 {
+    let files: Vec<_> = files.collect();
+    if options.raw && files.len() > 1 {
+        return Err(Box::new(CkSumError::RawMultipleFiles));
+    }
+
     for filename in files {
         let filename = Path::new(filename);
         let stdin_buf;
@@ -133,6 +175,17 @@ where
         let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
 
+        if options.raw {
+            let bytes = match options.algo_name {
+                ALGORITHM_OPTIONS_CRC => sum.parse::<u32>().unwrap().to_be_bytes().to_vec(),
+                ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => {
+                    sum.parse::<u16>().unwrap().to_be_bytes().to_vec()
+                }
+                _ => decode(sum).unwrap(),
+            };
+            stdout().write_all(&bytes)?;
+            return Ok(());
+        }
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
         match (options.algo_name, not_file) {
@@ -161,7 +214,19 @@ where
             (ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
             (ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
             (ALGORITHM_OPTIONS_BLAKE2B, _) if !options.untagged => {
-                println!("BLAKE2b ({}) = {sum}", filename.display());
+                if filename.is_dir() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("{}: Is a directory", filename.display()),
+                    )
+                    .into());
+                }
+                if let Some(length) = options.length {
+                    // Multiply by 8 here, as we want to print the length in bits.
+                    println!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());
+                } else {
+                    println!("BLAKE2b ({}) = {sum}", filename.display());
+                }
             }
             _ => {
                 if options.untagged {
@@ -217,6 +282,8 @@ mod options {
     pub const ALGORITHM: &str = "algorithm";
     pub const FILE: &str = "file";
     pub const UNTAGGED: &str = "untagged";
+    pub const LENGTH: &str = "length";
+    pub const RAW: &str = "raw";
 }
 
 #[uucore::main]
@@ -228,12 +295,56 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => ALGORITHM_OPTIONS_CRC,
     };
 
-    let (name, algo, bits) = detect_algo(algo_name);
+    let input_length = matches.get_one::<usize>(options::LENGTH);
+    let length = if let Some(length) = input_length {
+        match length.to_owned() {
+            0 => None,
+            n if n % 8 != 0 => {
+                // GNU's implementation seem to use these quotation marks
+                // in their error messages, so we do the same.
+                uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "length is not a multiple of 8",
+                )
+                .into());
+            }
+            n if n > 512 => {
+                uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
+
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
+                )
+                .into());
+            }
+            n => {
+                if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--length is only supported with --algorithm=blake2b",
+                    )
+                    .into());
+                }
+
+                // Divide by 8, as our blake2b implementation expects bytes
+                // instead of bits.
+                Some(n / 8)
+            }
+        }
+    } else {
+        None
+    };
+
+    let (name, algo, bits) = detect_algo(algo_name, length);
+
     let opts = Options {
         algo_name: name,
         digest: algo,
         output_bits: bits,
+        length,
         untagged: matches.get_flag(options::UNTAGGED),
+        raw: matches.get_flag(options::RAW),
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -281,6 +392,20 @@ pub fn uu_app() -> Command {
                 .long(options::UNTAGGED)
                 .help("create a reversed style checksum, without digest type")
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::LENGTH)
+                .long(options::LENGTH)
+                .value_parser(value_parser!(usize))
+                .short('l')
+                .help("digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8")
+                .action(ArgAction::Set),
+        )
+        .arg(
+            Arg::new(options::RAW)
+            .long(options::RAW)
+            .help("emit a raw binary digest, not hexadecimal")
+            .action(ArgAction::SetTrue),
         )
         .after_help(AFTER_HELP)
 }

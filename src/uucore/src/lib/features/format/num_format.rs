@@ -141,7 +141,17 @@ impl Formatter for UnsignedInt {
         let mut s = match self.variant {
             UnsignedIntVariant::Decimal => format!("{x}"),
             UnsignedIntVariant::Octal(Prefix::No) => format!("{x:o}"),
-            UnsignedIntVariant::Octal(Prefix::Yes) => format!("{x:#o}"),
+            UnsignedIntVariant::Octal(Prefix::Yes) => {
+                // The prefix that rust uses is `0o`, but GNU uses `0`.
+                // We also need to take into account that 0 should not be 00
+                // Since this is an unsigned int, we do not need to take the minus
+                // sign into account.
+                if x != 0 {
+                    format!("0{x:o}")
+                } else {
+                    format!("{x:o}")
+                }
+            }
             UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::No) => {
                 format!("{x:x}")
             }
@@ -286,7 +296,13 @@ impl Formatter for Float {
 
         let precision = match precision {
             Some(CanAsterisk::Fixed(x)) => x,
-            None => 0,
+            None => {
+                if matches!(variant, FloatVariant::Shortest) {
+                    6
+                } else {
+                    0
+                }
+            }
             Some(CanAsterisk::Asterisk) => return Err(FormatError::WrongSpecType),
         };
 
@@ -405,7 +421,7 @@ fn format_float_shortest(
         let mut normalized = format!("{normalized:.*}", precision);
 
         if force_decimal == ForceDecimal::No {
-            strip_zeros_and_dot(&mut normalized);
+            strip_fractional_zeroes_and_dot(&mut normalized);
         }
 
         let exp_char = match case {
@@ -418,8 +434,9 @@ fn format_float_shortest(
         // Decimal-ish notation with a few differences:
         //  - The precision works differently and specifies the total number
         //    of digits instead of the digits in the fractional part.
-        //  - If we don't force the decimal, '0' and `.` are trimmed.
-        let decimal_places = (precision as i32).saturating_sub(exponent) as usize;
+        //  - If we don't force the decimal, `.` and trailing `0` in the fractional part
+        //    are trimmed.
+        let decimal_places = (precision as i32 - exponent) as usize;
         let mut formatted = if decimal_places == 0 && force_decimal == ForceDecimal::Yes {
             format!("{f:.0}.")
         } else {
@@ -427,7 +444,7 @@ fn format_float_shortest(
         };
 
         if force_decimal == ForceDecimal::No {
-            strip_zeros_and_dot(&mut formatted);
+            strip_fractional_zeroes_and_dot(&mut formatted);
         }
 
         formatted
@@ -463,18 +480,43 @@ fn format_float_hexadecimal(
     s
 }
 
-fn strip_zeros_and_dot(s: &mut String) {
-    while s.ends_with('0') {
-        s.pop();
-    }
-    if s.ends_with('.') {
-        s.pop();
+fn strip_fractional_zeroes_and_dot(s: &mut String) {
+    let mut trim_to = s.len();
+    for (pos, c) in s.char_indices().rev() {
+        if pos + c.len_utf8() == trim_to && (c == '0' || c == '.') {
+            trim_to = pos;
+        }
+        if c == '.' {
+            s.truncate(trim_to);
+            break;
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::format::num_format::{Case, ForceDecimal};
+
+    #[test]
+    fn unsigned_octal() {
+        use super::{Formatter, NumberAlignment, Prefix, UnsignedInt, UnsignedIntVariant};
+        let f = |x| {
+            let mut s = Vec::new();
+            UnsignedInt {
+                variant: UnsignedIntVariant::Octal(Prefix::Yes),
+                width: 0,
+                precision: 0,
+                alignment: NumberAlignment::Left,
+            }
+            .fmt(&mut s, x)
+            .unwrap();
+            String::from_utf8(s).unwrap()
+        };
+
+        assert_eq!(f(0), "0");
+        assert_eq!(f(5), "05");
+        assert_eq!(f(8), "010");
+    }
 
     #[test]
     fn decimal_float() {
@@ -573,5 +615,19 @@ mod test {
         assert_eq!(f(12.3456789), "1.e+01");
         assert_eq!(f(1000000.0), "1.e+06");
         assert_eq!(f(99999999.0), "1.e+08");
+    }
+
+    #[test]
+    fn strip_insignificant_end() {
+        use super::strip_fractional_zeroes_and_dot;
+        let f = |s| {
+            let mut s = String::from(s);
+            strip_fractional_zeroes_and_dot(&mut s);
+            s
+        };
+        assert_eq!(&f("1000"), "1000");
+        assert_eq!(&f("1000."), "1000");
+        assert_eq!(&f("1000.02030"), "1000.0203");
+        assert_eq!(&f("1000.00000"), "1000");
     }
 }

@@ -196,7 +196,7 @@ mod tests {
             .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 3);
-        match patterns.get(0) {
+        match patterns.first() {
             Some(Pattern::UpToLine(24, ExecutePattern::Times(1))) => (),
             _ => panic!("expected UpToLine pattern"),
         };
@@ -227,7 +227,7 @@ mod tests {
         .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 5);
-        match patterns.get(0) {
+        match patterns.first() {
             Some(Pattern::UpToMatch(reg, 0, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test1.*end$");
@@ -281,7 +281,7 @@ mod tests {
         .collect();
         let patterns = get_patterns(input.as_slice()).unwrap();
         assert_eq!(patterns.len(), 5);
-        match patterns.get(0) {
+        match patterns.first() {
             Some(Pattern::SkipToMatch(reg, 0, ExecutePattern::Times(1))) => {
                 let parsed_reg = format!("{reg}");
                 assert_eq!(parsed_reg, "test1.*end$");

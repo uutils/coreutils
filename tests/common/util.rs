@@ -55,9 +55,7 @@ const DEFAULT_ENV: [(&str, &str); 2] = [("LC_ALL", "C"), ("TZ", "UTC")];
 
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
-    std::env::var("CI")
-        .unwrap_or_else(|_| String::from("false"))
-        .eq_ignore_ascii_case("true")
+    std::env::var("CI").is_ok_and(|s| s.eq_ignore_ascii_case("true"))
 }
 
 /// Read a test scenario fixture, returning its bytes

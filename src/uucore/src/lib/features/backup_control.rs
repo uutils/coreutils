@@ -662,7 +662,7 @@ mod tests {
         let target = Path::new("data.txt");
         let suffix = String::from(".bak");
 
-        assert!(source_is_target_backup(&source, &target, &suffix));
+        assert!(source_is_target_backup(source, target, &suffix));
     }
 
     #[test]
@@ -671,7 +671,7 @@ mod tests {
         let target = Path::new("backup.txt");
         let suffix = String::from(".bak");
 
-        assert!(!source_is_target_backup(&source, &target, &suffix));
+        assert!(!source_is_target_backup(source, target, &suffix));
     }
 
     #[test]
@@ -680,6 +680,6 @@ mod tests {
         let target = Path::new("example");
         let suffix = String::from("~");
 
-        assert!(source_is_target_backup(&source, &target, &suffix));
+        assert!(source_is_target_backup(source, target, &suffix));
     }
 }
