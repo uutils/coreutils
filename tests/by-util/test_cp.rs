@@ -56,7 +56,7 @@ static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 #[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use xattr;
 
 /// Assert that mode, ownership, and permissions of two metadata objects match.
