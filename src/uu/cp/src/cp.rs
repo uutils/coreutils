@@ -1510,7 +1510,7 @@ fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
 ///
 /// Copying to the same file is only allowed if both `--backup` and
 /// `--force` are specified and the file is a regular file.
-fn is_forbidden_copy_to_same_file(
+fn is_forbidden_to_copy_to_same_file(
     source: &Path,
     dest: &Path,
     options: &Options,
@@ -1522,6 +1522,7 @@ fn is_forbidden_copy_to_same_file(
         options.dereference(source_in_command_line) || !source.is_symlink();
     paths_refer_to_same_file(source, dest, dereference_to_compare)
         && !(options.force() && options.backup != BackupMode::NoBackup)
+        && !(dest.is_symlink() && options.backup != BackupMode::NoBackup)
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
@@ -1533,7 +1534,7 @@ fn handle_existing_dest(
 ) -> CopyResult<()> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
-    if is_forbidden_copy_to_same_file(source, dest, options, source_in_command_line) {
+    if is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line) {
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
