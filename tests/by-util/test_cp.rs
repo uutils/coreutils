@@ -57,7 +57,7 @@ static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 #[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use xattr;
+use crate::common::util::compare_xattrs;
 
 /// Assert that mode, ownership, and permissions of two metadata objects match.
 #[cfg(all(not(windows), not(target_os = "freebsd")))]
@@ -3737,21 +3737,6 @@ fn test_cp_no_such() {
         .arg("no-such/")
         .fails()
         .stderr_is("cp: 'no-such/' is not a directory\n");
-}
-
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-fn compare_xattrs<P: AsRef<Path>>(path1: P, path2: P) -> bool {
-    let get_sorted_xattrs = |path: P| {
-        xattr::list(path)
-            .map(|attrs| {
-                let mut attrs = attrs.collect::<Vec<_>>();
-                attrs.sort();
-                attrs
-            })
-            .unwrap_or_else(|_| Vec::new())
-    };
-
-    get_sorted_xattrs(path1) == get_sorted_xattrs(path2)
 }
 
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
