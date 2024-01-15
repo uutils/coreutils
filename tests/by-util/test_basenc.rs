@@ -22,7 +22,7 @@ fn test_z85_not_padded() {
 #[test]
 fn test_invalid_input() {
     let error_message = if cfg!(windows) {
-        "basenc: .: Permission denied"
+        "basenc: .: Permission denied\n"
     } else {
         "basenc: error: invalid input\n"
     };
