@@ -10,44 +10,41 @@
 use time::macros::format_description;
 use time::UtcOffset;
 
-pub use crate::*; // import macros from `../../macros.rs`
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
+#[cfg(unix)]
 static MOUNT_OPT_BIND: &str = "bind";
 #[cfg(windows)]
 const MAX_PATH: usize = 266;
-#[cfg(not(unix))]
+#[cfg(windows)]
 static EXIT_ERR: i32 = 1;
+
+#[cfg(any(
+    windows,
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use crate::crash;
+#[cfg(windows)]
+use crate::show_warning;
 
 #[cfg(windows)]
 use std::ffi::OsStr;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
-use windows_sys::Win32::Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE};
-#[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::{
-    FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
-    GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+use windows_sys::Win32::{
+    Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
+    Storage::FileSystem::{
+        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
+        GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+    },
+    System::WindowsProgramming::DRIVE_REMOTE,
 };
-#[cfg(windows)]
-use windows_sys::Win32::System::WindowsProgramming::DRIVE_REMOTE;
-
-// Warning: the pointer has to be used *immediately* or the Vec
-// it points to will be dropped!
-#[cfg(windows)]
-macro_rules! String2LPWSTR {
-    ($str: expr) => {
-        OsStr::new(&$str)
-            .encode_wide()
-            .chain(Some(0))
-            .collect::<Vec<u16>>()
-            .as_ptr()
-    };
-}
 
 #[cfg(windows)]
 #[allow(non_snake_case)]
@@ -56,29 +53,28 @@ fn LPWSTR2String(buf: &[u16]) -> String {
     String::from_utf16(&buf[..len]).unwrap()
 }
 
+#[cfg(windows)]
+fn to_nul_terminated_wide_string(s: impl AsRef<OsStr>) -> Vec<u16> {
+    s.as_ref()
+        .encode_wide()
+        .chain(Some(0))
+        .collect::<Vec<u16>>()
+}
+
 #[cfg(unix)]
 use libc::{
     mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
 };
 use std::borrow::Cow;
-use std::convert::{AsRef, From};
-#[cfg(any(
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "linux",
-    target_os = "android",
-    target_os = "illumos",
-    target_os = "solaris",
-))]
+use std::convert::From;
+#[cfg(unix)]
 use std::ffi::CStr;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::ffi::CString;
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
-#[cfg(not(unix))]
+#[cfg(windows)]
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
@@ -106,7 +102,6 @@ pub use libc::statvfs as StatFs;
     target_vendor = "apple",
     target_os = "freebsd",
     target_os = "openbsd",
-    target_os = "redox"
 ))]
 pub use libc::statfs as statfs_fn;
 #[cfg(any(
@@ -114,7 +109,8 @@ pub use libc::statfs as statfs_fn;
     target_os = "bitrig",
     target_os = "illumos",
     target_os = "solaris",
-    target_os = "dragonfly"
+    target_os = "dragonfly",
+    target_os = "redox"
 ))]
 pub use libc::statvfs as statfs_fn;
 
@@ -144,63 +140,27 @@ impl BirthTime for Metadata {
 
 #[derive(Debug, Clone)]
 pub struct MountInfo {
-    // it stores `volume_name` in windows platform and `dev_id` in unix platform
+    /// Stores `volume_name` in windows platform and `dev_id` in unix platform
     pub dev_id: String,
     pub dev_name: String,
     pub fs_type: String,
-    pub mount_dir: String,
-    pub mount_option: String, // we only care "bind" option
     pub mount_root: String,
+    pub mount_dir: String,
+    /// We only care whether this field contains "bind"
+    pub mount_option: String,
     pub remote: bool,
     pub dummy: bool,
 }
 
 impl MountInfo {
-    fn set_missing_fields(&mut self) {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
-            // We want to keep the dev_id on Windows
-            // but set dev_id
-            if let Ok(stat) = std::fs::metadata(&self.mount_dir) {
-                // Why do we cast this to i32?
-                self.dev_id = (stat.dev() as i32).to_string();
-            } else {
-                self.dev_id = String::new();
-            }
-        }
-        // set MountInfo::dummy
-        // spell-checker:disable
-        match self.fs_type.as_ref() {
-            "autofs" | "proc" | "subfs"
-            /* for Linux 2.6/3.x */
-            | "debugfs" | "devpts" | "fusectl" | "mqueue" | "rpc_pipefs" | "sysfs"
-            /* FreeBSD, Linux 2.4 */
-            | "devfs"
-            /* for NetBSD 3.0 */
-            | "kernfs"
-            /* for Irix 6.5 */
-            | "ignore" => self.dummy = true,
-            _ => self.dummy = self.fs_type == "none"
-                && !self.mount_option.contains(MOUNT_OPT_BIND)
-        }
-        // spell-checker:enable
-        // set MountInfo::remote
-        #[cfg(windows)]
-        {
-            self.remote = DRIVE_REMOTE == unsafe { GetDriveTypeW(String2LPWSTR!(self.mount_root)) };
-        }
-        #[cfg(unix)]
-        {
-            self.remote = self.dev_name.find(':').is_some()
-                || (self.dev_name.starts_with("//") && self.fs_type == "smbfs"
-                    || self.fs_type == "cifs")
-                || self.dev_name == "-hosts";
-        }
-    }
-
     #[cfg(any(target_os = "linux", target_os = "android"))]
     fn new(file_name: &str, raw: &[&str]) -> Option<Self> {
+        let dev_name;
+        let fs_type;
+        let mount_root;
+        let mount_dir;
+        let mount_option;
+
         match file_name {
             // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
@@ -210,36 +170,38 @@ impl MountInfo {
                 let after_fields = raw[FIELDS_OFFSET..].iter().position(|c| *c == "-").unwrap()
                     + FIELDS_OFFSET
                     + 1;
-                let mut m = Self {
-                    dev_id: String::new(),
-                    dev_name: raw[after_fields + 1].to_string(),
-                    fs_type: raw[after_fields].to_string(),
-                    mount_root: raw[3].to_string(),
-                    mount_dir: raw[4].to_string(),
-                    mount_option: raw[5].to_string(),
-                    remote: false,
-                    dummy: false,
-                };
-                m.set_missing_fields();
-                Some(m)
+                dev_name = raw[after_fields + 1].to_string();
+                fs_type = raw[after_fields].to_string();
+                mount_root = raw[3].to_string();
+                mount_dir = raw[4].to_string();
+                mount_option = raw[5].to_string();
             }
             LINUX_MTAB => {
-                let mut m = Self {
-                    dev_id: String::new(),
-                    dev_name: raw[0].to_string(),
-                    fs_type: raw[2].to_string(),
-                    mount_root: String::new(),
-                    mount_dir: raw[1].to_string(),
-                    mount_option: raw[3].to_string(),
-                    remote: false,
-                    dummy: false,
-                };
-                m.set_missing_fields();
-                Some(m)
+                dev_name = raw[0].to_string();
+                fs_type = raw[2].to_string();
+                mount_root = String::new();
+                mount_dir = raw[1].to_string();
+                mount_option = raw[3].to_string();
             }
-            _ => None,
-        }
+            _ => return None,
+        };
+
+        let dev_id = mount_dev_id(&mount_dir);
+        let dummy = is_dummy_filesystem(&fs_type, &mount_option);
+        let remote = is_remote_filesystem(&dev_name, &fs_type);
+
+        Some(Self {
+            dev_id,
+            dev_name,
+            fs_type,
+            mount_dir,
+            mount_option,
+            mount_root,
+            remote,
+            dummy,
+        })
     }
+
     #[cfg(windows)]
     fn new(mut volume_name: String) -> Option<Self> {
         let mut dev_name_buf = [0u16; MAX_PATH];
@@ -261,8 +223,9 @@ impl MountInfo {
 
         let mut mount_root_buf = [0u16; MAX_PATH];
         let success = unsafe {
+            let volume_name = to_nul_terminated_wide_string(&volume_name);
             GetVolumePathNamesForVolumeNameW(
-                String2LPWSTR!(volume_name),
+                volume_name.as_ptr(),
                 mount_root_buf.as_mut_ptr(),
                 mount_root_buf.len() as u32,
                 ptr::null_mut(),
@@ -276,8 +239,9 @@ impl MountInfo {
 
         let mut fs_type_buf = [0u16; MAX_PATH];
         let success = unsafe {
+            let mount_root = to_nul_terminated_wide_string(&mount_root);
             GetVolumeInformationW(
-                String2LPWSTR!(mount_root),
+                mount_root.as_ptr(),
                 ptr::null_mut(),
                 0,
                 ptr::null_mut(),
@@ -292,18 +256,21 @@ impl MountInfo {
         } else {
             Some(LPWSTR2String(&fs_type_buf))
         };
-        let mut mn_info = Self {
+        let remote = DRIVE_REMOTE
+            == unsafe {
+                let mount_root = to_nul_terminated_wide_string(&mount_root);
+                GetDriveTypeW(mount_root.as_ptr())
+            };
+        Some(Self {
             dev_id: volume_name,
             dev_name,
             fs_type: fs_type.unwrap_or_default(),
             mount_root,
             mount_dir: String::new(),
             mount_option: String::new(),
-            remote: false,
+            remote,
             dummy: false,
-        };
-        mn_info.set_missing_fields();
-        Some(mn_info)
+        })
     }
 }
 
@@ -315,33 +282,77 @@ impl MountInfo {
 ))]
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
-        let mut info = Self {
-            dev_id: String::new(),
-            dev_name: unsafe {
-                // spell-checker:disable-next-line
-                CStr::from_ptr(&statfs.f_mntfromname[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
-            fs_type: unsafe {
-                // spell-checker:disable-next-line
-                CStr::from_ptr(&statfs.f_fstypename[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
-            mount_dir: unsafe {
-                // spell-checker:disable-next-line
-                CStr::from_ptr(&statfs.f_mntonname[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
+        let dev_name = unsafe {
+            // spell-checker:disable-next-line
+            CStr::from_ptr(&statfs.f_mntfromname[0])
+                .to_string_lossy()
+                .into_owned()
+        };
+        let fs_type = unsafe {
+            // spell-checker:disable-next-line
+            CStr::from_ptr(&statfs.f_fstypename[0])
+                .to_string_lossy()
+                .into_owned()
+        };
+        let mount_dir = unsafe {
+            // spell-checker:disable-next-line
+            CStr::from_ptr(&statfs.f_mntonname[0])
+                .to_string_lossy()
+                .into_owned()
+        };
+
+        let dev_id = mount_dev_id(&mount_dir);
+        let dummy = is_dummy_filesystem(&fs_type, "");
+        let remote = is_remote_filesystem(&dev_name, &fs_type);
+
+        Self {
+            dev_id,
+            dev_name,
+            fs_type,
+            mount_dir,
             mount_root: String::new(),
             mount_option: String::new(),
-            remote: false,
-            dummy: false,
-        };
-        info.set_missing_fields();
-        info
+            remote,
+            dummy,
+        }
+    }
+}
+
+#[cfg(unix)]
+fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
+    // spell-checker:disable
+    match fs_type {
+        "autofs" | "proc" | "subfs"
+        // for Linux 2.6/3.x
+        | "debugfs" | "devpts" | "fusectl" | "mqueue" | "rpc_pipefs" | "sysfs"
+        // FreeBSD, Linux 2.4
+        | "devfs"
+        // for NetBSD 3.0
+        | "kernfs"
+        // for Irix 6.5
+        | "ignore" => true,
+        _ => fs_type == "none"
+            && !mount_option.contains(MOUNT_OPT_BIND)
+    }
+    // spell-checker:enable
+}
+
+#[cfg(unix)]
+fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
+    dev_name.find(':').is_some()
+        || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
+        || dev_name == "-hosts"
+}
+
+#[cfg(unix)]
+fn mount_dev_id(mount_dir: &str) -> String {
+    use std::os::unix::fs::MetadataExt;
+
+    if let Ok(stat) = std::fs::metadata(mount_dir) {
+        // Why do we cast this to i32?
+        (stat.dev() as i32).to_string()
+    } else {
+        String::new()
     }
 }
 
@@ -497,7 +508,10 @@ impl FsUsage {
     #[cfg(unix)]
     pub fn new(statvfs: StatFs) -> Self {
         {
-            #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+            #[cfg(all(
+                not(any(target_os = "freebsd", target_os = "openbsd")),
+                target_pointer_width = "64"
+            ))]
             return Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
                 blocks: statvfs.f_blocks,
@@ -507,7 +521,10 @@ impl FsUsage {
                 files: statvfs.f_files,
                 ffree: statvfs.f_ffree,
             };
-            #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+            #[cfg(all(
+                not(any(target_os = "freebsd", target_os = "openbsd")),
+                not(target_pointer_width = "64")
+            ))]
             return Self {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
                 blocks: statvfs.f_blocks.into(),
@@ -530,15 +547,29 @@ impl FsUsage {
                 files: statvfs.f_files,
                 ffree: statvfs.f_ffree.try_into().unwrap(),
             };
+            #[cfg(target_os = "openbsd")]
+            return Self {
+                blocksize: statvfs.f_bsize.into(),
+                blocks: statvfs.f_blocks,
+                bfree: statvfs.f_bfree,
+                bavail: statvfs.f_bavail.try_into().unwrap(),
+                bavail_top_bit_set: ((std::convert::TryInto::<u64>::try_into(statvfs.f_bavail)
+                    .unwrap())
+                    & (1u64.rotate_right(1)))
+                    != 0,
+                files: statvfs.f_files,
+                ffree: statvfs.f_ffree,
+            };
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     pub fn new(path: &Path) -> Self {
         let mut root_path = [0u16; MAX_PATH];
         let success = unsafe {
+            let path = to_nul_terminated_wide_string(path);
             GetVolumePathNamesForVolumeNameW(
                 //path_utf8.as_ptr(),
-                String2LPWSTR!(path.as_os_str()),
+                path.as_ptr(),
                 root_path.as_mut_ptr(),
                 root_path.len() as u32,
                 ptr::null_mut(),
@@ -558,8 +589,9 @@ impl FsUsage {
         let mut total_number_of_clusters = 0;
 
         let success = unsafe {
+            let path = to_nul_terminated_wide_string(path);
             GetDiskFreeSpaceW(
-                String2LPWSTR!(path.as_os_str()),
+                path.as_ptr(),
                 &mut sectors_per_cluster,
                 &mut bytes_per_sector,
                 &mut number_of_free_clusters,
@@ -617,8 +649,10 @@ impl FsMeta for StatFs {
             not(target_vendor = "apple"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_os = "openbsd"),
             not(target_os = "illumos"),
             not(target_os = "solaris"),
+            not(target_os = "redox"),
             not(target_arch = "s390x"),
             target_pointer_width = "64"
         ))]
@@ -626,10 +660,12 @@ impl FsMeta for StatFs {
         #[cfg(all(
             not(target_env = "musl"),
             not(target_os = "freebsd"),
+            not(target_os = "redox"),
             any(
                 target_arch = "s390x",
                 target_vendor = "apple",
                 target_os = "android",
+                target_os = "openbsd",
                 not(target_pointer_width = "64")
             )
         ))]
@@ -638,7 +674,8 @@ impl FsMeta for StatFs {
             target_env = "musl",
             target_os = "freebsd",
             target_os = "illumos",
-            target_os = "solaris"
+            target_os = "solaris",
+            target_os = "redox"
         ))]
         return self.f_bsize.try_into().unwrap();
     }
@@ -655,11 +692,19 @@ impl FsMeta for StatFs {
         return self.f_bfree.into();
     }
     fn avail_blocks(&self) -> u64 {
-        #[cfg(all(not(target_os = "freebsd"), target_pointer_width = "64"))]
+        #[cfg(all(
+            not(target_os = "freebsd"),
+            not(target_os = "openbsd"),
+            target_pointer_width = "64"
+        ))]
         return self.f_bavail;
-        #[cfg(all(not(target_os = "freebsd"), not(target_pointer_width = "64")))]
+        #[cfg(all(
+            not(target_os = "freebsd"),
+            not(target_os = "openbsd"),
+            not(target_pointer_width = "64")
+        ))]
         return self.f_bavail.into();
-        #[cfg(target_os = "freebsd")]
+        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
         return self.f_bavail.try_into().unwrap();
     }
     fn total_file_nodes(&self) -> u64 {
@@ -846,6 +891,7 @@ pub fn pretty_time(sec: i64, nsec: i64) -> String {
     // the date was set
     let local_offset = match UtcOffset::local_offset_at(tm) {
         Ok(lo) => lo,
+        Err(_) if cfg!(target_os = "redox") => UtcOffset::UTC,
         Err(e) => {
             panic!("error: {e}");
         }

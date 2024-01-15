@@ -3,7 +3,7 @@
 ```
 shuf [OPTION]... [FILE]
 shuf -e [OPTION]... [ARG]...
-shuf -i LO-HI [OPTION]...;
+shuf -i LO-HI [OPTION]...
 ```
 
 Shuffle the input by outputting a random permutation of input lines.

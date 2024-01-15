@@ -2,7 +2,12 @@ name: Android
 
 # spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader dtolnay juliangruber
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
 
 permissions:
   contents: read # to fetch code (actions/checkout)
@@ -47,7 +52,7 @@ jobs:
         ram-size: 2048M
         disk-size: 7GB
         force-avd-creation: true
-        emulator-options: -no-snapshot-load -noaudio -no-boot-anim -camera-back none
+        emulator-options: -no-window -no-snapshot-load -noaudio -no-boot-anim -camera-back none
         script: |
           util/android-commands.sh init "${{ matrix.arch }}" "${{ matrix.api-level }}" "${{ env.TERMUX }}"
     - name: Save AVD cache
@@ -83,7 +88,7 @@ jobs:
         ram-size: 2048M
         disk-size: 7GB
         force-avd-creation: false
-        emulator-options: -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -snapshot ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
+        emulator-options: -no-window -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -snapshot ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
         # This is not a usual script. Every line is executed in a separate shell with `sh -c`. If
         # one of the lines returns with error the whole script is failed (like running a script with
         # set -e) and in consequences the other lines (shells) are not executed.

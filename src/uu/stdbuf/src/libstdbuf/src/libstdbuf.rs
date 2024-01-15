@@ -5,10 +5,9 @@
 // spell-checker:ignore (ToDO) IOFBF IOLBF IONBF cstdio setvbuf
 
 use cpp::cpp;
-use libc::{c_char, c_int, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
+use libc::{c_char, c_int, fileno, size_t, FILE, _IOFBF, _IOLBF, _IONBF};
 use std::env;
 use std::ptr;
-use uucore::crash;
 
 cpp! {{
     #include <cstdio>
@@ -40,7 +39,10 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         input => {
             let buff_size: usize = match input.parse() {
                 Ok(num) => num,
-                Err(e) => crash!(1, "incorrect size of buffer!: {}", e),
+                Err(_) => {
+                    eprintln!("failed to allocate a {} byte stdio buffer", value);
+                    std::process::exit(1);
+                }
             };
             (_IOFBF, buff_size as size_t)
         }
@@ -52,7 +54,11 @@ fn set_buffer(stream: *mut FILE, value: &str) {
         res = libc::setvbuf(stream, buffer, mode, size);
     }
     if res != 0 {
-        crash!(res, "error while calling setvbuf!");
+        eprintln!(
+            "could not set buffering of {} to mode {}",
+            unsafe { fileno(stream) },
+            mode
+        );
     }
 }
 

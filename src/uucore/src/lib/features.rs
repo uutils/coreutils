@@ -6,6 +6,8 @@
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
+#[cfg(feature = "colors")]
+pub mod colors;
 #[cfg(feature = "encoding")]
 pub mod encoding;
 #[cfg(feature = "format")]
@@ -50,6 +52,7 @@ pub mod signals;
     unix,
     not(target_os = "android"),
     not(target_os = "fuchsia"),
+    not(target_os = "openbsd"),
     not(target_os = "redox"),
     not(target_env = "musl"),
     feature = "utmpx"

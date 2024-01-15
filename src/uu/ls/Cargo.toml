@@ -24,6 +24,7 @@ terminal_size = { workspace = true }
 glob = { workspace = true }
 lscolors = { workspace = true }
 uucore = { workspace = true, features = [
+  "colors",
   "entries",
   "fs",
   "quoting-style",
@@ -31,6 +32,10 @@ uucore = { workspace = true, features = [
 ] }
 once_cell = { workspace = true }
 selinux = { workspace = true, optional = true }
+hostname = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+xattr = { workspace = true }
 
 [[bin]]
 name = "ls"

@@ -11,11 +11,12 @@ use std::fmt;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::num::IntErrorKind;
+use std::path::Path;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
-use uucore::{format_usage, help_about, help_usage};
+use uucore::error::{set_exit_code, FromIo, UError, UResult};
+use uucore::{format_usage, help_about, help_usage, show_error};
 
 const ABOUT: &str = help_about!("expand.md");
 const USAGE: &str = help_usage!("expand.md");
@@ -275,6 +276,7 @@ pub fn uu_app() -> Command {
         .after_help(LONG_HELP)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::INITIAL)
                 .long(options::INITIAL)
@@ -464,6 +466,12 @@ fn expand(options: &Options) -> UResult<()> {
     let mut buf = Vec::new();
 
     for file in &options.files {
+        if Path::new(file).is_dir() {
+            show_error!("{}: Is a directory", file);
+            set_exit_code(1);
+            continue;
+        }
+
         let mut fh = open(file)?;
 
         while match fh.read_until(b'\n', &mut buf) {

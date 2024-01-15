@@ -98,8 +98,6 @@ pub fn uu_app() -> Command {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
     // For expr utility we do not want getopts.
     // The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`
     let matches = uu_app().try_get_matches_from(args)?;
@@ -108,9 +106,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.into_iter().map(|s| s.as_ref()).collect::<Vec<_>>())
         .unwrap_or_default();
 
-    let res = AstNode::parse(&token_strings)?.eval()?;
+    let res: String = AstNode::parse(&token_strings)?.eval()?.eval_as_string();
     println!("{res}");
-    if !is_truthy(&res) {
+    if !is_truthy(&res.into()) {
         return Err(1.into());
     }
     Ok(())

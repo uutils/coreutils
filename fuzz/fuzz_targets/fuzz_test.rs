@@ -184,9 +184,9 @@ fuzz_target!(|_data: &[u8]| {
         args.push(OsString::from(generate_test_arg()));
     }
 
-    let rust_result = generate_and_run_uumain(&args, uumain);
+    let rust_result = generate_and_run_uumain(&args, uumain, None);
 
-    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false) {
+    let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false, None) {
         Ok(result) => result,
         Err(error_result) => {
             eprintln!("Failed to run GNU command:");
@@ -203,12 +203,9 @@ fuzz_target!(|_data: &[u8]| {
     compare_result(
         "test",
         &format!("{:?}", &args[1..]),
-        &rust_result.stdout,
-        &gnu_result.stdout,
-        &rust_result.stderr,
-        &gnu_result.stderr,
-        rust_result.exit_code,
-        gnu_result.exit_code,
+        None,
+        &rust_result,
+        &gnu_result,
         false, // Set to true if you want to fail on stderr diff
     );
 });

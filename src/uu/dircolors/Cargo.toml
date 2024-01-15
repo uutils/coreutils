@@ -16,7 +16,7 @@ path = "src/dircolors.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
+uucore = { workspace = true, features = ["colors"] }
 
 [[bin]]
 name = "dircolors"

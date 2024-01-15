@@ -1181,3 +1181,8 @@ fn test_tmp_files_deleted_on_sigint() {
 fn test_same_sort_mode_twice() {
     new_ucmd!().args(&["-k", "2n,2n", "empty.txt"]).succeeds();
 }
+
+#[test]
+fn test_args_override() {
+    new_ucmd!().args(&["-f", "-f"]).pipe_in("foo").succeeds();
+}

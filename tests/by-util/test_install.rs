@@ -4,9 +4,10 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) helloworld nodir objdump n'source
 
-use crate::common::util::{is_ci, TestScenario};
+use crate::common::util::{is_ci, run_ucmd_as_root, TestScenario};
 use filetime::FileTime;
-use std::os::unix::fs::PermissionsExt;
+use std::fs;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(any(windows, target_os = "freebsd")))]
 use std::process::Command;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -672,6 +673,33 @@ fn test_install_and_strip_with_program() {
 
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(!stdout.contains(STRIP_SOURCE_FILE_SYMBOL));
+}
+
+#[cfg(all(unix, feature = "chmod"))]
+#[test]
+// FixME: Freebsd fails on 'No such file or directory'
+#[cfg(not(target_os = "freebsd"))]
+fn test_install_and_strip_with_program_hyphen() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    let content = r#"#!/bin/sh
+    printf -- '%s\n' "$1" | grep '^[^-]'
+    "#;
+    at.write("no-hyphen", content);
+    scene.ccmd("chmod").arg("+x").arg("no-hyphen").succeeds();
+
+    at.touch("src");
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("./no-hyphen")
+        .arg("--")
+        .arg("src")
+        .arg("-dest")
+        .succeeds()
+        .no_stderr();
 }
 
 #[test]
@@ -1537,4 +1565,81 @@ fn test_install_compare_option() {
         .fails()
         .code_is(1)
         .stderr_contains("Options --compare and --strip are mutually exclusive");
+}
+
+#[test]
+// Matches part of tests/install/basic-1
+fn test_t_exist_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source1 = "file";
+    let target_dir = "sub4/";
+    let target_file = "sub4/file_exists";
+
+    at.touch(source1);
+    at.mkdir(target_dir);
+    at.touch(target_file);
+
+    scene
+        .ucmd()
+        .arg("-t")
+        .arg(target_file)
+        .arg("-Dv")
+        .arg(source1)
+        .fails()
+        .stderr_contains("failed to access 'sub4/file_exists': Not a directory");
+}
+
+#[test]
+fn test_target_file_ends_with_slash() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "source_file";
+    let target_dir = "dir";
+    let target_file = "dir/target_file";
+    let target_file_slash = format!("{}/", target_file);
+
+    at.touch(source);
+    at.mkdir(target_dir);
+    at.touch(target_file);
+
+    scene
+        .ucmd()
+        .arg("-t")
+        .arg(target_file_slash)
+        .arg("-D")
+        .arg(source)
+        .fails()
+        .stderr_contains("failed to access 'dir/target_file/': Not a directory");
+}
+
+#[test]
+fn test_install_root_combined() {
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures.clone();
+    at.touch("a");
+    at.touch("c");
+
+    let run_and_check = |args: &[&str], target: &str, expected_uid: u32, expected_gid: u32| {
+        if let Ok(result) = run_ucmd_as_root(&ts, args) {
+            result.success();
+            assert!(at.file_exists(target));
+
+            let metadata = fs::metadata(at.plus(target)).unwrap();
+            assert_eq!(metadata.uid(), expected_uid);
+            assert_eq!(metadata.gid(), expected_gid);
+        } else {
+            print!("Test skipped; requires root user");
+        }
+    };
+
+    run_and_check(&["-Cv", "-o1", "-g1", "a", "b"], "b", 1, 1);
+    run_and_check(&["-Cv", "-o2", "-g1", "a", "b"], "b", 2, 1);
+    run_and_check(&["-Cv", "-o2", "-g2", "a", "b"], "b", 2, 2);
+
+    run_and_check(&["-Cv", "-o2", "c", "d"], "d", 2, 0);
+    run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
+    run_and_check(&["-Cv", "c", "d"], "d", 0, 0);
 }

@@ -2,7 +2,11 @@ name: Fuzzing
 
 # spell-checker:ignore fuzzer
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read # to fetch code (actions/checkout)
@@ -32,6 +36,7 @@ jobs:
     needs: fuzz-build
     name: Run the fuzzers
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       RUN_FOR: 60
     strategy:
@@ -42,6 +47,12 @@ jobs:
           - { name: fuzz_date, should_pass: false }
           - { name: fuzz_expr, should_pass: true }
           - { name: fuzz_printf, should_pass: false }
+          - { name: fuzz_echo, should_pass: true }
+          - { name: fuzz_seq, should_pass: false }
+          - { name: fuzz_sort, should_pass: false }
+          - { name: fuzz_wc, should_pass: false }
+          - { name: fuzz_cut, should_pass: false }
+          - { name: fuzz_split, should_pass: false }
           - { name: fuzz_parse_glob, should_pass: true }
           - { name: fuzz_parse_size, should_pass: true }
           - { name: fuzz_parse_time, should_pass: true }

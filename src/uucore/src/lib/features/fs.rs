@@ -115,11 +115,13 @@ impl FileInformation {
             not(target_os = "android"),
             not(target_os = "freebsd"),
             not(target_os = "netbsd"),
+            not(target_os = "openbsd"),
             not(target_os = "illumos"),
             not(target_os = "solaris"),
             not(target_arch = "aarch64"),
             not(target_arch = "riscv64"),
             not(target_arch = "loongarch64"),
+            not(target_arch = "sparc64"),
             target_pointer_width = "64"
         ))]
         return self.0.st_nlink;
@@ -130,11 +132,13 @@ impl FileInformation {
                 target_os = "android",
                 target_os = "freebsd",
                 target_os = "netbsd",
+                target_os = "openbsd",
                 target_os = "illumos",
                 target_os = "solaris",
                 target_arch = "aarch64",
                 target_arch = "riscv64",
                 target_arch = "loongarch64",
+                target_arch = "sparc64",
                 not(target_pointer_width = "64")
             )
         ))]
@@ -712,6 +716,33 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
     source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
 }
 
+/// Returns true if the passed `path` ends with a path terminator.
+///
+/// This function examines the last character of the path to determine
+/// if it is a directory separator. It supports both Unix-style (`/`)
+/// and Windows-style (`\`) separators.
+///
+/// # Arguments
+///
+/// * `path` - A reference to the path to be checked.
+#[cfg(unix)]
+pub fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::unix::prelude::OsStrExt;
+    path.as_os_str()
+        .as_bytes()
+        .last()
+        .map_or(false, |&byte| byte == b'/' || byte == b'\\')
+}
+
+#[cfg(windows)]
+pub fn path_ends_with_terminator(path: &Path) -> bool {
+    use std::os::windows::prelude::OsStrExt;
+    path.as_os_str()
+        .encode_wide()
+        .last()
+        .map_or(false, |wide| wide == b'/'.into() || wide == b'\\'.into())
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -876,7 +907,7 @@ mod tests {
         let path1 = temp_file.path();
         let path2 = temp_file.path();
 
-        assert!(are_hardlinks_to_same_file(&path1, &path2));
+        assert!(are_hardlinks_to_same_file(path1, path2));
     }
 
     #[cfg(unix)]
@@ -891,7 +922,7 @@ mod tests {
         let path1 = temp_file1.path();
         let path2 = temp_file2.path();
 
-        assert!(!are_hardlinks_to_same_file(&path1, &path2));
+        assert!(!are_hardlinks_to_same_file(path1, path2));
     }
 
     #[cfg(unix)]
@@ -902,9 +933,9 @@ mod tests {
         let path1 = temp_file.path();
 
         let path2 = temp_file.path().with_extension("hardlink");
-        fs::hard_link(&path1, &path2).unwrap();
+        fs::hard_link(path1, &path2).unwrap();
 
-        assert!(are_hardlinks_to_same_file(&path1, &path2));
+        assert!(are_hardlinks_to_same_file(path1, &path2));
     }
 
     #[cfg(unix)]
@@ -918,5 +949,25 @@ mod tests {
         assert_eq!(get_file_display(S_IFLNK | 0o777), 'l');
         assert_eq!(get_file_display(S_IFSOCK | 0o600), 's');
         assert_eq!(get_file_display(0o777), '?');
+    }
+
+    #[test]
+    fn test_path_ends_with_terminator() {
+        // Path ends with a forward slash
+        assert!(path_ends_with_terminator(Path::new("/some/path/")));
+
+        // Path ends with a backslash
+        assert!(path_ends_with_terminator(Path::new("C:\\some\\path\\")));
+
+        // Path does not end with a terminator
+        assert!(!path_ends_with_terminator(Path::new("/some/path")));
+        assert!(!path_ends_with_terminator(Path::new("C:\\some\\path")));
+
+        // Empty path
+        assert!(!path_ends_with_terminator(Path::new("")));
+
+        // Root path
+        assert!(path_ends_with_terminator(Path::new("/")));
+        assert!(path_ends_with_terminator(Path::new("C:\\")));
     }
 }

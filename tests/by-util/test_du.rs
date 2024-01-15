@@ -3,11 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink
+// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist testdir testfile
 #[cfg(not(windows))]
 use regex::Regex;
-#[cfg(not(windows))]
-use std::io::Write;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::common::util::expected_result;
@@ -22,24 +20,54 @@ const SUB_LINK: &str = "subdir/links/sublink.txt";
 
 #[test]
 fn test_du_basics() {
-    new_ucmd!().succeeds().no_stderr();
+    let ts = TestScenario::new(util_name!());
+
+    let result = ts.ucmd().succeeds();
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let result_reference = unwrap_or_return!(expected_result(&ts, &[]));
+        if result_reference.succeeded() {
+            assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            return;
+        }
+    }
+    _du_basics(result.stdout_str());
 }
+
 #[cfg(target_vendor = "apple")]
 fn _du_basics(s: &str) {
-    let answer = "32\t./subdir
-8\t./subdir/deeper
-24\t./subdir/links
-40\t.
-";
+    let answer = concat!(
+        "4\t./subdir/deeper/deeper_dir\n",
+        "8\t./subdir/deeper\n",
+        "12\t./subdir/links\n",
+        "20\t./subdir\n",
+        "24\t.\n"
+    );
     assert_eq!(s, answer);
 }
-#[cfg(not(target_vendor = "apple"))]
+
+#[cfg(target_os = "windows")]
 fn _du_basics(s: &str) {
-    let answer = "28\t./subdir
-8\t./subdir/deeper
-16\t./subdir/links
-36\t.
-";
+    let answer = concat!(
+        "0\t.\\subdir\\deeper\\deeper_dir\n",
+        "0\t.\\subdir\\deeper\n",
+        "8\t.\\subdir\\links\n",
+        "8\t.\\subdir\n",
+        "8\t.\n"
+    );
+    assert_eq!(s, answer);
+}
+
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows"),))]
+fn _du_basics(s: &str) {
+    let answer = concat!(
+        "8\t./subdir/deeper/deeper_dir\n",
+        "16\t./subdir/deeper\n",
+        "16\t./subdir/links\n",
+        "36\t./subdir\n",
+        "44\t.\n"
+    );
     assert_eq!(s, answer);
 }
 
@@ -116,6 +144,32 @@ fn test_du_invalid_size() {
             .code_is(1)
             .stderr_only(format!("du: --{s} argument '1Y' too large\n"));
     }
+}
+
+#[test]
+fn test_du_with_posixly_correct() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let dir = "a";
+
+    at.mkdir(dir);
+    at.write(&format!("{dir}/file"), "some content");
+
+    let expected = ts
+        .ucmd()
+        .arg(dir)
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_move_str();
+
+    let result = ts
+        .ucmd()
+        .arg(dir)
+        .env("POSIXLY_CORRECT", "1")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(expected, result);
 }
 
 #[test]
@@ -292,12 +346,10 @@ fn test_du_dereference_args() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    at.mkdir_all("subdir");
-    let mut file1 = at.make_file("subdir/file-ignore1");
-    file1.write_all(b"azeaze").unwrap();
-    let mut file2 = at.make_file("subdir/file-ignore1");
-    file2.write_all(b"amaz?ng").unwrap();
-    at.symlink_dir("subdir", "sublink");
+    at.mkdir("dir");
+    at.write("dir/file-ignore1", "azeaze");
+    at.write("dir/file-ignore2", "amaz?ng");
+    at.symlink_dir("dir", "sublink");
 
     for arg in ["-D", "-H", "--dereference-args"] {
         let result = ts.ucmd().arg(arg).arg("-s").arg("sublink").succeeds();
@@ -365,12 +417,19 @@ fn test_du_no_dereference() {
             .stdout_does_not_contain(symlink);
 
         // ensure dereference "wins"
-        ts.ucmd()
-            .arg(arg)
-            .arg("--dereference")
-            .succeeds()
-            .stdout_contains(symlink)
-            .stdout_does_not_contain(dir);
+        let result = ts.ucmd().arg(arg).arg("--dereference").succeeds();
+
+        #[cfg(target_os = "linux")]
+        {
+            let result_reference = unwrap_or_return!(expected_result(&ts, &[arg, "--dereference"]));
+
+            if result_reference.succeeded() {
+                assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            }
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        result.stdout_contains(symlink).stdout_does_not_contain(dir);
     }
 }
 
@@ -393,12 +452,13 @@ fn test_du_inodes_basic() {
 fn _du_inodes_basic(s: &str) {
     assert_eq!(
         s,
-        "2\t.\\subdir\\deeper\\deeper_dir
-4\t.\\subdir\\deeper
-3\t.\\subdir\\links
-8\t.\\subdir
-11\t.
-"
+        concat!(
+            "2\t.\\subdir\\deeper\\deeper_dir\n",
+            "4\t.\\subdir\\deeper\n",
+            "3\t.\\subdir\\links\n",
+            "8\t.\\subdir\n",
+            "11\t.\n",
+        )
     );
 }
 
@@ -406,12 +466,13 @@ fn _du_inodes_basic(s: &str) {
 fn _du_inodes_basic(s: &str) {
     assert_eq!(
         s,
-        "2\t./subdir/deeper/deeper_dir
-4\t./subdir/deeper
-3\t./subdir/links
-8\t./subdir
-11\t.
-"
+        concat!(
+            "2\t./subdir/deeper/deeper_dir\n",
+            "4\t./subdir/deeper\n",
+            "3\t./subdir/links\n",
+            "8\t./subdir\n",
+            "11\t.\n",
+        )
     );
 }
 
@@ -441,6 +502,7 @@ fn test_du_inodes() {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 #[test]
 fn test_du_inodes_with_count_links() {
     let ts = TestScenario::new(util_name!());
@@ -785,10 +847,8 @@ fn test_du_exclude_mix() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    let mut file1 = at.make_file("file-ignore1");
-    file1.write_all(b"azeaze").unwrap();
-    let mut file2 = at.make_file("file-ignore2");
-    file2.write_all(b"amaz?ng").unwrap();
+    at.write("file-ignore1", "azeaze");
+    at.write("file-ignore2", "amaz?ng");
 
     at.mkdir_all("azerty/xcwww/azeaze");
     at.mkdir_all("azerty/xcwww/qzerty");
@@ -920,10 +980,135 @@ fn test_du_symlink_multiple_fail() {
     let at = &ts.fixtures;
 
     at.symlink_file("non-existing.txt", "target.txt");
-    let mut file1 = at.make_file("file1");
-    file1.write_all(b"azeaze").unwrap();
+    at.write("file1", "azeaze");
 
     let result = ts.ucmd().arg("-L").arg("target.txt").arg("file1").fails();
     assert_eq!(result.code(), 1);
     result.stdout_contains("4\tfile1\n");
+}
+
+#[test]
+// Disable on Windows because of different path separators and handling of null characters
+#[cfg(not(target_os = "windows"))]
+fn test_du_files0_from() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("testfile1", "content1");
+    at.write("testfile2", "content2");
+
+    at.mkdir("testdir");
+    at.write("testdir/testfile3", "content3");
+
+    at.write("filelist", "testfile1\0testfile2\0testdir\0");
+
+    ts.ucmd()
+        .arg("--files0-from=filelist")
+        .succeeds()
+        .stdout_contains("testfile1")
+        .stdout_contains("testfile2")
+        .stdout_contains("testdir");
+}
+
+#[test]
+fn test_du_files0_from_ignore_duplicate_file_names() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file = "testfile";
+
+    at.touch(file);
+    at.write("filelist", &format!("{file}\0{file}\0"));
+
+    ts.ucmd()
+        .arg("--files0-from=filelist")
+        .succeeds()
+        .stdout_is(format!("0\t{file}\n"));
+}
+
+#[test]
+fn test_du_files0_from_with_invalid_zero_length_file_names() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("testfile");
+
+    at.write("filelist", "\0testfile\0\0");
+
+    ts.ucmd()
+        .arg("--files0-from=filelist")
+        .fails()
+        .code_is(1)
+        .stdout_contains("testfile")
+        .stderr_contains("filelist:1: invalid zero-length file name")
+        .stderr_contains("filelist:3: invalid zero-length file name");
+}
+
+#[test]
+fn test_du_files0_from_stdin() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("testfile1", "content1");
+    at.write("testfile2", "content2");
+
+    let input = "testfile1\0testfile2\0";
+
+    ts.ucmd()
+        .arg("--files0-from=-")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_contains("testfile1")
+        .stdout_contains("testfile2");
+}
+
+#[test]
+fn test_du_files0_from_stdin_ignore_duplicate_file_names() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file = "testfile";
+
+    at.touch(file);
+
+    let input = format!("{file}\0{file}");
+
+    ts.ucmd()
+        .arg("--files0-from=-")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(format!("0\t{file}\n"));
+}
+
+#[test]
+fn test_du_files0_from_stdin_with_invalid_zero_length_file_names() {
+    new_ucmd!()
+        .arg("--files0-from=-")
+        .pipe_in("\0\0")
+        .fails()
+        .code_is(1)
+        .stderr_contains("-:1: invalid zero-length file name")
+        .stderr_contains("-:2: invalid zero-length file name");
+}
+
+#[test]
+fn test_du_files0_from_dir() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+
+    let result = ts.ucmd().arg("--files0-from=dir").fails();
+    assert_eq!(result.stderr_str(), "du: dir: read error: Is a directory\n");
+}
+
+#[test]
+fn test_du_files0_from_combined() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir");
+
+    let result = ts.ucmd().arg("--files0-from=-").arg("foo").fails();
+    let stderr = result.stderr_str();
+
+    assert!(stderr.contains("file operands cannot be combined with --files0-from"));
 }
