@@ -264,13 +264,18 @@ fn test_type_option() {
 #[test]
 #[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
 fn test_type_option_with_file() {
-    let fs_type = new_ucmd!()
+    let fs_type_cwd = new_ucmd!()
         .args(&["--output=fstype", "."])
         .succeeds()
         .stdout_move_str();
-    let fs_type = fs_type.lines().nth(1).unwrap().trim();
+    let fs_type_cwd = fs_type_cwd.lines().nth(1).unwrap().trim();
+    let fs_type_root_dir = new_ucmd!()
+        .args(&["--output=fstype", "/"])
+        .succeeds()
+        .stdout_move_str();
+    let fs_type_root_dir = fs_type_root_dir.lines().nth(1).unwrap().trim();
 
-    new_ucmd!().args(&["-t", fs_type, "."]).succeeds();
+    new_ucmd!().args(&["-t", fs_type_cwd, "."]).succeeds();
     new_ucmd!()
         .args(&["-t", "nonexisting", "."])
         .fails()
@@ -283,7 +288,7 @@ fn test_type_option_with_file() {
     let fs_types: Vec<_> = fs_types
         .lines()
         .skip(1)
-        .filter(|t| t.trim() != fs_type && t.trim() != "")
+        .filter(|t| t.trim() != fs_type_cwd && t.trim() != fs_type_root_dir && t.trim() != "")
         .collect();
 
     if !fs_types.is_empty() {
