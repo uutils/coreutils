@@ -507,6 +507,7 @@ dependencies = [
  "uucore",
  "uuhelp_parser",
  "walkdir",
+ "xattr",
  "zip",
 ]
 
