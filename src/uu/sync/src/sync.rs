@@ -95,9 +95,9 @@ mod platform {
                     }
                 }
                 Err(e) => show!(USimpleError::new(
-                             e.raw_os_error().unwrap_or(1),
-                             "failed to create volume handle"
-                        )),
+                    e.raw_os_error().unwrap_or(1),
+                    "failed to create volume handle"
+                )),
             }
         }
     }
@@ -106,7 +106,10 @@ mod platform {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
         let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
         if handle == INVALID_HANDLE_VALUE {
-            show!(USimpleError::new(GetLastError() as i32, "failed to find first volume"));
+            show!(USimpleError::new(
+                GetLastError() as i32,
+                "failed to find first volume"
+            ));
         }
         (String::from_wide_null(&name), handle)
     }
