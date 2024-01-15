@@ -567,6 +567,22 @@ fn test_cp_arg_link_with_dest_hardlink_to_source() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_cp_arg_link_with_same_file() {
+    use std::os::linux::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+
+    at.touch(file);
+
+    ucmd.args(&["--link", file, file]).succeeds();
+
+    assert_eq!(at.metadata(file).st_nlink(), 1);
+    assert!(at.file_exists(file));
+}
+
+#[test]
 fn test_cp_arg_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -713,6 +729,25 @@ fn test_cp_arg_backup_with_dest_a_symlink() {
     assert_eq!(source_content, at.read(symlink));
     assert!(at.symlink_exists(backup));
     assert_eq!(original, at.resolve_link(backup));
+}
+
+#[test]
+fn test_cp_arg_backup_with_dest_a_symlink_to_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source";
+    let source_content = "content";
+    let symlink = "symlink";
+    let backup = "symlink~";
+
+    at.write(source, source_content);
+    at.symlink_file(source, symlink);
+
+    ucmd.arg("-b").arg(source).arg(symlink).succeeds();
+
+    assert!(!at.symlink_exists(symlink));
+    assert_eq!(source_content, at.read(symlink));
+    assert!(at.symlink_exists(backup));
+    assert_eq!(source, at.resolve_link(backup));
 }
 
 #[test]

@@ -5,14 +5,20 @@
 use crate::common::util::TestScenario;
 
 #[test]
+fn test_no_args() {
+    new_ucmd!()
+        .fails()
+        .no_stdout()
+        .stderr_contains("pathchk: missing operand");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
 }
 
 #[test]
 fn test_default_mode() {
-    // test the default mode
-
     // accept some reasonable default
     new_ucmd!().args(&["dir/file"]).succeeds().no_stdout();
 
@@ -48,8 +54,6 @@ fn test_default_mode() {
 
 #[test]
 fn test_posix_mode() {
-    // test the posix mode
-
     // accept some reasonable default
     new_ucmd!().args(&["-p", "dir/file"]).succeeds().no_stdout();
 
@@ -74,8 +78,6 @@ fn test_posix_mode() {
 
 #[test]
 fn test_posix_special() {
-    // test the posix special mode
-
     // accept some reasonable default
     new_ucmd!().args(&["-P", "dir/file"]).succeeds().no_stdout();
 
@@ -115,8 +117,6 @@ fn test_posix_special() {
 
 #[test]
 fn test_posix_all() {
-    // test the posix special mode
-
     // accept some reasonable default
     new_ucmd!()
         .args(&["-p", "-P", "dir/file"])
@@ -163,11 +163,4 @@ fn test_posix_all() {
 
     // fail on empty path
     new_ucmd!().args(&["-p", "-P", ""]).fails().no_stdout();
-}
-
-#[test]
-fn test_args_parsing() {
-    // fail on no args
-    let empty_args: [String; 0] = [];
-    new_ucmd!().args(&empty_args).fails().no_stdout();
 }
