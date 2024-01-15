@@ -168,8 +168,13 @@ where
         } else if filename.is_dir() {
             Box::new(BufReader::new(io::empty())) as Box<dyn Read>
         } else {
-            file_buf =
-                File::open(filename).map_err_context(|| filename.to_str().unwrap().to_string())?;
+            file_buf = match File::open(filename) {
+                Ok(file) => file,
+                Err(err) => {
+                    show!(err.map_err_context(|| filename.to_string_lossy().to_string()));
+                    continue;
+                }
+            };
             Box::new(file_buf) as Box<dyn Read>
         });
         let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
