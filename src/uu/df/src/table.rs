@@ -102,8 +102,8 @@ impl AddAssign for Row {
         let bytes = self.bytes + rhs.bytes;
         let bytes_used = self.bytes_used + rhs.bytes_used;
         let bytes_avail = self.bytes_avail + rhs.bytes_avail;
-        let inodes = self.inodes + rhs.inodes;
-        let inodes_used = self.inodes_used + rhs.inodes_used;
+        let inodes = self.inodes.saturating_add(rhs.inodes);
+        let inodes_used = self.inodes_used.saturating_add(rhs.inodes_used);
         *self = Self {
             file: None,
             fs_device: "total".into(),
@@ -125,7 +125,7 @@ impl AddAssign for Row {
             bytes_capacity: None,
             inodes,
             inodes_used,
-            inodes_free: self.inodes_free + rhs.inodes_free,
+            inodes_free: self.inodes_free.saturating_add(rhs.inodes_free),
             inodes_usage: if inodes == 0 {
                 None
             } else {
