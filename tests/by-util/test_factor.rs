@@ -1258,3 +1258,8 @@ const PRIMES50: &[u64] = &[
     1125899906841623,
     1125899906841613,
 ];
+
+#[test]
+fn fails_on_directory() {
+    new_ucmd!().pipe_in(".").fails();
+}

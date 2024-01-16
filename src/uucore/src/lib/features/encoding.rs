@@ -27,6 +27,7 @@ pub enum DecodeError {
 
 pub enum EncodeError {
     Z85InputLenNotMultipleOf4,
+    InvalidInput,
 }
 
 pub type DecodeResult = Result<Vec<u8>, DecodeError>;
@@ -148,8 +149,10 @@ impl<R: Read> Data<R> {
 
     pub fn encode(&mut self) -> Result<String, EncodeError> {
         let mut buf: Vec<u8> = vec![];
-        self.input.read_to_end(&mut buf).unwrap();
-        encode(self.format, buf.as_slice())
+        match self.input.read_to_end(&mut buf) {
+            Ok(_) => encode(self.format, buf.as_slice()),
+            Err(_) => Err(EncodeError::InvalidInput),
+        }
     }
 }
 

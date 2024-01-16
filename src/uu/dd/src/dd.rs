@@ -50,9 +50,9 @@ use uucore::display::Quotable;
 #[cfg(unix)]
 use uucore::error::set_exit_code;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 #[cfg(target_os = "linux")]
-use uucore::{show, show_if_err};
+use uucore::show_if_err;
+use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 const ABOUT: &str = help_about!("dd.md");
 const AFTER_HELP: &str = help_section!("after help", "dd.md");
@@ -1181,7 +1181,7 @@ fn calc_loop_bsize(
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(Num::Bytes(bmax)) => {
-            let bmax: u128 = (*bmax).try_into().unwrap();
+            let bmax: u128 = (*bmax).into();
             let bremain: u128 = bmax - wstat.bytes_total;
             cmp::min(ideal_bsize as u128, bremain) as usize
         }
@@ -1267,8 +1267,6 @@ fn is_fifo(filename: &str) -> bool {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     let settings: Settings = Parser::new().parse(

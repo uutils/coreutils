@@ -62,10 +62,14 @@ skip = [
   { name = "linux-raw-sys", version = "0.3.8" },
   # terminal_size
   { name = "rustix", version = "0.37.26" },
-  # various crates
+  # notify
   { name = "windows-sys", version = "0.45.0" },
+  # various crates
+  { name = "windows-sys", version = "0.48.0" },
   # windows-sys
   { name = "windows-targets", version = "0.42.2" },
+  # windows-sys
+  { name = "windows-targets", version = "0.48.0" },
   # windows-targets
   { name = "windows_aarch64_gnullvm", version = "0.42.2" },
   # windows-targets
@@ -80,12 +84,24 @@ skip = [
   { name = "windows_x86_64_gnullvm", version = "0.42.2" },
   # windows-targets
   { name = "windows_x86_64_msvc", version = "0.42.2" },
+  # windows-targets
+  { name = "windows_aarch64_gnullvm", version = "0.48.0" },
+  # windows-targets
+  { name = "windows_aarch64_msvc", version = "0.48.0" },
+  # windows-targets
+  { name = "windows_i686_gnu", version = "0.48.0" },
+  # windows-targets
+  { name = "windows_i686_msvc", version = "0.48.0" },
+  # windows-targets
+  { name = "windows_x86_64_gnu", version = "0.48.0" },
+  # windows-targets
+  { name = "windows_x86_64_gnullvm", version = "0.48.0" },
+  # windows-targets
+  { name = "windows_x86_64_msvc", version = "0.48.0" },
   # various crates
   { name = "syn", version = "1.0.109" },
   # various crates
   { name = "bitflags", version = "1.3.2" },
-  # various crates
-  { name = "redox_syscall", version = "0.3.5" },
   # clap_builder, textwrap
   { name = "terminal_size", version = "0.2.6" },
 ]

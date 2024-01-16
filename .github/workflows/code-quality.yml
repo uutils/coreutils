@@ -2,7 +2,11 @@ name: Code Quality
 
 # spell-checker:ignore TERMUX reactivecircus Swatinem  noaudio pkill swiftshader dtolnay juliangruber
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - main
 
 env:
   # * style job configuration

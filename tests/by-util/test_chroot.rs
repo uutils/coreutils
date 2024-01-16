@@ -124,7 +124,7 @@ fn test_default_shell() {
     if let Ok(result) = run_ucmd_as_root(&ts, &[dir]) {
         result.stderr_contains(expected);
     } else {
-        print!("TEST SKIPPED");
+        print!("Test skipped; requires root user");
     }
 }
 

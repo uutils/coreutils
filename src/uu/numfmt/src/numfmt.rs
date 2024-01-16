@@ -13,7 +13,7 @@ use std::str::FromStr;
 
 use units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult};
+use uucore::error::UResult;
 use uucore::ranges::Range;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
 
