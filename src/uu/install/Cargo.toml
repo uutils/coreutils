@@ -25,7 +25,7 @@ uucore = { workspace = true, features = [
   "mode",
   "perms",
   "entries",
-  "process"
+  "process",
 ] }
 
 [[bin]]
