@@ -776,13 +776,8 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 ///
 fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
     // Check if the filename starts with a hyphen and adjust the path
-    let to = if to
-        .file_name()
-        .unwrap_or_default()
-        .to_str()
-        .unwrap_or_default()
-        .starts_with('-')
-    {
+    let to_str = to.as_os_str().to_str().unwrap_or_default();
+    let to = if to_str.starts_with('-') {
         let mut new_path = PathBuf::from(".");
         new_path.push(to);
         new_path

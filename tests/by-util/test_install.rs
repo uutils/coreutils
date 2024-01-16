@@ -701,6 +701,18 @@ fn test_install_and_strip_with_program_hyphen() {
         .succeeds()
         .no_stderr()
         .stdout_is("./-dest\n");
+
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("./no-hyphen")
+        .arg("--")
+        .arg("src")
+        .arg("./-dest")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("./-dest\n");
 }
 
 #[test]
