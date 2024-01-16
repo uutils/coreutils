@@ -458,6 +458,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
         }
         stdout_lock.write_all(&buf[..n])?;
     }
+    stdout_lock.flush()?;
     Ok(())
 }
 
