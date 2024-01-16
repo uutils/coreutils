@@ -2608,7 +2608,6 @@ dependencies = [
  "unicode-width",
  "uucore",
  "uutils_term_grid",
- "xattr",
 ]
 
 [[package]]
@@ -3209,6 +3208,7 @@ dependencies = [
  "wild",
  "winapi-util",
  "windows-sys 0.48.0",
+ "xattr",
  "z85",
 ]
 

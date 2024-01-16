@@ -54,6 +54,7 @@ sm3 = { workspace = true, optional = true }
 [target.'cfg(unix)'.dependencies]
 walkdir = { workspace = true, optional = true }
 nix = { workspace = true, features = ["fs", "uio", "zerocopy", "signal"] }
+xattr = { workspace = true, optional = true }
 
 [dev-dependencies]
 clap = { workspace = true }
@@ -77,6 +78,7 @@ encoding = ["data-encoding", "data-encoding-macro", "z85", "thiserror"]
 entries = ["libc"]
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "time", "windows-sys"]
+fsxattr = ["xattr"]
 lines = []
 format = ["itertools"]
 mode = ["libc"]
