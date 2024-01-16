@@ -789,15 +789,14 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
     } else {
         to.to_path_buf()
     };
-    match process::Command::new(&b.strip_program).arg(&to).output() {
-        Ok(o) => {
-            if !o.status.success() {
+    match process::Command::new(&b.strip_program).arg(&to).status() {
+        Ok(status) => {
+            if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
                 let _ = fs::remove_file(to);
                 return Err(InstallError::StripProgramFailed(
-                    String::from_utf8(o.stderr).unwrap_or_default(),
-                )
-                .into());
+                    format!("strip process terminated abnormally - exit code: {}", status.code().unwrap())
+                ).into());
             }
         }
         Err(e) => {
