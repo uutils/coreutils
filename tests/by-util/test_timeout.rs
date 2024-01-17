@@ -151,7 +151,7 @@ fn test_kill_subprocess() {
             "10",
             "sh",
             "-c",
-            "sh -c \"trap 'echo xyz' TERM; sleep 30\"",
+            "sh -c \"trap 'echo xyz' TERM; sleep 120\"",
         ])
         .fails()
         .code_is(124)
