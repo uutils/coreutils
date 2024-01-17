@@ -6,7 +6,7 @@
 use std::io::{stdout, Read, Write};
 
 use uucore::display::Quotable;
-use uucore::encoding::{wrap_print, Data, Format};
+use uucore::encoding::{wrap_print, Data, EncodeError, Format};
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 
@@ -174,6 +174,7 @@ pub fn handle_input<R: Read>(
                 wrap_print(&data, &s);
                 Ok(())
             }
+            Err(EncodeError::InvalidInput) => Err(USimpleError::new(1, "error: invalid input")),
             Err(_) => Err(USimpleError::new(
                 1,
                 "error: invalid input (length must be multiple of 4 characters)",

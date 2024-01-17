@@ -27,6 +27,7 @@ uucore = { workspace = true, features = [
   "colors",
   "entries",
   "fs",
+  "fsxattr",
   "quoting-style",
   "version-cmp",
 ] }

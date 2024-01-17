@@ -331,7 +331,7 @@ utf-8 = "0.7.6"
 walkdir = "2.4"
 winapi-util = "0.1.6"
 windows-sys = { version = "0.48.0", default-features = false }
-xattr = "1.2.0"
+xattr = "1.3.1"
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
 
 hex = "0.4.3"
@@ -500,6 +500,7 @@ rlimit = "0.10.1"
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["process", "signal", "user"] }
 rand_pcg = "0.3"
+xattr = { workspace = true }
 
 [build-dependencies]
 phf_codegen = { workspace = true }
