@@ -32,7 +32,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         stdin_buf = stdin();
         &mut stdin_buf as &mut dyn Read
     } else {
-        file_buf = File::open(Path::new(&input)).map_err_context(|| input.to_string())?;
+        let path = Path::new(&input);
+        if path.is_dir() {
+            return Err(USimpleError::new(
+                1,
+                format!("tsort: `{}`: read error: Is a directory", input),
+            ));
+        }
+        file_buf = File::open(path).map_err_context(|| input.to_string())?;
         &mut file_buf as &mut dyn Read
     });
 
