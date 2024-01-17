@@ -146,23 +146,31 @@ impl Formatter for UnsignedInt {
                 // We also need to take into account that 0 should not be 00
                 // Since this is an unsigned int, we do not need to take the minus
                 // sign into account.
-                if x != 0 {
-                    format!("0{x:o}")
-                } else {
+                if x == 0 {
                     format!("{x:o}")
+                } else {
+                    format!("0{x:o}")
                 }
             }
             UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::No) => {
                 format!("{x:x}")
             }
             UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes) => {
-                format!("{x:#x}")
+                if x == 0 {
+                    "0".to_string()
+                } else {
+                    format!("{x:#x}")
+                }
             }
             UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::No) => {
                 format!("{x:X}")
             }
             UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes) => {
-                format!("{x:#X}")
+                if x == 0 {
+                    "0".to_string()
+                } else {
+                    format!("{x:#X}")
+                }
             }
         };
 

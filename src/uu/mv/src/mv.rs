@@ -27,7 +27,10 @@ use uucore::fs::{
     are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
     path_ends_with_terminator,
 };
+#[cfg(all(unix, not(target_os = "macos")))]
+use uucore::fsxattr;
 use uucore::update_control;
+
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enums
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
@@ -631,6 +634,10 @@ fn rename_with_fallback(
                     None
                 };
 
+            #[cfg(all(unix, not(target_os = "macos")))]
+            let xattrs =
+                fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
+
             let result = if let Some(ref pb) = progress_bar {
                 move_dir_with_progress(from, to, &options, |process_info: TransitProcess| {
                     pb.set_position(process_info.copied_bytes);
@@ -640,6 +647,9 @@ fn rename_with_fallback(
             } else {
                 move_dir(from, to, &options)
             };
+
+            #[cfg(all(unix, not(target_os = "macos")))]
+            fsxattr::apply_xattrs(to, xattrs).unwrap();
 
             if let Err(err) = result {
                 return match err.kind {
@@ -651,6 +661,11 @@ fn rename_with_fallback(
                 };
             }
         } else {
+            #[cfg(all(unix, not(target_os = "macos")))]
+            fs::copy(from, to)
+                .and_then(|_| fsxattr::copy_xattrs(&from, &to))
+                .and_then(|_| fs::remove_file(from))?;
+            #[cfg(any(target_os = "macos", not(unix)))]
             fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
         }
     }

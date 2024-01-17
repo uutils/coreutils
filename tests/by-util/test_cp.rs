@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile uufs
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile uufs xattrs
 
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
@@ -56,6 +56,8 @@ static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 #[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+use crate::common::util::compare_xattrs;
 
 /// Assert that mode, ownership, and permissions of two metadata objects match.
 #[cfg(all(not(windows), not(target_os = "freebsd")))]
@@ -567,6 +569,22 @@ fn test_cp_arg_link_with_dest_hardlink_to_source() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_cp_arg_link_with_same_file() {
+    use std::os::linux::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+
+    at.touch(file);
+
+    ucmd.args(&["--link", file, file]).succeeds();
+
+    assert_eq!(at.metadata(file).st_nlink(), 1);
+    assert!(at.file_exists(file));
+}
+
+#[test]
 fn test_cp_arg_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -713,6 +731,25 @@ fn test_cp_arg_backup_with_dest_a_symlink() {
     assert_eq!(source_content, at.read(symlink));
     assert!(at.symlink_exists(backup));
     assert_eq!(original, at.resolve_link(backup));
+}
+
+#[test]
+fn test_cp_arg_backup_with_dest_a_symlink_to_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source";
+    let source_content = "content";
+    let symlink = "symlink";
+    let backup = "symlink~";
+
+    at.write(source, source_content);
+    at.symlink_file(source, symlink);
+
+    ucmd.arg("-b").arg(source).arg(symlink).succeeds();
+
+    assert!(!at.symlink_exists(symlink));
+    assert_eq!(source_content, at.read(symlink));
+    assert!(at.symlink_exists(backup));
+    assert_eq!(source, at.resolve_link(backup));
 }
 
 #[test]
@@ -3700,4 +3737,43 @@ fn test_cp_no_such() {
         .arg("no-such/")
         .fails()
         .stderr_is("cp: 'no-such/' is not a directory\n");
+}
+
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[test]
+fn test_acl_preserve() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let path1 = "a";
+    let path2 = "b";
+    let file = "a/file";
+    let file_target = "b/file";
+    at.mkdir(path1);
+    at.mkdir(path2);
+    at.touch(file);
+
+    let path = at.plus_as_string(file);
+    // calling the command directly. xattr requires some dev packages to be installed
+    // and it adds a complex dependency just for a test
+    match Command::new("setfacl")
+        .args(["-m", "group::rwx", &path1])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {}", e);
+            return;
+        }
+    }
+
+    scene.ucmd().args(&["-p", &path, path2]).succeeds();
+
+    assert!(compare_xattrs(&file, &file_target));
 }

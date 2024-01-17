@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm getxattr
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm
 
 use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
@@ -36,7 +36,8 @@ use std::{
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
-
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+use uucore::fsxattr::has_acl;
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -2621,18 +2622,6 @@ fn display_grid(
     Ok(())
 }
 
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-fn file_has_acl<P: AsRef<Path>>(file: P) -> bool {
-    // don't use exacl here, it is doing more getxattr call then needed
-    match xattr::list(file) {
-        Ok(acl) => {
-            // if we have extra attributes, we have an acl
-            acl.count() > 0
-        }
-        Err(_) => false,
-    }
-}
-
 /// This writes to the BufWriter out a single string of the output of `ls -l`.
 ///
 /// It writes the following keys, in order:
@@ -2680,7 +2669,7 @@ fn display_item_long(
         // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = file_has_acl(item.display_name.as_os_str());
+        let is_acl_set = has_acl(item.display_name.as_os_str());
         write!(
             output_display,
             "{}{}{} {}",
