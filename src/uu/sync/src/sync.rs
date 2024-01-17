@@ -3,19 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/* Last synced with: sync (GNU coreutils) 8.13 */
-
 use clap::{crate_version, Arg, ArgAction, Command};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::errno::Errno;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::{open, OFlag};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::sys::stat::Mode;
-use std::path::Path;
-use uucore::display::Quotable;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::error::FromIo;
+use std::path::PathBuf;
 use uucore::error::{UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage};
 
@@ -23,46 +12,66 @@ const ABOUT: &str = help_about!("sync.md");
 const USAGE: &str = help_usage!("sync.md");
 
 pub mod options {
-    pub static FILE_SYSTEM: &str = "file-system";
-    pub static DATA: &str = "data";
+    pub const FILE_SYSTEM: &str = "file-system";
+    pub const DATA: &str = "data";
 }
 
-static ARG_FILES: &str = "files";
+const ARG_FILES: &str = "files";
 
 #[cfg(unix)]
 mod platform {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    use std::fs::File;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    use std::os::unix::io::AsRawFd;
+    use nix::{fcntl::OFlag, sys::stat::Mode};
+    use std::{
+        os::fd::RawFd,
+        path::{Path, PathBuf},
+    };
+    use uucore::{display::Quotable, error::FromIo, error::UResult, show};
 
-    pub unsafe fn do_sync() -> isize {
-        // see https://github.com/rust-lang/libc/pull/2161
-        #[cfg(target_os = "android")]
-        libc::syscall(libc::SYS_sync);
-        #[cfg(not(target_os = "android"))]
-        libc::sync();
-        0
+    pub fn sync() {
+        unsafe { libc::sync() };
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
+    pub fn syncfs(files: &[PathBuf]) {
         for path in files {
-            let f = File::open(path).unwrap();
-            let fd = f.as_raw_fd();
-            libc::syscall(libc::SYS_syncfs, fd);
+            match open(path) {
+                Ok(fd) => {
+                    let _ = unsafe { libc::syncfs(fd) };
+                    let _ = unsafe { libc::close(fd) };
+                }
+                Err(e) => show!(e),
+            }
         }
-        0
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub unsafe fn do_fdatasync(files: Vec<String>) -> isize {
+    pub fn fdatasync(files: &[PathBuf]) {
         for path in files {
-            let f = File::open(path).unwrap();
-            let fd = f.as_raw_fd();
-            libc::syscall(libc::SYS_fdatasync, fd);
+            match open(path) {
+                Ok(fd) => {
+                    let _ = unsafe { libc::fdatasync(fd) };
+                    let _ = unsafe { libc::close(fd) };
+                }
+                Err(e) => show!(e),
+            }
         }
-        0
+    }
+
+    pub fn fsync(files: &[PathBuf]) {
+        for path in files {
+            match open(path) {
+                Ok(fd) => {
+                    let _ = unsafe { libc::fsync(fd) };
+                    let _ = unsafe { libc::close(fd) };
+                }
+                Err(e) => show!(e),
+            }
+        }
+    }
+
+    fn open(path: &Path) -> UResult<RawFd> {
+        // Use the Nix open to be able to set the NONBLOCK flags for fifo files
+        nix::fcntl::open(path, OFlag::O_NONBLOCK, Mode::empty())
+            .map_err_context(|| format!("error opening {}", path.quote()))
     }
 }
 
@@ -70,7 +79,7 @@ mod platform {
 mod platform {
     use std::fs::OpenOptions;
     use std::os::windows::prelude::*;
-    use std::path::Path;
+    use std::path::PathBuf;
     use uucore::crash;
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
@@ -81,14 +90,17 @@ mod platform {
     };
     use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
-    unsafe fn flush_volume(name: &str) {
+    fn flush_volume(name: &str) {
         let name_wide = name.to_wide_null();
-        if GetDriveTypeW(name_wide.as_ptr()) == DRIVE_FIXED {
+        if unsafe { GetDriveTypeW(name_wide.as_ptr()) } == DRIVE_FIXED {
             let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
-                    if FlushFileBuffers(file.as_raw_handle() as HANDLE) == 0 {
-                        crash!(GetLastError() as i32, "failed to flush file buffer");
+                    if unsafe { FlushFileBuffers(file.as_raw_handle() as HANDLE) } == 0 {
+                        crash!(
+                            unsafe { GetLastError() } as i32,
+                            "failed to flush file buffer"
+                        );
                     }
                 }
                 Err(e) => crash!(
@@ -99,24 +111,29 @@ mod platform {
         }
     }
 
-    unsafe fn find_first_volume() -> (String, HANDLE) {
+    fn find_first_volume() -> (String, HANDLE) {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
-        let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
+        let handle = unsafe { FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32) };
         if handle == INVALID_HANDLE_VALUE {
-            crash!(GetLastError() as i32, "failed to find first volume");
+            crash!(
+                unsafe { GetLastError() } as i32,
+                "failed to find first volume"
+            );
         }
         (String::from_wide_null(&name), handle)
     }
 
-    unsafe fn find_all_volumes() -> Vec<String> {
+    fn find_all_volumes() -> Vec<String> {
         let (first_volume, next_volume_handle) = find_first_volume();
         let mut volumes = vec![first_volume];
         loop {
             let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
-            if FindNextVolumeW(next_volume_handle, name.as_mut_ptr(), name.len() as u32) == 0 {
-                match GetLastError() {
+            if unsafe { FindNextVolumeW(next_volume_handle, name.as_mut_ptr(), name.len() as u32) }
+                == 0
+            {
+                match unsafe { GetLastError() } {
                     ERROR_NO_MORE_FILES => {
-                        FindVolumeClose(next_volume_handle);
+                        unsafe { FindVolumeClose(next_volume_handle) };
                         return volumes;
                     }
                     err => crash!(err as i32, "failed to find next volume"),
@@ -127,19 +144,17 @@ mod platform {
         }
     }
 
-    pub unsafe fn do_sync() -> isize {
+    pub fn sync() {
         let volumes = find_all_volumes();
         for vol in &volumes {
             flush_volume(vol);
         }
-        0
     }
 
-    pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
+    pub fn syncfs(files: &[PathBuf]) {
         for path in files {
             flush_volume(
-                Path::new(&path)
-                    .components()
+                path.components()
                     .next()
                     .unwrap()
                     .as_os_str()
@@ -147,7 +162,10 @@ mod platform {
                     .unwrap(),
             );
         }
-        0
+    }
+
+    pub fn fsync(_files: &[PathBuf]) {
+        todo!()
     }
 }
 
@@ -155,48 +173,52 @@ mod platform {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let files: Vec<String> = matches
-        .get_many::<String>(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let files: Vec<PathBuf> = matches
+        .get_many::<PathBuf>(ARG_FILES)
+        .map(|v| v.map(ToOwned::to_owned).collect())
         .unwrap_or_default();
 
-    if matches.get_flag(options::DATA) && files.is_empty() {
+    let file_system = matches.get_flag(options::FILE_SYSTEM);
+    let data = matches.get_flag(options::DATA);
+
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "windows")))]
+    if file_system {
+        return Err(USimpleError::new(
+            1,
+            "--file-system is not supported on this platform",
+        ));
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    if data {
+        return Err(USimpleError::new(
+            1,
+            "--data is not supported on this platform",
+        ));
+    }
+
+    if data && files.is_empty() {
         return Err(USimpleError::new(1, "--data needs at least one argument"));
     }
 
-    for f in &files {
-        // Use the Nix open to be able to set the NONBLOCK flags for fifo files
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        {
-            let path = Path::new(&f);
-            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
-                if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    e.map_err_context(|| format!("error opening {}", f.quote()))?;
-                }
-            }
-        }
-
-        #[cfg(not(any(target_os = "linux", target_os = "android")))]
-        {
-            if !Path::new(&f).exists() {
-                return Err(USimpleError::new(
-                    1,
-                    format!("error opening {}: No such file or directory", f.quote()),
-                ));
-            }
-        }
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
+    if file_system {
+        platform::syncfs(&files);
+        return Ok(());
     }
 
-    #[allow(clippy::if_same_then_else)]
-    if matches.get_flag(options::FILE_SYSTEM) {
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-        syncfs(files);
-    } else if matches.get_flag(options::DATA) {
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        fdatasync(files);
+    #[cfg(unix)]
+    if data {
+        platform::fdatasync(&files);
+        return Ok(());
+    }
+
+    if files.is_empty() {
+        platform::sync();
     } else {
-        sync();
+        platform::fsync(&files);
     }
+
     Ok(())
 }
 
@@ -211,34 +233,27 @@ pub fn uu_app() -> Command {
                 .short('f')
                 .long(options::FILE_SYSTEM)
                 .conflicts_with(options::DATA)
-                .help("sync the file systems that contain the files (Linux and Windows only)")
-                .action(ArgAction::SetTrue),
+                .help("sync the file systems that contain the files (Linux, Android and Windows only)")
+                .action(ArgAction::SetTrue)
+                .hide(!cfg!(any(
+                    target_os = "linux",
+                    target_os = "android",
+                    target_os = "windows"
+                ))),
         )
         .arg(
             Arg::new(options::DATA)
                 .short('d')
                 .long(options::DATA)
                 .conflicts_with(options::FILE_SYSTEM)
-                .help("sync only file data, no unneeded metadata (Linux only)")
-                .action(ArgAction::SetTrue),
+                .help("sync only file data, no unneeded metadata (Unix only)")
+                .action(ArgAction::SetTrue)
+                .hide(!cfg!(unix)),
         )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath),
+                .value_hint(clap::ValueHint::AnyPath)
+                .value_parser(clap::value_parser!(PathBuf)),
         )
-}
-
-fn sync() -> isize {
-    unsafe { platform::do_sync() }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-fn syncfs(files: Vec<String>) -> isize {
-    unsafe { platform::do_syncfs(files) }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn fdatasync(files: Vec<String>) -> isize {
-    unsafe { platform::do_fdatasync(files) }
 }
