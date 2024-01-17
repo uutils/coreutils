@@ -33,7 +33,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Restore AVD cache
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       id: avd-cache
       with:
         path: |
@@ -57,7 +57,7 @@ jobs:
           util/android-commands.sh init "${{ matrix.arch }}" "${{ matrix.api-level }}" "${{ env.TERMUX }}"
     - name: Save AVD cache
       if: steps.avd-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: |
           ~/.android/avd/*
@@ -73,7 +73,7 @@ jobs:
         trim: true
     - name: Restore rust cache
       id: rust-cache
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: ~/__rust_cache__
         # The version vX at the end of the key is just a development version to avoid conflicts in
@@ -99,7 +99,7 @@ jobs:
           if [[ "${{ steps.rust-cache.outputs.cache-hit }}" != 'true' ]]; then util/android-commands.sh sync_image; fi; exit 0
     - name: Save rust cache
       if: steps.rust-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: ~/__rust_cache__
         key: ${{ matrix.arch }}_${{ matrix.target}}_${{ steps.read_rustc_hash.outputs.content }}_${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}_v3
