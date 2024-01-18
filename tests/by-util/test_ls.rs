@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -2623,6 +2623,70 @@ fn test_ls_quoting_style() {
 }
 
 #[test]
+fn test_ls_quoting_style_env_var_default() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(at.plus_as_string("foo-1"));
+    at.touch(at.plus_as_string("bar-2"));
+
+    // If no quoting style argument is provided, the QUOTING_STYLE environment variable
+    // shall be used.
+
+    let correct_c = "\"bar-2\"\n\"foo-1\"";
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "c")
+        .succeeds()
+        .stdout_only(format!("{correct_c}\n"));
+}
+
+#[test]
+fn test_ls_quoting_style_arg_overrides_env_var() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(at.plus_as_string("foo-1"));
+    at.touch(at.plus_as_string("bar-2"));
+
+    // The quoting style given by the env variable should be
+    // overridden by any escape style provided by argument.
+    for (arg, correct) in [
+        ("--quoting-style=literal", "foo-1"),
+        ("-N", "foo-1"),
+        ("--quoting-style=escape", "foo-1"),
+        ("-b", "foo-1"),
+        ("--quoting-style=shell-escape", "foo-1"),
+        ("--quoting-style=shell-escape-always", "'foo-1'"),
+        ("--quoting-style=shell", "foo-1"),
+        ("--quoting-style=shell-always", "'foo-1'"),
+    ] {
+        scene
+            .ucmd()
+            .env("QUOTING_STYLE", "c")
+            .arg("--hide-control-chars")
+            .arg(arg)
+            .arg("foo-1")
+            .succeeds()
+            .stdout_only(format!("{correct}\n"));
+    }
+
+    // Another loop to check for the C quoting style that is used as a default above.
+    for (arg, correct) in [
+        ("--quoting-style=c", "\"foo-1\""),
+        ("-Q", "\"foo-1\""),
+        ("--quote-name", "\"foo-1\""),
+    ] {
+        scene
+            .ucmd()
+            .env("QUOTING_STYLE", "literal")
+            .arg("--hide-control-chars")
+            .arg(arg)
+            .arg("foo-1")
+            .succeeds()
+            .stdout_only(format!("{correct}\n"));
+    }
+}
+
+#[test]
 fn test_ls_quoting_and_color() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3839,7 +3903,7 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
 
 #[cfg(all(unix, feature = "dd"))]
 #[test]
-fn test_posixly_correct() {
+fn test_posixly_correct_and_block_size_env_vars() {
     let scene = TestScenario::new(util_name!());
 
     scene
@@ -3852,16 +3916,92 @@ fn test_posixly_correct() {
 
     scene
         .ucmd()
-        .arg("-s")
+        .arg("-l")
         .succeeds()
-        .stdout_contains_line("total 4");
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1024 ");
 
     scene
         .ucmd()
-        .arg("-s")
+        .arg("-l")
         .env("POSIXLY_CORRECT", "some_value")
         .succeeds()
-        .stdout_contains_line("total 8");
+        .stdout_contains_line("total 8")
+        .stdout_contains(" 1024 ");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .env("LS_BLOCK_SIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 8")
+        .stdout_contains(" 2 ");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .env("BLOCK_SIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 8")
+        .stdout_contains(" 2 ");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .env("BLOCKSIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 8")
+        .stdout_contains(" 1024 ");
+}
+
+#[cfg(all(unix, feature = "dd"))]
+#[test]
+fn test_posixly_correct_and_block_size_env_vars_with_k() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ccmd("dd")
+        .arg("if=/dev/zero")
+        .arg("of=file")
+        .arg("bs=1024")
+        .arg("count=1")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("-k")
+        .env("POSIXLY_CORRECT", "some_value")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1024 ");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("-k")
+        .env("LS_BLOCK_SIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 2 ");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("-k")
+        .env("BLOCK_SIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 2 ");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("-k")
+        .env("BLOCKSIZE", "512")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1024 ");
 }
 
 #[test]
@@ -3872,6 +4012,109 @@ fn test_ls_invalid_block_size() {
         .code_is(2)
         .no_stdout()
         .stderr_is("ls: invalid --block-size argument 'invalid'\n");
+}
+
+#[cfg(all(unix, feature = "dd"))]
+#[test]
+fn test_ls_invalid_block_size_in_env_var() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ccmd("dd")
+        .arg("if=/dev/zero")
+        .arg("of=file")
+        .arg("bs=1024")
+        .arg("count=1")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-og")
+        .env("LS_BLOCK_SIZE", "invalid")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1 1 "); // hardlink count + file size
+
+    scene
+        .ucmd()
+        .arg("-og")
+        .env("BLOCK_SIZE", "invalid")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1 1 "); // hardlink count + file size
+
+    scene
+        .ucmd()
+        .arg("-og")
+        .env("BLOCKSIZE", "invalid")
+        .succeeds()
+        .stdout_contains_line("total 4")
+        .stdout_contains(" 1024 ");
+}
+
+#[cfg(all(unix, feature = "dd"))]
+#[test]
+fn test_ls_block_size_override() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ccmd("dd")
+        .arg("if=/dev/zero")
+        .arg("of=file")
+        .arg("bs=1024")
+        .arg("count=1")
+        .succeeds();
+
+    // --si "wins"
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--block-size=512")
+        .arg("--si")
+        .succeeds()
+        .stdout_contains_line("total 4.1k");
+
+    // --block-size "wins"
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--si")
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_contains_line("total 8");
+
+    // --human-readable "wins"
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--block-size=512")
+        .arg("--human-readable")
+        .succeeds()
+        .stdout_contains_line("total 4.0K");
+
+    // --block-size "wins"
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--human-readable")
+        .arg("--block-size=512")
+        .succeeds()
+        .stdout_contains_line("total 8");
+}
+
+#[test]
+fn test_ls_block_size_override_self() {
+    new_ucmd!()
+        .arg("--block-size=512")
+        .arg("--block-size=512")
+        .succeeds();
+
+    new_ucmd!()
+        .arg("--human-readable")
+        .arg("--human-readable")
+        .succeeds();
+
+    new_ucmd!().arg("--si").arg("--si").succeeds();
 }
 
 #[test]
@@ -3904,6 +4147,74 @@ fn test_ls_hyperlink() {
         .stdout_is(format!("{file}\n"));
 }
 
+// spell-checker: disable
+#[test]
+fn test_ls_hyperlink_encode_link() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        at.touch("back\\slash");
+        at.touch("ques?tion");
+    }
+    at.touch("encoded%3Fquestion");
+    at.touch("sp ace");
+
+    let result = ucmd.arg("--hyperlink").succeeds();
+    #[cfg(not(target_os = "windows"))]
+    {
+        assert!(result
+            .stdout_str()
+            .contains("back%5cslash\x07back\\slash\x1b]8;;\x07"));
+        assert!(result
+            .stdout_str()
+            .contains("ques%3ftion\x07ques?tion\x1b]8;;\x07"));
+    }
+    assert!(result
+        .stdout_str()
+        .contains("encoded%253Fquestion\x07encoded%3Fquestion\x1b]8;;\x07"));
+    assert!(result
+        .stdout_str()
+        .contains("sp%20ace\x07sp ace\x1b]8;;\x07"));
+}
+// spell-checker: enable
+
+#[test]
+fn test_ls_hyperlink_dirs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir_a = "a";
+    let dir_b = "b";
+
+    at.mkdir(dir_a);
+    at.mkdir(dir_b);
+
+    let path = at.root_dir_resolved();
+    let separator = std::path::MAIN_SEPARATOR_STR;
+
+    let result = scene
+        .ucmd()
+        .arg("--hyperlink")
+        .arg(dir_a)
+        .arg(dir_b)
+        .succeeds();
+
+    assert!(result.stdout_str().contains("\x1b]8;;file://"));
+    assert!(result
+        .stdout_str()
+        .lines()
+        .next()
+        .unwrap()
+        .contains(&format!("{path}{separator}{dir_a}\x07{dir_a}\x1b]8;;\x07:")));
+    assert_eq!(result.stdout_str().lines().nth(1).unwrap(), "");
+    assert!(result
+        .stdout_str()
+        .lines()
+        .nth(2)
+        .unwrap()
+        .contains(&format!("{path}{separator}{dir_b}\x07{dir_b}\x1b]8;;\x07:")));
+}
+
 #[test]
 fn test_ls_color_do_not_reset() {
     let scene: TestScenario = TestScenario::new(util_name!());
@@ -3922,4 +4233,99 @@ fn test_ls_color_do_not_reset() {
         result.stdout_str().escape_default().to_string(),
         "\\u{1b}[0m\\u{1b}[01;34ma\\u{1b}[0m\\n\\u{1b}[01;34mb\\u{1b}[0m\\n"
     );
+}
+
+#[cfg(all(unix, feature = "chmod"))]
+#[test]
+fn test_term_colorterm() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("exe");
+    scene.ccmd("chmod").arg("+x").arg("exe").succeeds();
+
+    // Should show colors
+    let result = scene
+        .ucmd()
+        .arg("--color=always")
+        .env("LS_COLORS", "")
+        .env("TERM", "")
+        .succeeds();
+    assert_eq!(
+        result.stdout_str().trim().escape_default().to_string(),
+        "\\u{1b}[0m\\u{1b}[01;32mexe\\u{1b}[0m"
+    );
+
+    // Should show colors
+    let result = scene
+        .ucmd()
+        .arg("--color=always")
+        .env("LS_COLORS", "")
+        .env("COLORTERM", "")
+        .succeeds();
+    assert_eq!(
+        result.stdout_str().trim().escape_default().to_string(),
+        "\\u{1b}[0m\\u{1b}[01;32mexe\\u{1b}[0m"
+    );
+
+    // No colors
+    let result = scene
+        .ucmd()
+        .arg("--color=always")
+        .env("LS_COLORS", "")
+        .env("TERM", "")
+        .env("COLORTERM", "")
+        .succeeds();
+    assert_eq!(
+        result.stdout_str().trim().escape_default().to_string(),
+        "exe"
+    );
+
+    // No colors
+    let result = scene
+        .ucmd()
+        .arg("--color=always")
+        .env("LS_COLORS", "")
+        .env("TERM", "dumb")
+        .env("COLORTERM", "")
+        .succeeds();
+    assert_eq!(
+        result.stdout_str().trim().escape_default().to_string(),
+        "exe"
+    );
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl_display() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let path = "a42";
+    at.mkdir(path);
+
+    let path = at.plus_as_string(path);
+    // calling the command directly. xattr requires some dev packages to be installed
+    // and it adds a complex dependency just for a test
+    match Command::new("setfacl")
+        .args(["-d", "-m", "group::rwx", &path])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {}", e);
+            return;
+        }
+    }
+
+    scene
+        .ucmd()
+        .args(&["-lda", &path])
+        .succeeds()
+        .stdout_contains("+");
 }

@@ -10,16 +10,6 @@ mod mode;
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
-use uucore::backup_control::{self, BackupMode};
-use uucore::display::Quotable;
-use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
-use uucore::fs::dir_strip_dot_for_creation;
-use uucore::mode::get_umask;
-use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
-use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
-
-use libc::{getegid, geteuid};
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::fs;
@@ -29,6 +19,15 @@ use std::os::unix::fs::MetadataExt;
 use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
 use std::process;
+use uucore::backup_control::{self, BackupMode};
+use uucore::display::Quotable;
+use uucore::entries::{grp2gid, usr2uid};
+use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
+use uucore::fs::dir_strip_dot_for_creation;
+use uucore::mode::get_umask;
+use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
+use uucore::process::{getegid, geteuid};
+use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -66,6 +65,7 @@ enum InstallError {
     InvalidUser(String),
     InvalidGroup(String),
     OmittingDirectory(PathBuf),
+    NotADirectory(PathBuf),
 }
 
 impl UError for InstallError {
@@ -120,6 +120,9 @@ impl Display for InstallError {
             Self::InvalidUser(user) => write!(f, "invalid user: {}", user.quote()),
             Self::InvalidGroup(group) => write!(f, "invalid group: {}", group.quote()),
             Self::OmittingDirectory(dir) => write!(f, "omitting directory {}", dir.quote()),
+            Self::NotADirectory(dir) => {
+                write!(f, "failed to access {}: Not a directory", dir.quote())
+            }
         }
     }
 }
@@ -565,6 +568,13 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
         };
 
         if let Some(to_create) = to_create {
+            // if the path ends in /, remove it
+            let to_create = if to_create.to_string_lossy().ends_with('/') {
+                Path::new(to_create.to_str().unwrap().trim_end_matches('/'))
+            } else {
+                to_create
+            };
+
             if !to_create.exists() {
                 if b.verbose {
                     let mut result = PathBuf::new();
@@ -581,6 +591,13 @@ fn standard(mut paths: Vec<String>, b: &Behavior) -> UResult<()> {
                 if let Err(e) = fs::create_dir_all(to_create) {
                     return Err(InstallError::CreateDirFailed(to_create.to_path_buf(), e).into());
                 }
+            }
+        }
+        if b.target_dir.is_some() {
+            let p = to_create.unwrap();
+
+            if !p.exists() || !p.is_dir() {
+                return Err(InstallError::NotADirectory(p.to_path_buf()).into());
             }
         }
     }
@@ -646,6 +663,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
 /// Handle incomplete user/group parings for chown.
 ///
 /// Returns a Result type with the Err variant containing the error message.
+/// If the user is root, revert the uid & gid
 ///
 /// # Parameters
 ///
@@ -657,23 +675,31 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
 /// return an empty error value.
 ///
 fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
-    if b.owner_id.is_some() || b.group_id.is_some() {
-        let meta = match fs::metadata(path) {
-            Ok(meta) => meta,
-            Err(e) => return Err(InstallError::MetadataFailed(e).into()),
-        };
+    // GNU coreutils doesn't print chown operations during install with verbose flag.
+    let verbosity = Verbosity {
+        groups_only: b.owner_id.is_none(),
+        level: VerbosityLevel::Normal,
+    };
 
-        // GNU coreutils doesn't print chown operations during install with verbose flag.
-        let verbosity = Verbosity {
-            groups_only: b.owner_id.is_none(),
-            level: VerbosityLevel::Normal,
-        };
+    // Determine the owner and group IDs to be used for chown.
+    let (owner_id, group_id) = if b.owner_id.is_some() || b.group_id.is_some() {
+        (b.owner_id, b.group_id)
+    } else if geteuid() == 0 {
+        // Special case for root user.
+        (Some(0), Some(0))
+    } else {
+        // No chown operation needed.
+        return Ok(());
+    };
 
-        match wrap_chown(path, &meta, b.owner_id, b.group_id, false, verbosity) {
-            Ok(msg) if b.verbose && !msg.is_empty() => println!("chown: {msg}"),
-            Ok(_) => {}
-            Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
-        }
+    let meta = match fs::metadata(path) {
+        Ok(meta) => meta,
+        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
+    };
+    match wrap_chown(path, &meta, owner_id, group_id, false, verbosity) {
+        Ok(msg) if b.verbose && !msg.is_empty() => println!("chown: {msg}"),
+        Ok(_) => {}
+        Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
     }
 
     Ok(())
@@ -749,14 +775,24 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
-    match process::Command::new(&b.strip_program).arg(to).output() {
-        Ok(o) => {
-            if !o.status.success() {
+    // Check if the filename starts with a hyphen and adjust the path
+    let to_str = to.as_os_str().to_str().unwrap_or_default();
+    let to = if to_str.starts_with('-') {
+        let mut new_path = PathBuf::from(".");
+        new_path.push(to);
+        new_path
+    } else {
+        to.to_path_buf()
+    };
+    match process::Command::new(&b.strip_program).arg(&to).status() {
+        Ok(status) => {
+            if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
                 let _ = fs::remove_file(to);
-                return Err(InstallError::StripProgramFailed(
-                    String::from_utf8(o.stderr).unwrap_or_default(),
-                )
+                return Err(InstallError::StripProgramFailed(format!(
+                    "strip process terminated abnormally - exit code: {}",
+                    status.code().unwrap()
+                ))
                 .into());
             }
         }
@@ -883,57 +919,74 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
 /// Crashes the program if a nonexistent owner or group is specified in _b_.
 ///
 fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
+    // Attempt to retrieve metadata for the source file.
+    // If this fails, assume the file needs to be copied.
     let from_meta = match fs::metadata(from) {
         Ok(meta) => meta,
         Err(_) => return Ok(true),
     };
+
+    // Attempt to retrieve metadata for the destination file.
+    // If this fails, assume the file needs to be copied.
     let to_meta = match fs::metadata(to) {
         Ok(meta) => meta,
         Err(_) => return Ok(true),
     };
 
-    // setuid || setgid || sticky
+    // Define special file mode bits (setuid, setgid, sticky).
     let extra_mode: u32 = 0o7000;
+    // Define all file mode bits (including permissions).
     // setuid || setgid || sticky || permissions
     let all_modes: u32 = 0o7777;
 
+    // Check if any special mode bits are set in the specified mode,
+    // source file mode, or destination file mode.
     if b.specified_mode.unwrap_or(0) & extra_mode != 0
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
     {
         return Ok(true);
     }
+
+    // Check if the mode of the destination file differs from the specified mode.
     if b.mode() != to_meta.mode() & all_modes {
         return Ok(true);
     }
 
+    // Check if either the source or destination is not a file.
     if !from_meta.is_file() || !to_meta.is_file() {
         return Ok(true);
     }
 
+    // Check if the file sizes differ.
     if from_meta.len() != to_meta.len() {
         return Ok(true);
     }
 
     // TODO: if -P (#1809) and from/to contexts mismatch, return true.
 
+    // Check if the owner ID is specified and differs from the destination file's owner.
     if let Some(owner_id) = b.owner_id {
         if owner_id != to_meta.uid() {
             return Ok(true);
         }
-    } else if let Some(group_id) = b.group_id {
+    }
+
+    // Check if the group ID is specified and differs from the destination file's group.
+    if let Some(group_id) = b.group_id {
         if group_id != to_meta.gid() {
             return Ok(true);
         }
     } else {
         #[cfg(not(target_os = "windows"))]
-        unsafe {
-            if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
-                return Ok(true);
-            }
+        // Check if the destination file's owner or group
+        // differs from the effective user/group ID of the process.
+        if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
+            return Ok(true);
         }
     }
 
+    // Check if the contents of the source and destination files differ.
     if !diff(from.to_str().unwrap(), to.to_str().unwrap()) {
         return Ok(true);
     }

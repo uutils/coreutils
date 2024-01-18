@@ -1181,7 +1181,7 @@ fn calc_loop_bsize(
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(Num::Bytes(bmax)) => {
-            let bmax: u128 = (*bmax).try_into().unwrap();
+            let bmax: u128 = (*bmax).into();
             let bremain: u128 = bmax - wstat.bytes_total;
             cmp::min(ideal_bsize as u128, bremain) as usize
         }
@@ -1267,8 +1267,6 @@ fn is_fifo(filename: &str) -> bool {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
     let matches = uu_app().try_get_matches_from(args)?;
 
     let settings: Settings = Parser::new().parse(

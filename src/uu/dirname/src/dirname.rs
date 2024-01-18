@@ -21,8 +21,6 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_lossy();
-
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));

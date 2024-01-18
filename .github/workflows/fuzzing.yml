@@ -36,6 +36,7 @@ jobs:
     needs: fuzz-build
     name: Run the fuzzers
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     env:
       RUN_FOR: 60
     strategy:
@@ -46,8 +47,12 @@ jobs:
           - { name: fuzz_date, should_pass: false }
           - { name: fuzz_expr, should_pass: true }
           - { name: fuzz_printf, should_pass: false }
-          - { name: fuzz_echo, should_pass: false }
+          - { name: fuzz_echo, should_pass: true }
           - { name: fuzz_seq, should_pass: false }
+          - { name: fuzz_sort, should_pass: false }
+          - { name: fuzz_wc, should_pass: false }
+          - { name: fuzz_cut, should_pass: false }
+          - { name: fuzz_split, should_pass: false }
           - { name: fuzz_parse_glob, should_pass: true }
           - { name: fuzz_parse_size, should_pass: true }
           - { name: fuzz_parse_time, should_pass: true }
@@ -61,7 +66,7 @@ jobs:
         shared-key: "cargo-fuzz-cache-key"
         cache-directories: "fuzz/target"
     - name: Restore Cached Corpus
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         key: corpus-cache-${{ matrix.test-target.name }}
         path: |
@@ -72,7 +77,7 @@ jobs:
       run: |
         cargo +nightly fuzz run ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -detect_leaks=0
     - name: Save Corpus Cache
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         key: corpus-cache-${{ matrix.test-target.name }}
         path: |

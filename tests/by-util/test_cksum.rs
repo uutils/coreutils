@@ -81,15 +81,19 @@ fn test_nonexisting_file() {
 }
 
 #[test]
-fn test_folder() {
+fn test_one_nonexisting_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let folder_name = "a_folder";
-    at.mkdir(folder_name);
+    at.touch("abc.txt");
+    at.touch("xyz.txt");
 
-    ucmd.arg(folder_name)
-        .succeeds()
-        .stdout_only(format!("4294967295 0 {folder_name}\n"));
+    ucmd.arg("abc.txt")
+        .arg("asdf.txt")
+        .arg("xyz.txt")
+        .fails()
+        .stdout_contains_line("4294967295 0 xyz.txt")
+        .stderr_contains("asdf.txt: No such file or directory")
+        .stdout_contains_line("4294967295 0 abc.txt");
 }
 
 // Make sure crc is correct for files larger than 32 bytes
@@ -227,4 +231,137 @@ fn test_untagged_algorithm_stdin() {
             .succeeds()
             .stdout_is_fixture(format!("untagged/{algo}_stdin.expected"));
     }
+}
+
+#[test]
+fn test_length_with_wrong_algorithm() {
+    new_ucmd!()
+        .arg("--length=16")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b")
+        .code_is(1);
+}
+
+#[test]
+fn test_length_not_supported() {
+    new_ucmd!()
+        .arg("--length=15")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_is_fixture("unsupported_length.expected")
+        .code_is(1);
+}
+
+#[test]
+fn test_length() {
+    new_ucmd!()
+        .arg("--length=16")
+        .arg("--algorithm=blake2b")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .stdout_is_fixture("supported_length.expected");
+}
+
+#[test]
+fn test_length_greater_than_512() {
+    new_ucmd!()
+        .arg("--length=1024")
+        .arg("--algorithm=blake2b")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .fails()
+        .no_stdout()
+        .stderr_is_fixture("length_larger_than_512.expected");
+}
+
+#[test]
+fn test_length_is_zero() {
+    new_ucmd!()
+        .arg("--length=0")
+        .arg("--algorithm=blake2b")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_fixture("length_is_zero.expected");
+}
+
+#[test]
+fn test_raw_single_file() {
+    for algo in ALGOS {
+        new_ucmd!()
+            .arg("--raw")
+            .arg("lorem_ipsum.txt")
+            .arg(format!("--algorithm={algo}"))
+            .succeeds()
+            .no_stderr()
+            .stdout_is_fixture_bytes(format!("raw/{algo}_single_file.expected"));
+    }
+}
+#[test]
+fn test_raw_multiple_files() {
+    new_ucmd!()
+        .arg("--raw")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: the --raw option is not supported with multiple files")
+        .code_is(1);
+}
+
+#[test]
+fn test_fail_on_folder() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let folder_name = "a_folder";
+    at.mkdir(folder_name);
+
+    ucmd.arg(folder_name)
+        .fails()
+        .no_stdout()
+        .stderr_contains(format!("cksum: {folder_name}: Is a directory"));
+}
+
+#[test]
+fn test_all_algorithms_fail_on_folder() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    let folder_name = "a_folder";
+    at.mkdir(folder_name);
+
+    for algo in ALGOS {
+        scene
+            .ucmd()
+            .arg(format!("--algorithm={algo}"))
+            .arg(folder_name)
+            .fails()
+            .no_stdout()
+            .stderr_contains(format!("cksum: {folder_name}: Is a directory"));
+    }
+}
+
+#[test]
+fn test_folder_and_file() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    let folder_name = "a_folder";
+    at.mkdir(folder_name);
+
+    scene
+        .ucmd()
+        .arg(folder_name)
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .stderr_contains(format!("cksum: {folder_name}: Is a directory"))
+        .stdout_is_fixture("crc_single_file.expected");
 }

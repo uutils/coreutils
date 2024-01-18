@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains -->
+<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains gsed -->
 
 # Setting up your local development environment
 
@@ -226,8 +226,8 @@ To run uutils against the GNU test suite locally, run the following commands:
 
 ```shell
 bash util/build-gnu.sh
-# Build uutils without release optimizations
-UU_MAKE_PROFILE=debug bash util/build-gnu.sh
+# Build uutils with release optimizations
+bash util/build-gnu.sh --release-build
 bash util/run-gnu-test.sh
 # To run a single test:
 bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
@@ -240,6 +240,12 @@ DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
 ***Tip:*** First time you run `bash util/build-gnu.sh` command, it will provide instructions on how to checkout GNU coreutils repository at the correct release tag. Please follow those instructions and when done, run `bash util/build-gnu.sh` command again.
 
 Note that GNU test suite relies on individual utilities (not the multicall binary).
+
+On FreeBSD, you need to install packages for GNU coreutils and sed (used in shell scripts instead of system commands):
+
+```shell
+pkg install coreutils gsed
+```
 
 ## Code coverage report
 

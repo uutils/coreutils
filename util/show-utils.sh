@@ -1,13 +1,23 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-# spell-checker:ignore (utils) cksum coreutils dircolors hashsum mkdir mktemp printenv printf readlink realpath  rmdir shuf tsort unexpand
+# spell-checker:ignore (shell) OSTYPE
+# spell-checker:ignore (utils) cksum coreutils dircolors hashsum mkdir mktemp printenv printf readlink realpath grealpath rmdir shuf tsort unexpand
 # spell-checker:ignore (jq) deps startswith
+
+# Use GNU version for realpath on *BSD
+case "$OSTYPE" in
+    *bsd*)
+        REALPATH="grealpath"
+        ;;
+    *)
+        REALPATH="realpath"
+        ;;
+esac
 
 ME="${0}"
 ME_dir="$(dirname -- "${ME}")"
 ME_parent_dir="$(dirname -- "${ME_dir}")"
-# NOTE: On FreeBSD, `-mP` arguments are not available.
-ME_parent_dir_abs="$(realpath -mP -- "${ME_parent_dir}" || realpath -- "${ME_parent_dir}")"
+ME_parent_dir_abs="$("${REALPATH}" -mP -- "${ME_parent_dir}" || "${REALPATH}" -- "${ME_parent_dir}")"
 
 # refs: <https://forge.rust-lang.org/release/platform-support.html> , <https://docs.rs/platforms/0.2.1/platforms/platform/tier1/index.html>
 

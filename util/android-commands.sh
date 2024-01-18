@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # spell-checker:ignore termux keyevent sdcard binutils unmatch adb's dumpsys logcat pkill nextest logfile
 
 # There are three shells: the host's, adb, and termux. Only adb lets us run

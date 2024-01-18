@@ -18,3 +18,16 @@ fn test_z85_not_padded() {
         .fails()
         .stderr_only("basenc: error: invalid input (length must be multiple of 4 characters)\n");
 }
+
+#[test]
+fn test_invalid_input() {
+    let error_message = if cfg!(windows) {
+        "basenc: .: Permission denied\n"
+    } else {
+        "basenc: error: invalid input\n"
+    };
+    new_ucmd!()
+        .args(&["--base32", "."])
+        .fails()
+        .stderr_only(error_message);
+}

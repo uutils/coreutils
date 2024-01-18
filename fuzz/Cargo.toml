@@ -10,6 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 libc = "0.2"
+tempfile = "3"
 rand = { version = "0.8", features = ["small_rng"] }
 
 uucore = { path = "../src/uucore/" }
@@ -19,6 +20,10 @@ uu_expr = { path = "../src/uu/expr/" }
 uu_printf = { path = "../src/uu/printf/" }
 uu_echo = { path = "../src/uu/echo/" }
 uu_seq = { path = "../src/uu/seq/" }
+uu_sort = { path = "../src/uu/sort/" }
+uu_wc = { path = "../src/uu/wc/" }
+uu_cut = { path = "../src/uu/cut/" }
+uu_split = { path = "../src/uu/split/" }
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -45,6 +50,30 @@ doc = false
 [[bin]]
 name = "fuzz_seq"
 path = "fuzz_targets/fuzz_seq.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_sort"
+path = "fuzz_targets/fuzz_sort.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_split"
+path = "fuzz_targets/fuzz_split.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_cut"
+path = "fuzz_targets/fuzz_cut.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_wc"
+path = "fuzz_targets/fuzz_wc.rs"
 test = false
 doc = false
 

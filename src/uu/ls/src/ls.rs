@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm
 
 use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
@@ -36,6 +36,8 @@ use std::{
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+use uucore::fsxattr::has_acl;
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -161,8 +163,8 @@ pub mod options {
 
 const DEFAULT_TERM_WIDTH: u16 = 80;
 const POSIXLY_CORRECT_BLOCK_SIZE: u64 = 512;
-#[cfg(unix)]
 const DEFAULT_BLOCK_SIZE: u64 = 1024;
+const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
 #[derive(Debug)]
 enum LsError {
@@ -409,7 +411,9 @@ pub struct Config {
     color: Option<LsColors>,
     long: LongFormat,
     alloc_size: bool,
-    block_size: Option<u64>,
+    file_size_block_size: u64,
+    #[allow(dead_code)]
+    block_size: u64, // is never read on Windows
     width: u16,
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
@@ -553,12 +557,43 @@ fn extract_time(options: &clap::ArgMatches) -> Time {
     }
 }
 
+// Some env variables can be passed
+// For now, we are only verifying if empty or not and known for TERM
+fn is_color_compatible_term() -> bool {
+    let is_term_set = std::env::var("TERM").is_ok();
+    let is_colorterm_set = std::env::var("COLORTERM").is_ok();
+
+    let term = std::env::var("TERM").unwrap_or_default();
+    let colorterm = std::env::var("COLORTERM").unwrap_or_default();
+
+    // Search function in the TERM struct to manage the wildcards
+    let term_matches = |term: &str| -> bool {
+        uucore::colors::TERMS.iter().any(|&pattern| {
+            term == pattern
+                || (pattern.ends_with('*') && term.starts_with(&pattern[..pattern.len() - 1]))
+        })
+    };
+
+    if is_term_set && term.is_empty() && is_colorterm_set && colorterm.is_empty() {
+        return false;
+    }
+
+    if !term.is_empty() && !term_matches(&term) {
+        return false;
+    }
+    true
+}
+
 /// Extracts the color option to use based on the options provided.
 ///
 /// # Returns
 ///
 /// A boolean representing whether or not to use color.
 fn extract_color(options: &clap::ArgMatches) -> bool {
+    if !is_color_compatible_term() {
+        return false;
+    }
+
     match options.get_one::<String>(options::COLOR) {
         None => options.contains_id(options::COLOR),
         Some(val) => match val.as_str() {
@@ -588,7 +623,52 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
     }
 }
 
+/// Match the argument given to --quoting-style or the QUOTING_STYLE env variable.
+///
+/// # Arguments
+///
+/// * `style`: the actual argument string
+/// * `show_control` - A boolean value representing whether or not to show control characters.
+///
+/// # Returns
+///
+/// * An option with None if the style string is invalid, or a `QuotingStyle` wrapped in `Some`.
+fn match_quoting_style_name(style: &str, show_control: bool) -> Option<QuotingStyle> {
+    match style {
+        "literal" => Some(QuotingStyle::Literal { show_control }),
+        "shell" => Some(QuotingStyle::Shell {
+            escape: false,
+            always_quote: false,
+            show_control,
+        }),
+        "shell-always" => Some(QuotingStyle::Shell {
+            escape: false,
+            always_quote: true,
+            show_control,
+        }),
+        "shell-escape" => Some(QuotingStyle::Shell {
+            escape: true,
+            always_quote: false,
+            show_control,
+        }),
+        "shell-escape-always" => Some(QuotingStyle::Shell {
+            escape: true,
+            always_quote: true,
+            show_control,
+        }),
+        "c" => Some(QuotingStyle::C {
+            quotes: quoting_style::Quotes::Double,
+        }),
+        "escape" => Some(QuotingStyle::C {
+            quotes: quoting_style::Quotes::None,
+        }),
+        _ => None,
+    }
+}
+
 /// Extracts the quoting style to use based on the options provided.
+/// If no options are given, it looks if a default quoting style is provided
+/// through the QUOTING_STYLE environment variable.
 ///
 /// # Arguments
 ///
@@ -599,38 +679,12 @@ fn extract_hyperlink(options: &clap::ArgMatches) -> bool {
 ///
 /// A QuotingStyle variant representing the quoting style to use.
 fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> QuotingStyle {
-    let opt_quoting_style = options.get_one::<String>(options::QUOTING_STYLE).cloned();
+    let opt_quoting_style = options.get_one::<String>(options::QUOTING_STYLE);
 
     if let Some(style) = opt_quoting_style {
-        match style.as_str() {
-            "literal" => QuotingStyle::Literal { show_control },
-            "shell" => QuotingStyle::Shell {
-                escape: false,
-                always_quote: false,
-                show_control,
-            },
-            "shell-always" => QuotingStyle::Shell {
-                escape: false,
-                always_quote: true,
-                show_control,
-            },
-            "shell-escape" => QuotingStyle::Shell {
-                escape: true,
-                always_quote: false,
-                show_control,
-            },
-            "shell-escape-always" => QuotingStyle::Shell {
-                escape: true,
-                always_quote: true,
-                show_control,
-            },
-            "c" => QuotingStyle::C {
-                quotes: quoting_style::Quotes::Double,
-            },
-            "escape" => QuotingStyle::C {
-                quotes: quoting_style::Quotes::None,
-            },
-            _ => unreachable!("Should have been caught by Clap"),
+        match match_quoting_style_name(style, show_control) {
+            Some(qs) => qs,
+            None => unreachable!("Should have been caught by Clap"),
         }
     } else if options.get_flag(options::quoting::LITERAL) {
         QuotingStyle::Literal { show_control }
@@ -642,16 +696,31 @@ fn extract_quoting_style(options: &clap::ArgMatches, show_control: bool) -> Quot
         QuotingStyle::C {
             quotes: quoting_style::Quotes::Double,
         }
-    } else if options.get_flag(options::DIRED) || !std::io::stdout().is_terminal() {
-        // By default, `ls` uses Literal quoting when
-        // writing to a non-terminal file descriptor
+    } else if options.get_flag(options::DIRED) {
         QuotingStyle::Literal { show_control }
     } else {
-        // TODO: use environment variable if available
-        QuotingStyle::Shell {
-            escape: true,
-            always_quote: false,
-            show_control,
+        // If set, the QUOTING_STYLE environment variable specifies a default style.
+        if let Ok(style) = std::env::var("QUOTING_STYLE") {
+            match match_quoting_style_name(style.as_str(), show_control) {
+                Some(qs) => return qs,
+                None => eprintln!(
+                    "{}: Ignoring invalid value of environment variable QUOTING_STYLE: '{}'",
+                    std::env::args().next().unwrap_or("ls".to_string()),
+                    style
+                ),
+            }
+        }
+
+        // By default, `ls` uses Shell escape quoting style when writing to a terminal file
+        // descriptor and Literal otherwise.
+        if std::io::stdout().is_terminal() {
+            QuotingStyle::Shell {
+                escape: true,
+                always_quote: false,
+                show_control,
+            }
+        } else {
+            QuotingStyle::Literal { show_control }
         }
     }
 }
@@ -779,10 +848,6 @@ impl Config {
             || options.get_flag(options::size::HUMAN_READABLE);
         let opt_kb = options.get_flag(options::size::KIBIBYTES);
 
-        let env_var_block_size = std::env::var_os("BLOCK_SIZE");
-        let env_var_ls_block_size = std::env::var_os("LS_BLOCK_SIZE");
-        let env_var_posixly_correct = std::env::var_os("POSIXLY_CORRECT");
-
         let size_format = if opt_si {
             SizeFormat::Decimal
         } else if opt_hr {
@@ -791,33 +856,66 @@ impl Config {
             SizeFormat::Bytes
         };
 
+        let env_var_blocksize = std::env::var_os("BLOCKSIZE");
+        let env_var_block_size = std::env::var_os("BLOCK_SIZE");
+        let env_var_ls_block_size = std::env::var_os("LS_BLOCK_SIZE");
+        let env_var_posixly_correct = std::env::var_os("POSIXLY_CORRECT");
+        let mut is_env_var_blocksize = false;
+
         let raw_block_size = if let Some(opt_block_size) = opt_block_size {
             OsString::from(opt_block_size)
-        } else if !opt_kb {
-            if let Some(env_var_ls_block_size) = env_var_ls_block_size {
-                env_var_ls_block_size
-            } else if let Some(env_var_block_size) = env_var_block_size {
-                env_var_block_size
-            } else {
-                OsString::from("")
-            }
+        } else if let Some(env_var_ls_block_size) = env_var_ls_block_size {
+            env_var_ls_block_size
+        } else if let Some(env_var_block_size) = env_var_block_size {
+            env_var_block_size
+        } else if let Some(env_var_blocksize) = env_var_blocksize {
+            is_env_var_blocksize = true;
+            env_var_blocksize
         } else {
             OsString::from("")
         };
 
-        let block_size: Option<u64> = if !opt_si && !opt_hr && !raw_block_size.is_empty() {
+        let (file_size_block_size, block_size) = if !opt_si && !opt_hr && !raw_block_size.is_empty()
+        {
             match parse_size_u64(&raw_block_size.to_string_lossy()) {
-                Ok(size) => Some(size),
+                Ok(size) => match (is_env_var_blocksize, opt_kb) {
+                    (true, true) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE),
+                    (true, false) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
+                    (false, true) => {
+                        // --block-size overrides -k
+                        if opt_block_size.is_some() {
+                            (size, size)
+                        } else {
+                            (size, DEFAULT_BLOCK_SIZE)
+                        }
+                    }
+                    (false, false) => (size, size),
+                },
                 Err(_) => {
-                    return Err(Box::new(LsError::BlockSizeParseError(
-                        opt_block_size.unwrap().clone(),
-                    )));
+                    // only fail if invalid block size was specified with --block-size,
+                    // ignore invalid block size from env vars
+                    if let Some(invalid_block_size) = opt_block_size {
+                        return Err(Box::new(LsError::BlockSizeParseError(
+                            invalid_block_size.clone(),
+                        )));
+                    }
+                    if is_env_var_blocksize {
+                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                    } else {
+                        (DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                    }
                 }
             }
         } else if env_var_posixly_correct.is_some() {
-            Some(POSIXLY_CORRECT_BLOCK_SIZE)
+            if opt_kb {
+                (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+            } else {
+                (DEFAULT_FILE_SIZE_BLOCK_SIZE, POSIXLY_CORRECT_BLOCK_SIZE)
+            }
+        } else if opt_si {
+            (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
         } else {
-            None
+            (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
         };
 
         let long = {
@@ -1023,6 +1121,7 @@ impl Config {
             inode: options.get_flag(options::INODE),
             long,
             alloc_size: options.get_flag(options::size::ALLOCATION_SIZE),
+            file_size_block_size,
             block_size,
             width,
             quoting_style,
@@ -1070,6 +1169,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .infer_long_args(true)
         .disable_help_flag(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::HELP)
                 .long(options::HELP)
@@ -1552,7 +1652,7 @@ pub fn uu_app() -> Command {
                 .short('h')
                 .long(options::size::HUMAN_READABLE)
                 .help("Print human readable file sizes (e.g. 1K 234M 56G).")
-                .overrides_with(options::size::SI)
+                .overrides_with_all([options::size::BLOCK_SIZE, options::size::SI])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1569,6 +1669,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::size::SI)
                 .long(options::size::SI)
                 .help("Print human readable file sizes using powers of 1000 instead of 1024.")
+                .overrides_with_all([options::size::BLOCK_SIZE, options::size::HUMAN_READABLE])
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1576,7 +1677,8 @@ pub fn uu_app() -> Command {
                 .long(options::size::BLOCK_SIZE)
                 .require_equals(true)
                 .value_name("BLOCK_SIZE")
-                .help("scale sizes by BLOCK_SIZE when printing them"),
+                .help("scale sizes by BLOCK_SIZE when printing them")
+                .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
         )
         .arg(
             Arg::new(options::INODE)
@@ -1752,6 +1854,8 @@ struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
+    // can be used to avoid reading the metadata. Can be also called d_type:
+    // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
     de: Option<DirEntry>,
     // Name of the file - will be empty for . or ..
     display_name: OsString,
@@ -1847,10 +1951,11 @@ impl PathData {
         }
     }
 
-    fn md(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
+    fn get_metadata(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
                 // check if we can use DirEntry metadata
+                // it will avoid a call to stat()
                 if !self.must_dereference {
                     if let Some(dir_entry) = &self.de {
                         return dir_entry.metadata().ok();
@@ -1858,7 +1963,7 @@ impl PathData {
                 }
 
                 // if not, check if we can use Path metadata
-                match get_metadata(self.p_buf.as_path(), self.must_dereference) {
+                match get_metadata_with_deref_opt(self.p_buf.as_path(), self.must_dereference) {
                     Err(err) => {
                         // FIXME: A bit tricky to propagate the result here
                         out.flush().unwrap();
@@ -1887,13 +1992,19 @@ impl PathData {
 
     fn file_type(&self, out: &mut BufWriter<Stdout>) -> Option<&FileType> {
         self.ft
-            .get_or_init(|| self.md(out).map(|md| md.file_type()))
+            .get_or_init(|| self.get_metadata(out).map(|md| md.file_type()))
             .as_ref()
     }
 }
 
-fn show_dir_name(dir: &Path, out: &mut BufWriter<Stdout>) {
-    write!(out, "{}:", dir.display()).unwrap();
+fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Config) {
+    if config.hyperlink {
+        let name = escape_name(&path_data.display_name, &config.quoting_style);
+        let hyperlink = create_hyperlink(&name, path_data);
+        write!(out, "{}:", hyperlink).unwrap();
+    } else {
+        write!(out, "{}:", path_data.p_buf.display()).unwrap();
+    }
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -1914,7 +2025,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
         // Proper GNU handling is don't show if dereferenced symlink DNE
         // but only for the base dir, for a child dir show, and print ?s
         // in long format
-        if path_data.md(&mut out).is_none() {
+        if path_data.get_metadata(&mut out).is_none() {
             continue;
         }
 
@@ -1961,7 +2072,8 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 if config.dired {
                     dired::indent(&mut out)?;
                 }
-                writeln!(out, "{}:", path_data.p_buf.display())?;
+                show_dir_name(path_data, &mut out, config);
+                writeln!(out)?;
                 if config.dired {
                     // First directory displayed
                     let dir_len = path_data.display_name.len();
@@ -1972,7 +2084,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
                 }
             } else {
                 writeln!(out)?;
-                show_dir_name(&path_data.p_buf, &mut out);
+                show_dir_name(path_data, &mut out, config);
                 writeln!(out)?;
             }
         }
@@ -2001,12 +2113,14 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                k.md(out)
+                k.get_metadata(out)
                     .and_then(|md| get_system_time(md, config))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
-        Sort::Size => entries.sort_by_key(|k| Reverse(k.md(out).map(|md| md.len()).unwrap_or(0))),
+        Sort::Size => {
+            entries.sort_by_key(|k| Reverse(k.get_metadata(out).map(|md| md.len()).unwrap_or(0)));
+        }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries.sort_by(|a, b| {
@@ -2047,7 +2161,8 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
             !match md {
                 None | Some(None) => {
                     // If it metadata cannot be determined, treat as a file.
-                    get_metadata(p.p_buf.as_path(), true).map_or_else(|_| false, |m| m.is_dir())
+                    get_metadata_with_deref_opt(p.p_buf.as_path(), true)
+                        .map_or_else(|_| false, |m| m.is_dir())
                 }
                 Some(Some(m)) => m.is_dir(),
             }
@@ -2197,7 +2312,7 @@ fn enter_directory(
                             dired::add_dir_name(dired, dir_name_size);
                         }
 
-                        show_dir_name(&e.p_buf, out);
+                        show_dir_name(e, out, config);
                         writeln!(out)?;
                         enter_directory(
                             e,
@@ -2222,7 +2337,7 @@ fn enter_directory(
     Ok(())
 }
 
-fn get_metadata(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
+fn get_metadata_with_deref_opt(p_buf: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
         p_buf.metadata()
     } else {
@@ -2236,7 +2351,7 @@ fn display_dir_entry_size(
     out: &mut BufWriter<std::io::Stdout>,
 ) -> (usize, usize, usize, usize, usize, usize) {
     // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
-    if let Some(md) = entry.md(out) {
+    if let Some(md) = entry.get_metadata(out) {
         let (size_len, major_len, minor_len) = match display_len_or_rdev(md, config) {
             SizeOrDeviceId::Device(major, minor) => (
                 (major.len() + minor.len() + 2usize),
@@ -2274,7 +2389,7 @@ fn return_total(
     let mut total_size = 0;
     for item in items {
         total_size += item
-            .md(out)
+            .get_metadata(out)
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
@@ -2298,7 +2413,7 @@ fn display_additional_leading_info(
     #[cfg(unix)]
     {
         if config.inode {
-            let i = if let Some(md) = item.md(out) {
+            let i = if let Some(md) = item.get_metadata(out) {
                 get_inode(md)
             } else {
                 "?".to_owned()
@@ -2308,7 +2423,7 @@ fn display_additional_leading_info(
     }
 
     if config.alloc_size {
-        let s = if let Some(md) = item.md(out) {
+        let s = if let Some(md) = item.get_metadata(out) {
             display_size(get_block_size(md, config), config)
         } else {
             "?".to_owned()
@@ -2335,6 +2450,11 @@ fn display_items(
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
     // option, print the security context to the left of the size column.
 
+    let quoted = items.iter().any(|item| {
+        let name = escape_name(&item.display_name, &config.quoting_style);
+        name.starts_with('\'')
+    });
+
     if config.format == Format::Long {
         let padding_collection = calculate_padding_collection(items, config, out);
 
@@ -2352,7 +2472,15 @@ fn display_items(
                     display_additional_leading_info(item, &padding_collection, config, out)?;
                 write!(out, "{more_info}")?;
             }
-            display_item_long(item, &padding_collection, config, out, dired, style_manager)?;
+            display_item_long(
+                item,
+                &padding_collection,
+                config,
+                out,
+                dired,
+                style_manager,
+                quoted,
+            )?;
         }
     } else {
         let mut longest_context_len = 1;
@@ -2369,18 +2497,21 @@ fn display_items(
         let padding = calculate_padding_collection(items, config, out);
 
         let mut names_vec = Vec::new();
-
         for i in items {
             let more_info = display_additional_leading_info(i, &padding, config, out)?;
-            let cell = display_file_name(i, config, prefix_context, more_info, out, style_manager);
+            let cell = display_item_name(i, config, prefix_context, more_info, out, style_manager);
             names_vec.push(cell);
         }
 
         let names = names_vec.into_iter();
 
         match config.format {
-            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out)?,
-            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out)?,
+            Format::Columns => {
+                display_grid(names, config.width, Direction::TopToBottom, out, quoted)?;
+            }
+            Format::Across => {
+                display_grid(names, config.width, Direction::LeftToRight, out, quoted)?;
+            }
             Format::Commas => {
                 let mut current_col = 0;
                 let mut names = names;
@@ -2430,17 +2561,7 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         };
         match config.size_format {
             SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
-            SizeFormat::Bytes => {
-                if cfg!(unix) {
-                    if let Some(user_block_size) = config.block_size {
-                        raw_blocks / user_block_size
-                    } else {
-                        raw_blocks / DEFAULT_BLOCK_SIZE
-                    }
-                } else {
-                    raw_blocks
-                }
-            }
+            SizeFormat::Bytes => raw_blocks / config.block_size,
         }
     }
     #[cfg(not(unix))]
@@ -2455,6 +2576,7 @@ fn display_grid(
     width: u16,
     direction: Direction,
     out: &mut BufWriter<Stdout>,
+    quoted: bool,
 ) -> UResult<()> {
     if width == 0 {
         // If the width is 0 we print one single line
@@ -2476,7 +2598,15 @@ fn display_grid(
         let mut grid = Grid::new(GridOptions { filling, direction });
 
         for name in names {
-            grid.add(name);
+            let formatted_name = Cell {
+                contents: if quoted && !name.contents.starts_with('\'') {
+                    format!(" {}", name.contents)
+                } else {
+                    name.contents
+                },
+                width: name.width,
+            };
+            grid.add(formatted_name);
         }
 
         match grid.fit_into_width(width as usize) {
@@ -2503,11 +2633,11 @@ fn display_grid(
 /// * `author` ([`display_uname`], config-optional)
 /// * `size / rdev` ([`display_len_or_rdev`])
 /// * `system_time` ([`get_system_time`])
-/// * `file_name` ([`display_file_name`])
+/// * `item_name` ([`display_item_name`])
 ///
 /// This function needs to display information in columns:
 /// * permissions and system_time are already guaranteed to be pre-formatted in fixed length.
-/// * file_name is the last column and is left-aligned.
+/// * item_name is the last column and is left-aligned.
 /// * Everything else needs to be padded using [`pad_left`].
 ///
 /// That's why we have the parameters:
@@ -2528,20 +2658,32 @@ fn display_item_long(
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
     style_manager: &mut StyleManager,
+    quoted: bool,
 ) -> UResult<()> {
     let mut output_display: String = String::new();
     if config.dired {
         output_display += "  ";
     }
-    if let Some(md) = item.md(out) {
+    if let Some(md) = item.get_metadata(out) {
+        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+        // TODO: See how Mac should work here
+        let is_acl_set = false;
+        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+        let is_acl_set = has_acl(item.display_name.as_os_str());
         write!(
             output_display,
-            "{}{} {}",
+            "{}{}{} {}",
             display_permissions(md, true),
             if item.security_context.len() > 1 {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
                 // but not other alternate access method.
                 "."
+            } else {
+                ""
+            },
+            if is_acl_set {
+                // if acl has been set, we display a "+" at the end of the file permissions
+                "+"
             } else {
                 ""
             },
@@ -2620,17 +2762,24 @@ fn display_item_long(
 
         write!(output_display, " {} ", display_date(md, config)).unwrap();
 
-        let displayed_file =
-            display_file_name(item, config, None, String::new(), out, style_manager).contents;
+        let item_name =
+            display_item_name(item, config, None, String::new(), out, style_manager).contents;
+
+        let displayed_item = if quoted && !item_name.starts_with('\'') {
+            format!(" {}", item_name)
+        } else {
+            item_name
+        };
+
         if config.dired {
             let (start, end) = dired::calculate_dired(
                 &dired.dired_positions,
                 output_display.len(),
-                displayed_file.len(),
+                displayed_item.len(),
             );
             dired::update_positions(dired, start, end);
         }
-        write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
+        write!(output_display, "{}{}", displayed_item, config.line_ending).unwrap();
     } else {
         #[cfg(unix)]
         let leading_char = {
@@ -2703,8 +2852,8 @@ fn display_item_long(
             write!(output_display, " {}", pad_right("?", padding.uname)).unwrap();
         }
 
-        let displayed_file =
-            display_file_name(item, config, None, String::new(), out, style_manager).contents;
+        let displayed_item =
+            display_item_name(item, config, None, String::new(), out, style_manager).contents;
         let date_len = 12;
 
         write!(
@@ -2719,10 +2868,10 @@ fn display_item_long(
             dired::calculate_and_update_positions(
                 dired,
                 output_display.len(),
-                displayed_file.trim().len(),
+                displayed_item.trim().len(),
             );
         }
-        write!(output_display, "{}{}", displayed_file, config.line_ending).unwrap();
+        write!(output_display, "{}{}", displayed_item, config.line_ending).unwrap();
     }
     write!(out, "{}", output_display)?;
 
@@ -2910,26 +3059,16 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
             return SizeOrDeviceId::Device(major.to_string(), minor.to_string());
         }
     }
-    // Reported file len only adjusted for block_size when block_size is set
-    if let Some(user_block_size) = config.block_size {
-        // ordinary division of unsigned integers rounds down,
-        // this is similar to the Rust API for division that rounds up,
-        // currently in nightly only, however once
-        // https://github.com/rust-lang/rust/pull/88582 : "div_ceil"
-        // is stable we should use that instead
-        let len_adjusted = {
-            let d = metadata.len() / user_block_size;
-            let r = metadata.len() % user_block_size;
-            if r == 0 {
-                d
-            } else {
-                d + 1
-            }
-        };
-        SizeOrDeviceId::Size(display_size(len_adjusted, config))
-    } else {
-        SizeOrDeviceId::Size(display_size(metadata.len(), config))
-    }
+    let len_adjusted = {
+        let d = metadata.len() / config.file_size_block_size;
+        let r = metadata.len() % config.file_size_block_size;
+        if r == 0 {
+            d
+        } else {
+            d + 1
+        }
+    };
+    SizeOrDeviceId::Size(display_size(len_adjusted, config))
 }
 
 fn display_size(size: u64, config: &Config) -> String {
@@ -2970,7 +3109,7 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
             } else if file_type.is_file()
                 // Safe unwrapping if the file was removed between listing and display
                 // See https://github.com/uutils/coreutils/issues/5371
-                && path.md(out).map(file_is_executable).unwrap_or_default()
+                && path.get_metadata(out).map(file_is_executable).unwrap_or_default()
             {
                 Some('*')
             } else {
@@ -2992,11 +3131,12 @@ fn classify_file(path: &PathData, out: &mut BufWriter<Stdout>) -> Option<char> {
 /// * `config.format` to display symlink targets if `Format::Long`. This function is also
 ///   responsible for coloring symlink target names if `config.color` is specified.
 /// * `config.context` to prepend security context to `name` if compiled with `feat_selinux`.
+/// * `config.hyperlink` decides whether to hyperlink the item
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
 #[allow(clippy::cognitive_complexity)]
-fn display_file_name(
+fn display_item_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
@@ -3012,30 +3152,11 @@ fn display_file_name(
     let mut width = name.width();
 
     if config.hyperlink {
-        let hostname = hostname::get().unwrap_or(OsString::from(""));
-        let hostname = hostname.to_string_lossy();
-
-        let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
-        let absolute_path = absolute_path.to_string_lossy();
-
-        // TODO encode path
-        // \x1b = ESC, \x07 = BEL
-        name = format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07");
+        name = create_hyperlink(&name, path);
     }
 
     if let Some(ls_colors) = &config.color {
-        let md = path.md(out);
-        name = if md.is_some() {
-            color_name(name, &path.p_buf, md, ls_colors, style_manager)
-        } else {
-            color_name(
-                name,
-                &path.p_buf,
-                path.p_buf.symlink_metadata().ok().as_ref(),
-                ls_colors,
-                style_manager,
-            )
-        };
+        name = color_name(name, path, ls_colors, style_manager, out, None);
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -3101,28 +3222,22 @@ fn display_file_name(
                     // Because we use an absolute path, we can assume this is guaranteed to exist.
                     // Otherwise, we use path.md(), which will guarantee we color to the same
                     // color of non-existent symlinks according to style_for_path_with_metadata.
-                    if path.md(out).is_none()
-                        && get_metadata(target_data.p_buf.as_path(), target_data.must_dereference)
-                            .is_err()
+                    if path.get_metadata(out).is_none()
+                        && get_metadata_with_deref_opt(
+                            target_data.p_buf.as_path(),
+                            target_data.must_dereference,
+                        )
+                        .is_err()
                     {
                         name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
                     } else {
-                        // Use fn get_metadata instead of md() here and above because ls
-                        // should not exit with an err, if we are unable to obtain the target_metadata
-                        let target_metadata = match get_metadata(
-                            target_data.p_buf.as_path(),
-                            target_data.must_dereference,
-                        ) {
-                            Ok(md) => md,
-                            Err(_) => path.md(out).unwrap().clone(),
-                        };
-
                         name.push_str(&color_name(
                             escape_name(target.as_os_str(), &config.quoting_style),
-                            &target_data.p_buf,
-                            Some(&target_metadata),
+                            path,
                             ls_colors,
                             style_manager,
+                            out,
+                            Some(&target_data),
                         ));
                     }
                 } else {
@@ -3155,6 +3270,34 @@ fn display_file_name(
         contents: name,
         width,
     }
+}
+
+fn create_hyperlink(name: &str, path: &PathData) -> String {
+    let hostname = hostname::get().unwrap_or(OsString::from(""));
+    let hostname = hostname.to_string_lossy();
+
+    let absolute_path = fs::canonicalize(&path.p_buf).unwrap_or_default();
+    let absolute_path = absolute_path.to_string_lossy();
+
+    #[cfg(not(target_os = "windows"))]
+    let unencoded_chars = "_-.:~/";
+    #[cfg(target_os = "windows")]
+    let unencoded_chars = "_-.:~/\\";
+
+    // percentage encoding of path
+    let absolute_path: String = absolute_path
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || unencoded_chars.contains(c) {
+                c.to_string()
+            } else {
+                format!("%{:02x}", c as u8)
+            }
+        })
+        .collect();
+
+    // \x1b = ESC, \x07 = BEL
+    format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07")
 }
 
 /// We need this struct to be able to store the previous style.
@@ -3191,17 +3334,56 @@ impl StyleManager {
     }
 }
 
-/// Colors the provided name based on the style determined for the given path.
-fn color_name(
-    name: String,
-    path: &Path,
-    md: Option<&Metadata>,
+fn apply_style_based_on_metadata(
+    path: &PathData,
+    md_option: Option<&Metadata>,
     ls_colors: &LsColors,
     style_manager: &mut StyleManager,
+    name: &str,
 ) -> String {
-    match ls_colors.style_for_path_with_metadata(path, md) {
-        Some(style) => style_manager.apply_style(style, &name),
-        None => name,
+    match ls_colors.style_for_path_with_metadata(&path.p_buf, md_option) {
+        Some(style) => style_manager.apply_style(style, name),
+        None => name.to_owned(),
+    }
+}
+
+/// Colors the provided name based on the style determined for the given path
+/// This function is quite long because it tries to leverage DirEntry to avoid
+/// unnecessary calls to stat()
+/// and manages the symlink errors
+fn color_name(
+    name: String,
+    path: &PathData,
+    ls_colors: &LsColors,
+    style_manager: &mut StyleManager,
+    out: &mut BufWriter<Stdout>,
+    target_symlink: Option<&PathData>,
+) -> String {
+    if !path.must_dereference {
+        // If we need to dereference (follow) a symlink, we will need to get the metadata
+        if let Some(de) = &path.de {
+            // There is a DirEntry, we don't need to get the metadata for the color
+            return match ls_colors.style_for(de) {
+                Some(style) => style_manager.apply_style(style, &name),
+                None => name,
+            };
+        }
+    }
+
+    if let Some(target) = target_symlink {
+        // use the optional target_symlink
+        // Use fn get_metadata_with_deref_opt instead of get_metadata() here because ls
+        // should not exit with an err, if we are unable to obtain the target_metadata
+        let md = get_metadata_with_deref_opt(target.p_buf.as_path(), path.must_dereference)
+            .unwrap_or_else(|_| target.get_metadata(out).unwrap().clone());
+
+        apply_style_based_on_metadata(path, Some(&md), ls_colors, style_manager, &name)
+    } else {
+        let md_option = path.get_metadata(out);
+        let symlink_metadata = path.p_buf.symlink_metadata().ok();
+        let md = md_option.or(symlink_metadata.as_ref());
+
+        apply_style_based_on_metadata(path, md, ls_colors, style_manager, &name)
     }
 }
 
@@ -3231,7 +3413,7 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
     if must_dereference {
-        match get_metadata(p_buf, must_dereference) {
+        match get_metadata_with_deref_opt(p_buf, must_dereference) {
             Err(err) => {
                 // The Path couldn't be dereferenced, so return early and set exit code 1
                 // to indicate a minor error
@@ -3296,7 +3478,7 @@ fn calculate_padding_collection(
     for item in items {
         #[cfg(unix)]
         if config.inode {
-            let inode_len = if let Some(md) = item.md(out) {
+            let inode_len = if let Some(md) = item.get_metadata(out) {
                 display_inode(md).len()
             } else {
                 continue;
@@ -3305,7 +3487,7 @@ fn calculate_padding_collection(
         }
 
         if config.alloc_size {
-            if let Some(md) = item.md(out) {
+            if let Some(md) = item.get_metadata(out) {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }
@@ -3355,7 +3537,7 @@ fn calculate_padding_collection(
 
     for item in items {
         if config.alloc_size {
-            if let Some(md) = item.md(out) {
+            if let Some(md) = item.get_metadata(out) {
                 let block_size_len = display_size(get_block_size(md, config), config).len();
                 padding_collections.block_size = block_size_len.max(padding_collections.block_size);
             }

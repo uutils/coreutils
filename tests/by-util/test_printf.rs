@@ -37,6 +37,11 @@ fn escaped_slash() {
 }
 
 #[test]
+fn unescaped_double_quote() {
+    new_ucmd!().args(&["\\\""]).succeeds().stdout_only("\"");
+}
+
+#[test]
 fn escaped_hex() {
     new_ucmd!().args(&["\\x41"]).succeeds().stdout_only("A");
 }
@@ -160,6 +165,14 @@ fn sub_char() {
         .args(&["the letter %c", "A"])
         .succeeds()
         .stdout_only("the letter A");
+}
+
+#[test]
+fn sub_char_from_string() {
+    new_ucmd!()
+        .args(&["%c%c%c", "five", "%", "oval"])
+        .succeeds()
+        .stdout_only("f%o");
 }
 
 #[test]
@@ -427,7 +440,6 @@ fn sub_float_dec_places() {
 }
 
 #[test]
-#[ignore = "hexadecimal floats are unimplemented"]
 fn sub_float_hex_in() {
     new_ucmd!()
         .args(&["%f", "0xF1.1F"])
@@ -590,4 +602,81 @@ fn sub_general_round_float_leading_zeroes() {
         .args(&["%g", "1.000009"])
         .succeeds()
         .stdout_only("1.00001");
+}
+
+#[test]
+fn partial_float() {
+    new_ucmd!()
+        .args(&["%.2f is %s", "42.03x", "a lot"])
+        .fails()
+        .code_is(1)
+        .stdout_is("42.03 is a lot")
+        .stderr_is("printf: '42.03x': value not completely converted\n");
+}
+
+#[test]
+fn partial_integer() {
+    new_ucmd!()
+        .args(&["%d is %s", "42x23", "a lot"])
+        .fails()
+        .code_is(1)
+        .stdout_is("42 is a lot")
+        .stderr_is("printf: '42x23': value not completely converted\n");
+}
+
+#[test]
+fn test_overflow() {
+    new_ucmd!()
+        .args(&["%d", "36893488147419103232"])
+        .fails()
+        .code_is(1)
+        .stderr_is("printf: '36893488147419103232': Numerical result out of range\n");
+}
+
+#[test]
+fn partial_char() {
+    new_ucmd!()
+        .args(&["%d", "'abc"])
+        .fails()
+        .code_is(1)
+        .stdout_is("97")
+        .stderr_is(
+            "printf: warning: bc: character(s) following character constant have been ignored\n",
+        );
+}
+
+#[test]
+fn sub_alternative_lower_hex_0() {
+    new_ucmd!().args(&["%#x", "0"]).succeeds().stdout_only("0");
+}
+
+#[test]
+fn sub_alternative_lower_hex() {
+    new_ucmd!()
+        .args(&["%#x", "42"])
+        .succeeds()
+        .stdout_only("0x2a");
+}
+
+#[test]
+fn sub_alternative_upper_hex_0() {
+    new_ucmd!().args(&["%#X", "0"]).succeeds().stdout_only("0");
+}
+
+#[test]
+fn sub_alternative_upper_hex() {
+    new_ucmd!()
+        .args(&["%#X", "42"])
+        .succeeds()
+        .stdout_only("0x2A");
+}
+
+#[test]
+fn char_as_byte() {
+    new_ucmd!().args(&["%c", "🙃"]).succeeds().stdout_only("ð");
+}
+
+#[test]
+fn no_infinite_loop() {
+    new_ucmd!().args(&["a", "b"]).succeeds().stdout_only("a");
 }

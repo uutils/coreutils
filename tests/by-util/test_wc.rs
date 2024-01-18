@@ -428,13 +428,17 @@ fn test_files_from_pseudo_filesystem() {
     let result = new_ucmd!().arg("-c").arg("/proc/cpuinfo").succeeds();
     assert_ne!(result.stdout_str(), "0 /proc/cpuinfo\n");
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("-c").arg("/sys/kernel/profiling").succeeds();
-    let actual = at.read("/sys/kernel/profiling").len();
-    assert_eq!(
-        result.stdout_str(),
-        format!("{} /sys/kernel/profiling\n", actual)
-    );
+    // the following block fails on Android with a "Permission denied" error
+    #[cfg(target_os = "linux")]
+    {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let result = ucmd.arg("-c").arg("/sys/kernel/profiling").succeeds();
+        let actual = at.read("/sys/kernel/profiling").len();
+        assert_eq!(
+            result.stdout_str(),
+            format!("{} /sys/kernel/profiling\n", actual)
+        );
+    }
 }
 
 #[test]
@@ -724,4 +728,17 @@ fn files0_from_dir() {
         .set_stdin(std::fs::File::open(".").unwrap())
         .fails()
         .stderr_only(dir_err!("-"));
+}
+
+#[test]
+fn test_args_override() {
+    new_ucmd!()
+        .args(&["-ll", "-l", "alice_in_wonderland.txt"])
+        .run()
+        .stdout_is("5 alice_in_wonderland.txt\n");
+
+    new_ucmd!()
+        .args(&["--total=always", "--total=never", "alice_in_wonderland.txt"])
+        .run()
+        .stdout_is("  5  57 302 alice_in_wonderland.txt\n");
 }
