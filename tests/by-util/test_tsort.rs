@@ -70,5 +70,5 @@ fn test_error_on_dir() {
     new_ucmd!()
         .arg(".")
         .fails()
-        .stderr_contains("tsort: tsort: `.`: read error: Is a directory");
+        .stderr_contains("tsort: `.`: read error: Is a directory");
 }

@@ -36,7 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if path.is_dir() {
             return Err(USimpleError::new(
                 1,
-                format!("tsort: `{}`: read error: Is a directory", input),
+                format!("{}: read error: Is a directory", input),
             ));
         }
         file_buf = File::open(path).map_err_context(|| input.to_string())?;
