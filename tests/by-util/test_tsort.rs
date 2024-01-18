@@ -67,8 +67,10 @@ fn test_multiple_arguments() {
 
 #[test]
 fn test_error_on_dir() {
-    new_ucmd!()
-        .arg(".")
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tsort_test_dir");
+    ucmd
+        .arg("tsort_test_dir")
         .fails()
-        .stderr_contains("tsort: `.`: read error: Is a directory");
+        .stderr_contains("tsort: tsort_test_dir: read error: Is a directory");
 }
