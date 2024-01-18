@@ -64,3 +64,11 @@ fn test_multiple_arguments() {
         .fails()
         .stderr_contains("unexpected argument 'invalid_file' found");
 }
+
+#[test]
+fn test_error_on_dir() {
+    new_ucmd!()
+        .arg(".")
+        .fails()
+        .stderr_contains("tsort: tsort: `.`: read error: Is a directory");
+}
