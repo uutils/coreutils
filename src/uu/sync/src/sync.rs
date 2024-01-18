@@ -17,7 +17,6 @@ use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::parse_size::ParseSizeError;
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("sync.md");
@@ -36,6 +35,20 @@ mod platform {
     use std::fs::File;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::os::unix::io::AsRawFd;
+    use uucore::parse_size::ParseSizeError;
+    use uucore::display::Quotable;
+
+    fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
+        // NOTE:
+        // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
+        match error {
+            ParseSizeError::InvalidSuffix(_) => {
+                format!("invalid suffix in --{} argument {}", option, s.quote())
+            }
+            ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
+            ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+        }
+    }
 
     pub unsafe fn do_sync() -> isize {
         // see https://github.com/rust-lang/libc/pull/2161
@@ -80,6 +93,20 @@ mod platform {
         FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, FlushFileBuffers, GetDriveTypeW,
     };
     use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
+    use uucore::parse_size::ParseSizeError;
+    use uucore::display::Quotable;
+
+    fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
+        // NOTE:
+        // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
+        match error {
+            ParseSizeError::InvalidSuffix(_) => {
+                format!("invalid suffix in --{} argument {}", option, s.quote())
+            }
+            ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
+            ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
+        }
+    }
 
     unsafe fn flush_volume(name: &str) {
         let name_wide = name.to_wide_null();
@@ -244,17 +271,6 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
-    // NOTE:
-    // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
-    match error {
-        ParseSizeError::InvalidSuffix(_) => {
-            format!("invalid suffix in --{} argument {}", option, s.quote())
-        }
-        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
-    }
-}
 
 fn sync() -> isize {
     unsafe { platform::do_sync() }
