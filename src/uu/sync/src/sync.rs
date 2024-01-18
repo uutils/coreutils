@@ -71,8 +71,8 @@ mod platform {
     use std::fs::OpenOptions;
     use std::os::windows::prelude::*;
     use std::path::Path;
-    use uucore::show;
     use uucore::error::{UResult, USimpleError};
+    use uucore::show;
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
         GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
