@@ -103,7 +103,7 @@ mod platform {
         }
     }
 
-    unsafe fn find_first_volume() -> (String, HANDLE) {
+    unsafe fn find_first_volume() -> UResult<(String, HANDLE)> {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
         let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
         if handle == INVALID_HANDLE_VALUE {
@@ -111,8 +111,9 @@ mod platform {
                 GetLastError() as i32,
                 "failed to find first volume"
             ));
+            Err(String::from("INVALID_HANDLE"))
         }
-        (String::from_wide_null(&name), handle)
+        Ok(String::from_wide_null(&name), handle)
     }
 
     unsafe fn find_all_volumes() -> Vec<String> {
