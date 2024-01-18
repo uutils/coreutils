@@ -35,24 +35,6 @@ mod platform {
     use std::fs::File;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::os::unix::io::AsRawFd;
-    use uucore::display::Quotable;
-    use uucore::parse_size::ParseSizeError;
-
-    fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
-        // NOTE:
-        // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
-        match error {
-            ParseSizeError::InvalidSuffix(_) => {
-                format!("invalid suffix in --{} argument {}", option, s.quote())
-            }
-            ParseSizeError::ParseFailure(_) => {
-                format!("invalid --{} argument {}", option, s.quote())
-            }
-            ParseSizeError::SizeTooBig(_) => {
-                format!("--{} argument {} too large", option, s.quote())
-            }
-        }
-    }
 
     pub unsafe fn do_sync() -> isize {
         // see https://github.com/rust-lang/libc/pull/2161
