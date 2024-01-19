@@ -91,7 +91,7 @@ fn test_nohup_with_pseudo_terminal_emulation_on_stdin_stdout_stderr_get_replaced
         .set_stdin(pi_slave)
         .set_stdout(po_slave)
         .set_stderr(pe_slave)
-        .args(&["./is_atty.sh"])
+        .args(&["sh", "is_atty.sh"])
         .succeeds();
 
     let mut buffer_stdout = String::new();
