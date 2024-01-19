@@ -137,7 +137,7 @@ jobs:
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v14
+    - uses: DavidAnson/markdownlint-cli2-action@v15
       with:
         fix: "true"
         globs: |
