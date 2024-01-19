@@ -25,6 +25,7 @@ fn test_count() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_boot() {
     let ts = TestScenario::new(util_name!());
     for opt in ["-b", "--boot", "--b"] {
@@ -65,6 +66,7 @@ fn test_short() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_login() {
     let ts = TestScenario::new(util_name!());
     for opt in ["-l", "--login", "--log"] {
@@ -75,6 +77,7 @@ fn test_login() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_m() {
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &["-m"])).stdout_move_str();
@@ -83,6 +86,7 @@ fn test_m() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_process() {
     let ts = TestScenario::new(util_name!());
     for opt in ["-p", "--process", "--p"] {
@@ -93,6 +97,7 @@ fn test_process() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_runlevel() {
     let ts = TestScenario::new(util_name!());
     for opt in ["-r", "--runlevel", "--r"] {
@@ -106,6 +111,7 @@ fn test_runlevel() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_time() {
     let ts = TestScenario::new(util_name!());
     for opt in ["-t", "--time", "--t"] {
@@ -141,6 +147,7 @@ fn test_mesg() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_arg1_arg2() {
     let args = ["am", "i"];
     let ts = TestScenario::new(util_name!());
@@ -195,6 +202,7 @@ fn test_lookup() {
 
 #[cfg(unix)]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_dead() {
     let ts = TestScenario::new(util_name!());
     for opt in ["-d", "--dead", "--de"] {
