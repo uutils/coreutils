@@ -235,3 +235,35 @@ fn test_tabs_shortcut_with_too_large_size() {
 
     new_ucmd!().arg(arg).fails().stderr_contains(expected_error);
 }
+
+#[test]
+fn test_is_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_name = "dir";
+    at.mkdir(dir_name);
+
+    ucmd.arg(dir_name)
+        .fails()
+        .stderr_contains(format!("unexpand: {}: Is a directory", dir_name));
+}
+
+#[test]
+fn test_multiple_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+    at.touch("file1");
+
+    ucmd.args(&["file1", "file1"])
+        .succeeds()
+        .stdout_contains("contents");
+}
+
+#[test]
+fn test_one_nonexisting_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("asdf.txt")
+        .fails()
+        .stderr_contains("asdf.txt: No such file or directory");
+}
