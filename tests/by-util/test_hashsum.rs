@@ -392,3 +392,47 @@ fn test_with_escape_filename() {
     assert!(stdout.starts_with('\\'));
     assert!(stdout.trim().ends_with("a\\nb"));
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_with_escape_filename_zero_text() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    let filename = "a\nb";
+    at.touch(filename);
+    let result = scene
+        .ccmd("md5sum")
+        .arg("--text")
+        .arg("--zero")
+        .arg(filename)
+        .succeeds();
+    let stdout = result.stdout_str();
+    println!("stdout {}", stdout);
+    assert!(!stdout.starts_with('\\'));
+    assert!(stdout.contains("a\nb"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_check_with_escape_filename() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    let filename = "a\nb";
+    at.touch(filename);
+    let result = scene.ccmd("md5sum").arg("--tag").arg(filename).succeeds();
+    let stdout = result.stdout_str();
+    println!("stdout {}", stdout);
+    assert!(stdout.starts_with("\\MD5"));
+    assert!(stdout.contains("a\\nb"));
+    at.write("check.md5", stdout);
+    let result = scene
+        .ccmd("md5sum")
+        .arg("--strict")
+        .arg("-c")
+        .arg("check.md5")
+        .succeeds();
+    assert!(result.stdout_str().contains("OK"));
+}
