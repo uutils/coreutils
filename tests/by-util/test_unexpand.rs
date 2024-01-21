@@ -251,12 +251,12 @@ fn test_is_directory() {
 fn test_multiple_files() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.touch("file1");
+    at.write("file", "content");
+    at.write("file1", "a        b");
 
-    ucmd.args(&["file1", "file1"])
+    ucmd.args(&["file", "file1"])
         .succeeds()
-        .stdout_contains("contents");
+        .stdout_is("contenta        b");
 }
 
 #[test]
