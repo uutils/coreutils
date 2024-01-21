@@ -357,6 +357,12 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_conflicting_arg() {
+    new_ucmd!().arg("-tag").arg("--check").fails().code_is(1);
+    new_ucmd!().arg("-tag").arg("--text").fails().code_is(1);
+}
+
+#[test]
 fn test_tag() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

@@ -393,13 +393,15 @@ pub fn uu_app_common() -> Command {
                 .short('c')
                 .long("check")
                 .help("read hashsums from the FILEs and check them")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .conflicts_with("tag"),
         )
         .arg(
             Arg::new("tag")
                 .long("tag")
                 .help("create a BSD-style checksum")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .conflicts_with("text"),
         )
         .arg(
             Arg::new("text")
