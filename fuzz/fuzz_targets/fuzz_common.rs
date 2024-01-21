@@ -362,12 +362,7 @@ fn print_diff(rust_output: &str, gnu_output: &str) {
     println!("Diff=");
     let diff = TextDiff::from_lines(rust_output, gnu_output);
     for change in diff.iter_all_changes() {
-        let sign = match change.tag() {
-            ChangeTag::Delete => "-",
-            ChangeTag::Insert => "+",
-            ChangeTag::Equal => " ",
-        };
-        print!("{}{}", sign, change);
+        print!("{}{}", change.tag(), change);
     }
     println!();
 }
