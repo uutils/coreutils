@@ -100,9 +100,9 @@ cp "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests rename t
 # Create *sum binaries
 for sum in b2sum b3sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum; do
     sum_path="${UU_BUILD_DIR}/${sum}"
-    test -f "${sum_path}" || cp "${UU_BUILD_DIR}/hashsum" "${sum_path}"
+    test -f "${sum_path}" || (cd ${UU_BUILD_DIR} && ln -s "hashsum" "${sum}")
 done
-test -f "${UU_BUILD_DIR}/[" || cp "${UU_BUILD_DIR}/test" "${UU_BUILD_DIR}/["
+test -f "${UU_BUILD_DIR}/[" || (cd ${UU_BUILD_DIR} && ln -s "test" "[")
 
 ##
 
