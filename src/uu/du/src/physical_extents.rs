@@ -1,3 +1,9 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore fiemap
 use std::{collections::BTreeMap, path::PathBuf};
 
 use fiemap::FiemapExtentFlags;
@@ -96,7 +102,7 @@ impl SeenPhysicalExtents {
 
         let mut total_overlapping: u64 = 0;
 
-        for (_i, extent_result) in extents.enumerate() {
+        for extent_result in extents {
             let extent = match extent_result {
                 Err(e) => {
                     errors.push(USimpleError::new(
