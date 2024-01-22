@@ -1569,8 +1569,8 @@ fn test_mv_dir_into_path_slash() {
     assert!(at.dir_exists("f/b"));
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
+#[cfg(unix)]
 fn test_acl() {
     use std::process::Command;
 
@@ -1589,6 +1589,7 @@ fn test_acl() {
     let path = at.plus_as_string(file);
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
+    #[cfg(not(target_os = "macos"))]
     match Command::new("setfacl")
         .args(["-m", "group::rwx", path1])
         .status()
@@ -1601,6 +1602,27 @@ fn test_acl() {
         }
         Err(e) => {
             println!("test skipped: setfacl failed with {}", e);
+            return;
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    match Command::new("chmod")
+        .args([
+            "+a",
+            &format!("group:staff allow read,write,execute"),
+            &path1,
+        ])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: chmod failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: chmod failed with {}", e);
             return;
         }
     }

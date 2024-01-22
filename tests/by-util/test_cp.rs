@@ -56,7 +56,7 @@ static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 #[cfg(unix)]
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(all(unix, not(target_os = "android")))]
 use crate::common::util::compare_xattrs;
 
 /// Assert that mode, ownership, and permissions of two metadata objects match.
@@ -3762,7 +3762,7 @@ fn test_cp_no_such() {
         .stderr_is("cp: 'no-such/' is not a directory\n");
 }
 
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(all(unix, not(target_os = "android")))]
 #[test]
 fn test_acl_preserve() {
     use std::process::Command;
@@ -3780,6 +3780,7 @@ fn test_acl_preserve() {
     let path = at.plus_as_string(file);
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
+    #[cfg(not(target_os = "macos"))]
     match Command::new("setfacl")
         .args(["-m", "group::rwx", path1])
         .status()
@@ -3792,6 +3793,26 @@ fn test_acl_preserve() {
         }
         Err(e) => {
             println!("test skipped: setfacl failed with {}", e);
+            return;
+        }
+    }
+    #[cfg(target_os = "macos")]
+    match Command::new("chmod")
+        .args([
+            "+a",
+            &format!("group:staff allow read,write,execute"),
+            &path,
+        ])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: chmod failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: chmod failed with {}", e);
             return;
         }
     }
