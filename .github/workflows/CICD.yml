@@ -137,7 +137,7 @@ jobs:
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v14
+    - uses: DavidAnson/markdownlint-cli2-action@v15
       with:
         fix: "true"
         globs: |
@@ -612,9 +612,23 @@ jobs:
       run: |
         ## Install/setup prerequisites
         case '${{ matrix.job.target }}' in
-          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-          aarch64-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-          *-redox*) sudo apt-get -y update ; sudo apt-get -y install fuse3 libfuse-dev ;;
+          arm-unknown-linux-gnueabihf) 
+            sudo apt-get -y update
+            sudo apt-get -y install gcc-arm-linux-gnueabihf
+          ;;
+          aarch64-unknown-linux-*) 
+            sudo apt-get -y update
+            sudo apt-get -y install gcc-aarch64-linux-gnu
+          ;;
+          *-redox*) 
+            sudo apt-get -y update
+            sudo apt-get -y install fuse3 libfuse-dev
+          ;;
+          # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
+          x86_64-pc-windows-gnu)
+            C:/msys64/usr/bin/pacman.exe -Syu --needed mingw-w64-x86_64-gcc --noconfirm
+            echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
+          ;;
         esac
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
@@ -984,6 +998,10 @@ jobs:
             echo "foo" > /home/runner/.plan
             ;;
         esac
+        case '${{ matrix.job.os }}' in
+          # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
+          windows-latest) C:/msys64/usr/bin/pacman.exe -Syu --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
+        esac
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
       shell: bash
@@ -994,16 +1012,8 @@ jobs:
         UTILITY_LIST="$(./util/show-utils.sh ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }})"
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo -n "-puu_${u} "; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
-    - name: Test uucore
-      run: cargo nextest run --profile ci --hide-progress-bar -p uucore
-      env:
-        RUSTC_WRAPPER: ""
-        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
-        RUSTDOCFLAGS: "-Cpanic=abort"
-        RUST_BACKTRACE: "1"
-        # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test
-      run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      run: cargo nextest run --profile ci --hide-progress-bar ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
         RUSTC_WRAPPER: ""
         RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"

@@ -409,3 +409,11 @@ int main() {
 ",
         );
 }
+
+#[test]
+fn test_expand_directory() {
+    new_ucmd!()
+        .args(&["."])
+        .fails()
+        .stderr_contains("expand: .: Is a directory");
+}

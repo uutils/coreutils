@@ -634,3 +634,20 @@ fn test_empty_section_delimiter() {
             .stdout_is("     1\ta\n       \n     2\tb\n");
     }
 }
+
+#[test]
+fn test_directory_as_input() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "dir";
+    let file = "file";
+    let content = "aaa";
+
+    at.mkdir(dir);
+    at.write(file, content);
+
+    ucmd.arg(dir)
+        .arg(file)
+        .fails()
+        .stderr_is(format!("nl: {dir}: Is a directory\n"))
+        .stdout_contains(content);
+}

@@ -46,6 +46,8 @@ pub mod pipes;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
 
+#[cfg(all(unix, not(target_os = "macos"), feature = "fsxattr"))]
+pub mod fsxattr;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;
 #[cfg(all(

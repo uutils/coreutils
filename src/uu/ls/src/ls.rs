@@ -36,6 +36,8 @@ use std::{
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+use uucore::fsxattr::has_acl;
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -2663,14 +2665,25 @@ fn display_item_long(
         output_display += "  ";
     }
     if let Some(md) = item.get_metadata(out) {
+        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+        // TODO: See how Mac should work here
+        let is_acl_set = false;
+        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+        let is_acl_set = has_acl(item.display_name.as_os_str());
         write!(
             output_display,
-            "{}{} {}",
+            "{}{}{} {}",
             display_permissions(md, true),
             if item.security_context.len() > 1 {
                 // GNU `ls` uses a "." character to indicate a file with a security context,
                 // but not other alternate access method.
                 "."
+            } else {
+                ""
+            },
+            if is_acl_set {
+                // if acl has been set, we display a "+" at the end of the file permissions
+                "+"
             } else {
                 ""
             },

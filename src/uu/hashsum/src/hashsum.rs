@@ -756,7 +756,9 @@ where
             } else if options.zero {
                 print!("{} {}{}\0", sum, binary_marker, filename.display());
             } else {
-                println!("{} {}{}", sum, binary_marker, filename.display());
+                let (filename, has_prefix) = escape_filename(filename);
+                let prefix = if has_prefix { "\\" } else { "" };
+                println!("{}{} {}{}", prefix, sum, binary_marker, filename);
             }
         }
     }
@@ -779,6 +781,16 @@ where
     }
 
     Ok(())
+}
+
+fn escape_filename(filename: &Path) -> (String, bool) {
+    let original = filename.as_os_str().to_string_lossy();
+    let escaped = original
+        .replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r");
+    let has_changed = escaped != original;
+    (escaped, has_changed)
 }
 
 fn digest_reader<T: Read>(

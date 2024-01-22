@@ -73,9 +73,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let stdin = stdin();
         let lines = stdin.lock().lines();
         for line in lines {
-            for number in line.unwrap().split_whitespace() {
-                print_factors_str(number, &mut w, print_exponents)
-                    .map_err_context(|| "write error".into())?;
+            match line {
+                Ok(line) => {
+                    for number in line.split_whitespace() {
+                        print_factors_str(number, &mut w, print_exponents)
+                            .map_err_context(|| "write error".into())?;
+                    }
+                }
+                Err(e) => {
+                    set_exit_code(1);
+                    show_error!("error reading input: {}", e);
+                    return Ok(());
+                }
             }
         }
     }
