@@ -7,7 +7,6 @@ use libc::STDIN_FILENO;
 use libc::{close, dup, dup2, pipe, STDERR_FILENO, STDOUT_FILENO};
 use rand::prelude::SliceRandom;
 use rand::Rng;
-use similar::ChangeTag;
 use similar::TextDiff;
 use std::ffi::OsString;
 use std::io::{Seek, SeekFrom, Write};
