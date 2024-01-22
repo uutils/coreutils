@@ -298,8 +298,9 @@ fn test_acl() {
     let dir = "d";
     let subdir = "d/e";
     at.mkdir(dir);
+    println!("dir: {}", dir);
     let dir = at.plus_as_string(dir);
-
+    println!("dir: {}", dir);
     let status = Command::new("setfacl")
         .args(["-d", "-m", "group::rwx", &dir])
         .status()
