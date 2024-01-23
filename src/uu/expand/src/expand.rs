@@ -471,15 +471,21 @@ fn expand(options: &Options) -> UResult<()> {
             set_exit_code(1);
             continue;
         }
-
-        let mut fh = open(file)?;
-
-        while match fh.read_until(b'\n', &mut buf) {
-            Ok(s) => s > 0,
-            Err(_) => buf.is_empty(),
-        } {
-            expand_line(&mut buf, &mut output, ts, options)
-                .map_err_context(|| "failed to write output".to_string())?;
+        match open(file) {
+            Ok(mut fh) => {
+                while match fh.read_until(b'\n', &mut buf) {
+                    Ok(s) => s > 0,
+                    Err(_) => buf.is_empty(),
+                } {
+                    expand_line(&mut buf, &mut output, ts, options)
+                        .map_err_context(|| "failed to write output".to_string())?;
+                }
+            }
+            Err(e) => {
+                show_error!("{}", e);
+                set_exit_code(1);
+                continue;
+            }
         }
     }
     Ok(())

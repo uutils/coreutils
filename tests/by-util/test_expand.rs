@@ -417,3 +417,11 @@ fn test_expand_directory() {
         .fails()
         .stderr_contains("expand: .: Is a directory");
 }
+
+#[test]
+fn test_nonexisting_file() {
+    new_ucmd!()
+        .args(&["with-trailing-tab.txt", "nonexistent", "with_spaces.txt"])
+        .fails()
+        .stderr_contains("expand: nonexistent: No such file or directory");
+}
