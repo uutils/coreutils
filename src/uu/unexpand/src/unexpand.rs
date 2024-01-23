@@ -216,7 +216,7 @@ fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     if filename.is_dir() {
         Err(Box::new(USimpleError {
             code: 1,
-            message: format!("unexpand: {}: Is a directory", filename.display()),
+            message: format!("{}: Is a directory", filename.display()),
         }))
     } else if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))

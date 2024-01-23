@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore contenta
 use crate::common::util::TestScenario;
 
 #[test]
@@ -261,9 +262,8 @@ fn test_multiple_files() {
 
 #[test]
 fn test_one_nonexisting_file() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    ucmd.arg("asdf.txt")
+    new_ucmd!()
+        .arg("asdf.txt")
         .fails()
         .stderr_contains("asdf.txt: No such file or directory");
 }
