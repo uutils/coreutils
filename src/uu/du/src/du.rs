@@ -340,7 +340,9 @@ fn du(
                             }
 
                             if let Some(inode) = this_stat.inode {
-                                if seen_inodes.contains(&inode) {
+                                if seen_inodes.contains(&inode)
+                                    && !(options.all && options.count_links)
+                                {
                                     if options.count_links {
                                         my_stat.inodes += 1;
                                     }
@@ -348,6 +350,7 @@ fn du(
                                 }
                                 seen_inodes.insert(inode);
                             }
+
                             if this_stat.is_dir {
                                 if options.one_file_system {
                                     if let (Some(this_inode), Some(my_inode)) =
