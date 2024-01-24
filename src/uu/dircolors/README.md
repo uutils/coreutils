@@ -16,3 +16,5 @@ cargo test --features "dircolors" --no-default-features
 ```
 
 Edit `/PATH_TO_COREUTILS/src/uu/dircolors/src/colors.rs` until the tests pass.
+
+`colors.rs` is licensed GPL-3.0-or-later, same as GNU coreutils. See `LICENSE.GPL`.

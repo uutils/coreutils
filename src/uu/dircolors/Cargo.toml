@@ -2,7 +2,7 @@
 name = "uu_dircolors"
 version = "0.0.24"
 authors = ["uutils developers"]
-license = "MIT"
+license = "MIT AND GPL-3.0-or-later"
 description = "dircolors ~ (uutils) display commands to set LS_COLORS"
 
 homepage = "https://github.com/uutils/coreutils"
