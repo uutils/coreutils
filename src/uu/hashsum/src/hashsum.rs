@@ -791,12 +791,12 @@ where
 }
 
 fn unescape_filename(filename: &str) -> (String, &'static str) {
-    let escaped = filename
+    let unescaped = filename
         .replace("\\\\", "\\")
         .replace("\\n", "\n")
         .replace("\\r", "\r");
-    let prefix = if escaped == filename { "" } else { "\\" };
-    (escaped, prefix)
+    let prefix = if unescaped == filename { "" } else { "\\" };
+    (unescaped, prefix)
 }
 
 fn escape_filename(filename: &Path) -> (String, &'static str) {
