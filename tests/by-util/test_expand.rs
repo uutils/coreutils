@@ -417,3 +417,12 @@ fn test_expand_directory() {
         .fails()
         .stderr_contains("expand: .: Is a directory");
 }
+
+#[test]
+fn test_nonexisting_file() {
+    new_ucmd!()
+        .args(&["nonexistent", "with-spaces.txt"])
+        .fails()
+        .stderr_contains("expand: nonexistent: No such file or directory")
+        .stdout_contains_line("// !note: file contains significant whitespace");
+}
