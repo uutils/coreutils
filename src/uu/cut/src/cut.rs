@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 
 use self::searcher::Searcher;
@@ -319,6 +319,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
 
             if path.is_dir() {
                 show_error!("{}: Is a directory", filename.maybe_quote());
+                set_exit_code(1);
                 continue;
             }
 
