@@ -403,7 +403,7 @@ fn test_args_override() {
 // * indentation uses <TAB> characters
 int main() {
         // * next line has both a leading & trailing tab
-        // with tabs=>	
+        // with tabs=>\t
         return 0;
 }
 ",
