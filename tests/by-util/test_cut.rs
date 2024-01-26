@@ -219,7 +219,8 @@ fn test_is_a_directory() {
 
     ucmd.arg("-b1")
         .arg("some")
-        .run()
+        .fails()
+        .code_is(1)
         .stderr_is("cut: some: Is a directory\n");
 }
 
@@ -228,7 +229,8 @@ fn test_no_such_file() {
     new_ucmd!()
         .arg("-b1")
         .arg("some")
-        .run()
+        .fails()
+        .code_is(1)
         .stderr_is("cut: some: No such file or directory\n");
 }
 
