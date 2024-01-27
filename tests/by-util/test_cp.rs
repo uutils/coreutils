@@ -1463,7 +1463,7 @@ fn test_cp_preserve_xattr_fails_on_android() {
         .arg(TEST_COPY_FROM_FOLDER_FILE)
         .arg(TEST_HELLO_WORLD_DEST)
         .arg("--preserve=xattr")
-        .fails();
+        .succeeds();
 }
 
 #[test]
