@@ -217,7 +217,7 @@ mod tests {
         // This is a strong pseudoprime (wrt. miller_rabin::BASIS)
         //  and triggered a bug in rho::factor's code path handling
         //  miller_rabbin::Result::Composite
-        let pseudoprime = 17179869183;
+        let pseudoprime = 17_179_869_183;
         for _ in 0..20 {
             // Repeat the test 20 times, as it only fails some fraction
             // of the time.
