@@ -575,7 +575,7 @@ fn process_chunk<
     text: &str,
     current_len: &mut usize,
     in_word: &mut bool,
-) -> usize {
+) {
     for ch in text.chars() {
         if SHOW_WORDS {
             if ch.is_whitespace() {
@@ -612,9 +612,17 @@ fn process_chunk<
     total.bytes += text.len();
 
     total.max_line_length = max(*current_len, total.max_line_length);
-    *current_len
 }
 
+fn handle_error<'a>(error: BufReadDecoderError<'a>, total: &mut WordCount) -> Option<io::Error> {
+    match error {
+        BufReadDecoderError::InvalidByteSequence(bytes) => {
+            total.bytes += bytes.len();
+        }
+        BufReadDecoderError::Io(e) => return Some(e),
+    }
+    None
+}
 fn word_count_from_reader_specialized<
     T: WordCountable,
     const SHOW_CHARS: bool,
@@ -638,13 +646,10 @@ fn word_count_from_reader_specialized<
                     &mut in_word,
                 );
             }
-            Err(BufReadDecoderError::InvalidByteSequence(bytes)) => {
-                // GNU wc treats invalid data as neither word nor char nor whitespace,
-                // so no other counters are affected
-                total.bytes += bytes.len();
-            }
-            Err(BufReadDecoderError::Io(e)) => {
-                return (total, Some(e));
+            Err(e) => {
+                if let Some(e) = handle_error(e, &mut total) {
+                    return (total, Some(e));
+                }
             }
         }
     }
