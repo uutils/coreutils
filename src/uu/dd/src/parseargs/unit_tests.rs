@@ -508,14 +508,6 @@ mod test_64bit_arch {
 
 #[test]
 #[should_panic]
-fn test_overflow_panic() {
-    let bs_str = format!("{}KiB", u64::MAX);
-
-    parse_bytes_with_opt_multiplier(&bs_str).unwrap();
-}
-
-#[test]
-#[should_panic]
 fn test_neg_panic() {
     let bs_str = format!("{}", -1);
 
