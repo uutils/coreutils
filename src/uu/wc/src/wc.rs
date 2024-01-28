@@ -573,33 +573,32 @@ fn process_chunk<
 >(
     total: &mut WordCount,
     text: &str,
-) {
-    let mut in_word = false;
-    let mut current_len = 0;
-
+    current_len: &mut usize,
+    in_word: &mut bool,
+) -> usize {
     for ch in text.chars() {
         if SHOW_WORDS {
             if ch.is_whitespace() {
-                in_word = false;
+                *in_word = false;
             } else if ch.is_ascii_control() {
                 // These count as characters but do not affect the word state
-            } else if !in_word {
-                in_word = true;
+            } else if !(*in_word) {
+                *in_word = true;
                 total.words += 1;
             }
         }
         if SHOW_MAX_LINE_LENGTH {
             match ch {
                 '\n' | '\r' | '\x0c' => {
-                    total.max_line_length = max(current_len, total.max_line_length);
-                    current_len = 0;
+                    total.max_line_length = max(*current_len, total.max_line_length);
+                    *current_len = 0;
                 }
                 '\t' => {
-                    current_len -= current_len % 8;
-                    current_len += 8;
+                    *current_len -= *current_len % 8;
+                    *current_len += 8;
                 }
                 _ => {
-                    current_len += ch.width().unwrap_or(0);
+                    *current_len += ch.width().unwrap_or(0);
                 }
             }
         }
@@ -612,7 +611,8 @@ fn process_chunk<
     }
     total.bytes += text.len();
 
-    total.max_line_length = max(current_len, total.max_line_length);
+    total.max_line_length = max(*current_len, total.max_line_length);
+    *current_len
 }
 
 fn word_count_from_reader_specialized<
@@ -626,12 +626,18 @@ fn word_count_from_reader_specialized<
 ) -> (WordCount, Option<io::Error>) {
     let mut total = WordCount::default();
     let mut reader = BufReadDecoder::new(reader.buffered());
-
+    let mut in_word = false;
+    let mut current_len = 0;
     while let Some(chunk) = reader.next_strict() {
         match chunk {
-            Ok(text) => process_chunk::<SHOW_CHARS, SHOW_LINES, SHOW_MAX_LINE_LENGTH, SHOW_WORDS>(
-                &mut total, text,
-            ),
+            Ok(text) => {
+                process_chunk::<SHOW_CHARS, SHOW_LINES, SHOW_MAX_LINE_LENGTH, SHOW_WORDS>(
+                    &mut total,
+                    text,
+                    &mut current_len,
+                    &mut in_word,
+                );
+            }
             Err(BufReadDecoderError::InvalidByteSequence(bytes)) => {
                 // GNU wc treats invalid data as neither word nor char nor whitespace,
                 // so no other counters are affected
