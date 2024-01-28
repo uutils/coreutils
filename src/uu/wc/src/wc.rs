@@ -614,7 +614,7 @@ fn process_chunk<
     total.max_line_length = max(*current_len, total.max_line_length);
 }
 
-fn handle_error<'a>(error: BufReadDecoderError<'a>, total: &mut WordCount) -> Option<io::Error> {
+fn handle_error(error: BufReadDecoderError<'_>, total: &mut WordCount) -> Option<io::Error> {
     match error {
         BufReadDecoderError::InvalidByteSequence(bytes) => {
             total.bytes += bytes.len();
