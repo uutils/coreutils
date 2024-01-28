@@ -565,7 +565,56 @@ fn word_count_from_reader<T: WordCountable>(
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
+fn process_chunk<
+    const SHOW_CHARS: bool,
+    const SHOW_LINES: bool,
+    const SHOW_MAX_LINE_LENGTH: bool,
+    const SHOW_WORDS: bool,
+>(
+    total: &mut WordCount,
+    text: &str,
+) {
+    let mut in_word = false;
+    let mut current_len = 0;
+
+    for ch in text.chars() {
+        if SHOW_WORDS {
+            if ch.is_whitespace() {
+                in_word = false;
+            } else if ch.is_ascii_control() {
+                // These count as characters but do not affect the word state
+            } else if !in_word {
+                in_word = true;
+                total.words += 1;
+            }
+        }
+        if SHOW_MAX_LINE_LENGTH {
+            match ch {
+                '\n' | '\r' | '\x0c' => {
+                    total.max_line_length = max(current_len, total.max_line_length);
+                    current_len = 0;
+                }
+                '\t' => {
+                    current_len -= current_len % 8;
+                    current_len += 8;
+                }
+                _ => {
+                    current_len += ch.width().unwrap_or(0);
+                }
+            }
+        }
+        if SHOW_LINES && ch == '\n' {
+            total.lines += 1;
+        }
+        if SHOW_CHARS {
+            total.chars += 1;
+        }
+    }
+    total.bytes += text.len();
+
+    total.max_line_length = max(current_len, total.max_line_length);
+}
+
 fn word_count_from_reader_specialized<
     T: WordCountable,
     const SHOW_CHARS: bool,
@@ -577,47 +626,12 @@ fn word_count_from_reader_specialized<
 ) -> (WordCount, Option<io::Error>) {
     let mut total = WordCount::default();
     let mut reader = BufReadDecoder::new(reader.buffered());
-    let mut in_word = false;
-    let mut current_len = 0;
 
     while let Some(chunk) = reader.next_strict() {
         match chunk {
-            Ok(text) => {
-                for ch in text.chars() {
-                    if SHOW_WORDS {
-                        if ch.is_whitespace() {
-                            in_word = false;
-                        } else if ch.is_ascii_control() {
-                            // These count as characters but do not affect the word state
-                        } else if !in_word {
-                            in_word = true;
-                            total.words += 1;
-                        }
-                    }
-                    if SHOW_MAX_LINE_LENGTH {
-                        match ch {
-                            '\n' | '\r' | '\x0c' => {
-                                total.max_line_length = max(current_len, total.max_line_length);
-                                current_len = 0;
-                            }
-                            '\t' => {
-                                current_len -= current_len % 8;
-                                current_len += 8;
-                            }
-                            _ => {
-                                current_len += ch.width().unwrap_or(0);
-                            }
-                        }
-                    }
-                    if SHOW_LINES && ch == '\n' {
-                        total.lines += 1;
-                    }
-                    if SHOW_CHARS {
-                        total.chars += 1;
-                    }
-                }
-                total.bytes += text.len();
-            }
+            Ok(text) => process_chunk::<SHOW_CHARS, SHOW_LINES, SHOW_MAX_LINE_LENGTH, SHOW_WORDS>(
+                &mut total, text,
+            ),
             Err(BufReadDecoderError::InvalidByteSequence(bytes)) => {
                 // GNU wc treats invalid data as neither word nor char nor whitespace,
                 // so no other counters are affected
@@ -628,8 +642,6 @@ fn word_count_from_reader_specialized<
             }
         }
     }
-
-    total.max_line_length = max(current_len, total.max_line_length);
 
     (total, None)
 }
