@@ -90,9 +90,9 @@ impl<'parser> Parser<'parser> {
             NumberSystem::Hexadecimal => size
                 .chars()
                 .take(2)
-                .chain(size.chars().skip(2).take_while(|c| c.is_ascii_hexdigit()))
+                .chain(size.chars().skip(2).take_while(char::is_ascii_hexdigit))
                 .collect(),
-            _ => size.chars().take_while(|c| c.is_ascii_digit()).collect(),
+            _ => size.chars().take_while(char::is_ascii_digit).collect(),
         };
         let mut unit: &str = &size[numeric_string.len()..];
 
@@ -243,7 +243,7 @@ impl<'parser> Parser<'parser> {
 
         let num_digits: usize = size
             .chars()
-            .take_while(|c| c.is_ascii_digit())
+            .take_while(char::is_ascii_digit)
             .collect::<String>()
             .len();
         let all_zeros = size.chars().all(|c| c == '0');

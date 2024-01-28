@@ -1622,7 +1622,7 @@ fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a
     // Get the matching number of elements from the ancestors of the
     // destination path (for example, get "d/a" and "d/a/b").
     let k = source_ancestors.len();
-    let dest_ancestors = &dest_ancestors[1..1 + k];
+    let dest_ancestors = &dest_ancestors[1..=k];
 
     // Now we have two slices of the same length, so we zip them.
     let mut result = vec![];
