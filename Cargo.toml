@@ -287,7 +287,7 @@ glob = "0.3.1"
 half = "2.3"
 hostname = "0.3"
 indicatif = "0.17"
-itertools = "0.12.0"
+itertools = "0.12.1"
 libc = "0.2.152"
 lscolors = { version = "0.16.0", default-features = false, features = [
   "gnu_legacy",
