@@ -71,7 +71,8 @@ mod platform {
     use std::fs::OpenOptions;
     use std::os::windows::prelude::*;
     use std::path::Path;
-    use uucore::crash;
+    use uucore::display::Quotable;
+    use uucore::parse_size::ParseSizeError;
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
         GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
@@ -81,6 +82,22 @@ mod platform {
     };
     use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
+    fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
+        // NOTE:
+        // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
+        match error {
+            ParseSizeError::InvalidSuffix(_) => {
+                format!("invalid suffix in --{} argument {}", option, s.quote())
+            }
+            ParseSizeError::ParseFailure(_) => {
+                format!("invalid --{} argument {}", option, s.quote())
+            }
+            ParseSizeError::SizeTooBig(_) => {
+                format!("--{} argument {} too large", option, s.quote())
+            }
+        }
+    }
+
     unsafe fn flush_volume(name: &str) {
         let name_wide = name.to_wide_null();
         if GetDriveTypeW(name_wide.as_ptr()) == DRIVE_FIXED {
@@ -88,12 +105,21 @@ mod platform {
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
                     if FlushFileBuffers(file.as_raw_handle() as HANDLE) == 0 {
-                        crash!(GetLastError() as i32, "failed to flush file buffer");
+                        USimpleError::new(
+                            1,
+                            format_error_message(
+                                GetLastError() as i32,
+                                "failed to flush file buffer",
+                            ),
+                        );
                     }
                 }
-                Err(e) => crash!(
-                    e.raw_os_error().unwrap_or(1),
-                    "failed to create volume handle"
+                Err(e) => USimpleError::new(
+                    1,
+                    format_error_message(
+                        e.raw_os_error().unwrap_or(1),
+                        "failed to create volume handle",
+                    ),
                 ),
             }
         }
@@ -103,7 +129,10 @@ mod platform {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
         let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
         if handle == INVALID_HANDLE_VALUE {
-            crash!(GetLastError() as i32, "failed to find first volume");
+            USimpleError::new(
+                1,
+                format_error_message(GetLastError() as i32, "failed to find first volume"),
+            );
         }
         (String::from_wide_null(&name), handle)
     }
@@ -119,7 +148,10 @@ mod platform {
                         FindVolumeClose(next_volume_handle);
                         return volumes;
                     }
-                    err => crash!(err as i32, "failed to find next volume"),
+                    err => USimpleError::new(
+                        1,
+                        format_error_message(err as i32, "failed to find next volume"),
+                    ),
                 }
             } else {
                 volumes.push(String::from_wide_null(&name));
