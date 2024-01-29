@@ -526,11 +526,11 @@ fn word_count_from_reader<T: WordCountable>(
         (_, false, false, true, true) => {
             word_count_from_reader_specialized::<_, false, false, true, true>(reader)
         }
-        // show_chars, show_words
+        // show_lines, show_words
         (_, false, true, false, true) => {
             word_count_from_reader_specialized::<_, false, true, false, true>(reader)
         }
-        // show_chars, show_lines
+        // show_lines, show_max_line_length
         (_, false, true, true, false) => {
             word_count_from_reader_specialized::<_, false, true, true, false>(reader)
         }
