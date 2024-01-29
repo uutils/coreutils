@@ -623,6 +623,7 @@ fn handle_error(error: BufReadDecoderError<'_>, total: &mut WordCount) -> Option
     }
     None
 }
+
 fn word_count_from_reader_specialized<
     T: WordCountable,
     const SHOW_CHARS: bool,
