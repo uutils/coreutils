@@ -151,6 +151,8 @@ scoop install uutils-coreutils
 conda install -c conda-forge uutils-coreutils
 ```
 
+### Yocto
+
 [Yocto recipe](https://github.com/openembedded/meta-openembedded/tree/master/meta-oe/recipes-core/uutils-coreutils)
 
 The uutils-coreutils recipe is provided as part of the meta-openembedded yocto layer.
