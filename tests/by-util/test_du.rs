@@ -173,11 +173,15 @@ fn test_du_with_posixly_correct() {
 }
 
 #[test]
-fn test_du_basics_bad_name() {
+fn test_du_non_existing_files() {
     new_ucmd!()
-        .arg("bad_name")
+        .arg("non_existing_a")
+        .arg("non_existing_b")
         .fails()
-        .stderr_only("du: bad_name: No such file or directory\n");
+        .stderr_only(concat!(
+            "du: cannot access 'non_existing_a': No such file or directory\n",
+            "du: cannot access 'non_existing_b': No such file or directory\n"
+        ));
 }
 
 #[test]

@@ -785,8 +785,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .send(Err(USimpleError::new(
                     1,
                     format!(
-                        "{}: No such file or directory",
-                        path.to_string_lossy().maybe_quote()
+                        "cannot access {}: No such file or directory",
+                        path.to_string_lossy().quote()
                     ),
                 )))
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
