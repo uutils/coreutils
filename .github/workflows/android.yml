@@ -20,7 +20,7 @@ concurrency:
 jobs:
   test_android:
     name: Test builds
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -47,7 +47,7 @@ jobs:
       run: |
         rm -f \
           ~/.android/avd/*.avd/*.lock \
-          ~/.android/avd/*/*.lock              
+          ~/.android/avd/*/*.lock
     - name: Create and cache emulator image
       if: steps.avd-cache.outputs.cache-hit != 'true'
       uses: reactivecircus/android-emulator-runner@v2
@@ -55,7 +55,7 @@ jobs:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
         arch: ${{ matrix.arch }}
-        ram-size: 2048M
+        ram-size: 4096M
         disk-size: 7GB
         force-avd-creation: true
         emulator-options: -no-window -no-snapshot-load -noaudio -no-boot-anim -camera-back none
@@ -91,7 +91,7 @@ jobs:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
         arch: ${{ matrix.arch }}
-        ram-size: 2048M
+        ram-size: 4096M
         disk-size: 7GB
         force-avd-creation: false
         emulator-options: -no-window -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -snapshot ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
