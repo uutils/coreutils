@@ -474,7 +474,7 @@ jobs:
           - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl      , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl      , use-cross: use-cross }
-          - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer  , skip-tests: true }
+          - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true }
           - { os: macos-14       , target: aarch64-apple-darwin        , features: feat_os_macos } # M1 CPU
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
@@ -585,9 +585,6 @@ jobs:
         if [ "${CARGO_CMD}" = 'cross' ] && [ ! -e "Cross.toml" ] ; then
           printf "[build.env]\npassthrough = [\"CI\", \"RUST_BACKTRACE\", \"CARGO_TERM_COLOR\"]\n" > Cross.toml
         fi
-        # * test only library and/or binaries for arm-type targets
-        unset CARGO_TEST_OPTIONS ; case '${{ matrix.job.target }}' in aarch64-* | arm-*) CARGO_TEST_OPTIONS="--bins" ;; esac;
-        outputs CARGO_TEST_OPTIONS
         # * executable for `strip`?
         STRIP="strip"
         case ${{ matrix.job.target }} in
@@ -612,15 +609,15 @@ jobs:
       run: |
         ## Install/setup prerequisites
         case '${{ matrix.job.target }}' in
-          arm-unknown-linux-gnueabihf) 
+          arm-unknown-linux-gnueabihf)
             sudo apt-get -y update
             sudo apt-get -y install gcc-arm-linux-gnueabihf
           ;;
-          aarch64-unknown-linux-*) 
+          aarch64-unknown-linux-*)
             sudo apt-get -y update
             sudo apt-get -y install gcc-aarch64-linux-gnu
           ;;
-          *-redox*) 
+          *-redox*)
             sudo apt-get -y update
             sudo apt-get -y install fuse3 libfuse-dev
           ;;
@@ -707,7 +704,7 @@ jobs:
       run: |
         ## Test individual utilities
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} test --target=${{ matrix.job.target }} \
-        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+        ${{ matrix.job.cargo-options }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
         RUST_BACKTRACE: "1"
     - name: Archive executable artifacts
