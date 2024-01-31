@@ -37,7 +37,7 @@ pub struct Options {
     pub os: bool,
 }
 
-pub fn uu_uname(opts: &Options) -> UResult<()> {
+pub fn uu_uname(opts: &Options) -> UResult<String> {
     let mut output = String::new();
     let uname = PlatformInfo::new().map_err(|_e| USimpleError::new(1, "cannot get system name"))?;
     let none = !(opts.all
@@ -93,9 +93,7 @@ pub fn uu_uname(opts: &Options) -> UResult<()> {
         output.push_str("unknown");
         output.push(' ');
     }
-
-    println!("{}", output.trim_end());
-    Ok(())
+    Ok(output)
 }
 
 #[uucore::main]
@@ -113,7 +111,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         hardware_platform: matches.get_flag(HARDWARE_PLATFORM),
         os: matches.get_flag(OS),
     };
-    uu_uname(&options)
+    let output = uu_uname(&options)?;
+    println!("{}", output.trim_end());
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
