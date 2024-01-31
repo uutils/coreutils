@@ -405,7 +405,7 @@ fn print_unsigned_hex(
 
 impl Stater {
     fn handle_percent_case(
-        chars: &Vec<char>,
+        chars: &[char],
         i: &mut usize,
         bound: usize,
         format_str: &str,
@@ -474,7 +474,7 @@ impl Stater {
     }
 
     fn handle_escape_sequences(
-        chars: &Vec<char>,
+        chars: &[char],
         i: &mut usize,
         bound: usize,
         format_str: &str,
@@ -486,7 +486,6 @@ impl Stater {
                 show_warning!("backslash at end of format");
                 return Token::Char('\\');
             }
-            //let mut tokens : Vec<Token> = Vec::new();
             match chars[*i] {
                 'x' if *i + 1 < bound => {
                     if let Some((c, offset)) = format_str[*i + 1..].scan_char(16) {
@@ -517,7 +516,6 @@ impl Stater {
                     Token::Char(c)
                 }
             }
-            //tokens
         } else {
             Token::Char('\\')
         }
