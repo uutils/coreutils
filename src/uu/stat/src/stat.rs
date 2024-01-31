@@ -409,16 +409,16 @@ impl Stater {
         i: &mut usize,
         bound: usize,
         format_str: &str,
-    ) -> UResult<Vec<Token>> {
+    ) -> UResult<Token> {
         let old = *i;
 
         *i += 1;
         if *i >= bound {
-            return Ok(vec![Token::Char('%')]);
+            return Ok(Token::Char('%'));
         }
         if chars[*i] == '%' {
             *i += 1;
-            return Ok(vec![Token::Char('%')]);
+            return Ok(Token::Char('%'));
         }
 
         let mut flag = Flags::default();
@@ -465,12 +465,12 @@ impl Stater {
         }
 
         *i = j;
-        Ok(vec![Token::Directive {
+        Ok(Token::Directive {
             width,
             flag,
             precision,
             format: chars[*i],
-        }])
+        })
     }
 
     fn handle_escape_sequences(
@@ -479,47 +479,47 @@ impl Stater {
         bound: usize,
         format_str: &str,
         use_printf: bool,
-    ) -> Vec<Token> {
+    ) -> Token {
         if use_printf {
             *i += 1;
             if *i >= bound {
                 show_warning!("backslash at end of format");
-                return vec![Token::Char('\\')];
+                return Token::Char('\\');
             }
             //let mut tokens : Vec<Token> = Vec::new();
             match chars[*i] {
                 'x' if *i + 1 < bound => {
                     if let Some((c, offset)) = format_str[*i + 1..].scan_char(16) {
                         *i += offset;
-                        vec![Token::Char(c)]
+                        Token::Char(c)
                     } else {
                         show_warning!("unrecognized escape '\\x'");
-                        vec![Token::Char('x')]
+                        Token::Char('x')
                     }
                 }
                 '0'..='7' => {
                     let (c, offset) = format_str[*i..].scan_char(8).unwrap();
                     *i += offset - 1;
-                    vec![Token::Char(c)]
+                    Token::Char(c)
                 }
-                '"' => vec![Token::Char('"')],
-                '\\' => vec![Token::Char('\\')],
-                'a' => vec![Token::Char('\x07')],
-                'b' => vec![Token::Char('\x08')],
-                'e' => vec![Token::Char('\x1B')],
-                'f' => vec![Token::Char('\x0C')],
-                'n' => vec![Token::Char('\n')],
-                'r' => vec![Token::Char('\r')],
-                't' => vec![Token::Char('\t')],
-                'v' => vec![Token::Char('\x0B')],
+                '"' => Token::Char('"'),
+                '\\' => Token::Char('\\'),
+                'a' => Token::Char('\x07'),
+                'b' => Token::Char('\x08'),
+                'e' => Token::Char('\x1B'),
+                'f' => Token::Char('\x0C'),
+                'n' => Token::Char('\n'),
+                'r' => Token::Char('\r'),
+                't' => Token::Char('\t'),
+                'v' => Token::Char('\x0B'),
                 c => {
                     show_warning!("unrecognized escape '\\{}'", c);
-                    vec![Token::Char(c)]
+                    Token::Char(c)
                 }
             }
             //tokens
         } else {
-            vec![Token::Char('\\')]
+            Token::Char('\\')
         }
     }
 
@@ -530,10 +530,10 @@ impl Stater {
         let mut i = 0;
         while i < bound {
             match chars[i] {
-                '%' => tokens.append(&mut Self::handle_percent_case(
+                '%' => tokens.push(Self::handle_percent_case(
                     &chars, &mut i, bound, format_str,
                 )?),
-                '\\' => tokens.append(&mut Self::handle_escape_sequences(
+                '\\' => tokens.push(Self::handle_escape_sequences(
                     &chars, &mut i, bound, format_str, use_printf,
                 )),
                 c => tokens.push(Token::Char(c)),
