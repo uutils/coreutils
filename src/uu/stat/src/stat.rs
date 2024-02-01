@@ -530,9 +530,9 @@ impl Stater {
                     if use_printf {
                         tokens.push(Self::handle_escape_sequences(
                             &chars, &mut i, bound, format_str,
-                        ))
+                        ));
                     } else {
-                        tokens.push(Token::Char('\\'))
+                        tokens.push(Token::Char('\\'));
                     }
                 }
                 c => tokens.push(Token::Char(c)),
