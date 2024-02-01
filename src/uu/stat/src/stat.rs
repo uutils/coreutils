@@ -478,46 +478,41 @@ impl Stater {
         i: &mut usize,
         bound: usize,
         format_str: &str,
-        use_printf: bool,
     ) -> Token {
-        if use_printf {
-            *i += 1;
-            if *i >= bound {
-                show_warning!("backslash at end of format");
-                return Token::Char('\\');
-            }
-            match chars[*i] {
-                'x' if *i + 1 < bound => {
-                    if let Some((c, offset)) = format_str[*i + 1..].scan_char(16) {
-                        *i += offset;
-                        Token::Char(c)
-                    } else {
-                        show_warning!("unrecognized escape '\\x'");
-                        Token::Char('x')
-                    }
-                }
-                '0'..='7' => {
-                    let (c, offset) = format_str[*i..].scan_char(8).unwrap();
-                    *i += offset - 1;
+        *i += 1;
+        if *i >= bound {
+            show_warning!("backslash at end of format");
+            return Token::Char('\\');
+        }
+        match chars[*i] {
+            'x' if *i + 1 < bound => {
+                if let Some((c, offset)) = format_str[*i + 1..].scan_char(16) {
+                    *i += offset;
                     Token::Char(c)
-                }
-                '"' => Token::Char('"'),
-                '\\' => Token::Char('\\'),
-                'a' => Token::Char('\x07'),
-                'b' => Token::Char('\x08'),
-                'e' => Token::Char('\x1B'),
-                'f' => Token::Char('\x0C'),
-                'n' => Token::Char('\n'),
-                'r' => Token::Char('\r'),
-                't' => Token::Char('\t'),
-                'v' => Token::Char('\x0B'),
-                c => {
-                    show_warning!("unrecognized escape '\\{}'", c);
-                    Token::Char(c)
+                } else {
+                    show_warning!("unrecognized escape '\\x'");
+                    Token::Char('x')
                 }
             }
-        } else {
-            Token::Char('\\')
+            '0'..='7' => {
+                let (c, offset) = format_str[*i..].scan_char(8).unwrap();
+                *i += offset - 1;
+                Token::Char(c)
+            }
+            '"' => Token::Char('"'),
+            '\\' => Token::Char('\\'),
+            'a' => Token::Char('\x07'),
+            'b' => Token::Char('\x08'),
+            'e' => Token::Char('\x1B'),
+            'f' => Token::Char('\x0C'),
+            'n' => Token::Char('\n'),
+            'r' => Token::Char('\r'),
+            't' => Token::Char('\t'),
+            'v' => Token::Char('\x0B'),
+            c => {
+                show_warning!("unrecognized escape '\\{}'", c);
+                Token::Char(c)
+            }
         }
     }
 
@@ -531,9 +526,15 @@ impl Stater {
                 '%' => tokens.push(Self::handle_percent_case(
                     &chars, &mut i, bound, format_str,
                 )?),
-                '\\' => tokens.push(Self::handle_escape_sequences(
-                    &chars, &mut i, bound, format_str, use_printf,
-                )),
+                '\\' => {
+                    if use_printf {
+                        tokens.push(Self::handle_escape_sequences(
+                            &chars, &mut i, bound, format_str,
+                        ))
+                    } else {
+                        tokens.push(Token::Char('\\'))
+                    }
+                }
                 c => tokens.push(Token::Char(c)),
             }
             i += 1;
@@ -543,6 +544,7 @@ impl Stater {
         }
         Ok(tokens)
     }
+
     fn new(matches: &ArgMatches) -> UResult<Self> {
         let files = matches
             .get_many::<OsString>(options::FILES)
