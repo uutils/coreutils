@@ -8,6 +8,7 @@
 use std::{
     fs::File,
     io::{stdin, stdout, BufReader, IsTerminal, Read, Stdout, Write},
+    panic::set_hook,
     path::Path,
     time::Duration,
 };
@@ -87,6 +88,13 @@ impl Options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Disable raw mode before exiting if a panic occurs
+    set_hook(Box::new(|panic_info| {
+        terminal::disable_raw_mode().unwrap();
+        print!("\r");
+        println!("{panic_info}");
+    }));
+
     let matches = match uu_app().try_get_matches_from(args) {
         Ok(m) => m,
         Err(e) => return Err(e.into()),
