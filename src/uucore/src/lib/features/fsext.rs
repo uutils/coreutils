@@ -14,7 +14,7 @@ use time::UtcOffset;
 const LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 static MOUNT_OPT_BIND: &str = "bind";
 #[cfg(windows)]
 const MAX_PATH: usize = 266;
@@ -318,7 +318,7 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -337,14 +337,14 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:enable
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
     dev_name.find(':').is_some()
         || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
         || dev_name == "-hosts"
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn mount_dev_id(mount_dir: &str) -> String {
     use std::os::unix::fs::MetadataExt;
 
