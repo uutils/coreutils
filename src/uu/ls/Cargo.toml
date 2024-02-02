@@ -1,6 +1,6 @@
 [package]
 name = "uu_ls"
-version = "0.0.23"
+version = "0.0.24"
 authors = ["uutils developers"]
 license = "MIT"
 description = "ls ~ (uutils) display directory contents"
@@ -27,6 +27,7 @@ uucore = { workspace = true, features = [
   "colors",
   "entries",
   "fs",
+  "fsxattr",
   "quoting-style",
   "version-cmp",
 ] }

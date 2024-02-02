@@ -11,6 +11,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_uptime() {
     TestScenario::new(util_name!())
         .ucmd()
@@ -22,6 +23,7 @@ fn test_uptime() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_uptime_since() {
     let re = Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}").unwrap();
 

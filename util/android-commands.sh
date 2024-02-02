@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # spell-checker:ignore termux keyevent sdcard binutils unmatch adb's dumpsys logcat pkill nextest logfile
 
 # There are three shells: the host's, adb, and termux. Only adb lets us run
@@ -183,7 +183,7 @@ init() {
     termux="$3"
 
     # shellcheck disable=SC2015
-    wget "https://github.com/termux/termux-app/releases/download/${termux}/termux-app_${termux}+github-debug_${arch}.apk" &&
+    wget -nv "https://github.com/termux/termux-app/releases/download/${termux}/termux-app_${termux}+github-debug_${arch}.apk" &&
         snapshot "termux-app_${termux}+github-debug_${arch}.apk" &&
         hash_rustc &&
         exit_termux &&
@@ -202,7 +202,9 @@ snapshot() {
 
     echo "Prepare and install system packages"
     probe='/sdcard/pkg.probe'
-    command="'mkdir -vp ~/.cargo/bin; yes | pkg install rust binutils openssl tar -y; echo \$? > $probe'"
+    # as of https://github.com/termux/termux-tools/blob/5b30fbf3b0306c9f3dcd67b68755d990e83f1263/packages/termux-tools/pkg there is one
+    # broken mirror, which is not properly detected. thus skipping mirror detection altogether
+    command="'mkdir -vp ~/.cargo/bin; export TERMUX_PKG_NO_MIRROR_SELECT=y; yes | pkg install rust binutils openssl tar -y; echo \$? > $probe'"
     run_termux_command "$command" "$probe" || return
 
     echo "Installing cargo-nextest"

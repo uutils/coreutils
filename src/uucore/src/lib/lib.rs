@@ -43,8 +43,6 @@ pub use crate::features::encoding;
 pub use crate::features::format;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
-#[cfg(feature = "fsext")]
-pub use crate::features::fsext;
 #[cfg(feature = "lines")]
 pub use crate::features::lines;
 #[cfg(feature = "quoting-style")]
@@ -89,6 +87,12 @@ pub use crate::features::utmpx;
 #[cfg(all(windows, feature = "wide"))]
 pub use crate::features::wide;
 
+#[cfg(feature = "fsext")]
+pub use crate::features::fsext;
+
+#[cfg(all(unix, not(target_os = "macos"), feature = "fsxattr"))]
+pub use crate::features::fsxattr;
+
 //## core functions
 
 use std::ffi::OsString;
@@ -105,9 +109,15 @@ macro_rules! bin {
     ($util:ident) => {
         pub fn main() {
             use std::io::Write;
-            uucore::panic::mute_sigpipe_panic(); // suppress extraneous error output for SIGPIPE failures/panics
-            let code = $util::uumain(uucore::args_os()); // execute utility code
-            std::io::stdout().flush().expect("could not flush stdout"); // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
+            // suppress extraneous error output for SIGPIPE failures/panics
+            uucore::panic::mute_sigpipe_panic();
+            // execute utility code
+            let code = $util::uumain(uucore::args_os());
+            // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
+            if let Err(e) = std::io::stdout().flush() {
+                eprintln!("Error flushing stdout: {}", e);
+            }
+
             std::process::exit(code);
         }
     };

@@ -985,7 +985,7 @@ impl FieldSelector {
                 let mut range = match to {
                     Some(Resolution::StartOfChar(mut to)) => {
                         // We need to include the character at `to`.
-                        to += line[to..].chars().next().map_or(1, |c| c.len_utf8());
+                        to += line[to..].chars().next().map_or(1, char::len_utf8);
                         from..to
                     }
                     Some(Resolution::EndOfChar(to)) => from..to,

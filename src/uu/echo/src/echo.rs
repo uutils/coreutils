@@ -132,13 +132,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    // Note: echo is different from the other utils in that it should **not**
+    // have `infer_long_args(true)`, because, for example, `--ver` should be
+    // printed as `--ver` and not show the version text.
     Command::new(uucore::util_name())
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
         // Final argument must have multiple(true) or the usage string equivalent.
         .trailing_var_arg(true)
         .allow_hyphen_values(true)
-        .infer_long_args(true)
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)

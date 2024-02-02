@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
-#![allow(clippy::missing_safety_doc)]
-#![allow(clippy::extra_unused_lifetimes)]
 
 use quick_error::quick_error;
 use std::cmp::Ordering;
@@ -32,8 +30,8 @@ use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, is_symlink_loop, paths_refer_to_same_file,
-    FileInformation, MissingHandling, ResolveMode,
+    are_hardlinks_to_same_file, canonicalize, is_symlink_loop, path_ends_with_terminator,
+    paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -150,6 +148,7 @@ pub enum TargetType {
 }
 
 /// Copy action to perform
+#[derive(PartialEq)]
 pub enum CopyMode {
     Link,
     SymLink,
@@ -825,6 +824,7 @@ impl Attributes {
         ownership: Preserve::Yes { required: true },
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
+        xattr: Preserve::Yes { required: true },
         ..Self::NONE
     };
 
@@ -1171,6 +1171,9 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     //
     // key is the source file's information and the value is the destination filepath.
     let mut copied_files: HashMap<FileInformation, PathBuf> = HashMap::with_capacity(sources.len());
+    // remember the copied destinations for further usage.
+    // we can't use copied_files as it is because the key is the source file's information.
+    let mut copied_destinations: HashSet<PathBuf> = HashSet::with_capacity(sources.len());
 
     let progress_bar = if options.progress_bar {
         let pb = ProgressBar::new(disk_usage(sources, options.recursive)?)
@@ -1190,18 +1193,39 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     for source in sources {
         if seen_sources.contains(source) {
             // FIXME: compare sources by the actual file they point to, not their path. (e.g. dir/file == dir/../dir/file in most cases)
-            show_warning!("source {} specified more than once", source.quote());
-        } else if let Err(error) = copy_source(
-            &progress_bar,
-            source,
-            target,
-            target_type,
-            options,
-            &mut symlinked_files,
-            &mut copied_files,
-        ) {
-            show_error_if_needed(&error);
-            non_fatal_errors = true;
+            show_warning!("source file {} specified more than once", source.quote());
+        } else {
+            let dest = construct_dest_path(source, target, target_type, options)
+                .unwrap_or_else(|_| target.to_path_buf());
+
+            if fs::metadata(&dest).is_ok() && !fs::symlink_metadata(&dest)?.file_type().is_symlink()
+            {
+                // There is already a file and it isn't a symlink (managed in a different place)
+                if copied_destinations.contains(&dest)
+                    && options.backup != BackupMode::NumberedBackup
+                {
+                    // If the target file was already created in this cp call, do not overwrite
+                    return Err(Error::Error(format!(
+                        "will not overwrite just-created '{}' with '{}'",
+                        dest.display(),
+                        source.display()
+                    )));
+                }
+            }
+
+            if let Err(error) = copy_source(
+                &progress_bar,
+                source,
+                target,
+                target_type,
+                options,
+                &mut symlinked_files,
+                &mut copied_files,
+            ) {
+                show_error_if_needed(&error);
+                non_fatal_errors = true;
+            }
+            copied_destinations.insert(dest.clone());
         }
         seen_sources.insert(source);
     }
@@ -1416,7 +1440,7 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(&attributes.xattr, || -> CopyResult<()> {
-        #[cfg(unix)]
+        #[cfg(all(unix, not(target_os = "android")))]
         {
             let xattrs = xattr::list(source)?;
             for attr in xattrs {
@@ -1425,7 +1449,7 @@ pub(crate) fn copy_attributes(
                 }
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(all(unix, not(target_os = "android"))))]
         {
             // The documentation for GNU cp states:
             //
@@ -1472,7 +1496,11 @@ fn context_for(src: &Path, dest: &Path) -> String {
 /// Implements a simple backup copy for the destination file.
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
 fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
-    fs::copy(dest, backup_path)?;
+    if dest.is_symlink() {
+        fs::rename(dest, backup_path)?;
+    } else {
+        fs::copy(dest, backup_path)?;
+    }
     Ok(backup_path.into())
 }
 
@@ -1481,7 +1509,7 @@ fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
 ///
 /// Copying to the same file is only allowed if both `--backup` and
 /// `--force` are specified and the file is a regular file.
-fn is_forbidden_copy_to_same_file(
+fn is_forbidden_to_copy_to_same_file(
     source: &Path,
     dest: &Path,
     options: &Options,
@@ -1493,6 +1521,7 @@ fn is_forbidden_copy_to_same_file(
         options.dereference(source_in_command_line) || !source.is_symlink();
     paths_refer_to_same_file(source, dest, dereference_to_compare)
         && !(options.force() && options.backup != BackupMode::NoBackup)
+        && !(dest.is_symlink() && options.backup != BackupMode::NoBackup)
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
@@ -1504,7 +1533,7 @@ fn handle_existing_dest(
 ) -> CopyResult<()> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
-    if is_forbidden_copy_to_same_file(source, dest, options, source_in_command_line) {
+    if is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line) {
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
@@ -1593,7 +1622,7 @@ fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a
     // Get the matching number of elements from the ancestors of the
     // destination path (for example, get "d/a" and "d/a/b").
     let k = source_ancestors.len();
-    let dest_ancestors = &dest_ancestors[1..1 + k];
+    let dest_ancestors = &dest_ancestors[1..=k];
 
     // Now we have two slices of the same length, so we zip them.
     let mut result = vec![];
@@ -1682,6 +1711,14 @@ fn copy_file(
     }
 
     if file_or_link_exists(dest) {
+        if are_hardlinks_to_same_file(source, dest)
+            && !options.force()
+            && options.backup == BackupMode::NoBackup
+            && source != dest
+            || (source == dest && options.copy_mode == CopyMode::Link)
+        {
+            return Ok(());
+        }
         handle_existing_dest(source, dest, options, source_in_command_line)?;
     }
 
@@ -1957,6 +1994,10 @@ fn copy_helper(
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
         fs::create_dir_all(parent)?;
+    }
+
+    if path_ends_with_terminator(dest) && !dest.is_dir() {
+        return Err(Error::NotADirectory(dest.to_path_buf()));
     }
 
     if source.as_os_str() == "/dev/null" {

@@ -30,7 +30,7 @@ jobs:
       contents: read  # for actions/checkout to fetch code
       pull-requests: read  # for dawidd6/action-download-artifact to query commit hash
     name: Run GNU tests
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
     - name: Initialize workflow variables
       id: vars
@@ -204,6 +204,7 @@ jobs:
         ## Compare test failures VS reference
         have_new_failures=""
         REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite.log'
+        ROOT_REF_LOG_FILE='${{ steps.vars.outputs.path_reference }}/test-logs/test-suite-root.log'
         REF_SUMMARY_FILE='${{ steps.vars.outputs.path_reference }}/test-summary/gnu-result.json'
         REPO_DEFAULT_BRANCH='${{ steps.vars.outputs.repo_default_branch }}'
         path_UUTILS='${{ steps.vars.outputs.path_UUTILS }}'
@@ -223,68 +224,92 @@ jobs:
         rm -f ${COMMENT_LOG}
         touch ${COMMENT_LOG}
 
-        if test -f "${REF_LOG_FILE}"; then
-          echo "Reference SHA1/ID: $(sha1sum -- "${REF_SUMMARY_FILE}")"
-          REF_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
-          NEW_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" '${{ steps.vars.outputs.path_GNU_tests }}/test-suite.log' | sort)
-          REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${REF_LOG_FILE}" | sort)
-          NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" '${{ steps.vars.outputs.path_GNU_tests }}/test-suite.log' | sort)
-          for LINE in ${REF_FAILING}
-          do
-            if ! grep -Fxq ${LINE}<<<"${NEW_FAILING}"; then
-              if ! grep ${LINE} ${IGNORE_INTERMITTENT}
+        compare_tests() {
+          local new_log_file=$1
+          local ref_log_file=$2
+          local test_type=$3  # "standard" or "root"
+
+          if test -f "${ref_log_file}"; then
+            echo "Reference ${test_type} test log SHA1/ID: $(sha1sum -- "${ref_log_file}") - ${test_type}"
+            REF_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
+            CURRENT_RUN_ERROR=$(sed -n "s/^ERROR: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
+            REF_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${ref_log_file}"| sort)
+            CURRENT_RUN_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" "${new_log_file}" | sort)
+            echo "Detailled information:"
+            echo "REF_ERROR = ${REF_ERROR}"
+            echo "CURRENT_RUN_ERROR = ${CURRENT_RUN_ERROR}"
+            echo "REF_FAILING = ${REF_FAILING}"
+            echo "CURRENT_RUN_FAILING = ${CURRENT_RUN_FAILING}"
+
+            # Compare failing and error tests
+            for LINE in ${CURRENT_RUN_FAILING}
+            do
+              if ! grep -Fxq ${LINE}<<<"${REF_FAILING}"
               then
-                MSG="Congrats! The gnu test ${LINE} is no longer failing!"
-                echo "::warning ::$MSG"
-                echo $MSG >> ${COMMENT_LOG}
-              else
-                MSG="Skipping an intermittent issue ${LINE}"
-                echo "::warning ::$MSG"
-                echo $MSG >> ${COMMENT_LOG}
-                echo ""
+                if ! grep ${LINE} ${IGNORE_INTERMITTENT}
+                then
+                  MSG="GNU test failed: ${LINE}. ${LINE} is passing on '${REPO_DEFAULT_BRANCH}'. Maybe you have to rebase?"
+                  echo "::error ::$MSG"
+                  echo $MSG >> ${COMMENT_LOG}
+                  have_new_failures="true"
+                else
+                  MSG="Skip an intermittent issue ${LINE} (fails in this run but passes in the 'main' branch)"
+                  echo "::warning ::$MSG"
+                  echo $MSG >> ${COMMENT_LOG}
+                  echo ""
+                fi
               fi
-            fi
-          done
-          for LINE in ${NEW_FAILING}
-          do
-            if ! grep -Fxq ${LINE}<<<"${REF_FAILING}"
-            then
-              if ! grep ${LINE} ${IGNORE_INTERMITTENT}
+            done
+
+            for LINE in ${REF_FAILING}
+            do
+              if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_FAILING}"
               then
-                MSG="GNU test failed: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
+                if ! grep ${LINE} ${IGNORE_INTERMITTENT}
+                then
+                  MSG="Congrats! The gnu test ${LINE} is no longer failing!"
+                  echo "::warning ::$MSG"
+                  echo $MSG >> ${COMMENT_LOG}
+                else
+                  MSG="Skipping an intermittent issue ${LINE} (passes in this run but fails in the 'main' branch)"
+                  echo "::warning ::$MSG"
+                  echo $MSG >> ${COMMENT_LOG}
+                  echo ""
+                fi
+              fi
+            done
+
+            for LINE in ${CURRENT_RUN_ERROR}
+            do
+              if ! grep -Fxq ${LINE}<<<"${REF_ERROR}"
+              then
+                MSG="GNU test error: ${LINE}. ${LINE} is passing on '${REPO_DEFAULT_BRANCH}'. Maybe you have to rebase?"
                 echo "::error ::$MSG"
                 echo $MSG >> ${COMMENT_LOG}
                 have_new_failures="true"
-              else
-                MSG="Skip an intermittent issue ${LINE}"
+              fi
+            done
+
+            for LINE in ${REF_ERROR}
+            do
+              if ! grep -Fxq ${LINE}<<<"${CURRENT_RUN_ERROR}"
+              then
+                MSG="Congrats! The gnu test ${LINE} is no longer ERROR!"
                 echo "::warning ::$MSG"
                 echo $MSG >> ${COMMENT_LOG}
-                echo ""
               fi
-            fi
-          done
-          for LINE in ${REF_ERROR}
-          do
-            if ! grep -Fxq ${LINE}<<<"${NEW_ERROR}"; then
-              MSG="Congrats! The gnu test ${LINE} is no longer ERROR!"
-              echo "::warning ::$MSG"
-              echo $MSG >> ${COMMENT_LOG}
-            fi
-          done
-          for LINE in ${NEW_ERROR}
-          do
-            if ! grep -Fxq ${LINE}<<<"${REF_ERROR}"
-            then
-              MSG="GNU test error: ${LINE}. ${LINE} is passing on '${{ steps.vars.outputs.repo_default_branch }}'. Maybe you have to rebase?"
-              echo "::error ::$MSG"
-              echo $MSG >> ${COMMENT_LOG}
-              have_new_failures="true"
-            fi
-          done
+            done
+          else
+            echo "::warning ::Skipping ${test_type} test failure comparison; no prior reference test logs are available."
+          fi
+        }
 
-        else
-          echo "::warning ::Skipping test failure comparison; no prior reference test logs are available."
-        fi
+        # Compare standard tests
+        compare_tests '${{ steps.vars.outputs.path_GNU_tests }}/test-suite.log' "${REF_LOG_FILE}" "standard"
+
+        # Compare root tests
+        compare_tests '${{ steps.vars.outputs.path_GNU_tests }}/test-suite-root.log' "${ROOT_REF_LOG_FILE}" "root"
+
         if test -n "${have_new_failures}" ; then exit -1 ; fi
     - name: Upload comparison log (for GnuComment workflow)
       if: success() || failure() # run regardless of prior step success/failure
@@ -308,7 +333,7 @@ jobs:
 
   gnu_coverage:
     name: Run GNU tests with coverage
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout code uutil
       uses: actions/checkout@v4
@@ -372,7 +397,7 @@ jobs:
         grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ${{ steps.coverage.outputs.report }}
         flags: gnutests

@@ -26,11 +26,11 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
 use uucore::display::{print_verbatim, Quotable};
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_warning};
+use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
@@ -65,6 +65,7 @@ mod options {
     pub const INODES: &str = "inodes";
     pub const EXCLUDE: &str = "exclude";
     pub const EXCLUDE_FROM: &str = "exclude-from";
+    pub const FILES0_FROM: &str = "files0-from";
     pub const VERBOSE: &str = "verbose";
     pub const FILE: &str = "FILE";
 }
@@ -587,6 +588,57 @@ pub fn div_ceil(a: u64, b: u64) -> u64 {
     (a + b - 1) / b
 }
 
+// Read file paths from the specified file, separated by null characters
+fn read_files_from(file_name: &str) -> Result<Vec<PathBuf>, std::io::Error> {
+    let reader: Box<dyn BufRead> = if file_name == "-" {
+        // Read from standard input
+        Box::new(BufReader::new(std::io::stdin()))
+    } else {
+        // First, check if the file_name is a directory
+        let path = PathBuf::from(file_name);
+        if path.is_dir() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("{}: read error: Is a directory", file_name),
+            ));
+        }
+
+        // Attempt to open the file and handle the error if it does not exist
+        match File::open(file_name) {
+            Ok(file) => Box::new(BufReader::new(file)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "cannot open '{}' for reading: No such file or directory",
+                        file_name
+                    ),
+                ))
+            }
+            Err(e) => return Err(e),
+        }
+    };
+
+    let mut paths = Vec::new();
+
+    for (i, line) in reader.split(b'\0').enumerate() {
+        let path = line?;
+
+        if path.is_empty() {
+            let line_number = i + 1;
+            show_error!("{file_name}:{line_number}: invalid zero-length file name");
+            set_exit_code(1);
+        } else {
+            let p = PathBuf::from(String::from_utf8_lossy(&path).to_string());
+            if !paths.contains(&p) {
+                paths.push(p);
+            }
+        }
+    }
+
+    Ok(paths)
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -601,13 +653,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         summarize,
     )?;
 
-    let files = match matches.get_one::<String>(options::FILE) {
-        Some(_) => matches
-            .get_many::<String>(options::FILE)
-            .unwrap()
-            .map(PathBuf::from)
-            .collect(),
-        None => vec![PathBuf::from(".")],
+    let files = if let Some(file_from) = matches.get_one::<String>(options::FILES0_FROM) {
+        if file_from == "-" && matches.get_one::<String>(options::FILE).is_some() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "extra operand {}\nfile operands cannot be combined with --files0-from",
+                    matches.get_one::<String>(options::FILE).unwrap().quote()
+                ),
+            )
+            .into());
+        }
+
+        read_files_from(file_from)?
+    } else {
+        match matches.get_one::<String>(options::FILE) {
+            Some(_) => matches
+                .get_many::<String>(options::FILE)
+                .unwrap()
+                .map(PathBuf::from)
+                .collect(),
+            None => vec![PathBuf::from(".")],
+        }
     };
 
     let time = matches.contains_id(options::TIME).then(|| {
@@ -718,8 +785,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .send(Err(USimpleError::new(
                     1,
                     format!(
-                        "{}: No such file or directory",
-                        path.to_string_lossy().maybe_quote()
+                        "cannot access {}: No such file or directory",
+                        path.to_string_lossy().quote()
                     ),
                 )))
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
@@ -952,6 +1019,14 @@ pub fn uu_app() -> Command {
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .help("exclude files that match any pattern in FILE")
+                .action(ArgAction::Append)
+        )
+        .arg(
+            Arg::new(options::FILES0_FROM)
+                .long("files0-from")
+                .value_name("FILE")
+                .value_hint(clap::ValueHint::FilePath)
+                .help("summarize device usage of the NUL-terminated file names specified in file F; if F is -, then read names from standard input")
                 .action(ArgAction::Append)
         )
         .arg(

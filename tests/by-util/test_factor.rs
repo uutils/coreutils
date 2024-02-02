@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-#![allow(clippy::unreadable_literal)]
 
 // spell-checker:ignore (methods) hexdigest
 
@@ -1258,3 +1257,8 @@ const PRIMES50: &[u64] = &[
     1125899906841623,
     1125899906841613,
 ];
+
+#[test]
+fn fails_on_directory() {
+    new_ucmd!().pipe_in(".").fails();
+}

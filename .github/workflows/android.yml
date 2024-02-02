@@ -27,13 +27,13 @@ jobs:
       matrix:
         api-level: [28]
         target: [default]
-        arch: [x86] # , arm64-v8a
+        arch: [x86, x86_64] # , arm64-v8a
     env:
       TERMUX: v0.118.0
     steps:
     - uses: actions/checkout@v4
     - name: Restore AVD cache
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       id: avd-cache
       with:
         path: |
@@ -42,6 +42,12 @@ jobs:
           ~/.android/adb*
           ~/__rustc_hash__
         key: avd-${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}+nextest+rustc-hash
+    - name: Delete AVD Lockfile when run from cache
+      if: steps.avd-cache.outputs.cache-hit == 'true'
+      run: |
+        rm -f \
+          ~/.android/avd/*.avd/*.lock \
+          ~/.android/avd/*/*.lock              
     - name: Create and cache emulator image
       if: steps.avd-cache.outputs.cache-hit != 'true'
       uses: reactivecircus/android-emulator-runner@v2
@@ -52,12 +58,12 @@ jobs:
         ram-size: 2048M
         disk-size: 7GB
         force-avd-creation: true
-        emulator-options: -no-snapshot-load -noaudio -no-boot-anim -camera-back none
+        emulator-options: -no-window -no-snapshot-load -noaudio -no-boot-anim -camera-back none
         script: |
           util/android-commands.sh init "${{ matrix.arch }}" "${{ matrix.api-level }}" "${{ env.TERMUX }}"
     - name: Save AVD cache
       if: steps.avd-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: |
           ~/.android/avd/*
@@ -73,7 +79,7 @@ jobs:
         trim: true
     - name: Restore rust cache
       id: rust-cache
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: ~/__rust_cache__
         # The version vX at the end of the key is just a development version to avoid conflicts in
@@ -88,7 +94,7 @@ jobs:
         ram-size: 2048M
         disk-size: 7GB
         force-avd-creation: false
-        emulator-options: -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -snapshot ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
+        emulator-options: -no-window -no-snapshot-save -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -snapshot ${{ matrix.api-level }}-${{ matrix.arch }}+termux-${{ env.TERMUX }}
         # This is not a usual script. Every line is executed in a separate shell with `sh -c`. If
         # one of the lines returns with error the whole script is failed (like running a script with
         # set -e) and in consequences the other lines (shells) are not executed.
@@ -99,7 +105,7 @@ jobs:
           if [[ "${{ steps.rust-cache.outputs.cache-hit }}" != 'true' ]]; then util/android-commands.sh sync_image; fi; exit 0
     - name: Save rust cache
       if: steps.rust-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: ~/__rust_cache__
         key: ${{ matrix.arch }}_${{ matrix.target}}_${{ steps.read_rustc_hash.outputs.content }}_${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}_v3

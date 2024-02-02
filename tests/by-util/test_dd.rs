@@ -1537,6 +1537,16 @@ fn test_nocache_stdin_error() {
         .stderr_only(format!("dd: failed to discard cache for: 'standard input': {detail}\n0+0 records in\n0+0 records out\n"));
 }
 
+/// Test that dd fails when no number in count.
+#[test]
+fn test_empty_count_number() {
+    new_ucmd!()
+        .args(&["count=B"])
+        .fails()
+        .code_is(1)
+        .stderr_only("dd: invalid number: ‘B’\n");
+}
+
 /// Test for discarding system file cache.
 #[test]
 #[cfg(target_os = "linux")]
@@ -1565,7 +1575,7 @@ fn test_skip_past_dev() {
         result.stderr_contains("0+0 records out");
         result.code_is(1);
     } else {
-        print!("TEST SKIPPED");
+        print!("Test skipped; requires root user");
     }
 }
 
@@ -1586,7 +1596,7 @@ fn test_seek_past_dev() {
         result.stderr_contains("0+0 records out");
         result.code_is(1);
     } else {
-        print!("TEST SKIPPED");
+        print!("Test skipped; requires root user");
     }
 }
 

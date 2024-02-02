@@ -1456,6 +1456,20 @@ fn test_mv_directory_into_subdirectory_of_itself_fails() {
 }
 
 #[test]
+fn test_mv_dir_into_dir_with_source_name_a_prefix_of_target_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "test";
+    let target = "test2";
+
+    at.mkdir(source);
+    at.mkdir(target);
+
+    ucmd.arg(source).arg(target).succeeds().no_output();
+
+    assert!(at.dir_exists(&format!("{target}/{source}")));
+}
+
+#[test]
 fn test_mv_file_into_dir_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1470,6 +1484,65 @@ fn test_mv_file_into_dir_where_both_are_files() {
 }
 
 #[test]
+fn test_mv_seen_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+
+    let result = ts.ucmd().arg("a/f").arg("b/f").arg("c").fails();
+
+    #[cfg(not(unix))]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    #[cfg(unix)]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+
+    // a/f has been moved into c/f
+    assert!(at.plus("c").join("f").exists());
+    // b/f still exists
+    assert!(at.plus("b").join("f").exists());
+    // a/f no longer exists
+    assert!(!at.plus("a").join("f").exists());
+}
+
+#[test]
+fn test_mv_seen_multiple_files_to_directory() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("a");
+    at.mkdir("b");
+    at.mkdir("c");
+    at.write("a/f", "a");
+    at.write("b/f", "b");
+    at.write("b/g", "g");
+
+    let result = ts.ucmd().arg("a/f").arg("b/f").arg("b/g").arg("c").fails();
+    #[cfg(not(unix))]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c\\f' with 'b/f'"));
+    #[cfg(unix)]
+    assert!(result
+        .stderr_str()
+        .contains("will not overwrite just-created 'c/f' with 'b/f'"));
+
+    assert!(!at.plus("a").join("f").exists());
+    assert!(at.plus("b").join("f").exists());
+    assert!(!at.plus("b").join("g").exists());
+    assert!(at.plus("c").join("f").exists());
+    assert!(at.plus("c").join("g").exists());
+}
+
+#[test]
 fn test_mv_dir_into_file_where_both_are_files() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1481,6 +1554,60 @@ fn test_mv_dir_into_file_where_both_are_files() {
         .arg("b")
         .fails()
         .stderr_contains("mv: cannot stat 'a/': Not a directory");
+}
+
+#[test]
+fn test_mv_dir_into_path_slash() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a");
+    scene.ucmd().arg("a").arg("e/").succeeds();
+    assert!(at.dir_exists("e"));
+    at.mkdir("b");
+    at.mkdir("f");
+    scene.ucmd().arg("b").arg("f/").succeeds();
+    assert!(at.dir_exists("f/b"));
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl() {
+    use std::process::Command;
+
+    use crate::common::util::compare_xattrs;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let path1 = "a";
+    let path2 = "b";
+    let file = "a/file";
+    let file_target = "b/file";
+    at.mkdir(path1);
+    at.mkdir(path2);
+    at.touch(file);
+
+    let path = at.plus_as_string(file);
+    // calling the command directly. xattr requires some dev packages to be installed
+    // and it adds a complex dependency just for a test
+    match Command::new("setfacl")
+        .args(["-m", "group::rwx", &path1])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {}", e);
+            return;
+        }
+    }
+
+    scene.ucmd().arg(&path).arg(path2).succeeds();
+
+    assert!(compare_xattrs(&file, &file_target));
 }
 
 // Todo:
