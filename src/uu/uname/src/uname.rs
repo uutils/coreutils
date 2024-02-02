@@ -7,6 +7,8 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use platform_info::*;
+use std::borrow::Cow;
+use std::fmt::{self, Display, Formatter};
 use uucore::{
     error::{UResult, USimpleError},
     format_usage, help_about, help_usage,
@@ -25,6 +27,91 @@ static PROCESSOR: &str = "processor";
 static HARDWARE_PLATFORM: &str = "hardware-platform";
 static OS: &str = "operating-system";
 
+// #[derive(Debug, Clone)]
+pub struct UnameOutput<'a> {
+    kernel_name: String,
+    nodename: String,
+    kernel_release: String,
+    kernel_version: String,
+    machine: String,
+    os: String,
+    processor: String,
+    hardware_platform: String,
+    opts: &'a Options,
+}
+fn format_this(out: &UnameOutput) -> String {
+    let mut output = String::new();
+    let none = !(out.opts.all
+        || out.opts.kernel_name
+        || out.opts.nodename
+        || out.opts.kernel_release
+        || out.opts.kernel_version
+        || out.opts.machine
+        || out.opts.os
+        || out.opts.processor
+        || out.opts.hardware_platform);
+    if out.opts.kernel_name || out.opts.all || none {
+        output.push_str(&out.kernel_name);
+        output.push(' ');
+    }
+
+    if out.opts.nodename || out.opts.all {
+        output.push_str(&out.nodename);
+        output.push(' ');
+    }
+
+    if out.opts.kernel_release || out.opts.all {
+        output.push_str(&out.kernel_release);
+        output.push(' ');
+    }
+
+    if out.opts.kernel_version || out.opts.all {
+        output.push_str(&out.kernel_version);
+        output.push(' ');
+    }
+
+    if out.opts.machine || out.opts.all {
+        output.push_str(&out.machine);
+        output.push(' ');
+    }
+
+    if out.opts.os || out.opts.all {
+        output.push_str(&out.os);
+        output.push(' ');
+    }
+
+    // This option is unsupported on modern Linux systems
+    // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
+
+    if out.opts.processor {
+        output.push_str("unknown");
+        output.push(' ');
+    }
+
+    // This option is unsupported on modern Linux systems
+    // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
+    if out.opts.hardware_platform {
+        output.push_str("unknown");
+        output.push(' ');
+    }
+    output
+}
+impl<'a> Display for UnameOutput<'a> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            format_this(self) // self.kernel_name,
+                              // self.nodename,
+                              // self.kernel_release,
+                              // self.kernel_version,
+                              // self.machine,
+                              // self.os,
+                              // self.processor,
+                              // self.hardware_platform
+        )
+    }
+}
 pub struct Options {
     pub all: bool,
     pub kernel_name: bool,
@@ -37,7 +124,7 @@ pub struct Options {
     pub os: bool,
 }
 
-pub fn uu_uname(opts: &Options) -> UResult<String> {
+pub fn uu_uname(opts: &Options) -> UResult<UnameOutput> {
     let mut output = String::new();
     let uname = PlatformInfo::new().map_err(|_e| USimpleError::new(1, "cannot get system name"))?;
     let none = !(opts.all
@@ -51,7 +138,8 @@ pub fn uu_uname(opts: &Options) -> UResult<String> {
         || opts.hardware_platform);
 
     if opts.kernel_name || opts.all || none {
-        output.push_str(&uname.sysname().to_string_lossy());
+        let kernel_name = &uname.sysname().to_string_lossy();
+        output.push_str(kernel_name);
         output.push(' ');
     }
 
@@ -93,7 +181,19 @@ pub fn uu_uname(opts: &Options) -> UResult<String> {
         output.push_str("unknown");
         output.push(' ');
     }
-    Ok(output)
+    let un = UnameOutput {
+        kernel_name: uname.sysname().to_string_lossy().to_string(),
+        nodename: uname.nodename().to_string_lossy().to_string(),
+        kernel_release: uname.release().to_string_lossy().to_string(),
+        kernel_version: uname.version().to_string_lossy().to_string(),
+        machine: uname.machine().to_string_lossy().to_string(),
+        os: uname.osname().to_string_lossy().to_string(),
+        processor: "unknown".to_string(),
+        hardware_platform: "unknown".to_string(),
+        opts,
+    };
+    // Ok(output)
+    Ok(un)
 }
 
 #[uucore::main]
@@ -112,7 +212,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         os: matches.get_flag(OS),
     };
     let output = uu_uname(&options)?;
-    println!("{}", output.trim_end());
+    // println!("{}", output.trim_end());
+    println!("{}", output);
     Ok(())
 }
 
