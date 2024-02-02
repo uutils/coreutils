@@ -546,10 +546,16 @@ impl Stater {
     }
 
     fn new(matches: &ArgMatches) -> UResult<Self> {
-        let files = matches
+        let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
             .map(|v| v.map(OsString::from).collect())
             .unwrap_or_default();
+        if files.is_empty() {
+            return Err(Box::new(USimpleError {
+                code: 1,
+                message: "missing operand\nTry 'stat --help' for more information.".to_string(),
+            }));
+        }
         let format_str = if matches.contains_id(options::PRINTF) {
             matches
                 .get_one::<String>(options::PRINTF)
