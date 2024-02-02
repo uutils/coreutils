@@ -2935,7 +2935,7 @@ fn display_group(metadata: &Metadata, config: &Config) -> String {
 }
 
 #[cfg(target_os = "redox")]
-fn display_group(metadata: &Metadata, config: &Config) -> String {
+fn display_group(metadata: &Metadata, _config: &Config) -> String {
     metadata.gid().to_string()
 }
 
