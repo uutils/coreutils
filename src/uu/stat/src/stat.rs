@@ -553,7 +553,7 @@ impl Stater {
         if files.is_empty() {
             return Err(Box::new(USimpleError {
                 code: 1,
-                message: format!("missing operand\nTry 'stat --help' for more information."),
+                message: format!("missing operand\nTry 'stat --help' for more information.").to_string(),
             }));
         }
         let format_str = if matches.contains_id(options::PRINTF) {
