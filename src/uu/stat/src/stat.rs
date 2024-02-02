@@ -7,14 +7,13 @@ use clap::builder::ValueParser;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::fs::display_permissions;
-use uucore::fsext::{
-    pretty_filetype, pretty_fstype, pretty_time, read_fs_list, statfs, BirthTime, FsMeta,
-};
+use uucore::fsext::{pretty_filetype, pretty_fstype, read_fs_list, statfs, BirthTime, FsMeta};
 use uucore::libc::mode_t;
 use uucore::{
     entries, format_usage, help_about, help_section, help_usage, show_error, show_warning,
 };
 
+use chrono::{DateTime, Local};
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
 use std::convert::AsRef;
@@ -809,10 +808,13 @@ impl Stater {
                                     }
 
                                     // time of file birth, human-readable; - if unknown
-                                    'w' => OutputType::Str(meta.pretty_birth()),
+                                    'w' => {
+                                        let (sec, nsec) = meta.birth();
+                                        OutputType::Str(pretty_time(sec as i64, nsec as i64))
+                                    }
 
                                     // time of file birth, seconds since Epoch; 0 if unknown
-                                    'W' => OutputType::Unsigned(meta.birth()),
+                                    'W' => OutputType::Unsigned(meta.birth().0),
 
                                     // time of last access, human-readable
                                     'x' => OutputType::Str(pretty_time(
@@ -1061,4 +1063,14 @@ mod tests {
         ];
         assert_eq!(&expected, &Stater::generate_tokens(s, true).unwrap());
     }
+}
+
+const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f %z";
+
+fn pretty_time(sec: i64, nsec: i64) -> String {
+    // Return the date in UTC
+    let tm = chrono::DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
+    let tm: DateTime<Local> = tm.into();
+
+    tm.format(&PRETTY_DATETIME_FORMAT).to_string()
 }
