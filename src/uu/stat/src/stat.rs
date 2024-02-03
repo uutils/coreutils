@@ -404,7 +404,118 @@ fn print_unsigned_hex(
 }
 
 impl Stater {
-    #[allow(clippy::cognitive_complexity)]
+    fn handle_percent_case(
+        chars: &[char],
+        i: &mut usize,
+        bound: usize,
+        format_str: &str,
+    ) -> UResult<Token> {
+        let old = *i;
+
+        *i += 1;
+        if *i >= bound {
+            return Ok(Token::Char('%'));
+        }
+        if chars[*i] == '%' {
+            *i += 1;
+            return Ok(Token::Char('%'));
+        }
+
+        let mut flag = Flags::default();
+
+        while *i < bound {
+            match chars[*i] {
+                '#' => flag.alter = true,
+                '0' => flag.zero = true,
+                '-' => flag.left = true,
+                ' ' => flag.space = true,
+                '+' => flag.sign = true,
+                '\'' => flag.group = true,
+                'I' => unimplemented!(),
+                _ => break,
+            }
+            *i += 1;
+        }
+        check_bound(format_str, bound, old, *i)?;
+
+        let mut width = 0;
+        let mut precision = None;
+        let mut j = *i;
+
+        if let Some((field_width, offset)) = format_str[j..].scan_num::<usize>() {
+            width = field_width;
+            j += offset;
+        }
+        check_bound(format_str, bound, old, j)?;
+
+        if chars[j] == '.' {
+            j += 1;
+            check_bound(format_str, bound, old, j)?;
+
+            match format_str[j..].scan_num::<i32>() {
+                Some((value, offset)) => {
+                    if value >= 0 {
+                        precision = Some(value as usize);
+                    }
+                    j += offset;
+                }
+                None => precision = Some(0),
+            }
+            check_bound(format_str, bound, old, j)?;
+        }
+
+        *i = j;
+        Ok(Token::Directive {
+            width,
+            flag,
+            precision,
+            format: chars[*i],
+        })
+    }
+
+    fn handle_escape_sequences(
+        chars: &[char],
+        i: &mut usize,
+        bound: usize,
+        format_str: &str,
+    ) -> Token {
+        *i += 1;
+        if *i >= bound {
+            show_warning!("backslash at end of format");
+            return Token::Char('\\');
+        }
+        match chars[*i] {
+            'x' if *i + 1 < bound => {
+                if let Some((c, offset)) = format_str[*i + 1..].scan_char(16) {
+                    *i += offset;
+                    Token::Char(c)
+                } else {
+                    show_warning!("unrecognized escape '\\x'");
+                    Token::Char('x')
+                }
+            }
+            '0'..='7' => {
+                let (c, offset) = format_str[*i..].scan_char(8).unwrap();
+                *i += offset - 1;
+                Token::Char(c)
+            }
+            '"' => Token::Char('"'),
+            '\\' => Token::Char('\\'),
+            'a' => Token::Char('\x07'),
+            'b' => Token::Char('\x08'),
+            'e' => Token::Char('\x1B'),
+            'f' => Token::Char('\x0C'),
+            'n' => Token::Char('\n'),
+            'r' => Token::Char('\r'),
+            't' => Token::Char('\t'),
+            'v' => Token::Char('\x0B'),
+            c => {
+                show_warning!("unrecognized escape '\\{}'", c);
+                Token::Char(c)
+            }
+        }
+    }
+
     fn generate_tokens(format_str: &str, use_printf: bool) -> UResult<Vec<Token>> {
         let mut tokens = Vec::new();
         let bound = format_str.len();
@@ -412,114 +523,18 @@ impl Stater {
         let mut i = 0;
         while i < bound {
             match chars[i] {
-                '%' => {
-                    let old = i;
-
-                    i += 1;
-                    if i >= bound {
-                        tokens.push(Token::Char('%'));
-                        continue;
-                    }
-                    if chars[i] == '%' {
-                        tokens.push(Token::Char('%'));
-                        i += 1;
-                        continue;
-                    }
-
-                    let mut flag = Flags::default();
-
-                    while i < bound {
-                        match chars[i] {
-                            '#' => flag.alter = true,
-                            '0' => flag.zero = true,
-                            '-' => flag.left = true,
-                            ' ' => flag.space = true,
-                            '+' => flag.sign = true,
-                            '\'' => flag.group = true,
-                            'I' => unimplemented!(),
-                            _ => break,
-                        }
-                        i += 1;
-                    }
-                    check_bound(format_str, bound, old, i)?;
-
-                    let mut width = 0;
-                    let mut precision = None;
-                    let mut j = i;
-
-                    if let Some((field_width, offset)) = format_str[j..].scan_num::<usize>() {
-                        width = field_width;
-                        j += offset;
-                    }
-                    check_bound(format_str, bound, old, j)?;
-
-                    if chars[j] == '.' {
-                        j += 1;
-                        check_bound(format_str, bound, old, j)?;
-
-                        match format_str[j..].scan_num::<i32>() {
-                            Some((value, offset)) => {
-                                if value >= 0 {
-                                    precision = Some(value as usize);
-                                }
-                                j += offset;
-                            }
-                            None => precision = Some(0),
-                        }
-                        check_bound(format_str, bound, old, j)?;
-                    }
-
-                    i = j;
-                    tokens.push(Token::Directive {
-                        width,
-                        flag,
-                        precision,
-                        format: chars[i],
-                    });
-                }
+                '%' => tokens.push(Self::handle_percent_case(
+                    &chars, &mut i, bound, format_str,
+                )?),
                 '\\' => {
                     if use_printf {
-                        i += 1;
-                        if i >= bound {
-                            show_warning!("backslash at end of format");
-                            tokens.push(Token::Char('\\'));
-                            continue;
-                        }
-                        match chars[i] {
-                            'x' if i + 1 < bound => {
-                                if let Some((c, offset)) = format_str[i + 1..].scan_char(16) {
-                                    tokens.push(Token::Char(c));
-                                    i += offset;
-                                } else {
-                                    show_warning!("unrecognized escape '\\x'");
-                                    tokens.push(Token::Char('x'));
-                                }
-                            }
-                            '0'..='7' => {
-                                let (c, offset) = format_str[i..].scan_char(8).unwrap();
-                                tokens.push(Token::Char(c));
-                                i += offset - 1;
-                            }
-                            '"' => tokens.push(Token::Char('"')),
-                            '\\' => tokens.push(Token::Char('\\')),
-                            'a' => tokens.push(Token::Char('\x07')),
-                            'b' => tokens.push(Token::Char('\x08')),
-                            'e' => tokens.push(Token::Char('\x1B')),
-                            'f' => tokens.push(Token::Char('\x0C')),
-                            'n' => tokens.push(Token::Char('\n')),
-                            'r' => tokens.push(Token::Char('\r')),
-                            't' => tokens.push(Token::Char('\t')),
-                            'v' => tokens.push(Token::Char('\x0B')),
-                            c => {
-                                show_warning!("unrecognized escape '\\{}'", c);
-                                tokens.push(Token::Char(c));
-                            }
-                        }
+                        tokens.push(Self::handle_escape_sequences(
+                            &chars, &mut i, bound, format_str,
+                        ));
                     } else {
                         tokens.push(Token::Char('\\'));
                     }
                 }
-
                 c => tokens.push(Token::Char(c)),
             }
             i += 1;
@@ -531,10 +546,16 @@ impl Stater {
     }
 
     fn new(matches: &ArgMatches) -> UResult<Self> {
-        let files = matches
+        let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
             .map(|v| v.map(OsString::from).collect())
             .unwrap_or_default();
+        if files.is_empty() {
+            return Err(Box::new(USimpleError {
+                code: 1,
+                message: "missing operand\nTry 'stat --help' for more information.".to_string(),
+            }));
+        }
         let format_str = if matches.contains_id(options::PRINTF) {
             matches
                 .get_one::<String>(options::PRINTF)
