@@ -15,15 +15,17 @@ use uucore::{
 const ABOUT: &str = help_about!("uname.md");
 const USAGE: &str = help_usage!("uname.md");
 
-static ALL: &str = "all";
-static KERNEL_NAME: &str = "kernel-name";
-static NODENAME: &str = "nodename";
-static KERNEL_VERSION: &str = "kernel-version";
-static KERNEL_RELEASE: &str = "kernel-release";
-static MACHINE: &str = "machine";
-static PROCESSOR: &str = "processor";
-static HARDWARE_PLATFORM: &str = "hardware-platform";
-static OS: &str = "operating-system";
+pub mod options {
+    pub static ALL: &str = "all";
+    pub static KERNEL_NAME: &str = "kernel-name";
+    pub static NODENAME: &str = "nodename";
+    pub static KERNEL_VERSION: &str = "kernel-version";
+    pub static KERNEL_RELEASE: &str = "kernel-release";
+    pub static MACHINE: &str = "machine";
+    pub static PROCESSOR: &str = "processor";
+    pub static HARDWARE_PLATFORM: &str = "hardware-platform";
+    pub static OS: &str = "operating-system";
+}
 
 pub struct UNameOutput {
     pub kernel_name: Option<String>,
@@ -125,15 +127,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     let options = Options {
-        all: matches.get_flag(ALL),
-        kernel_name: matches.get_flag(KERNEL_NAME),
-        nodename: matches.get_flag(NODENAME),
-        kernel_release: matches.get_flag(KERNEL_RELEASE),
-        kernel_version: matches.get_flag(KERNEL_VERSION),
-        machine: matches.get_flag(MACHINE),
-        processor: matches.get_flag(PROCESSOR),
-        hardware_platform: matches.get_flag(HARDWARE_PLATFORM),
-        os: matches.get_flag(OS),
+        all: matches.get_flag(options::ALL),
+        kernel_name: matches.get_flag(options::KERNEL_NAME),
+        nodename: matches.get_flag(options::NODENAME),
+        kernel_release: matches.get_flag(options::KERNEL_RELEASE),
+        kernel_version: matches.get_flag(options::KERNEL_VERSION),
+        machine: matches.get_flag(options::MACHINE),
+        processor: matches.get_flag(options::PROCESSOR),
+        hardware_platform: matches.get_flag(options::HARDWARE_PLATFORM),
+        os: matches.get_flag(options::OS),
     };
     let output = UNameOutput::new(&options)?;
     println!("{}", output.display().trim_end());
@@ -147,24 +149,24 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .arg(
-            Arg::new(ALL)
+            Arg::new(options::ALL)
                 .short('a')
-                .long(ALL)
+                .long(options::ALL)
                 .help("Behave as though all of the options -mnrsvo were specified.")
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(KERNEL_NAME)
+            Arg::new(options::KERNEL_NAME)
                 .short('s')
-                .long(KERNEL_NAME)
+                .long(options::KERNEL_NAME)
                 .alias("sysname") // Obsolescent option in GNU uname
                 .help("print the kernel name.")
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(NODENAME)
+            Arg::new(options::NODENAME)
                 .short('n')
-                .long(NODENAME)
+                .long(options::NODENAME)
                 .help(
                     "print the nodename (the nodename may be a name that the system \
                 is known by to a communications network).",
@@ -172,46 +174,46 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(KERNEL_RELEASE)
+            Arg::new(options::KERNEL_RELEASE)
                 .short('r')
-                .long(KERNEL_RELEASE)
+                .long(options::KERNEL_RELEASE)
                 .alias("release") // Obsolescent option in GNU uname
                 .help("print the operating system release.")
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(KERNEL_VERSION)
+            Arg::new(options::KERNEL_VERSION)
                 .short('v')
-                .long(KERNEL_VERSION)
+                .long(options::KERNEL_VERSION)
                 .help("print the operating system version.")
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(MACHINE)
+            Arg::new(options::MACHINE)
                 .short('m')
-                .long(MACHINE)
+                .long(options::MACHINE)
                 .help("print the machine hardware name.")
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(OS)
+            Arg::new(options::OS)
                 .short('o')
-                .long(OS)
+                .long(options::OS)
                 .help("print the operating system name.")
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(PROCESSOR)
+            Arg::new(options::PROCESSOR)
                 .short('p')
-                .long(PROCESSOR)
+                .long(options::PROCESSOR)
                 .help("print the processor type (non-portable)")
                 .action(ArgAction::SetTrue)
                 .hide(true),
         )
         .arg(
-            Arg::new(HARDWARE_PLATFORM)
+            Arg::new(options::HARDWARE_PLATFORM)
                 .short('i')
-                .long(HARDWARE_PLATFORM)
+                .long(options::HARDWARE_PLATFORM)
                 .help("print the hardware platform (non-portable)")
                 .action(ArgAction::SetTrue)
                 .hide(true),
