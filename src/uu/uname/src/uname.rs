@@ -39,7 +39,7 @@ pub struct UNameOutput {
 impl UNameOutput {
     fn display(&self) -> String {
         let mut output = String::new();
-        [
+        for name in [
             self.kernel_name.as_ref(),
             self.nodename.as_ref(),
             self.kernel_release.as_ref(),
@@ -49,13 +49,12 @@ impl UNameOutput {
             self.processor.as_ref(),
             self.hardware_platform.as_ref(),
         ]
-        .iter()
-        .for_each(|name| {
-            if let Some(name) = name {
-                output.push_str(name);
-                output.push(' ');
-            }
-        });
+        .into_iter()
+        .flatten()
+        {
+            output.push_str(name);
+            output.push(' ');
+        }
         output
     }
     pub fn new(opts: &Options) -> UResult<Self> {
@@ -71,57 +70,30 @@ impl UNameOutput {
             || opts.processor
             || opts.hardware_platform);
 
-        let kernel_name = if opts.kernel_name || opts.all || none {
-            Some(uname.sysname().to_string_lossy().to_string())
-        } else {
-            None
-        };
+        let kernel_name = (opts.kernel_name || opts.all || none)
+            .then(|| uname.sysname().to_string_lossy().to_string());
 
-        let nodename = if opts.nodename || opts.all {
-            Some(uname.nodename().to_string_lossy().to_string())
-        } else {
-            None
-        };
+        let nodename =
+            (opts.nodename || opts.all).then(|| uname.nodename().to_string_lossy().to_string());
 
-        let kernel_release = if opts.kernel_release || opts.all {
-            Some(uname.release().to_string_lossy().to_string())
-        } else {
-            None
-        };
-        let kernel_version = if opts.kernel_version || opts.all {
-            Some(uname.version().to_string_lossy().to_string())
-        } else {
-            None
-        };
+        let kernel_release = (opts.kernel_release || opts.all)
+            .then(|| uname.release().to_string_lossy().to_string());
 
-        let machine = if opts.machine || opts.all {
-            Some(uname.machine().to_string_lossy().to_string())
-        } else {
-            None
-        };
+        let kernel_version = (opts.kernel_version || opts.all)
+            .then(|| uname.version().to_string_lossy().to_string());
 
-        let os = if opts.os || opts.all {
-            Some(uname.osname().to_string_lossy().to_string())
-        } else {
-            None
-        };
+        let machine =
+            (opts.machine || opts.all).then(|| uname.machine().to_string_lossy().to_string());
+
+        let os = (opts.os || opts.all).then(|| uname.osname().to_string_lossy().to_string());
 
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-        let processor = if opts.processor {
-            Some("unknown".to_string())
-        } else {
-            None
-        };
+        let processor = opts.processor.then(|| "unknown".to_string());
 
+        let hardware_platform = opts.hardware_platform.then(|| "unknown".to_string());
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
-
-        let hardware_platform = if opts.hardware_platform {
-            Some("unknown".to_string())
-        } else {
-            None
-        };
 
         Ok(Self {
             kernel_name,
