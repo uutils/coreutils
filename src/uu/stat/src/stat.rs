@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore datetime
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
@@ -1072,5 +1073,5 @@ fn pretty_time(sec: i64, nsec: i64) -> String {
     let tm = chrono::DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
     let tm: DateTime<Local> = tm.into();
 
-    tm.format(&PRETTY_DATETIME_FORMAT).to_string()
+    tm.format(PRETTY_DATETIME_FORMAT).to_string()
 }
