@@ -60,7 +60,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             format!("missing operand after {}", sets[0].quote()),
         ));
     }
-
+    if delete_flag && !squeeze_flag && sets_len > 1 {
+        return Err(UUsageError::new(
+            1,
+            format!("extra operand {}\nOnly one string may be given when deleting without squeezing repeats.", sets[1].quote()),
+        ));
+    }
     if let Some(first) = sets.first() {
         if first.ends_with('\\') {
             show!(USimpleError::new(
