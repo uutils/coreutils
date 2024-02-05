@@ -152,10 +152,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        ## Install/setup prerequisites
-        # * pin installed cspell to v4.2.8 (cspell v5+ is broken for NodeJS < v12)
-        ## maint: [2021-11-10; rivy] `cspell` version may be advanced to v5 when used with NodeJS >= v12
-        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell@4.2.8 -g ;
+        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g ;
     - name: Run `cspell`
       shell: bash
       run: |
@@ -167,10 +164,7 @@ jobs:
         cfg_files=($(shopt -s nullglob ; echo {.vscode,.}/{,.}c[sS]pell{.json,.config{.js,.cjs,.json,.yaml,.yml},.yaml,.yml} ;))
         cfg_file=${cfg_files[0]}
         unset CSPELL_CFG_OPTION ; if [ -n "$cfg_file" ]; then CSPELL_CFG_OPTION="--config $cfg_file" ; fi
-        # * `cspell`
-        ## maint: [2021-11-10; rivy] the `--no-progress` option for `cspell` is a `cspell` v5+ option
-        # S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
-        S=$(cspell ${CSPELL_CFG_OPTION} --no-summary "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
+        S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
   toml_format:
