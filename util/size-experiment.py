@@ -1,3 +1,4 @@
+# spell-checker:ignore debuginfo
 import subprocess
 from itertools import product
 import shutil

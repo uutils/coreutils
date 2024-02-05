@@ -111,7 +111,7 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
     }
 
     fn to_mod(&self, x: u64) -> Self::ModInt {
-        // TODO: optimise!
+        // TODO: optimize!
         debug_assert!(x < self.n.as_u64());
         let r = T::from_double_width(
             ((T::DoubleWidth::from_u64(x)) << T::zero().count_zeros() as usize)
