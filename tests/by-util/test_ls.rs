@@ -2100,6 +2100,17 @@ fn test_ls_inode() {
     let result = scene.ucmd().arg("test_inode").succeeds();
     assert!(!re_short.is_match(result.stdout_str()));
     assert!(!result.stdout_str().contains(inode_short));
+    use std::process::Command;
+
+    let mut binding = Command::new("ls");
+    let c = binding.args(["-li", "test_inode"]);
+    let output = c.output().expect("Failed to execute command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("stdout: {}", stdout);
+    println!("stderr: {}", stderr);
 
     let result = scene.ucmd().arg("-li").arg("test_inode").succeeds();
     assert!(re_long.is_match(result.stdout_str()));
@@ -4334,7 +4345,7 @@ fn test_acl_display() {
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
     let mut binding = Command::new("ls");
-    let c = binding.args(["-al", &path]);
+    let c = binding.args(["-ald", &path]);
     let output = c.output().expect("Failed to execute command");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -4385,7 +4396,7 @@ fn test_acl_display() {
     #[cfg(target_os = "macos")]
     let extended = "@";
     let mut binding = Command::new("ls");
-    let c = binding.args(["-al", &path]);
+    let c = binding.args(["-ald", &path]);
     let output = c.output().expect("Failed to execute command");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
