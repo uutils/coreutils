@@ -4333,6 +4333,16 @@ fn test_acl_display() {
     let path = at.plus_as_string(path);
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
+    let mut binding = Command::new("ls");
+    let c = binding.args(["-al", &path]);
+    let output = c.output().expect("Failed to execute command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("stdout: {}", stdout);
+    println!("stderr: {}", stderr);
+
     #[cfg(not(target_os = "macos"))]
     match Command::new("setfacl")
         .args(["-d", "-m", "group::rwx", &path])
@@ -4374,7 +4384,15 @@ fn test_acl_display() {
     let extended = "+";
     #[cfg(target_os = "macos")]
     let extended = "@";
+    let mut binding = Command::new("ls");
+    let c = binding.args(["-al", &path]);
+    let output = c.output().expect("Failed to execute command");
 
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("stdout: {}", stdout);
+    println!("stderr: {}", stderr);
     scene
         .ucmd()
         .args(&["-lda", &path])
