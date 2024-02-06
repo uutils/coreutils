@@ -5,7 +5,7 @@
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
 
 use crate::common::util::{AtPath, TestScenario};
-use filetime::{self, FileTime};
+use filetime::{self, set_symlink_file_times, FileTime};
 use std::fs::remove_file;
 use std::path::PathBuf;
 
@@ -855,4 +855,39 @@ fn test_touch_invalid_date_format() {
     ucmd.args(&["-m", "-t", "+1000000000000 years", file])
         .fails()
         .stderr_contains("touch: invalid date format ‘+1000000000000 years’");
+}
+
+#[test]
+fn test_touch_symlink_with_no_deref() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let target = "foo.txt";
+    let symlink = "bar.txt";
+    let time = FileTime::from_unix_time(123, 0);
+
+    at.touch(target);
+    at.relative_symlink_file(target, symlink);
+    set_symlink_file_times(at.plus(symlink), time, time).unwrap();
+
+    ucmd.args(&["-a", "--no-dereference", symlink]).succeeds();
+    // Modification time shouldn't be set to the destination's modification time
+    assert_eq!(time, get_symlink_times(&at, symlink).1);
+}
+
+#[test]
+fn test_touch_reference_symlink_with_no_deref() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let target = "foo.txt";
+    let symlink = "bar.txt";
+    let arg = "baz.txt";
+    let time = FileTime::from_unix_time(123, 0);
+
+    at.touch(target);
+    at.relative_symlink_file(target, symlink);
+    set_symlink_file_times(at.plus(symlink), time, time).unwrap();
+    at.touch(arg);
+
+    ucmd.args(&["--reference", symlink, "--no-dereference", arg])
+        .succeeds();
+    // Times should be taken from the symlink, not the destination
+    assert_eq!((time, time), get_symlink_times(&at, arg));
 }
