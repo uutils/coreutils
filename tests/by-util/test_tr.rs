@@ -1149,7 +1149,7 @@ fn check_against_gnu_tr_tests_no_abort_1() {
 }
 
 #[test]
-fn check_against_gnu_tr_delete_flag_takes_only_one_operand() {
+fn test_delete_flag_takes_only_one_operand() {
     // gnu tr -d fails with more than 1 argument
     new_ucmd!()
         .args(&["-d", "a", "p"])
