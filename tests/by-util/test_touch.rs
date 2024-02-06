@@ -858,6 +858,7 @@ fn test_touch_invalid_date_format() {
 }
 
 #[test]
+#[cfg(not(target_os = "freebsd"))]
 fn test_touch_symlink_with_no_deref() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "foo.txt";
@@ -874,6 +875,7 @@ fn test_touch_symlink_with_no_deref() {
 }
 
 #[test]
+#[cfg(not(target_os = "freebsd"))]
 fn test_touch_reference_symlink_with_no_deref() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "foo.txt";
