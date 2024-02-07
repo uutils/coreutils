@@ -1159,3 +1159,33 @@ fn test_delete_flag_takes_only_one_operand() {
         "extra operand 'p'\nOnly one string may be given when deleting without squeezing repeats.",
     );
 }
+
+#[test]
+fn test_translate_flag_fails_with_more_than_two_operand() {
+    // gnu tr -d fails with more than 1 argument
+    new_ucmd!()
+        .args(&["-t", "a", "b", "c"])
+        .pipe_in("abc")
+        .fails()
+        .stderr_contains("extra operand 'c'");
+}
+
+#[test]
+fn test_squeeze_flag_fails_with_more_than_two_operand() {
+    // gnu tr -d fails with more than 1 argument
+    new_ucmd!()
+        .args(&["-s", "a", "b", "c"])
+        .pipe_in("abc")
+        .fails()
+        .stderr_contains("extra operand 'c'");
+}
+
+#[test]
+fn test_complement_flag_fails_with_more_than_two_operand() {
+    // gnu tr -d fails with more than 1 argument
+    new_ucmd!()
+        .args(&["-s", "a", "b", "c"])
+        .pipe_in("abc")
+        .fails()
+        .stderr_contains("extra operand 'c'");
+}
