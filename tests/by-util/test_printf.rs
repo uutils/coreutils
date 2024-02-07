@@ -680,3 +680,31 @@ fn char_as_byte() {
 fn no_infinite_loop() {
     new_ucmd!().args(&["a", "b"]).succeeds().stdout_only("a");
 }
+
+#[test]
+fn pad_octal_with_prefix() {
+    new_ucmd!()
+        .args(&[">%#15.6o<", "0"])
+        .succeeds()
+        .stdout_only(">         000000<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "01"])
+        .succeeds()
+        .stdout_only(">         000001<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "01234"])
+        .succeeds()
+        .stdout_only(">         001234<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "012345"])
+        .succeeds()
+        .stdout_only(">         012345<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "0123456"])
+        .succeeds()
+        .stdout_only(">        0123456<");
+}

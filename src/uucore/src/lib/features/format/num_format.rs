@@ -143,11 +143,13 @@ impl Formatter for UnsignedInt {
             UnsignedIntVariant::Octal(Prefix::No) => format!("{x:o}"),
             UnsignedIntVariant::Octal(Prefix::Yes) => {
                 // The prefix that rust uses is `0o`, but GNU uses `0`.
-                // We also need to take into account that 0 should not be 00
+                // We also need to take into account that 0 should not be 00 and
+                // that GNU pads prefixed octals with zeros.
+                //
                 // Since this is an unsigned int, we do not need to take the minus
                 // sign into account.
-                if x == 0 {
-                    format!("{x:o}")
+                if x < 8u64.pow(self.precision.saturating_sub(1) as u32) {
+                    format!("{x:0>width$o}", width = self.precision)
                 } else {
                     format!("0{x:o}")
                 }
