@@ -743,6 +743,55 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
         .map_or(false, |wide| wide == b'/'.into() || wide == b'\\'.into())
 }
 
+pub mod sane_blksize {
+
+    #[cfg(not(target_os = "windows"))]
+    use std::os::unix::fs::MetadataExt;
+    use std::{fs::metadata, path::Path};
+
+    pub const DEFAULT: u64 = 512;
+    pub const MAX: u64 = (u32::MAX / 8 + 1) as u64;
+
+    /// Provides sanity checked blksize value from the provided value.
+    ///
+    /// If the provided value is a invalid values a meaningful adaption
+    /// of that value is done.
+    pub fn sane_blksize(st_blksize: u64) -> u64 {
+        match st_blksize {
+            0 => DEFAULT,
+            1..=MAX => st_blksize,
+            _ => DEFAULT,
+        }
+    }
+
+    /// Provides the blksize information from the provided metadata.
+    ///
+    /// If the metadata contain invalid values a meaningful adaption
+    /// of that value is done.
+    pub fn sane_blksize_from_metadata(_metadata: &std::fs::Metadata) -> u64 {
+        #[cfg(not(target_os = "windows"))]
+        {
+            sane_blksize(_metadata.blksize())
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            DEFAULT
+        }
+    }
+
+    /// Provides the blksize information from given file path's filesystem.
+    ///
+    /// If the metadata can't be fetched or contain invalid values a
+    /// meaningful adaption of that value is done.
+    pub fn sane_blksize_from_path(path: &Path) -> u64 {
+        match metadata(path) {
+            Ok(metadata) => sane_blksize_from_metadata(&metadata),
+            Err(_) => DEFAULT,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -969,5 +1018,14 @@ mod tests {
         // Root path
         assert!(path_ends_with_terminator(Path::new("/")));
         assert!(path_ends_with_terminator(Path::new("C:\\")));
+    }
+
+    #[test]
+    fn test_sane_blksize() {
+        assert_eq!(512, sane_blksize::sane_blksize(0));
+        assert_eq!(512, sane_blksize::sane_blksize(512));
+        assert_eq!(4096, sane_blksize::sane_blksize(4096));
+        assert_eq!(0x2000_0000, sane_blksize::sane_blksize(0x2000_0000));
+        assert_eq!(512, sane_blksize::sane_blksize(0x2000_0001));
     }
 }

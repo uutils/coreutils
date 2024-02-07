@@ -43,18 +43,6 @@ static OPT_VERBOSE: &str = "verbose";
 static OPT_SEPARATOR: &str = "separator";
 static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
 static OPT_IO_BLKSIZE: &str = "-io-blksize";
-// Cap ---io-blksize value
-// For 64bit systems the max value is the same as in GNU
-// and is equivalent of `i32::MAX >> 20 << 20` operation.
-// On 32bit systems however, even though it fits within `u32` and `i32`,
-// it causes rust-lang `library/alloc/src/raw_vec.rs` to panic with 'capacity overflow' error.
-// Could be due to how `std::io::BufReader` handles internal buffers.
-// So we use much smaller value for those
-static OPT_IO_BLKSIZE_MAX: usize = if usize::BITS >= 64 {
-    2_146_435_072
-} else {
-    1_000_000_000
-};
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
@@ -421,7 +409,7 @@ struct Settings {
     /// chunks. If this is `false`, then empty files will not be
     /// created.
     elide_empty_files: bool,
-    io_blksize: Option<usize>,
+    io_blksize: Option<u64>,
 }
 
 /// An error when parsing settings from command-line arguments.
@@ -512,17 +500,10 @@ impl Settings {
             None => b'\n',
         };
 
-        let io_blksize: Option<usize> = if let Some(s) = matches.get_one::<String>(OPT_IO_BLKSIZE) {
+        let io_blksize: Option<u64> = if let Some(s) = matches.get_one::<String>(OPT_IO_BLKSIZE) {
             match parse_size_u64(s) {
-                Ok(n) => {
-                    let n: usize = n
-                        .try_into()
-                        .map_err(|_| SettingsError::InvalidIOBlockSize(s.to_string()))?;
-                    if n > OPT_IO_BLKSIZE_MAX {
-                        return Err(SettingsError::InvalidIOBlockSize(s.to_string()));
-                    }
-                    Some(n)
-                }
+                Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
+                Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
                 _ => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
             }
         } else {
@@ -645,14 +626,18 @@ fn get_input_size<R>(
     input: &String,
     reader: &mut R,
     buf: &mut Vec<u8>,
-    io_blksize: &Option<usize>,
+    io_blksize: &Option<u64>,
 ) -> std::io::Result<u64>
 where
     R: BufRead,
 {
     // Set read limit to io_blksize if specified
-    // Otherwise to OPT_IO_BLKSIZE_MAX
-    let read_limit = io_blksize.unwrap_or(OPT_IO_BLKSIZE_MAX) as u64;
+    let read_limit: u64 = if let Some(custom_blksize) = io_blksize {
+        *custom_blksize
+    } else {
+        // otherwise try to get it from filesystem, or use default
+        uucore::fs::sane_blksize::sane_blksize_from_path(Path::new(input))
+    };
 
     // Try to read into buffer up to a limit
     let num_bytes = reader
@@ -1635,7 +1620,7 @@ fn split(settings: &Settings) -> UResult<()> {
         Box::new(r) as Box<dyn Read>
     };
     let mut reader = if let Some(c) = settings.io_blksize {
-        BufReader::with_capacity(c, r_box)
+        BufReader::with_capacity(c.try_into().unwrap(), r_box)
     } else {
         BufReader::new(r_box)
     };
