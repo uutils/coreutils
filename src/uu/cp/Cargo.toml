@@ -19,21 +19,21 @@ edition = "2021"
 path = "src/cp.rs"
 
 [dependencies]
-clap = { workspace = true }
+clap = { workspace = true, optional = true }
 filetime = { workspace = true }
 libc = { workspace = true }
 quick-error = { workspace = true }
 selinux = { workspace = true, optional = true }
-uucore = { workspace = true, features = [
-  "backup-control",
-  "entries",
-  "fs",
-  "perms",
-  "mode",
-  "update-control",
-] }
 walkdir = { workspace = true }
 indicatif = { workspace = true }
+uucore = { workspace = true, default-features = false, features = [
+  "entries",
+  "fs",
+  "mode",
+  "perms",
+  "update-control",
+  "backup-control",
+] }
 
 [target.'cfg(unix)'.dependencies]
 xattr = { workspace = true }
@@ -44,5 +44,7 @@ name = "cp"
 path = "src/main.rs"
 
 [features]
+default = ["cli-parser"]
 feat_selinux = ["selinux"]
 feat_acl = ["exacl"]
+cli-parser = ["dep:clap", "uucore/cli-parser"]

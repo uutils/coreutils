@@ -5,4 +5,5 @@
 pub mod parse_glob;
 pub mod parse_size;
 pub mod parse_time;
+#[cfg(feature = "cli-parser")]
 pub mod shortcut_value_parser;
