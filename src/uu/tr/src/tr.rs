@@ -75,11 +75,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     "\nOnly one string may be given when deleting without squeezing repeats.",
                 );
             }
-            return Err(UUsageError::new(1, format!("{}", msg)));
+            return Err(UUsageError::new(1, format!("{}", msg.to_string())));
         }
         if sets_len > 2 {
             msg.push_str(&sets[2].quote().to_string());
-            return Err(UUsageError::new(1, format!("{}", msg)));
+            return Err(UUsageError::new(1, format!("{}", msg.to_string())));
         }
     }
 
