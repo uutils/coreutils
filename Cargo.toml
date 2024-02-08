@@ -298,7 +298,7 @@ nix = { version = "0.27", default-features = false }
 nom = "7.1.3"
 notify = { version = "=6.0.1", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
-num-traits = "0.2.17"
+num-traits = "0.2.18"
 number_prefix = "0.4"
 once_cell = "1.19.0"
 onig = { version = "~6.4", default-features = false }
