@@ -18,7 +18,7 @@ path = "src/csplit.rs"
 clap = { workspace = true }
 thiserror = { workspace = true }
 regex = { workspace = true }
-uucore = { workspace = true, features = ["entries", "fs"] }
+uucore = { workspace = true, features = ["entries", "fs", "format"] }
 
 [[bin]]
 name = "csplit"
