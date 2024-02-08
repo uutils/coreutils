@@ -149,7 +149,7 @@ impl Formatter for UnsignedInt {
             }
         };
 
-        // Zeroes doe not get a prefix. An octal value does also not get a
+        // Zeroes do not get a prefix. An octal value does also not get a
         // prefix if the padded value will not start with a zero.
         let prefix = match (x, self.variant) {
             (1.., UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes)) => "0x",
