@@ -359,6 +359,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let complement = matches.get_flag(options::COMPLEMENT);
 
+    // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
+    // is expected. The number of those arguments is used for parsing a cutting
+    // mode and handling the error cases.
     let mode_args_count = [
         matches.indices_of(options::BYTES),
         matches.indices_of(options::CHARACTERS),
@@ -521,6 +524,13 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .infer_long_args(true)
+        // While `args_override_self(true)` for some arguments, such as `-d`
+        // and `--output-delimiter`, is consistent to the behavior of GNU cut,
+        // arguments related to cutting mode, i.e. `-b`, `-c`, `-f`, should
+        // cause an error when there is more than one of them, as described in
+        // the manual of GNU cut: "Use one, and only one of -b, -c or -f".
+        // `ArgAction::Append` is used on `-b`, `-c`, `-f` arguments, so that
+        // the occurrences of those could be counted and be handled accordingly.
         .args_override_self(true)
         .arg(
             Arg::new(options::BYTES)
