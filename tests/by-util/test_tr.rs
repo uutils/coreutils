@@ -1161,7 +1161,7 @@ fn test_delete_flag_takes_only_one_operand() {
 }
 
 #[test]
-fn test_translate_flag_fails_with_more_than_two_operand() {
+fn test_truncate_flag_fails_with_more_than_two_operand() {
     new_ucmd!()
         .args(&["-t", "a", "b", "c"])
         .fails()
