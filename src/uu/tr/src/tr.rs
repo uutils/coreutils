@@ -64,22 +64,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    // all operation error on more than 2 but messages change sometimes depending on operand
-    // except delete also errors with 2
-    let mut msg: String = "extra operand ".into();
+    let mut msg: String = "extra operand".into();
     if sets_len > 1 {
         if delete_flag && !squeeze_flag {
-            msg.push_str(&sets[1].quote().to_string());
+            msg = format!("{} {}", msg, sets[1].quote());
             if sets_len == 2 {
-                msg.push_str(
-                    "\nOnly one string may be given when deleting without squeezing repeats.",
+                msg = format!(
+                    "{}\n{}",
+                    msg, "Only one string may be given when deleting without squeezing repeats."
                 );
             }
-            return Err(UUsageError::new(1, msg.to_string()));
+            return Err(UUsageError::new(1, msg));
         }
         if sets_len > 2 {
-            msg.push_str(&sets[2].quote().to_string());
-            return Err(UUsageError::new(1, msg.to_string()));
+            msg = format!("{} {}", msg, sets[2].quote());
+            return Err(UUsageError::new(1, msg));
         }
     }
 
@@ -185,5 +184,5 @@ pub fn uu_app() -> Command {
                 .help("first truncate SET1 to length of SET2")
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(options::SETS).num_args(1..=32))
+        .arg(Arg::new(options::SETS).num_args(1..))
 }
