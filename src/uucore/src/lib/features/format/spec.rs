@@ -115,12 +115,6 @@ impl Spec {
             index += 1;
         }
 
-        let alignment = match (minus, zero) {
-            (true, _) => NumberAlignment::Left,
-            (false, true) => NumberAlignment::RightZero,
-            (false, false) => NumberAlignment::RightSpace,
-        };
-
         let positive_sign = match (plus, space) {
             (true, _) => PositiveSign::Plus,
             (false, true) => PositiveSign::Space,
@@ -134,6 +128,17 @@ impl Spec {
             Some(eat_asterisk_or_number(rest, &mut index).unwrap_or(CanAsterisk::Fixed(0)))
         } else {
             None
+        };
+
+        // The `0` flag is ignored if `-` is given or a precision is specified.
+        // So the only case for RightZero, is when `-` is not given and the
+        // precision is none.
+        let alignment = if minus {
+            NumberAlignment::Left
+        } else if zero && precision.is_none() {
+            NumberAlignment::RightZero
+        } else {
+            NumberAlignment::RightSpace
         };
 
         // We ignore the length. It's not really relevant to printf

@@ -1357,3 +1357,18 @@ fn precision_format() {
     assert_eq!(at.read("xx   000"), generate(1, 10));
     assert_eq!(at.read("xx 0x001"), generate(10, 51));
 }
+
+#[test]
+fn precision_format2() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "10", "--suffix-format", "%0#6.3x"])
+        .succeeds()
+        .stdout_only("18\n123\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 2);
+    assert_eq!(at.read("xx   000"), generate(1, 10));
+    assert_eq!(at.read("xx 0x001"), generate(10, 51));
+}
