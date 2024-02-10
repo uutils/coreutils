@@ -60,7 +60,7 @@ pub enum PositiveSign {
     Space,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NumberAlignment {
     Left,
     RightSpace,
