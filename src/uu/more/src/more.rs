@@ -670,7 +670,7 @@ fn break_line(line: &str, cols: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::break_line;
+    use super::{break_line, search_pattern_in_file};
     use unicode_width::UnicodeWidthStr;
 
     #[test]
@@ -717,5 +717,54 @@ mod tests {
 
         // Each 👩🏻‍🔬 is 6 character width it break line to the closest number to 80 => 6 * 13 = 78
         assert_eq!((78, 42), (widths[0], widths[1]));
+    }
+
+    #[test]
+    fn test_search_pattern_empty_lines() {
+        let lines = vec![];
+        let pattern = Some(String::from("pattern"));
+        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
+    }
+
+    #[test]
+    fn test_search_pattern_empty_pattern() {
+        let lines = vec![String::from("line1"), String::from("line2")];
+        let pattern = None;
+        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
+    }
+
+    #[test]
+    fn test_search_pattern_found_pattern() {
+        let lines = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("pattern"),
+        ];
+        let lines2 = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("pattern"),
+            String::from("pattern2"),
+        ];
+        let lines3 = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("other_pattern"),
+        ];
+        let pattern = Some(String::from("pattern"));
+        assert_eq!(2, search_pattern_in_file(&lines, &pattern).unwrap());
+        assert_eq!(2, search_pattern_in_file(&lines2, &pattern).unwrap());
+        assert_eq!(2, search_pattern_in_file(&lines3, &pattern).unwrap());
+    }
+
+    #[test]
+    fn test_search_pattern_not_found_pattern() {
+        let lines = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("something"),
+        ];
+        let pattern = Some(String::from("pattern"));
+        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
     }
 }
