@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (regex) diuox
 
-use uucore::format::{num_format::UnsignedInt, Format};
+use uucore::format::{num_format::UnsignedInt, Format, FormatError};
 
 use crate::csplit_error::CsplitError;
 
@@ -52,8 +52,11 @@ impl SplitName {
             None => format!("%0{n_digits}u"),
         };
 
-        let format = Format::<UnsignedInt>::parse(format_string)
-            .map_err(|_| CsplitError::SuffixFormatIncorrect)?;
+        let format = match Format::<UnsignedInt>::parse(format_string) {
+            Ok(format) => Ok(format),
+            Err(FormatError::TooManySpecs(_)) => Err(CsplitError::SuffixFormatTooManyPercents),
+            Err(_) => Err(CsplitError::SuffixFormatIncorrect),
+        }?;
 
         Ok(Self {
             prefix: prefix.as_bytes().to_owned(),
@@ -187,7 +190,7 @@ mod tests {
     #[test]
     fn alternate_form_octal() {
         let split_name = SplitName::new(None, Some(String::from("cst-%#10o-")), None).unwrap();
-        assert_eq!(split_name.get(42), "xxcst-      0o52-");
+        assert_eq!(split_name.get(42), "xxcst-       052-");
     }
 
     #[test]
@@ -199,7 +202,7 @@ mod tests {
     #[test]
     fn alternate_form_upper_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%#10X-")), None).unwrap();
-        assert_eq!(split_name.get(42), "xxcst-      0x2A-");
+        assert_eq!(split_name.get(42), "xxcst-      0X2A-");
     }
 
     #[test]
@@ -223,19 +226,19 @@ mod tests {
     #[test]
     fn left_adjusted_octal() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10o-")), None).unwrap();
-        assert_eq!(split_name.get(42), "xxcst-0o52      -");
+        assert_eq!(split_name.get(42), "xxcst-52        -");
     }
 
     #[test]
     fn left_adjusted_lower_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10x-")), None).unwrap();
-        assert_eq!(split_name.get(42), "xxcst-0x2a      -");
+        assert_eq!(split_name.get(42), "xxcst-2a        -");
     }
 
     #[test]
     fn left_adjusted_upper_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10X-")), None).unwrap();
-        assert_eq!(split_name.get(42), "xxcst-0x2A      -");
+        assert_eq!(split_name.get(42), "xxcst-2A        -");
     }
 
     #[test]
