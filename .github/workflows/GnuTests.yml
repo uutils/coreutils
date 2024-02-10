@@ -397,7 +397,7 @@ jobs:
         grcov . --output-type lcov --output-path "${COVERAGE_REPORT_FILE}" --branch --ignore build.rs --ignore "vendor/*" --ignore "/*" --ignore "[a-zA-Z]:/*" --excl-br-line "^\s*((debug_)?assert(_eq|_ne)?!|#\[derive\()"
         echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ${{ steps.coverage.outputs.report }}
         flags: gnutests

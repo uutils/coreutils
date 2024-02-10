@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Generate a table of the multiplicative inverses of p_i mod 2^64
+//! Generate a table of the multiplicative inverses of `p_i` mod 2^64
 //! for the first 1027 odd primes (all 13 bit and smaller primes).
 //! You can supply a command line argument to override the default
 //! value of 1027 for the number of entries in the table.
@@ -87,7 +87,7 @@ fn test_generator_10001() {
 }
 
 const MAX_WIDTH: usize = 102;
-const PREAMBLE: &str = r##"/*
+const PREAMBLE: &str = r"/*
 * This file is part of the uutils coreutils package.
 *
 * For the full copyright and license information, please view the LICENSE file
@@ -100,4 +100,4 @@ const PREAMBLE: &str = r##"/*
 
 #[allow(clippy::unreadable_literal)]
 pub const PRIME_INVERSIONS_U64: &[(u64, u64, u64)] = &[
-   "##;
+   ";

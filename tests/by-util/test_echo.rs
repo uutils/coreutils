@@ -293,3 +293,13 @@ fn old_octal_syntax() {
         .succeeds()
         .stdout_is("A1\n");
 }
+
+#[test]
+fn partial_version_argument() {
+    new_ucmd!().arg("--ver").succeeds().stdout_is("--ver\n");
+}
+
+#[test]
+fn partial_help_argument() {
+    new_ucmd!().arg("--he").succeeds().stdout_is("--he\n");
+}

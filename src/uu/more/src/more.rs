@@ -8,6 +8,7 @@
 use std::{
     fs::File,
     io::{stdin, stdout, BufReader, IsTerminal, Read, Stdout, Write},
+    panic::set_hook,
     path::Path,
     time::Duration,
 };
@@ -24,8 +25,8 @@ use crossterm::{
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::{display::Quotable, show};
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("more.md");
@@ -87,6 +88,13 @@ impl Options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Disable raw mode before exiting if a panic occurs
+    set_hook(Box::new(|panic_info| {
+        terminal::disable_raw_mode().unwrap();
+        print!("\r");
+        println!("{panic_info}");
+    }));
+
     let matches = match uu_app().try_get_matches_from(args) {
         Ok(m) => m,
         Err(e) => return Err(e.into()),
@@ -105,25 +113,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let file = Path::new(file);
             if file.is_dir() {
                 terminal::disable_raw_mode().unwrap();
-                return Err(UUsageError::new(
-                    1,
+                show!(UUsageError::new(
+                    0,
                     format!("{} is a directory.", file.quote()),
                 ));
+                terminal::enable_raw_mode().unwrap();
+                continue;
             }
             if !file.exists() {
                 terminal::disable_raw_mode().unwrap();
-                return Err(USimpleError::new(
-                    1,
+                show!(USimpleError::new(
+                    0,
                     format!("cannot open {}: No such file or directory", file.quote()),
                 ));
+                terminal::enable_raw_mode().unwrap();
+                continue;
             }
             let opened_file = match File::open(file) {
                 Err(why) => {
                     terminal::disable_raw_mode().unwrap();
-                    return Err(USimpleError::new(
-                        1,
+                    show!(USimpleError::new(
+                        0,
                         format!("cannot open {}: {}", file.quote(), why.kind()),
                     ));
+                    terminal::enable_raw_mode().unwrap();
+                    continue;
                 }
                 Ok(opened_file) => opened_file,
             };

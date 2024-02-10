@@ -403,7 +403,7 @@ fn test_args_override() {
 // * indentation uses <TAB> characters
 int main() {
         // * next line has both a leading & trailing tab
-        // with tabs=>	
+        // with tabs=>\t
         return 0;
 }
 ",
@@ -416,4 +416,13 @@ fn test_expand_directory() {
         .args(&["."])
         .fails()
         .stderr_contains("expand: .: Is a directory");
+}
+
+#[test]
+fn test_nonexisting_file() {
+    new_ucmd!()
+        .args(&["nonexistent", "with-spaces.txt"])
+        .fails()
+        .stderr_contains("expand: nonexistent: No such file or directory")
+        .stdout_contains_line("// !note: file contains significant whitespace");
 }

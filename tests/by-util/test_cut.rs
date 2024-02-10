@@ -212,20 +212,25 @@ fn test_zero_terminated_only_delimited() {
 }
 
 #[test]
-fn test_directory_and_no_such_file() {
+fn test_is_a_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("some");
 
     ucmd.arg("-b1")
         .arg("some")
-        .run()
+        .fails()
+        .code_is(1)
         .stderr_is("cut: some: Is a directory\n");
+}
 
+#[test]
+fn test_no_such_file() {
     new_ucmd!()
         .arg("-b1")
         .arg("some")
-        .run()
+        .fails()
+        .code_is(1)
         .stderr_is("cut: some: No such file or directory\n");
 }
 

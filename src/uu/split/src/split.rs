@@ -918,8 +918,7 @@ impl<'a> Write for LineChunkWriter<'a> {
             // Write the line, starting from *after* the previous
             // separator character and ending *after* the current
             // separator character.
-            let num_bytes_written =
-                custom_write(&buf[prev..i + 1], &mut self.inner, self.settings)?;
+            let num_bytes_written = custom_write(&buf[prev..=i], &mut self.inner, self.settings)?;
             total_bytes_written += num_bytes_written;
             prev = i + 1;
             self.num_lines_remaining_in_current_chunk -= 1;
@@ -1090,7 +1089,7 @@ impl<'a> Write for LineBytesChunkWriter<'a> {
                 // example comment above.)
                 Some(i) if i < self.num_bytes_remaining_in_current_chunk => {
                     let num_bytes_written =
-                        custom_write(&buf[..i + 1], &mut self.inner, self.settings)?;
+                        custom_write(&buf[..=i], &mut self.inner, self.settings)?;
                     self.num_bytes_remaining_in_current_chunk -= num_bytes_written;
                     total_bytes_written += num_bytes_written;
                     buf = &buf[num_bytes_written..];
