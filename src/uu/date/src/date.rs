@@ -6,7 +6,7 @@
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, Duration, FixedOffset, Local, Offset, Utc};
+use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
@@ -91,7 +91,7 @@ enum DateSource {
     Now,
     Custom(String),
     File(PathBuf),
-    Human(Duration),
+    Human(TimeDelta),
 }
 
 enum Iso8601Format {
