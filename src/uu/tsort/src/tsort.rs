@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use clap::{crate_version, Arg, Command};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt::Write;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
@@ -72,19 +73,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     g.run_tsort();
-
-    if !g.is_acyclic() {
-        return Err(USimpleError::new(
-            1,
-            format!("{input}, input contains a loop:"),
-        ));
+    match g.result {
+        Err(cycle) => {
+            eprint!(
+                "{}",
+                cycle.iter().fold(
+                    format!(
+                        "{}: {}: input contains a loop:\n",
+                        uucore::util_name(),
+                        input
+                    ),
+                    |acc, node| {
+                        let mut acc = acc;
+                        writeln!(acc, "{}: {}", uucore::util_name(), node)
+                            .expect("Failed to write to string");
+                        acc
+                    }
+                )
+            );
+            println!("{}", cycle.join("\n"));
+            Err(USimpleError::new(1, ""))
+        }
+        Ok(ordering) => {
+            println!("{}", ordering.join("\n"));
+            Ok(())
+        }
     }
-
-    for x in &g.result {
-        println!("{x}");
-    }
-
-    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -101,79 +115,108 @@ pub fn uu_app() -> Command {
         )
 }
 
+// Split off a slice from a VecDeque and return it as a Vec
+// This is to avoid the need to convert the VecDeque to a Vec after splitting
+// This function is inspired from the implementation of split_off in the standard library
+fn split_off_as_vec<T>(deque: &mut VecDeque<T>, at: usize) -> Vec<T>
+where
+    T: Clone,
+{
+    assert!(at <= deque.len(), "`at` out of bounds");
+
+    let (first_half, second_half) = deque.as_slices(); // In Rust, the deque is implemented as a
+                                                       // two Vec buffer, so we can the slices directly
+    let first_len = first_half.len();
+    if at < first_len {
+        // `at` lies in the first half.
+        [&first_half[at..], second_half].concat()
+    } else {
+        // `at` lies in the second half,
+        second_half[at - first_len..].to_vec()
+    }
+}
+
 // We use String as a representation of node here
 // but using integer may improve performance.
-#[derive(Default)]
 struct Graph {
-    in_edges: BTreeMap<String, BTreeSet<String>>,
-    out_edges: BTreeMap<String, Vec<String>>,
-    result: Vec<String>,
+    in_edges: HashMap<String, HashSet<String>>,
+    out_edges: HashMap<String, Vec<String>>,
+    result: Result<Vec<String>, Vec<String>>, // Stores either the topological sort result or the cycle
 }
 
 impl Graph {
     fn new() -> Self {
-        Self::default()
-    }
-
-    fn has_node(&self, n: &str) -> bool {
-        self.in_edges.contains_key(n)
+        Self {
+            in_edges: HashMap::new(),
+            out_edges: HashMap::new(),
+            result: Ok(Vec::new()),
+        }
     }
 
     fn has_edge(&self, from: &str, to: &str) -> bool {
-        self.in_edges[to].contains(from)
+        self.out_edges
+            .get(from)
+            .map_or(false, |edges| edges.contains(&to.to_string()))
     }
 
     fn init_node(&mut self, n: &str) {
-        self.in_edges.insert(n.to_string(), BTreeSet::new());
-        self.out_edges.insert(n.to_string(), vec![]);
+        self.in_edges.entry(n.to_string()).or_default();
+        self.out_edges.entry(n.to_string()).or_default();
     }
 
     fn add_edge(&mut self, from: &str, to: &str) {
-        if !self.has_node(to) {
-            self.init_node(to);
-        }
-
-        if !self.has_node(from) {
-            self.init_node(from);
-        }
-
         if from != to && !self.has_edge(from, to) {
+            self.init_node(to); // Ensure both nodes are initialized
+            self.init_node(from);
             self.in_edges.get_mut(to).unwrap().insert(from.to_string());
             self.out_edges.get_mut(from).unwrap().push(to.to_string());
         }
     }
 
-    // Kahn's algorithm
-    // O(|V|+|E|)
     fn run_tsort(&mut self) {
-        let mut start_nodes = vec![];
-        for (n, edges) in &self.in_edges {
-            if edges.is_empty() {
-                start_nodes.push(n.clone());
-            }
-        }
-
-        while !start_nodes.is_empty() {
-            let n = start_nodes.remove(0);
-
-            self.result.push(n.clone());
-
-            let n_out_edges = self.out_edges.get_mut(&n).unwrap();
-            #[allow(clippy::explicit_iter_loop)]
-            for m in n_out_edges.iter() {
-                let m_in_edges = self.in_edges.get_mut(m).unwrap();
-                m_in_edges.remove(&n);
-
-                // If m doesn't have other in-coming edges add it to start_nodes
-                if m_in_edges.is_empty() {
-                    start_nodes.push(m.clone());
+        let mut visited = HashSet::new();
+        let mut stack = VecDeque::new();
+        let mut result = Vec::new();
+        let mut nodes: Vec<&String> = self.out_edges.keys().collect();
+        nodes.sort_unstable();
+        for node in nodes {
+            if !visited.contains(node.as_str()) {
+                if let Err(cycle) = self.dfs(node, &mut visited, &mut stack, &mut result) {
+                    self.result = Err(cycle);
+                    return;
                 }
             }
-            n_out_edges.clear();
         }
+
+        result.reverse(); // Reverse to get the correct topological order
+        self.result = Ok(result);
     }
 
-    fn is_acyclic(&self) -> bool {
-        self.out_edges.values().all(|edge| edge.is_empty())
+    fn dfs(
+        &self,
+        node: &str,
+        visited: &mut HashSet<String>,
+        stack: &mut VecDeque<String>,
+        result: &mut Vec<String>,
+    ) -> Result<(), Vec<String>> {
+        if let Some(pos) = stack.iter().position(|x| x == node) {
+            // Detected a cycle, return Err with the cycle's nodes
+            return Err(split_off_as_vec(stack, pos));
+        }
+        if visited.contains(node) {
+            return Ok(());
+        }
+        stack.push_back(node.to_string());
+        visited.insert(node.to_string());
+
+        if let Some(neighbors) = self.out_edges.get(node) {
+            for neighbor in neighbors {
+                self.dfs(neighbor, visited, stack, result)?;
+            }
+        }
+        stack.pop_back();
+        result.push(node.to_string());
+
+        Ok(())
     }
 }
