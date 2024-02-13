@@ -64,8 +64,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let start: &str = "extra operand";
     if sets_len > 1 {
+        let start = "extra operand";
         if delete_flag && !squeeze_flag {
             let op = sets[1].quote();
             let msg = if sets_len == 2 {
