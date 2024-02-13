@@ -57,15 +57,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if !(delete_flag || squeeze_flag) && sets_len < 2 {
         return Err(UUsageError::new(
             1,
-            format!("missing operand after {}", sets[0].quote()),
+            format!(
+                "missing operand after {}\nTwo strings must be given when translating.",
+                sets[0].quote()
+            ),
         ));
     }
 
-    if delete_flag && !squeeze_flag && sets_len > 1 {
-        return Err(UUsageError::new(
-            1,
-            format!("extra operand {}\nOnly one string may be given when deleting without squeezing repeats.", sets[1].quote()),
-        ));
+    if sets_len > 1 {
+        let start = "extra operand";
+        if delete_flag && !squeeze_flag {
+            let op = sets[1].quote();
+            let msg = if sets_len == 2 {
+                format!(
+                    "{} {}\nOnly one string may be given when deleting without squeezing repeats.",
+                    start, op,
+                )
+            } else {
+                format!("{} {}", start, op,)
+            };
+            return Err(UUsageError::new(1, msg));
+        }
+        if sets_len > 2 {
+            let op = sets[2].quote();
+            let msg = format!("{} {}", start, op);
+            return Err(UUsageError::new(1, msg));
+        }
     }
 
     if let Some(first) = sets.first() {
@@ -170,5 +187,5 @@ pub fn uu_app() -> Command {
                 .help("first truncate SET1 to length of SET2")
                 .action(ArgAction::SetTrue),
         )
-        .arg(Arg::new(options::SETS).num_args(1..=2))
+        .arg(Arg::new(options::SETS).num_args(1..))
 }
