@@ -204,11 +204,8 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
         let mut print_delim = false;
 
         if delim_search.peek().is_none() {
-            if !only_delimited {
+            if !only_delimited && line[line.len() - 1] == newline_char {
                 out.write_all(line)?;
-                if line[line.len() - 1] != newline_char {
-                    out.write_all(&[newline_char])?;
-                }
             }
 
             return Ok(true);
