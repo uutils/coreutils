@@ -953,6 +953,16 @@ pub fn uu_app() -> Command {
         )
 }
 
+const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f %z";
+
+fn pretty_time(sec: i64, nsec: i64) -> String {
+    // Return the date in UTC
+    let tm = chrono::DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
+    let tm: DateTime<Local> = tm.into();
+
+    tm.format(PRETTY_DATETIME_FORMAT).to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{group_num, Flags, ScanUtil, Stater, Token};
@@ -1064,14 +1074,4 @@ mod tests {
         ];
         assert_eq!(&expected, &Stater::generate_tokens(s, true).unwrap());
     }
-}
-
-const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f %z";
-
-fn pretty_time(sec: i64, nsec: i64) -> String {
-    // Return the date in UTC
-    let tm = chrono::DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
-    let tm: DateTime<Local> = tm.into();
-
-    tm.format(PRETTY_DATETIME_FORMAT).to_string()
 }
