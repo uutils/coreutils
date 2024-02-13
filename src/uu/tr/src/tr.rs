@@ -64,20 +64,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let mut msg: String = "extra operand".into();
+    let start: &str = "extra operand";
     if sets_len > 1 {
         if delete_flag && !squeeze_flag {
-            msg = format!("{} {}", msg, sets[1].quote());
-            if sets_len == 2 {
-                msg = format!(
-                    "{}\n{}",
-                    msg, "Only one string may be given when deleting without squeezing repeats."
-                );
-            }
+            let op = sets[1].quote();
+            let msg = if sets_len == 2 {
+                format!(
+                    "{} {}\nOnly one string may be given when deleting without squeezing repeats.",
+                    start, op,
+                )
+            } else {
+                format!("{} {}", start, op,)
+            };
             return Err(UUsageError::new(1, msg));
         }
         if sets_len > 2 {
-            msg = format!("{} {}", msg, sets[2].quote());
+            let op = sets[2].quote();
+            let msg = format!("{} {}", start, op);
             return Err(UUsageError::new(1, msg));
         }
     }
