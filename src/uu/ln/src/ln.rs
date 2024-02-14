@@ -300,6 +300,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     let mut linked_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
 
     let mut all_successful = true;
+
     for srcpath in files {
         let targetpath =
             if settings.no_dereference && matches!(settings.overwrite, OverwriteMode::Force) {
@@ -319,8 +320,30 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                             show_error!("Could not update {}: {}", target_dir.quote(), e);
                         };
                     }
+                    target_dir.to_path_buf()
+                } else {
+                    if target_dir.is_dir() {
+                        match srcpath.as_os_str().to_str() {
+                            Some(name) => {
+                                match Path::new(name).file_name() {
+                                    Some(basename) => target_dir.join(basename),
+                                    // This can be None only for "." or "..". Trying
+                                    // to create a link with such name will fail with
+                                    // EEXIST, which agrees with the behavior of GNU
+                                    // coreutils.
+                                    None => target_dir.join(name),
+                                }
+                            }
+                            None => {
+                                show_error!("cannot stat {}: No such file or directory", srcpath.quote());
+                                all_successful = false;
+                                continue;
+                            }
+                        }
+                    } else {
+                        target_dir.to_path_buf()
+                    }
                 }
-                target_dir.to_path_buf()
             } else {
                 match srcpath.as_os_str().to_str() {
                     Some(name) => {
