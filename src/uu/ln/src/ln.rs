@@ -300,50 +300,28 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     let mut linked_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
 
     let mut all_successful = true;
-
     for srcpath in files {
         let targetpath =
-            if settings.no_dereference && matches!(settings.overwrite, OverwriteMode::Force) {
+            if settings.no_dereference
+                && matches!(settings.overwrite, OverwriteMode::Force)
+                && target_dir.is_symlink()
+            {
                 // In that case, we don't want to do link resolution
                 // We need to clean the target
-                if target_dir.is_symlink() {
-                    if target_dir.is_file() {
-                        if let Err(e) = fs::remove_file(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.quote(), e);
-                        };
-                    }
-                    if target_dir.is_dir() {
-                        // Not sure why but on Windows, the symlink can be
-                        // considered as a dir
-                        // See test_ln::test_symlink_no_deref_dir
-                        if let Err(e) = fs::remove_dir(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.quote(), e);
-                        };
-                    }
-                    target_dir.to_path_buf()
-                } else {
-                    if target_dir.is_dir() {
-                        match srcpath.as_os_str().to_str() {
-                            Some(name) => {
-                                match Path::new(name).file_name() {
-                                    Some(basename) => target_dir.join(basename),
-                                    // This can be None only for "." or "..". Trying
-                                    // to create a link with such name will fail with
-                                    // EEXIST, which agrees with the behavior of GNU
-                                    // coreutils.
-                                    None => target_dir.join(name),
-                                }
-                            }
-                            None => {
-                                show_error!("cannot stat {}: No such file or directory", srcpath.quote());
-                                all_successful = false;
-                                continue;
-                            }
-                        }
-                    } else {
-                        target_dir.to_path_buf()
-                    }
+                if target_dir.is_file() {
+                    if let Err(e) = fs::remove_file(target_dir) {
+                        show_error!("Could not update {}: {}", target_dir.quote(), e);
+                    };
                 }
+                if target_dir.is_dir() {
+                    // Not sure why but on Windows, the symlink can be
+                    // considered as a dir
+                    // See test_ln::test_symlink_no_deref_dir
+                    if let Err(e) = fs::remove_dir(target_dir) {
+                        show_error!("Could not update {}: {}", target_dir.quote(), e);
+                    };
+                }
+                target_dir.to_path_buf()
             } else {
                 match srcpath.as_os_str().to_str() {
                     Some(name) => {
