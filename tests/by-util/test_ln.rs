@@ -587,6 +587,9 @@ fn test_symlink_no_deref_file_in_destination_dir() {
     assert!(at.is_symlink(link1));
     assert_eq!(at.resolve_link(link1), file1);
 
+    // -n alone should fail if destination exists already (it should now)
+    scene.ucmd().args(&["-sn", file1, dest]).fails();
+
     // -nf should also work
     scene
         .ucmd()
