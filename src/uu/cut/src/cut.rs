@@ -368,7 +368,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         matches.indices_of(options::FIELDS),
     ]
     .into_iter()
-    .filter_map(|mode| mode.map(|indices| indices.len()))
+    .map(|indices| indices.unwrap_or_default().count())
     .sum();
 
     let mode_parse = match (
