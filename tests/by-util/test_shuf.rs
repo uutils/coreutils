@@ -80,6 +80,27 @@ fn test_echo() {
 }
 
 #[test]
+fn test_echo_multi() {
+    let result = new_ucmd!()
+        .arg("-e")
+        .arg("a")
+        .arg("b")
+        .arg("-e")
+        .arg("c")
+        .succeeds();
+    result.no_stderr();
+
+    let mut result_seq: Vec<String> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.into())
+        .collect();
+    result_seq.sort_unstable();
+    assert_eq!(result_seq, ["a", "b", "c"], "Output is not a permutation");
+}
+
+#[test]
 fn test_head_count() {
     let repeat_limit = 5;
     let input_seq = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];

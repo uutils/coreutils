@@ -129,6 +129,7 @@ pub fn uu_app() -> Command {
                 .help("treat each ARG as an input line")
                 .use_value_delimiter(false)
                 .num_args(0..)
+                .action(clap::ArgAction::Append)
                 .conflicts_with(options::INPUT_RANGE),
         )
         .arg(
