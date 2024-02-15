@@ -145,6 +145,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(options::HEAD_COUNT)
                 .value_name("COUNT")
+                .action(clap::ArgAction::Append)
                 .help("output at most COUNT lines"),
         )
         .arg(

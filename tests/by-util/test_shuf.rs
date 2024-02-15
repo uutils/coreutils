@@ -132,6 +132,72 @@ fn test_head_count() {
 }
 
 #[test]
+fn test_head_count_multi_big_then_small() {
+    let repeat_limit = 5;
+    let input_seq = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let input = input_seq
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<String>>()
+        .join("\n");
+
+    let result = new_ucmd!()
+        .arg("-n")
+        .arg(&(repeat_limit + 1).to_string())
+        .arg("-n")
+        .arg(&repeat_limit.to_string())
+        .pipe_in(input.as_bytes())
+        .succeeds();
+    result.no_stderr();
+
+    let result_seq: Vec<i32> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap())
+        .collect();
+    assert_eq!(result_seq.len(), repeat_limit, "Output is not limited");
+    assert!(
+        result_seq.iter().all(|x| input_seq.contains(x)),
+        "Output includes element not from input: {}",
+        result.stdout_str()
+    );
+}
+
+#[test]
+fn test_head_count_multi_small_then_big() {
+    let repeat_limit = 5;
+    let input_seq = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let input = input_seq
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<String>>()
+        .join("\n");
+
+    let result = new_ucmd!()
+        .arg("-n")
+        .arg(&repeat_limit.to_string())
+        .arg("-n")
+        .arg(&(repeat_limit + 1).to_string())
+        .pipe_in(input.as_bytes())
+        .succeeds();
+    result.no_stderr();
+
+    let result_seq: Vec<i32> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap())
+        .collect();
+    assert_eq!(result_seq.len(), repeat_limit, "Output is not limited");
+    assert!(
+        result_seq.iter().all(|x| input_seq.contains(x)),
+        "Output includes element not from input: {}",
+        result.stdout_str()
+    );
+}
+
+#[test]
 fn test_repeat() {
     let repeat_limit = 15000;
     let input_seq = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
