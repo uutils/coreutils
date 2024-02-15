@@ -59,6 +59,7 @@ impl UNameOutput {
         }
         output
     }
+
     pub fn new(opts: &Options) -> UResult<Self> {
         let uname =
             PlatformInfo::new().map_err(|_e| USimpleError::new(1, "cannot get system name"))?;
@@ -93,9 +94,9 @@ impl UNameOutput {
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
         let processor = opts.processor.then(|| "unknown".to_string());
 
-        let hardware_platform = opts.hardware_platform.then(|| "unknown".to_string());
         // This option is unsupported on modern Linux systems
         // See: https://lists.gnu.org/archive/html/bug-coreutils/2005-09/msg00063.html
+        let hardware_platform = opts.hardware_platform.then(|| "unknown".to_string());
 
         Ok(Self {
             kernel_name,
