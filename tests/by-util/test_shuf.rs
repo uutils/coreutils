@@ -49,6 +49,13 @@ fn test_zero_termination() {
 }
 
 #[test]
+fn test_empty_input() {
+    let result = new_ucmd!().pipe_in(vec![]).succeeds();
+    result.no_stderr();
+    result.no_stdout();
+}
+
+#[test]
 fn test_echo() {
     let input_seq = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let result = new_ucmd!()
