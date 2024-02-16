@@ -60,7 +60,7 @@ pub enum PositiveSign {
     Space,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NumberAlignment {
     Left,
     RightSpace,
@@ -168,6 +168,24 @@ impl Formatter for UnsignedInt {
     }
 
     fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
+        // A signed int spec might be mapped to an unsigned int spec if no sign is specified
+        let s = if let Spec::SignedInt {
+            width,
+            precision,
+            positive_sign: PositiveSign::None,
+            alignment,
+        } = s
+        {
+            Spec::UnsignedInt {
+                variant: UnsignedIntVariant::Decimal,
+                width,
+                precision,
+                alignment,
+            }
+        } else {
+            s
+        };
+
         let Spec::UnsignedInt {
             variant,
             width,
