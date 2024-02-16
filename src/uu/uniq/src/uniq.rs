@@ -10,6 +10,7 @@ use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Write};
 use std::str::FromStr;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::posix::{posix_version, OBSOLETE};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("uniq.md");
@@ -23,7 +24,6 @@ pub mod options {
     pub static IGNORE_CASE: &str = "ignore-case";
     pub static REPEATED: &str = "repeated";
     pub static SKIP_FIELDS: &str = "skip-fields";
-    pub static OBSOLETE_SKIP_FIELDS: &str = "obsolete_skip_field";
     pub static SKIP_CHARS: &str = "skip-chars";
     pub static UNIQUE: &str = "unique";
     pub static ZERO_TERMINATED: &str = "zero-terminated";
@@ -53,8 +53,6 @@ struct Uniq {
     ignore_case: bool,
     zero_terminated: bool,
 }
-
-const OBSOLETE_SKIP_FIELDS_DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 macro_rules! write_line_terminator {
     ($writer:expr, $line_terminator:expr) => {
@@ -239,43 +237,266 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Optio
     })
 }
 
-/// Gets number of fields to be skipped from the shorthand option `-N`
+/// Extract obsolete shorthands (if any) for skip fields and skip chars options
+/// following GNU `uniq` behavior
 ///
-/// ```bash
-/// uniq -12345
-/// ```
-/// the first digit isn't interpreted by clap as part of the value
-/// so `get_one()` would return `2345`, then to get the actual value
-/// we loop over every possible first digit, only one of which can be
-/// found in the command line because they conflict with each other,
-/// append the value to it and parse the resulting string as usize,
-/// an error at this point means that a character that isn't a digit was given
-fn obsolete_skip_field(matches: &ArgMatches) -> UResult<Option<usize>> {
-    for opt_text in OBSOLETE_SKIP_FIELDS_DIGITS {
-        let argument = matches.get_one::<String>(opt_text);
-        if matches.contains_id(opt_text) {
-            let mut full = opt_text.to_owned();
-            if let Some(ar) = argument {
-                full.push_str(ar);
-            }
-            let value = full.parse::<usize>();
+/// Examples for obsolete skip fields option
+/// `uniq -1 file` would equal `uniq -f1 file`
+/// `uniq -1 -2 -3 file` would equal `uniq -f123 file`
+/// `uniq -1 -2 -f5 file` would equal `uniq -f5 file`
+/// `uniq -u20s4 file` would equal `uniq -u -f20 -s4 file`
+/// `uniq -D1w3 -3 file` would equal `uniq -D -f3 -w3 file`
+///
+/// Examples for obsolete skip chars option
+/// `uniq +1 file` would equal `uniq -s1 file`
+/// `uniq +1 -s2 file` would equal `uniq -s2 file`
+/// `uniq -s2 +3 file` would equal `uniq -s3 file`
+///
+fn handle_obsolete(args: impl uucore::Args) -> (Vec<OsString>, Option<usize>, Option<usize>) {
+    let mut skip_fields_old = None;
+    let mut skip_chars_old = None;
+    let mut preceding_long_opt_req_value = false;
+    let mut preceding_short_opt_req_value = false;
 
-            if let Ok(val) = value {
-                return Ok(Some(val));
-            } else {
-                return Err(USimpleError {
-                    code: 1,
-                    message: format!("Invalid argument for skip-fields: {}", full),
-                }
-                .into());
+    let filtered_args = args
+        .filter_map(|os_slice| {
+            filter_args(
+                os_slice,
+                &mut skip_fields_old,
+                &mut skip_chars_old,
+                &mut preceding_long_opt_req_value,
+                &mut preceding_short_opt_req_value,
+            )
+        })
+        .collect();
+
+    // exacted String values (if any) for skip_fields_old and skip_chars_old
+    // are guaranteed to consist of ascii digit chars only at this point
+    // so, it is safe to parse into usize and collapse Result into Option
+    let skip_fields_old: Option<usize> = skip_fields_old.and_then(|v| v.parse::<usize>().ok());
+    let skip_chars_old: Option<usize> = skip_chars_old.and_then(|v| v.parse::<usize>().ok());
+
+    (filtered_args, skip_fields_old, skip_chars_old)
+}
+
+fn filter_args(
+    os_slice: OsString,
+    skip_fields_old: &mut Option<String>,
+    skip_chars_old: &mut Option<String>,
+    preceding_long_opt_req_value: &mut bool,
+    preceding_short_opt_req_value: &mut bool,
+) -> Option<OsString> {
+    let filter: Option<OsString>;
+    if let Some(slice) = os_slice.to_str() {
+        if should_extract_obs_skip_fields(
+            slice,
+            preceding_long_opt_req_value,
+            preceding_short_opt_req_value,
+        ) {
+            // start of the short option string
+            // that can have obsolete skip fields option value in it
+            filter = handle_extract_obs_skip_fields(slice, skip_fields_old);
+        } else if should_extract_obs_skip_chars(
+            slice,
+            preceding_long_opt_req_value,
+            preceding_short_opt_req_value,
+        ) {
+            // the obsolete skip chars option
+            filter = handle_extract_obs_skip_chars(slice, skip_chars_old);
+        } else {
+            // either not a short option
+            // or a short option that cannot have obsolete lines value in it
+            filter = Some(OsString::from(slice));
+            // Check and reset to None obsolete values extracted so far
+            // if corresponding new/documented options are encountered next.
+            // NOTE: For skip fields - occurrences of corresponding new/documented options
+            // inside combined short options ike '-u20s4' or '-D1w3', etc
+            // are also covered in `handle_extract_obs_skip_fields()` function
+            if slice.starts_with("-f") {
+                *skip_fields_old = None;
+            }
+            if slice.starts_with("-s") {
+                *skip_chars_old = None;
             }
         }
+        handle_preceding_options(
+            slice,
+            preceding_long_opt_req_value,
+            preceding_short_opt_req_value,
+        );
+    } else {
+        // Cannot cleanly convert os_slice to UTF-8
+        // Do not process and return as-is
+        // This will cause failure later on, but we should not handle it here
+        // and let clap panic on invalid UTF-8 argument
+        filter = Some(os_slice);
     }
-    Ok(None)
+    filter
+}
+
+/// Helper function to [`filter_args`]
+/// Checks if the slice is a true short option (and not hyphen prefixed value of an option)
+/// and if so, a short option that can contain obsolete skip fields value
+fn should_extract_obs_skip_fields(
+    slice: &str,
+    preceding_long_opt_req_value: &bool,
+    preceding_short_opt_req_value: &bool,
+) -> bool {
+    slice.starts_with('-')
+        && !slice.starts_with("--")
+        && !preceding_long_opt_req_value
+        && !preceding_short_opt_req_value
+        && !slice.starts_with("-s")
+        && !slice.starts_with("-f")
+        && !slice.starts_with("-w")
+}
+
+/// Helper function to [`filter_args`]
+/// Checks if the slice is a true obsolete skip chars short option
+fn should_extract_obs_skip_chars(
+    slice: &str,
+    preceding_long_opt_req_value: &bool,
+    preceding_short_opt_req_value: &bool,
+) -> bool {
+    slice.starts_with('+')
+        && posix_version().is_some_and(|v| v <= OBSOLETE)
+        && !preceding_long_opt_req_value
+        && !preceding_short_opt_req_value
+        && slice.chars().nth(1).map_or(false, |c| c.is_ascii_digit())
+}
+
+/// Helper function to [`filter_args`]
+/// Captures if current slice is a preceding option
+/// that requires value
+fn handle_preceding_options(
+    slice: &str,
+    preceding_long_opt_req_value: &mut bool,
+    preceding_short_opt_req_value: &mut bool,
+) {
+    // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
+    // following slice should be treaded as value for this option
+    // even if it starts with '-' (which would be treated as hyphen prefixed value)
+    if slice.starts_with("--") {
+        use options as O;
+        *preceding_long_opt_req_value = &slice[2..] == O::SKIP_CHARS
+            || &slice[2..] == O::SKIP_FIELDS
+            || &slice[2..] == O::CHECK_CHARS
+            || &slice[2..] == O::GROUP
+            || &slice[2..] == O::ALL_REPEATED
+    }
+    // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
+    // following slice should be treaded as value for this option
+    // even if it starts with '-' (which would be treated as hyphen prefixed value)
+    *preceding_short_opt_req_value = slice == "-s" || slice == "-f" || slice == "-w";
+    // slice is a value
+    // reset preceding option flags
+    if !slice.starts_with('-') {
+        *preceding_short_opt_req_value = false;
+        *preceding_long_opt_req_value = false;
+    }
+}
+
+/// Helper function to [`filter_args`]
+/// Extracts obsolete skip fields numeric part from argument slice
+/// and filters it out
+fn handle_extract_obs_skip_fields(
+    slice: &str,
+    skip_fields_old: &mut Option<String>,
+) -> Option<OsString> {
+    let mut obs_extracted: Vec<char> = vec![];
+    let mut obs_end_reached = false;
+    let mut obs_overwritten_by_new = false;
+    let filtered_slice: Vec<char> = slice
+        .chars()
+        .filter(|c| {
+            if c.eq(&'f') {
+                // any extracted obsolete skip fields value up to this point should be discarded
+                // as the new/documented option for skip fields was used after it
+                // i.e. in situation like `-u12f3`
+                // The obsolete skip fields value should still be extracted, filtered out
+                // but the skip_fields_old should be set to None instead of Some(String) later on
+                obs_overwritten_by_new = true;
+            }
+            // To correctly process scenario like '-u20s4' or '-D1w3', etc
+            // we need to stop extracting digits once alphabetic character is encountered
+            // after we already have something in obs_extracted
+            if c.is_ascii_digit() && !obs_end_reached {
+                obs_extracted.push(*c);
+                false
+            } else {
+                if !obs_extracted.is_empty() {
+                    obs_end_reached = true;
+                }
+                true
+            }
+        })
+        .collect();
+
+    if obs_extracted.is_empty() {
+        // no obsolete value found/extracted
+        Some(OsString::from(slice))
+    } else {
+        // obsolete value was extracted
+        // unless there was new/documented option for skip fields used after it
+        // set the skip_fields_old value (concatenate to it if there was a value there already)
+        if obs_overwritten_by_new {
+            *skip_fields_old = None;
+        } else {
+            let mut extracted: String = obs_extracted.iter().collect();
+            if let Some(val) = skip_fields_old {
+                extracted.push_str(&val);
+            }
+            *skip_fields_old = Some(extracted);
+        }
+        if filtered_slice.get(1).is_some() {
+            // there were some short options in front of or after obsolete lines value
+            // i.e. '-u20s4' or '-D1w3' or similar, which after extraction of obsolete lines value
+            // would look like '-us4' or '-Dw3' or similar
+            let filtered_slice: String = filtered_slice.iter().collect();
+            Some(OsString::from(filtered_slice))
+        } else {
+            None
+        }
+    }
+}
+
+/// Helper function to [`filter_args`]
+/// Extracts obsolete skip chars numeric part from argument slice
+fn handle_extract_obs_skip_chars(
+    slice: &str,
+    skip_chars_old: &mut Option<String>,
+) -> Option<OsString> {
+    let mut obs_extracted: Vec<char> = vec![];
+    let mut slice_chars = slice.chars();
+    slice_chars.next(); // drop leading '+' character
+    for c in slice_chars {
+        if c.is_ascii_digit() {
+            obs_extracted.push(c);
+        } else {
+            // for obsolete skip chars option the whole value after '+' should be numeric
+            // so, if any non-digit characters are encountered in the slice (i.e. `+1q`, etc)
+            // set skip_chars_old to None and return whole slice back.
+            // It will be parsed by clap and panic with appropriate error message
+            *skip_chars_old = None;
+            return Some(OsString::from(slice));
+        }
+    }
+    if obs_extracted.is_empty() {
+        // no obsolete value found/extracted
+        // i.e. it was just '+' character alone
+        Some(OsString::from(slice))
+    } else {
+        // successfully extracted numeric value
+        // capture it and return None to filter out the whole slice
+        *skip_chars_old = Some(obs_extracted.iter().collect());
+        None
+    }
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let (args, skip_fields_old, skip_chars_old) = handle_obsolete(args);
+
     let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
 
     let files = matches.get_many::<OsString>(ARG_FILES);
@@ -286,8 +507,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     let skip_fields_modern: Option<usize> = opt_parsed(options::SKIP_FIELDS, &matches)?;
-
-    let skip_fields_old: Option<usize> = obsolete_skip_field(&matches)?;
+    let skip_chars_modern: Option<usize> = opt_parsed(options::SKIP_CHARS, &matches)?;
 
     let uniq = Uniq {
         repeats_only: matches.get_flag(options::REPEATED)
@@ -298,7 +518,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         delimiters: get_delimiter(&matches),
         show_counts: matches.get_flag(options::COUNT),
         skip_fields: skip_fields_modern.or(skip_fields_old),
-        slice_start: opt_parsed(options::SKIP_CHARS, &matches)?,
+        slice_start: skip_chars_modern.or(skip_chars_old),
         slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
         ignore_case: matches.get_flag(options::IGNORE_CASE),
         zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
@@ -397,7 +617,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::SKIP_FIELDS)
                 .short('f')
                 .long(options::SKIP_FIELDS)
-                .overrides_with_all(OBSOLETE_SKIP_FIELDS_DIGITS)
+                // .overrides_with_all(OBSOLETE_SKIP_FIELDS_DIGITS)
                 .help("avoid comparing the first N fields")
                 .value_name("N"),
         )
@@ -415,24 +635,24 @@ pub fn uu_app() -> Command {
                 .help("end lines with 0 byte, not newline")
                 .action(ArgAction::SetTrue),
         )
-        .group(
-            // in GNU `uniq` every every digit of these arguments
-            // would be interpreted as a simple flag,
-            // these flags then are concatenated to get
-            // the number of fields to skip.
-            // in this way `uniq -1 -z -2` would be
-            // equal to `uniq -12 -q`, since this behavior
-            // is counterintuitive and it's hard to do in clap
-            // we handle it more like GNU `fold`: we have a flag
-            // for each possible initial digit, that takes the
-            // rest of the value as argument.
-            // we disallow explicitly multiple occurrences
-            // because then it would have a different behavior
-            // from GNU
-            ArgGroup::new(options::OBSOLETE_SKIP_FIELDS)
-                .multiple(false)
-                .args(OBSOLETE_SKIP_FIELDS_DIGITS)
-        )
+        // .group(
+        //     // in GNU `uniq` every every digit of these arguments
+        //     // would be interpreted as a simple flag,
+        //     // these flags then are concatenated to get
+        //     // the number of fields to skip.
+        //     // in this way `uniq -1 -z -2` would be
+        //     // equal to `uniq -12 -q`, since this behavior
+        //     // is counterintuitive and it's hard to do in clap
+        //     // we handle it more like GNU `fold`: we have a flag
+        //     // for each possible initial digit, that takes the
+        //     // rest of the value as argument.
+        //     // we disallow explicitly multiple occurrences
+        //     // because then it would have a different behavior
+        //     // from GNU
+        //     ArgGroup::new(options::OBSOLETE_SKIP_FIELDS)
+        //         .multiple(false)
+        //         .args(OBSOLETE_SKIP_FIELDS_DIGITS)
+        // )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
@@ -441,14 +661,14 @@ pub fn uu_app() -> Command {
                 .value_hint(clap::ValueHint::FilePath),
         );
 
-    for i in OBSOLETE_SKIP_FIELDS_DIGITS {
-        cmd = cmd.arg(
-            Arg::new(i)
-                .short(i.chars().next().unwrap())
-                .num_args(0..=1)
-                .hide(true),
-        );
-    }
+    // for i in OBSOLETE_SKIP_FIELDS_DIGITS {
+    //     cmd = cmd.arg(
+    //         Arg::new(i)
+    //             .short(i.chars().next().unwrap())
+    //             .num_args(0..=1)
+    //             .hide(true),
+    //     );
+    // }
 
     cmd
 }
