@@ -195,6 +195,13 @@ fn read_input_file(filename: &str) -> UResult<Vec<u8>> {
 }
 
 fn find_seps(data: &mut Vec<&[u8]>, sep: u8) {
+    // Special case: If data is empty (and does not even contain a single 'sep'
+    // to indicate the presence of the empty element), then behave as if the input contained no elements at all.
+    if data.len() == 1 && data[0].is_empty() {
+        data.clear();
+        return;
+    }
+
     // need to use for loop so we don't borrow the vector as we modify it in place
     // basic idea:
     // * We don't care about the order of the result. This lets us slice the slices
