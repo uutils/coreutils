@@ -25,8 +25,8 @@ use crossterm::{
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::{display::Quotable, show};
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("more.md");
@@ -113,25 +113,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let file = Path::new(file);
             if file.is_dir() {
                 terminal::disable_raw_mode().unwrap();
-                return Err(UUsageError::new(
-                    1,
+                show!(UUsageError::new(
+                    0,
                     format!("{} is a directory.", file.quote()),
                 ));
+                terminal::enable_raw_mode().unwrap();
+                continue;
             }
             if !file.exists() {
                 terminal::disable_raw_mode().unwrap();
-                return Err(USimpleError::new(
-                    1,
+                show!(USimpleError::new(
+                    0,
                     format!("cannot open {}: No such file or directory", file.quote()),
                 ));
+                terminal::enable_raw_mode().unwrap();
+                continue;
             }
             let opened_file = match File::open(file) {
                 Err(why) => {
                     terminal::disable_raw_mode().unwrap();
-                    return Err(USimpleError::new(
-                        1,
+                    show!(USimpleError::new(
+                        0,
                         format!("cannot open {}: {}", file.quote(), why.kind()),
                     ));
+                    terminal::enable_raw_mode().unwrap();
+                    continue;
                 }
                 Ok(opened_file) => opened_file,
             };

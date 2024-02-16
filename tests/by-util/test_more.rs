@@ -91,8 +91,8 @@ fn test_more_dir_arg() {
     if std::io::stdout().is_terminal() {
         new_ucmd!()
             .arg(".")
-            .fails()
-            .usage_error("'.' is a directory.");
+            .succeeds()
+            .stderr_contains("'.' is a directory.");
     }
 }
 
@@ -108,8 +108,46 @@ fn test_more_invalid_file_perms() {
         at.make_file("invalid-perms.txt");
         set_permissions(at.plus("invalid-perms.txt"), permissions).unwrap();
         ucmd.arg("invalid-perms.txt")
-            .fails()
-            .code_is(1)
+            .succeeds()
             .stderr_contains("permission denied");
+    }
+}
+
+#[test]
+fn test_more_error_on_single_arg() {
+    if std::io::stdout().is_terminal() {
+        let ts = TestScenario::new("more");
+        ts.fixtures.mkdir_all("folder");
+        ts.ucmd()
+            .arg("folder")
+            .succeeds()
+            .stderr_contains("is a directory");
+        ts.ucmd()
+            .arg("file1")
+            .succeeds()
+            .stderr_contains("No such file or directory");
+    }
+}
+
+#[test]
+fn test_more_error_on_multiple_files() {
+    if std::io::stdout().is_terminal() {
+        let ts = TestScenario::new("more");
+        ts.fixtures.mkdir_all("folder");
+        ts.fixtures.make_file("file1");
+        ts.ucmd()
+            .arg("folder")
+            .arg("file2")
+            .arg("file1")
+            .succeeds()
+            .stderr_contains("folder")
+            .stderr_contains("file2")
+            .stdout_contains("file1");
+        ts.ucmd()
+            .arg("file2")
+            .arg("file3")
+            .succeeds()
+            .stderr_contains("file2")
+            .stderr_contains("file3");
     }
 }

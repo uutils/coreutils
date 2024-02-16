@@ -503,7 +503,6 @@ fn test_write_to_self_empty() {
 
     let file = OpenOptions::new()
         .create_new(true)
-        .write(true)
         .append(true)
         .open(&file_path)
         .unwrap();
@@ -519,7 +518,6 @@ fn test_write_to_self() {
 
     let file = OpenOptions::new()
         .create_new(true)
-        .write(true)
         .append(true)
         .open(file_path)
         .unwrap();

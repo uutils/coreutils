@@ -1147,3 +1147,35 @@ fn check_against_gnu_tr_tests_no_abort_1() {
         .succeeds()
         .stdout_is("abb");
 }
+
+#[test]
+fn test_delete_flag_takes_only_one_operand() {
+    // gnu tr -d fails with more than 1 argument
+    new_ucmd!().args(&["-d", "a", "p"]).fails().stderr_contains(
+        "extra operand 'p'\nOnly one string may be given when deleting without squeezing repeats.",
+    );
+}
+
+#[test]
+fn test_truncate_flag_fails_with_more_than_two_operand() {
+    new_ucmd!()
+        .args(&["-t", "a", "b", "c"])
+        .fails()
+        .stderr_contains("extra operand 'c'");
+}
+
+#[test]
+fn test_squeeze_flag_fails_with_more_than_two_operand() {
+    new_ucmd!()
+        .args(&["-s", "a", "b", "c"])
+        .fails()
+        .stderr_contains("extra operand 'c'");
+}
+
+#[test]
+fn test_complement_flag_fails_with_more_than_two_operand() {
+    new_ucmd!()
+        .args(&["-c", "a", "b", "c"])
+        .fails()
+        .stderr_contains("extra operand 'c'");
+}

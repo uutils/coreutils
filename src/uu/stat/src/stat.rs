@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore datetime
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
@@ -545,10 +546,16 @@ impl Stater {
     }
 
     fn new(matches: &ArgMatches) -> UResult<Self> {
-        let files = matches
+        let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
             .map(|v| v.map(OsString::from).collect())
             .unwrap_or_default();
+        if files.is_empty() {
+            return Err(Box::new(USimpleError {
+                code: 1,
+                message: "missing operand\nTry 'stat --help' for more information.".to_string(),
+            }));
+        }
         let format_str = if matches.contains_id(options::PRINTF) {
             matches
                 .get_one::<String>(options::PRINTF)
@@ -944,6 +951,16 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
+}
+
+const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f %z";
+
+fn pretty_time(sec: i64, nsec: i64) -> String {
+    // Return the date in UTC
+    let tm = chrono::DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
+    let tm: DateTime<Local> = tm.into();
+
+    tm.format(PRETTY_DATETIME_FORMAT).to_string()
 }
 
 #[cfg(test)]
