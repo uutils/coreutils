@@ -809,13 +809,14 @@ impl Stater {
                                     }
 
                                     // time of file birth, human-readable; - if unknown
-                                    'w' => {
-                                        let (sec, nsec) = meta.birth();
-                                        OutputType::Str(pretty_time(sec as i64, nsec as i64))
-                                    }
+                                    'w' => OutputType::Str(
+                                        meta.birth()
+                                            .map(|(sec, nsec)| pretty_time(sec as i64, nsec as i64))
+                                            .unwrap_or(String::from("-")),
+                                    ),
 
                                     // time of file birth, seconds since Epoch; 0 if unknown
-                                    'W' => OutputType::Unsigned(meta.birth().0),
+                                    'W' => OutputType::Unsigned(meta.birth().unwrap_or_default().0),
 
                                     // time of last access, human-readable
                                     'x' => OutputType::Str(pretty_time(
@@ -1074,14 +1075,4 @@ mod tests {
         ];
         assert_eq!(&expected, &Stater::generate_tokens(s, true).unwrap());
     }
-}
-
-const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f %z";
-
-fn pretty_time(sec: i64, nsec: i64) -> String {
-    // Return the date in UTC
-    let tm = chrono::DateTime::from_timestamp(sec, nsec as u32).unwrap_or_default();
-    let tm: DateTime<Local> = tm.into();
-
-    tm.format(&PRETTY_DATETIME_FORMAT).to_string()
 }
