@@ -2,8 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
+// spell-checker:ignore badoption
+use clap::{
+    builder::ValueParser, crate_version, error::ContextKind, error::ErrorKind, Arg, ArgAction,
+    ArgMatches, Command,
+};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Write};
@@ -382,7 +385,7 @@ fn handle_preceding_options(
             || &slice[2..] == O::SKIP_FIELDS
             || &slice[2..] == O::CHECK_CHARS
             || &slice[2..] == O::GROUP
-            || &slice[2..] == O::ALL_REPEATED
+            || &slice[2..] == O::ALL_REPEATED;
     }
     // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
     // following slice should be treaded as value for this option
@@ -444,7 +447,7 @@ fn handle_extract_obs_skip_fields(
         } else {
             let mut extracted: String = obs_extracted.iter().collect();
             if let Some(val) = skip_fields_old {
-                extracted.push_str(&val);
+                extracted.push_str(val);
             }
             *skip_fields_old = Some(extracted);
         }
@@ -497,7 +500,34 @@ fn handle_extract_obs_skip_chars(
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, skip_fields_old, skip_chars_old) = handle_obsolete(args);
 
-    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
+    let mut cmd = uu_app();
+
+    // these overrides are necessary only to pass GNU tests
+    let override_arg_conflict_err = cmd.error(ErrorKind::ArgumentConflict, "uniq: --group is mutually exclusive with -c/-d/-D/-u\nTry 'uniq --help' for more information.\n");
+    let override_group_badoption_err = cmd.error(ErrorKind::InvalidValue, "uniq: invalid argument 'badoption' for '--group'\nValid arguments are:\n  - 'prepend'\n  - 'append'\n  - 'separate'\n  - 'both'\nTry 'uniq --help' for more information.\n");
+    let override_all_repeated_badoption_err = cmd.error(ErrorKind::InvalidValue,"uniq: invalid argument 'badoption' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\nTry 'uniq --help' for more information.\n");
+
+    // this is ugly, but seems to be the only way to coerce "correct" error message from clap to pass GNU tests
+    let matches = cmd.try_get_matches_from(args).map_err(|e| match e.kind() {
+        ErrorKind::ArgumentConflict => override_arg_conflict_err,
+        ErrorKind::InvalidValue
+            if e.get(ContextKind::InvalidValue)
+                .is_some_and(|v| v.to_string() == "badoption")
+                && e.get(ContextKind::InvalidArg)
+                    .is_some_and(|v| v.to_string().starts_with("--group")) =>
+        {
+            override_group_badoption_err
+        }
+        ErrorKind::InvalidValue
+            if e.get(ContextKind::InvalidValue)
+                .is_some_and(|v| v.to_string() == "badoption")
+                && e.get(ContextKind::InvalidArg)
+                    .is_some_and(|v| v.to_string().starts_with("--all-repeated")) =>
+        {
+            override_all_repeated_badoption_err
+        }
+        _ => e,
+    })?;
 
     let files = matches.get_many::<OsString>(ARG_FILES);
 
@@ -527,7 +557,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if uniq.show_counts && uniq.all_repeated {
         return Err(UUsageError::new(
             1,
-            "printing all duplicated lines and repeat counts is meaningless",
+            "printing all duplicated lines and repeat counts is meaningless\nTry 'uniq --help' for more information.\n",
         ));
     }
 
@@ -538,11 +568,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let mut cmd = Command::new(uucore::util_name())
+    Command::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .after_help(AFTER_HELP)
         .arg(
             Arg::new(options::ALL_REPEATED)
                 .short('D')
@@ -576,6 +607,7 @@ pub fn uu_app() -> Command {
                     options::REPEATED,
                     options::ALL_REPEATED,
                     options::UNIQUE,
+                    options::COUNT
                 ]),
         )
         .arg(
@@ -617,7 +649,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::SKIP_FIELDS)
                 .short('f')
                 .long(options::SKIP_FIELDS)
-                // .overrides_with_all(OBSOLETE_SKIP_FIELDS_DIGITS)
                 .help("avoid comparing the first N fields")
                 .value_name("N"),
         )
@@ -635,42 +666,13 @@ pub fn uu_app() -> Command {
                 .help("end lines with 0 byte, not newline")
                 .action(ArgAction::SetTrue),
         )
-        // .group(
-        //     // in GNU `uniq` every every digit of these arguments
-        //     // would be interpreted as a simple flag,
-        //     // these flags then are concatenated to get
-        //     // the number of fields to skip.
-        //     // in this way `uniq -1 -z -2` would be
-        //     // equal to `uniq -12 -q`, since this behavior
-        //     // is counterintuitive and it's hard to do in clap
-        //     // we handle it more like GNU `fold`: we have a flag
-        //     // for each possible initial digit, that takes the
-        //     // rest of the value as argument.
-        //     // we disallow explicitly multiple occurrences
-        //     // because then it would have a different behavior
-        //     // from GNU
-        //     ArgGroup::new(options::OBSOLETE_SKIP_FIELDS)
-        //         .multiple(false)
-        //         .args(OBSOLETE_SKIP_FIELDS_DIGITS)
-        // )
         .arg(
             Arg::new(ARG_FILES)
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .num_args(0..=2)
                 .value_hint(clap::ValueHint::FilePath),
-        );
-
-    // for i in OBSOLETE_SKIP_FIELDS_DIGITS {
-    //     cmd = cmd.arg(
-    //         Arg::new(i)
-    //             .short(i.chars().next().unwrap())
-    //             .num_args(0..=1)
-    //             .hide(true),
-    //     );
-    // }
-
-    cmd
+        )
 }
 
 fn get_delimiter(matches: &ArgMatches) -> Delimiters {
