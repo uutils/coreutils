@@ -322,7 +322,7 @@ smallvec = { version = "1.13", features = ["union"] }
 tempfile = "3.10.0"
 uutils_term_grid = "0.3"
 terminal_size = "0.3.0"
-textwrap = { version = "0.16.0", features = ["terminal_size"] }
+textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "1.0"
 time = { version = "0.3" }
 unicode-segmentation = "1.11.0"
