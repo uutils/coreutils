@@ -63,6 +63,7 @@ use libc::{
     mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
 };
 use std::borrow::Cow;
+#[cfg(not(windows))]
 use std::convert::From;
 #[cfg(unix)]
 use std::ffi::CStr;
