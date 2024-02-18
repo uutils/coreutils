@@ -229,29 +229,9 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     })
 }
 
-// If the --format argument and its value are provided separately, they are concatenated to avoid a
-// potential clap error. For example: "--format --%f--" is changed to "--format=--%f--".
-fn concat_format_arg_and_value(args: &[String]) -> Vec<String> {
-    let mut processed_args: Vec<String> = Vec::with_capacity(args.len());
-    let mut iter = args.iter().peekable();
-
-    while let Some(arg) = iter.next() {
-        if arg == "--format" && iter.peek().is_some() {
-            processed_args.push(format!("--format={}", iter.peek().unwrap()));
-            iter.next();
-        } else {
-            processed_args.push(arg.to_string());
-        }
-    }
-
-    processed_args
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
-
-    let matches = uu_app().try_get_matches_from(concat_format_arg_and_value(&args))?;
+    let matches = uu_app().try_get_matches_from(args)?;
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
@@ -300,7 +280,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::FORMAT)
                 .long(options::FORMAT)
                 .help("use printf style floating-point FORMAT; see FORMAT below for details")
-                .value_name("FORMAT"),
+                .value_name("FORMAT")
+                .allow_hyphen_values(true),
         )
         .arg(
             Arg::new(options::FROM)
