@@ -4,15 +4,15 @@
 // file that was distributed with this source code.
 // spell-checker:ignore badoption
 use clap::{
-    builder::ValueParser, crate_version, error::ContextKind, error::ErrorKind, Arg, ArgAction,
-    ArgMatches, Command,
+    builder::ValueParser, crate_version, error::ContextKind, error::Error, error::ErrorKind, Arg,
+    ArgAction, ArgMatches, Command,
 };
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Write};
-use std::str::FromStr;
+use std::num::IntErrorKind;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::posix::{posix_version, OBSOLETE};
 use uucore::{format_usage, help_about, help_section, help_usage};
 
@@ -224,20 +224,24 @@ fn get_line_string(io_line: io::Result<Vec<u8>>) -> UResult<String> {
         .map_err(|e| USimpleError::new(1, format!("failed to convert line to utf8: {e}")))
 }
 
-fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Option<T>> {
-    Ok(match matches.get_one::<String>(opt_name) {
-        Some(arg_str) => Some(arg_str.parse().map_err(|_| {
-            USimpleError::new(
-                1,
-                format!(
-                    "Invalid argument for {}: {}",
-                    opt_name,
-                    arg_str.maybe_quote()
-                ),
-            )
-        })?),
-        None => None,
-    })
+fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
+    match matches.get_one::<String>(opt_name) {
+        Some(arg_str) => match arg_str.parse::<usize>() {
+            Ok(v) => Ok(Some(v)),
+            Err(e) => match e.kind() {
+                IntErrorKind::PosOverflow => Ok(Some(usize::MAX)),
+                _ => Err(USimpleError::new(
+                    1,
+                    format!(
+                        "Invalid argument for {}: {}",
+                        opt_name,
+                        arg_str.maybe_quote()
+                    ),
+                )),
+            },
+        },
+        None => Ok(None),
+    }
 }
 
 /// Extract obsolete shorthands (if any) for skip fields and skip chars options
@@ -496,38 +500,52 @@ fn handle_extract_obs_skip_chars(
     }
 }
 
+/// Maps Clap errors to USimpleError and overrides 3 specific ones
+/// to meet requirements of GNU tests for `uniq`.
+/// Unfortunately these overrides are necessary, since several GNU tests
+/// for `uniq` hardcode and require the exact wording of the error message
+/// and it is not compatible with how Clap formats and displays those error messages.
+fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
+    let footer = "Try 'uniq --help' for more information.";
+    let override_arg_conflict =
+        "--group is mutually exclusive with -c/-d/-D/-u\n".to_string() + footer;
+    let override_group_badoption = "invalid argument 'badoption' for '--group'\nValid arguments are:\n  - 'prepend'\n  - 'append'\n  - 'separate'\n  - 'both'\n".to_string() + footer;
+    let override_all_repeated_badoption = "invalid argument 'badoption' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\n".to_string() + footer;
+
+    let error_message = match clap_error.kind() {
+        ErrorKind::ArgumentConflict => override_arg_conflict,
+        ErrorKind::InvalidValue
+            if clap_error
+                .get(ContextKind::InvalidValue)
+                .is_some_and(|v| v.to_string() == "badoption")
+                && clap_error
+                    .get(ContextKind::InvalidArg)
+                    .is_some_and(|v| v.to_string().starts_with("--group")) =>
+        {
+            override_group_badoption
+        }
+        ErrorKind::InvalidValue
+            if clap_error
+                .get(ContextKind::InvalidValue)
+                .is_some_and(|v| v.to_string() == "badoption")
+                && clap_error
+                    .get(ContextKind::InvalidArg)
+                    .is_some_and(|v| v.to_string().starts_with("--all-repeated")) =>
+        {
+            override_all_repeated_badoption
+        }
+        _ => clap_error.to_string(),
+    };
+    USimpleError::new(1, error_message)
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, skip_fields_old, skip_chars_old) = handle_obsolete(args);
 
-    let mut cmd = uu_app();
-
-    // these overrides are necessary only to pass GNU tests
-    let override_arg_conflict_err = cmd.error(ErrorKind::ArgumentConflict, "uniq: --group is mutually exclusive with -c/-d/-D/-u\nTry 'uniq --help' for more information.\n");
-    let override_group_badoption_err = cmd.error(ErrorKind::InvalidValue, "uniq: invalid argument 'badoption' for '--group'\nValid arguments are:\n  - 'prepend'\n  - 'append'\n  - 'separate'\n  - 'both'\nTry 'uniq --help' for more information.\n");
-    let override_all_repeated_badoption_err = cmd.error(ErrorKind::InvalidValue,"uniq: invalid argument 'badoption' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\nTry 'uniq --help' for more information.\n");
-
-    // this is ugly, but seems to be the only way to coerce "correct" error message from clap to pass GNU tests
-    let matches = cmd.try_get_matches_from(args).map_err(|e| match e.kind() {
-        ErrorKind::ArgumentConflict => override_arg_conflict_err,
-        ErrorKind::InvalidValue
-            if e.get(ContextKind::InvalidValue)
-                .is_some_and(|v| v.to_string() == "badoption")
-                && e.get(ContextKind::InvalidArg)
-                    .is_some_and(|v| v.to_string().starts_with("--group")) =>
-        {
-            override_group_badoption_err
-        }
-        ErrorKind::InvalidValue
-            if e.get(ContextKind::InvalidValue)
-                .is_some_and(|v| v.to_string() == "badoption")
-                && e.get(ContextKind::InvalidArg)
-                    .is_some_and(|v| v.to_string().starts_with("--all-repeated")) =>
-        {
-            override_all_repeated_badoption_err
-        }
-        _ => e,
-    })?;
+    let matches = uu_app()
+        .try_get_matches_from(args)
+        .map_err(|e| map_clap_errors(e))?;
 
     let files = matches.get_many::<OsString>(ARG_FILES);
 
@@ -555,9 +573,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if uniq.show_counts && uniq.all_repeated {
-        return Err(UUsageError::new(
+        return Err(USimpleError::new(
             1,
-            "printing all duplicated lines and repeat counts is meaningless\nTry 'uniq --help' for more information.\n",
+            "printing all duplicated lines and repeat counts is meaningless\nTry 'uniq --help' for more information.",
         ));
     }
 
@@ -671,6 +689,7 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
                 .num_args(0..=2)
+                .hide(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore nabcd badoption
+// spell-checker:ignore nabcd badoption schar
 use crate::common::util::TestScenario;
 use uucore::posix::OBSOLETE;
 
@@ -826,6 +826,16 @@ fn gnu_tests() {
             stderr: None,
             exit: None,
         },
+        // u128::MAX = 340282366920938463463374607431768211455
+        TestCase {
+            name: "121",
+            args: &["-d", "-u", "-w340282366920938463463374607431768211456"],
+            input: "a\na\n\x08",
+            stdout: Some(""),
+            stderr: None,
+            exit: None,
+        },
+        // Test 122 is the same as 121, just different big int overflow number
         TestCase {
             name: "123",
             args: &["--zero-terminated"],
@@ -1029,7 +1039,7 @@ fn gnu_tests() {
             result.stdout_is(stdout);
         }
         if let Some(stderr) = case.stderr {
-            result.stderr_contains(stderr);
+            result.stderr_is(stderr);
         }
         if let Some(exit) = case.exit {
             result.code_is(exit);
@@ -1051,10 +1061,37 @@ fn gnu_tests() {
             result.stdout_is(stdout);
         }
         if let Some(stderr) = case.stderr {
-            result.stderr_contains(stderr);
+            result.stderr_is(stderr);
         }
         if let Some(exit) = case.exit {
             result.code_is(exit);
         }
     }
 }
+
+#[test]
+fn gnu_locale_test() {
+    // let input = " y z\n\xa0 y z\n";
+
+}
+//         my $locale = $ENV{LOCALE_FR};
+// if ( defined $locale && $locale ne 'none' )
+//   {
+//     # I've only ever triggered the problem in a non-C locale.
+
+//     # See if isblank returns true for nbsp.
+//     my $x = qx!env printf '\xa0'| LC_ALL=$locale tr '[:blank:]' x!;
+//     # If so, expect just one line of output in the schar test.
+//     # Otherwise, expect two.
+//     my $in = " y z\n\xa0 y z\n";
+//     my $schar_exp = $x eq 'x' ? " y z\n" : $in;
+
+//     my @Locale_Tests =
+//     (
+//       # Test for a subtle, system-and-locale-dependent bug in uniq.
+//       ['schar', '-f1',  {IN => $in}, {OUT => $schar_exp},
+//         {ENV => "LC_ALL=$locale"}]
+//     );
+
+//     push @Tests, @Locale_Tests;
+//   }
