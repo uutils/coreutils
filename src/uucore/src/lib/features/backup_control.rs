@@ -474,7 +474,6 @@ pub fn source_is_target_backup(source: &Path, target: &Path, suffix: &str) -> bo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
     // Required to instantiate mutex in shared context
     use clap::Command;
     use once_cell::sync::Lazy;

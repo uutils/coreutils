@@ -6,11 +6,9 @@
 // spell-checker:ignore (strings) ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUV
 // spell-checker:ignore (encodings) lsbf msbf hexupper
 
-use data_encoding::{self, BASE32, BASE64};
-
 use std::io::{self, Read, Write};
 
-use data_encoding::{Encoding, BASE32HEX, BASE64URL, HEXUPPER};
+use data_encoding::{Encoding, BASE32, BASE32HEX, BASE64, BASE64URL, HEXUPPER};
 use data_encoding_macro::new_encoding;
 #[cfg(feature = "thiserror")]
 use thiserror::Error;

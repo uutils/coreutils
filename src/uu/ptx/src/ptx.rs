@@ -9,7 +9,6 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::default::Default;
 use std::error::Error;
 use std::fmt::{Display, Formatter, Write as FmtWrite};
 use std::fs::File;

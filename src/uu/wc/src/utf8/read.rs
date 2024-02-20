@@ -7,7 +7,6 @@ use super::*;
 use std::error::Error;
 use std::fmt;
 use std::io::{self, BufRead};
-use std::str;
 
 /// Wraps a `std::io::BufRead` buffered byte stream and decode it as UTF-8.
 pub struct BufReadDecoder<B: BufRead> {

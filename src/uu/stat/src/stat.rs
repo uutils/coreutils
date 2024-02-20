@@ -17,7 +17,6 @@ use uucore::{
 use chrono::{DateTime, Local};
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
-use std::convert::AsRef;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
