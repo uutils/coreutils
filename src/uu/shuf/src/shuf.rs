@@ -92,6 +92,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
+    if options.head_count == 0 {
+        // Do not attempt to read the random source or the input file.
+        // However, we must touch the output file, if given:
+        if let Some(s) = options.output {
+            File::create(&s[..])
+                .map_err_context(|| format!("failed to open {} for writing", s.quote()))?;
+        }
+        return Ok(());
+    }
+
     match mode {
         Mode::Echo(args) => {
             let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
