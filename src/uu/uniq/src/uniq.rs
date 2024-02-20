@@ -9,7 +9,7 @@ use clap::{
 };
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
 use std::num::IntErrorKind;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
@@ -70,7 +70,7 @@ impl Uniq {
         let mut first_line_printed = false;
         let mut group_count = 1;
         let line_terminator = self.get_line_terminator();
-        let mut lines = reader.split(line_terminator).map(get_line_string);
+        let mut lines = reader.split(line_terminator);
         let mut line = match lines.next() {
             Some(l) => l?,
             None => return Ok(()),
@@ -112,22 +112,28 @@ impl Uniq {
         Ok(())
     }
 
-    fn skip_fields<'a>(&self, line: &'a str) -> &'a str {
+    fn skip_fields(&self, line: &[u8]) -> Vec<u8> {
         if let Some(skip_fields) = self.skip_fields {
-            let mut i = 0;
-            let mut char_indices = line.char_indices();
+            let mut line = line.iter();
+            let mut line_after_skipped_field: Vec<u8>;
             for _ in 0..skip_fields {
-                if char_indices.all(|(_, c)| c.is_whitespace()) {
-                    return "";
+                if line.all(|u| u.is_ascii_whitespace()) {
+                    return Vec::new();
                 }
-                match char_indices.find(|(_, c)| c.is_whitespace()) {
-                    None => return "",
-                    Some((next_field_i, _)) => i = next_field_i,
+                line_after_skipped_field = line
+                    .by_ref()
+                    .skip_while(|u| !u.is_ascii_whitespace())
+                    .copied()
+                    .collect::<Vec<u8>>();
+
+                if line_after_skipped_field.is_empty() {
+                    return Vec::new();
                 }
+                line = line_after_skipped_field.iter();
             }
-            &line[i..]
+            line.copied().collect::<Vec<u8>>()
         } else {
-            line
+            line.to_vec()
         }
     }
 
@@ -139,15 +145,15 @@ impl Uniq {
         }
     }
 
-    fn cmp_keys(&self, first: &str, second: &str) -> bool {
+    fn cmp_keys(&self, first: &[u8], second: &[u8]) -> bool {
         self.cmp_key(first, |first_iter| {
             self.cmp_key(second, |second_iter| first_iter.ne(second_iter))
         })
     }
 
-    fn cmp_key<F>(&self, line: &str, mut closure: F) -> bool
+    fn cmp_key<F>(&self, line: &[u8], mut closure: F) -> bool
     where
-        F: FnMut(&mut dyn Iterator<Item = char>) -> bool,
+        F: FnMut(&mut dyn Iterator<Item = u8>) -> bool,
     {
         let fields_to_check = self.skip_fields(line);
         let len = fields_to_check.len();
@@ -156,28 +162,34 @@ impl Uniq {
         if len > 0 {
             // fast path: avoid doing any work if there is no need to skip or map to lower-case
             if !self.ignore_case && slice_start == 0 && slice_stop == len {
-                return closure(&mut fields_to_check.chars());
+                return closure(&mut fields_to_check.iter().copied());
             }
 
             // fast path: avoid skipping
             if self.ignore_case && slice_start == 0 && slice_stop == len {
-                return closure(&mut fields_to_check.chars().flat_map(char::to_uppercase));
+                return closure(&mut fields_to_check.iter().map(|u| u.to_ascii_lowercase()));
             }
 
-            // fast path: we can avoid mapping chars to upper-case, if we don't want to ignore the case
+            // fast path: we can avoid mapping chars to lower-case, if we don't want to ignore the case
             if !self.ignore_case {
-                return closure(&mut fields_to_check.chars().skip(slice_start).take(slice_stop));
+                return closure(
+                    &mut fields_to_check
+                        .iter()
+                        .skip(slice_start)
+                        .take(slice_stop)
+                        .copied(),
+                );
             }
 
             closure(
                 &mut fields_to_check
-                    .chars()
+                    .iter()
                     .skip(slice_start)
                     .take(slice_stop)
-                    .flat_map(char::to_uppercase),
+                    .map(|u| u.to_ascii_lowercase()),
             )
         } else {
-            closure(&mut fields_to_check.chars())
+            closure(&mut fields_to_check.iter().copied())
         }
     }
 
@@ -197,7 +209,7 @@ impl Uniq {
     fn print_line(
         &self,
         writer: &mut impl Write,
-        line: &str,
+        line: &[u8],
         count: usize,
         first_line_printed: bool,
     ) -> UResult<()> {
@@ -208,20 +220,21 @@ impl Uniq {
         }
 
         if self.show_counts {
-            write!(writer, "{count:7} {line}")
+            let prefix = format!("{count:7} ");
+            let out = prefix
+                .as_bytes()
+                .iter()
+                .chain(line.iter())
+                .copied()
+                .collect::<Vec<u8>>();
+            writer.write_all(out.as_slice())
         } else {
-            writer.write_all(line.as_bytes())
+            writer.write_all(line)
         }
         .map_err_context(|| "Failed to write line".to_string())?;
 
         write_line_terminator!(writer, line_terminator)
     }
-}
-
-fn get_line_string(io_line: io::Result<Vec<u8>>) -> UResult<String> {
-    let line_bytes = io_line.map_err_context(|| "failed to split lines".to_string())?;
-    String::from_utf8(line_bytes)
-        .map_err(|e| USimpleError::new(1, format!("failed to convert line to utf8: {e}")))
 }
 
 fn opt_parsed(opt_name: &str, matches: &ArgMatches) -> UResult<Option<usize>> {
@@ -505,7 +518,7 @@ fn handle_extract_obs_skip_chars(
 /// Unfortunately these overrides are necessary, since several GNU tests
 /// for `uniq` hardcode and require the exact wording of the error message
 /// and it is not compatible with how Clap formats and displays those error messages.
-fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
+fn map_clap_errors(clap_error: &Error) -> Box<dyn UError> {
     let footer = "Try 'uniq --help' for more information.";
     let override_arg_conflict =
         "--group is mutually exclusive with -c/-d/-D/-u\n".to_string() + footer;
@@ -545,7 +558,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app()
         .try_get_matches_from(args)
-        .map_err(|e| map_clap_errors(e))?;
+        .map_err(|e| map_clap_errors(&e))?;
 
     let files = matches.get_many::<OsString>(ARG_FILES);
 

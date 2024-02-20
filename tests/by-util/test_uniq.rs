@@ -201,14 +201,13 @@ fn test_stdin_zero_terminated() {
 }
 
 #[test]
-fn test_invalid_utf8() {
+fn test_gnu_locale_fr_schar() {
     new_ucmd!()
-        .arg("not-utf8-sequence.txt")
+        .args(&["-f1", "locale-fr-schar.txt"])
+        .env("LC_ALL", "C")
         .run()
-        .failure()
-        .stderr_only(
-        "uniq: failed to convert line to utf8: invalid utf-8 sequence of 1 bytes from index 0\n",
-    );
+        .success()
+        .stdout_is_fixture_bytes("locale-fr-schar.txt");
 }
 
 #[test]
@@ -1068,30 +1067,3 @@ fn gnu_tests() {
         }
     }
 }
-
-#[test]
-fn gnu_locale_test() {
-    // let input = " y z\n\xa0 y z\n";
-
-}
-//         my $locale = $ENV{LOCALE_FR};
-// if ( defined $locale && $locale ne 'none' )
-//   {
-//     # I've only ever triggered the problem in a non-C locale.
-
-//     # See if isblank returns true for nbsp.
-//     my $x = qx!env printf '\xa0'| LC_ALL=$locale tr '[:blank:]' x!;
-//     # If so, expect just one line of output in the schar test.
-//     # Otherwise, expect two.
-//     my $in = " y z\n\xa0 y z\n";
-//     my $schar_exp = $x eq 'x' ? " y z\n" : $in;
-
-//     my @Locale_Tests =
-//     (
-//       # Test for a subtle, system-and-locale-dependent bug in uniq.
-//       ['schar', '-f1',  {IN => $in}, {OUT => $schar_exp},
-//         {ENV => "LC_ALL=$locale"}]
-//     );
-
-//     push @Tests, @Locale_Tests;
-//   }
