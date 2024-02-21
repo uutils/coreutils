@@ -14,7 +14,6 @@ on:
   push:
     branches:
       - main
-      - uniq-obs
 
 permissions:
   contents: read
