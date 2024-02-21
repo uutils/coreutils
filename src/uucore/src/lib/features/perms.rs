@@ -6,16 +6,12 @@
 //! Common functions to manage permissions
 
 use crate::display::Quotable;
-use crate::error::strip_errno;
-use crate::error::UResult;
-use crate::error::USimpleError;
+use crate::error::{strip_errno, UResult, USimpleError};
 pub use crate::features::entries;
 use crate::fs::resolve_relative_path;
 use crate::show_error;
-use clap::Arg;
-use clap::ArgMatches;
-use clap::Command;
-use libc::{self, gid_t, uid_t};
+use clap::{Arg, ArgMatches, Command};
+use libc::{gid_t, uid_t};
 use walkdir::WalkDir;
 
 use std::io::Error as IOError;

@@ -120,7 +120,6 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
-        .args_override_self(true)
         .arg(
             Arg::new(options::ECHO)
                 .short('e')
@@ -129,6 +128,7 @@ pub fn uu_app() -> Command {
                 .help("treat each ARG as an input line")
                 .use_value_delimiter(false)
                 .num_args(0..)
+                .action(clap::ArgAction::Append)
                 .conflicts_with(options::INPUT_RANGE),
         )
         .arg(
@@ -144,6 +144,7 @@ pub fn uu_app() -> Command {
                 .short('n')
                 .long(options::HEAD_COUNT)
                 .value_name("COUNT")
+                .action(clap::ArgAction::Append)
                 .help("output at most COUNT lines"),
         )
         .arg(
@@ -166,14 +167,16 @@ pub fn uu_app() -> Command {
                 .short('r')
                 .long(options::REPEAT)
                 .help("output lines can be repeated")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::REPEAT),
         )
         .arg(
             Arg::new(options::ZERO_TERMINATED)
                 .short('z')
                 .long(options::ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ZERO_TERMINATED),
         )
         .arg(Arg::new(options::FILE).value_hint(clap::ValueHint::FilePath))
 }
@@ -195,6 +198,13 @@ fn read_input_file(filename: &str) -> UResult<Vec<u8>> {
 }
 
 fn find_seps(data: &mut Vec<&[u8]>, sep: u8) {
+    // Special case: If data is empty (and does not even contain a single 'sep'
+    // to indicate the presence of the empty element), then behave as if the input contained no elements at all.
+    if data.len() == 1 && data[0].is_empty() {
+        data.clear();
+        return;
+    }
+
     // need to use for loop so we don't borrow the vector as we modify it in place
     // basic idea:
     // * We don't care about the order of the result. This lets us slice the slices

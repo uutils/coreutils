@@ -9,7 +9,6 @@ use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::{memchr3_iter, memchr_iter};
 use std::cmp::Ordering;
-use std::convert::From;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt::Display;

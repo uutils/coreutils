@@ -12,7 +12,6 @@ use nix::sys::signal::{raise, sigaction, SaFlags, SigAction, SigHandler, SigSet,
 use std::borrow::Cow;
 use std::env;
 use std::io::{self, Write};
-use std::iter::Iterator;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::process;

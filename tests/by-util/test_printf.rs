@@ -668,7 +668,7 @@ fn sub_alternative_upper_hex() {
     new_ucmd!()
         .args(&["%#X", "42"])
         .succeeds()
-        .stdout_only("0x2A");
+        .stdout_only("0X2A");
 }
 
 #[test]
@@ -679,4 +679,60 @@ fn char_as_byte() {
 #[test]
 fn no_infinite_loop() {
     new_ucmd!().args(&["a", "b"]).succeeds().stdout_only("a");
+}
+
+#[test]
+fn pad_octal_with_prefix() {
+    new_ucmd!()
+        .args(&[">%#15.6o<", "0"])
+        .succeeds()
+        .stdout_only(">         000000<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "01"])
+        .succeeds()
+        .stdout_only(">         000001<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "01234"])
+        .succeeds()
+        .stdout_only(">         001234<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "012345"])
+        .succeeds()
+        .stdout_only(">         012345<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "0123456"])
+        .succeeds()
+        .stdout_only(">        0123456<");
+}
+
+#[test]
+fn pad_unsigned_zeroes() {
+    for format in ["%.3u", "%.3x", "%.3X", "%.3o"] {
+        new_ucmd!()
+            .args(&[format, "0"])
+            .succeeds()
+            .stdout_only("000");
+    }
+}
+
+#[test]
+fn pad_unsigned_three() {
+    for (format, expected) in [
+        ("%.3u", "003"),
+        ("%.3x", "003"),
+        ("%.3X", "003"),
+        ("%.3o", "003"),
+        ("%#.3x", "0x003"),
+        ("%#.3X", "0X003"),
+        ("%#.3o", "003"),
+    ] {
+        new_ucmd!()
+            .args(&[format, "3"])
+            .succeeds()
+            .stdout_only(expected);
+    }
 }
