@@ -12,7 +12,7 @@ use rand::RngCore;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
 
 mod rand_read_adapter;
@@ -42,15 +42,21 @@ mod options {
     pub static RANDOM_SOURCE: &str = "random-source";
     pub static REPEAT: &str = "repeat";
     pub static ZERO_TERMINATED: &str = "zero-terminated";
-    pub static FILE: &str = "file";
+    pub static FILE_OR_ARGS: &str = "file-or-args";
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
-    let mode = if let Some(args) = matches.get_many::<String>(options::ECHO) {
-        Mode::Echo(args.map(String::from).collect())
+    let mode = if matches.get_flag(options::ECHO) {
+        Mode::Echo(
+            matches
+                .get_many::<String>(options::FILE_OR_ARGS)
+                .unwrap_or_default()
+                .map(String::from)
+                .collect(),
+        )
     } else if let Some(range) = matches.get_one::<String>(options::INPUT_RANGE) {
         match parse_range(range) {
             Ok(m) => Mode::InputRange(m),
@@ -59,13 +65,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
     } else {
-        Mode::Default(
-            matches
-                .get_one::<String>(options::FILE)
-                .map(|s| s.as_str())
-                .unwrap_or("-")
-                .to_string(),
-        )
+        let mut operands = matches
+            .get_many::<String>(options::FILE_OR_ARGS)
+            .unwrap_or_default();
+        let file = operands.next().cloned().unwrap_or("-".into());
+        if let Some(second_file) = operands.next() {
+            return Err(UUsageError::new(
+                1,
+                format!("unexpected argument '{second_file}' found"),
+            ));
+        };
+        Mode::Default(file)
     };
 
     let options = Options {
@@ -124,11 +134,9 @@ pub fn uu_app() -> Command {
             Arg::new(options::ECHO)
                 .short('e')
                 .long(options::ECHO)
-                .value_name("ARG")
                 .help("treat each ARG as an input line")
-                .use_value_delimiter(false)
-                .num_args(0..)
-                .action(clap::ArgAction::Append)
+                .action(clap::ArgAction::SetTrue)
+                .overrides_with(options::ECHO)
                 .conflicts_with(options::INPUT_RANGE),
         )
         .arg(
@@ -137,7 +145,7 @@ pub fn uu_app() -> Command {
                 .long(options::INPUT_RANGE)
                 .value_name("LO-HI")
                 .help("treat each number LO through HI as an input line")
-                .conflicts_with(options::FILE),
+                .conflicts_with(options::FILE_OR_ARGS),
         )
         .arg(
             Arg::new(options::HEAD_COUNT)
@@ -178,7 +186,11 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::ZERO_TERMINATED),
         )
-        .arg(Arg::new(options::FILE).value_hint(clap::ValueHint::FilePath))
+        .arg(
+            Arg::new(options::FILE_OR_ARGS)
+                .action(clap::ArgAction::Append)
+                .value_hint(clap::ValueHint::FilePath),
+        )
 }
 
 fn read_input_file(filename: &str) -> UResult<Vec<u8>> {

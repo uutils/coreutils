@@ -33,6 +33,28 @@ fn test_output_is_random_permutation() {
 }
 
 #[test]
+fn test_explicit_stdin_file() {
+    let input_seq = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    let input = input_seq
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<String>>()
+        .join("\n");
+
+    let result = new_ucmd!().arg("-").pipe_in(input.as_bytes()).succeeds();
+    result.no_stderr();
+
+    let mut result_seq: Vec<i32> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap())
+        .collect();
+    result_seq.sort_unstable();
+    assert_eq!(result_seq, input_seq, "Output is not a permutation");
+}
+
+#[test]
 fn test_zero_termination() {
     let input_seq = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     let result = new_ucmd!().arg("-z").arg("-i1-10").succeeds();
@@ -111,6 +133,36 @@ fn test_echo_multi() {
         .split('\n')
         .filter(|x| !x.is_empty())
         .map(|x| x.into())
+        .collect();
+    result_seq.sort_unstable();
+    assert_eq!(result_seq, ["a", "b", "c"], "Output is not a permutation");
+}
+
+#[test]
+fn test_echo_postfix() {
+    let result = new_ucmd!().arg("a").arg("b").arg("c").arg("-e").succeeds();
+    result.no_stderr();
+
+    let mut result_seq: Vec<String> = result
+        .stdout_str()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.into())
+        .collect();
+    result_seq.sort_unstable();
+    assert_eq!(result_seq, ["a", "b", "c"], "Output is not a permutation");
+}
+
+#[test]
+fn test_echo_short_collapsed_zero() {
+    let result = new_ucmd!().arg("-ez").arg("a").arg("b").arg("c").succeeds();
+    result.no_stderr();
+
+    let mut result_seq: Vec<String> = result
+        .stdout_str()
+        .split('\0')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap())
         .collect();
     result_seq.sort_unstable();
     assert_eq!(result_seq, ["a", "b", "c"], "Output is not a permutation");
@@ -363,6 +415,22 @@ fn test_shuf_multiple_outputs() {
         .fails()
         .stderr_contains("--output")
         .stderr_contains("cannot be used multiple times");
+}
+
+#[test]
+fn test_shuf_two_input_files() {
+    new_ucmd!()
+        .args(&["file_a", "file_b"])
+        .fails()
+        .stderr_contains("unexpected argument 'file_b' found");
+}
+
+#[test]
+fn test_shuf_three_input_files() {
+    new_ucmd!()
+        .args(&["file_a", "file_b", "file_c"])
+        .fails()
+        .stderr_contains("unexpected argument 'file_b' found");
 }
 
 #[test]
