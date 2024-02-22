@@ -3,7 +3,7 @@
 # Benchmarking shuf
 
 `shuf` is a simple utility, but there are at least two important cases
-benchmark: with and without repetition.
+to benchmark: with and without repetition.
 
 When benchmarking changes, make sure to always build with the `--release` flag.
 You can compare with another branch by compiling on that branch and then
