@@ -31,14 +31,11 @@ pub(crate) trait Arithmetic: Copy + Sized {
 
         // Check that r (reduced back to the usual representation) equals
         //  a^b % n, unless the latter computation overflows
-        // Temporarily commented-out, as there u64::checked_pow is not available
-        //  on the minimum supported Rust version, nor is an appropriate method
-        //  for compiling the check conditionally.
-        //debug_assert!(self
-        //    .to_u64(_a)
-        //    .checked_pow(_b as u32)
-        //    .map(|r| r % self.modulus() == self.to_u64(result))
-        //    .unwrap_or(true));
+        debug_assert!(self
+            .to_u64(_a)
+            .checked_pow(_b as u32)
+            .map(|r| r % self.modulus() == self.to_u64(result))
+            .unwrap_or(true));
 
         result
     }
