@@ -127,7 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             {
                 let mut squeeze_reader = BufReader::new(delete_buffer.as_bytes());
-                let op = SqueezeOperation::new(set2, complement_flag);
+                let op = SqueezeOperation::new(set2, false);
                 translate_input(&mut squeeze_reader, &mut buffered_stdout, op);
             }
         } else {
