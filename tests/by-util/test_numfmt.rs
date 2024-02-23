@@ -666,7 +666,12 @@ fn test_invalid_stdin_number_returns_status_2() {
 
 #[test]
 fn test_invalid_stdin_number_in_middle_of_input() {
-    new_ucmd!().pipe_in("100\nhello\n200").fails().code_is(2);
+    new_ucmd!()
+        .pipe_in("100\nhello\n200")
+        .ignore_stdin_write_error()
+        .fails()
+        .stdout_is("100\n")
+        .code_is(2);
 }
 
 #[test]
