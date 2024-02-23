@@ -119,6 +119,15 @@ fn test_complement5() {
 }
 
 #[test]
+fn test_complement_multi_early() {
+    new_ucmd!()
+        .args(&["-c", "-c", "a", "X"])
+        .pipe_in("ab")
+        .succeeds()
+        .stdout_is("aX");
+}
+
+#[test]
 fn test_squeeze() {
     new_ucmd!()
         .args(&["-s", "a-z"])

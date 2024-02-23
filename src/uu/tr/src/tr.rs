@@ -170,7 +170,8 @@ pub fn uu_app() -> Command {
                 .short('c')
                 .long(options::COMPLEMENT)
                 .help("use the complement of SET1")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::COMPLEMENT),
         )
         .arg(
             Arg::new(options::DELETE)
