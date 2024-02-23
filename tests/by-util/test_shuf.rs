@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore (ToDO) unwritable
 use crate::common::util::TestScenario;
 
 #[test]
@@ -197,6 +199,79 @@ fn test_head_count() {
         "Output includes element not from input: {}",
         result.stdout_str()
     );
+}
+
+#[test]
+fn test_zero_head_count_pipe() {
+    let result = new_ucmd!().arg("-n0").pipe_in(vec![]).succeeds();
+    // Output must be completely empty, not even a newline!
+    result.no_output();
+}
+
+#[test]
+fn test_zero_head_count_pipe_explicit() {
+    let result = new_ucmd!().arg("-n0").arg("-").pipe_in(vec![]).succeeds();
+    result.no_output();
+}
+
+#[test]
+fn test_zero_head_count_file_unreadable() {
+    new_ucmd!()
+        .arg("-n0")
+        .arg("/invalid/unreadable")
+        .pipe_in(vec![])
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_zero_head_count_file_touch_output_negative() {
+    new_ucmd!()
+        .arg("-n0")
+        .arg("-o")
+        .arg("/invalid/unwritable")
+        .pipe_in(vec![])
+        .fails()
+        .stderr_contains("failed to open '/invalid/unwritable' for writing:");
+}
+
+#[test]
+fn test_zero_head_count_file_touch_output_positive_new() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-n0", "-o", "file"]).succeeds().no_output();
+    assert_eq!(
+        at.read_bytes("file"),
+        Vec::new(),
+        "Output file must exist and be completely empty"
+    );
+}
+
+#[test]
+fn test_zero_head_count_file_touch_output_positive_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    ucmd.args(&["-n0", "-o", "file"]).succeeds().no_output();
+    assert_eq!(
+        at.read_bytes("file"),
+        Vec::new(),
+        "Output file must exist and be completely empty"
+    );
+}
+
+#[test]
+fn test_zero_head_count_echo() {
+    new_ucmd!()
+        .arg("-n0")
+        .arg("-e")
+        .arg("hello")
+        .pipe_in(vec![])
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_zero_head_count_range() {
+    new_ucmd!().arg("-n0").arg("-i4-8").succeeds().no_output();
 }
 
 #[test]
