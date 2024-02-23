@@ -79,6 +79,14 @@ fn test_complement1() {
 }
 
 #[test]
+fn test_complement_afterwards_is_not_flag() {
+    new_ucmd!()
+        .args(&["a", "X", "-c"])
+        .fails()
+        .stderr_contains("extra operand '-c'");
+}
+
+#[test]
 fn test_complement2() {
     new_ucmd!()
         .args(&["-c", "0-9", "x"])
@@ -125,6 +133,22 @@ fn test_complement_multi_early() {
         .pipe_in("ab")
         .succeeds()
         .stdout_is("aX");
+}
+
+#[test]
+fn test_complement_multi_middle() {
+    new_ucmd!()
+        .args(&["-c", "a", "-c", "X"])
+        .fails()
+        .stderr_contains("tr: extra operand 'X'");
+}
+
+#[test]
+fn test_complement_multi_late() {
+    new_ucmd!()
+        .args(&["-c", "a", "X", "-c"])
+        .fails()
+        .stderr_contains("tr: extra operand '-c'");
 }
 
 #[test]

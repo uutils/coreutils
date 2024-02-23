@@ -164,6 +164,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .trailing_var_arg(true)
         .arg(
             Arg::new(options::COMPLEMENT)
                 .visible_short_alias('C')
