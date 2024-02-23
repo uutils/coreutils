@@ -164,6 +164,15 @@ fn test_translate_and_squeeze_multiple_lines() {
 }
 
 #[test]
+fn test_delete_and_squeeze_one_set() {
+    new_ucmd!()
+        .args(&["-ds", "a-z"])
+        .fails()
+        .stderr_contains("missing operand after 'a-z'")
+        .stderr_contains("Two strings must be given when deleting and squeezing.");
+}
+
+#[test]
 fn test_delete_and_squeeze() {
     new_ucmd!()
         .args(&["-ds", "a-z", "A-Z"])
