@@ -77,7 +77,7 @@ fn test_tee_no_more_writeable_1() {
     // equals to 'tee /dev/full out2 <multi_read' call
     let (at, mut ucmd) = at_and_ucmd!();
     let content = (1..=10).fold(String::new(), |mut output, x| {
-        let _ = writeln!(output, "{x}");
+        writeln!(output, "{x}").unwrap();
         output
     });
     let file_out = "tee_file_out";
