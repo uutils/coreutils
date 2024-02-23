@@ -47,6 +47,32 @@ fn test_delete() {
 }
 
 #[test]
+fn test_delete_afterwards_is_not_flag() {
+    new_ucmd!()
+        .args(&["a-z", "-d"])
+        .pipe_in("aBcD")
+        .succeeds()
+        .stdout_is("-BdD");
+}
+
+#[test]
+fn test_delete_multi() {
+    new_ucmd!()
+        .args(&["-d", "-d", "a-z"])
+        .pipe_in("aBcD")
+        .succeeds()
+        .stdout_is("BD");
+}
+
+#[test]
+fn test_delete_late() {
+    new_ucmd!()
+        .args(&["-d", "a-z", "-d"])
+        .fails()
+        .stderr_contains("extra operand '-d'");
+}
+
+#[test]
 fn test_delete_complement() {
     new_ucmd!()
         .args(&["-d", "-c", "a-z"])

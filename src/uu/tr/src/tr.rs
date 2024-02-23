@@ -179,7 +179,8 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(options::DELETE)
                 .help("delete characters in SET1, do not translate")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DELETE),
         )
         .arg(
             Arg::new(options::SQUEEZE)
