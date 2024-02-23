@@ -64,6 +64,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
+    if delete_flag & squeeze_flag && sets_len < 2 {
+        return Err(UUsageError::new(
+            1,
+            format!(
+                "missing operand after {}\nTwo strings must be given when deleting and squeezing.",
+                sets[0].quote()
+            ),
+        ));
+    }
+
     if sets_len > 1 {
         let start = "extra operand";
         if delete_flag && !squeeze_flag {
@@ -117,7 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             {
                 let mut squeeze_reader = BufReader::new(delete_buffer.as_bytes());
-                let op = SqueezeOperation::new(set2, complement_flag);
+                let op = SqueezeOperation::new(set2, false);
                 translate_input(&mut squeeze_reader, &mut buffered_stdout, op);
             }
         } else {
