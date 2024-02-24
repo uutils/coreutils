@@ -54,8 +54,6 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
-use once_cell::sync::Lazy;
-
 use crate::*; // import macros from `../../macros.rs`
 
 // In case the c_char array doesn't end with NULL

@@ -263,7 +263,7 @@ binary-heap-plus = "0.5.0"
 bstr = "1.9"
 bytecount = "0.6.7"
 byteorder = "1.5.0"
-chrono = { version = "^0.4.33", default-features = false, features = [
+chrono = { version = "^0.4.34", default-features = false, features = [
   "std",
   "alloc",
   "clock",
@@ -322,7 +322,7 @@ smallvec = { version = "1.13", features = ["union"] }
 tempfile = "3.10.0"
 uutils_term_grid = "0.3"
 terminal_size = "0.3.0"
-textwrap = { version = "0.16.0", features = ["terminal_size"] }
+textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "1.0"
 time = { version = "0.3" }
 unicode-segmentation = "1.11.0"

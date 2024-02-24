@@ -87,6 +87,40 @@ enum Length {
     LongDouble,
 }
 
+#[derive(Default, PartialEq, Eq)]
+struct Flags {
+    minus: bool,
+    plus: bool,
+    space: bool,
+    hash: bool,
+    zero: bool,
+}
+
+impl Flags {
+    pub fn parse(rest: &mut &[u8], index: &mut usize) -> Self {
+        let mut flags = Self::default();
+
+        while let Some(x) = rest.get(*index) {
+            match x {
+                b'-' => flags.minus = true,
+                b'+' => flags.plus = true,
+                b' ' => flags.space = true,
+                b'#' => flags.hash = true,
+                b'0' => flags.zero = true,
+                _ => break,
+            }
+            *index += 1;
+        }
+
+        flags
+    }
+
+    /// Whether any of the flags is set to true
+    fn any(&self) -> bool {
+        self != &Self::default()
+    }
+}
+
 impl Spec {
     pub fn parse<'a>(rest: &mut &'a [u8]) -> Result<Self, &'a [u8]> {
         // Based on the C++ reference, the spec format looks like:
@@ -97,34 +131,12 @@ impl Spec {
         let mut index = 0;
         let start = *rest;
 
-        let mut minus = false;
-        let mut plus = false;
-        let mut space = false;
-        let mut hash = false;
-        let mut zero = false;
+        let flags = Flags::parse(rest, &mut index);
 
-        while let Some(x) = rest.get(index) {
-            match x {
-                b'-' => minus = true,
-                b'+' => plus = true,
-                b' ' => space = true,
-                b'#' => hash = true,
-                b'0' => zero = true,
-                _ => break,
-            }
-            index += 1;
-        }
-
-        let alignment = match (minus, zero) {
-            (true, _) => NumberAlignment::Left,
-            (false, true) => NumberAlignment::RightZero,
-            (false, false) => NumberAlignment::RightSpace,
-        };
-
-        let positive_sign = match (plus, space) {
-            (true, _) => PositiveSign::Plus,
-            (false, true) => PositiveSign::Space,
-            (false, false) => PositiveSign::None,
+        let positive_sign = match flags {
+            Flags { plus: true, .. } => PositiveSign::Plus,
+            Flags { space: true, .. } => PositiveSign::Space,
+            _ => PositiveSign::None,
         };
 
         let width = eat_asterisk_or_number(rest, &mut index);
@@ -134,6 +146,17 @@ impl Spec {
             Some(eat_asterisk_or_number(rest, &mut index).unwrap_or(CanAsterisk::Fixed(0)))
         } else {
             None
+        };
+
+        // The `0` flag is ignored if `-` is given or a precision is specified.
+        // So the only case for RightZero, is when `-` is not given and the
+        // precision is none.
+        let alignment = if flags.minus {
+            NumberAlignment::Left
+        } else if flags.zero && precision.is_none() {
+            NumberAlignment::RightZero
+        } else {
+            NumberAlignment::RightSpace
         };
 
         // We ignore the length. It's not really relevant to printf
@@ -148,38 +171,38 @@ impl Spec {
         Ok(match type_spec {
             // GNU accepts minus, plus and space even though they are not used
             b'c' => {
-                if hash || precision.is_some() {
+                if flags.hash || precision.is_some() {
                     return Err(&start[..index]);
                 }
                 Self::Char {
                     width,
-                    align_left: minus,
+                    align_left: flags.minus,
                 }
             }
             b's' => {
-                if hash {
+                if flags.hash {
                     return Err(&start[..index]);
                 }
                 Self::String {
                     precision,
                     width,
-                    align_left: minus,
+                    align_left: flags.minus,
                 }
             }
             b'b' => {
-                if hash || minus || plus || space || width.is_some() || precision.is_some() {
+                if flags.any() || width.is_some() || precision.is_some() {
                     return Err(&start[..index]);
                 }
                 Self::EscapedString
             }
             b'q' => {
-                if hash || minus || plus || space || width.is_some() || precision.is_some() {
+                if flags.any() || width.is_some() || precision.is_some() {
                     return Err(&start[..index]);
                 }
                 Self::QuotedString
             }
             b'd' | b'i' => {
-                if hash {
+                if flags.hash {
                     return Err(&start[..index]);
                 }
                 Self::SignedInt {
@@ -191,10 +214,10 @@ impl Spec {
             }
             c @ (b'u' | b'o' | b'x' | b'X') => {
                 // Normal unsigned integer cannot have a prefix
-                if *c == b'u' && hash {
+                if *c == b'u' && flags.hash {
                     return Err(&start[..index]);
                 }
-                let prefix = match hash {
+                let prefix = match flags.hash {
                     false => Prefix::No,
                     true => Prefix::Yes,
                 };
@@ -222,7 +245,7 @@ impl Spec {
                     b'a' | b'A' => FloatVariant::Hexadecimal,
                     _ => unreachable!(),
                 },
-                force_decimal: match hash {
+                force_decimal: match flags.hash {
                     false => ForceDecimal::No,
                     true => ForceDecimal::Yes,
                 },

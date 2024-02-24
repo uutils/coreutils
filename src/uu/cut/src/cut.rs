@@ -359,12 +359,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let complement = matches.get_flag(options::COMPLEMENT);
 
+    // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
+    // is expected. The number of those arguments is used for parsing a cutting
+    // mode and handling the error cases.
+    let mode_args_count = [
+        matches.indices_of(options::BYTES),
+        matches.indices_of(options::CHARACTERS),
+        matches.indices_of(options::FIELDS),
+    ]
+    .into_iter()
+    .map(|indices| indices.unwrap_or_default().count())
+    .sum();
+
     let mode_parse = match (
+        mode_args_count,
         matches.get_one::<String>(options::BYTES),
         matches.get_one::<String>(options::CHARACTERS),
         matches.get_one::<String>(options::FIELDS),
     ) {
-        (Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
+        (1, Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
             Mode::Bytes(
                 ranges,
                 Options {
@@ -379,7 +392,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 },
             )
         }),
-        (None, Some(char_ranges), None) => list_to_ranges(char_ranges, complement).map(|ranges| {
+        (1, None, Some(char_ranges), None) => list_to_ranges(char_ranges, complement).map(|ranges| {
             Mode::Characters(
                 ranges,
                 Options {
@@ -394,7 +407,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 },
             )
         }),
-        (None, None, Some(field_ranges)) => {
+        (1, None, None, Some(field_ranges)) => {
             list_to_ranges(field_ranges, complement).and_then(|ranges| {
                 let out_delim = match matches.get_one::<String>(options::OUTPUT_DELIMITER) {
                     Some(s) => {
@@ -461,7 +474,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
             })
         }
-        (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => Err(
+        (2.., _, _, _) => Err(
             "invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)".into()
         ),
         _ => Err("invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)".into()),
@@ -511,6 +524,13 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .infer_long_args(true)
+        // While `args_override_self(true)` for some arguments, such as `-d`
+        // and `--output-delimiter`, is consistent to the behavior of GNU cut,
+        // arguments related to cutting mode, i.e. `-b`, `-c`, `-f`, should
+        // cause an error when there is more than one of them, as described in
+        // the manual of GNU cut: "Use one, and only one of -b, -c or -f".
+        // `ArgAction::Append` is used on `-b`, `-c`, `-f` arguments, so that
+        // the occurrences of those could be counted and be handled accordingly.
         .args_override_self(true)
         .arg(
             Arg::new(options::BYTES)
@@ -518,7 +538,8 @@ pub fn uu_app() -> Command {
                 .long(options::BYTES)
                 .help("filter byte columns from the input source")
                 .allow_hyphen_values(true)
-                .value_name("LIST"),
+                .value_name("LIST")
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::CHARACTERS)
@@ -526,7 +547,8 @@ pub fn uu_app() -> Command {
                 .long(options::CHARACTERS)
                 .help("alias for character mode")
                 .allow_hyphen_values(true)
-                .value_name("LIST"),
+                .value_name("LIST")
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::DELIMITER)
@@ -548,7 +570,8 @@ pub fn uu_app() -> Command {
                 .long(options::FIELDS)
                 .help("filter field columns from the input source")
                 .allow_hyphen_values(true)
-                .value_name("LIST"),
+                .value_name("LIST")
+                .action(ArgAction::Append),
         )
         .arg(
             Arg::new(options::COMPLEMENT)

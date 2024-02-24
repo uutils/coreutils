@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore aabbaa aabbcc aabc abbb abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn
+// spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn
 use crate::common::util::TestScenario;
 
 #[test]
@@ -164,6 +164,15 @@ fn test_translate_and_squeeze_multiple_lines() {
 }
 
 #[test]
+fn test_delete_and_squeeze_one_set() {
+    new_ucmd!()
+        .args(&["-ds", "a-z"])
+        .fails()
+        .stderr_contains("missing operand after 'a-z'")
+        .stderr_contains("Two strings must be given when deleting and squeezing.");
+}
+
+#[test]
 fn test_delete_and_squeeze() {
     new_ucmd!()
         .args(&["-ds", "a-z", "A-Z"])
@@ -179,6 +188,15 @@ fn test_delete_and_squeeze_complement() {
         .pipe_in("abBcB")
         .run()
         .stdout_is("abc");
+}
+
+#[test]
+fn test_delete_and_squeeze_complement_squeeze_set2() {
+    new_ucmd!()
+        .args(&["-dsc", "abX", "XYZ"])
+        .pipe_in("abbbcdddXXXYYY")
+        .succeeds()
+        .stdout_is("abbbX");
 }
 
 #[test]
@@ -1154,4 +1172,28 @@ fn test_delete_flag_takes_only_one_operand() {
     new_ucmd!().args(&["-d", "a", "p"]).fails().stderr_contains(
         "extra operand 'p'\nOnly one string may be given when deleting without squeezing repeats.",
     );
+}
+
+#[test]
+fn test_truncate_flag_fails_with_more_than_two_operand() {
+    new_ucmd!()
+        .args(&["-t", "a", "b", "c"])
+        .fails()
+        .stderr_contains("extra operand 'c'");
+}
+
+#[test]
+fn test_squeeze_flag_fails_with_more_than_two_operand() {
+    new_ucmd!()
+        .args(&["-s", "a", "b", "c"])
+        .fails()
+        .stderr_contains("extra operand 'c'");
+}
+
+#[test]
+fn test_complement_flag_fails_with_more_than_two_operand() {
+    new_ucmd!()
+        .args(&["-c", "a", "b", "c"])
+        .fails()
+        .stderr_contains("extra operand 'c'");
 }
