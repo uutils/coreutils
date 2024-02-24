@@ -191,7 +191,8 @@ pub fn uu_app() -> Command {
                      listed in the last specified SET, with a single occurrence \
                      of that character",
                 )
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SQUEEZE),
         )
         .arg(
             Arg::new(options::TRUNCATE_SET1)

@@ -182,7 +182,16 @@ fn test_squeeze() {
     new_ucmd!()
         .args(&["-s", "a-z"])
         .pipe_in("aaBBcDcc")
-        .run()
+        .succeeds()
+        .stdout_is("aBBcDc");
+}
+
+#[test]
+fn test_squeeze_multi() {
+    new_ucmd!()
+        .args(&["-ss", "-s", "a-z"])
+        .pipe_in("aaBBcDcc")
+        .succeeds()
         .stdout_is("aBBcDc");
 }
 
@@ -191,7 +200,16 @@ fn test_squeeze_complement() {
     new_ucmd!()
         .args(&["-sc", "a-z"])
         .pipe_in("aaBBcDcc")
-        .run()
+        .succeeds()
+        .stdout_is("aaBcDcc");
+}
+
+#[test]
+fn test_squeeze_complement_multi() {
+    new_ucmd!()
+        .args(&["-scsc", "a-z"]) // spell-checker:disable-line
+        .pipe_in("aaBBcDcc")
+        .succeeds()
         .stdout_is("aaBcDcc");
 }
 
