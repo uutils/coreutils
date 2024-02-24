@@ -300,7 +300,16 @@ fn test_truncate() {
     new_ucmd!()
         .args(&["-t", "abc", "xy"])
         .pipe_in("abcde")
-        .run()
+        .succeeds()
+        .stdout_is("xycde"); // spell-checker:disable-line
+}
+
+#[test]
+fn test_truncate_multi() {
+    new_ucmd!()
+        .args(&["-tt", "-t", "abc", "xy"])
+        .pipe_in("abcde")
+        .succeeds()
         .stdout_is("xycde"); // spell-checker:disable-line
 }
 

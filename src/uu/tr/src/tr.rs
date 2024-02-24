@@ -199,7 +199,8 @@ pub fn uu_app() -> Command {
                 .long(options::TRUNCATE_SET1)
                 .short('t')
                 .help("first truncate SET1 to length of SET2")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TRUNCATE_SET1),
         )
         .arg(Arg::new(options::SETS).num_args(1..))
 }
