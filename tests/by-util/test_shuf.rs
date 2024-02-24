@@ -624,3 +624,32 @@ fn test_shuf_multiple_input_line_count() {
         .count();
     assert_eq!(result_count, 5, "Output should have 5 items");
 }
+
+#[test]
+#[ignore = "known issue"]
+fn test_shuf_repeat_empty_range() {
+    new_ucmd!()
+        .arg("-ri4-3")
+        .fails()
+        .no_stdout()
+        .stderr_only("shuf: no lines to repeat\n");
+}
+
+#[test]
+fn test_shuf_repeat_empty_echo() {
+    new_ucmd!()
+        .arg("-re")
+        .fails()
+        .no_stdout()
+        .stderr_only("shuf: no lines to repeat\n");
+}
+
+#[test]
+fn test_shuf_repeat_empty_input() {
+    new_ucmd!()
+        .arg("-r")
+        .pipe_in("")
+        .fails()
+        .no_stdout()
+        .stderr_only("shuf: no lines to repeat\n");
+}
