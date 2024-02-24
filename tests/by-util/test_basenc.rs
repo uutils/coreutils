@@ -173,3 +173,60 @@ fn test_base2lsbf_decode() {
         .no_stderr()
         .stdout_only("lsbf");
 }
+
+#[test]
+fn test_choose_last_encoding_z85() {
+    new_ucmd!()
+        .args(&[
+            "--base2lsbf",
+            "--base2msbf",
+            "--base16",
+            "--base32hex",
+            "--base64url",
+            "--base32",
+            "--base64",
+            "--z85",
+        ])
+        .pipe_in("Hello, World")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("nm=QNz.92jz/PV8\n");
+}
+
+#[test]
+fn test_choose_last_encoding_base64() {
+    new_ucmd!()
+        .args(&[
+            "--base2msbf",
+            "--base2lsbf",
+            "--base64url",
+            "--base32hex",
+            "--base32",
+            "--base16",
+            "--z85",
+            "--base64",
+        ])
+        .pipe_in("Hello, World!")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("SGVsbG8sIFdvcmxkIQ==\n"); // spell-checker:disable-line
+}
+
+#[test]
+fn test_choose_last_encoding_base2lsbf() {
+    new_ucmd!()
+        .args(&[
+            "--base64url",
+            "--base16",
+            "--base2msbf",
+            "--base32",
+            "--base64",
+            "--z85",
+            "--base32hex",
+            "--base2lsbf",
+        ])
+        .pipe_in("lsbf")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("00110110110011100100011001100110\n");
+}
