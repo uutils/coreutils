@@ -410,7 +410,7 @@ fn test_with_pr_core_utils_tests() {
         let mut scenario = new_ucmd!();
         let input_file_path = input_file.first().unwrap();
         let test_file_path = expected_file.first().unwrap();
-        let value = file_last_modified_time(&scenario, test_file_path);
+        let value = file_last_modified_time(&scenario, input_file_path);
         let mut arguments: Vec<&str> = flags
             .split(' ')
             .filter(|i| i.trim() != "")
