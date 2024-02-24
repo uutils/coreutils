@@ -230,3 +230,24 @@ fn test_choose_last_encoding_base2lsbf() {
         .no_stderr()
         .stdout_only("00110110110011100100011001100110\n");
 }
+
+#[test]
+fn test_base32_decode_repeated() {
+    new_ucmd!()
+        .args(&[
+            "--ignore",
+            "--wrap=80",
+            "--base32hex",
+            "--z85",
+            "--ignore",
+            "--decode",
+            "--z85",
+            "--base32",
+            "-w",
+            "10",
+        ])
+        .pipe_in("NZUWGZJ6MJQXGZJ7") // spell-checker:disable-line
+        .succeeds()
+        .no_stderr()
+        .stdout_only("nice>base?");
+}
