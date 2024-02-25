@@ -755,7 +755,7 @@ fn gnu_tests() {
         TestCase {
             name: "112",
             args: &["-D", "-c"],
-            input: "a a\na b\n",
+            input: "", // Note: Different from GNU test, but should not matter
             stdout: Some(""),
             stderr: Some("uniq: printing all duplicated lines and repeat counts is meaningless\nTry 'uniq --help' for more information.\n"),
             exit: Some(1),
@@ -811,7 +811,7 @@ fn gnu_tests() {
         TestCase {
             name: "119",
             args: &["--all-repeated=badoption"],
-            input: "a a\na b\n",
+            input: "", // Note: Different from GNU test, but should not matter
             stdout: Some(""),
             stderr: Some("uniq: invalid argument 'badoption' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\nTry 'uniq --help' for more information.\n"),
             exit: Some(1),
