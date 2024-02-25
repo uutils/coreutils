@@ -1644,6 +1644,7 @@ fn test_round_robin_limited_file_descriptors() {
     new_ucmd!()
         .args(&["-n", "r/40", "onehundredlines.txt"])
         .limit(Resource::NOFILE, 9, 9)
+        .env("RUST_BACKTRACE", "1")
         .succeeds();
 }
 
