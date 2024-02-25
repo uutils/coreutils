@@ -646,7 +646,7 @@ fn test_quiet_n_verbose_used_multiple_times() {
 }
 
 #[test]
-fn test_changes_from_reference() {
+fn test_changes_from_identical_reference() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("file");
