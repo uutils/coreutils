@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) cmdline evec nonrepeating seps shufable rvec fdata
+// spell-checker:ignore (ToDO) cmdline evec nonrepeating seps shuffable rvec fdata
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::memchr_iter;
@@ -250,7 +250,7 @@ fn find_seps(data: &mut Vec<&[u8]>, sep: u8) {
     }
 }
 
-trait Shufable {
+trait Shuffable {
     type Item: Writable;
     fn is_empty(&self) -> bool;
     fn choose(&self, rng: &mut WrappedRng) -> Self::Item;
@@ -267,7 +267,7 @@ trait Shufable {
     ) -> Self::PartialShuffleIterator<'b>;
 }
 
-impl<'a> Shufable for Vec<&'a [u8]> {
+impl<'a> Shuffable for Vec<&'a [u8]> {
     type Item = &'a [u8];
     fn is_empty(&self) -> bool {
         (**self).is_empty()
@@ -289,7 +289,7 @@ impl<'a> Shufable for Vec<&'a [u8]> {
     }
 }
 
-impl Shufable for (usize, usize) {
+impl Shuffable for (usize, usize) {
     type Item = usize;
     fn is_empty(&self) -> bool {
         // Note: This is an inclusive range, so equality means there is 1 element.
@@ -416,7 +416,7 @@ impl Writable for usize {
     }
 }
 
-fn shuf_exec(input: &mut impl Shufable, opts: Options) -> UResult<()> {
+fn shuf_exec(input: &mut impl Shuffable, opts: Options) -> UResult<()> {
     let mut output = BufWriter::new(match opts.output {
         None => Box::new(stdout()) as Box<dyn Write>,
         Some(s) => {
