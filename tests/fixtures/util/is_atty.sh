@@ -14,6 +14,7 @@ fi
 
 if [ -t 2 ] ; then
     echo "stderr is atty"
+    echo "terminal size: $(stty size)"
 else
     echo "stderr is not atty"
 fi

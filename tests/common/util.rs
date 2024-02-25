@@ -1228,7 +1228,10 @@ pub struct UCommand {
     limits: Vec<(rlimit::Resource, u64, u64)>,
     stderr_to_stdout: bool,
     timeout: Option<Duration>,
+    #[cfg(unix)]
     terminal_simulation: bool,
+    #[cfg(unix)]
+    terminal_size: Option<libc::winsize>,
     tmpd: Option<Rc<TempDir>>, // drop last
 }
 
@@ -1407,11 +1410,24 @@ impl UCommand {
         self
     }
 
-    /// Set if process should be run in a simulated terminal (unix: pty, windows: ConPTY[not yet supported])
+    /// Set if process should be run in a simulated terminal
+    ///
     /// This is useful to test behavior that is only active if [`stdout.is_terminal()`] is [`true`].
+    /// (unix: pty, windows: ConPTY[not yet supported])
     #[cfg(unix)]
     pub fn terminal_simulation(&mut self, enable: bool) -> &mut Self {
         self.terminal_simulation = enable;
+        self
+    }
+
+    /// Set if process should be run in a simulated terminal with specific size
+    ///
+    /// This is useful to test behavior that is only active if [`stdout.is_terminal()`] is [`true`].
+    /// And the size of the terminal matters additionally.
+    #[cfg(unix)]
+    pub fn terminal_size(&mut self, win_size: libc::winsize) -> &mut Self {
+        self.terminal_simulation(true);
+        self.terminal_size = Some(win_size);
         self
     }
 
@@ -1427,7 +1443,7 @@ impl UCommand {
             Err(e) if e.raw_os_error().unwrap_or_default() == 5 => {}
             Err(e) => {
                 eprintln!("Unexpected error: {:?}", e);
-                assert!(false);
+                panic!("error forwarding output of pty");
             }
         }
     }
@@ -1600,12 +1616,12 @@ impl UCommand {
 
         #[cfg(unix)]
         if self.terminal_simulation {
-            let terminal_size = libc::winsize {
+            let terminal_size = self.terminal_size.unwrap_or(libc::winsize {
                 ws_col: 80,
                 ws_row: 30,
-                ws_xpixel: 800,
-                ws_ypixel: 300,
-            };
+                ws_xpixel: 80 * 8,
+                ws_ypixel: 30 * 10,
+            });
 
             let OpenptyResult {
                 slave: pi_slave,
@@ -2147,17 +2163,15 @@ impl UChild {
         };
 
         if let Some(stdout) = self.captured_stdout.as_mut() {
-            stdout
-                .reader_thread_handle
-                .take()
-                .map(|handle| handle.join().unwrap());
+            if let Some(handle) = stdout.reader_thread_handle.take() {
+                handle.join().unwrap();
+            }
             output.stdout = stdout.output_bytes();
         }
         if let Some(stderr) = self.captured_stderr.as_mut() {
-            stderr
-                .reader_thread_handle
-                .take()
-                .map(|handle| handle.join().unwrap());
+            if let Some(handle) = stderr.reader_thread_handle.take() {
+                handle.join().unwrap();
+            }
             output.stderr = stderr.output_bytes();
         }
 
@@ -3597,7 +3611,33 @@ mod tests {
             .succeeds();
         std::assert_eq!(
             String::from_utf8_lossy(out.stdout()),
-            "stdin is atty\r\nstdout is atty\r\nstderr is atty\r\n"
+            "stdin is atty\r\nstdout is atty\r\nstderr is atty\r\nterminal size: 30 80\r\n"
+        );
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stderr()),
+            "This is an error message.\r\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_simulation_of_terminal_size_information() {
+        let scene = TestScenario::new("util");
+
+        let out = scene
+            .ccmd("env")
+            .arg("sh")
+            .arg("is_atty.sh")
+            .terminal_size(libc::winsize {
+                ws_col: 40,
+                ws_row: 10,
+                ws_xpixel: 40 * 8,
+                ws_ypixel: 10 * 10,
+            })
+            .succeeds();
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            "stdin is atty\r\nstdout is atty\r\nstderr is atty\r\nterminal size: 10 40\r\n"
         );
         std::assert_eq!(
             String::from_utf8_lossy(out.stderr()),
