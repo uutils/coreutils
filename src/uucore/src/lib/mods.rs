@@ -9,3 +9,4 @@ pub mod error;
 pub mod line_ending;
 pub mod os;
 pub mod panic;
+pub mod posix;
