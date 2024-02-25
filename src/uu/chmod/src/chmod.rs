@@ -101,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let recursive = matches.get_flag(options::RECURSIVE);
     let fmode = match matches.get_one::<String>(options::REFERENCE) {
         Some(fref) => match fs::metadata(fref) {
-            Ok(meta) => Some(meta.mode()),
+            Ok(meta) => Some(meta.mode() & 0o7777),
             Err(err) => {
                 return Err(USimpleError::new(
                     1,
@@ -306,7 +306,7 @@ impl Chmoder {
         use uucore::mode::get_umask;
 
         let fperm = match fs::metadata(file) {
-            Ok(meta) => meta.mode(),
+            Ok(meta) => meta.mode() & 0o7777,
             Err(err) => {
                 if file.is_symlink() {
                     if self.verbose {
@@ -392,7 +392,7 @@ impl Chmoder {
                 println!(
                     "mode of {} retained as {:04o} ({})",
                     file.quote(),
-                    fperm & 0o7777,
+                    fperm,
                     display_permissions_unix(fperm as mode_t, false),
                 );
             }
@@ -405,9 +405,9 @@ impl Chmoder {
                 println!(
                     "failed to change mode of file {} from {:04o} ({}) to {:04o} ({})",
                     file.quote(),
-                    fperm & 0o7777,
+                    fperm,
                     display_permissions_unix(fperm as mode_t, false),
-                    mode & 0o7777,
+                    mode,
                     display_permissions_unix(mode as mode_t, false)
                 );
             }
@@ -417,9 +417,9 @@ impl Chmoder {
                 println!(
                     "mode of {} changed from {:04o} ({}) to {:04o} ({})",
                     file.quote(),
-                    fperm & 0o7777,
+                    fperm,
                     display_permissions_unix(fperm as mode_t, false),
-                    mode & 0o7777,
+                    mode,
                     display_permissions_unix(mode as mode_t, false)
                 );
             }
