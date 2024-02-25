@@ -27,86 +27,48 @@ pub mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_lossy();
 
-    // Since options have to go before names,
-    // if the first argument is not an option, then there is no option,
-    // and that implies there is exactly one name (no option => no -a option),
-    // so simple format is used
-    if args.len() > 1 && !args[1].starts_with('-') {
-        if args.len() > 3 {
-            return Err(UUsageError::new(
-                1,
-                format!("extra operand {}", args[3].to_string().quote()),
-            ));
-        }
-        let suffix = if args.len() > 2 { args[2].as_ref() } else { "" };
-        println!("{}", basename(&args[1], suffix));
-        return Ok(());
-    }
-
     //
     // Argument parsing
     //
     let matches = uu_app().try_get_matches_from(args)?;
 
-    // too few arguments
-    if !matches.contains_id(options::NAME) {
-        return Err(UUsageError::new(1, "missing operand".to_string()));
-    }
-
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
-    let opt_suffix = matches.get_one::<String>(options::SUFFIX).is_some();
-    let opt_multiple = matches.get_flag(options::MULTIPLE);
-    let multiple_paths = opt_suffix || opt_multiple;
-    let name_args_count = matches
+    let mut name_args = matches
         .get_many::<String>(options::NAME)
-        .map(|n| n.len())
-        .unwrap_or(0);
-
-    // too many arguments
-    if !multiple_paths && name_args_count > 2 {
-        return Err(UUsageError::new(
-            1,
-            format!(
-                "extra operand {}",
-                matches
-                    .get_many::<String>(options::NAME)
-                    .unwrap()
-                    .nth(2)
-                    .unwrap()
-                    .quote()
-            ),
-        ));
+        .unwrap_or_default()
+        .collect::<Vec<_>>();
+    if name_args.is_empty() {
+        return Err(UUsageError::new(1, "missing operand".to_string()));
     }
-
-    let suffix = if opt_suffix {
-        matches.get_one::<String>(options::SUFFIX).unwrap()
-    } else if !opt_multiple && name_args_count > 1 {
+    let multiple_paths =
+        matches.get_one::<String>(options::SUFFIX).is_some() || matches.get_flag(options::MULTIPLE);
+    let suffix = if multiple_paths {
         matches
-            .get_many::<String>(options::NAME)
-            .unwrap()
-            .nth(1)
-            .unwrap()
+            .get_one::<String>(options::SUFFIX)
+            .cloned()
+            .unwrap_or_default()
     } else {
-        ""
+        // "simple format"
+        match name_args.len() {
+            0 => panic!("already checked"),
+            1 => String::default(),
+            2 => name_args.pop().unwrap().clone(),
+            _ => {
+                return Err(UUsageError::new(
+                    1,
+                    format!("extra operand {}", name_args[2].quote(),),
+                ));
+            }
+        }
     };
 
     //
     // Main Program Processing
     //
 
-    let paths: Vec<_> = if multiple_paths {
-        matches.get_many::<String>(options::NAME).unwrap().collect()
-    } else {
-        matches
-            .get_many::<String>(options::NAME)
-            .unwrap()
-            .take(1)
-            .collect()
-    };
-
-    for path in paths {
-        print!("{}{}", basename(path, suffix), line_ending);
+    for path in name_args {
+        print!("{}{}", basename(path, &suffix), line_ending);
     }
 
     Ok(())
@@ -123,27 +85,31 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long(options::MULTIPLE)
                 .help("support multiple arguments and treat each as a NAME")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::MULTIPLE),
         )
         .arg(
             Arg::new(options::NAME)
                 .action(clap::ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath)
-                .hide(true),
+                .hide(true)
+                .trailing_var_arg(true),
         )
         .arg(
             Arg::new(options::SUFFIX)
                 .short('s')
                 .long(options::SUFFIX)
                 .value_name("SUFFIX")
-                .help("remove a trailing SUFFIX; implies -a"),
+                .help("remove a trailing SUFFIX; implies -a")
+                .overrides_with(options::SUFFIX),
         )
         .arg(
             Arg::new(options::ZERO)
                 .short('z')
                 .long(options::ZERO)
                 .help("end each output line with NUL, not newline")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ZERO),
         )
 }
 
