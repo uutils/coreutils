@@ -201,3 +201,19 @@ fn test_simple_format() {
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails().code_is(1);
 }
+
+#[test]
+fn test_zero_does_not_imply_multiple() {
+    new_ucmd!()
+        .args(&["-z", "foo.c", "c"])
+        .succeeds()
+        .stdout_is("foo.\0");
+}
+
+#[test]
+fn test_suffix_implies_multiple() {
+    new_ucmd!()
+        .args(&["-s", ".c", "foo.c", "o.c"])
+        .succeeds()
+        .stdout_is("foo\no\n");
+}
