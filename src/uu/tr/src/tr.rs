@@ -9,9 +9,10 @@ mod operation;
 mod unicode_table;
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use nom::AsBytes;
-use operation::{translate_input, Sequence, SqueezeOperation, TranslateOperation};
-use std::io::{stdin, stdout, BufReader, BufWriter};
+use operation::{
+    translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
+};
+use std::io::{stdin, stdout, BufWriter};
 use uucore::{format_usage, help_about, help_section, help_usage, show};
 
 use crate::operation::DeleteOperation;
@@ -117,19 +118,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         truncate_set1_flag,
     )?;
 
+    // '*_op' are the operations that need to be applied, in order.
     if delete_flag {
         if squeeze_flag {
-            let mut delete_buffer = vec![];
-            {
-                let mut delete_writer = BufWriter::new(&mut delete_buffer);
-                let delete_op = DeleteOperation::new(set1, complement_flag);
-                translate_input(&mut locked_stdin, &mut delete_writer, delete_op);
-            }
-            {
-                let mut squeeze_reader = BufReader::new(delete_buffer.as_bytes());
-                let op = SqueezeOperation::new(set2, false);
-                translate_input(&mut squeeze_reader, &mut buffered_stdout, op);
-            }
+            let delete_op = DeleteOperation::new(set1, complement_flag);
+            let squeeze_op = SqueezeOperation::new(set2, false);
+            let op = delete_op.chain(squeeze_op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
             let op = DeleteOperation::new(set1, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
@@ -139,17 +134,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let op = SqueezeOperation::new(set1, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let mut translate_buffer = vec![];
-            {
-                let mut writer = BufWriter::new(&mut translate_buffer);
-                let op = TranslateOperation::new(set1, set2.clone(), complement_flag)?;
-                translate_input(&mut locked_stdin, &mut writer, op);
-            }
-            {
-                let mut reader = BufReader::new(translate_buffer.as_bytes());
-                let squeeze_op = SqueezeOperation::new(set2, false);
-                translate_input(&mut reader, &mut buffered_stdout, squeeze_op);
-            }
+            let translate_op = TranslateOperation::new(set1, set2.clone(), complement_flag)?;
+            let squeeze_op = SqueezeOperation::new(set2, false);
+            let op = translate_op.chain(squeeze_op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else {
         let op = TranslateOperation::new(set1, set2, complement_flag)?;
