@@ -25,6 +25,7 @@ pub use crate::mods::error;
 pub use crate::mods::line_ending;
 pub use crate::mods::os;
 pub use crate::mods::panic;
+pub use crate::mods::posix;
 
 // * string parsing modules
 pub use crate::parser::parse_glob;

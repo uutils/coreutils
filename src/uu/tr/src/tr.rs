@@ -164,20 +164,23 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .trailing_var_arg(true)
         .arg(
             Arg::new(options::COMPLEMENT)
                 .visible_short_alias('C')
                 .short('c')
                 .long(options::COMPLEMENT)
                 .help("use the complement of SET1")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::COMPLEMENT),
         )
         .arg(
             Arg::new(options::DELETE)
                 .short('d')
                 .long(options::DELETE)
                 .help("delete characters in SET1, do not translate")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DELETE),
         )
         .arg(
             Arg::new(options::SQUEEZE)
@@ -188,14 +191,16 @@ pub fn uu_app() -> Command {
                      listed in the last specified SET, with a single occurrence \
                      of that character",
                 )
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SQUEEZE),
         )
         .arg(
             Arg::new(options::TRUNCATE_SET1)
                 .long(options::TRUNCATE_SET1)
                 .short('t')
                 .help("first truncate SET1 to length of SET2")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TRUNCATE_SET1),
         )
         .arg(Arg::new(options::SETS).num_args(1..))
 }

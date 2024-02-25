@@ -47,6 +47,32 @@ fn test_delete() {
 }
 
 #[test]
+fn test_delete_afterwards_is_not_flag() {
+    new_ucmd!()
+        .args(&["a-z", "-d"])
+        .pipe_in("aBcD")
+        .succeeds()
+        .stdout_is("-BdD");
+}
+
+#[test]
+fn test_delete_multi() {
+    new_ucmd!()
+        .args(&["-d", "-d", "a-z"])
+        .pipe_in("aBcD")
+        .succeeds()
+        .stdout_is("BD");
+}
+
+#[test]
+fn test_delete_late() {
+    new_ucmd!()
+        .args(&["-d", "a-z", "-d"])
+        .fails()
+        .stderr_contains("extra operand '-d'");
+}
+
+#[test]
 fn test_delete_complement() {
     new_ucmd!()
         .args(&["-d", "-c", "a-z"])
@@ -76,6 +102,14 @@ fn test_complement1() {
         .pipe_in("ab")
         .run()
         .stdout_is("aX");
+}
+
+#[test]
+fn test_complement_afterwards_is_not_flag() {
+    new_ucmd!()
+        .args(&["a", "X", "-c"])
+        .fails()
+        .stderr_contains("extra operand '-c'");
 }
 
 #[test]
@@ -119,11 +153,45 @@ fn test_complement5() {
 }
 
 #[test]
+fn test_complement_multi_early() {
+    new_ucmd!()
+        .args(&["-c", "-c", "a", "X"])
+        .pipe_in("ab")
+        .succeeds()
+        .stdout_is("aX");
+}
+
+#[test]
+fn test_complement_multi_middle() {
+    new_ucmd!()
+        .args(&["-c", "a", "-c", "X"])
+        .fails()
+        .stderr_contains("tr: extra operand 'X'");
+}
+
+#[test]
+fn test_complement_multi_late() {
+    new_ucmd!()
+        .args(&["-c", "a", "X", "-c"])
+        .fails()
+        .stderr_contains("tr: extra operand '-c'");
+}
+
+#[test]
 fn test_squeeze() {
     new_ucmd!()
         .args(&["-s", "a-z"])
         .pipe_in("aaBBcDcc")
-        .run()
+        .succeeds()
+        .stdout_is("aBBcDc");
+}
+
+#[test]
+fn test_squeeze_multi() {
+    new_ucmd!()
+        .args(&["-ss", "-s", "a-z"])
+        .pipe_in("aaBBcDcc")
+        .succeeds()
         .stdout_is("aBBcDc");
 }
 
@@ -132,7 +200,16 @@ fn test_squeeze_complement() {
     new_ucmd!()
         .args(&["-sc", "a-z"])
         .pipe_in("aaBBcDcc")
-        .run()
+        .succeeds()
+        .stdout_is("aaBcDcc");
+}
+
+#[test]
+fn test_squeeze_complement_multi() {
+    new_ucmd!()
+        .args(&["-scsc", "a-z"]) // spell-checker:disable-line
+        .pipe_in("aaBBcDcc")
+        .succeeds()
         .stdout_is("aaBcDcc");
 }
 
@@ -223,7 +300,16 @@ fn test_truncate() {
     new_ucmd!()
         .args(&["-t", "abc", "xy"])
         .pipe_in("abcde")
-        .run()
+        .succeeds()
+        .stdout_is("xycde"); // spell-checker:disable-line
+}
+
+#[test]
+fn test_truncate_multi() {
+    new_ucmd!()
+        .args(&["-tt", "-t", "abc", "xy"])
+        .pipe_in("abcde")
+        .succeeds()
         .stdout_is("xycde"); // spell-checker:disable-line
 }
 
