@@ -646,6 +646,20 @@ fn test_quiet_n_verbose_used_multiple_times() {
 }
 
 #[test]
+fn test_changes_from_identical_reference() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene
+        .ucmd()
+        .arg("-c")
+        .arg("--reference=file")
+        .arg("file")
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
 fn test_gnu_invalid_mode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
