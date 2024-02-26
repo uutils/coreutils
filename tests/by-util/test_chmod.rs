@@ -653,8 +653,7 @@ fn test_changes_from_identical_reference() {
     scene
         .ucmd()
         .arg("-c")
-        .arg("--reference")
-        .arg("file")
+        .arg("--reference=file")
         .arg("file")
         .succeeds()
         .no_stdout();
