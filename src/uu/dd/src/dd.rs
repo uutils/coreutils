@@ -21,6 +21,7 @@ use nix::fcntl::FcntlArg::F_SETFL;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
+use progress::ProgUpdateType;
 use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
 use uucore::io::OwnedFileDescriptorOrHandle;
 
@@ -39,10 +40,8 @@ use std::os::unix::{
 #[cfg(windows)]
 use std::os::windows::{fs::MetadataExt, io::AsHandle};
 use std::path::Path;
-use std::sync::{
-    atomic::{AtomicBool, Ordering::Relaxed},
-    mpsc, Arc,
-};
+use std::sync::atomic::AtomicU8;
+use std::sync::{atomic::Ordering::Relaxed, mpsc, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -94,29 +93,41 @@ struct Settings {
 /// the first caller each interval will yield true.
 ///
 /// When all instances are dropped the background thread will exit on the next interval.
-#[derive(Debug, Clone)]
 pub struct Alarm {
     interval: Duration,
-    trigger: Arc<AtomicBool>,
+    trigger: Arc<AtomicU8>,
 }
+
+const TRIGGER_NONE: u8 = 0;
+const TRIGGER_TIMER: u8 = 1;
+const TRIGGER_SIGNAL: u8 = 2;
 
 impl Alarm {
     pub fn with_interval(interval: Duration) -> Self {
-        let trigger = Arc::new(AtomicBool::default());
+        let trigger = Arc::new(AtomicU8::default());
 
         let weak_trigger = Arc::downgrade(&trigger);
         thread::spawn(move || {
             while let Some(trigger) = weak_trigger.upgrade() {
                 thread::sleep(interval);
-                trigger.store(true, Relaxed);
+                trigger.store(TRIGGER_TIMER, Relaxed);
             }
         });
 
         Self { interval, trigger }
     }
 
-    pub fn is_triggered(&self) -> bool {
-        self.trigger.swap(false, Relaxed)
+    pub fn manual_trigger_fn(&self) -> Box<dyn Send + Sync + Fn()> {
+        let weak_trigger = Arc::downgrade(&self.trigger);
+        Box::new(move || {
+            if let Some(trigger) = weak_trigger.upgrade() {
+                trigger.store(TRIGGER_SIGNAL, Relaxed);
+            }
+        })
+    }
+
+    pub fn get_trigger(&self) -> u8 {
+        self.trigger.swap(TRIGGER_NONE, Relaxed)
     }
 
     pub fn get_interval(&self) -> Duration {
@@ -1018,6 +1029,18 @@ fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
     // This avoids the need to query the OS monotonic clock for every block.
     let alarm = Alarm::with_interval(Duration::from_secs(1));
 
+    // The signal handler spawns an own thread that waits for signals.
+    // When the signal is received, it calls a handler function.
+    // We inject a handler function that manually triggers the alarm.
+    #[cfg(target_os = "linux")]
+    let signal_handler = progress::SignalHandler::install_signal_handler(alarm.manual_trigger_fn());
+    #[cfg(target_os = "linux")]
+    if let Err(e) = &signal_handler {
+        if Some(StatusLevel::None) != i.settings.status {
+            eprintln!("Internal dd Warning: Unable to register signal handler \n\t{e}");
+        }
+    }
+
     // Index in the input file where we are reading bytes and in
     // the output file where we are writing bytes.
     //
@@ -1086,11 +1109,20 @@ fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
         // error.
         rstat += rstat_update;
         wstat += wstat_update;
-        if alarm.is_triggered() {
-            let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), false);
-            prog_tx.send(prog_update).unwrap_or(());
+        match alarm.get_trigger() {
+            TRIGGER_NONE => {}
+            t @ TRIGGER_TIMER | t @ TRIGGER_SIGNAL => {
+                let tp = match t {
+                    TRIGGER_TIMER => ProgUpdateType::Periodic,
+                    _ => ProgUpdateType::Signal,
+                };
+                let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
+                prog_tx.send(prog_update).unwrap_or(());
+            }
+            _ => {}
         }
     }
+
     finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)
 }
 
@@ -1118,12 +1150,13 @@ fn finalize<T>(
 
     // Print the final read/write statistics.
     let wstat = wstat + wstat_update;
-    let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), true);
+    let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), ProgUpdateType::Final);
     prog_tx.send(prog_update).unwrap_or(());
     // Wait for the output thread to finish
     output_thread
         .join()
         .expect("Failed to join with the output thread.");
+
     Ok(())
 }
 
