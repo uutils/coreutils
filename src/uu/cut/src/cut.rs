@@ -11,7 +11,6 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
@@ -76,7 +75,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()
         .out_delimiter
         .as_ref()
         .unwrap_or(default_out_delim)
-        .as_bytes();
+        .as_encoded_bytes();
 
     let result = buf_in.for_byte_record(newline_char, |line| {
         let mut print_delim = false;
@@ -148,7 +147,7 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
             for _ in 0..=high - low {
                 // skip printing delimiter if this is the first matching field for this line
                 if print_delim {
-                    out.write_all(out_delim.as_bytes())?;
+                    out.write_all(out_delim.as_encoded_bytes())?;
                 } else {
                     print_delim = true;
                 }
@@ -264,7 +263,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<(
     let field_opts = opts.field_opts.as_ref().unwrap(); // it is safe to unwrap() here - field_opts will always be Some() for cut_fields() call
     match field_opts.delimiter {
         Delimiter::String(ref delim) => {
-            let matcher = ExactMatcher::new(delim.as_bytes());
+            let matcher = ExactMatcher::new(delim.as_encoded_bytes());
             match opts.out_delimiter {
                 Some(ref out_delim) => cut_fields_explicit_out_delim(
                     reader,
@@ -440,7 +439,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         }
                         // For delimiter option value - allow both UTF8 (possibly multi-byte) characters 
                         // and Non UTF8 (and not ASCII) single byte "characters", like b"\xff" to align with GNU behavior
-                        if delim.to_str().is_some_and(|d| d.chars().count() > 1) || delim.to_str().is_none() && delim.as_bytes().len() > 1 {
+                        if delim.to_str().is_some_and(|d| d.chars().count() > 1) || delim.to_str().is_none() && delim.as_encoded_bytes().len() > 1 {
                             Err("the delimiter must be a single character".into())
                         } else {
                             let delim = if delim.is_empty() {
@@ -455,8 +454,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                                     out_delimiter: out_delim,
                                     line_ending,
                                     field_opts: Some(FieldOptions {
-                                        delimiter: Delimiter::String(delim.clone()),
                                         only_delimited,
+                                        delimiter: Delimiter::String(delim),
                                 })},
                             ))
                         }
