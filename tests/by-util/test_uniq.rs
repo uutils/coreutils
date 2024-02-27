@@ -757,7 +757,10 @@ fn gnu_tests() {
             args: &["-D", "-c"],
             input: "", // Note: Different from GNU test, but should not matter
             stdout: Some(""),
-            stderr: Some("uniq: printing all duplicated lines and repeat counts is meaningless\nTry 'uniq --help' for more information.\n"),
+            stderr: Some(concat!(
+                "uniq: printing all duplicated lines and repeat counts is meaningless\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
             exit: Some(1),
         },
         TestCase {
@@ -813,7 +816,14 @@ fn gnu_tests() {
             args: &["--all-repeated=badoption"],
             input: "", // Note: Different from GNU test, but should not matter
             stdout: Some(""),
-            stderr: Some("uniq: invalid argument 'badoption' for '--all-repeated'\nValid arguments are:\n  - 'none'\n  - 'prepend'\n  - 'separate'\nTry 'uniq --help' for more information.\n"),
+            stderr: Some(concat!(
+                "uniq: invalid argument 'badoption' for '--all-repeated'\n",
+                "Valid arguments are:\n",
+                "  - 'none'\n",
+                "  - 'prepend'\n",
+                "  - 'separate'\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
             exit: Some(1),
         },
         // \x08 is the backspace char
@@ -984,7 +994,10 @@ fn gnu_tests() {
             args: &["--group", "-c"],
             input: "",
             stdout: Some(""),
-            stderr: Some("uniq: --group is mutually exclusive with -c/-d/-D/-u\nTry 'uniq --help' for more information.\n"),
+            stderr: Some(concat!(
+                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
             exit: Some(1),
         },
         TestCase {
@@ -992,7 +1005,10 @@ fn gnu_tests() {
             args: &["--group", "-d"],
             input: "",
             stdout: Some(""),
-            stderr: Some("uniq: --group is mutually exclusive with -c/-d/-D/-u\nTry 'uniq --help' for more information.\n"),
+            stderr: Some(concat!(
+                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
             exit: Some(1),
         },
         TestCase {
@@ -1000,7 +1016,10 @@ fn gnu_tests() {
             args: &["--group", "-u"],
             input: "",
             stdout: Some(""),
-            stderr: Some("uniq: --group is mutually exclusive with -c/-d/-D/-u\nTry 'uniq --help' for more information.\n"),
+            stderr: Some(concat!(
+                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
             exit: Some(1),
         },
         TestCase {
@@ -1008,7 +1027,10 @@ fn gnu_tests() {
             args: &["--group", "-D"],
             input: "",
             stdout: Some(""),
-            stderr: Some("uniq: --group is mutually exclusive with -c/-d/-D/-u\nTry 'uniq --help' for more information.\n"),
+            stderr: Some(concat!(
+                "uniq: --group is mutually exclusive with -c/-d/-D/-u\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
             exit: Some(1),
         },
         TestCase {
@@ -1016,7 +1038,15 @@ fn gnu_tests() {
             args: &["--group=badoption"],
             input: "",
             stdout: Some(""),
-            stderr: Some("uniq: invalid argument 'badoption' for '--group'\nValid arguments are:\n  - 'prepend'\n  - 'append'\n  - 'separate'\n  - 'both'\nTry 'uniq --help' for more information.\n"),
+            stderr: Some(concat!(
+                "uniq: invalid argument 'badoption' for '--group'\n",
+                "Valid arguments are:\n",
+                "  - 'prepend'\n",
+                "  - 'append'\n",
+                "  - 'separate'\n",
+                "  - 'both'\n",
+                "Try 'uniq --help' for more information.\n"
+            )),
             exit: Some(1),
         },
     ];
