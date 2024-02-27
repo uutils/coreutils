@@ -435,11 +435,10 @@ fn shuf_exec(input: &mut impl Shufable, opts: Options) -> UResult<()> {
         None => WrappedRng::RngDefault(rand::thread_rng()),
     };
 
-    if input.is_empty() {
-        return Ok(());
-    }
-
     if opts.repeat {
+        if input.is_empty() {
+            return Err(USimpleError::new(1, "no lines to repeat"));
+        }
         for _ in 0..opts.head_count {
             let r = input.choose(&mut rng);
 
