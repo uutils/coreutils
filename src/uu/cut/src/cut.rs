@@ -6,9 +6,12 @@
 // spell-checker:ignore (ToDO) delim sourcefiles
 
 use bstr::io::BufReadExt;
+use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, Command};
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
@@ -27,26 +30,25 @@ const ABOUT: &str = help_about!("cut.md");
 const AFTER_HELP: &str = help_section!("after help", "cut.md");
 
 struct Options {
-    out_delim: Option<String>,
+    out_delimiter: Option<OsString>, // use OsString without trying to parse into UTF8/char or &[u8]
     line_ending: LineEnding,
+    field_opts: Option<FieldOptions>,
 }
 
 enum Delimiter {
     Whitespace,
-    String(String), // FIXME: use char?
+    String(OsString), // use OsString without trying to parse into UTF8/char or &[u8]
 }
 
 struct FieldOptions {
     delimiter: Delimiter,
-    out_delimiter: Option<String>,
     only_delimited: bool,
-    line_ending: LineEnding,
 }
 
 enum Mode {
     Bytes(Vec<Range>, Options),
     Characters(Vec<Range>, Options),
-    Fields(Vec<Range>, FieldOptions),
+    Fields(Vec<Range>, Options),
 }
 
 fn stdout_writer() -> Box<dyn Write> {
@@ -69,10 +71,11 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()
     let newline_char = opts.line_ending.into();
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
-    let delim = opts
-        .out_delim
+    let default_out_delim = &OsString::from("\t");
+    let out_delim = opts
+        .out_delimiter
         .as_ref()
-        .map_or("", String::as_str)
+        .unwrap_or(default_out_delim)
         .as_bytes();
 
     let result = buf_in.for_byte_record(newline_char, |line| {
@@ -82,8 +85,8 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()
                 break;
             }
             if print_delim {
-                out.write_all(delim)?;
-            } else if opts.out_delim.is_some() {
+                out.write_all(out_delim)?;
+            } else if opts.out_delimiter.is_some() {
                 print_delim = true;
             }
             // change `low` from 1-indexed value to 0-index value
@@ -109,7 +112,7 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
     ranges: &[Range],
     only_delimited: bool,
     newline_char: u8,
-    out_delim: &str,
+    out_delim: &OsString,
 ) -> UResult<()> {
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
@@ -256,9 +259,10 @@ fn cut_fields_implicit_out_delim<R: Read, M: Matcher>(
     Ok(())
 }
 
-fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> UResult<()> {
+fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()> {
     let newline_char = opts.line_ending.into();
-    match opts.delimiter {
+    let field_opts = opts.field_opts.as_ref().unwrap(); // it is safe to unwrap() here - field_opts will always be Some() for cut_fields() call
+    match field_opts.delimiter {
         Delimiter::String(ref delim) => {
             let matcher = ExactMatcher::new(delim.as_bytes());
             match opts.out_delimiter {
@@ -266,7 +270,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
                     reader,
                     &matcher,
                     ranges,
-                    opts.only_delimited,
+                    field_opts.only_delimited,
                     newline_char,
                     out_delim,
                 ),
@@ -274,19 +278,20 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> URes
                     reader,
                     &matcher,
                     ranges,
-                    opts.only_delimited,
+                    field_opts.only_delimited,
                     newline_char,
                 ),
             }
         }
         Delimiter::Whitespace => {
             let matcher = WhitespaceMatcher {};
-            let out_delim = opts.out_delimiter.as_deref().unwrap_or("\t");
+            let default_out_delim = &OsString::from("\t");
+            let out_delim = opts.out_delimiter.as_ref().unwrap_or(default_out_delim);
             cut_fields_explicit_out_delim(
                 reader,
                 &matcher,
                 ranges,
-                opts.only_delimited,
+                field_opts.only_delimited,
                 newline_char,
                 out_delim,
             )
@@ -352,9 +357,9 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
+    let args = args.collect::<Vec<OsString>>();
 
-    let delimiter_is_equal = args.contains(&"-d=".to_string()); // special case
+    let delimiter_is_equal = args.contains(&OsString::from("-d=")); // special case
     let matches = uu_app().try_get_matches_from(args)?;
 
     let complement = matches.get_flag(options::COMPLEMENT);
@@ -381,14 +386,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Mode::Bytes(
                 ranges,
                 Options {
-                    out_delim: Some(
-                        matches
-                            .get_one::<String>(options::OUTPUT_DELIMITER)
-                            .map(|s| s.as_str())
-                            .unwrap_or_default()
-                            .to_owned(),
-                    ),
+                    out_delimiter: matches
+                            .get_one::<OsString>(options::OUTPUT_DELIMITER)
+                            .cloned(),
                     line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED)),
+                    field_opts: None,
                 },
             )
         }),
@@ -396,25 +398,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Mode::Characters(
                 ranges,
                 Options {
-                    out_delim: Some(
-                        matches
-                            .get_one::<String>(options::OUTPUT_DELIMITER)
-                            .map(|s| s.as_str())
-                            .unwrap_or_default()
-                            .to_owned(),
-                    ),
+                    out_delimiter: matches
+                            .get_one::<OsString>(options::OUTPUT_DELIMITER)
+                            .cloned(),
                     line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED)),
+                    field_opts: None,
                 },
             )
         }),
         (1, None, None, Some(field_ranges)) => {
             list_to_ranges(field_ranges, complement).and_then(|ranges| {
-                let out_delim = match matches.get_one::<String>(options::OUTPUT_DELIMITER) {
+                let out_delim = match matches.get_one::<OsString>(options::OUTPUT_DELIMITER).cloned() {
                     Some(s) => {
-                        if s.is_empty() {
-                            Some("\0".to_owned())
+                        if s.is_empty() || s == "''" {
+                            Some(OsString::from("\0"))
                         } else {
-                            Some(s.clone())
+                            Some(s)
                         }
                     }
                     None => None,
@@ -425,7 +424,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let zero_terminated = matches.get_flag(options::ZERO_TERMINATED);
                 let line_ending = LineEnding::from_zero_flag(zero_terminated);
 
-                match matches.get_one::<String>(options::DELIMITER).map(|s| s.as_str()) {
+                match matches.get_one::<OsString>(options::DELIMITER).cloned() {
                     Some(_) if whitespace_delimited => {
                             Err("invalid input: Only one of --delimiter (-d) or -w option can be specified".into())
                         }
@@ -434,43 +433,50 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         // Clap parsing is limited in this situation, see:
                         // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
                         if delimiter_is_equal {
-                            delim = "=";
+                            delim = OsString::from("=");
                         } else if delim == "''" {
                             // treat `''` as empty delimiter
-                            delim = "";
+                            delim = OsString::from("");
                         }
-                        if delim.chars().count() > 1 {
+                        // For delimiter option value - allow both UTF8 (possibly multi-byte) characters 
+                        // and Non UTF8 (and not ASCII) single byte "characters", like b"\xff" to align with GNU behavior
+                        if delim.to_str().is_some_and(|d| d.chars().count() > 1) || delim.to_str().is_none() && delim.as_bytes().len() > 1 {
                             Err("the delimiter must be a single character".into())
                         } else {
                             let delim = if delim.is_empty() {
-                                "\0".to_owned()
+                                OsString::from("\0")
                             } else {
-                                delim.to_owned()
+                                delim
                             };
 
                             Ok(Mode::Fields(
                                 ranges,
-                                FieldOptions {
-                                    delimiter: Delimiter::String(delim),
+                                Options {
                                     out_delimiter: out_delim,
-                                    only_delimited,
                                     line_ending,
-                                },
+                                    field_opts: Some(FieldOptions {
+                                        delimiter: Delimiter::String(delim.clone()),
+                                        only_delimited,
+                                })},
                             ))
                         }
                     }
-                    None => Ok(Mode::Fields(
-                        ranges,
-                        FieldOptions {
-                            delimiter: match whitespace_delimited {
-                                true => Delimiter::Whitespace,
-                                false => Delimiter::String("\t".to_owned()),
+                    None => {
+                        let delim = &OsString::from("\t");
+                        Ok(Mode::Fields(
+                            ranges,
+                            Options {
+                                out_delimiter: out_delim,
+                                line_ending,
+                                field_opts: Some (FieldOptions {
+                                    delimiter: match whitespace_delimited {
+                                        true    => Delimiter::Whitespace,
+                                        false   => Delimiter::String(delim.clone()),
+                                    },
+                                    only_delimited
+                                })
                             },
-                            out_delimiter: out_delim,
-                            only_delimited,
-                            line_ending,
-                        },
-                    )),
+                    ))},
                 }
             })
         }
@@ -554,6 +560,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::DELIMITER)
                 .short('d')
                 .long(options::DELIMITER)
+                .value_parser(ValueParser::os_string())
                 .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
                 .value_name("DELIM"),
         )
@@ -596,6 +603,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::OUTPUT_DELIMITER)
                 .long(options::OUTPUT_DELIMITER)
+                .value_parser(ValueParser::os_string())
                 .help("in field mode, replace the delimiter in output lines with this option's argument")
                 .value_name("NEW_DELIM"),
         )
