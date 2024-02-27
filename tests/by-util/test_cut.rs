@@ -270,3 +270,21 @@ fn test_multiple() {
     assert_eq!(result.stdout_str(), "b\n");
     assert_eq!(result.stderr_str(), "");
 }
+
+#[test]
+fn test_multiple_mode_args() {
+    for args in [
+        vec!["-b1", "-b2"],
+        vec!["-c1", "-c2"],
+        vec!["-f1", "-f2"],
+        vec!["-b1", "-c2"],
+        vec!["-b1", "-f2"],
+        vec!["-c1", "-f2"],
+        vec!["-b1", "-c2", "-f3"],
+    ] {
+        new_ucmd!()
+        .args(&args)
+        .fails()
+        .stderr_is("cut: invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)\n");
+    }
+}

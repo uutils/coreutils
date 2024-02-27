@@ -57,15 +57,42 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if !(delete_flag || squeeze_flag) && sets_len < 2 {
         return Err(UUsageError::new(
             1,
-            format!("missing operand after {}", sets[0].quote()),
+            format!(
+                "missing operand after {}\nTwo strings must be given when translating.",
+                sets[0].quote()
+            ),
         ));
     }
 
-    if delete_flag && !squeeze_flag && sets_len > 1 {
+    if delete_flag & squeeze_flag && sets_len < 2 {
         return Err(UUsageError::new(
             1,
-            format!("extra operand {}\nOnly one string may be given when deleting without squeezing repeats.", sets[1].quote()),
+            format!(
+                "missing operand after {}\nTwo strings must be given when deleting and squeezing.",
+                sets[0].quote()
+            ),
         ));
+    }
+
+    if sets_len > 1 {
+        let start = "extra operand";
+        if delete_flag && !squeeze_flag {
+            let op = sets[1].quote();
+            let msg = if sets_len == 2 {
+                format!(
+                    "{} {}\nOnly one string may be given when deleting without squeezing repeats.",
+                    start, op,
+                )
+            } else {
+                format!("{} {}", start, op,)
+            };
+            return Err(UUsageError::new(1, msg));
+        }
+        if sets_len > 2 {
+            let op = sets[2].quote();
+            let msg = format!("{} {}", start, op);
+            return Err(UUsageError::new(1, msg));
+        }
     }
 
     if let Some(first) = sets.first() {
@@ -100,7 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             {
                 let mut squeeze_reader = BufReader::new(delete_buffer.as_bytes());
-                let op = SqueezeOperation::new(set2, complement_flag);
+                let op = SqueezeOperation::new(set2, false);
                 translate_input(&mut squeeze_reader, &mut buffered_stdout, op);
             }
         } else {
@@ -137,20 +164,23 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .trailing_var_arg(true)
         .arg(
             Arg::new(options::COMPLEMENT)
                 .visible_short_alias('C')
                 .short('c')
                 .long(options::COMPLEMENT)
                 .help("use the complement of SET1")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::COMPLEMENT),
         )
         .arg(
             Arg::new(options::DELETE)
                 .short('d')
                 .long(options::DELETE)
                 .help("delete characters in SET1, do not translate")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DELETE),
         )
         .arg(
             Arg::new(options::SQUEEZE)
@@ -161,14 +191,16 @@ pub fn uu_app() -> Command {
                      listed in the last specified SET, with a single occurrence \
                      of that character",
                 )
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SQUEEZE),
         )
         .arg(
             Arg::new(options::TRUNCATE_SET1)
                 .long(options::TRUNCATE_SET1)
                 .short('t')
                 .help("first truncate SET1 to length of SET2")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TRUNCATE_SET1),
         )
-        .arg(Arg::new(options::SETS).num_args(1..=2))
+        .arg(Arg::new(options::SETS).num_args(1..))
 }

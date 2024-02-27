@@ -5,7 +5,7 @@
 echo "PATH: $PATH"
 
 export PATH=$HOME/.cargo/bin:$PATH
-export RUST_BACKTRACE=1
+export RUST_BACKTRACE=full
 export CARGO_TERM_COLOR=always
 export CARGO_INCREMENTAL=0
 

@@ -102,23 +102,24 @@ pub fn base_app(about: &'static str, usage: &str) -> Command {
                 .short('d')
                 .long(options::DECODE)
                 .help("decode data")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DECODE),
         )
         .arg(
             Arg::new(options::IGNORE_GARBAGE)
                 .short('i')
                 .long(options::IGNORE_GARBAGE)
                 .help("when decoding, ignore non-alphabetic characters")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::IGNORE_GARBAGE),
         )
         .arg(
             Arg::new(options::WRAP)
                 .short('w')
                 .long(options::WRAP)
                 .value_name("COLS")
-                .help(
-                    "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
-                ),
+                .help("wrap encoded lines after COLS character (default 76, 0 to disable wrapping)")
+                .overrides_with(options::WRAP),
         )
         // "multiple" arguments are used to check whether there is more than one
         // file passed in.

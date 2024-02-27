@@ -99,10 +99,8 @@ fn test_verbose() {
 }
 
 #[test]
-#[ignore]
 fn test_spams_newline() {
-    //this test is does not mirror what GNU does
-    new_ucmd!().pipe_in("a").succeeds().stdout_is("a\n");
+    new_ucmd!().pipe_in("a").succeeds().stdout_is("a");
 }
 
 #[test]
