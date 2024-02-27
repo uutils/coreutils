@@ -471,7 +471,11 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
         let end = to
             .parse::<usize>()
             .map_err(|_| format!("invalid input range: {}", to.quote()))?;
-        Ok(begin..=end)
+        if begin <= end || begin == end + 1 {
+            Ok(begin..=end)
+        } else {
+            Err(format!("invalid input range: {}", input_range.quote()))
+        }
     } else {
         Err(format!("invalid input range: {}", input_range.quote()))
     }

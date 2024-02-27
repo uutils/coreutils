@@ -762,7 +762,11 @@ fn test_range_empty() {
 
 #[test]
 fn test_range_empty_minus_one() {
-    new_ucmd!().arg("-i5-3").succeeds().no_output();
+    new_ucmd!()
+        .arg("-i5-3")
+        .fails()
+        .no_stdout()
+        .stderr_only("shuf: invalid input range: '5-3'\n");
 }
 
 #[test]
@@ -792,5 +796,5 @@ fn test_range_repeat_empty_minus_one() {
         .arg("-ri5-3")
         .fails()
         .no_stdout()
-        .stderr_only("shuf: no lines to repeat\n");
+        .stderr_only("shuf: invalid input range: '5-3'\n");
 }
