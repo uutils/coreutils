@@ -743,12 +743,7 @@ fn pad_unsigned_three() {
 
 #[test]
 fn pad_char() {
-    for (format, expected) in [
-       ("%3c", "  X"),
-       ("%1c", "X"),
-       ("%-1c", "X"),
-       ("%-3c", "X  "),
-    ] {
+    for (format, expected) in [("%3c", "  X"), ("%1c", "X"), ("%-1c", "X"), ("%-3c", "X  ")] {
         new_ucmd!()
             .args(&[format, "X"])
             .succeeds()
@@ -756,14 +751,13 @@ fn pad_char() {
     }
 }
 
-
 #[test]
 fn pad_string() {
     for (format, expected) in [
-       ("%8s", "  bottle"),
-       ("%-8s", "bottle  "),
-       ("%6s", "bottle"),
-       ("%-6s", "bottle"),
+        ("%8s", "  bottle"),
+        ("%-8s", "bottle  "),
+        ("%6s", "bottle"),
+        ("%-6s", "bottle"),
     ] {
         new_ucmd!()
             .args(&[format, "bottle"])
