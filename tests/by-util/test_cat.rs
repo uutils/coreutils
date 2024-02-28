@@ -175,6 +175,7 @@ fn test_piped_to_dev_full() {
             s.ucmd()
                 .set_stdout(dev_full)
                 .pipe_in_fixture("alpha.txt")
+                .ignore_stdin_write_error()
                 .fails()
                 .stderr_contains("No space left on device");
         }
@@ -224,6 +225,7 @@ fn test_three_directories_and_file_and_stdin() {
             "test_directory3",
         ])
         .pipe_in("stdout bytes")
+        .ignore_stdin_write_error()
         .fails()
         .stderr_is_fixture("three_directories_and_file_and_stdin.stderr.expected")
         .stdout_is(
