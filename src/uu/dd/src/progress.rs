@@ -443,6 +443,7 @@ pub(crate) fn gen_prog_updater(
     }
 }
 
+/// signal handler listens for SIGUSR1 signal and runs provided closure.
 #[cfg(target_os = "linux")]
 pub(crate) struct SignalHandler {
     handle: Handle,

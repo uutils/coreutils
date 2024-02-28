@@ -86,8 +86,10 @@ struct Settings {
 
 /// A timer which triggers on a given interval
 ///
-/// After being constructed with [`Alarm::with_interval`], [`Alarm::is_triggered`]
-/// will return true once per the given [`Duration`].
+/// After being constructed with [`Alarm::with_interval`], [`Alarm::get_trigger`]
+/// will return [`TRIGGER_TIMER`] once per the given [`Duration`].
+/// Alarm can be manually triggered with closure returned by [`Alarm::manual_trigger_fn`].
+/// [`Alarm::get_trigger`] will return [`TRIGGER_SIGNAL`] in this case.
 ///
 /// Can be cloned, but the trigger status is shared across all instances so only
 /// the first caller each interval will yield true.
@@ -933,6 +935,27 @@ impl<'a> BlockWriter<'a> {
     }
 }
 
+fn flush_caches_full_length(i: &Input, o: &Output) -> std::io::Result<()> {
+    // TODO Better error handling for overflowing `len`.
+    if i.settings.iflags.nocache {
+        let offset = 0;
+        #[allow(clippy::useless_conversion)]
+        let len = i.src.len()?.try_into().unwrap();
+        i.discard_cache(offset, len);
+    }
+    // Similarly, discard the system cache for the output file.
+    //
+    // TODO Better error handling for overflowing `len`.
+    if i.settings.oflags.nocache {
+        let offset = 0;
+        #[allow(clippy::useless_conversion)]
+        let len = o.dst.len()?.try_into().unwrap();
+        o.discard_cache(offset, len);
+    }
+
+    Ok(())
+}
+
 /// Copy the given input data to this output, consuming both.
 ///
 /// This method contains the main loop for the `dd` program. Bytes
@@ -992,22 +1015,7 @@ fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
         // requests that we inform the system that we no longer
         // need the contents of the input file in a system cache.
         //
-        // TODO Better error handling for overflowing `len`.
-        if i.settings.iflags.nocache {
-            let offset = 0;
-            #[allow(clippy::useless_conversion)]
-            let len = i.src.len()?.try_into().unwrap();
-            i.discard_cache(offset, len);
-        }
-        // Similarly, discard the system cache for the output file.
-        //
-        // TODO Better error handling for overflowing `len`.
-        if i.settings.oflags.nocache {
-            let offset = 0;
-            #[allow(clippy::useless_conversion)]
-            let len = o.dst.len()?.try_into().unwrap();
-            o.discard_cache(offset, len);
-        }
+        flush_caches_full_length(&i, &o)?;
         return finalize(
             BlockWriter::Unbuffered(o),
             rstat,
