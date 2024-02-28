@@ -813,10 +813,18 @@ fn test_check_silent() {
 
 #[test]
 fn test_check_unique() {
-    // Due to a clap bug the combination "-cu" does not work. "-c -u" works.
-    // See https://github.com/clap-rs/clap/issues/2624
     new_ucmd!()
         .args(&["-c", "-u"])
+        .pipe_in("A\nA\n")
+        .fails()
+        .code_is(1)
+        .stderr_only("sort: -:2: disorder: A\n");
+}
+
+#[test]
+fn test_check_unique_combined() {
+    new_ucmd!()
+        .args(&["-cu"])
         .pipe_in("A\nA\n")
         .fails()
         .code_is(1)

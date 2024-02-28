@@ -1068,6 +1068,7 @@ fn test_split_number_oversized_stdin() {
     new_ucmd!()
         .args(&["--number=3", "---io-blksize=600"])
         .pipe_in_fixture("sixhundredfiftyonebytes.txt")
+        .ignore_stdin_write_error()
         .fails()
         .stderr_only("split: -: cannot determine input size\n");
 }
