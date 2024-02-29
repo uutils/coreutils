@@ -288,3 +288,17 @@ fn test_multiple_mode_args() {
         .stderr_is("cut: invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)\n");
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn test_8bit_non_utf8_delimiter() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let delim = OsStr::from_bytes(b"\xAD".as_slice());
+    new_ucmd!()
+        .arg("-d")
+        .arg(delim)
+        .args(&["--out=_", "-f2,3", "8bit-delim.txt"])
+        .succeeds()
+        .stdout_check(|out| out == "b_c\n".as_bytes());
+}

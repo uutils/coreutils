@@ -6,11 +6,12 @@
 // spell-checker:ignore (ToDO) delim sourcefiles
 
 use bstr::io::BufReadExt;
-use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, Command};
+use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
@@ -28,26 +29,38 @@ const USAGE: &str = help_usage!("cut.md");
 const ABOUT: &str = help_about!("cut.md");
 const AFTER_HELP: &str = help_section!("after help", "cut.md");
 
-struct Options {
-    out_delimiter: Option<OsString>, // use OsString without trying to parse into UTF8/char or &[u8]
+struct Options<'a> {
+    out_delimiter: Option<&'a [u8]>,
     line_ending: LineEnding,
-    field_opts: Option<FieldOptions>,
+    field_opts: Option<FieldOptions<'a>>,
 }
 
-enum Delimiter {
+enum Delimiter<'a> {
     Whitespace,
-    String(OsString), // use OsString without trying to parse into UTF8/char or &[u8]
+    Slice(&'a [u8]),
 }
 
-struct FieldOptions {
-    delimiter: Delimiter,
+struct FieldOptions<'a> {
+    delimiter: Delimiter<'a>,
     only_delimited: bool,
 }
 
-enum Mode {
-    Bytes(Vec<Range>, Options),
-    Characters(Vec<Range>, Options),
-    Fields(Vec<Range>, Options),
+enum Mode<'a> {
+    Bytes(Vec<Range>, Options<'a>),
+    Characters(Vec<Range>, Options<'a>),
+    Fields(Vec<Range>, Options<'a>),
+}
+
+impl Default for Delimiter<'_> {
+    fn default() -> Self {
+        Self::Slice(b"\t")
+    }
+}
+
+impl<'a> From<&'a OsString> for Delimiter<'a> {
+    fn from(s: &'a OsString) -> Self {
+        Self::Slice(os_string_as_bytes(s).unwrap())
+    }
 }
 
 fn stdout_writer() -> Box<dyn Write> {
@@ -70,12 +83,7 @@ fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<()
     let newline_char = opts.line_ending.into();
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
-    let default_out_delim = &OsString::from("\t");
-    let out_delim = opts
-        .out_delimiter
-        .as_ref()
-        .unwrap_or(default_out_delim)
-        .as_encoded_bytes();
+    let out_delim = opts.out_delimiter.unwrap_or(b"\t");
 
     let result = buf_in.for_byte_record(newline_char, |line| {
         let mut print_delim = false;
@@ -111,7 +119,7 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
     ranges: &[Range],
     only_delimited: bool,
     newline_char: u8,
-    out_delim: &OsString,
+    out_delim: &[u8],
 ) -> UResult<()> {
     let mut buf_in = BufReader::new(reader);
     let mut out = stdout_writer();
@@ -147,7 +155,7 @@ fn cut_fields_explicit_out_delim<R: Read, M: Matcher>(
             for _ in 0..=high - low {
                 // skip printing delimiter if this is the first matching field for this line
                 if print_delim {
-                    out.write_all(out_delim.as_encoded_bytes())?;
+                    out.write_all(out_delim)?;
                 } else {
                     print_delim = true;
                 }
@@ -262,10 +270,10 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<(
     let newline_char = opts.line_ending.into();
     let field_opts = opts.field_opts.as_ref().unwrap(); // it is safe to unwrap() here - field_opts will always be Some() for cut_fields() call
     match field_opts.delimiter {
-        Delimiter::String(ref delim) => {
-            let matcher = ExactMatcher::new(delim.as_encoded_bytes());
+        Delimiter::Slice(delim) => {
+            let matcher = ExactMatcher::new(delim);
             match opts.out_delimiter {
-                Some(ref out_delim) => cut_fields_explicit_out_delim(
+                Some(out_delim) => cut_fields_explicit_out_delim(
                     reader,
                     &matcher,
                     ranges,
@@ -284,15 +292,13 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> UResult<(
         }
         Delimiter::Whitespace => {
             let matcher = WhitespaceMatcher {};
-            let default_out_delim = &OsString::from("\t");
-            let out_delim = opts.out_delimiter.as_ref().unwrap_or(default_out_delim);
             cut_fields_explicit_out_delim(
                 reader,
                 &matcher,
                 ranges,
                 field_opts.only_delimited,
                 newline_char,
-                out_delim,
+                opts.out_delimiter.unwrap_or(b"\t"),
             )
         }
     }
@@ -341,6 +347,88 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
     }
 }
 
+// This is temporary helper function to convert OSString to &[u8] for unix targets only
+// TODO Remove this function and re-implement the functionality in each place that calls it
+// for all targets using https://doc.rust-lang.org/nightly/std/ffi/struct.OsStr.html#method.as_encoded_bytes
+// once project's MSRV is bumped up to 1.74.0+ so that function becomes available
+// For now - support unix targets only and on non-unix (i.e. Windows) will just return an error if delimiter value is not UTF-8
+fn os_string_as_bytes(os_string: &OsString) -> UResult<&[u8]> {
+    #[cfg(unix)]
+    let bytes = os_string.as_bytes();
+
+    #[cfg(not(unix))]
+    let bytes = os_string
+        .to_str()
+        .ok_or_else(|| {
+            uucore::error::UUsageError::new(
+                1,
+                "invalid UTF-8 was detected in one or more arguments",
+            )
+        })?
+        .as_bytes();
+
+    Ok(bytes)
+}
+
+// Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
+// Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
+fn get_delimiters<'a>(
+    matches: &'a ArgMatches,
+    delimiter_is_equal: bool,
+    os_string_equals: &'a OsString,
+    os_string_nul: &'a OsString,
+) -> UResult<(Delimiter<'a>, Option<&'a [u8]>)> {
+    let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
+    let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
+    let delim = match delim_opt {
+        Some(_) if whitespace_delimited => {
+            return Err(USimpleError::new(
+                1,
+                "invalid input: Only one of --delimiter (-d) or -w option can be specified",
+            ));
+        }
+        Some(mut os_string) => {
+            // GNU's `cut` supports `-d=` to set the delimiter to `=`.
+            // Clap parsing is limited in this situation, see:
+            // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+            // rewrite the delimiter value os_string before further processing
+            if delimiter_is_equal {
+                os_string = os_string_equals;
+            } else if os_string == "''" || os_string.is_empty() {
+                // treat `''` as empty delimiter
+                os_string = os_string_nul;
+            }
+            // For delimiter `-d` option value - allow both UTF-8 (possibly multi-byte) characters
+            // and Non UTF-8 (and not ASCII) single byte "characters", like b"\xff" to align with GNU behavior
+            let bytes = os_string_as_bytes(os_string)?;
+            if os_string.to_str().is_some_and(|s| s.chars().count() > 1)
+                || os_string.to_str().is_none() && bytes.len() > 1
+            {
+                return Err(USimpleError::new(
+                    1,
+                    "the delimiter must be a single character",
+                ));
+            } else {
+                Delimiter::from(os_string)
+            }
+        }
+        None => match whitespace_delimited {
+            true => Delimiter::Whitespace,
+            false => Delimiter::default(),
+        },
+    };
+    let out_delim = matches
+        .get_one::<OsString>(options::OUTPUT_DELIMITER)
+        .map(|os_string| {
+            if os_string.is_empty() || os_string == "''" {
+                "\0".as_bytes()
+            } else {
+                os_string_as_bytes(os_string).unwrap()
+            }
+        });
+    Ok((delim, out_delim))
+}
+
 mod options {
     pub const BYTES: &str = "bytes";
     pub const CHARACTERS: &str = "characters";
@@ -362,6 +450,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
     let complement = matches.get_flag(options::COMPLEMENT);
+    let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
+
+    // since OsString::from creates a new value and it does not by default have 'static lifetime like &str
+    // we need to create these values here and pass them down to satisfy borrow checker
+    let os_string_equals = OsString::from("=");
+    let os_string_nul = OsString::from("\0");
+
+    let (delimiter, out_delimiter) = get_delimiters(
+        &matches,
+        delimiter_is_equal,
+        &os_string_equals,
+        &os_string_nul,
+    )?;
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
 
     // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
     // is expected. The number of those arguments is used for parsing a cutting
@@ -385,10 +487,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Mode::Bytes(
                 ranges,
                 Options {
-                    out_delimiter: matches
-                            .get_one::<OsString>(options::OUTPUT_DELIMITER)
-                            .cloned(),
-                    line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED)),
+                    out_delimiter,
+                    line_ending,
                     field_opts: None,
                 },
             )
@@ -397,88 +497,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Mode::Characters(
                 ranges,
                 Options {
-                    out_delimiter: matches
-                            .get_one::<OsString>(options::OUTPUT_DELIMITER)
-                            .cloned(),
-                    line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED)),
+                    out_delimiter,
+                    line_ending,
                     field_opts: None,
                 },
             )
         }),
-        (1, None, None, Some(field_ranges)) => {
-            list_to_ranges(field_ranges, complement).and_then(|ranges| {
-                let out_delim = match matches.get_one::<OsString>(options::OUTPUT_DELIMITER).cloned() {
-                    Some(s) => {
-                        if s.is_empty() || s == "''" {
-                            Some(OsString::from("\0"))
-                        } else {
-                            Some(s)
-                        }
-                    }
-                    None => None,
-                };
-
-                let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
-                let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
-                let zero_terminated = matches.get_flag(options::ZERO_TERMINATED);
-                let line_ending = LineEnding::from_zero_flag(zero_terminated);
-
-                match matches.get_one::<OsString>(options::DELIMITER).cloned() {
-                    Some(_) if whitespace_delimited => {
-                            Err("invalid input: Only one of --delimiter (-d) or -w option can be specified".into())
-                        }
-                    Some(mut delim) => {
-                        // GNU's `cut` supports `-d=` to set the delimiter to `=`.
-                        // Clap parsing is limited in this situation, see:
-                        // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-                        if delimiter_is_equal {
-                            delim = OsString::from("=");
-                        } else if delim == "''" {
-                            // treat `''` as empty delimiter
-                            delim = OsString::from("");
-                        }
-                        // For delimiter option value - allow both UTF8 (possibly multi-byte) characters 
-                        // and Non UTF8 (and not ASCII) single byte "characters", like b"\xff" to align with GNU behavior
-                        if delim.to_str().is_some_and(|d| d.chars().count() > 1) || delim.to_str().is_none() && delim.as_encoded_bytes().len() > 1 {
-                            Err("the delimiter must be a single character".into())
-                        } else {
-                            let delim = if delim.is_empty() {
-                                OsString::from("\0")
-                            } else {
-                                delim
-                            };
-
-                            Ok(Mode::Fields(
-                                ranges,
-                                Options {
-                                    out_delimiter: out_delim,
-                                    line_ending,
-                                    field_opts: Some(FieldOptions {
-                                        only_delimited,
-                                        delimiter: Delimiter::String(delim),
-                                })},
-                            ))
-                        }
-                    }
-                    None => {
-                        let delim = &OsString::from("\t");
-                        Ok(Mode::Fields(
-                            ranges,
-                            Options {
-                                out_delimiter: out_delim,
-                                line_ending,
-                                field_opts: Some (FieldOptions {
-                                    delimiter: match whitespace_delimited {
-                                        true    => Delimiter::Whitespace,
-                                        false   => Delimiter::String(delim.clone()),
-                                    },
-                                    only_delimited
-                                })
-                            },
-                    ))},
-                }
-            })
-        }
+        (1, None, None, Some(field_ranges)) => list_to_ranges(field_ranges, complement).map(|ranges| {
+            Mode::Fields(
+                ranges,
+                Options {
+                    out_delimiter,
+                    line_ending,
+                    field_opts: Some(FieldOptions {
+                        only_delimited,
+                        delimiter,
+                })},
+            )
+        }),
         (2.., _, _, _) => Err(
             "invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)".into()
         ),
