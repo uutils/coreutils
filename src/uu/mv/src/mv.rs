@@ -657,7 +657,15 @@ fn rename_with_fallback(
     to: &Path,
     multi_progress: Option<&MultiProgress>,
 ) -> io::Result<()> {
-    if fs::rename(from, to).is_err() {
+    if let Err(err) = fs::rename(from, to) {
+        // We will only copy if they're not on the same device, otherwise we'll report an error.
+        #[cfg(windows)]
+        const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
+        #[cfg(unix)]
+        const EXDEV: i32 = libc::EXDEV as _;
+        if err.raw_os_error() != Some(EXDEV) {
+            return Err(err);
+        }
         // Get metadata without following symlinks
         let metadata = from.symlink_metadata()?;
         let file_type = metadata.file_type();

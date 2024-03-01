@@ -1670,6 +1670,51 @@ fn test_acl() {
     assert!(compare_xattrs(&file, &file_target));
 }
 
+#[test]
+#[cfg(windows)]
+fn test_move_should_not_fallback_to_copy() {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let locked_file = "a_file_is_locked";
+    let locked_file_path = at.plus(locked_file);
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .share_mode(
+            uucore::windows_sys::Win32::Storage::FileSystem::FILE_SHARE_READ
+                | uucore::windows_sys::Win32::Storage::FileSystem::FILE_SHARE_WRITE,
+        )
+        .open(locked_file_path);
+
+    let target_file = "target_file";
+    ucmd.arg(locked_file).arg(target_file).fails();
+
+    assert!(at.file_exists(locked_file));
+    assert!(!at.file_exists(target_file));
+
+    drop(file);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_move_should_not_fallback_to_copy() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let readonly_dir = "readonly_dir";
+    let locked_file = "readonly_dir/a_file_is_locked";
+    at.mkdir(readonly_dir);
+    at.touch(locked_file);
+    at.set_mode(readonly_dir, 0o555);
+
+    let target_file = "target_file";
+    ucmd.arg(locked_file).arg(target_file).fails();
+
+    assert!(at.file_exists(locked_file));
+    assert!(!at.file_exists(target_file));
+}
+
 // Todo:
 
 // $ at.touch a b

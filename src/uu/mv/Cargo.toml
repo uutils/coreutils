@@ -28,6 +28,12 @@ uucore = { workspace = true, features = [
 ] }
 thiserror = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
 [[bin]]
 name = "mv"
 path = "src/main.rs"
