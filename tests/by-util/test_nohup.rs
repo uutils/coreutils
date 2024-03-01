@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore winsize Openpty openpty xpixel ypixel ptyprocess
 use crate::common::util::TestScenario;
 use std::thread::sleep;
 
@@ -30,4 +31,33 @@ fn test_nohup_multiple_args_and_flags() {
 
     assert!(at.file_exists("file1"));
     assert!(at.file_exists("file2"));
+}
+
+#[test]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_vendor = "apple"
+))]
+fn test_nohup_with_pseudo_terminal_emulation_on_stdin_stdout_stderr_get_replaced() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .terminal_simulation(true)
+        .args(&["sh", "is_atty.sh"])
+        .succeeds();
+
+    assert_eq!(
+        String::from_utf8_lossy(result.stderr()).trim(),
+        "nohup: ignoring input and appending output to 'nohup.out'"
+    );
+
+    sleep(std::time::Duration::from_millis(10));
+
+    // this proves that nohup was exchanging the stdio file descriptors
+    assert_eq!(
+        std::fs::read_to_string(ts.fixtures.plus_as_string("nohup.out")).unwrap(),
+        "stdin is not atty\nstdout is not atty\nstderr is not atty\n"
+    );
 }
