@@ -438,7 +438,6 @@ fn test_non_blank_overrides_number() {
 }
 
 #[test]
-#[ignore = "known issue"]
 fn test_non_blank_overrides_number_even_when_present() {
     new_ucmd!()
         .args(&["-n", "-b", "-n"])

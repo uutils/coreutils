@@ -250,7 +250,8 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::NUMBER_NONBLANK)
                 .help("number nonempty output lines, overrides -n")
-                .overrides_with(options::NUMBER)
+                // Note: This MUST NOT .overrides_with(options::NUMBER)!
+                // In clap, overriding is symmetric, so "-b -n" counts as "-n", which is not what we want.
                 .action(ArgAction::SetTrue),
         )
         .arg(
