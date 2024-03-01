@@ -399,6 +399,7 @@ jobs:
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v4
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         file: ${{ steps.coverage.outputs.report }}
         flags: gnutests
         name: gnutests
