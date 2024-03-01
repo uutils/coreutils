@@ -673,7 +673,11 @@ fn sub_alternative_upper_hex() {
 
 #[test]
 fn char_as_byte() {
-    new_ucmd!().args(&["%c", "🙃"]).succeeds().stdout_only("ð");
+    new_ucmd!()
+        .args(&["%c", "🙃"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"\xf0");
 }
 
 #[test]
@@ -735,4 +739,41 @@ fn pad_unsigned_three() {
             .succeeds()
             .stdout_only(expected);
     }
+}
+
+#[test]
+fn pad_char() {
+    for (format, expected) in [("%3c", "  X"), ("%1c", "X"), ("%-1c", "X"), ("%-3c", "X  ")] {
+        new_ucmd!()
+            .args(&[format, "X"])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn pad_string() {
+    for (format, expected) in [
+        ("%8s", "  bottle"),
+        ("%-8s", "bottle  "),
+        ("%6s", "bottle"),
+        ("%-6s", "bottle"),
+    ] {
+        new_ucmd!()
+            .args(&[format, "bottle"])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn format_spec_zero_char_fails() {
+    // It is invalid to have the format spec '%0c'
+    new_ucmd!().args(&["%0c", "3"]).fails().code_is(1);
+}
+
+#[test]
+fn format_spec_zero_string_fails() {
+    // It is invalid to have the format spec '%0s'
+    new_ucmd!().args(&["%0s", "3"]).fails().code_is(1);
 }

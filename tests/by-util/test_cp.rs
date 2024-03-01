@@ -505,9 +505,31 @@ fn test_cp_arg_interactive_update() {
     at.touch("a");
     at.touch("b");
     ucmd.args(&["-i", "-u", "a", "b"])
-        .pipe_in("N\n")
+        .pipe_in("")
         .succeeds()
         .no_stdout();
+    // Make extra sure that closing stdin behaves identically to piping-in nothing.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.touch("b");
+    ucmd.args(&["-i", "-u", "a", "b"]).succeeds().no_stdout();
+}
+
+#[test]
+#[cfg(not(any(target_os = "android", target_os = "freebsd")))]
+#[ignore = "known issue #6019"]
+fn test_cp_arg_interactive_update_newer() {
+    // -u -i *WILL* show the prompt to validate the override.
+    // Therefore, the error code depends on the prompt response.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("b");
+    at.touch("a");
+    ucmd.args(&["-i", "-u", "a", "b"])
+        .pipe_in("N\n")
+        .fails()
+        .code_is(1)
+        .no_stdout()
+        .stderr_is("cp: overwrite 'b'? ");
 }
 
 #[test]

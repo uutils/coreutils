@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) intmax ptrdiff
+// spell-checker:ignore (vars) intmax ptrdiff padlen
 
 use crate::quoting_style::{escape_name, QuotingStyle};
 
@@ -14,7 +14,7 @@ use super::{
     },
     parse_escape_only, ArgumentIter, FormatChar, FormatError,
 };
-use std::{fmt::Display, io::Write, ops::ControlFlow};
+use std::{io::Write, ops::ControlFlow};
 
 /// A parsed specification for formatting a value
 ///
@@ -171,7 +171,7 @@ impl Spec {
         Ok(match type_spec {
             // GNU accepts minus, plus and space even though they are not used
             b'c' => {
-                if flags.hash || precision.is_some() {
+                if flags.zero || flags.hash || precision.is_some() {
                     return Err(&start[..index]);
                 }
                 Self::Char {
@@ -180,7 +180,7 @@ impl Spec {
                 }
             }
             b's' => {
-                if flags.hash {
+                if flags.zero || flags.hash {
                     return Err(&start[..index]);
                 }
                 Self::String {
@@ -312,7 +312,7 @@ impl Spec {
         match self {
             Self::Char { width, align_left } => {
                 let width = resolve_asterisk(*width, &mut args)?.unwrap_or(0);
-                write_padded(writer, args.get_char(), width, false, *align_left)
+                write_padded(writer, &[args.get_char()], width, *align_left)
             }
             Self::String {
                 width,
@@ -333,7 +333,7 @@ impl Spec {
                     Some(p) if p < s.len() => &s[..p],
                     _ => s,
                 };
-                write_padded(writer, truncated, width, false, *align_left)
+                write_padded(writer, truncated.as_bytes(), width, *align_left)
             }
             Self::EscapedString => {
                 let s = args.get_str();
@@ -445,16 +445,17 @@ fn resolve_asterisk<'a>(
 
 fn write_padded(
     mut writer: impl Write,
-    text: impl Display,
+    text: &[u8],
     width: usize,
-    pad_zero: bool,
     left: bool,
 ) -> Result<(), FormatError> {
-    match (left, pad_zero) {
-        (false, false) => write!(writer, "{text: >width$}"),
-        (false, true) => write!(writer, "{text:0>width$}"),
-        // 0 is ignored if we pad left.
-        (true, _) => write!(writer, "{text: <width$}"),
+    let padlen = width.saturating_sub(text.len());
+    if left {
+        writer.write_all(text)?;
+        write!(writer, "{: <padlen$}", "")
+    } else {
+        write!(writer, "{: >padlen$}", "")?;
+        writer.write_all(text)
     }
     .map_err(FormatError::IoError)
 }

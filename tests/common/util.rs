@@ -3,10 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized
+//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty winsize xpixel ypixel
 
 #![allow(dead_code)]
 
+#[cfg(unix)]
+use nix::pty::OpenptyResult;
 use pretty_assertions::assert_eq;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::prlimit;
@@ -21,6 +23,8 @@ use std::ffi::{OsStr, OsString};
 use std::fs::{self, hard_link, remove_file, File, OpenOptions};
 use std::io::{self, BufWriter, Read, Result, Write};
 #[cfg(unix)]
+use std::os::fd::OwnedFd;
+#[cfg(unix)]
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
@@ -34,7 +38,7 @@ use std::rc::Rc;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, Instant};
-use std::{env, hint, thread};
+use std::{env, hint, mem, thread};
 use tempfile::{Builder, TempDir};
 
 static TESTS_DIR: &str = "tests";
@@ -46,6 +50,7 @@ static ALREADY_RUN: &str = " you have already run this UCommand, if you want to 
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
 static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
+static END_OF_TRANSMISSION_SEQUENCE: &[u8] = &[b'\n', 0x04];
 
 pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 pub const PATH: &str = env!("PATH");
@@ -387,7 +392,10 @@ impl CmdResult {
     pub fn success(&self) -> &Self {
         assert!(
             self.succeeded(),
-            "Command was expected to succeed.\nstdout = {}\n stderr = {}",
+            "Command was expected to succeed. Exit code: {}.\nstdout = {}\n stderr = {}",
+            self.exit_status()
+                .code()
+                .map_or("n/a".to_string(), |code| code.to_string()),
             self.stdout_str(),
             self.stderr_str()
         );
@@ -1220,6 +1228,10 @@ pub struct UCommand {
     limits: Vec<(rlimit::Resource, u64, u64)>,
     stderr_to_stdout: bool,
     timeout: Option<Duration>,
+    #[cfg(unix)]
+    terminal_simulation: bool,
+    #[cfg(unix)]
+    terminal_size: Option<libc::winsize>,
     tmpd: Option<Rc<TempDir>>, // drop last
 }
 
@@ -1398,6 +1410,68 @@ impl UCommand {
         self
     }
 
+    /// Set if process should be run in a simulated terminal
+    ///
+    /// This is useful to test behavior that is only active if [`stdout.is_terminal()`] is [`true`].
+    /// (unix: pty, windows: ConPTY[not yet supported])
+    #[cfg(unix)]
+    pub fn terminal_simulation(&mut self, enable: bool) -> &mut Self {
+        self.terminal_simulation = enable;
+        self
+    }
+
+    /// Set if process should be run in a simulated terminal with specific size
+    ///
+    /// This is useful to test behavior that is only active if [`stdout.is_terminal()`] is [`true`].
+    /// And the size of the terminal matters additionally.
+    #[cfg(unix)]
+    pub fn terminal_size(&mut self, win_size: libc::winsize) -> &mut Self {
+        self.terminal_simulation(true);
+        self.terminal_size = Some(win_size);
+        self
+    }
+
+    #[cfg(unix)]
+    fn read_from_pty(pty_fd: std::os::fd::OwnedFd, out: File) {
+        let read_file = std::fs::File::from(pty_fd);
+        let mut reader = std::io::BufReader::new(read_file);
+        let mut writer = std::io::BufWriter::new(out);
+        let result = std::io::copy(&mut reader, &mut writer);
+        match result {
+            Ok(_) => {}
+            // Input/output error (os error 5) is returned due to pipe closes. Buffer gets content anyway.
+            Err(e) if e.raw_os_error().unwrap_or_default() == 5 => {}
+            Err(e) => {
+                eprintln!("Unexpected error: {:?}", e);
+                panic!("error forwarding output of pty");
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    fn spawn_reader_thread(
+        &self,
+        captured_output: Option<CapturedOutput>,
+        pty_fd_master: OwnedFd,
+        name: String,
+    ) -> Option<CapturedOutput> {
+        if let Some(mut captured_output_i) = captured_output {
+            let fd = captured_output_i.try_clone().unwrap();
+
+            let handle = std::thread::Builder::new()
+                .name(name)
+                .spawn(move || {
+                    Self::read_from_pty(pty_fd_master, fd);
+                })
+                .unwrap();
+
+            captured_output_i.reader_thread_handle = Some(handle);
+            Some(captured_output_i)
+        } else {
+            None
+        }
+    }
+
     /// Build the `std::process::Command` and apply the defaults on fields which were not specified
     /// by the user.
     ///
@@ -1417,7 +1491,14 @@ impl UCommand {
     /// * `stderr_to_stdout`: `false`
     /// * `bytes_into_stdin`: `None`
     /// * `limits`: `None`.
-    fn build(&mut self) -> (Command, Option<CapturedOutput>, Option<CapturedOutput>) {
+    fn build(
+        &mut self,
+    ) -> (
+        Command,
+        Option<CapturedOutput>,
+        Option<CapturedOutput>,
+        Option<File>,
+    ) {
         if self.bin_path.is_some() {
             if let Some(util_name) = &self.util_name {
                 self.args.push_front(util_name.into());
@@ -1496,6 +1577,10 @@ impl UCommand {
 
         let mut captured_stdout = None;
         let mut captured_stderr = None;
+        #[cfg(unix)]
+        let mut stdin_pty: Option<File> = None;
+        #[cfg(not(unix))]
+        let stdin_pty: Option<File> = None;
         if self.stderr_to_stdout {
             let mut output = CapturedOutput::default();
 
@@ -1529,7 +1614,39 @@ impl UCommand {
                 .stderr(stderr);
         };
 
-        (command, captured_stdout, captured_stderr)
+        #[cfg(unix)]
+        if self.terminal_simulation {
+            let terminal_size = self.terminal_size.unwrap_or(libc::winsize {
+                ws_col: 80,
+                ws_row: 30,
+                ws_xpixel: 80 * 8,
+                ws_ypixel: 30 * 10,
+            });
+
+            let OpenptyResult {
+                slave: pi_slave,
+                master: pi_master,
+            } = nix::pty::openpty(&terminal_size, None).unwrap();
+            let OpenptyResult {
+                slave: po_slave,
+                master: po_master,
+            } = nix::pty::openpty(&terminal_size, None).unwrap();
+            let OpenptyResult {
+                slave: pe_slave,
+                master: pe_master,
+            } = nix::pty::openpty(&terminal_size, None).unwrap();
+
+            stdin_pty = Some(File::from(pi_master));
+
+            captured_stdout =
+                self.spawn_reader_thread(captured_stdout, po_master, "stdout_reader".to_string());
+            captured_stderr =
+                self.spawn_reader_thread(captured_stderr, pe_master, "stderr_reader".to_string());
+
+            command.stdin(pi_slave).stdout(po_slave).stderr(pe_slave);
+        }
+
+        (command, captured_stdout, captured_stderr, stdin_pty)
     }
 
     /// Spawns the command, feeds the stdin if any, and returns the
@@ -1538,7 +1655,7 @@ impl UCommand {
         assert!(!self.has_run, "{}", ALREADY_RUN);
         self.has_run = true;
 
-        let (mut command, captured_stdout, captured_stderr) = self.build();
+        let (mut command, captured_stdout, captured_stderr, stdin_pty) = self.build();
         log_info("run", self.to_string());
 
         let child = command.spawn().unwrap();
@@ -1554,7 +1671,7 @@ impl UCommand {
             .unwrap();
         }
 
-        let mut child = UChild::from(self, child, captured_stdout, captured_stderr);
+        let mut child = UChild::from(self, child, captured_stdout, captured_stderr, stdin_pty);
 
         if let Some(input) = self.bytes_into_stdin.take() {
             child.pipe_in(input);
@@ -1619,6 +1736,7 @@ impl std::fmt::Display for UCommand {
 struct CapturedOutput {
     current_file: File,
     output: tempfile::NamedTempFile, // drop last
+    reader_thread_handle: Option<thread::JoinHandle<()>>,
 }
 
 impl CapturedOutput {
@@ -1627,6 +1745,7 @@ impl CapturedOutput {
         Self {
             current_file: output.reopen().unwrap(),
             output,
+            reader_thread_handle: None,
         }
     }
 
@@ -1703,6 +1822,7 @@ impl Default for CapturedOutput {
         Self {
             current_file: file.reopen().unwrap(),
             output: file,
+            reader_thread_handle: None,
         }
     }
 }
@@ -1836,6 +1956,7 @@ pub struct UChild {
     util_name: Option<String>,
     captured_stdout: Option<CapturedOutput>,
     captured_stderr: Option<CapturedOutput>,
+    stdin_pty: Option<File>,
     ignore_stdin_write_error: bool,
     stderr_to_stdout: bool,
     join_handle: Option<JoinHandle<io::Result<()>>>,
@@ -1849,6 +1970,7 @@ impl UChild {
         child: Child,
         captured_stdout: Option<CapturedOutput>,
         captured_stderr: Option<CapturedOutput>,
+        stdin_pty: Option<File>,
     ) -> Self {
         Self {
             raw: child,
@@ -1856,6 +1978,7 @@ impl UChild {
             util_name: ucommand.util_name.clone(),
             captured_stdout,
             captured_stderr,
+            stdin_pty,
             ignore_stdin_write_error: ucommand.ignore_stdin_write_error,
             stderr_to_stdout: ucommand.stderr_to_stdout,
             join_handle: None,
@@ -1996,11 +2119,19 @@ impl UChild {
     /// error.
     #[deprecated = "Please use wait() -> io::Result<CmdResult> instead."]
     pub fn wait_with_output(mut self) -> io::Result<Output> {
+        // some apps do not stop execution until their stdin gets closed.
+        // to prevent a endless waiting here, we close the stdin.
+        self.join(); // ensure that all pending async input is piped in
+        self.close_stdin();
+
         let output = if let Some(timeout) = self.timeout {
             let child = self.raw;
 
             let (sender, receiver) = mpsc::channel();
-            let handle = thread::spawn(move || sender.send(child.wait_with_output()));
+            let handle = thread::Builder::new()
+                .name("wait_with_output".to_string())
+                .spawn(move || sender.send(child.wait_with_output()))
+                .unwrap();
 
             match receiver.recv_timeout(timeout) {
                 Ok(result) => {
@@ -2032,9 +2163,15 @@ impl UChild {
         };
 
         if let Some(stdout) = self.captured_stdout.as_mut() {
+            if let Some(handle) = stdout.reader_thread_handle.take() {
+                handle.join().unwrap();
+            }
             output.stdout = stdout.output_bytes();
         }
         if let Some(stderr) = self.captured_stderr.as_mut() {
+            if let Some(handle) = stderr.reader_thread_handle.take() {
+                handle.join().unwrap();
+            }
             output.stderr = stderr.output_bytes();
         }
 
@@ -2196,6 +2333,29 @@ impl UChild {
         }
     }
 
+    fn access_stdin_as_writer<'a>(&'a mut self) -> Box<dyn Write + Send + 'a> {
+        if let Some(stdin_fd) = &self.stdin_pty {
+            Box::new(BufWriter::new(stdin_fd.try_clone().unwrap()))
+        } else {
+            let stdin: &mut std::process::ChildStdin = self.raw.stdin.as_mut().unwrap();
+            Box::new(BufWriter::new(stdin))
+        }
+    }
+
+    fn take_stdin_as_writer(&mut self) -> Box<dyn Write + Send> {
+        if let Some(stdin_fd) = mem::take(&mut self.stdin_pty) {
+            Box::new(BufWriter::new(stdin_fd))
+        } else {
+            let stdin = self
+                .raw
+                .stdin
+                .take()
+                .expect("Could not pipe into child process. Was it set to Stdio::null()?");
+
+            Box::new(BufWriter::new(stdin))
+        }
+    }
+
     /// Pipe data into [`Child`] stdin in a separate thread to avoid deadlocks.
     ///
     /// In contrast to [`UChild::write_in`], this method is designed to simulate a pipe on the
@@ -2217,24 +2377,24 @@ impl UChild {
     /// [`JoinHandle`]: std::thread::JoinHandle
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, content: T) -> &mut Self {
         let ignore_stdin_write_error = self.ignore_stdin_write_error;
-        let content = content.into();
-        let stdin = self
-            .raw
-            .stdin
-            .take()
-            .expect("Could not pipe into child process. Was it set to Stdio::null()?");
+        let mut content: Vec<u8> = content.into();
+        if self.stdin_pty.is_some() {
+            content.append(&mut END_OF_TRANSMISSION_SEQUENCE.to_vec());
+        }
+        let mut writer = self.take_stdin_as_writer();
 
-        let join_handle = thread::spawn(move || {
-            let mut writer = BufWriter::new(stdin);
-
-            match writer.write_all(&content).and_then(|()| writer.flush()) {
-                Err(error) if !ignore_stdin_write_error => Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("failed to write to stdin of child: {error}"),
-                )),
-                Ok(()) | Err(_) => Ok(()),
-            }
-        });
+        let join_handle = std::thread::Builder::new()
+            .name("pipe_in".to_string())
+            .spawn(
+                move || match writer.write_all(&content).and_then(|()| writer.flush()) {
+                    Err(error) if !ignore_stdin_write_error => Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("failed to write to stdin of child: {error}"),
+                    )),
+                    Ok(()) | Err(_) => Ok(()),
+                },
+            )
+            .unwrap();
 
         self.join_handle = Some(join_handle);
         self
@@ -2277,10 +2437,11 @@ impl UChild {
     /// # Errors
     /// If [`ChildStdin::write_all`] or [`ChildStdin::flush`] returned an error
     pub fn try_write_in<T: Into<Vec<u8>>>(&mut self, data: T) -> io::Result<()> {
-        let stdin = self.raw.stdin.as_mut().unwrap();
+        let ignore_stdin_write_error = self.ignore_stdin_write_error;
+        let mut writer = self.access_stdin_as_writer();
 
-        match stdin.write_all(&data.into()).and_then(|()| stdin.flush()) {
-            Err(error) if !self.ignore_stdin_write_error => Err(io::Error::new(
+        match writer.write_all(&data.into()).and_then(|()| writer.flush()) {
+            Err(error) if !ignore_stdin_write_error => Err(io::Error::new(
                 io::ErrorKind::Other,
                 format!("failed to write to stdin of child: {error}"),
             )),
@@ -2317,6 +2478,11 @@ impl UChild {
     /// Note, this does not have any effect if using the [`UChild::pipe_in`] method.
     pub fn close_stdin(&mut self) -> &mut Self {
         self.raw.stdin.take();
+        if self.stdin_pty.is_some() {
+            // a pty can not be closed. We need to send a EOT:
+            let _ = self.try_write_in(END_OF_TRANSMISSION_SEQUENCE);
+            self.stdin_pty.take();
+        }
         self
     }
 }
@@ -3414,5 +3580,124 @@ mod tests {
 
         xattr::set(&file_path2, test_attr, test_value).unwrap();
         assert!(compare_xattrs(&file_path1, &file_path2));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_simulation_of_terminal_false() {
+        let scene = TestScenario::new("util");
+
+        let out = scene.ccmd("env").arg("sh").arg("is_atty.sh").succeeds();
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            "stdin is not atty\nstdout is not atty\nstderr is not atty\n"
+        );
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stderr()),
+            "This is an error message.\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_simulation_of_terminal_true() {
+        let scene = TestScenario::new("util");
+
+        let out = scene
+            .ccmd("env")
+            .arg("sh")
+            .arg("is_atty.sh")
+            .terminal_simulation(true)
+            .succeeds();
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            "stdin is atty\r\nstdout is atty\r\nstderr is atty\r\nterminal size: 30 80\r\n"
+        );
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stderr()),
+            "This is an error message.\r\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_simulation_of_terminal_size_information() {
+        let scene = TestScenario::new("util");
+
+        let out = scene
+            .ccmd("env")
+            .arg("sh")
+            .arg("is_atty.sh")
+            .terminal_size(libc::winsize {
+                ws_col: 40,
+                ws_row: 10,
+                ws_xpixel: 40 * 8,
+                ws_ypixel: 10 * 10,
+            })
+            .succeeds();
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            "stdin is atty\r\nstdout is atty\r\nstderr is atty\r\nterminal size: 10 40\r\n"
+        );
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stderr()),
+            "This is an error message.\r\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_simulation_of_terminal_pty_sends_eot_automatically() {
+        let scene = TestScenario::new("util");
+
+        let mut cmd = scene.ccmd("env");
+        cmd.timeout(std::time::Duration::from_secs(10));
+        cmd.args(&["cat", "-"]);
+        cmd.terminal_simulation(true);
+        let child = cmd.run_no_wait();
+        let out = child.wait().unwrap(); // cat would block if there is no eot
+
+        std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
+        std::assert_eq!(String::from_utf8_lossy(out.stdout()), "\r\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_simulation_of_terminal_pty_pipes_into_data_and_sends_eot_automatically() {
+        let scene = TestScenario::new("util");
+
+        let message = "Hello stdin forwarding!";
+
+        let mut cmd = scene.ccmd("env");
+        cmd.args(&["cat", "-"]);
+        cmd.terminal_simulation(true);
+        cmd.pipe_in(message);
+        let child = cmd.run_no_wait();
+        let out = child.wait().unwrap();
+
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            format!("{}\r\n", message)
+        );
+        std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
+        let scene = TestScenario::new("util");
+
+        let mut cmd = scene.ccmd("env");
+        cmd.args(&["cat", "-"]);
+        cmd.terminal_simulation(true);
+        let mut child = cmd.run_no_wait();
+        child.write_in("Hello stdin forwarding via write_in!");
+        let out = child.wait().unwrap();
+
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            "Hello stdin forwarding via write_in!\r\n"
+        );
+        std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
     }
 }
