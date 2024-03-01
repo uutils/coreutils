@@ -231,6 +231,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
