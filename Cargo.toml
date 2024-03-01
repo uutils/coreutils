@@ -328,7 +328,7 @@ time = { version = "0.3" }
 unicode-segmentation = "1.11.0"
 unicode-width = "0.1.11"
 utf-8 = "0.7.6"
-walkdir = "2.4"
+walkdir = "2.5"
 winapi-util = "0.1.6"
 windows-sys = { version = "0.48.0", default-features = false }
 xattr = "1.3.1"
