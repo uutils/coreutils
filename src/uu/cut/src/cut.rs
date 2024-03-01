@@ -347,7 +347,7 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
     }
 }
 
-// This is temporary helper function to convert OSString to &[u8] for unix targets only
+// This is temporary helper function to convert OsString to &[u8] for unix targets only
 // TODO Remove this function and re-implement the functionality in each place that calls it
 // for all targets using https://doc.rust-lang.org/nightly/std/ffi/struct.OsStr.html#method.as_encoded_bytes
 // once project's MSRV is bumped up to 1.74.0+ so that function becomes available
@@ -453,7 +453,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
 
     // since OsString::from creates a new value and it does not by default have 'static lifetime like &str
-    // we need to create these values here and pass them down avoid issues with borrow checker and temporary values
+    // we need to create these values here and pass them down to avoid issues with borrow checker and temporary values
     let os_string_equals = OsString::from("=");
     let os_string_nul = OsString::from("\0");
 
