@@ -765,3 +765,15 @@ fn pad_string() {
             .stdout_only(expected);
     }
 }
+
+#[test]
+fn format_spec_zero_char_fails() {
+    // It is invalid to have the format spec '%0c'
+    new_ucmd!().args(&["%0c", "3"]).fails().code_is(1);
+}
+
+#[test]
+fn format_spec_zero_string_fails() {
+    // It is invalid to have the format spec '%0s'
+    new_ucmd!().args(&["%0s", "3"]).fails().code_is(1);
+}

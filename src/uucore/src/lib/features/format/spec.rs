@@ -171,7 +171,7 @@ impl Spec {
         Ok(match type_spec {
             // GNU accepts minus, plus and space even though they are not used
             b'c' => {
-                if flags.hash || precision.is_some() {
+                if flags.zero || flags.hash || precision.is_some() {
                     return Err(&start[..index]);
                 }
                 Self::Char {
@@ -180,7 +180,7 @@ impl Spec {
                 }
             }
             b's' => {
-                if flags.hash {
+                if flags.zero || flags.hash {
                     return Err(&start[..index]);
                 }
                 Self::String {
