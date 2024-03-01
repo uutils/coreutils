@@ -612,3 +612,14 @@ fn test_error_loop() {
         .fails()
         .stderr_is("cat: 1: Too many levels of symbolic links\n");
 }
+
+#[test]
+fn test_u_ignored() {
+    for same_param in ["-u", "-uu"] {
+        new_ucmd!()
+            .arg(same_param)
+            .pipe_in("hello")
+            .succeeds()
+            .stdout_only("hello");
+    }
+}

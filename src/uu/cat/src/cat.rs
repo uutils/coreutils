@@ -170,6 +170,7 @@ mod options {
     pub static SHOW_NONPRINTING_TABS: &str = "t";
     pub static SHOW_TABS: &str = "show-tabs";
     pub static SHOW_NONPRINTING: &str = "show-nonprinting";
+    pub static IGNORED_U: &str = "ignored-u";
 }
 
 #[uucore::main]
@@ -299,6 +300,12 @@ pub fn uu_app() -> Command {
                 .short('v')
                 .long(options::SHOW_NONPRINTING)
                 .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::IGNORED_U)
+                .short('u')
+                .help("(ignored)")
                 .action(ArgAction::SetTrue),
         )
 }
