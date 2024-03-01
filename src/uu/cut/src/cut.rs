@@ -399,7 +399,7 @@ fn get_delimiters<'a>(
                 os_string = os_string_nul;
             }
             // For delimiter `-d` option value - allow both UTF-8 (possibly multi-byte) characters
-            // and Non UTF-8 (and not ASCII) single byte "characters", like b"\xff" to align with GNU behavior
+            // and Non UTF-8 (and not ASCII) single byte "characters", like `b"\xAD"` to align with GNU behavior
             let bytes = os_string_as_bytes(os_string)?;
             if os_string.to_str().is_some_and(|s| s.chars().count() > 1)
                 || os_string.to_str().is_none() && bytes.len() > 1
@@ -453,7 +453,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
 
     // since OsString::from creates a new value and it does not by default have 'static lifetime like &str
-    // we need to create these values here and pass them down to satisfy borrow checker
+    // we need to create these values here and pass them down avoid issues with borrow checker and temporary values
     let os_string_equals = OsString::from("=");
     let os_string_nul = OsString::from("\0");
 
