@@ -1225,11 +1225,20 @@ impl ManageOutFiles for OutFiles {
                 }
                 // And then try to instantiate the writer again
                 // If this fails - give up and propagate the error
-                self[idx].maybe_writer =
-                    Some(settings.instantiate_current_writer(
-                        self[idx].filename.as_str(),
-                        self[idx].is_new,
-                    )?);
+                let result = settings
+                    .instantiate_current_writer(self[idx].filename.as_str(), self[idx].is_new);
+                if let Err(e) = result {
+                    let mut count = 0;
+                    for out_file in self {
+                        if out_file.maybe_writer.is_some() {
+                            count += 1;
+                        }
+                    }
+
+                    return Err(USimpleError::new(e.raw_os_error().unwrap_or(1),
+                        format!("Instantiation of writer failed due to error: {e:?}. Existing writer number: {count}")));
+                }
+                self[idx].maybe_writer = Some(result?);
                 Ok(self[idx].maybe_writer.as_mut().unwrap())
             }
         }
