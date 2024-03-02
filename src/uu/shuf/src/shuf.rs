@@ -100,28 +100,41 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    if options.head_count == 0 {
-        // Do not attempt to read the random source or the input file.
-        // However, we must touch the output file, if given:
-        if let Some(s) = options.output {
-            File::create(&s)
+    let mut output = BufWriter::new(match options.output {
+        None => Box::new(stdout()) as Box<dyn OsWrite>,
+        Some(ref s) => {
+            let file = File::create(s)
                 .map_err_context(|| format!("failed to open {} for writing", s.quote()))?;
+            Box::new(file) as Box<dyn OsWrite>
         }
+    });
+
+    if options.head_count == 0 {
+        // In this case we do want to touch the output file but we can quit immediately.
         return Ok(());
     }
+
+    let mut rng = match options.random_source {
+        Some(ref r) => {
+            let file = File::open(r)
+                .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
+            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
+        }
+        None => WrappedRng::RngDefault(rand::rng()),
+    };
 
     match mode {
         Mode::Echo(args) => {
             let mut evec: Vec<&OsStr> = args.iter().map(AsRef::as_ref).collect();
-            shuf_exec(&mut evec, options)?;
+            shuf_exec(&mut evec, &options, &mut rng, &mut output)?;
         }
         Mode::InputRange(mut range) => {
-            shuf_exec(&mut range, options)?;
+            shuf_exec(&mut range, &options, &mut rng, &mut output)?;
         }
         Mode::Default(filename) => {
             let fdata = read_input_file(&filename)?;
             let mut items = split_seps(&fdata, options.sep);
-            shuf_exec(&mut items, options)?;
+            shuf_exec(&mut items, &options, &mut rng, &mut output)?;
         }
     }
 
@@ -418,46 +431,28 @@ impl Writable for usize {
     }
 }
 
-fn shuf_exec(input: &mut impl Shufable, opts: Options) -> UResult<()> {
-    let mut output = BufWriter::new(match opts.output {
-        None => Box::new(stdout()) as Box<dyn OsWrite>,
-        Some(s) => {
-            let file = File::create(&s)
-                .map_err_context(|| format!("failed to open {} for writing", s.quote()))?;
-            Box::new(file) as Box<dyn OsWrite>
-        }
-    });
-
-    let mut rng = match opts.random_source {
-        Some(r) => {
-            let file = File::open(&r)
-                .map_err_context(|| format!("failed to open random source {}", r.quote()))?;
-            WrappedRng::RngFile(rand_read_adapter::ReadRng::new(file))
-        }
-        None => WrappedRng::RngDefault(rand::rng()),
-    };
-
+fn shuf_exec(
+    input: &mut impl Shufable,
+    opts: &Options,
+    rng: &mut WrappedRng,
+    output: &mut BufWriter<Box<dyn OsWrite>>,
+) -> UResult<()> {
+    let ctx = || "write failed".to_string();
     if opts.repeat {
         if input.is_empty() {
             return Err(USimpleError::new(1, "no lines to repeat"));
         }
         for _ in 0..opts.head_count {
-            let r = input.choose(&mut rng);
+            let r = input.choose(rng);
 
-            r.write_all_to(&mut output)
-                .map_err_context(|| "write failed".to_string())?;
-            output
-                .write_all(&[opts.sep])
-                .map_err_context(|| "write failed".to_string())?;
+            r.write_all_to(output).map_err_context(ctx)?;
+            output.write_all(&[opts.sep]).map_err_context(ctx)?;
         }
     } else {
-        let shuffled = input.partial_shuffle(&mut rng, opts.head_count);
+        let shuffled = input.partial_shuffle(rng, opts.head_count);
         for r in shuffled {
-            r.write_all_to(&mut output)
-                .map_err_context(|| "write failed".to_string())?;
-            output
-                .write_all(&[opts.sep])
-                .map_err_context(|| "write failed".to_string())?;
+            r.write_all_to(output).map_err_context(ctx)?;
+            output.write_all(&[opts.sep]).map_err_context(ctx)?;
         }
     }
 
