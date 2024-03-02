@@ -129,6 +129,18 @@ fn test_stdin_larger_than_128_bytes() {
 }
 
 #[test]
+fn test_repeated_flags() {
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha1")
+        .arg("--algo=sha256")
+        .arg("-a=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("md5_single_file.expected");
+}
+
+#[test]
 fn test_algorithm_single_file() {
     for algo in ALGOS {
         for option in ["-a", "--algorithm"] {
@@ -282,6 +294,20 @@ fn test_length_greater_than_512() {
 #[test]
 fn test_length_is_zero() {
     new_ucmd!()
+        .arg("--length=0")
+        .arg("--algorithm=blake2b")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_fixture("length_is_zero.expected");
+}
+
+#[test]
+fn test_length_repeated() {
+    new_ucmd!()
+        .arg("--length=10")
+        .arg("--length=123456")
         .arg("--length=0")
         .arg("--algorithm=blake2b")
         .arg("lorem_ipsum.txt")
