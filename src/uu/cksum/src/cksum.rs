@@ -286,6 +286,7 @@ mod options {
     pub const ALGORITHM: &str = "algorithm";
     pub const FILE: &str = "file";
     pub const UNTAGGED: &str = "untagged";
+    pub const TAG: &str = "tag";
     pub const LENGTH: &str = "length";
     pub const RAW: &str = "raw";
 }
@@ -396,6 +397,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::UNTAGGED)
                 .long(options::UNTAGGED)
                 .help("create a reversed style checksum, without digest type")
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TAG),
+        )
+        .arg(
+            Arg::new(options::TAG)
+                .long(options::TAG)
+                .help("create a BSD style checksum, undo --untagged (default)")
                 .action(ArgAction::SetTrue),
         )
         .arg(

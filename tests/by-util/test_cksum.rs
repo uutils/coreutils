@@ -141,6 +141,17 @@ fn test_repeated_flags() {
 }
 
 #[test]
+fn test_tag_after_untagged() {
+    new_ucmd!()
+        .arg("--untagged")
+        .arg("--tag")
+        .arg("-a=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("md5_single_file.expected");
+}
+
+#[test]
 fn test_algorithm_single_file() {
     for algo in ALGOS {
         for option in ["-a", "--algorithm"] {
@@ -218,6 +229,17 @@ fn test_untagged_algorithm_single_file() {
             .succeeds()
             .stdout_is_fixture(format!("untagged/{algo}_single_file.expected"));
     }
+}
+
+#[test]
+fn test_untagged_algorithm_after_tag() {
+    new_ucmd!()
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("untagged/md5_single_file.expected");
 }
 
 #[test]
