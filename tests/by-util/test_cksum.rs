@@ -364,6 +364,43 @@ fn test_raw_multiple_files() {
 }
 
 #[test]
+fn test_base64_raw_conflicts() {
+    new_ucmd!()
+        .arg("--base64")
+        .arg("--raw")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("--base64")
+        .stderr_contains("cannot be used with")
+        .stderr_contains("--raw");
+}
+
+#[test]
+fn test_base64_single_file() {
+    for algo in ALGOS {
+        new_ucmd!()
+            .arg("--base64")
+            .arg("lorem_ipsum.txt")
+            .arg(format!("--algorithm={algo}"))
+            .succeeds()
+            .no_stderr()
+            .stdout_is_fixture_bytes(format!("base64/{algo}_single_file.expected"));
+    }
+}
+#[test]
+fn test_base64_multiple_files() {
+    new_ucmd!()
+        .arg("--base64")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_fixture_bytes(format!("base64/md5_multiple_files.expected"));
+}
+
+#[test]
 fn test_fail_on_folder() {
     let (at, mut ucmd) = at_and_ucmd!();
 
