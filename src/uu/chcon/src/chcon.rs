@@ -163,7 +163,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::dereference::DEREFERENCE)
                 .long(options::dereference::DEREFERENCE)
-                .conflicts_with(options::dereference::NO_DEREFERENCE)
+                .overrides_with(options::dereference::NO_DEREFERENCE)
                 .help(
                     "Affect the referent of each symbolic link (this is the default), \
                      rather than the symbolic link itself.",

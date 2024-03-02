@@ -89,6 +89,33 @@ fn valid_context_on_valid_symlink() {
 }
 
 #[test]
+fn valid_context_on_valid_symlink_override_dereference() {
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.touch("a.tmp");
+    dir.symlink_file("a.tmp", "la.tmp");
+
+    let a_context = get_file_context(dir.plus("a.tmp")).unwrap();
+    let la_context = get_file_context(dir.plus("la.tmp")).unwrap();
+    let new_a_context = "guest_u:object_r:etc_t:s0:c42";
+    assert_ne!(a_context.as_deref(), Some(new_a_context));
+    assert_ne!(la_context.as_deref(), Some(new_a_context));
+
+    cmd.args(&[
+        "--verbose",
+        "--no-dereference",
+        "--dereference",
+        new_a_context,
+    ])
+    .arg(dir.plus("la.tmp"))
+    .succeeds();
+    assert_eq!(
+        get_file_context(dir.plus("a.tmp")).unwrap().as_deref(),
+        Some(new_a_context)
+    );
+    assert_eq!(get_file_context(dir.plus("la.tmp")).unwrap(), la_context);
+}
+
+#[test]
 fn valid_context_on_broken_symlink() {
     let (dir, mut cmd) = at_and_ucmd!();
     dir.symlink_file("a.tmp", "la.tmp");
@@ -98,6 +125,29 @@ fn valid_context_on_broken_symlink() {
     cmd.args(&["--verbose", "--no-dereference", new_la_context])
         .arg(dir.plus("la.tmp"))
         .succeeds();
+    assert_eq!(
+        get_file_context(dir.plus("la.tmp")).unwrap().as_deref(),
+        Some(new_la_context)
+    );
+}
+
+#[test]
+fn valid_context_on_broken_symlink_after_deref() {
+    let (dir, mut cmd) = at_and_ucmd!();
+    dir.symlink_file("a.tmp", "la.tmp");
+
+    let la_context = get_file_context(dir.plus("la.tmp")).unwrap();
+    let new_la_context = "guest_u:object_r:etc_t:s0:c42";
+    assert_ne!(la_context.as_deref(), Some(new_la_context));
+
+    cmd.args(&[
+        "--verbose",
+        "--dereference",
+        "--no-dereference",
+        new_la_context,
+    ])
+    .arg(dir.plus("la.tmp"))
+    .succeeds();
     assert_eq!(
         get_file_context(dir.plus("la.tmp")).unwrap().as_deref(),
         Some(new_la_context)
