@@ -892,7 +892,8 @@ impl AtPath {
             .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
     }
 
-    pub fn append(&self, name: &str, contents: &str) {
+    pub fn append(&self, name: impl AsRef<Path>, contents: &str) {
+        let name = name.as_ref();
         log_info("write(append)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
             .append(true)
@@ -900,7 +901,7 @@ impl AtPath {
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write(append) {name}: {e}"));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) {}: {e}", name.display()));
     }
 
     pub fn append_bytes(&self, name: &str, contents: &[u8]) {

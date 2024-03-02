@@ -363,6 +363,51 @@ fn test_echo_short_collapsed_zero() {
 }
 
 #[test]
+fn test_echo_separators_in_arguments() {
+    // We used to split arguments themselves on newlines, but this was wrong.
+    // shuf should behave as though it's shuffling two arguments and therefore
+    // output all of them.
+    // (Note that arguments can't contain null bytes so we don't need to test that.)
+    let result = new_ucmd!()
+        .arg("-e")
+        .arg("-n2")
+        .arg("a\nb")
+        .arg("c\nd")
+        .succeeds();
+    result.no_stderr();
+    assert_eq!(result.stdout_str().len(), 8, "Incorrect output length");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_echo_invalid_unicode_in_arguments() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+    let result = new_ucmd!()
+        .arg("-e")
+        .arg(OsStr::from_bytes(b"a\xFFb"))
+        .arg("ok")
+        .succeeds();
+    result.no_stderr();
+    assert!(result.stdout().contains(&b'\xFF'));
+}
+
+#[cfg(any(unix, target_os = "wasi"))]
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn test_invalid_unicode_in_filename() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let filename = OsStr::from_bytes(b"a\xFFb");
+    at.append(filename, "foo\n");
+
+    let result = ucmd.arg(filename).succeeds();
+    result.no_stderr();
+    assert_eq!(result.stdout(), b"foo\n");
+}
+
+#[test]
 fn test_head_count() {
     let repeat_limit = 5;
     let input_seq = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
@@ -647,23 +692,21 @@ fn test_shuf_invalid_input_range_one() {
     new_ucmd!()
         .args(&["-i", "0"])
         .fails()
-        .stderr_contains("invalid input range");
+        .stderr_contains("invalid value '0' for '--input-range <LO-HI>': missing '-'");
 }
 
 #[test]
 fn test_shuf_invalid_input_range_two() {
-    new_ucmd!()
-        .args(&["-i", "a-9"])
-        .fails()
-        .stderr_contains("invalid input range: 'a'");
+    new_ucmd!().args(&["-i", "a-9"]).fails().stderr_contains(
+        "invalid value 'a-9' for '--input-range <LO-HI>': invalid digit found in string",
+    );
 }
 
 #[test]
 fn test_shuf_invalid_input_range_three() {
-    new_ucmd!()
-        .args(&["-i", "0-b"])
-        .fails()
-        .stderr_contains("invalid input range: 'b'");
+    new_ucmd!().args(&["-i", "0-b"]).fails().stderr_contains(
+        "invalid value '0-b' for '--input-range <LO-HI>': invalid digit found in string",
+    );
 }
 
 #[test]
@@ -702,10 +745,9 @@ fn test_shuf_three_input_files() {
 
 #[test]
 fn test_shuf_invalid_input_line_count() {
-    new_ucmd!()
-        .args(&["-n", "a"])
-        .fails()
-        .stderr_contains("invalid line count: 'a'");
+    new_ucmd!().args(&["-n", "a"]).fails().stderr_contains(
+        "invalid value 'a' for '--head-count <COUNT>': invalid digit found in string",
+    );
 }
 
 #[test]
@@ -772,7 +814,7 @@ fn test_range_empty_minus_one() {
         .arg("-i5-3")
         .fails()
         .no_stdout()
-        .stderr_only("shuf: invalid input range: '5-3'\n");
+        .stderr_contains("invalid value '5-3' for '--input-range <LO-HI>': start exceeds end\n");
 }
 
 #[test]
@@ -802,5 +844,5 @@ fn test_range_repeat_empty_minus_one() {
         .arg("-ri5-3")
         .fails()
         .no_stdout()
-        .stderr_only("shuf: invalid input range: '5-3'\n");
+        .stderr_contains("invalid value '5-3' for '--input-range <LO-HI>': start exceeds end\n");
 }
