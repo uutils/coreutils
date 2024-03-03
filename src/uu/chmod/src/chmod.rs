@@ -267,7 +267,7 @@ impl Chmoder {
                 return Err(USimpleError::new(
                     1,
                     format!(
-                        "it is dangerous to operate recursively on {}\nuse --no-preserve-root to override this failsafe",
+                        "it is dangerous to operate recursively on {}\nchmod: use --no-preserve-root to override this failsafe",
                         filename.quote()
                     )
                 ));
