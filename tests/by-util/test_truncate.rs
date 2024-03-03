@@ -266,6 +266,36 @@ fn test_new_file() {
     assert_eq!(at.read_bytes(filename), vec![b'\0'; 8]);
 }
 
+/// Test that truncating a non-existent file creates that file, even in reference-mode.
+#[test]
+fn test_new_file_reference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut old_file = at.make_file(FILE1);
+    old_file.write_all(b"1234567890").unwrap();
+    let filename = "new_file_that_does_not_exist_yet";
+    ucmd.args(&["-r", FILE1, filename])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists(filename));
+    assert_eq!(at.read_bytes(filename), vec![b'\0'; 10]);
+}
+
+/// Test that truncating a non-existent file creates that file, even in size-and-reference-mode.
+#[test]
+fn test_new_file_size_and_reference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut old_file = at.make_file(FILE1);
+    old_file.write_all(b"1234567890").unwrap();
+    let filename = "new_file_that_does_not_exist_yet";
+    ucmd.args(&["-s", "+3", "-r", FILE1, filename])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(at.file_exists(filename));
+    assert_eq!(at.read_bytes(filename), vec![b'\0'; 13]);
+}
+
 /// Test for not creating a non-existent file.
 #[test]
 fn test_new_file_no_create_size_only() {
@@ -280,7 +310,6 @@ fn test_new_file_no_create_size_only() {
 
 /// Test for not creating a non-existent file.
 #[test]
-#[ignore = "other bug"]
 fn test_new_file_no_create_reference_only() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut old_file = at.make_file(FILE1);
@@ -295,7 +324,6 @@ fn test_new_file_no_create_reference_only() {
 
 /// Test for not creating a non-existent file.
 #[test]
-#[ignore = "other bug"]
 fn test_new_file_no_create_size_and_reference() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut old_file = at.make_file(FILE1);
