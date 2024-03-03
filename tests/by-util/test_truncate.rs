@@ -43,9 +43,6 @@ fn test_reference() {
     let mut file = at.make_file(FILE2);
 
     // manpage: "A FILE argument that does not exist is created."
-    // TODO: 'truncate' does not create the file in this case,
-    //        but should because '--no-create' wasn't specified.
-    at.touch(FILE1); // TODO: remove this when 'no-create' is fixed
     scene.ucmd().arg("-s").arg("+5KB").arg(FILE1).succeeds();
 
     scene
@@ -240,10 +237,9 @@ fn test_reference_with_size_file_not_found() {
 
 #[test]
 fn test_truncate_bytes_size() {
-    // TODO: this should succeed without error, uncomment when '--no-create' is fixed
-    // new_ucmd!()
-    //     .args(&["--no-create", "--size", "K", "file"])
-    //     .succeeds();
+    new_ucmd!()
+        .args(&["--no-create", "--size", "K", "file"])
+        .succeeds();
     new_ucmd!()
         .args(&["--size", "1024R", "file"])
         .fails()
