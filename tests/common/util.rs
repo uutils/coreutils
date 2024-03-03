@@ -3583,6 +3583,7 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[cfg(feature = "env")]
     #[test]
     fn test_simulation_of_terminal_false() {
         let scene = TestScenario::new("util");
@@ -3599,6 +3600,7 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[cfg(feature = "env")]
     #[test]
     fn test_simulation_of_terminal_true() {
         let scene = TestScenario::new("util");
@@ -3620,6 +3622,7 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[cfg(feature = "env")]
     #[test]
     fn test_simulation_of_terminal_size_information() {
         let scene = TestScenario::new("util");
@@ -3646,6 +3649,7 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[cfg(feature = "env")]
     #[test]
     fn test_simulation_of_terminal_pty_sends_eot_automatically() {
         let scene = TestScenario::new("util");
@@ -3662,6 +3666,7 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[cfg(feature = "env")]
     #[test]
     fn test_simulation_of_terminal_pty_pipes_into_data_and_sends_eot_automatically() {
         let scene = TestScenario::new("util");
@@ -3683,6 +3688,7 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[cfg(feature = "env")]
     #[test]
     fn test_simulation_of_terminal_pty_write_in_data_and_sends_eot_automatically() {
         let scene = TestScenario::new("util");
