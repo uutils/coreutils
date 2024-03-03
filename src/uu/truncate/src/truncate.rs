@@ -180,8 +180,11 @@ pub fn uu_app() -> Command {
 /// size of the file.
 fn file_truncate(filename: &str, create: bool, size: u64) -> std::io::Result<()> {
     let path = Path::new(filename);
-    let f = OpenOptions::new().write(true).create(create).open(path)?;
-    f.set_len(size)
+    match OpenOptions::new().write(true).create(create).open(path) {
+        Ok(file) => file.set_len(size),
+        Err(e) if e.kind() == ErrorKind::NotFound && !create => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 /// Truncate files to a size relative to a given file.
@@ -337,15 +340,8 @@ fn truncate_size_only(size_string: &str, filenames: &[String], create: bool) -> 
             Err(_) => 0,
         };
         let tsize = mode.to_size(fsize);
-        match file_truncate(filename, create, tsize) {
-            Ok(_) => continue,
-            Err(e) if e.kind() == ErrorKind::NotFound && !create => continue,
-            Err(e) => {
-                return Err(
-                    e.map_err_context(|| format!("cannot open {} for writing", filename.quote()))
-                )
-            }
-        }
+        file_truncate(filename, create, tsize)
+            .map_err_context(|| format!("cannot open {} for writing", filename.quote()))?;
     }
     Ok(())
 }

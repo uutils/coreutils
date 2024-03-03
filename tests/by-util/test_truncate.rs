@@ -268,10 +268,40 @@ fn test_new_file() {
 
 /// Test for not creating a non-existent file.
 #[test]
-fn test_new_file_no_create() {
+fn test_new_file_no_create_size_only() {
     let (at, mut ucmd) = at_and_ucmd!();
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-s", "8", "-c", filename])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(!at.file_exists(filename));
+}
+
+/// Test for not creating a non-existent file.
+#[test]
+#[ignore = "other bug"]
+fn test_new_file_no_create_reference_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut old_file = at.make_file(FILE1);
+    old_file.write_all(b"1234567890").unwrap();
+    let filename = "new_file_that_does_not_exist_yet";
+    ucmd.args(&["-r", FILE1, "-c", filename])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+    assert!(!at.file_exists(filename));
+}
+
+/// Test for not creating a non-existent file.
+#[test]
+#[ignore = "other bug"]
+fn test_new_file_no_create_size_and_reference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut old_file = at.make_file(FILE1);
+    old_file.write_all(b"1234567890").unwrap();
+    let filename = "new_file_that_does_not_exist_yet";
+    ucmd.args(&["-r", FILE1, "-s", "+8", "-c", filename])
         .succeeds()
         .no_stdout()
         .no_stderr();
