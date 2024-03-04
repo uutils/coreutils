@@ -256,6 +256,28 @@ fn test_output_multi_files_print_all_chars() {
 }
 
 #[test]
+fn test_output_multi_files_print_all_chars_repeated() {
+    // spell-checker:disable
+    new_ucmd!()
+        .args(&["alpha.txt", "256.txt", "-A", "-n", "-A", "-n"])
+        .succeeds()
+        .stdout_only(
+            "     1\tabcde$\n     2\tfghij$\n     3\tklmno$\n     4\tpqrst$\n     \
+             5\tuvwxyz$\n     6\t^@^A^B^C^D^E^F^G^H^I$\n     \
+             7\t^K^L^M^N^O^P^Q^R^S^T^U^V^W^X^Y^Z^[^\\^]^^^_ \
+             !\"#$%&\'()*+,-./0123456789:;\
+             <=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~^?M-^@M-^AM-^\
+             BM-^CM-^DM-^EM-^FM-^GM-^HM-^IM-^JM-^KM-^LM-^MM-^NM-^OM-^PM-^QM-^RM-^SM-^TM-^UM-^V\
+             M-^WM-^XM-^YM-^ZM-^[M-^\\M-^]M-^^M-^_M- \
+             M-!M-\"M-#M-$M-%M-&M-\'M-(M-)M-*M-+M-,M--M-.M-/M-0M-1M-2M-3M-4M-5M-6M-7M-8M-9M-:\
+             M-;M-<M-=M->M-?M-@M-AM-BM-CM-DM-EM-FM-GM-HM-IM-JM-KM-LM-MM-NM-OM-PM-QM-RM-SM-TM-U\
+             M-VM-WM-XM-YM-ZM-[M-\\M-]M-^M-_M-`M-aM-bM-cM-dM-eM-fM-gM-hM-iM-jM-kM-lM-mM-nM-oM-\
+             pM-qM-rM-sM-tM-uM-vM-wM-xM-yM-zM-{M-|M-}M-~M-^?",
+        );
+    // spell-checker:enable
+}
+
+#[test]
 fn test_numbered_lines_no_trailing_newline() {
     // spell-checker:disable
     new_ucmd!()
@@ -270,7 +292,7 @@ fn test_numbered_lines_no_trailing_newline() {
 
 #[test]
 fn test_stdin_show_nonprinting() {
-    for same_param in ["-v", "--show-nonprinting", "--show-non"] {
+    for same_param in ["-v", "-vv", "--show-nonprinting", "--show-non"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -281,7 +303,7 @@ fn test_stdin_show_nonprinting() {
 
 #[test]
 fn test_stdin_show_tabs() {
-    for same_param in ["-T", "--show-tabs", "--show-ta"] {
+    for same_param in ["-T", "-TT", "--show-tabs", "--show-ta"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -292,7 +314,7 @@ fn test_stdin_show_tabs() {
 
 #[test]
 fn test_stdin_show_ends() {
-    for same_param in ["-E", "--show-ends", "--show-e"] {
+    for same_param in ["-E", "-EE", "--show-ends", "--show-e"] {
         new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\t\0\n\t")
@@ -302,12 +324,23 @@ fn test_stdin_show_ends() {
 }
 
 #[test]
-fn squeeze_all_files() {
+fn test_squeeze_all_files() {
     // empty lines at the end of a file are "squeezed" together with empty lines at the beginning
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("input1", "a\n\n");
     at.write("input2", "\n\nb");
     ucmd.args(&["input1", "input2", "-s"])
+        .succeeds()
+        .stdout_only("a\n\nb");
+}
+
+#[test]
+fn test_squeeze_all_files_repeated() {
+    // empty lines at the end of a file are "squeezed" together with empty lines at the beginning
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a\n\n");
+    at.write("input2", "\n\nb");
+    ucmd.args(&["-s", "input1", "input2", "-s"])
         .succeeds()
         .stdout_only("a\n\nb");
 }
@@ -342,9 +375,27 @@ fn test_stdin_nonprinting_and_endofline() {
 }
 
 #[test]
+fn test_stdin_nonprinting_and_endofline_repeated() {
+    new_ucmd!()
+        .args(&["-ee", "-e"])
+        .pipe_in("\t\0\n")
+        .succeeds()
+        .stdout_only("\t^@$\n");
+}
+
+#[test]
 fn test_stdin_nonprinting_and_tabs() {
     new_ucmd!()
         .args(&["-t"])
+        .pipe_in("\t\0\n")
+        .succeeds()
+        .stdout_only("^I^@\n");
+}
+
+#[test]
+fn test_stdin_nonprinting_and_tabs_repeated() {
+    new_ucmd!()
+        .args(&["-tt", "-t"])
         .pipe_in("\t\0\n")
         .succeeds()
         .stdout_only("^I^@\n");
@@ -364,7 +415,7 @@ fn test_stdin_squeeze_blank() {
 #[test]
 fn test_stdin_number_non_blank() {
     // spell-checker:disable-next-line
-    for same_param in ["-b", "--number-nonblank", "--number-non"] {
+    for same_param in ["-b", "-bb", "--number-nonblank", "--number-non"] {
         new_ucmd!()
             .arg(same_param)
             .arg("-")
@@ -384,6 +435,15 @@ fn test_non_blank_overrides_number() {
             .succeeds()
             .stdout_only("\n     1\ta\n     2\tb\n\n\n     3\tc");
     }
+}
+
+#[test]
+fn test_non_blank_overrides_number_even_when_present() {
+    new_ucmd!()
+        .args(&["-n", "-b", "-n"])
+        .pipe_in("\na\nb\n\n\nc")
+        .succeeds()
+        .stdout_only("\n     1\ta\n     2\tb\n\n\n     3\tc");
 }
 
 #[test]
@@ -551,4 +611,15 @@ fn test_error_loop() {
     ucmd.arg("1")
         .fails()
         .stderr_is("cat: 1: Too many levels of symbolic links\n");
+}
+
+#[test]
+fn test_u_ignored() {
+    for same_param in ["-u", "-uu"] {
+        new_ucmd!()
+            .arg(same_param)
+            .pipe_in("hello")
+            .succeeds()
+            .stdout_only("hello");
+    }
 }

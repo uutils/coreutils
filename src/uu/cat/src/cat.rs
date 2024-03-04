@@ -170,6 +170,7 @@ mod options {
     pub static SHOW_NONPRINTING_TABS: &str = "t";
     pub static SHOW_TABS: &str = "show-tabs";
     pub static SHOW_NONPRINTING: &str = "show-nonprinting";
+    pub static IGNORED_U: &str = "ignored-u";
 }
 
 #[uucore::main]
@@ -231,6 +232,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .about(ABOUT)
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
@@ -249,7 +251,8 @@ pub fn uu_app() -> Command {
                 .short('b')
                 .long(options::NUMBER_NONBLANK)
                 .help("number nonempty output lines, overrides -n")
-                .overrides_with(options::NUMBER)
+                // Note: This MUST NOT .overrides_with(options::NUMBER)!
+                // In clap, overriding is symmetric, so "-b -n" counts as "-n", which is not what we want.
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -297,6 +300,12 @@ pub fn uu_app() -> Command {
                 .short('v')
                 .long(options::SHOW_NONPRINTING)
                 .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::IGNORED_U)
+                .short('u')
+                .help("(ignored)")
                 .action(ArgAction::SetTrue),
         )
 }
