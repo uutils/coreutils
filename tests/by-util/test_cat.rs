@@ -324,7 +324,7 @@ fn test_stdin_show_ends() {
 }
 
 #[test]
-fn squeeze_all_files() {
+fn test_squeeze_all_files() {
     // empty lines at the end of a file are "squeezed" together with empty lines at the beginning
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("input1", "a\n\n");
@@ -335,7 +335,7 @@ fn squeeze_all_files() {
 }
 
 #[test]
-fn squeeze_all_files_repeated() {
+fn test_squeeze_all_files_repeated() {
     // empty lines at the end of a file are "squeezed" together with empty lines at the beginning
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("input1", "a\n\n");
