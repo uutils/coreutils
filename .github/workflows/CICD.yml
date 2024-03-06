@@ -997,8 +997,12 @@ jobs:
             ;;
         esac
         case '${{ matrix.job.os }}' in
-          # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
-          windows-latest) C:/msys64/usr/bin/pacman.exe -Syu --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
+          windows-latest)
+            # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
+            echo "downloading gcc 13.2.0-2"
+            wget https://repo.msys2.org/msys/x86_64/gcc-13.2.0-2-x86_64.pkg.tar.zst
+            echo "installing"
+            C:/msys64/usr/bin/pacman.exe -yU gcc-13.2.0-2-x86_64.pkg.tar.zst --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
         esac
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
