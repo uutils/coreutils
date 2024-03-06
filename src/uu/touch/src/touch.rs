@@ -433,7 +433,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     // only care about the timestamp anyway.
     // Tested in gnu/tests/touch/60-seconds
     if local.second() == 59 && ts.ends_with(".60") {
-        local += Duration::seconds(1);
+        local += Duration::try_seconds(1).unwrap();
     }
 
     // Due to daylight saving time switch, local time can jump from 1:59 AM to
@@ -441,7 +441,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     // valid. If we are within this jump, chrono takes the offset from before
     // the jump. If we then jump forward an hour, we get the new corrected
     // offset. Jumping back will then now correctly take the jump into account.
-    let local2 = local + Duration::hours(1) - Duration::hours(1);
+    let local2 = local + Duration::try_hours(1).unwrap() - Duration::try_hours(1).unwrap();
     if local.hour() != local2.hour() {
         return Err(USimpleError::new(
             1,
