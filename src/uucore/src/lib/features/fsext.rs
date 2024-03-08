@@ -642,7 +642,7 @@ impl FsMeta for StatFs {
             not(target_arch = "s390x"),
             target_pointer_width = "64"
         ))]
-        return self.f_bsize; // i64 -> i64 - OK
+        return self.f_bsize;
         #[cfg(all(
             not(target_env = "musl"),
             not(target_os = "freebsd"),
@@ -655,7 +655,7 @@ impl FsMeta for StatFs {
                 not(target_pointer_width = "64")
             )
         ))]
-        return self.f_bsize.into(); // i32 or u32 -> i64 - OK
+        return self.f_bsize.into();
         #[cfg(any(
             target_env = "musl",
             target_os = "freebsd",
@@ -664,7 +664,7 @@ impl FsMeta for StatFs {
             target_os = "redox",
             all(target_os = "android", target_pointer_width = "64"),
         ))]
-        return self.f_bsize.try_into().unwrap(); // u64 -> i64 - might fail if number is too high
+        return self.f_bsize.try_into().unwrap();
     }
     fn total_blocks(&self) -> u64 {
         #[cfg(target_pointer_width = "64")]
