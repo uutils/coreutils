@@ -47,7 +47,7 @@ jobs:
         # We need jq and GNU coreutils to run show-utils.sh and bash to use inline shell string replacement
         prepare: |
           pkg_add curl sudo-1.9.14.2 jq coreutils bash
-          pkg_add rust
+          pkg_add rust rust-rustfmt rust-clippy
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
