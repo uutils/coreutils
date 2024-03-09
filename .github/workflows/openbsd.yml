@@ -58,9 +58,11 @@ jobs:
           REPO_NAME=${GITHUB_WORKSPACE##*/}
           WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
           WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
+          HOMEDIR_VM="/home/${TEST_USER}/"
           #
-          useradd -d /root/ -c "Coreutils user to build" -g wheel ${TEST_USER}
-          chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
+          mkdir "$HOMEDIR_VM"
+          useradd -d "$HOMEDIR_VM" -c "Coreutils user to build" -g wheel ${TEST_USER}
+          chown -R ${TEST_USER}:wheel "$HOMEDIR_VM" "${WORKSPACE_PARENT}"/
           whoami
           #
           # Further work needs to be done in a sudo as we are changing users
@@ -155,10 +157,11 @@ jobs:
           REPO_NAME=${GITHUB_WORKSPACE##*/}
           WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
           WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
+          HOMEDIR_VM="/home/${TEST_USER}"
           #
-          useradd -d /root/ -c "Coreutils user to build" -g wheel ${TEST_USER}
-          # chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
-          chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
+          mkdir "$HOMEDIR_VM"
+          useradd -d "$HOMEDIR_VM" -c "Coreutils user to build" -g wheel ${TEST_USER}
+          chown -R ${TEST_USER}:wheel "$HOMEDIR_VM" "${WORKSPACE_PARENT}"/
           whoami
           #
           # Further work needs to be done in a sudo as we are changing users
