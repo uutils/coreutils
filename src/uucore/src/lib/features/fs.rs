@@ -13,7 +13,6 @@ use libc::{
     S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH,
     S_IXUSR,
 };
-use std::borrow::Cow;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
@@ -193,30 +192,6 @@ impl Hash for FileInformation {
             self.0.file_index().hash(state);
         }
     }
-}
-
-/// resolve a relative path
-pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
-    if path.components().all(|e| e != Component::ParentDir) {
-        return path.into();
-    }
-    let root = Component::RootDir.as_os_str();
-    let mut result = env::current_dir().unwrap_or_else(|_| PathBuf::from(root));
-    for comp in path.components() {
-        match comp {
-            Component::ParentDir => {
-                if let Ok(p) = result.read_link() {
-                    result = p;
-                }
-                result.pop();
-            }
-            Component::CurDir => (),
-            Component::RootDir | Component::Normal(_) | Component::Prefix(_) => {
-                result.push(comp.as_os_str());
-            }
-        }
-    }
-    result.into()
 }
 
 /// Controls how symbolic links should be handled when canonicalizing a path.
