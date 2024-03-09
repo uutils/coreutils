@@ -69,7 +69,7 @@ jobs:
           whoami
           #### curl https://sh.rustup.rs -sSf --output rustup.sh
           #### sh rustup.sh -y -c rustfmt,clippy --profile=minimal -t stable
-          . ${HOME}/.cargo/env
+          #### . ${HOME}/.cargo/env
           ## VARs setup
           cd "${WORKSPACE}"
           unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
@@ -166,10 +166,11 @@ jobs:
           whoami
           #### curl https://sh.rustup.rs -sSf --output rustup.sh
           #### sh rustup.sh -y --profile=minimal
-          . $HOME/.cargo/env
+          #### . $HOME/.cargo/env
           # Install nextest
           mkdir -p ~/.cargo/bin
-          curl -LsSf https://get.nexte.st/latest/openbsd | tar zxf - -C ~/.cargo/bin
+          #### curl -LsSf https://get.nexte.st/latest/freebsd | tar zxf - -C ~/.cargo/bin
+          cargo install cargo-nextest --locked
           ## Info
           # environment
           echo "## environment"
