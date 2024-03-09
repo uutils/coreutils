@@ -67,6 +67,7 @@ jobs:
           sudo -i -u ${TEST_USER} bash << EOF
           set -e
           whoami
+          ulimit -n 1024 # to avoid error, see https://github.com/rust-lang/cargo/issues/11435
           #### curl https://sh.rustup.rs -sSf --output rustup.sh
           #### sh rustup.sh -y -c rustfmt,clippy --profile=minimal -t stable
           #### . ${HOME}/.cargo/env
@@ -164,6 +165,7 @@ jobs:
           sudo -i -u ${TEST_USER} sh << EOF
           set -e
           whoami
+          ulimit -n 1024 # to avoid error, see https://github.com/rust-lang/cargo/issues/11435
           #### curl https://sh.rustup.rs -sSf --output rustup.sh
           #### sh rustup.sh -y --profile=minimal
           #### . $HOME/.cargo/env
