@@ -3,15 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty winsize xpixel ypixel
+//spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
+//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE
 
 #![allow(dead_code)]
 
 #[cfg(unix)]
 use nix::pty::OpenptyResult;
 use pretty_assertions::assert_eq;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use rlimit::prlimit;
+#[cfg(unix)]
+use rlimit::setrlimit;
 #[cfg(feature = "sleep")]
 use rstest::rstest;
 #[cfg(unix)]
@@ -26,6 +27,8 @@ use std::io::{self, BufWriter, Read, Result, Write};
 use std::os::fd::OwnedFd;
 #[cfg(unix)]
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file, PermissionsExt};
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
@@ -1224,7 +1227,7 @@ pub struct UCommand {
     stdout: Option<Stdio>,
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(unix)]
     limits: Vec<(rlimit::Resource, u64, u64)>,
     stderr_to_stdout: bool,
     timeout: Option<Duration>,
@@ -1387,7 +1390,7 @@ impl UCommand {
         self
     }
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(unix)]
     pub fn limit(
         &mut self,
         resource: rlimit::Resource,
@@ -1646,6 +1649,25 @@ impl UCommand {
             command.stdin(pi_slave).stdout(po_slave).stderr(pe_slave);
         }
 
+        #[cfg(unix)]
+        if !self.limits.is_empty() {
+            // just to be safe: move a copy of the limits list into the closure.
+            // this way the closure is fully self-contained.
+            let limits_copy = self.limits.clone();
+            let closure = move || -> Result<()> {
+                for &(resource, soft_limit, hard_limit) in &limits_copy {
+                    setrlimit(resource, soft_limit, hard_limit)?;
+                }
+                Ok(())
+            };
+            // SAFETY: the closure is self-contained and doesn't do any memory
+            // writes that would need to be propagated back to the parent process.
+            // also, the closure doesn't access stdin, stdout and stderr.
+            unsafe {
+                command.pre_exec(closure);
+            }
+        }
+
         (command, captured_stdout, captured_stderr, stdin_pty)
     }
 
@@ -1659,17 +1681,6 @@ impl UCommand {
         log_info("run", self.to_string());
 
         let child = command.spawn().unwrap();
-
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        for &(resource, soft_limit, hard_limit) in &self.limits {
-            prlimit(
-                child.id() as i32,
-                resource,
-                Some((soft_limit, hard_limit)),
-                None,
-            )
-            .unwrap();
-        }
 
         let mut child = UChild::from(self, child, captured_stdout, captured_stderr, stdin_pty);
 
@@ -3705,5 +3716,34 @@ mod tests {
             "Hello stdin forwarding via write_in!\r\n"
         );
         std::assert_eq!(String::from_utf8_lossy(out.stderr()), "");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_application_of_process_resource_limits_unlimited_file_size() {
+        let ts = TestScenario::new("util");
+        ts.cmd("sh")
+            .args(&["-c", "ulimit -Sf; ulimit -Hf"])
+            .succeeds()
+            .no_stderr()
+            .stdout_is("unlimited\nunlimited\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_application_of_process_resource_limits_limited_file_size() {
+        let unit_size_bytes = if cfg!(target_os = "macos") { 1024 } else { 512 };
+
+        let ts = TestScenario::new("util");
+        ts.cmd("sh")
+            .args(&["-c", "ulimit -Sf; ulimit -Hf"])
+            .limit(
+                rlimit::Resource::FSIZE,
+                8 * unit_size_bytes,
+                16 * unit_size_bytes,
+            )
+            .succeeds()
+            .no_stderr()
+            .stdout_is("8\n16\n");
     }
 }
