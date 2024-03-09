@@ -57,7 +57,7 @@ jobs:
           WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
           WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
           #
-          pw adduser -n ${TEST_USER} -d /root/ -g wheel -c "Coreutils user to build" -w random
+          useradd -d /root/ -c "Coreutils user to build" -g wheel ${TEST_USER}
           chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
           whoami
           #
@@ -151,7 +151,7 @@ jobs:
           WORKSPACE_PARENT="/home/runner/work/${REPO_NAME}"
           WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
           #
-          pw adduser -n ${TEST_USER} -d /root/ -g wheel -c "Coreutils user to build" -w random
+          useradd -d /root/ -c "Coreutils user to build" -g wheel ${TEST_USER}
           # chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
           chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
           whoami
