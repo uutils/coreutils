@@ -87,9 +87,9 @@ struct Settings {
 /// A timer which triggers on a given interval
 ///
 /// After being constructed with [`Alarm::with_interval`], [`Alarm::get_trigger`]
-/// will return [`TRIGGER_TIMER`] once per the given [`Duration`].
+/// will return [`ALARM_TRIGGER_TIMER`] once per the given [`Duration`].
 /// Alarm can be manually triggered with closure returned by [`Alarm::manual_trigger_fn`].
-/// [`Alarm::get_trigger`] will return [`TRIGGER_SIGNAL`] in this case.
+/// [`Alarm::get_trigger`] will return [`ALARM_TRIGGER_SIGNAL`] in this case.
 ///
 /// Can be cloned, but the trigger status is shared across all instances so only
 /// the first caller each interval will yield true.
@@ -100,9 +100,9 @@ pub struct Alarm {
     trigger: Arc<AtomicU8>,
 }
 
-const TRIGGER_NONE: u8 = 0;
-const TRIGGER_TIMER: u8 = 1;
-const TRIGGER_SIGNAL: u8 = 2;
+pub const ALARM_TRIGGER_NONE: u8 = 0;
+pub const ALARM_TRIGGER_TIMER: u8 = 1;
+pub const ALARM_TRIGGER_SIGNAL: u8 = 2;
 
 impl Alarm {
     pub fn with_interval(interval: Duration) -> Self {
@@ -112,7 +112,7 @@ impl Alarm {
         thread::spawn(move || {
             while let Some(trigger) = weak_trigger.upgrade() {
                 thread::sleep(interval);
-                trigger.store(TRIGGER_TIMER, Relaxed);
+                trigger.store(ALARM_TRIGGER_TIMER, Relaxed);
             }
         });
 
@@ -123,13 +123,13 @@ impl Alarm {
         let weak_trigger = Arc::downgrade(&self.trigger);
         Box::new(move || {
             if let Some(trigger) = weak_trigger.upgrade() {
-                trigger.store(TRIGGER_SIGNAL, Relaxed);
+                trigger.store(ALARM_TRIGGER_SIGNAL, Relaxed);
             }
         })
     }
 
     pub fn get_trigger(&self) -> u8 {
-        self.trigger.swap(TRIGGER_NONE, Relaxed)
+        self.trigger.swap(ALARM_TRIGGER_NONE, Relaxed)
     }
 
     pub fn get_interval(&self) -> Duration {
@@ -831,6 +831,30 @@ impl<'a> Output<'a> {
         }
     }
 
+    /// writes a block of data. optionally retries when first try didn't complete
+    ///
+    /// this is needed by gnu-test: tests/dd/stats.s
+    /// the write can be interrupted by a system signal.
+    /// e.g. SIGUSR1 which is send to report status
+    /// without retry, the data might not be fully written to destination.
+    fn write_block(&mut self, chunk: &[u8]) -> io::Result<usize> {
+        let full_len = chunk.len();
+        let mut base_idx = 0;
+        loop {
+            match self.dst.write(&chunk[base_idx..]) {
+                Ok(wlen) => {
+                    base_idx += wlen;
+                    // take iflags.fullblock as oflags shall not have this option
+                    if (base_idx >= full_len) || !self.settings.iflags.fullblock {
+                        return Ok(base_idx);
+                    }
+                }
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
     /// Write the given bytes one block at a time.
     ///
     /// This may write partial blocks (for example, if the underlying
@@ -844,7 +868,7 @@ impl<'a> Output<'a> {
         let mut bytes_total = 0;
 
         for chunk in buf.chunks(self.settings.obs) {
-            let wlen = self.dst.write(chunk)?;
+            let wlen = self.write_block(chunk)?;
             if wlen < self.settings.obs {
                 writes_partial += 1;
             } else {
@@ -1118,10 +1142,10 @@ fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
         rstat += rstat_update;
         wstat += wstat_update;
         match alarm.get_trigger() {
-            TRIGGER_NONE => {}
-            t @ TRIGGER_TIMER | t @ TRIGGER_SIGNAL => {
+            ALARM_TRIGGER_NONE => {}
+            t @ ALARM_TRIGGER_TIMER | t @ ALARM_TRIGGER_SIGNAL => {
                 let tp = match t {
-                    TRIGGER_TIMER => ProgUpdateType::Periodic,
+                    ALARM_TRIGGER_TIMER => ProgUpdateType::Periodic,
                     _ => ProgUpdateType::Signal,
                 };
                 let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
