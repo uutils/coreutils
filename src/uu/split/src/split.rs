@@ -1130,6 +1130,11 @@ struct OutFile {
 /// and [`n_chunks_by_line_round_robin`] functions.
 type OutFiles = Vec<OutFile>;
 trait ManageOutFiles {
+    fn instantiate_writer(
+        &mut self,
+        idx: usize,
+        settings: &Settings,
+    ) -> UResult<&mut BufWriter<Box<dyn Write>>>;
     /// Initialize a new set of output files
     /// Each OutFile is generated with filename, while the writer for it could be
     /// optional, to be instantiated later by the calling function as needed.
@@ -1194,6 +1199,52 @@ impl ManageOutFiles for OutFiles {
         Ok(out_files)
     }
 
+    fn instantiate_writer(
+        &mut self,
+        idx: usize,
+        settings: &Settings,
+    ) -> UResult<&mut BufWriter<Box<dyn Write>>> {
+        let mut count = 0;
+        // Use-case for doing multiple tries of closing fds:
+        // E.g. split running in parallel to other processes (e.g. another split) doing similar stuff,
+        // sharing the same limits. In this scenario, after closing one fd, the other process
+        // might "steel" the freed fd and open a file on its side. Then it would be beneficial
+        // if split would be able to close another fd before cancellation.
+        'loop1: loop {
+            let filename_to_open = self[idx].filename.as_str();
+            let file_to_open_is_new = self[idx].is_new;
+            let maybe_writer =
+                settings.instantiate_current_writer(filename_to_open, file_to_open_is_new);
+            if let Ok(writer) = maybe_writer {
+                self[idx].maybe_writer = Some(writer);
+                return Ok(self[idx].maybe_writer.as_mut().unwrap());
+            }
+
+            if settings.filter.is_some() {
+                // Propagate error if in `--filter` mode
+                return Err(maybe_writer.err().unwrap().into());
+            }
+
+            // Could have hit system limit for open files.
+            // Try to close one previously instantiated writer first
+            for (i, out_file) in self.iter_mut().enumerate() {
+                if i != idx && out_file.maybe_writer.is_some() {
+                    out_file.maybe_writer.as_mut().unwrap().flush()?;
+                    out_file.maybe_writer = None;
+                    out_file.is_new = false;
+                    count += 1;
+
+                    // And then try to instantiate the writer again
+                    continue 'loop1;
+                }
+            }
+
+            // If this fails - give up and propagate the error
+            uucore::show_error!("at file descriptor limit, but no file descriptor left to close. Closed {count} writers before.");
+            return Err(maybe_writer.err().unwrap().into());
+        }
+    }
+
     fn get_writer(
         &mut self,
         idx: usize,
@@ -1204,34 +1255,7 @@ impl ManageOutFiles for OutFiles {
         } else {
             // Writer was not instantiated upfront or was temporarily closed due to system resources constraints.
             // Instantiate it and record for future use.
-            let maybe_writer =
-                settings.instantiate_current_writer(self[idx].filename.as_str(), self[idx].is_new);
-            if let Ok(writer) = maybe_writer {
-                self[idx].maybe_writer = Some(writer);
-                Ok(self[idx].maybe_writer.as_mut().unwrap())
-            } else if settings.filter.is_some() {
-                // Propagate error if in `--filter` mode
-                Err(maybe_writer.err().unwrap().into())
-            } else {
-                // Could have hit system limit for open files.
-                // Try to close one previously instantiated writer first
-                for (i, out_file) in self.iter_mut().enumerate() {
-                    if i != idx && out_file.maybe_writer.is_some() {
-                        out_file.maybe_writer.as_mut().unwrap().flush()?;
-                        out_file.maybe_writer = None;
-                        out_file.is_new = false;
-                        break;
-                    }
-                }
-                // And then try to instantiate the writer again
-                // If this fails - give up and propagate the error
-                self[idx].maybe_writer =
-                    Some(settings.instantiate_current_writer(
-                        self[idx].filename.as_str(),
-                        self[idx].is_new,
-                    )?);
-                Ok(self[idx].maybe_writer.as_mut().unwrap())
-            }
+            self.instantiate_writer(idx, settings)
         }
     }
 }
