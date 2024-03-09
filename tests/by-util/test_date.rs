@@ -294,6 +294,7 @@ fn test_date_for_no_permission_file() {
     use std::os::unix::fs::PermissionsExt;
     let file = std::fs::OpenOptions::new()
         .create(true)
+        .truncate(true)
         .write(true)
         .open(at.plus(FILE))
         .unwrap();
