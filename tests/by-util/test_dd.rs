@@ -1405,6 +1405,36 @@ fn test_bytes_suffix() {
         .stdout_only("\0\0\0abcdef");
 }
 
+#[test]
+// the recursive nature of the suffix allows any string with a 'B' in it treated as bytes.
+fn test_bytes_suffix_recursive() {
+    new_ucmd!()
+        .args(&["count=2Bx2", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("abcd");
+    new_ucmd!()
+        .args(&["skip=2Bx2", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("ef");
+    new_ucmd!()
+        .args(&["iseek=2Bx2", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("ef");
+    new_ucmd!()
+        .args(&["seek=2Bx2", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("\0\0\0\0abcdef");
+    new_ucmd!()
+        .args(&["oseek=2Bx2", "status=none"])
+        .pipe_in("abcdef")
+        .succeeds()
+        .stdout_only("\0\0\0\0abcdef");
+}
+
 /// Test for "conv=sync" with a slow reader.
 #[cfg(not(windows))]
 #[test]
