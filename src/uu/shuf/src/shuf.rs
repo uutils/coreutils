@@ -12,6 +12,7 @@ use rand::{Rng, RngCore};
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Error, Read, Write};
+use std::ops::RangeInclusive;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
@@ -21,7 +22,7 @@ mod rand_read_adapter;
 enum Mode {
     Default(String),
     Echo(Vec<String>),
-    InputRange((usize, usize)),
+    InputRange(RangeInclusive<usize>),
 }
 
 static USAGE: &str = help_usage!("shuf.md");
@@ -119,8 +120,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             find_seps(&mut evec, options.sep);
             shuf_exec(&mut evec, options)?;
         }
-        Mode::InputRange((b, e)) => {
-            shuf_exec(&mut (b, e), options)?;
+        Mode::InputRange(mut range) => {
+            shuf_exec(&mut range, options)?;
         }
         Mode::Default(filename) => {
             let fdata = read_input_file(&filename)?;
@@ -289,14 +290,13 @@ impl<'a> Shufable for Vec<&'a [u8]> {
     }
 }
 
-impl Shufable for (usize, usize) {
+impl Shufable for RangeInclusive<usize> {
     type Item = usize;
     fn is_empty(&self) -> bool {
-        // Note: This is an inclusive range, so equality means there is 1 element.
-        self.0 > self.1
+        self.is_empty()
     }
     fn choose(&self, rng: &mut WrappedRng) -> usize {
-        rng.gen_range(self.0..self.1)
+        rng.gen_range(self.clone())
     }
     type PartialShuffleIterator<'b> = NonrepeatingIterator<'b> where Self: 'b;
     fn partial_shuffle<'b>(
@@ -304,7 +304,7 @@ impl Shufable for (usize, usize) {
         rng: &'b mut WrappedRng,
         amount: usize,
     ) -> Self::PartialShuffleIterator<'b> {
-        NonrepeatingIterator::new(self.0, self.1, rng, amount)
+        NonrepeatingIterator::new(self.clone(), rng, amount)
     }
 }
 
@@ -314,8 +314,7 @@ enum NumberSet {
 }
 
 struct NonrepeatingIterator<'a> {
-    begin: usize,
-    end: usize, // exclusive
+    range: RangeInclusive<usize>,
     rng: &'a mut WrappedRng,
     remaining_count: usize,
     buf: NumberSet,
@@ -323,19 +322,19 @@ struct NonrepeatingIterator<'a> {
 
 impl<'a> NonrepeatingIterator<'a> {
     fn new(
-        begin: usize,
-        end: usize,
+        range: RangeInclusive<usize>,
         rng: &'a mut WrappedRng,
         amount: usize,
     ) -> NonrepeatingIterator {
-        let capped_amount = if begin > end {
+        let capped_amount = if range.start() > range.end() {
             0
+        } else if *range.start() == 0 && *range.end() == std::usize::MAX {
+            amount
         } else {
-            amount.min(end - begin)
+            amount.min(range.end() - range.start() + 1)
         };
         NonrepeatingIterator {
-            begin,
-            end,
+            range,
             rng,
             remaining_count: capped_amount,
             buf: NumberSet::AlreadyListed(HashSet::default()),
@@ -343,11 +342,11 @@ impl<'a> NonrepeatingIterator<'a> {
     }
 
     fn produce(&mut self) -> usize {
-        debug_assert!(self.begin <= self.end);
+        debug_assert!(self.range.start() <= self.range.end());
         match &mut self.buf {
             NumberSet::AlreadyListed(already_listed) => {
                 let chosen = loop {
-                    let guess = self.rng.gen_range(self.begin..self.end);
+                    let guess = self.rng.gen_range(self.range.clone());
                     let newly_inserted = already_listed.insert(guess);
                     if newly_inserted {
                         break guess;
@@ -356,9 +355,11 @@ impl<'a> NonrepeatingIterator<'a> {
                 // Once a significant fraction of the interval has already been enumerated,
                 // the number of attempts to find a number that hasn't been chosen yet increases.
                 // Therefore, we need to switch at some point from "set of already returned values" to "list of remaining values".
-                let range_size = self.end - self.begin;
+                let range_size = (self.range.end() - self.range.start()).saturating_add(1);
                 if number_set_should_list_remaining(already_listed.len(), range_size) {
-                    let mut remaining = (self.begin..self.end)
+                    let mut remaining = self
+                        .range
+                        .clone()
                         .filter(|n| !already_listed.contains(n))
                         .collect::<Vec<_>>();
                     assert!(remaining.len() >= self.remaining_count);
@@ -381,7 +382,7 @@ impl<'a> Iterator for NonrepeatingIterator<'a> {
     type Item = usize;
 
     fn next(&mut self) -> Option<usize> {
-        if self.begin > self.end || self.remaining_count == 0 {
+        if self.range.is_empty() || self.remaining_count == 0 {
             return None;
         }
         self.remaining_count -= 1;
@@ -462,7 +463,7 @@ fn shuf_exec(input: &mut impl Shufable, opts: Options) -> UResult<()> {
     Ok(())
 }
 
-fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
+fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
     if let Some((from, to)) = input_range.split_once('-') {
         let begin = from
             .parse::<usize>()
@@ -470,7 +471,11 @@ fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
         let end = to
             .parse::<usize>()
             .map_err(|_| format!("invalid input range: {}", to.quote()))?;
-        Ok((begin, end + 1))
+        if begin <= end || begin == end + 1 {
+            Ok(begin..=end)
+        } else {
+            Err(format!("invalid input range: {}", input_range.quote()))
+        }
     } else {
         Err(format!("invalid input range: {}", input_range.quote()))
     }
