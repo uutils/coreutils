@@ -326,12 +326,12 @@ fn update_times(
 // If `follow` is `true`, the function will try to follow symlinks
 // If `follow` is `false` or the symlink is broken, the function will return metadata of the symlink itself
 fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
-    let metadata = match fs::metadata(path) {
-        Ok(metadata) => metadata,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound && !follow => fs::symlink_metadata(path)
-            .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?,
-        Err(e) => return Err(e.into()),
-    };
+    let metadata = if follow {
+        fs::metadata(path).or_else(|_| fs::symlink_metadata(path))
+    } else {
+        fs::symlink_metadata(path)
+    }
+    .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?;
 
     Ok((
         FileTime::from_last_access_time(&metadata),
