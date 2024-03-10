@@ -2981,7 +2981,8 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
         Some(time) => {
             //Date is recent if from past 6 months
             //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-            let recent = time + chrono::TimeDelta::seconds(31_556_952 / 2) > chrono::Local::now();
+            let recent = time + chrono::TimeDelta::try_seconds(31_556_952 / 2).unwrap()
+                > chrono::Local::now();
 
             match &config.time_style {
                 TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),
