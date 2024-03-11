@@ -781,10 +781,8 @@ impl CopyMode {
             Self::Update
         } else if matches.get_flag(options::ATTRIBUTES_ONLY) {
             if matches.get_flag(options::REMOVE_DESTINATION) {
-                // if we pass --remove-destination --attributes-only, we want to move the copy mode
                 Self::Copy
             } else {
-                // if no --remove-destination, back to the previous mode
                 Self::AttrOnly
             }
         } else {
