@@ -780,7 +780,11 @@ impl CopyMode {
         {
             Self::Update
         } else if matches.get_flag(options::ATTRIBUTES_ONLY) {
-            Self::AttrOnly
+            if matches.get_flag(options::REMOVE_DESTINATION) {
+                Self::Copy
+            } else {
+                Self::AttrOnly
+            }
         } else {
             Self::Copy
         }
@@ -1709,7 +1713,13 @@ fn copy_file(
         fs::remove_file(dest)?;
     }
 
-    if file_or_link_exists(dest) {
+    if file_or_link_exists(dest)
+        && (!options.attributes_only
+            || matches!(
+                options.overwrite,
+                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+            ))
+    {
         if are_hardlinks_to_same_file(source, dest)
             && !options.force()
             && options.backup == BackupMode::NoBackup
@@ -1719,6 +1729,20 @@ fn copy_file(
             return Ok(());
         }
         handle_existing_dest(source, dest, options, source_in_command_line)?;
+    }
+
+    if options.attributes_only
+        && source.is_symlink()
+        && !matches!(
+            options.overwrite,
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+        )
+    {
+        return Err(format!(
+            "cannot change attribute {}: Source file is a non regular file",
+            dest.quote()
+        )
+        .into());
     }
 
     if options.preserve_hard_links() {
