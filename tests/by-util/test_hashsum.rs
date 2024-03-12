@@ -358,8 +358,18 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_conflicting_arg() {
-    new_ucmd!().arg("-tag").arg("--check").fails().code_is(1);
-    new_ucmd!().arg("-tag").arg("--text").fails().code_is(1);
+    new_ucmd!()
+        .arg("--tag")
+        .arg("--check")
+        .arg("--md5")
+        .fails()
+        .code_is(1);
+    new_ucmd!()
+        .arg("--tag")
+        .arg("--text")
+        .arg("--md5")
+        .fails()
+        .code_is(1);
 }
 
 #[test]
