@@ -434,5 +434,5 @@ fn test_check_with_escape_filename() {
         .arg("-c")
         .arg("check.md5")
         .succeeds();
-    assert!(result.stdout_str().contains("OK"));
+    result.stdout_is("\\a\\nb: OK\n");
 }
