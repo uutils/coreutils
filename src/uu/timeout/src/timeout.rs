@@ -343,8 +343,15 @@ fn timeout(
             send_signal(process, signal, foreground);
             match kill_after {
                 None => {
+                    let status = process.wait()?;
                     if preserve_status {
-                        Err(ExitStatus::SignalSent(signal).into())
+                        if let Some(ec) = status.code() {
+                            Err(ec.into())
+                        } else if let Some(sc) = status.signal() {
+                            Err(ExitStatus::SignalSent(sc.try_into().unwrap()).into())
+                        } else {
+                            Err(ExitStatus::CommandTimedOut.into())
+                        }
                     } else {
                         Err(ExitStatus::CommandTimedOut.into())
                     }
