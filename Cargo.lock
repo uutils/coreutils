@@ -826,7 +826,7 @@ checksum = "1ee447700ac8aa0b2f2bd7bc4462ad686ba06baa6727ac149a2d6277f0d240fd"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.4.1",
  "windows-sys 0.52.0",
 ]
 
@@ -1466,7 +1466,7 @@ checksum = "4c42a9226546d68acdd9c0a280d17ce19bfe27a46bf68784e4066115788d008e"
 dependencies = [
  "cfg-if",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.4.1",
  "smallvec",
  "windows-targets 0.48.0",
 ]
@@ -1699,6 +1699,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4722d768eff46b75989dd134e5c353f0d6296e5aaa3132e776cbdb56be7731aa"
 dependencies = [
  "bitflags 1.3.2",
+]
+
+[[package]]
+name = "redox_syscall"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c178f952cc7eac391f3124bd9851d1ac0bdbc4c9de2d892ccd5f0d8b160e96"
+dependencies = [
+ "bitflags 2.4.2",
 ]
 
 [[package]]
@@ -3010,7 +3019,7 @@ version = "0.0.24"
 dependencies = [
  "clap",
  "libc",
- "redox_syscall",
+ "redox_syscall 0.5.0",
  "uucore",
 ]
 
