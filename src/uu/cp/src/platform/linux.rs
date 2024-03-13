@@ -132,6 +132,29 @@ where
     Ok(num_bytes_copied)
 }
 
+pub(crate) fn check_sparse_detection(
+    source: &Path,
+    copy_debug: &mut CopyDebug,
+) -> std::io::Result<()> {
+    // cp uses a crude heureustic for hole detection
+    // from testing on a ext4 filesystem , it seems any SEEKHOLE is basically a 512byte block with
+    // null bytes . The checking is done block wise i.e. discrete and contigous blocks of bytes.
+
+    let mut f = File::open(source).unwrap();
+
+    use std::os::unix::prelude::MetadataExt;
+
+    let size: usize = f.metadata()?.size().try_into().unwrap();
+    let mut buf: Vec<u8> = vec![0; 512];
+    let mut current_offset = 0;
+    while current_offset < size {
+        let this_read = f.read(&mut buf).unwrap();
+        if buf.iter().all(|&x| x == 0) {}
+        current_offset += this_read;
+        copy_debug.sparse_detection = SparseDebug::SeekHole;
+    }
+    Ok(())
+}
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
 /// The `source_is_fifo` flag must be set to `true` if and only if
@@ -160,7 +183,7 @@ pub(crate) fn copy_on_write(
             sparse_copy(source, dest)
         }
         (ReflinkMode::Never, _) => {
-            copy_debug.sparse_detection = SparseDebug::No;
+            let _ = check_sparse_detection(&source, &mut copy_debug);
             copy_debug.reflink = OffloadReflinkDebug::No;
             std::fs::copy(source, dest).map(|_| ())
         }
