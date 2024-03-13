@@ -10,7 +10,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use libc::S_IWUSR;
 use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Seek, Write};
+use std::io::{self, Read, Seek, Write};
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -33,6 +33,7 @@ pub mod options {
     pub const VERBOSE: &str = "verbose";
     pub const EXACT: &str = "exact";
     pub const ZERO: &str = "zero";
+    pub const RANDOM_SOURCE: &str = "random-source";
 
     pub mod remove {
         pub const UNLINK: &str = "unlink";
@@ -260,6 +261,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let exact = matches.get_flag(options::EXACT) || size.is_some();
     let zero = matches.get_flag(options::ZERO);
     let verbose = matches.get_flag(options::VERBOSE);
+    let random_source = matches.get_flag(options::RANDOM_SOURCE);
 
     for path_str in matches.get_many::<String>(options::FILE).unwrap() {
         show_if_err!(wipe_file(
@@ -271,6 +273,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             zero,
             verbose,
             force,
+            random_source
         ));
     }
     Ok(())
@@ -350,6 +353,12 @@ pub fn uu_app() -> Command {
                 .help("add a final overwrite with zeros to hide shredding")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(options::RANDOM_SOURCE)
+                .long(options::RANDOM_SOURCE)
+                .help("get random bytes from FILE")
+                .action(ArgAction::SetFalse),
+        )
         // Positional arguments
         .arg(
             Arg::new(options::FILE)
@@ -390,6 +399,7 @@ fn wipe_file(
     zero: bool,
     verbose: bool,
     force: bool,
+    random_source: bool,
 ) -> UResult<()> {
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
@@ -501,10 +511,16 @@ fn wipe_file(
             .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
     }
 
+    if random_source {
+        random_bytes_from_file(path_str)
+            .map_err_context(|| format!("{}: failed to read random bytes", path.maybe_quote()))?;
+    }
+
     if remove_method != RemoveMethod::None {
         do_remove(path, path_str, verbose, remove_method)
             .map_err_context(|| format!("{}: failed to remove file", path.maybe_quote()))?;
     }
+
     Ok(())
 }
 
@@ -623,4 +639,18 @@ fn do_remove(
     }
 
     Ok(())
+}
+
+fn random_bytes_from_file(path: &str) -> Result<Vec<u8>, io::Error> {
+    let mut file = File::open(path)?;
+    let mut rng = rand::thread_rng();
+    let mut buffer = Vec::new();
+
+    file.read_to_end(&mut buffer)?;
+    buffer.shuffle(&mut rng);
+    let buffer_len = buffer.len() as u64;
+    let end = rng.gen_range(1..buffer_len);
+
+    let random_bytes = &mut buffer[0..end as usize];
+    Ok(random_bytes.to_owned())
 }
