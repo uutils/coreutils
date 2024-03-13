@@ -1543,7 +1543,9 @@ fn handle_existing_dest(
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
-    options.overwrite.verify(dest)?;
+    if options.update != UpdateMode::ReplaceIfOlder {
+        options.overwrite.verify(dest)?;
+    }
 
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
@@ -1770,6 +1772,8 @@ fn handle_copy_mode(
                         if src_time <= dest_time {
                             return Ok(());
                         } else {
+                            options.overwrite.verify(dest)?;
+
                             copy_helper(
                                 source,
                                 dest,
@@ -1866,14 +1870,6 @@ fn copy_file(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    if (options.update == UpdateMode::ReplaceIfOlder || options.update == UpdateMode::ReplaceNone)
-        && options.overwrite == OverwriteMode::Interactive(ClobberMode::Standard)
-    {
-        // `cp -i --update old new` when `new` exists doesn't copy anything
-        // and exit with 0
-        return Ok(());
-    }
-
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest.is_symlink() {
         if FileInformation::from_path(dest, false)
