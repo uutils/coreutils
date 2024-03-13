@@ -6,10 +6,8 @@
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "warn"
-unmaintained = "warn"
+version = 2
 yanked = "warn"
-notice = "warn"
 ignore = [
   #"RUSTSEC-0000-0000",
 ]
@@ -18,7 +16,7 @@ ignore = [
 # More documentation for the licenses section can be found here:
 # https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
 [licenses]
-unlicensed = "deny"
+version = 2
 allow = [
   "MIT",
   "Apache-2.0",
@@ -29,9 +27,6 @@ allow = [
   "CC0-1.0",
   "Unicode-DFS-2016",
 ]
-copyleft = "deny"
-allow-osi-fsf-free = "neither"
-default = "deny"
 confidence-threshold = 0.8
 
 [[licenses.clarify]]
@@ -104,6 +99,8 @@ skip = [
   { name = "bitflags", version = "1.3.2" },
   # clap_builder, textwrap
   { name = "terminal_size", version = "0.2.6" },
+  # filetime, parking_lot_core
+  { name = "redox_syscall", version = "0.4.1" },
 ]
 # spell-checker: enable
 

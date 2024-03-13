@@ -1635,12 +1635,8 @@ fn split(settings: &Settings) -> UResult<()> {
     let r_box = if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
-        let r = File::open(Path::new(&settings.input)).map_err_context(|| {
-            format!(
-                "cannot open {} for reading: No such file or directory",
-                settings.input.quote()
-            )
-        })?;
+        let r = File::open(Path::new(&settings.input))
+            .map_err_context(|| format!("cannot open {} for reading", settings.input.quote()))?;
         Box::new(r) as Box<dyn Read>
     };
     let mut reader = if let Some(c) = settings.io_blksize {

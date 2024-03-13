@@ -393,13 +393,15 @@ pub fn uu_app_common() -> Command {
                 .short('c')
                 .long("check")
                 .help("read hashsums from the FILEs and check them")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .conflicts_with("tag"),
         )
         .arg(
             Arg::new("tag")
                 .long("tag")
                 .help("create a BSD-style checksum")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .conflicts_with("text"),
         )
         .arg(
             Arg::new("text")
@@ -630,7 +632,8 @@ where
             }
             let mut gnu_re = gnu_re_template(&bytes_marker, r"(?P<binary>[ \*])?")?;
             let bsd_re = Regex::new(&format!(
-                r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
+                // it can start with \
+                r"^(|\\){algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
                 algorithm = options.algoname,
                 digest_size = bytes_marker,
             ))
@@ -699,7 +702,8 @@ where
                         }
                     },
                 };
-                let f = match File::open(ck_filename.clone()) {
+                let (ck_filename_unescaped, prefix) = unescape_filename(&ck_filename);
+                let f = match File::open(ck_filename_unescaped) {
                     Err(_) => {
                         failed_open_file += 1;
                         println!(
@@ -732,11 +736,11 @@ where
                 // easier (and more important) on Unix than on Windows.
                 if sum == real_sum {
                     if !options.quiet {
-                        println!("{ck_filename}: OK");
+                        println!("{prefix}{ck_filename}: OK");
                     }
                 } else {
                     if !options.status {
-                        println!("{ck_filename}: FAILED");
+                        println!("{prefix}{ck_filename}: FAILED");
                     }
                     failed_cksum += 1;
                 }
@@ -749,16 +753,19 @@ where
                 options.output_bits,
             )
             .map_err_context(|| "failed to read input".to_string())?;
+            let (escaped_filename, prefix) = escape_filename(filename);
             if options.tag {
-                println!("{} ({}) = {}", options.algoname, filename.display(), sum);
+                println!(
+                    "{}{} ({}) = {}",
+                    prefix, options.algoname, escaped_filename, sum
+                );
             } else if options.nonames {
                 println!("{sum}");
             } else if options.zero {
+                // with zero, we don't escape the filename
                 print!("{} {}{}\0", sum, binary_marker, filename.display());
             } else {
-                let (filename, has_prefix) = escape_filename(filename);
-                let prefix = if has_prefix { "\\" } else { "" };
-                println!("{}{} {}{}", prefix, sum, binary_marker, filename);
+                println!("{}{} {}{}", prefix, sum, binary_marker, escaped_filename);
             }
         }
     }
@@ -783,14 +790,23 @@ where
     Ok(())
 }
 
-fn escape_filename(filename: &Path) -> (String, bool) {
+fn unescape_filename(filename: &str) -> (String, &'static str) {
+    let unescaped = filename
+        .replace("\\\\", "\\")
+        .replace("\\n", "\n")
+        .replace("\\r", "\r");
+    let prefix = if unescaped == filename { "" } else { "\\" };
+    (unescaped, prefix)
+}
+
+fn escape_filename(filename: &Path) -> (String, &'static str) {
     let original = filename.as_os_str().to_string_lossy();
     let escaped = original
         .replace('\\', "\\\\")
         .replace('\n', "\\n")
         .replace('\r', "\\r");
-    let has_changed = escaped != original;
-    (escaped, has_changed)
+    let prefix = if escaped == original { "" } else { "\\" };
+    (escaped, prefix)
 }
 
 fn digest_reader<T: Read>(
