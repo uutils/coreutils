@@ -1,0 +1,47 @@
+diff --git a/tests/env/env-S.pl b/tests/env/env-S.pl
+index 710ca82cf..af7cf6efa 100755
+--- a/tests/env/env-S.pl
++++ b/tests/env/env-S.pl
+@@ -209,27 +209,28 @@ my @Tests =
+       {ERR=>"$prog: no terminating quote in -S string\n"}],
+      ['err5', q[-S'A=B\\q'], {EXIT=>125},
+       {ERR=>"$prog: invalid sequence '\\q' in -S\n"}],
+-     ['err6', q[-S'A=$B'], {EXIT=>125},
+-      {ERR=>"$prog: only \${VARNAME} expansion is supported, error at: \$B\n"}],
++     ['err6', q[-S'A=$B echo hello'], {EXIT=>0},
++      {OUT=>"hello"}],
+      ['err7', q[-S'A=${B'], {EXIT=>125},
+-      {ERR=>"$prog: only \${VARNAME} expansion is supported, " .
+-           "error at: \${B\n"}],
++      {ERR=>"$prog" . qq[: variable name issue (at 5): Missing closing brace\n]}],
+      ['err8', q[-S'A=${B%B}'], {EXIT=>125},
+-      {ERR=>"$prog: only \${VARNAME} expansion is supported, " .
+-           "error at: \${B%B}\n"}],
++      {ERR=>"$prog" . qq[: variable name issue (at 5): Unexpected character: '%', expected a closing brace ('}') or colon (':')\n]}],
+      ['err9', q[-S'A=${9B}'], {EXIT=>125},
+-      {ERR=>"$prog: only \${VARNAME} expansion is supported, " .
+-           "error at: \${9B}\n"}],
++      {ERR=>"$prog" . qq[: variable name issue (at 4): Unexpected character: '9', expected variable name must not start with 0..9\n]}],
+ 
+      # Test incorrect shebang usage (extraneous whitespace).
+      ['err_sp2', q['-v -S cat -n'], {EXIT=>125},
+-      {ERR=>"env: invalid option -- ' '\n" .
+-            "env: use -[v]S to pass options in shebang lines\n" .
+-           "Try 'env --help' for more information.\n"}],
++      {ERR=>"$prog: error: unexpected argument '- ' found\n\n" .
++            "  tip: to pass '- ' as a value, use '-- - '\n\n" .
++            "Usage: $prog [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]\n\n" .
++            "For more information, try '--help'.\n" .
++            "$prog: use -[v]S to pass options in shebang lines\n"}],
+      ['err_sp3', q['-v	-S cat -n'], {EXIT=>125}, # embedded tab after -v
+-      {ERR=>"env: invalid option -- '\t'\n" .
+-            "env: use -[v]S to pass options in shebang lines\n" .
+-           "Try 'env --help' for more information.\n"}],
++      {ERR=>"$prog: error: unexpected argument '-\t' found\n\n" .
++            "  tip: to pass '-\t' as a value, use '-- -\t'\n\n" .
++            "Usage: $prog [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]\n\n" .
++            "For more information, try '--help'.\n" .
++            "$prog: use -[v]S to pass options in shebang lines\n"}],
+ 
+      # Also diagnose incorrect shebang usage when failing to exec.
+      # This typically happens with:
