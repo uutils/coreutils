@@ -38,20 +38,20 @@ fn test_buffer_sizes() {
             .arg("ext_sort.txt")
             .succeeds()
             .stdout_is_fixture("ext_sort.expected");
+    }
 
-        #[cfg(not(target_pointer_width = "32"))]
-        {
-            let buffer_sizes = ["1000G", "10T"];
-            for buffer_size in &buffer_sizes {
-                TestScenario::new(util_name!())
-                    .ucmd()
-                    .arg("-n")
-                    .arg("-S")
-                    .arg(buffer_size)
-                    .arg("ext_sort.txt")
-                    .succeeds()
-                    .stdout_is_fixture("ext_sort.expected");
-            }
+    #[cfg(not(target_pointer_width = "32"))]
+    {
+        let buffer_sizes = ["1000G", "10T"];
+        for buffer_size in &buffer_sizes {
+            TestScenario::new(util_name!())
+                .ucmd()
+                .arg("-n")
+                .arg("-S")
+                .arg(buffer_size)
+                .arg("ext_sort.txt")
+                .succeeds()
+                .stdout_is_fixture("ext_sort.expected");
         }
     }
 }

@@ -748,6 +748,18 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
+    // fs::copy fails if destination is a invalid symlink.
+    // so lets just remove all existing files at destination before copy.
+    if let Err(e) = fs::remove_file(to) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            show_error!(
+                "Failed to remove existing file {}. Error: {:?}",
+                to.display(),
+                e
+            );
+        }
+    }
+
     if from.as_os_str() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
