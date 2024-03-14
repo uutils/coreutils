@@ -517,7 +517,6 @@ fn test_cp_arg_interactive_update() {
 
 #[test]
 #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
-#[ignore = "known issue #6019"]
 fn test_cp_arg_interactive_update_newer() {
     // -u -i *WILL* show the prompt to validate the override.
     // Therefore, the error code depends on the prompt response.
