@@ -262,7 +262,13 @@ impl Source {
             }
             Self::File(f) => f.seek(io::SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
-            Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
+            Self::Fifo(f) => {
+                let v = Vec::<u8>::with_capacity(n as usize);
+                println!("skip with_capacity: {}", v.capacity());
+                let r = io::copy(&mut f.take(n), &mut io::sink());
+                drop(v);
+                r
+            }
         }
     }
 
@@ -621,7 +627,11 @@ impl Dest {
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
-                io::copy(&mut f.take(n), &mut io::sink())
+                let v = Vec::<u8>::with_capacity(n as usize);
+                println!("seek with_capacity: {}", v.capacity());
+                let r = io::copy(&mut f.take(n), &mut io::sink());
+                drop(v);
+                r
             }
             #[cfg(unix)]
             Self::Sink => Ok(0),
