@@ -3482,6 +3482,21 @@ fn test_cp_debug_multiple_default() {
 
 #[test]
 #[cfg(target_os = "linux")]
+fn test_cp_debug_reflink_never() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_sparse_reflink() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
