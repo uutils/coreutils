@@ -264,7 +264,6 @@ impl Source {
             #[cfg(unix)]
             Self::Fifo(f) => {
                 let v = Vec::<u8>::with_capacity(n as usize);
-                println!("skip with_capacity: {}", v.capacity());
                 let r = io::copy(&mut f.take(n), &mut io::sink());
                 drop(v);
                 r
@@ -628,7 +627,6 @@ impl Dest {
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
                 let v = Vec::<u8>::with_capacity(n as usize);
-                println!("seek with_capacity: {}", v.capacity());
                 let r = io::copy(&mut f.take(n), &mut io::sink());
                 drop(v);
                 r
