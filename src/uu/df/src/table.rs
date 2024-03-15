@@ -18,14 +18,10 @@ use uucore::fsext::{FsUsage, MountInfo};
 use std::fmt;
 use std::ops::AddAssign;
 
-type InodesIntT = u128;
-type MaybeInodesT = Option<InodesIntT>;
-
 /// A row in the filesystem usage data table.
 ///
 /// A row comprises several pieces of information, including the
 /// filesystem device, the mountpoint, the number of bytes used, etc.
-#[derive(Clone)]
 pub(crate) struct Row {
     /// The filename given on the command-line, if given.
     file: Option<String>,
@@ -62,13 +58,13 @@ pub(crate) struct Row {
     bytes_capacity: Option<f64>,
 
     /// Total number of inodes in the filesystem.
-    inodes: MaybeInodesT,
+    inodes: u128,
 
     /// Number of used inodes.
-    inodes_used: MaybeInodesT,
+    inodes_used: u128,
 
     /// Number of free inodes.
-    inodes_free: MaybeInodesT,
+    inodes_free: u128,
 
     /// Percentage of inodes that are used, given as a float between 0 and 1.
     ///
@@ -89,33 +85,11 @@ impl Row {
             bytes_usage: None,
             #[cfg(target_os = "macos")]
             bytes_capacity: None,
-            inodes: Some(0),
-            inodes_used: Some(0),
-            inodes_free: Some(0),
+            inodes: 0,
+            inodes_used: 0,
+            inodes_free: 0,
             inodes_usage: None,
         }
-    }
-}
-
-fn checked_accumulation_op(accumulator: &MaybeInodesT, summand: &MaybeInodesT) -> MaybeInodesT {
-    let a = (*accumulator)?;
-    if let Some(s) = *summand {
-        if s > InodesIntT::MAX / 2 {
-            eprintln!("invalid inodes number ({s}) - filesystem will be ignored");
-            *accumulator
-        } else {
-            a.checked_add(s)
-        }
-    } else {
-        *accumulator
-    }
-}
-
-fn calc_inode_usage(inodes: MaybeInodesT, inodes_used: MaybeInodesT) -> Option<f64> {
-    if inodes? == 0 {
-        None
-    } else {
-        Some(inodes_used? as f64 / inodes? as f64)
     }
 }
 
@@ -128,8 +102,8 @@ impl AddAssign for Row {
         let bytes = self.bytes + rhs.bytes;
         let bytes_used = self.bytes_used + rhs.bytes_used;
         let bytes_avail = self.bytes_avail + rhs.bytes_avail;
-        let inodes = checked_accumulation_op(&self.inodes, &rhs.inodes);
-        let inodes_used = checked_accumulation_op(&self.inodes_used, &rhs.inodes_used);
+        let inodes = self.inodes + rhs.inodes;
+        let inodes_used = self.inodes_used + rhs.inodes_used;
         *self = Self {
             file: None,
             fs_device: "total".into(),
@@ -151,8 +125,12 @@ impl AddAssign for Row {
             bytes_capacity: None,
             inodes,
             inodes_used,
-            inodes_free: checked_accumulation_op(&self.inodes_free, &rhs.inodes_free),
-            inodes_usage: calc_inode_usage(inodes, inodes_used),
+            inodes_free: self.inodes_free + rhs.inodes_free,
+            inodes_usage: if inodes == 0 {
+                None
+            } else {
+                Some(inodes_used as f64 / inodes as f64)
+            },
         }
     }
 }
@@ -200,9 +178,9 @@ impl From<Filesystem> for Row {
             } else {
                 Some(bavail as f64 / ((bused + bavail) as f64))
             },
-            inodes: Some(files as InodesIntT),
-            inodes_used: Some(fused as InodesIntT),
-            inodes_free: Some(ffree as InodesIntT),
+            inodes: files as u128,
+            inodes_used: fused as u128,
+            inodes_free: ffree as u128,
             inodes_usage: if files == 0 {
                 None
             } else {
@@ -257,15 +235,11 @@ impl<'a> RowFormatter<'a> {
     /// Get a string giving the scaled version of the input number.
     ///
     /// The scaling factor is defined in the `options` field.
-    fn scaled_inodes(&self, maybe_size: MaybeInodesT) -> String {
-        if let Some(size) = maybe_size {
-            if let Some(h) = self.options.human_readable {
-                to_magnitude_and_suffix(size, SuffixType::HumanReadable(h))
-            } else {
-                size.to_string()
-            }
+    fn scaled_inodes(&self, size: u128) -> String {
+        if let Some(h) = self.options.human_readable {
+            to_magnitude_and_suffix(size, SuffixType::HumanReadable(h))
         } else {
-            "int_overflow".into()
+            size.to_string()
         }
     }
 
@@ -531,9 +505,9 @@ mod tests {
                 #[cfg(target_os = "macos")]
                 bytes_capacity: Some(0.5),
 
-                inodes: Some(10),
-                inodes_used: Some(2),
-                inodes_free: Some(8),
+                inodes: 10,
+                inodes_used: 2,
+                inodes_free: 8,
                 inodes_usage: Some(0.2),
             }
         }
@@ -724,9 +698,9 @@ mod tests {
             fs_device: "my_device".to_string(),
             fs_mount: "my_mount".to_string(),
 
-            inodes: Some(10),
-            inodes_used: Some(2),
-            inodes_free: Some(8),
+            inodes: 10,
+            inodes_used: 2,
+            inodes_free: 8,
             inodes_usage: Some(0.2),
 
             ..Default::default()
@@ -747,7 +721,7 @@ mod tests {
         };
         let row = Row {
             bytes: 100,
-            inodes: Some(10),
+            inodes: 10,
             ..Default::default()
         };
         let fmt = RowFormatter::new(&row, &options, false);
@@ -872,119 +846,33 @@ mod tests {
 
         let row = Row::from(d);
 
-        assert_eq!(row.inodes_used, Some(0));
+        assert_eq!(row.inodes_used, 0);
     }
 
     #[test]
     fn test_row_accumulation_u64_overflow() {
-        let total = u64::MAX as super::InodesIntT;
-        let used1 = 3000 as super::InodesIntT;
-        let used2 = 50000 as super::InodesIntT;
+        let total = u64::MAX as u128;
+        let used1 = 3000u128;
+        let used2 = 50000u128;
 
         let mut row1 = Row {
-            inodes: Some(total),
-            inodes_used: Some(used1),
-            inodes_free: Some(total - used1),
+            inodes: total,
+            inodes_used: used1,
+            inodes_free: total - used1,
             ..Default::default()
         };
 
         let row2 = Row {
-            inodes: Some(total),
-            inodes_used: Some(used2),
-            inodes_free: Some(total - used2),
+            inodes: total,
+            inodes_used: used2,
+            inodes_free: total - used2,
             ..Default::default()
         };
 
         row1 += row2;
 
-        assert_eq!(row1.inodes, Some(total * 2));
-        assert_eq!(row1.inodes_used, Some(used1 + used2));
-        assert_eq!(row1.inodes_free, Some(total * 2 - used1 - used2));
-    }
-
-    #[test]
-    fn test_row_accumulation_close_to_u128_overflow() {
-        let total = u128::MAX as super::InodesIntT / 2 - 1;
-        let used1 = total - 50000;
-        let used2 = total - 100000;
-
-        let mut row1 = Row {
-            inodes: Some(total),
-            inodes_used: Some(used1),
-            inodes_free: Some(total - used1),
-            ..Default::default()
-        };
-
-        let row2 = Row {
-            inodes: Some(total),
-            inodes_used: Some(used2),
-            inodes_free: Some(total - used2),
-            ..Default::default()
-        };
-
-        row1 += row2;
-
-        assert_eq!(row1.inodes, Some(total * 2));
-        assert_eq!(row1.inodes_used, Some(used1 + used2));
-        assert_eq!(row1.inodes_free, Some(total * 2 - used1 - used2));
-    }
-
-    #[test]
-    #[allow(clippy::cognitive_complexity)]
-    fn test_row_accumulation_and_usage_close_over_u128_overflow() {
-        let total = u128::MAX as super::InodesIntT / 2 - 1;
-        let used1 = total / 2;
-        let free1 = total - used1;
-        let used2 = total / 2 - 10;
-        let free2 = total - used2;
-
-        let mut row1 = Row {
-            inodes: Some(total),
-            inodes_used: Some(used1),
-            inodes_free: Some(free1),
-            ..Default::default()
-        };
-
-        let row2 = Row {
-            inodes: Some(total),
-            inodes_used: Some(used2),
-            inodes_free: Some(free2),
-            ..Default::default()
-        };
-
-        row1 += row2.clone();
-
-        assert_eq!(row1.inodes, Some(total * 2));
-        assert_eq!(row1.inodes_used, Some(used1 + used2));
-        assert_eq!(row1.inodes_free, Some(free1 + free2));
-        assert_eq!(row1.inodes_usage, Some(0.5));
-
-        row1 += row2.clone();
-
-        assert_eq!(row1.inodes, None); // total * 3
-        assert_eq!(row1.inodes_used, Some(used1 + used2 * 2));
-        assert_eq!(row1.inodes_free, Some(free1 + free2 * 2));
-        assert_eq!(row1.inodes_usage, None);
-
-        row1 += row2.clone();
-
-        assert_eq!(row1.inodes, None); // total * 4
-        assert_eq!(row1.inodes_used, Some(used1 + used2 * 3)); // used * 4
-        assert_eq!(row1.inodes_free, None); // free * 4
-        assert_eq!(row1.inodes_usage, None);
-
-        row1 += row2.clone();
-
-        assert_eq!(row1.inodes, None); // total * 5
-        assert_eq!(row1.inodes_used, None); // used * 5
-        assert_eq!(row1.inodes_free, None); // free * 5
-        assert_eq!(row1.inodes_usage, None);
-
-        row1 += row2;
-
-        assert_eq!(row1.inodes, None); // total * 6
-        assert_eq!(row1.inodes_used, None); // used * 6
-        assert_eq!(row1.inodes_free, None); // free * 6
-        assert_eq!(row1.inodes_usage, None);
+        assert_eq!(row1.inodes, total * 2);
+        assert_eq!(row1.inodes_used, used1 + used2);
+        assert_eq!(row1.inodes_free, total * 2 - used1 - used2);
     }
 }
