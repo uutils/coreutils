@@ -32,6 +32,8 @@ use uucore::fs::{
     are_hardlinks_to_same_file, canonicalize, is_symlink_loop, path_ends_with_terminator,
     paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
 };
+#[cfg(unix)]
+use uucore::mode::get_umask;
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enum.
@@ -1830,7 +1832,6 @@ fn calculate_dest_permissions(
             let mode = handle_no_preserve_mode(options, permissions.mode());
 
             // Apply umask
-            use uucore::mode::get_umask;
             let mode = mode & !get_umask();
             permissions.set_mode(mode);
             Ok(permissions)
@@ -2086,7 +2087,7 @@ fn copy_helper(
          * https://github.com/rust-lang/rust/issues/79390
          */
         File::create(dest).context(dest.display().to_string())?;
-    } else if source_is_fifo && options.recursive && !options.copy_contents {
+    } else if source_is_fifo && !options.copy_contents {
         #[cfg(unix)]
         copy_fifo(dest, options.overwrite)?;
     } else if source_is_symlink {
@@ -2119,8 +2120,9 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode) -> CopyResult<()> {
         fs::remove_file(dest)?;
     }
 
+    let mode = 0o666 & !get_umask();
     let name = CString::new(dest.as_os_str().as_bytes()).unwrap();
-    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
+    let err = unsafe { mkfifo(name.as_ptr(), mode as libc::mode_t) };
     if err == -1 {
         return Err(format!("cannot create fifo {}: File exists", dest.quote()).into());
     }
@@ -2211,8 +2213,14 @@ fn disk_usage_directory(p: &Path) -> io::Result<u64> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use libc::mkfifo;
 
     use crate::{aligned_ancestors, localize_to_target};
+    #[cfg(unix)]
+    use std::ffi::CString;
+    #[cfg(unix)]
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
     use std::path::Path;
 
     #[test]
@@ -2233,5 +2241,35 @@ mod tests {
             (Path::new("a/b"), Path::new("d/a/b")),
         ];
         assert_eq!(actual, expected);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_copy_fifo() {
+        use uucore::mode::get_umask;
+
+        let source = "test_fifo_source";
+        let dest = "test_fifo_dest";
+
+        let mode = 0o644 & !get_umask();
+        let name = CString::new(source.as_bytes()).unwrap();
+        unsafe {
+            mkfifo(name.as_ptr(), mode as libc::mode_t);
+        }
+        let metadata_source = std::fs::metadata(source).unwrap();
+
+        let result = super::copy_fifo(Path::new(dest), super::OverwriteMode::NoClobber);
+        assert!(result.is_ok());
+
+        let metadata = std::fs::metadata(dest).unwrap();
+        assert!(metadata.file_type().is_fifo());
+
+        assert_eq!(
+            metadata_source.permissions().mode(),
+            metadata.permissions().mode()
+        );
+
+        std::fs::remove_file(source).unwrap();
+        std::fs::remove_file(dest).unwrap();
     }
 }
