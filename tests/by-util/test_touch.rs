@@ -5,7 +5,7 @@
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
 
 use crate::common::util::{AtPath, TestScenario};
-use filetime::{self, set_symlink_file_times, FileTime};
+use filetime::{set_symlink_file_times, FileTime};
 use std::fs::remove_file;
 use std::path::PathBuf;
 
