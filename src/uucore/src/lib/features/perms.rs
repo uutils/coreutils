@@ -650,7 +650,7 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use std::os::unix;
-    use std::path::{Component, Path, PathBuf};
+    use std::path::{Component, PathBuf};
     #[cfg(unix)]
     use tempfile::tempdir;
 
