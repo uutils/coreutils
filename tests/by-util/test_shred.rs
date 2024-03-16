@@ -6,7 +6,6 @@
 // spell-checker:ignore wipesync
 
 use crate::common::util::TestScenario;
-use std::path::Path;
 
 #[test]
 fn test_invalid_arg() {
@@ -160,7 +159,19 @@ fn test_shred_empty() {
         .arg("-uv")
         .arg(file_a)
         .succeeds()
-        .stdout_does_not_contain("pass 1/3 (random)");
+        .stderr_does_not_contain("1/3 (random)");
+
+    assert!(!at.file_exists(file_a));
+
+    // if the file isn't empty, we should have random
+    at.touch(file_a);
+    at.write(file_a, "1");
+    scene
+        .ucmd()
+        .arg("-uv")
+        .arg(file_a)
+        .succeeds()
+        .stderr_contains("1/3 (random)");
 
     assert!(!at.file_exists(file_a));
 }
@@ -168,6 +179,8 @@ fn test_shred_empty() {
 #[test]
 #[cfg(all(unix, feature = "chmod"))]
 fn test_shred_fail_no_perm() {
+    use std::path::Path;
+
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let dir = "dir";
