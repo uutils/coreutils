@@ -1713,3 +1713,16 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     let expected = b"0+2 records in\n0+2 records out\n4 bytes copied";
     assert!(output.stderr.starts_with(expected));
 }
+
+#[test]
+#[cfg(unix)]
+fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.make_file("input");
+    let filename = at.plus_as_string("input");
+    new_ucmd!()
+        .args(&["iflag=directory", "count=0"])
+        .set_stdin(std::process::Stdio::from(File::open(filename).unwrap()))
+        .fails();
+}
