@@ -2086,7 +2086,7 @@ fn test_ls_inode() {
     #[cfg(not(target_os = "macos"))]
     let re_long = Regex::new(r" *(\d+) [xrw-]{10}\.? \d .+ test_inode").unwrap();
     #[cfg(target_os = "macos")]
-    let re_long = Regex::new(r" *(\d+) [xrw-]{10}@\.? \d .+ test_inode").unwrap();
+    let re_long = Regex::new(r" *(\d+) [xrw-]{10}\.? \d .+ test_inode").unwrap();
 
     let result = scene.ucmd().arg("test_inode").arg("-i").succeeds();
     assert!(re_short.is_match(result.stdout_str()));
@@ -2109,8 +2109,8 @@ fn test_ls_inode() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    println!("stdout: {}", stdout);
-    println!("stderr: {}", stderr);
+    println!("stdout apple: {}", stdout);
+    println!("stderr apple: {}", stderr);
 
     let result = scene.ucmd().arg("-li").arg("test_inode").succeeds();
     assert!(re_long.is_match(result.stdout_str()));
