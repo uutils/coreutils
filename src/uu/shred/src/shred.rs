@@ -477,23 +477,13 @@ fn wipe_file(
     for (i, pass_type) in pass_sequence.into_iter().enumerate() {
         if verbose {
             let pass_name = pass_name(&pass_type);
-            if total_passes < 10 {
-                show_error!(
-                    "{}: pass {}/{} ({})...",
-                    path.maybe_quote(),
-                    i + 1,
-                    total_passes,
-                    pass_name
-                );
-            } else {
-                show_error!(
-                    "{}: pass {:2.0}/{:2.0} ({})...",
-                    path.maybe_quote(),
-                    i + 1,
-                    total_passes,
-                    pass_name
-                );
-            }
+            show_error!(
+                "{}: pass {:2}/{} ({})...",
+                path.maybe_quote(),
+                i + 1,
+                total_passes,
+                pass_name
+            );
         }
         // size is an optional argument for exactly how many bytes we want to shred
         // Ignore failed writes; just keep trying
