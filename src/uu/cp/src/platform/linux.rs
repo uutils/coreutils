@@ -136,6 +136,7 @@ fn check_for_seekhole(blocks: usize, size: usize) -> bool {
     // cp uses a crude heureustic for hole detection
     // an estimated formula which closely replicates GNU behavior is no of blocks < st_size/512
     // reference: https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks
+    // GNU checks for minimum threshold block size of 512 bytes .
     blocks < (size / 512)
 }
 
@@ -193,7 +194,7 @@ pub(crate) fn copy_on_write(
         sparse_detection: SparseDebug::No,
     };
 
-    let mut _size: usize = 0; // size > 512
+    let mut _size: usize = 0; // size of file
     let mut non_null_flag = false; // contains non_null_byte
     let result = match (reflink_mode, sparse_mode) {
         (ReflinkMode::Never, SparseMode::Always) => {
@@ -266,7 +267,7 @@ pub(crate) fn copy_on_write(
             sparse_copy(source, dest)
         }
 
-        (ReflinkMode::Auto, SparseMode::Auto) => {
+        (ReflinkMode::Auto, _) => {
             copy_debug.reflink = OffloadReflinkDebug::Unsupported;
             let mut sparse_val = SparseDebug::No;
             let _ =
@@ -287,32 +288,6 @@ pub(crate) fn copy_on_write(
                 (_, false) => {
                     copy_debug.sparse_detection = sparse_val;
                     copy_debug.offload = OffloadReflinkDebug::Unknown;
-                }
-            };
-
-            if source_is_fifo {
-                copy_fifo_contents(source, dest).map(|_| ())
-            } else {
-                clone(source, dest, CloneFallback::FSCopy)
-            }
-        }
-        (ReflinkMode::Auto, SparseMode::Never) => {
-            copy_debug.reflink = OffloadReflinkDebug::Unsupported;
-            let mut sparse_val = SparseDebug::No;
-            let _ =
-                check_for_non_null_element(source, &mut non_null_flag, &mut _size, &mut sparse_val);
-            match (_size, non_null_flag) {
-                (0, _) => {
-                    copy_debug.sparse_detection = sparse_val;
-                    copy_debug.offload = OffloadReflinkDebug::Unknown;
-                }
-                (_, false) => {
-                    copy_debug.sparse_detection = sparse_val;
-                    copy_debug.offload = OffloadReflinkDebug::Unknown;
-                }
-                (_, true) => {
-                    copy_debug.sparse_detection = sparse_val;
-                    copy_debug.offload = OffloadReflinkDebug::Yes;
                 }
             };
 
