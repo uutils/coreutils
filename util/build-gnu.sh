@@ -249,6 +249,11 @@ test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 # SKIP for now
 sed -i -e "s|my \$prog = 'pr';$|my \$prog = 'pr';CuSkip::skip \"\$prog: SKIP for producing too long logs\";|" tests/pr/pr-tests.pl
 
+# We don't have the same error message and no need to be that specific
+sed -i -e "s|invalid suffix in --pages argument|invalid --pages argument|" \
+    -e "s|--pages argument '\$too_big' too large|invalid --pages argument '\$too_big'|"  \
+    -e "s|invalid page range|invalid --pages argument|" tests/misc/xstrtol.pl
+
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
 # it hit the decode error, while we don't write anything if the input is invalid.
 sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/misc/base64.pl
