@@ -1354,7 +1354,7 @@ fn test_ls_long_formats() {
     #[cfg(not(target_os = "macos"))]
     let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z.A-Z]+ 0").unwrap();
     #[cfg(target_os = "macos")]
-    let re_one = Regex::new(r"[xrw-]{9}@\.? \d [-0-9_a-z.A-Z]+ 0").unwrap();
+    let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z.A-Z]+ 0").unwrap();
 
     #[cfg(all(unix, not(target_os = "macos")))]
     let re_one_num = Regex::new(r"[xrw-]{9}\.? \d \d+ 0").unwrap();
