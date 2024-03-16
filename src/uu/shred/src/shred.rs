@@ -365,6 +365,7 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
         .or_else(|| {
             if let Some(size) = size_str_opt {
                 show_error!("invalid file size: {}", size.quote());
+                // TODO: replace with our error management
                 std::process::exit(1);
             }
             None
@@ -578,7 +579,8 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Op
                         new_path.quote(),
                         e
                     );
-                    return None;
+                    // TODO: replace with our error management
+                    std::process::exit(1);
                 }
             }
         }
