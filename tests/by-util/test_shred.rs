@@ -143,3 +143,23 @@ fn test_hex() {
 
     ucmd.arg("--size=0x10").arg(file).succeeds();
 }
+
+#[test]
+fn test_shred_empty() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_shred_remove_a";
+
+    at.touch(file_a);
+
+    // Shred file_a and verify that, as it is empty, it doesn't have "pass 1/3 (random)"
+    scene
+        .ucmd()
+        .arg("-uv")
+        .arg(file_a)
+        .succeeds()
+        .stdout_does_not_contain("pass 1/3 (random)");
+
+    assert!(!at.file_exists(file_a));
+}
