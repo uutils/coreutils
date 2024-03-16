@@ -4391,10 +4391,10 @@ fn test_acl_display() {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
+    //#[cfg(not(target_os = "macos"))]
     let extended = "+";
-    #[cfg(target_os = "macos")]
-    let extended = "@";
+    //#[cfg(target_os = "macos")]
+    //let extended = "@";
     let mut binding = Command::new("ls");
     let c = binding.args(["-ald", &path]);
     let output = c.output().expect("Failed to execute command");
