@@ -1329,12 +1329,12 @@ fn test_ls_long_formats() {
     #[cfg(not(target_os = "macos"))]
     let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
     #[cfg(target_os = "macos")]
-    let re_three = Regex::new(r"[xrw-]{9}@\.? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
+    let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
 
     #[cfg(all(unix, not(target_os = "macos")))]
     let re_three_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){3}0").unwrap();
     #[cfg(target_os = "macos")]
-    let re_three_num = Regex::new(r"[xrw-]{9}@\.? \d (\d+ ){3}0").unwrap();
+    let re_three_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){3}0").unwrap();
 
     // Regex for two names, either:
     // - group and owner
@@ -1343,12 +1343,12 @@ fn test_ls_long_formats() {
     #[cfg(not(target_os = "macos"))]
     let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
     #[cfg(target_os = "macos")]
-    let re_two = Regex::new(r"[xrw-]{9}@\.? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
+    let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
 
     #[cfg(all(unix, not(target_os = "macos")))]
     let re_two_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){2}0").unwrap();
     #[cfg(target_os = "macos")]
-    let re_two_num = Regex::new(r"[xrw-]{9}@\.? \d (\d+ ){2}0").unwrap();
+    let re_two_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){2}0").unwrap();
 
     // Regex for one name: author, group or owner
     #[cfg(not(target_os = "macos"))]
@@ -1359,13 +1359,13 @@ fn test_ls_long_formats() {
     #[cfg(all(unix, not(target_os = "macos")))]
     let re_one_num = Regex::new(r"[xrw-]{9}\.? \d \d+ 0").unwrap();
     #[cfg(target_os = "macos")]
-    let re_one_num = Regex::new(r"[xrw-]{9}@\.? \d \d+ 0").unwrap();
+    let re_one_num = Regex::new(r"[xrw-]{9}\.? \d \d+ 0").unwrap();
 
     // Regex for no names
     #[cfg(not(target_os = "macos"))]
     let re_zero = Regex::new(r"[xrw-]{9}\.? \d 0").unwrap();
     #[cfg(target_os = "macos")]
-    let re_zero = Regex::new(r"[xrw-]{9}@\.? \d 0").unwrap();
+    let re_zero = Regex::new(r"[xrw-]{9}\.? \d 0").unwrap();
 
     scene
         .ucmd()
@@ -4402,8 +4402,8 @@ fn test_acl_display() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
-    println!("stdout: {}", stdout);
-    println!("stderr: {}", stderr);
+    println!("stdout Apple: {}", stdout);
+    println!("stderr Apple: {}", stderr);
     scene
         .ucmd()
         .args(&["-lda", &path])
