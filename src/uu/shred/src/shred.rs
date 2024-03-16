@@ -474,7 +474,7 @@ fn wipe_file(
 
     let size = match size {
         Some(size) => size,
-        None => get_file_size(path)?,
+        None => metadata.len(),
     };
 
     for (i, pass_type) in pass_sequence.into_iter().enumerate() {
@@ -530,10 +530,6 @@ fn do_pass(
     file.sync_data()?;
 
     Ok(())
-}
-
-fn get_file_size(path: &Path) -> Result<u64, io::Error> {
-    Ok(fs::metadata(path)?.len())
 }
 
 // Repeatedly renames the file with strings of decreasing length (most likely all 0s)
