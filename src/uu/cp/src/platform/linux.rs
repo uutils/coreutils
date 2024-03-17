@@ -132,48 +132,70 @@ where
     Ok(num_bytes_copied)
 }
 
-fn check_for_seekhole(blocks: usize, size: usize) -> bool {
+/*fn check_for_seekhole(blocks: usize, size: usize) -> bool {
     // cp uses a crude heureustic for hole detection
     // an estimated formula which closely replicates GNU behavior is no of blocks < st_size/512
     // reference: https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks
     // GNU checks for minimum threshold block size of 512 bytes .
     blocks < (size / 512)
-}
+}*/
 
-fn check_for_non_null_element(
+fn check_for_sparse_always_and_offload(
     source: &Path,
     non_null_flag: &mut bool,
     _size: &mut usize,
-    sparse_val: &mut SparseDebug,
+    null_terminated_block_flag: &mut bool,
 ) -> std::io::Result<()> {
-    //from testing GNU cp behaviour , any sparse file with non null byte , yields copy_offload:
-    //avoided in the debug result and any file size < 512 yields the same.
     let mut f = File::open(source)?;
 
     use std::os::unix::prelude::MetadataExt;
 
     let size: usize = f.metadata()?.size().try_into().unwrap();
     let block_size: usize = f.metadata()?.blksize().try_into().unwrap();
-    let blocks: usize = f.metadata()?.blocks().try_into().unwrap();
-    if check_for_seekhole(blocks, size) {
-        *sparse_val = SparseDebug::SeekHole;
-    } else if size < 512 {
-        *_size = size;
-    }
+    *_size = size;
+    *null_terminated_block_flag = false;
     let mut buf: Vec<u8> = vec![0; block_size];
-    let mut current_offset = 0;
+    let mut current_offset = 512;
     while current_offset < size {
         let this_read = f.read(&mut buf)?;
-        if buf.iter().any(|&x| x != 0x0) {
+        if buf.iter().all(|&x| x == 0x0) {
+            *null_terminated_block_flag = true;
+        } else {
+            *null_terminated_block_flag = false;
             *non_null_flag = true;
-            return Ok(());
         }
 
         current_offset += this_read;
     }
     Ok(())
 }
+fn check_for_sparse_and_offload(
+    source: &Path,
+    non_null_flag: &mut bool,
+    _size: &mut usize,
+    sparse_val: &mut SparseDebug,
+) -> std::io::Result<()> {
+    let mut f = File::open(source)?;
 
+    use std::os::unix::prelude::MetadataExt;
+
+    let size: usize = f.metadata()?.size().try_into().unwrap();
+    let block_size: usize = f.metadata()?.blksize().try_into().unwrap();
+    *_size = size;
+    let mut buf: Vec<u8> = vec![0; block_size];
+    let mut current_offset = 0;
+    while current_offset < size {
+        let this_read = f.read(&mut buf)?;
+        if buf.iter().any(|&x| x != 0x0) {
+            *non_null_flag = true;
+        } else {
+            *sparse_val = SparseDebug::SeekHole;
+        }
+
+        current_offset += this_read;
+    }
+    Ok(())
+}
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
 /// The `source_is_fifo` flag must be set to `true` if and only if
@@ -193,25 +215,33 @@ pub(crate) fn copy_on_write(
         reflink: OffloadReflinkDebug::Unsupported,
         sparse_detection: SparseDebug::No,
     };
-
+    let mut null_terminated_block_flag = false;
     let mut _size: usize = 0; // size of file
     let mut non_null_flag = false; // contains non_null_byte
     let result = match (reflink_mode, sparse_mode) {
         (ReflinkMode::Never, SparseMode::Always) => {
-            let mut sparse_val = SparseDebug::Zeros; //Default sparse_debug val
-            let _ =
-                check_for_non_null_element(source, &mut non_null_flag, &mut _size, &mut sparse_val);
-            match (_size, non_null_flag) {
-                (0..=511, _) => {
+            let sparse_val = SparseDebug::Zeros; //Default sparse_debug val
+            let _ = check_for_sparse_always_and_offload(
+                source,
+                &mut non_null_flag,
+                &mut _size,
+                &mut null_terminated_block_flag,
+            );
+            match (_size, non_null_flag, null_terminated_block_flag) {
+                (0..=511, _, _) => {
                     copy_debug.sparse_detection = sparse_val;
                     copy_debug.offload = OffloadReflinkDebug::Avoided;
                 }
-                (_, false) => {
-                    copy_debug.sparse_detection = sparse_val;
+                (_, false, _) => {
+                    copy_debug.sparse_detection = SparseDebug::SeekHole;
                     copy_debug.offload = OffloadReflinkDebug::Unknown;
                 }
-                (_, true) => {
-                    copy_debug.sparse_detection = sparse_val;
+                (_, true, true) => {
+                    copy_debug.sparse_detection = SparseDebug::SeekHoleZeros;
+                    copy_debug.offload = OffloadReflinkDebug::Avoided;
+                }
+                (_, true, false) => {
+                    copy_debug.sparse_detection = SparseDebug::Zeros;
                     copy_debug.offload = OffloadReflinkDebug::Avoided;
                 }
             };
@@ -221,8 +251,12 @@ pub(crate) fn copy_on_write(
 
         (ReflinkMode::Never, _) => {
             let mut sparse_val = SparseDebug::No;
-            let _ =
-                check_for_non_null_element(source, &mut non_null_flag, &mut _size, &mut sparse_val);
+            let _ = check_for_sparse_and_offload(
+                source,
+                &mut non_null_flag,
+                &mut _size,
+                &mut sparse_val,
+            );
             match (_size, non_null_flag) {
                 (0..=511, _) => {
                     copy_debug.sparse_detection = sparse_val;
@@ -241,27 +275,31 @@ pub(crate) fn copy_on_write(
             std::fs::copy(source, dest).map(|_| ())
         }
         (ReflinkMode::Auto, SparseMode::Always) => {
-            let mut sparse_val = SparseDebug::Zeros;
-            let _ =
-                check_for_non_null_element(source, &mut non_null_flag, &mut _size, &mut sparse_val);
-            match (_size, non_null_flag) {
-                (0..=511, _) => {
+            let sparse_val = SparseDebug::Zeros;
+            let _ = check_for_sparse_always_and_offload(
+                source,
+                &mut non_null_flag,
+                &mut _size,
+                &mut null_terminated_block_flag,
+            );
+            match (_size, non_null_flag, null_terminated_block_flag) {
+                (0..=511, _, _) => {
                     copy_debug.sparse_detection = sparse_val;
                     copy_debug.offload = OffloadReflinkDebug::Avoided;
                 }
-                (_, false) => {
-                    copy_debug.sparse_detection = sparse_val;
+                (_, false, _) => {
+                    copy_debug.sparse_detection = SparseDebug::SeekHole;
                     copy_debug.offload = OffloadReflinkDebug::Unknown;
                 }
-                (_, true) => {
-                    match sparse_val {
-                        SparseDebug::SeekHole => sparse_val = SparseDebug::SeekHoleZeros,
-                        _ => sparse_val = SparseDebug::Zeros,
-                    };
+                (_, true, true) => {
+                    copy_debug.sparse_detection = SparseDebug::SeekHoleZeros;
+                    copy_debug.offload = OffloadReflinkDebug::Avoided;
+                }
+                (_, true, false) => {
                     copy_debug.sparse_detection = sparse_val;
                     copy_debug.offload = OffloadReflinkDebug::Avoided;
                 }
-            };
+            }
 
             copy_debug.reflink = OffloadReflinkDebug::Unsupported;
             sparse_copy(source, dest)
@@ -270,8 +308,12 @@ pub(crate) fn copy_on_write(
         (ReflinkMode::Auto, _) => {
             copy_debug.reflink = OffloadReflinkDebug::Unsupported;
             let mut sparse_val = SparseDebug::No;
-            let _ =
-                check_for_non_null_element(source, &mut non_null_flag, &mut _size, &mut sparse_val);
+            let _ = check_for_sparse_and_offload(
+                source,
+                &mut non_null_flag,
+                &mut _size,
+                &mut sparse_val,
+            );
             match (_size, non_null_flag) {
                 (0, _) => {
                     copy_debug.sparse_detection = sparse_val;
