@@ -20,11 +20,9 @@ gcd = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = ["format", "quoting-style"] }
 
-[target.'cfg(any(target_os = "linux"))'.dependencies]
-nix = { workspace = true, features = ["fs"] }
-
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 signal-hook = { workspace = true }
+nix = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "dd"
