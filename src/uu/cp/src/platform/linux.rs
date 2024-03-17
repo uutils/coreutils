@@ -309,34 +309,34 @@ pub(crate) fn copy_on_write(
         (ReflinkMode::Auto, _) => {
             copy_debug.reflink = OffloadReflinkDebug::Unsupported;
             let mut sparse_val = SparseDebug::No;
-            let _ = check_for_sparse_and_offload(
-                source,
-                &mut non_null_flag,
-                &mut _size,
-                &mut sparse_val,
-            );
-            match (_size, non_null_flag) {
-                (0, _) => {
-                    copy_debug.sparse_detection = sparse_val;
-                    copy_debug.offload = OffloadReflinkDebug::Unknown;
-                }
-                (1..=511, _) => {
-                    copy_debug.sparse_detection = sparse_val;
-                    copy_debug.offload = OffloadReflinkDebug::Yes;
-                }
-                (_, true) => {
-                    copy_debug.sparse_detection = sparse_val;
-                    copy_debug.offload = OffloadReflinkDebug::Yes;
-                }
-                (_, false) => {
-                    copy_debug.sparse_detection = sparse_val;
-                    copy_debug.offload = OffloadReflinkDebug::Unknown;
-                }
-            };
-
             if source_is_fifo {
                 copy_fifo_contents(source, dest).map(|_| ())
             } else {
+                let _ = check_for_sparse_and_offload(
+                    source,
+                    &mut non_null_flag,
+                    &mut _size,
+                    &mut sparse_val,
+                );
+                match (_size, non_null_flag) {
+                    (0, _) => {
+                        copy_debug.sparse_detection = sparse_val;
+                        copy_debug.offload = OffloadReflinkDebug::Unknown;
+                    }
+                    (1..=511, _) => {
+                        copy_debug.sparse_detection = sparse_val;
+                        copy_debug.offload = OffloadReflinkDebug::Yes;
+                    }
+                    (_, true) => {
+                        copy_debug.sparse_detection = sparse_val;
+                        copy_debug.offload = OffloadReflinkDebug::Yes;
+                    }
+                    (_, false) => {
+                        copy_debug.sparse_detection = sparse_val;
+                        copy_debug.offload = OffloadReflinkDebug::Unknown;
+                    }
+                };
+
                 clone(source, dest, CloneFallback::FSCopy)
             }
         }
