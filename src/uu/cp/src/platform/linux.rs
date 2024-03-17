@@ -183,6 +183,7 @@ fn check_for_sparse_and_offload(
     let block_size: usize = f.metadata()?.blksize().try_into().unwrap();
     *_size = size;
     let mut buf: Vec<u8> = vec![0; block_size];
+
     let mut current_offset = 0;
     while current_offset < size {
         let this_read = f.read(&mut buf)?;
@@ -191,9 +192,9 @@ fn check_for_sparse_and_offload(
         } else {
             *sparse_val = SparseDebug::SeekHole;
         }
-
         current_offset += this_read;
     }
+
     Ok(())
 }
 /// Copies `source` to `dest` using copy-on-write if possible.
