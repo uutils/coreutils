@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname seekable
 
 #[cfg(unix)]
 use crate::common::util::run_ucmd_as_root_with_stdin_stdout;
@@ -11,6 +11,7 @@ use crate::common::util::TestScenario;
 use crate::common::util::{UCommand, TESTS_BINARY};
 
 use regex::Regex;
+use uucore::io::OwnedFileDescriptorOrHandle;
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
@@ -1725,4 +1726,51 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
         .args(&["iflag=directory", "count=0"])
         .set_stdin(std::process::Stdio::from(File::open(filename).unwrap()))
         .fails();
+}
+
+#[cfg(unix)]
+fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
+    use std::process::Stdio;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("in", "abcde");
+
+    let stdin = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true),
+        at.plus("in").as_path(),
+    )
+    .unwrap();
+    let stdout = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().create(true).write(true),
+        at.plus("out").as_path(),
+    )
+    .unwrap();
+    let stderr = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().create(true).write(true),
+        at.plus("err").as_path(),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&["bs=1", "skip=1", "count=1"])
+        .set_stdin(Stdio::from(stdin.try_clone().unwrap()))
+        .set_stdout(Stdio::from(stdout.try_clone().unwrap()))
+        .set_stderr(Stdio::from(stderr.try_clone().unwrap()))
+        .succeeds();
+
+    ts.ucmd()
+        .args(&["bs=1", "skip=1"])
+        .set_stdin(stdin)
+        .set_stdout(stdout)
+        .set_stderr(stderr)
+        .succeeds();
+
+    let err_file_content = std::fs::read_to_string(at.plus_as_string("err")).unwrap();
+    println!("stderr:\n{}", err_file_content);
+
+    let out_file_content = std::fs::read_to_string(at.plus_as_string("out")).unwrap();
+    println!("stdout:\n{}", out_file_content);
+    assert_eq!(out_file_content, "bde");
 }

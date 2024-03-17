@@ -313,6 +313,7 @@ sed -i -e "s/du: invalid -t argument/du: invalid --threshold argument/" -e "s/du
 # Remove the extra output check
 sed -i -e "s|Try '\$prog --help' for more information.\\\n||" tests/du/files0-from.pl
 sed -i -e "s|when reading file names from stdin, no file name of\"|-: No such file or directory\n\"|" -e "s| '-' allowed\\\n||" tests/du/files0-from.pl
+sed -i -e "s|-: No such file or directory|cannot access '-': No such file or directory|g" tests/du/files0-from.pl
 
 awk 'BEGIN {count=0} /compare exp out2/ && count < 6 {sub(/compare exp out2/, "grep -q \"cannot be used with\" out2"); count++} 1' tests/df/df-output.sh > tests/df/df-output.sh.tmp && mv tests/df/df-output.sh.tmp tests/df/df-output.sh
 
