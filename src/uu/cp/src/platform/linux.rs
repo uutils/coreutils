@@ -184,18 +184,21 @@ fn check_for_sparse_and_offload(
     *_size = size;
     let mut buf: Vec<u8> = vec![0; block_size];
 
-    let mut current_offset = 0;
-    while current_offset < size {
-        let this_read = f.read(&mut buf)?;
-        if buf.iter().any(|&x| x != 0x0) {
-            *non_null_flag = true;
-        } else {
-            *sparse_val = SparseDebug::SeekHole;
+    if size > 511 {
+        let mut current_offset = 512;
+        while current_offset < size {
+            let this_read = f.read(&mut buf)?;
+            if buf.iter().any(|&x| x != 0x0) {
+                *non_null_flag = true;
+            } else {
+                *sparse_val = SparseDebug::SeekHole;
+            }
+            current_offset += this_read;
         }
-        current_offset += this_read;
+        Ok(())
+    } else {
+        Ok(())
     }
-
-    Ok(())
 }
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
@@ -324,7 +327,7 @@ pub(crate) fn copy_on_write(
                         copy_debug.offload = OffloadReflinkDebug::Unknown;
                     }
                     (1..=511, _) => {
-                        copy_debug.sparse_detection = sparse_val;
+                        copy_debug.sparse_detection = SparseDebug::No;
                         copy_debug.offload = OffloadReflinkDebug::Yes;
                     }
                     (_, true) => {
