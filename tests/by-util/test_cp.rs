@@ -3493,6 +3493,248 @@ fn test_cp_debug_reflink_never() {
         .arg("a")
         .arg("b")
         .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: no") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_reflink_never_with_hole() {
+    let ts = TestScenario::new(util_name!());
+    let empty_bytes = [0 as u8; 10000];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.write("a", "hello");
+    at.append_bytes("a", &empty_bytes);
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: SEEK_HOLE") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_reflink_never_with_nullbytes_and_hole() {
+    let ts = TestScenario::new(util_name!());
+    let empty_bytes = [0 as u8; 10000];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.append_bytes("a", &empty_bytes);
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: unknown, reflink: no, sparse detection: SEEK_HOLE") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_reflink_auto_sparse_auto_with_hole() {
+    let ts = TestScenario::new(util_name!());
+    let empty_bytes = [0 as u8; 10000];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.append_bytes("a", &empty_bytes);
+    at.append_bytes("a", "hello".as_bytes());
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=auto")
+        .arg("--sparse=auto")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: yes, reflink: unsupported, sparse detection: SEEK_HOLE")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_reflink_auto_sparse_auto_less_than_512_bytes() {
+    let ts = TestScenario::new(util_name!());
+
+    let empty_bytes = [0 as u8; 400];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.append_bytes("a", "hello".as_bytes());
+    at.append_bytes("a", &empty_bytes);
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=auto")
+        .arg("--sparse=auto")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: yes, reflink: unsupported, sparse detection: no") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_reflink_auto_sparse_auto_without_hole() {
+    let ts = TestScenario::new(util_name!());
+
+    let empty_bytes = [0 as u8; 1000];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.append_bytes("a", "hello".as_bytes());
+    at.append_bytes("a", &empty_bytes);
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=auto")
+        .arg("--sparse=auto")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: yes, reflink: unsupported, sparse detection: no") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_reflink_auto_sparse_auto_with_null_bytes_and_hole() {
+    let ts = TestScenario::new(util_name!());
+    let empty_bytes = [0 as u8; 10000];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.append_bytes("a", &empty_bytes);
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=auto")
+        .arg("--sparse=auto")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str
+        .contains("copy offload: unknown, reflink: unsupported, sparse detection: SEEK_HOLE")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_reflink_never_sparse_always_with_nullterminatedblock() {
+    let ts = TestScenario::new(util_name!());
+    let empty_bytes = [0 as u8; 10000];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.write("a", "hello");
+    at.append_bytes("a", &empty_bytes);
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("--sparse=always")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str
+        .contains("copy offload: avoided, reflink: no, sparse detection: SEEK_HOLE + zeros")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_reflink_never_sparse_always_with_non_nullterminatedblock() {
+    let ts = TestScenario::new(util_name!());
+    let empty_bytes = [0 as u8; 10000];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.write("a", "hello");
+    at.append_bytes("a", &empty_bytes);
+    at.append_bytes("a", "hello".as_bytes());
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("--sparse=always")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: zeros") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_reflink_never_sparse_always_with_nullbytes_and_hole() {
+    let ts = TestScenario::new(util_name!());
+    let empty_bytes = [0 as u8; 10000];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.append_bytes("a", &empty_bytes);
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("--sparse=always")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: unknown, reflink: no, sparse detection: SEEK_HOLE") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_reflink_never_without_hole() {
+    let ts = TestScenario::new(util_name!());
+    let empty_bytes = [0 as u8; 1000];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.write("a", "hello");
+    at.append_bytes("a", &empty_bytes);
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: no") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
 }
 
 #[test]
