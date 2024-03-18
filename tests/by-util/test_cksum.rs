@@ -129,6 +129,29 @@ fn test_stdin_larger_than_128_bytes() {
 }
 
 #[test]
+fn test_repeated_flags() {
+    new_ucmd!()
+        .arg("-a")
+        .arg("sha1")
+        .arg("--algo=sha256")
+        .arg("-a=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("md5_single_file.expected");
+}
+
+#[test]
+fn test_tag_after_untagged() {
+    new_ucmd!()
+        .arg("--untagged")
+        .arg("--tag")
+        .arg("-a=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("md5_single_file.expected");
+}
+
+#[test]
 fn test_algorithm_single_file() {
     for algo in ALGOS {
         for option in ["-a", "--algorithm"] {
@@ -206,6 +229,17 @@ fn test_untagged_algorithm_single_file() {
             .succeeds()
             .stdout_is_fixture(format!("untagged/{algo}_single_file.expected"));
     }
+}
+
+#[test]
+fn test_untagged_algorithm_after_tag() {
+    new_ucmd!()
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("untagged/md5_single_file.expected");
 }
 
 #[test]
@@ -292,6 +326,20 @@ fn test_length_is_zero() {
 }
 
 #[test]
+fn test_length_repeated() {
+    new_ucmd!()
+        .arg("--length=10")
+        .arg("--length=123456")
+        .arg("--length=0")
+        .arg("--algorithm=blake2b")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_fixture("length_is_zero.expected");
+}
+
+#[test]
 fn test_raw_single_file() {
     for algo in ALGOS {
         new_ucmd!()
@@ -313,6 +361,43 @@ fn test_raw_multiple_files() {
         .no_stdout()
         .stderr_contains("cksum: the --raw option is not supported with multiple files")
         .code_is(1);
+}
+
+#[test]
+fn test_base64_raw_conflicts() {
+    new_ucmd!()
+        .arg("--base64")
+        .arg("--raw")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("--base64")
+        .stderr_contains("cannot be used with")
+        .stderr_contains("--raw");
+}
+
+#[test]
+fn test_base64_single_file() {
+    for algo in ALGOS {
+        new_ucmd!()
+            .arg("--base64")
+            .arg("lorem_ipsum.txt")
+            .arg(format!("--algorithm={algo}"))
+            .succeeds()
+            .no_stderr()
+            .stdout_is_fixture_bytes(format!("base64/{algo}_single_file.expected"));
+    }
+}
+#[test]
+fn test_base64_multiple_files() {
+    new_ucmd!()
+        .arg("--base64")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .arg("alice_in_wonderland.txt")
+        .succeeds()
+        .no_stderr()
+        .stdout_is_fixture_bytes(format!("base64/md5_multiple_files.expected"));
 }
 
 #[test]
