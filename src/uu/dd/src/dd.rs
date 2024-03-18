@@ -313,7 +313,7 @@ impl<'a> Input<'a> {
         #[cfg(unix)]
         if let Source::StdinFile(f) = &src {
             // GNU compatibility:
-            // this will check stdin point to a folder or not
+            // this will check whether stdin points to a folder or not
             if f.metadata()?.is_file() && settings.iflags.directory {
                 show_error!("standard input: not a directory");
                 return Err(1.into());
