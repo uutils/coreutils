@@ -208,6 +208,13 @@ enum Source {
 }
 
 impl Source {
+    fn unset_direct(&mut self) -> io::Result<()> {
+        if let Self::File(f) = self {
+            unset_direct(f)?
+        }
+        Ok(())
+    }
+
     /// Create a source from stdin using its raw file descriptor.
     ///
     /// This returns an instance of the `Source::StdinFile` variant,
@@ -432,6 +439,19 @@ impl<'a> Read for Input<'a> {
         let mut base_idx = 0;
         let target_len = buf.len();
         loop {
+            if self.settings.iflags.direct {
+                let remaining = target_len - base_idx;
+                if (remaining < self.settings.ibs)
+                    || ((buf.as_ptr() as usize % self.settings.ibs) != 0)
+                {
+                    // when previous read was interrupted (e.g. due to OS signal)
+                    // OR when previous read was short (e.g. due to End of File)
+                    // we need to do a irregular read.
+                    // we can do that by disabling direct read.
+                    self.src.unset_direct()?;
+                }
+            }
+
             match self.src.read(&mut buf[base_idx..]) {
                 Ok(0) => return Ok(base_idx),
                 Ok(rlen) if self.settings.iflags.fullblock => {
@@ -572,16 +592,9 @@ enum Dest {
 
 impl Dest {
     fn unset_direct(&mut self) -> io::Result<()> {
-        match self {
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            Self::File(f, _d) => {
-                let mut mode = OFlag::from_bits_retain(fcntl(f.as_raw_fd(), FcntlArg::F_GETFL)?);
-                mode.remove(OFlag::O_DIRECT);
-                nix::fcntl::fcntl(f.as_raw_fd(), FcntlArg::F_SETFL(mode))?;
-            }
-            _ => {}
+        if let Self::File(f, _d) = self {
+            unset_direct(f)?
         }
-
         Ok(())
     }
 
@@ -682,6 +695,16 @@ impl Dest {
             _ => Ok(0),
         }
     }
+}
+
+fn unset_direct(_f: &mut File) -> io::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let mut mode = OFlag::from_bits_retain(fcntl(_f.as_raw_fd(), FcntlArg::F_GETFL)?);
+        mode.remove(OFlag::O_DIRECT);
+        nix::fcntl::fcntl(_f.as_raw_fd(), FcntlArg::F_SETFL(mode))?;
+    }
+    Ok(())
 }
 
 /// Decide whether the given buffer is all zeros.
