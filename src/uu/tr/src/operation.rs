@@ -122,18 +122,17 @@ impl Sequence {
     }
 
     // Hide all the nasty sh*t in here
-    // TODO: Make the 2 set lazily generate the character mapping as necessary.
     pub fn solve_set_characters(
         set1_str: &[u8],
         set2_str: &[u8],
         truncate_set1_flag: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
         let set1 = Self::from_str(set1_str)?;
-        let set2 = Self::from_str(set2_str)?;
 
         let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
         let set1_star_count = set1.iter().filter(is_char_star).count();
         if set1_star_count == 0 {
+            let set2 = Self::from_str(set2_str)?;
             let set2_star_count = set2.iter().filter(is_char_star).count();
             if set2_star_count < 2 {
                 let char_star = set2.iter().find_map(|s| match s {
