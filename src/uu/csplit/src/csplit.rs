@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-#![crate_name = "uu_csplit"]
 // spell-checker:ignore rustdoc
 #![allow(rustdoc::private_intra_doc_links)]
 
