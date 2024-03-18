@@ -122,7 +122,6 @@ impl Sequence {
     }
 
     // Hide all the nasty sh*t in here
-    // TODO: Make the 2 set lazily generate the character mapping as necessary.
     pub fn solve_set_characters(
         set1_str: &[u8],
         set2_str: &[u8],
