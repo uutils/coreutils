@@ -33,7 +33,19 @@ fn test_fmt_width() {
         new_ucmd!()
             .args(&["one-word-per-line.txt", param, "10"])
             .succeeds()
-            .stdout_is("this is\na file\nwith one\nword per\nline\n");
+            .stdout_is("this is a\nfile with\none word\nper line\n");
+    }
+}
+
+#[test]
+fn test_small_width() {
+    for width in ["0", "1", "2", "3"] {
+        for param in ["-w", "--width"] {
+            new_ucmd!()
+                .args(&[param, width, "one-word-per-line.txt"])
+                .succeeds()
+                .stdout_is("this\nis\na\nfile\nwith\none\nword\nper\nline\n");
+        }
     }
 }
 

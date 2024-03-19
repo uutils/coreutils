@@ -2,7 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-#![crate_name = "uu_csplit"]
 // spell-checker:ignore rustdoc
 #![allow(rustdoc::private_intra_doc_links)]
 
@@ -89,7 +88,7 @@ impl CsplitOptions {
 ///   more than once.
 pub fn csplit<T>(
     options: &CsplitOptions,
-    patterns: Vec<patterns::Pattern>,
+    patterns: Vec<String>,
     input: T,
 ) -> Result<(), CsplitError>
 where
@@ -97,6 +96,7 @@ where
 {
     let mut input_iter = InputSplitter::new(input.lines().enumerate());
     let mut split_writer = SplitWriter::new(options);
+    let patterns: Vec<patterns::Pattern> = patterns::get_patterns(&patterns[..])?;
     let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
 
     // consume the rest
@@ -563,7 +563,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap()
         .map(|s| s.to_string())
         .collect();
-    let patterns = patterns::get_patterns(&patterns[..])?;
     let options = CsplitOptions::new(&matches);
     if file_name == "-" {
         let stdin = io::stdin();

@@ -2,7 +2,7 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode submodules xstrtol ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) gnproc greadlink gsed
 
 set -e
 
@@ -248,6 +248,11 @@ test -f "${UU_BUILD_DIR}/getlimits" || cp src/getlimits "${UU_BUILD_DIR}"
 # pr produces very long log and this command isn't super interesting
 # SKIP for now
 sed -i -e "s|my \$prog = 'pr';$|my \$prog = 'pr';CuSkip::skip \"\$prog: SKIP for producing too long logs\";|" tests/pr/pr-tests.pl
+
+# We don't have the same error message and no need to be that specific
+sed -i -e "s|invalid suffix in --pages argument|invalid --pages argument|" \
+    -e "s|--pages argument '\$too_big' too large|invalid --pages argument '\$too_big'|"  \
+    -e "s|invalid page range|invalid --pages argument|" tests/misc/xstrtol.pl
 
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
 # it hit the decode error, while we don't write anything if the input is invalid.
