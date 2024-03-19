@@ -95,7 +95,8 @@ impl FmtOptions {
                 (w, g)
             }
             (Some(&w), None) => {
-                let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).min(w - 3);
+                // Only allow a goal of zero if the width is set to be zero
+                let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(if w == 0 { 0 } else { 1 });
                 (w, g)
             }
             (None, Some(&g)) => {
@@ -104,6 +105,7 @@ impl FmtOptions {
             }
             (None, None) => (75, 70),
         };
+        debug_assert!(width >= goal, "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}.");
 
         if width > MAX_WIDTH {
             return Err(USimpleError::new(
@@ -331,7 +333,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::GOAL)
                 .short('g')
                 .long("goal")
-                .help("Goal width, default of 93% of WIDTH. Must be less than WIDTH.")
+                .help("Goal width, default of 93% of WIDTH. Must be less than or equal to WIDTH.")
                 .value_name("GOAL")
                 .value_parser(clap::value_parser!(usize)),
         )
