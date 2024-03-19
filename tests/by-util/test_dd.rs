@@ -1729,7 +1729,7 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
         .stderr_contains("standard input: not a directory");
 }
 
-#[cfg(unix)]
+#[test]
 fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
     use std::process::Stdio;
 
