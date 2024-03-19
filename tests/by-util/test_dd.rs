@@ -1716,7 +1716,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1725,7 +1725,8 @@ fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
     new_ucmd!()
         .args(&["iflag=directory", "count=0"])
         .set_stdin(std::process::Stdio::from(File::open(filename).unwrap()))
-        .fails();
+        .fails()
+        .stderr_contains("standard input: not a directory");
 }
 
 #[cfg(unix)]
