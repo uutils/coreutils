@@ -94,6 +94,17 @@ fn test_fmt_goal_too_big() {
 }
 
 #[test]
+fn test_fmt_goal_bigger_than_default_width_of_75() {
+    for param in ["-g", "--goal"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", param, "76"])
+            .fails()
+            .code_is(1)
+            .stderr_is("fmt: GOAL cannot be greater than WIDTH.\n");
+    }
+}
+
+#[test]
 fn test_fmt_invalid_goal() {
     for param in ["-g", "--goal"] {
         new_ucmd!()
