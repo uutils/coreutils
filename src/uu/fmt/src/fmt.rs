@@ -101,6 +101,9 @@ impl FmtOptions {
                 (w, g)
             }
             (None, Some(&g)) => {
+                if g > DEFAULT_WIDTH {
+                    return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
+                }
                 let w = (g * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO).max(g + 3);
                 (w, g)
             }
