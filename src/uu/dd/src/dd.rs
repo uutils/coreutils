@@ -310,6 +310,15 @@ impl<'a> Input<'a> {
         };
         #[cfg(unix)]
         let mut src = Source::stdin_as_file();
+        #[cfg(unix)]
+        if let Source::StdinFile(f) = &src {
+            // GNU compatibility:
+            // this will check whether stdin points to a folder or not
+            if f.metadata()?.is_file() && settings.iflags.directory {
+                show_error!("standard input: not a directory");
+                return Err(1.into());
+            }
+        };
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
