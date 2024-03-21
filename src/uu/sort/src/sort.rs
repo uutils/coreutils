@@ -247,6 +247,7 @@ pub struct Output {
 }
 
 impl Output {
+    #[allow(clippy::suspicious_open_options)]
     fn new(name: Option<&str>) -> UResult<Self> {
         let file = if let Some(name) = name {
             // This is different from `File::create()` because we don't truncate the output yet.
@@ -254,7 +255,6 @@ impl Output {
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)
-                .truncate(true)
                 .open(name)
                 .map_err(|e| SortError::OpenFailed {
                     path: name.to_owned(),
