@@ -54,6 +54,7 @@ struct Options {
     clean_print: bool,
     from_line: usize,
     lines: Option<u16>,
+    pattern: Option<String>,
     print_over: bool,
     silent: bool,
     squeeze: bool,
@@ -75,10 +76,14 @@ impl Options {
             Some(number) if number > 1 => number - 1,
             _ => 0,
         };
+        let pattern = matches
+            .get_one::<String>(options::PATTERN)
+            .map(|s| s.to_owned());
         Self {
             clean_print: matches.get_flag(options::CLEAN_PRINT),
             from_line,
             lines,
+            pattern,
             print_over: matches.get_flag(options::PRINT_OVER),
             silent: matches.get_flag(options::SILENT),
             squeeze: matches.get_flag(options::SQUEEZE),
@@ -207,6 +212,15 @@ pub fn uu_app() -> Command {
                 .hide(true),
         )
         .arg(
+            Arg::new(options::PATTERN)
+                .short('P')
+                .long(options::PATTERN)
+                .allow_hyphen_values(true)
+                .required(false)
+                .value_name("pattern")
+                .help("Display file beginning from pattern match"),
+        )
+        .arg(
             Arg::new(options::FROM_LINE)
                 .short('F')
                 .long(options::FROM_LINE)
@@ -244,14 +258,6 @@ pub fn uu_app() -> Command {
                 .short('l')
                 .long(options::NO_PAUSE)
                 .help("Suppress pause after form feed"),
-        )
-        .arg(
-            Arg::new(options::PATTERN)
-                .short('P')
-                .allow_hyphen_values(true)
-                .required(false)
-                .takes_value(true)
-                .help("Display file beginning from pattern match"),
         )
         */
         .arg(
@@ -306,6 +312,17 @@ fn more(
     let lines = break_buff(buff, usize::from(cols));
 
     let mut pager = Pager::new(rows, lines, next_file, options);
+
+    if options.pattern.is_some() {
+        match search_pattern_in_file(&pager.lines, &options.pattern) {
+            Some(number) => pager.upper_mark = number,
+            None => {
+                execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine))?;
+                stdout.write_all("\rPattern not found\n".as_bytes())?;
+                pager.content_rows -= 1;
+            }
+        }
+    }
 
     if multiple_file {
         execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
@@ -592,6 +609,19 @@ impl<'a> Pager<'a> {
     }
 }
 
+fn search_pattern_in_file(lines: &[String], pattern: &Option<String>) -> Option<usize> {
+    let pattern = pattern.clone().unwrap_or_default();
+    if lines.is_empty() || pattern.is_empty() {
+        return None;
+    }
+    for (line_number, line) in lines.iter().enumerate() {
+        if line.contains(pattern.as_str()) {
+            return Some(line_number);
+        }
+    }
+    None
+}
+
 fn paging_add_back_message(options: &Options, stdout: &mut std::io::Stdout) -> UResult<()> {
     if options.lines.is_some() {
         execute!(stdout, MoveUp(1))?;
@@ -640,7 +670,7 @@ fn break_line(line: &str, cols: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::break_line;
+    use super::{break_line, search_pattern_in_file};
     use unicode_width::UnicodeWidthStr;
 
     #[test]
@@ -687,5 +717,54 @@ mod tests {
 
         // Each 👩🏻‍🔬 is 6 character width it break line to the closest number to 80 => 6 * 13 = 78
         assert_eq!((78, 42), (widths[0], widths[1]));
+    }
+
+    #[test]
+    fn test_search_pattern_empty_lines() {
+        let lines = vec![];
+        let pattern = Some(String::from("pattern"));
+        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
+    }
+
+    #[test]
+    fn test_search_pattern_empty_pattern() {
+        let lines = vec![String::from("line1"), String::from("line2")];
+        let pattern = None;
+        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
+    }
+
+    #[test]
+    fn test_search_pattern_found_pattern() {
+        let lines = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("pattern"),
+        ];
+        let lines2 = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("pattern"),
+            String::from("pattern2"),
+        ];
+        let lines3 = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("other_pattern"),
+        ];
+        let pattern = Some(String::from("pattern"));
+        assert_eq!(2, search_pattern_in_file(&lines, &pattern).unwrap());
+        assert_eq!(2, search_pattern_in_file(&lines2, &pattern).unwrap());
+        assert_eq!(2, search_pattern_in_file(&lines3, &pattern).unwrap());
+    }
+
+    #[test]
+    fn test_search_pattern_not_found_pattern() {
+        let lines = vec![
+            String::from("line1"),
+            String::from("line2"),
+            String::from("something"),
+        ];
+        let pattern = Some(String::from("pattern"));
+        assert_eq!(None, search_pattern_in_file(&lines, &pattern));
     }
 }
