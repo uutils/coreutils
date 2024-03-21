@@ -229,13 +229,6 @@ fn test_hex32() {
         .stdout_is(expected_output);
 }
 
-// This test fails on Android CI on AVD on Ubuntu Github runners.
-// It was never reproducible locally and seems to be very hard to fix.
-// Thats why its disabled for android x86*. See uutils issue #5941.
-#[cfg(not(all(
-    target_os = "android",
-    any(target_arch = "x86", target_arch = "x86_64")
-)))]
 #[test]
 fn test_f16() {
     let input: [u8; 14] = [
