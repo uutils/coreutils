@@ -685,7 +685,7 @@ mod tests {
     fn test_symlink_slash() {
         let temp_dir = tempdir().unwrap();
         let symlink_path = temp_dir.path().join("symlink");
-        unix::fs::symlink(&PathBuf::from("/"), &symlink_path).unwrap();
+        unix::fs::symlink(PathBuf::from("/"), &symlink_path).unwrap();
         let symlink_path_slash = temp_dir.path().join("symlink/");
         // Must return true, we're about to "accidentally" recurse on "/",
         // since "symlink/" always counts as an already-entered directory
@@ -708,7 +708,7 @@ mod tests {
         // This covers both the commandline-argument case and the recursion case.
         let temp_dir = tempdir().unwrap();
         let symlink_path = temp_dir.path().join("symlink");
-        unix::fs::symlink(&PathBuf::from("/"), &symlink_path).unwrap();
+        unix::fs::symlink(PathBuf::from("/"), &symlink_path).unwrap();
         // Only return true  we're about to "accidentally" recurse on "/".
         assert!(!is_root(&symlink_path, false));
         assert!(is_root(&symlink_path, true));
