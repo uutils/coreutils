@@ -254,6 +254,7 @@ impl Output {
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)
+                .truncate(true)
                 .open(name)
                 .map_err(|e| SortError::OpenFailed {
                     path: name.to_owned(),
