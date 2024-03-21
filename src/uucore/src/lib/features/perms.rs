@@ -664,6 +664,7 @@ mod tests {
         assert!(!is_root(&path, true));
     }
 
+    #[allow(clippy::needless_borrow)]
     #[cfg(unix)]
     #[test]
     fn test_literal_root() {
