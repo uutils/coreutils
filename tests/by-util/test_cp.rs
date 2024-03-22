@@ -3306,7 +3306,7 @@ fn test_symbolic_link_file() {
 #[test]
 fn test_src_base_dot() {
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = &ts.fixtures;
     at.mkdir("x");
     at.mkdir("y");
     ts.ucmd()
