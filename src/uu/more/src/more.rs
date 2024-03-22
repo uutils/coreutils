@@ -3,11 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (methods) isnt
-
 use std::{
     fs::File,
-    io::{stdin, stdout, BufReader, IsTerminal, Read, Stdout, Write},
+    io::{stdin, stdout, BufReader, Read, Stdout, Write},
     panic::set_hook,
     path::Path,
     time::Duration,
@@ -159,13 +157,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             buff.clear();
         }
         reset_term(&mut stdout);
-    } else if !std::io::stdin().is_terminal() {
+    } else {
         stdin().read_to_string(&mut buff).unwrap();
+        if buff.is_empty() {
+            return Err(UUsageError::new(1, "bad usage"));
+        }
         let mut stdout = setup_term();
         more(&buff, &mut stdout, false, None, None, &mut options)?;
         reset_term(&mut stdout);
-    } else {
-        return Err(UUsageError::new(1, "bad usage"));
     }
     Ok(())
 }
