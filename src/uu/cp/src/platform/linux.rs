@@ -172,11 +172,10 @@ fn check_for_non_null_element(
 
     if size > 511 {
         let mut current_offset = 512;
-        let _ = f.seek(std::io::SeekFrom::Start(512));
+        let _ = f.seek(std::io::SeekFrom::Start(512))?;
         while current_offset < size {
             let this_read = f.read(&mut buf)?;
             if buf.iter().all(|&x| x == 0x0) {
-                *sparse_val = SparseDebug::SeekHole; //Manually changing for an empty buffer
                 *null_terminated_block_flag = true;
             } else {
                 *null_terminated_block_flag = false;
