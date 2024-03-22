@@ -344,18 +344,7 @@ impl EnvAppData {
             program: vec![],
         };
 
-        // change directory
-        if let Some(d) = opts.running_directory {
-            match env::set_current_dir(d) {
-                Ok(()) => d,
-                Err(error) => {
-                    return Err(USimpleError::new(
-                        125,
-                        format!("cannot change directory to {}: {error}", d.quote()),
-                    ));
-                }
-            };
-        }
+        apply_change_directory(&opts)?;
 
         let mut begin_prog_opts = false;
         if let Some(mut iter) = matches.get_many::<OsString>("vars") {
@@ -492,6 +481,21 @@ impl EnvAppData {
         }
         Ok(())
     }
+}
+
+fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
+    if let Some(d) = opts.running_directory {
+        match env::set_current_dir(d) {
+            Ok(()) => d,
+            Err(error) => {
+                return Err(USimpleError::new(
+                    125,
+                    format!("cannot change directory to {}: {error}", d.quote()),
+                ));
+            }
+        };
+    }
+    Ok(())
 }
 
 fn apply_specified_env_vars(opts: &Options<'_>) {
