@@ -34,6 +34,9 @@ fn test_valid_arg() {
 
         new_ucmd!().arg("-F").arg("10").succeeds();
         new_ucmd!().arg("--from-line").arg("0").succeeds();
+
+        new_ucmd!().arg("-P").arg("something").succeeds();
+        new_ucmd!().arg("--pattern").arg("-1").succeeds();
     }
 }
 
@@ -149,5 +152,52 @@ fn test_more_error_on_multiple_files() {
             .succeeds()
             .stderr_contains("file2")
             .stderr_contains("file3");
+    }
+}
+
+#[test]
+fn test_more_pattern_found() {
+    if std::io::stdout().is_terminal() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let file = "test_file";
+
+        at.write(file, "line1\nline2");
+
+        // output only the second line "line2"
+        scene
+            .ucmd()
+            .arg("-P")
+            .arg("line2")
+            .arg(file)
+            .succeeds()
+            .no_stderr()
+            .stdout_does_not_contain("line1")
+            .stdout_contains("line2");
+    }
+}
+
+#[test]
+fn test_more_pattern_not_found() {
+    if std::io::stdout().is_terminal() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        let file = "test_file";
+
+        let file_content = "line1\nline2";
+        at.write(file, file_content);
+
+        scene
+            .ucmd()
+            .arg("-P")
+            .arg("something")
+            .arg(file)
+            .succeeds()
+            .no_stderr()
+            .stdout_contains("Pattern not found")
+            .stdout_contains("line1")
+            .stdout_contains("line2");
     }
 }

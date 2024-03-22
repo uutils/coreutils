@@ -1716,6 +1716,20 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.make_file("input");
+    let filename = at.plus_as_string("input");
+    new_ucmd!()
+        .args(&["iflag=directory", "count=0"])
+        .set_stdin(std::process::Stdio::from(File::open(filename).unwrap()))
+        .fails()
+        .stderr_contains("standard input: not a directory");
+}
+
+#[test]
 fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
     use std::process::Stdio;
 
