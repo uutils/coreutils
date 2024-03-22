@@ -292,10 +292,12 @@ impl EnvAppData {
         Ok(all_args)
     }
 
-    fn run_env(&mut self, original_args: impl uucore::Args) -> UResult<()> {
+    fn parse_arguments(
+        &mut self,
+        original_args: impl uucore::Args,
+    ) -> Result<(Vec<OsString>, clap::ArgMatches), Box<dyn UError>> {
         let original_args: Vec<OsString> = original_args.collect();
         let args = self.process_all_string_arguments(&original_args)?;
-
         let app = uu_app();
         let matches = app
             .try_get_matches_from(args)
@@ -315,6 +317,11 @@ impl EnvAppData {
                     }
                 }
             })?;
+        Ok((original_args, matches))
+    }
+
+    fn run_env(&mut self, original_args: impl uucore::Args) -> UResult<()> {
+        let (original_args, matches) = self.parse_arguments(original_args)?;
 
         let did_debug_printing_before = self.do_debug_printing; // could have been done already as part of the "-vS" string parsing
         let do_debug_printing = self.do_debug_printing || matches.get_flag("debug");
@@ -322,68 +329,14 @@ impl EnvAppData {
             debug_print_args(&original_args);
         }
 
-        let ignore_env = matches.get_flag("ignore-environment");
-        let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
-        let running_directory = matches.get_one::<OsString>("chdir").map(|s| s.as_os_str());
-        let files = match matches.get_many::<OsString>("file") {
-            Some(v) => v.map(|s| s.as_os_str()).collect(),
-            None => Vec::with_capacity(0),
-        };
-        let unsets = match matches.get_many::<OsString>("unset") {
-            Some(v) => v.map(|s| s.as_os_str()).collect(),
-            None => Vec::with_capacity(0),
-        };
-
-        let mut opts = Options {
-            ignore_env,
-            line_ending,
-            running_directory,
-            files,
-            unsets,
-            sets: vec![],
-            program: vec![],
-        };
+        let mut opts = make_options(&matches)?;
 
         apply_change_directory(&opts)?;
-
-        let mut begin_prog_opts = false;
-        if let Some(mut iter) = matches.get_many::<OsString>("vars") {
-            // read NAME=VALUE arguments (and up to a single program argument)
-            while !begin_prog_opts {
-                if let Some(opt) = iter.next() {
-                    if opt == "-" {
-                        opts.ignore_env = true;
-                    } else {
-                        begin_prog_opts = parse_name_value_opt(&mut opts, opt)?;
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            // read any leftover program arguments
-            for opt in iter {
-                parse_program_opt(&mut opts, opt)?;
-            }
-        }
-
-        // GNU env tests this behavior
-        if opts.program.is_empty() && running_directory.is_some() {
-            return Err(UUsageError::new(
-                125,
-                "must specify command with --chdir (-C)".to_string(),
-            ));
-        }
 
         // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
         //       easily handle the case where no command is given
 
-        // remove all env vars if told to ignore presets
-        if opts.ignore_env {
-            for (ref name, _) in env::vars_os() {
-                env::remove_var(name);
-            }
-        }
+        apply_removal_of_all_env_vars(&opts);
 
         // load .env-style config file prior to those given on the command-line
         load_config_file(&mut opts)?;
@@ -469,6 +422,62 @@ impl EnvAppData {
     }
 }
 
+fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
+    // remove all env vars if told to ignore presets
+    if opts.ignore_env {
+        for (ref name, _) in env::vars_os() {
+            env::remove_var(name);
+        }
+    }
+}
+
+fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
+    let ignore_env = matches.get_flag("ignore-environment");
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag("null"));
+    let running_directory = matches.get_one::<OsString>("chdir").map(|s| s.as_os_str());
+    let files = match matches.get_many::<OsString>("file") {
+        Some(v) => v.map(|s| s.as_os_str()).collect(),
+        None => Vec::with_capacity(0),
+    };
+    let unsets = match matches.get_many::<OsString>("unset") {
+        Some(v) => v.map(|s| s.as_os_str()).collect(),
+        None => Vec::with_capacity(0),
+    };
+
+    let mut opts = Options {
+        ignore_env,
+        line_ending,
+        running_directory,
+        files,
+        unsets,
+        sets: vec![],
+        program: vec![],
+    };
+
+    let mut begin_prog_opts = false;
+    if let Some(mut iter) = matches.get_many::<OsString>("vars") {
+        // read NAME=VALUE arguments (and up to a single program argument)
+        while !begin_prog_opts {
+            if let Some(opt) = iter.next() {
+                if opt == "-" {
+                    opts.ignore_env = true;
+                } else {
+                    begin_prog_opts = parse_name_value_opt(&mut opts, opt)?;
+                }
+            } else {
+                break;
+            }
+        }
+
+        // read any leftover program arguments
+        for opt in iter {
+            parse_program_opt(&mut opts, opt)?;
+        }
+    }
+
+    Ok(opts)
+}
+
 fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     for name in &opts.unsets {
         let native_name = NativeStr::new(name);
@@ -488,6 +497,14 @@ fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
 }
 
 fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
+    // GNU env tests this behavior
+    if opts.program.is_empty() && opts.running_directory.is_some() {
+        return Err(UUsageError::new(
+            125,
+            "must specify command with --chdir (-C)".to_string(),
+        ));
+    }
+
     if let Some(d) = opts.running_directory {
         match env::set_current_dir(d) {
             Ok(()) => d,
