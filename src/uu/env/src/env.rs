@@ -388,21 +388,7 @@ impl EnvAppData {
         // load .env-style config file prior to those given on the command-line
         load_config_file(&mut opts)?;
 
-        // unset specified env vars
-        for name in &opts.unsets {
-            let native_name = NativeStr::new(name);
-            if name.is_empty()
-                || native_name.contains(&'\0').unwrap()
-                || native_name.contains(&'=').unwrap()
-            {
-                return Err(USimpleError::new(
-                    125,
-                    format!("cannot unset {}: Invalid argument", name.quote()),
-                ));
-            }
-
-            env::remove_var(name);
-        }
+        apply_unset_env_vars(&opts)?;
 
         apply_specified_env_vars(&opts);
 
@@ -481,6 +467,24 @@ impl EnvAppData {
         }
         Ok(())
     }
+}
+
+fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
+    for name in &opts.unsets {
+        let native_name = NativeStr::new(name);
+        if name.is_empty()
+            || native_name.contains(&'\0').unwrap()
+            || native_name.contains(&'=').unwrap()
+        {
+            return Err(USimpleError::new(
+                125,
+                format!("cannot unset {}: Invalid argument", name.quote()),
+            ));
+        }
+
+        env::remove_var(name);
+    }
+    Ok(())
 }
 
 fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
