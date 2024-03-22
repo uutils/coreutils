@@ -292,7 +292,6 @@ impl EnvAppData {
         Ok(all_args)
     }
 
-    #[allow(clippy::cognitive_complexity)]
     fn run_env(&mut self, original_args: impl uucore::Args) -> UResult<()> {
         let original_args: Vec<OsString> = original_args.collect();
         let args = self.process_all_string_arguments(&original_args)?;
@@ -416,108 +415,115 @@ impl EnvAppData {
             env::remove_var(name);
         }
 
-        // set specified env vars
-        for (name, val) in &opts.sets {
-            /*
-             * set_var panics if name is an empty string
-             * set_var internally calls setenv (on unix at least), while GNU env calls putenv instead.
-             *
-             * putenv returns successfully if provided with something like "=a" and modifies the environ
-             * variable to contain "=a" inside it, effectively modifying the process' current environment
-             * to contain a malformed string in it. Using GNU's implementation, the command `env =a`
-             * prints out the malformed string and even invokes the child process with that environment.
-             * This can be seen by using `env -i =a env` or `env -i =a cat /proc/self/environ`
-             *
-             * POSIX.1-2017 doesn't seem to mention what to do if the string is malformed (at least
-             * not in "Chapter 8, Environment Variables" or in the definition for environ and various
-             * exec*'s or in the description of env in the "Shell & Utilities" volume).
-             *
-             * It also doesn't specify any checks for putenv before modifying the environ variable, which
-             * is likely why glibc doesn't do so. However, the first set_var argument cannot point to
-             * an empty string or a string containing '='.
-             *
-             * There is no benefit in replicating GNU's env behavior, since it will only modify the
-             * environment in weird ways
-             */
-
-            if name.is_empty() {
-                show_warning!("no name specified for value {}", val.quote());
-                continue;
-            }
-            env::set_var(name, val);
-        }
+        apply_specified_env_vars(&opts);
 
         if opts.program.is_empty() {
             // no program provided, so just dump all env vars to stdout
             print_env(opts.line_ending);
         } else {
-            // we need to execute a command
-            let prog = Cow::from(opts.program[0]);
-            let args = &opts.program[1..];
-
-            if do_debug_printing {
-                eprintln!("executable: {}", prog.quote());
-                for (i, arg) in args.iter().enumerate() {
-                    eprintln!("arg[{}]: {}", i, arg.quote());
-                }
-            }
-
-            /*
-             * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp
-             * (which ends up calling clone). Keep using the current process would be ideal, but the
-             * standard library contains many checks and fail-safes to ensure the process ends up being
-             * created. This is much simpler than dealing with the hassles of calling execvp directly.
-             */
-            match process::Command::new(&*prog).args(args).status() {
-                Ok(exit) if !exit.success() => {
-                    #[cfg(unix)]
-                    if let Some(exit_code) = exit.code() {
-                        return Err(exit_code.into());
-                    } else {
-                        // `exit.code()` returns `None` on Unix when the process is terminated by a signal.
-                        // See std::os::unix::process::ExitStatusExt for more information. This prints out
-                        // the interrupted process and the signal it received.
-                        let signal_code = exit.signal().unwrap();
-                        let signal = Signal::try_from(signal_code).unwrap();
-
-                        // We have to disable any handler that's installed by default.
-                        // This ensures that we exit on this signal.
-                        // For example, `SIGSEGV` and `SIGBUS` have default handlers installed in Rust.
-                        // We ignore the errors because there is not much we can do if that fails anyway.
-                        // SAFETY: The function is unsafe because installing functions is unsafe, but we are
-                        // just defaulting to default behavior and not installing a function. Hence, the call
-                        // is safe.
-                        let _ = unsafe {
-                            sigaction(
-                                signal,
-                                &SigAction::new(
-                                    SigHandler::SigDfl,
-                                    SaFlags::empty(),
-                                    SigSet::all(),
-                                ),
-                            )
-                        };
-
-                        let _ = raise(signal);
-                    }
-                    #[cfg(not(unix))]
-                    return Err(exit.code().unwrap().into());
-                }
-                Err(ref err)
-                    if (err.kind() == io::ErrorKind::NotFound)
-                        || (err.kind() == io::ErrorKind::InvalidInput) =>
-                {
-                    return Err(self.make_error_no_such_file_or_dir(prog.deref()));
-                }
-                Err(e) => {
-                    uucore::show_error!("unknown error: {:?}", e);
-                    return Err(126.into());
-                }
-                Ok(_) => (),
-            }
+            return self.run_program(opts, do_debug_printing);
         }
 
         Ok(())
+    }
+
+    fn run_program(
+        &mut self,
+        opts: Options<'_>,
+        do_debug_printing: bool,
+    ) -> Result<(), Box<dyn UError>> {
+        let prog = Cow::from(opts.program[0]);
+        let args = &opts.program[1..];
+        if do_debug_printing {
+            eprintln!("executable: {}", prog.quote());
+            for (i, arg) in args.iter().enumerate() {
+                eprintln!("arg[{}]: {}", i, arg.quote());
+            }
+        }
+        // we need to execute a command
+
+        /*
+         * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp
+         * (which ends up calling clone). Keep using the current process would be ideal, but the
+         * standard library contains many checks and fail-safes to ensure the process ends up being
+         * created. This is much simpler than dealing with the hassles of calling execvp directly.
+         */
+        match process::Command::new(&*prog).args(args).status() {
+            Ok(exit) if !exit.success() => {
+                #[cfg(unix)]
+                if let Some(exit_code) = exit.code() {
+                    return Err(exit_code.into());
+                } else {
+                    // `exit.code()` returns `None` on Unix when the process is terminated by a signal.
+                    // See std::os::unix::process::ExitStatusExt for more information. This prints out
+                    // the interrupted process and the signal it received.
+                    let signal_code = exit.signal().unwrap();
+                    let signal = Signal::try_from(signal_code).unwrap();
+
+                    // We have to disable any handler that's installed by default.
+                    // This ensures that we exit on this signal.
+                    // For example, `SIGSEGV` and `SIGBUS` have default handlers installed in Rust.
+                    // We ignore the errors because there is not much we can do if that fails anyway.
+                    // SAFETY: The function is unsafe because installing functions is unsafe, but we are
+                    // just defaulting to default behavior and not installing a function. Hence, the call
+                    // is safe.
+                    let _ = unsafe {
+                        sigaction(
+                            signal,
+                            &SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::all()),
+                        )
+                    };
+
+                    let _ = raise(signal);
+                }
+                return Err(exit.code().unwrap().into());
+            }
+            Err(ref err)
+                if (err.kind() == io::ErrorKind::NotFound)
+                    || (err.kind() == io::ErrorKind::InvalidInput) =>
+            {
+                return Err(self.make_error_no_such_file_or_dir(prog.deref()));
+            }
+            Err(e) => {
+                uucore::show_error!("unknown error: {:?}", e);
+                return Err(126.into());
+            }
+            Ok(_) => (),
+        }
+        Ok(())
+    }
+}
+
+fn apply_specified_env_vars(opts: &Options<'_>) {
+    // set specified env vars
+    for (name, val) in &opts.sets {
+        /*
+         * set_var panics if name is an empty string
+         * set_var internally calls setenv (on unix at least), while GNU env calls putenv instead.
+         *
+         * putenv returns successfully if provided with something like "=a" and modifies the environ
+         * variable to contain "=a" inside it, effectively modifying the process' current environment
+         * to contain a malformed string in it. Using GNU's implementation, the command `env =a`
+         * prints out the malformed string and even invokes the child process with that environment.
+         * This can be seen by using `env -i =a env` or `env -i =a cat /proc/self/environ`
+         *
+         * POSIX.1-2017 doesn't seem to mention what to do if the string is malformed (at least
+         * not in "Chapter 8, Environment Variables" or in the definition for environ and various
+         * exec*'s or in the description of env in the "Shell & Utilities" volume).
+         *
+         * It also doesn't specify any checks for putenv before modifying the environ variable, which
+         * is likely why glibc doesn't do so. However, the first set_var argument cannot point to
+         * an empty string or a string containing '='.
+         *
+         * There is no benefit in replicating GNU's env behavior, since it will only modify the
+         * environment in weird ways
+         */
+
+        if name.is_empty() {
+            show_warning!("no name specified for value {}", val.quote());
+            continue;
+        }
+        env::set_var(name, val);
     }
 }
 
