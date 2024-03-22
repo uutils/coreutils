@@ -8,7 +8,6 @@
 
 #![allow(dead_code)]
 
-use chrono::{NaiveDateTime, Utc, DateTime};
 #[cfg(unix)]
 use nix::pty::OpenptyResult;
 use pretty_assertions::assert_eq;
@@ -21,7 +20,7 @@ use std::collections::VecDeque;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
-use std::fs::{self, hard_link, remove_file, File, OpenOptions, FileTimes};
+use std::fs::{self, hard_link, remove_file, File, OpenOptions};
 use std::io::{self, BufWriter, Read, Result, Write};
 #[cfg(unix)]
 use std::os::fd::OwnedFd;
@@ -40,7 +39,7 @@ use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::rc::Rc;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::{sleep, JoinHandle};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use std::{env, hint, mem, thread};
 use tempfile::{Builder, TempDir};
 
@@ -966,27 +965,6 @@ impl AtPath {
         let file = file.as_ref();
         log_info("touch", self.plus_as_string(file));
         File::create(self.plus(file)).unwrap();
-    }
-
-    pub fn touch_with_file_date<P: AsRef<Path>>(&self, file: P, time: &str) {
-        let file = file.as_ref();
-        log_info("touch", self.plus_as_string(file));
-        let file_time = Self::parse_str_time_to_system_time(time);
-        let times = FileTimes::new()
-            .set_accessed(file_time)
-            .set_modified(file_time);
-        File::create(self.plus(file))
-            .unwrap()
-            .set_times(times)
-            .unwrap();
-    }
-
-    fn parse_str_time_to_system_time(time: &str) -> SystemTime {
-        // Parse the time string (YYYYMMDDhhmm) to a DateTime<Utc>
-        let naive_date_time = NaiveDateTime::parse_from_str(time, "%Y%m%d%H%M").unwrap();
-        let date_time: DateTime<Utc> =  DateTime::<Utc>::from_naive_utc_and_offset(naive_date_time,Utc);
-        // Convert the DateTime<Utc> to a SystemTime
-        date_time.into()
     }
 
     #[cfg(not(windows))]

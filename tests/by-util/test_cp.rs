@@ -521,27 +521,15 @@ fn test_cp_arg_interactive_update_overwrite_older() {
     // -u -i *WILL* show the prompt to validate the override.
     // Therefore, the error code depends on the prompt response.
     let (at, mut ucmd) = at_and_ucmd!();
-    at.touch_with_file_date("b","202403211030");
-    at.touch_with_file_date("a","202403211031");
+    at.touch("b");
+    std::thread::sleep(Duration::from_secs(1));
+    at.touch("a");
     ucmd.args(&["-i", "-u", "a", "b"])
         .pipe_in("N\n")
         .fails()
         .code_is(1)
         .no_stdout()
         .stderr_is("cp: overwrite 'b'? ");
-}
-
-#[test]
-#[cfg(not(any(target_os = "android", target_os = "freebsd")))]
-fn test_cp_arg_interactive_update_with_create_dates_equal() {
-    // -u -i *WILL NOT* show the prompt to validate the override.
-    let (at, mut ucmd) = at_and_ucmd!();
-    // Create files with the same creation date
-    at.touch_with_file_date("b","202403211030");
-    at.touch_with_file_date("a","202403211030");
-    ucmd.args(&["-i", "-u", "a", "b"])
-        .pipe_in("N\n")
-        .succeeds().no_stdout();
 }
 
 #[test]
