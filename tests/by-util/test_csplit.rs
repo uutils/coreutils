@@ -1376,3 +1376,39 @@ fn no_such_file() {
         .fails()
         .stderr_contains("cannot access 'in': No such file or directory");
 }
+
+#[test]
+fn repeat_everything() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "numbers50.txt",
+        "--suppress-matched",
+        "--suppress-matched",
+        "-kzsn", // spell-checker:disable-line
+        "2",
+        "-szkn3", // spell-checker:disable-line
+        "-b",
+        "%03d",
+        "-b%03x",
+        "-f",
+        "xxy_",
+        "-fxxz_", // spell-checker:disable-line
+        "/13/",
+        "9",
+        "{5}",
+    ])
+    .fails()
+    .no_stdout()
+    .code_is(1)
+    .stderr_only("csplit: '9': line number out of range on repetition 5\n");
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be some splits created")
+        .count();
+    assert_eq!(count, 6);
+    assert_eq!(at.read("xxz_000"), generate(1, 12 + 1));
+    assert_eq!(at.read("xxz_001"), generate(14, 17 + 1)); // FIXME: GNU starts at 15
+    assert_eq!(at.read("xxz_002"), generate(19, 26 + 1));
+    assert_eq!(at.read("xxz_003"), generate(28, 35 + 1));
+    assert_eq!(at.read("xxz_004"), generate(37, 44 + 1));
+    assert_eq!(at.read("xxz_005"), generate(46, 50 + 1));
+}
