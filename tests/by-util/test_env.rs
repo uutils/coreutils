@@ -445,6 +445,7 @@ macro_rules! compare_with_gnu {
 }
 
 #[test]
+#[allow(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
 fn test_env_with_gnu_reference_parsing_errors() {
     let ts = TestScenario::new(util_name!());
 

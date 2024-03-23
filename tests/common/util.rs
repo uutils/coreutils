@@ -33,7 +33,7 @@ use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 #[cfg(windows)]
-use std::path::MAIN_SEPARATOR;
+use std::path::MAIN_SEPARATOR_STR;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::rc::Rc;
@@ -1016,7 +1016,7 @@ impl AtPath {
 
     pub fn relative_symlink_file(&self, original: &str, link: &str) {
         #[cfg(windows)]
-        let original = original.replace('/', &MAIN_SEPARATOR.to_string());
+        let original = original.replace('/', MAIN_SEPARATOR_STR);
         log_info(
             "symlink",
             format!("{},{}", &original, &self.plus_as_string(link)),
@@ -1038,7 +1038,7 @@ impl AtPath {
 
     pub fn relative_symlink_dir(&self, original: &str, link: &str) {
         #[cfg(windows)]
-        let original = original.replace('/', &MAIN_SEPARATOR.to_string());
+        let original = original.replace('/', MAIN_SEPARATOR_STR);
         log_info(
             "symlink",
             format!("{},{}", &original, &self.plus_as_string(link)),

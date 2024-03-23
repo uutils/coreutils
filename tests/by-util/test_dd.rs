@@ -1641,7 +1641,7 @@ fn test_seek_past_dev() {
 fn test_reading_partial_blocks_from_fifo() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = &ts.fixtures;
     at.mkfifo("fifo");
     let fifoname = at.plus_as_string("fifo");
 
@@ -1682,7 +1682,7 @@ fn test_reading_partial_blocks_from_fifo() {
 fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = ts.fixtures;
     at.mkfifo("fifo");
     let fifoname = at.plus_as_string("fifo");
 

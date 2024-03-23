@@ -660,10 +660,11 @@ mod tests {
         assert_eq!(path.to_str(), Some(""));
         // The main point to test here is that we don't crash.
         // The result should be 'false', to avoid unnecessary and confusing warnings.
-        assert_eq!(false, is_root(&path, false));
-        assert_eq!(false, is_root(&path, true));
+        assert!(!is_root(&path, false));
+        assert!(!is_root(&path, true));
     }
 
+    #[allow(clippy::needless_borrow)]
     #[cfg(unix)]
     #[test]
     fn test_literal_root() {
@@ -675,8 +676,8 @@ mod tests {
             "cfg(unix) but using non-unix path delimiters?!"
         );
         // Must return true, this is the main scenario that --preserve-root shall prevent.
-        assert_eq!(true, is_root(&path, false));
-        assert_eq!(true, is_root(&path, true));
+        assert!(is_root(&path, false));
+        assert!(is_root(&path, true));
     }
 
     #[cfg(unix)]
@@ -684,7 +685,7 @@ mod tests {
     fn test_symlink_slash() {
         let temp_dir = tempdir().unwrap();
         let symlink_path = temp_dir.path().join("symlink");
-        unix::fs::symlink(&PathBuf::from("/"), &symlink_path).unwrap();
+        unix::fs::symlink(PathBuf::from("/"), symlink_path).unwrap();
         let symlink_path_slash = temp_dir.path().join("symlink/");
         // Must return true, we're about to "accidentally" recurse on "/",
         // since "symlink/" always counts as an already-entered directory
@@ -697,8 +698,8 @@ mod tests {
         //   chown: it is dangerous to operate recursively on 'slink-to-root/' (same as '/')
         //   chown: use --no-preserve-root to override this failsafe
         //   [$? = 1]
-        assert_eq!(true, is_root(&symlink_path_slash, false));
-        assert_eq!(true, is_root(&symlink_path_slash, true));
+        assert!(is_root(&symlink_path_slash, false));
+        assert!(is_root(&symlink_path_slash, true));
     }
 
     #[cfg(unix)]
@@ -707,9 +708,9 @@ mod tests {
         // This covers both the commandline-argument case and the recursion case.
         let temp_dir = tempdir().unwrap();
         let symlink_path = temp_dir.path().join("symlink");
-        unix::fs::symlink(&PathBuf::from("/"), &symlink_path).unwrap();
+        unix::fs::symlink(PathBuf::from("/"), &symlink_path).unwrap();
         // Only return true  we're about to "accidentally" recurse on "/".
-        assert_eq!(false, is_root(&symlink_path, false));
-        assert_eq!(true, is_root(&symlink_path, true));
+        assert!(!is_root(&symlink_path, false));
+        assert!(is_root(&symlink_path, true));
     }
 }
