@@ -1016,7 +1016,7 @@ impl AtPath {
 
     pub fn relative_symlink_file(&self, original: &str, link: &str) {
         #[cfg(windows)]
-        let original = original.replace('/', std::path::MAIN_SEPARATOR_STR);
+        let original = original.replace('/', MAIN_SEPARATOR_STR);
         log_info(
             "symlink",
             format!("{},{}", &original, &self.plus_as_string(link)),
@@ -1038,7 +1038,7 @@ impl AtPath {
 
     pub fn relative_symlink_dir(&self, original: &str, link: &str) {
         #[cfg(windows)]
-        let original = original.replace('/', std::path::MAIN_SEPARATOR_STR);
+        let original = original.replace('/', MAIN_SEPARATOR_STR);
         log_info(
             "symlink",
             format!("{},{}", &original, &self.plus_as_string(link)),
