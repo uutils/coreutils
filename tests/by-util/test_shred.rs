@@ -143,3 +143,60 @@ fn test_hex() {
 
     ucmd.arg("--size=0x10").arg(file).succeeds();
 }
+
+#[test]
+fn test_shred_empty() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_shred_remove_a";
+
+    at.touch(file_a);
+
+    // Shred file_a and verify that, as it is empty, it doesn't have "pass 1/3 (random)"
+    scene
+        .ucmd()
+        .arg("-uv")
+        .arg(file_a)
+        .succeeds()
+        .stderr_does_not_contain("1/3 (random)");
+
+    assert!(!at.file_exists(file_a));
+
+    // if the file isn't empty, we should have random
+    at.touch(file_a);
+    at.write(file_a, "1");
+    scene
+        .ucmd()
+        .arg("-uv")
+        .arg(file_a)
+        .succeeds()
+        .stderr_contains("1/3 (random)");
+
+    assert!(!at.file_exists(file_a));
+}
+
+#[test]
+#[cfg(all(unix, feature = "chmod"))]
+fn test_shred_fail_no_perm() {
+    use std::path::Path;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = "dir";
+
+    let file = "test_shred_remove_a";
+
+    let binding = Path::new("dir").join(file);
+    let path = binding.to_str().unwrap();
+    at.mkdir(dir);
+    at.touch(path);
+    scene.ccmd("chmod").arg("a-w").arg(dir).succeeds();
+
+    scene
+        .ucmd()
+        .arg("-uv")
+        .arg(path)
+        .fails()
+        .stderr_contains("Couldn't rename to");
+}
