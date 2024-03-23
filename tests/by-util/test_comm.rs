@@ -108,6 +108,53 @@ fn output_delimiter_hyphen_help() {
 }
 
 #[test]
+fn output_delimiter_multiple_identical() {
+    new_ucmd!()
+        .args(&[
+            "--output-delimiter=word",
+            "--output-delimiter=word",
+            "a",
+            "b",
+        ])
+        .succeeds()
+        .stdout_only_fixture("ab_delimiter_word.expected");
+}
+
+#[test]
+fn output_delimiter_multiple_different() {
+    new_ucmd!()
+        .args(&[
+            "--output-delimiter=word",
+            "--output-delimiter=other",
+            "a",
+            "b",
+        ])
+        .fails()
+        .no_stdout()
+        .stderr_contains("multiple")
+        .stderr_contains("output")
+        .stderr_contains("delimiters");
+}
+
+#[test]
+#[ignore = "This is too weird; deviate intentionally."]
+fn output_delimiter_multiple_different_prevents_help() {
+    new_ucmd!()
+        .args(&[
+            "--output-delimiter=word",
+            "--output-delimiter=other",
+            "--help",
+            "a",
+            "b",
+        ])
+        .fails()
+        .no_stdout()
+        .stderr_contains("multiple")
+        .stderr_contains("output")
+        .stderr_contains("delimiters");
+}
+
+#[test]
 fn output_delimiter_nul() {
     new_ucmd!()
         .args(&["--output-delimiter=", "a", "b"])
