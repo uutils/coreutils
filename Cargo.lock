@@ -380,7 +380,7 @@ checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 
 [[package]]
 name = "coreutils"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "chrono",
  "clap",
