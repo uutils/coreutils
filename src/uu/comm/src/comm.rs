@@ -186,6 +186,7 @@ pub fn uu_app() -> Command {
                 .help("separate columns with STR")
                 .value_name("STR")
                 .default_value(options::DELIMITER_DEFAULT)
+                .allow_hyphen_values(true)
                 .hide_default_value(true),
         )
         .arg(

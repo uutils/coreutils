@@ -92,6 +92,22 @@ fn output_delimiter() {
 }
 
 #[test]
+fn output_delimiter_hyphen_one() {
+    new_ucmd!()
+        .args(&["--output-delimiter", "-1", "a", "b"])
+        .succeeds()
+        .stdout_only_fixture("ab_delimiter_hyphen_one.expected");
+}
+
+#[test]
+fn output_delimiter_hyphen_help() {
+    new_ucmd!()
+        .args(&["--output-delimiter", "--help", "a", "b"])
+        .succeeds()
+        .stdout_only_fixture("ab_delimiter_hyphen_help.expected");
+}
+
+#[test]
 fn output_delimiter_nul() {
     new_ucmd!()
         .args(&["--output-delimiter=", "a", "b"])
