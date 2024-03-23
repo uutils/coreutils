@@ -105,6 +105,7 @@ pub const ALARM_TRIGGER_TIMER: u8 = 1;
 pub const ALARM_TRIGGER_SIGNAL: u8 = 2;
 
 impl Alarm {
+    /// use to construct alarm timer with duration
     pub fn with_interval(interval: Duration) -> Self {
         let trigger = Arc::new(AtomicU8::default());
 
@@ -119,6 +120,11 @@ impl Alarm {
         Self { interval, trigger }
     }
 
+    /// Returns a closure that allows to manually trigger the alarm
+    ///
+    /// This is useful for cases where more than one alarm even source exists
+    /// In case of `dd` there is the SIGUSR1/SIGINFO case where we want to
+    /// trigger an manual progress report.
     pub fn manual_trigger_fn(&self) -> Box<dyn Send + Sync + Fn()> {
         let weak_trigger = Arc::downgrade(&self.trigger);
         Box::new(move || {
@@ -128,10 +134,17 @@ impl Alarm {
         })
     }
 
+    /// Use this function to poll for any pending alarm event
+    ///
+    /// Returns `ALARM_TRIGGER_NONE` for no pending event.
+    /// Returns `ALARM_TRIGGER_TIMER` if the event was triggered by timer
+    /// Returns `ALARM_TRIGGER_SIGNAL` if the event was triggered manually
+    /// by the closure returned from `manual_trigger_fn`
     pub fn get_trigger(&self) -> u8 {
         self.trigger.swap(ALARM_TRIGGER_NONE, Relaxed)
     }
 
+    // Getter function for the configured interval duration
     pub fn get_interval(&self) -> Duration {
         self.interval
     }
@@ -959,6 +972,8 @@ impl<'a> BlockWriter<'a> {
     }
 }
 
+/// depending on the command line arguments, this function
+/// informs the OS to flush/discard the caches for input and/or output file.
 fn flush_caches_full_length(i: &Input, o: &Output) -> std::io::Result<()> {
     // TODO Better error handling for overflowing `len`.
     if i.settings.iflags.nocache {
