@@ -21,6 +21,8 @@ num-traits = { workspace = true }
 rand = { workspace = true }
 smallvec = { workspace = true }
 uucore = { workspace = true }
+num-bigint = { workspace = true }
+num-prime = { workspace = true }
 
 [dev-dependencies]
 quickcheck = "1.0.3"

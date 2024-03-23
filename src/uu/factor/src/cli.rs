@@ -3,20 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore funcs
+
+use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::io::{self, stdin, stdout, Write};
 
-mod factor;
 use clap::{crate_version, Arg, ArgAction, Command};
-pub use factor::*;
+use num_bigint::BigUint;
+use num_traits::FromPrimitive;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult};
 use uucore::{format_usage, help_about, help_usage, show_error, show_warning};
-
-mod miller_rabin;
-pub mod numeric;
-mod rho;
-pub mod table;
 
 const ABOUT: &str = help_about!("factor.md");
 const USAGE: &str = help_usage!("factor.md");
@@ -32,7 +30,7 @@ fn print_factors_str(
     w: &mut io::BufWriter<impl io::Write>,
     print_exponents: bool,
 ) -> io::Result<()> {
-    let x = match num_str.trim().parse::<u64>() {
+    let x = match num_str.trim().parse::<num_bigint::BigUint>() {
         Ok(x) => x,
         Err(e) => {
             // We return Ok() instead of Err(), because it's non-fatal and we should try the next
@@ -43,13 +41,30 @@ fn print_factors_str(
         }
     };
 
+    write!(w, "{x}:")?;
+
+    let factorization = if x > BigUint::from_u32(1).unwrap() {
+        num_prime::nt_funcs::factorize(x.clone())
+    } else {
+        BTreeMap::new()
+    };
+
     // If print_exponents is true, use the alternate format specifier {:#} from fmt to print the factors
     // of x in the form of p^e.
-    if print_exponents {
-        writeln!(w, "{}:{:#}", x, factor(x))?;
-    } else {
-        writeln!(w, "{}:{}", x, factor(x))?;
+    for (factor, n) in factorization {
+        if print_exponents {
+            if n > 1 {
+                write!(w, " {}^{}", factor, n)?;
+            } else {
+                write!(w, " {}", factor)?;
+            }
+        } else {
+            for _i in 0..n {
+                write!(w, " {}", factor)?;
+            }
+        }
     }
+    writeln!(w)?;
     w.flush()
 }
 
