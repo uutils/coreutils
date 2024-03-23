@@ -7,36 +7,46 @@ use std::io::IsTerminal;
 
 #[test]
 fn test_more_no_arg() {
-    // Reading from stdin is now supported, so this must succeed
     if std::io::stdout().is_terminal() {
-        new_ucmd!().succeeds();
+        new_ucmd!().fails().stderr_contains("more: bad usage");
     }
 }
 
 #[test]
 fn test_valid_arg() {
     if std::io::stdout().is_terminal() {
-        new_ucmd!().arg("-c").succeeds();
-        new_ucmd!().arg("--print-over").succeeds();
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
 
-        new_ucmd!().arg("-p").succeeds();
-        new_ucmd!().arg("--clean-print").succeeds();
+        let file = "test_file";
+        at.touch(file);
 
-        new_ucmd!().arg("-s").succeeds();
-        new_ucmd!().arg("--squeeze").succeeds();
+        scene.ucmd().arg(file).arg("-c").succeeds();
+        scene.ucmd().arg(file).arg("--print-over").succeeds();
 
-        new_ucmd!().arg("-u").succeeds();
-        new_ucmd!().arg("--plain").succeeds();
+        scene.ucmd().arg(file).arg("-p").succeeds();
+        scene.ucmd().arg(file).arg("--clean-print").succeeds();
 
-        new_ucmd!().arg("-n").arg("10").succeeds();
-        new_ucmd!().arg("--lines").arg("0").succeeds();
-        new_ucmd!().arg("--number").arg("0").succeeds();
+        scene.ucmd().arg(file).arg("-s").succeeds();
+        scene.ucmd().arg(file).arg("--squeeze").succeeds();
 
-        new_ucmd!().arg("-F").arg("10").succeeds();
-        new_ucmd!().arg("--from-line").arg("0").succeeds();
+        scene.ucmd().arg(file).arg("-u").succeeds();
+        scene.ucmd().arg(file).arg("--plain").succeeds();
 
-        new_ucmd!().arg("-P").arg("something").succeeds();
-        new_ucmd!().arg("--pattern").arg("-1").succeeds();
+        scene.ucmd().arg(file).arg("-n").arg("10").succeeds();
+        scene.ucmd().arg(file).arg("--lines").arg("0").succeeds();
+        scene.ucmd().arg(file).arg("--number").arg("0").succeeds();
+
+        scene.ucmd().arg(file).arg("-F").arg("10").succeeds();
+        scene
+            .ucmd()
+            .arg(file)
+            .arg("--from-line")
+            .arg("0")
+            .succeeds();
+
+        scene.ucmd().arg(file).arg("-P").arg("something").succeeds();
+        scene.ucmd().arg(file).arg("--pattern").arg("-1").succeeds();
     }
 }
 

@@ -5,7 +5,9 @@
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
 
 use crate::common::util::{AtPath, TestScenario};
-use filetime::{set_symlink_file_times, FileTime};
+#[cfg(not(target_os = "freebsd"))]
+use filetime::set_symlink_file_times;
+use filetime::FileTime;
 use std::fs::remove_file;
 use std::path::PathBuf;
 

@@ -97,7 +97,7 @@ mod tests {
 
         // test that we don't look for closing square brackets unnecessarily
         // Verifies issue #5584
-        let chars = std::iter::repeat("^[").take(174571).collect::<String>();
+        let chars = "^[".repeat(174571);
         assert_eq!(fix_negation(chars.as_str()), chars);
     }
 

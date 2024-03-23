@@ -397,7 +397,7 @@ fn test_base64_multiple_files() {
         .arg("alice_in_wonderland.txt")
         .succeeds()
         .no_stderr()
-        .stdout_is_fixture_bytes(format!("base64/md5_multiple_files.expected"));
+        .stdout_is_fixture_bytes("base64/md5_multiple_files.expected");
 }
 
 #[test]
