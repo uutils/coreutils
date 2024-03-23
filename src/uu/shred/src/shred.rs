@@ -460,10 +460,11 @@ fn wipe_file(
                 pass_sequence[i * (n_passes - 1) / (n_random - 1)] = PassType::Random;
             }
         }
-    }
-    // --zero specifies whether we want one final pass of 0x00 on our file
-    if zero {
-        pass_sequence.push(PassType::Pattern(PATTERNS[0]));
+
+        // --zero specifies whether we want one final pass of 0x00 on our file
+        if zero {
+            pass_sequence.push(PassType::Pattern(PATTERNS[0]));
+        }
     }
 
     let total_passes = pass_sequence.len();
