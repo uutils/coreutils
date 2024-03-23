@@ -23,6 +23,7 @@ pub enum DecodeError {
     Io(#[from] io::Error),
 }
 
+#[derive(Debug)]
 pub enum EncodeError {
     Z85InputLenNotMultipleOf4,
     InvalidInput,

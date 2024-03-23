@@ -15,6 +15,7 @@ use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
 use uucore::{
+    encoding,
     error::{FromIo, UError, UResult, USimpleError},
     format_usage, help_about, help_section, help_usage, show,
     sum::{
@@ -42,6 +43,13 @@ const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 #[derive(Debug)]
 enum CkSumError {
     RawMultipleFiles,
+}
+
+#[derive(Debug, PartialEq)]
+enum OutputFormat {
+    Hexadecimal,
+    Raw,
+    Base64,
 }
 
 impl UError for CkSumError {
@@ -138,7 +146,7 @@ struct Options {
     output_bits: usize,
     untagged: bool,
     length: Option<usize>,
-    raw: bool,
+    output_format: OutputFormat,
 }
 
 /// Calculate checksum
@@ -153,7 +161,7 @@ where
     I: Iterator<Item = &'a OsStr>,
 {
     let files: Vec<_> = files.collect();
-    if options.raw && files.len() > 1 {
+    if options.output_format == OutputFormat::Raw && files.len() > 1 {
         return Err(Box::new(CkSumError::RawMultipleFiles));
     }
 
@@ -177,7 +185,7 @@ where
             };
             Box::new(file_buf) as Box<dyn Read>
         });
-        let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
+        let (sum_hex, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
         if filename.is_dir() {
             show!(USimpleError::new(
@@ -186,17 +194,25 @@ where
             ));
             continue;
         }
-        if options.raw {
-            let bytes = match options.algo_name {
-                ALGORITHM_OPTIONS_CRC => sum.parse::<u32>().unwrap().to_be_bytes().to_vec(),
-                ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => {
-                    sum.parse::<u16>().unwrap().to_be_bytes().to_vec()
-                }
-                _ => decode(sum).unwrap(),
-            };
-            stdout().write_all(&bytes)?;
-            return Ok(());
-        }
+        let sum = match options.output_format {
+            OutputFormat::Raw => {
+                let bytes = match options.algo_name {
+                    ALGORITHM_OPTIONS_CRC => sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec(),
+                    ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => {
+                        sum_hex.parse::<u16>().unwrap().to_be_bytes().to_vec()
+                    }
+                    _ => decode(sum_hex).unwrap(),
+                };
+                // Cannot handle multiple files anyway, output immediately.
+                stdout().write_all(&bytes)?;
+                return Ok(());
+            }
+            OutputFormat::Hexadecimal => sum_hex,
+            OutputFormat::Base64 => match options.algo_name {
+                ALGORITHM_OPTIONS_CRC | ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => sum_hex,
+                _ => encoding::encode(encoding::Format::Base64, &decode(sum_hex).unwrap()).unwrap(),
+            },
+        };
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
         match (options.algo_name, not_file) {
@@ -286,8 +302,10 @@ mod options {
     pub const ALGORITHM: &str = "algorithm";
     pub const FILE: &str = "file";
     pub const UNTAGGED: &str = "untagged";
+    pub const TAG: &str = "tag";
     pub const LENGTH: &str = "length";
     pub const RAW: &str = "raw";
+    pub const BASE64: &str = "base64";
 }
 
 #[uucore::main]
@@ -342,13 +360,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (name, algo, bits) = detect_algo(algo_name, length);
 
+    let output_format = if matches.get_flag(options::RAW) {
+        OutputFormat::Raw
+    } else if matches.get_flag(options::BASE64) {
+        OutputFormat::Base64
+    } else {
+        OutputFormat::Hexadecimal
+    };
+
     let opts = Options {
         algo_name: name,
         digest: algo,
         output_bits: bits,
         length,
         untagged: matches.get_flag(options::UNTAGGED),
-        raw: matches.get_flag(options::RAW),
+        output_format,
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -365,6 +391,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
@@ -395,6 +422,13 @@ pub fn uu_app() -> Command {
             Arg::new(options::UNTAGGED)
                 .long(options::UNTAGGED)
                 .help("create a reversed style checksum, without digest type")
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TAG),
+        )
+        .arg(
+            Arg::new(options::TAG)
+                .long(options::TAG)
+                .help("create a BSD style checksum, undo --untagged (default)")
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -410,6 +444,15 @@ pub fn uu_app() -> Command {
             .long(options::RAW)
             .help("emit a raw binary digest, not hexadecimal")
             .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::BASE64)
+            .long(options::BASE64)
+            .help("emit a base64 digest, not hexadecimal")
+            .action(ArgAction::SetTrue)
+            // Even though this could easily just override an earlier '--raw',
+            // GNU cksum does not permit these flags to be combined:
+            .conflicts_with(options::RAW),
         )
         .after_help(AFTER_HELP)
 }

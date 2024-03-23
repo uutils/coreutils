@@ -21,6 +21,10 @@ mod parasplit;
 const ABOUT: &str = help_about!("fmt.md");
 const USAGE: &str = help_usage!("fmt.md");
 const MAX_WIDTH: usize = 2500;
+const DEFAULT_GOAL: usize = 70;
+const DEFAULT_WIDTH: usize = 75;
+// by default, goal is 93% of width
+const DEFAULT_GOAL_TO_WIDTH_RATIO: usize = 93;
 
 mod options {
     pub const CROWN_MARGIN: &str = "crown-margin";
@@ -38,9 +42,6 @@ mod options {
     pub const TAB_WIDTH: &str = "tab-width";
     pub const FILES: &str = "files";
 }
-
-// by default, goal is 93% of width
-const DEFAULT_GOAL_TO_WIDTH_RATIO: usize = 93;
 
 pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;
 pub struct FmtOptions {
@@ -95,15 +96,20 @@ impl FmtOptions {
                 (w, g)
             }
             (Some(&w), None) => {
-                let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).min(w - 3);
+                // Only allow a goal of zero if the width is set to be zero
+                let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(if w == 0 { 0 } else { 1 });
                 (w, g)
             }
             (None, Some(&g)) => {
+                if g > DEFAULT_WIDTH {
+                    return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
+                }
                 let w = (g * 100 / DEFAULT_GOAL_TO_WIDTH_RATIO).max(g + 3);
                 (w, g)
             }
-            (None, None) => (75, 70),
+            (None, None) => (DEFAULT_WIDTH, DEFAULT_GOAL),
         };
+        debug_assert!(width >= goal, "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}.");
 
         if width > MAX_WIDTH {
             return Err(USimpleError::new(
@@ -331,7 +337,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::GOAL)
                 .short('g')
                 .long("goal")
-                .help("Goal width, default of 93% of WIDTH. Must be less than WIDTH.")
+                .help("Goal width, default of 93% of WIDTH. Must be less than or equal to WIDTH.")
                 .value_name("GOAL")
                 .value_parser(clap::value_parser!(usize)),
         )

@@ -994,6 +994,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x5846_5342 => "xfs".into(),
         0x012F_D16D => "xia".into(),
         0x2FC1_2FC1 => "zfs".into(),
+        0xDE => "zfs".into(),
         other => format!("UNKNOWN ({other:#x})").into(),
     }
     // spell-checker:enable

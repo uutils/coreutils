@@ -1359,3 +1359,20 @@ fn precision_format() {
         assert_eq!(at.read("xx 0x001"), generate(10, 51));
     }
 }
+
+#[test]
+fn zero_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("in");
+    ucmd.args(&["in", "0"])
+        .fails()
+        .stderr_contains("0: line number must be greater");
+}
+
+#[test]
+fn no_such_file() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["in", "0"])
+        .fails()
+        .stderr_contains("cannot access 'in': No such file or directory");
+}

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput
+// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput, SETFL
 
 mod blocks;
 mod bufferedoutput;
@@ -16,8 +16,13 @@ mod progress;
 use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
 use datastructures::*;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::fcntl::FcntlArg::F_SETFL;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
+use uucore::io::OwnedFileDescriptorOrHandle;
 
 use std::cmp;
 use std::env;
@@ -31,6 +36,8 @@ use std::os::unix::{
     fs::FileTypeExt,
     io::{AsRawFd, FromRawFd},
 };
+#[cfg(windows)]
+use std::os::windows::{fs::MetadataExt, io::AsHandle};
 use std::path::Path;
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
@@ -227,7 +234,7 @@ impl Source {
                     Err(e) => Err(e),
                 }
             }
-            Self::File(f) => f.seek(io::SeekFrom::Start(n)),
+            Self::File(f) => f.seek(io::SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
             Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
         }
@@ -283,9 +290,35 @@ impl<'a> Input<'a> {
     /// Instantiate this struct with stdin as a source.
     fn new_stdin(settings: &'a Settings) -> UResult<Self> {
         #[cfg(not(unix))]
-        let mut src = Source::Stdin(io::stdin());
+        let mut src = {
+            let f = File::from(io::stdin().as_handle().try_clone_to_owned()?);
+            let is_file = if let Ok(metadata) = f.metadata() {
+                // this hack is needed as there is no other way on windows
+                // to differentiate between the case where `seek` works
+                // on a file handle or not. i.e. when the handle is no real
+                // file but a pipe, `seek` is still successful, but following
+                // `read`s are not affected by the seek.
+                metadata.creation_time() != 0
+            } else {
+                false
+            };
+            if is_file {
+                Source::File(f)
+            } else {
+                Source::Stdin(io::stdin())
+            }
+        };
         #[cfg(unix)]
         let mut src = Source::stdin_as_file();
+        #[cfg(unix)]
+        if let Source::StdinFile(f) = &src {
+            // GNU compatibility:
+            // this will check whether stdin points to a folder or not
+            if f.metadata()?.is_file() && settings.iflags.directory {
+                show_error!("standard input: not a directory");
+                return Err(1.into());
+            }
+        };
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
@@ -557,7 +590,7 @@ impl Dest {
                         return Ok(len);
                     }
                 }
-                f.seek(io::SeekFrom::Start(n))
+                f.seek(io::SeekFrom::Current(n.try_into().unwrap()))
             }
             #[cfg(unix)]
             Self::Fifo(f) => {
@@ -699,6 +732,11 @@ impl<'a> Output<'a> {
         if !settings.oconv.notrunc {
             dst.set_len(settings.seek).ok();
         }
+
+        Self::prepare_file(dst, settings)
+    }
+
+    fn prepare_file(dst: File, settings: &'a Settings) -> UResult<Self> {
         let density = if settings.oconv.sparse {
             Density::Sparse
         } else {
@@ -708,6 +746,24 @@ impl<'a> Output<'a> {
         dst.seek(settings.seek)
             .map_err_context(|| "failed to seek in output file".to_string())?;
         Ok(Self { dst, settings })
+    }
+
+    /// Instantiate this struct with file descriptor as a destination.
+    ///
+    /// This is useful e.g. for the case when the file descriptor was
+    /// already opened by the system (stdout) and has a state
+    /// (current position) that shall be used.
+    fn new_file_from_stdout(settings: &'a Settings) -> UResult<Self> {
+        let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
+            nix::fcntl::fcntl(
+                fx.as_raw().as_raw_fd(),
+                F_SETFL(OFlag::from_bits_retain(libc_flags)),
+            )?;
+        }
+
+        Self::prepare_file(fx.into_file(), settings)
     }
 
     /// Instantiate this struct with the given named pipe as a destination.
@@ -1287,9 +1343,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(unix)]
         Some(ref outfile) if is_fifo(outfile) => Output::new_fifo(Path::new(&outfile), &settings)?,
         Some(ref outfile) => Output::new_file(Path::new(&outfile), &settings)?,
-        None if is_stdout_redirected_to_seekable_file() => {
-            Output::new_file(Path::new(&stdout_canonicalized()), &settings)?
-        }
+        None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
     };
     dd_copy(i, o).map_err_context(|| "IO error".to_string())

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # spell-checker:ignore debuginfo
 import subprocess
 from itertools import product

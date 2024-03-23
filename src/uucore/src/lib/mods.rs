@@ -6,6 +6,7 @@
 
 pub mod display;
 pub mod error;
+pub mod io;
 pub mod line_ending;
 pub mod os;
 pub mod panic;

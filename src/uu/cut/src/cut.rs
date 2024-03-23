@@ -347,11 +347,9 @@ fn cut_files(mut filenames: Vec<String>, mode: &Mode) {
     }
 }
 
-// This is temporary helper function to convert OsString to &[u8] for unix targets only
-// TODO Remove this function and re-implement the functionality in each place that calls it
-// for all targets using https://doc.rust-lang.org/nightly/std/ffi/struct.OsStr.html#method.as_encoded_bytes
-// once project's MSRV is bumped up to 1.74.0+ so that function becomes available
-// For now - support unix targets only and on non-unix (i.e. Windows) will just return an error if delimiter value is not UTF-8
+// Helper function for processing delimiter values (which could be non UTF-8)
+// It converts OsString to &[u8] for unix targets only
+// On non-unix (i.e. Windows) it will just return an error if delimiter value is not UTF-8
 fn os_string_as_bytes(os_string: &OsString) -> UResult<&[u8]> {
     #[cfg(unix)]
     let bytes = os_string.as_bytes();
@@ -372,12 +370,10 @@ fn os_string_as_bytes(os_string: &OsString) -> UResult<&[u8]> {
 
 // Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
 // Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
-fn get_delimiters<'a>(
-    matches: &'a ArgMatches,
+fn get_delimiters(
+    matches: &ArgMatches,
     delimiter_is_equal: bool,
-    os_string_equals: &'a OsString,
-    os_string_nul: &'a OsString,
-) -> UResult<(Delimiter<'a>, Option<&'a [u8]>)> {
+) -> UResult<(Delimiter, Option<&[u8]>)> {
     let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
     let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
     let delim = match delim_opt {
@@ -387,29 +383,29 @@ fn get_delimiters<'a>(
                 "invalid input: Only one of --delimiter (-d) or -w option can be specified",
             ));
         }
-        Some(mut os_string) => {
+        Some(os_string) => {
             // GNU's `cut` supports `-d=` to set the delimiter to `=`.
             // Clap parsing is limited in this situation, see:
             // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-            // rewrite the delimiter value os_string before further processing
             if delimiter_is_equal {
-                os_string = os_string_equals;
+                Delimiter::Slice(b"=")
             } else if os_string == "''" || os_string.is_empty() {
                 // treat `''` as empty delimiter
-                os_string = os_string_nul;
-            }
-            // For delimiter `-d` option value - allow both UTF-8 (possibly multi-byte) characters
-            // and Non UTF-8 (and not ASCII) single byte "characters", like `b"\xAD"` to align with GNU behavior
-            let bytes = os_string_as_bytes(os_string)?;
-            if os_string.to_str().is_some_and(|s| s.chars().count() > 1)
-                || os_string.to_str().is_none() && bytes.len() > 1
-            {
-                return Err(USimpleError::new(
-                    1,
-                    "the delimiter must be a single character",
-                ));
+                Delimiter::Slice(b"\0")
             } else {
-                Delimiter::from(os_string)
+                // For delimiter `-d` option value - allow both UTF-8 (possibly multi-byte) characters
+                // and Non UTF-8 (and not ASCII) single byte "characters", like `b"\xAD"` to align with GNU behavior
+                let bytes = os_string_as_bytes(os_string)?;
+                if os_string.to_str().is_some_and(|s| s.chars().count() > 1)
+                    || os_string.to_str().is_none() && bytes.len() > 1
+                {
+                    return Err(USimpleError::new(
+                        1,
+                        "the delimiter must be a single character",
+                    ));
+                } else {
+                    Delimiter::from(os_string)
+                }
             }
         }
         None => match whitespace_delimited {
@@ -421,7 +417,7 @@ fn get_delimiters<'a>(
         .get_one::<OsString>(options::OUTPUT_DELIMITER)
         .map(|os_string| {
             if os_string.is_empty() || os_string == "''" {
-                "\0".as_bytes()
+                b"\0"
             } else {
                 os_string_as_bytes(os_string).unwrap()
             }
@@ -452,17 +448,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let complement = matches.get_flag(options::COMPLEMENT);
     let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
 
-    // since OsString::from creates a new value and it does not by default have 'static lifetime like &str
-    // we need to create these values here and pass them down to avoid issues with borrow checker and temporary values
-    let os_string_equals = OsString::from("=");
-    let os_string_nul = OsString::from("\0");
-
-    let (delimiter, out_delimiter) = get_delimiters(
-        &matches,
-        delimiter_is_equal,
-        &os_string_equals,
-        &os_string_nul,
-    )?;
+    let (delimiter, out_delimiter) = get_delimiters(&matches, delimiter_is_equal)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
 
     // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
