@@ -247,11 +247,11 @@ pub struct Output {
 }
 
 impl Output {
-    #[allow(clippy::suspicious_open_options)]
     fn new(name: Option<&str>) -> UResult<Self> {
         let file = if let Some(name) = name {
             // This is different from `File::create()` because we don't truncate the output yet.
             // This allows using the output file as an input file.
+            #[allow(clippy::suspicious_open_options)]
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)
