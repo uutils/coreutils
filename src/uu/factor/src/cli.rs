@@ -13,7 +13,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UResult};
+use uucore::error::{set_exit_code, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show_error, show_warning};
 
 const ABOUT: &str = help_about!("factor.md");
@@ -29,7 +29,7 @@ fn print_factors_str(
     num_str: &str,
     w: &mut io::BufWriter<impl io::Write>,
     print_exponents: bool,
-) -> io::Result<()> {
+) -> UResult<()> {
     let x = match num_str.trim().parse::<num_bigint::BigUint>() {
         Ok(x) => x,
         Err(e) => {
@@ -43,11 +43,18 @@ fn print_factors_str(
 
     write!(w, "{x}:")?;
 
-    let factorization = if x > BigUint::from_u32(1).unwrap() {
-        num_prime::nt_funcs::factorize(x.clone())
+    let (factorization, remaining) = if x > BigUint::from_u32(1).unwrap() {
+        num_prime::nt_funcs::factors(x.clone(), None)
     } else {
-        BTreeMap::new()
+        (BTreeMap::new(), None)
     };
+
+    if let Some(_remaining) = remaining {
+        return Err(USimpleError::new(
+            1,
+            "Factorization incomplete. Remainders exists.",
+        ));
+    }
 
     // If print_exponents is true, use the alternate format specifier {:#} from fmt to print the factors
     // of x in the form of p^e.
@@ -65,7 +72,8 @@ fn print_factors_str(
         }
     }
     writeln!(w)?;
-    w.flush()
+    w.flush()?;
+    Ok(())
 }
 
 #[uucore::main]
@@ -81,8 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(values) = matches.get_many::<String>(options::NUMBER) {
         for number in values {
-            print_factors_str(number, &mut w, print_exponents)
-                .map_err_context(|| "write error".into())?;
+            print_factors_str(number, &mut w, print_exponents)?;
         }
     } else {
         let stdin = stdin();
@@ -91,8 +98,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             match line {
                 Ok(line) => {
                     for number in line.split_whitespace() {
-                        print_factors_str(number, &mut w, print_exponents)
-                            .map_err_context(|| "write error".into())?;
+                        print_factors_str(number, &mut w, print_exponents)?;
                     }
                 }
                 Err(e) => {
