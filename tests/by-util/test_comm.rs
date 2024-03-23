@@ -76,6 +76,14 @@ fn total_with_suppressed_regular_output() {
 }
 
 #[test]
+fn repeated_flags() {
+    new_ucmd!()
+        .args(&["--total", "-123123", "--total", "a", "b"])
+        .succeeds()
+        .stdout_is_fixture("ab_total_suppressed_regular_output.expected");
+}
+
+#[test]
 fn total_with_output_delimiter() {
     new_ucmd!()
         .args(&["--total", "--output-delimiter=word", "a", "b"])
