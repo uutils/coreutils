@@ -61,7 +61,6 @@ mod format {
 }
 
 struct Flags {
-    have_source: bool,
     update_only_atime: bool,
     update_only_mtime: bool,
     no_create: bool,
@@ -94,14 +93,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         )
     })?;
 
+    // Ideally, we would like to parse the date string in such a way that we still know whether it is logically "now".
+    // However, that would require re-implementing a lot of logic from scratch.
+    // Instead, we measure the time immediately before and after the times are computed, and use that to make an educated guess.
+    // TODO: Rewrite *all* the date-parsing logic.
+    let time_before_now = FileTime::now();
     let (atime, mtime) = determine_times(&matches)?;
+    let time_after_now = FileTime::now();
 
     let time = matches
         .get_one::<String>(options::TIME)
         .map(|s| s.as_str())
         .unwrap_or("");
     let flags = Flags {
-        have_source: matches.contains_id(options::SOURCES),
         update_only_atime: matches.get_flag(options::ACCESS)
             || time.contains(&"access".to_owned())
             || time.contains(&"atime".to_owned())
@@ -112,6 +116,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         no_create: matches.get_flag(options::NO_CREATE),
         no_deref: matches.get_flag(options::NO_DEREF),
     };
+
+    let time_is_now = (flags.update_only_atime == flags.update_only_mtime)
+        && (time_before_now <= atime)
+        && (atime <= time_after_now)
+        && (time_before_now <= mtime)
+        && (mtime <= time_after_now);
 
     for filename in files {
         // FIXME: find a way to avoid having to clone the path
@@ -154,8 +164,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 continue;
             };
 
-            // Minor optimization: if no reference time was specified, we're done.
-            if !flags.have_source {
+            // Minor optimization: if the new atime/mtime is just "now", we're already done.
+            if time_is_now {
                 continue;
             }
         }
