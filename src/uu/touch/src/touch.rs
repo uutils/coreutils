@@ -60,6 +60,14 @@ mod format {
     pub(crate) const YYYYMMDDHHMM_OFFSET: &str = "%Y-%m-%d %H:%M %z";
 }
 
+struct Flags {
+    have_source: bool,
+    update_only_atime: bool,
+    update_only_mtime: bool,
+    no_create: bool,
+    no_deref: bool,
+}
+
 /// Convert a DateTime with a TZ offset into a FileTime
 ///
 /// The DateTime is converted into a unix timestamp from which the FileTime is
@@ -88,6 +96,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (atime, mtime) = determine_times(&matches)?;
 
+    let time = matches
+        .get_one::<String>(options::TIME)
+        .map(|s| s.as_str())
+        .unwrap_or("");
+    let flags = Flags {
+        have_source: matches.contains_id(options::SOURCES),
+        update_only_atime: matches.get_flag(options::ACCESS)
+            || time.contains(&"access".to_owned())
+            || time.contains(&"atime".to_owned())
+            || time.contains(&"use".to_owned()),
+        update_only_mtime: matches.get_flag(options::MODIFICATION)
+            || time.contains(&"modify".to_owned())
+            || time.contains(&"mtime".to_owned()),
+        no_create: matches.get_flag(options::NO_CREATE),
+        no_deref: matches.get_flag(options::NO_DEREF),
+    };
+
     for filename in files {
         // FIXME: find a way to avoid having to clone the path
         let pathbuf = if filename == "-" {
@@ -98,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let path = pathbuf.as_path();
 
-        let metadata_result = if matches.get_flag(options::NO_DEREF) {
+        let metadata_result = if flags.no_deref {
             path.symlink_metadata()
         } else {
             path.metadata()
@@ -109,11 +134,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
             }
 
-            if matches.get_flag(options::NO_CREATE) {
+            if flags.no_create {
                 continue;
             }
 
-            if matches.get_flag(options::NO_DEREF) {
+            if flags.no_deref {
                 show!(USimpleError::new(
                     1,
                     format!(
@@ -130,12 +155,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             };
 
             // Minor optimization: if no reference time was specified, we're done.
-            if !matches.contains_id(options::SOURCES) {
+            if !flags.have_source {
                 continue;
             }
         }
 
-        update_times(&matches, path, atime, mtime, filename)?;
+        update_times(&flags, path, atime, mtime, filename)?;
     }
     Ok(())
 }
@@ -273,36 +298,20 @@ fn determine_times(matches: &ArgMatches) -> UResult<(FileTime, FileTime)> {
 
 // Updating file access and modification times based on user-specified options
 fn update_times(
-    matches: &ArgMatches,
+    flags: &Flags,
     path: &Path,
     mut atime: FileTime,
     mut mtime: FileTime,
     filename: &OsString,
 ) -> UResult<()> {
     // If changing "only" atime or mtime, grab the existing value of the other.
-    // Note that "-a" and "-m" may be passed together; this is not an xor.
-    if matches.get_flag(options::ACCESS)
-        || matches.get_flag(options::MODIFICATION)
-        || matches.contains_id(options::TIME)
-    {
-        let st = stat(path, !matches.get_flag(options::NO_DEREF))?;
-        let time = matches
-            .get_one::<String>(options::TIME)
-            .map(|s| s.as_str())
-            .unwrap_or("");
-
-        if !(matches.get_flag(options::ACCESS)
-            || time.contains(&"access".to_owned())
-            || time.contains(&"atime".to_owned())
-            || time.contains(&"use".to_owned()))
-        {
+    // Note that "-a" and "-m" may be passed together. In that case, change both.
+    if flags.update_only_atime ^ flags.update_only_mtime {
+        let st = stat(path, !flags.no_deref)?;
+        if !flags.update_only_atime {
             atime = st.0;
         }
-
-        if !(matches.get_flag(options::MODIFICATION)
-            || time.contains(&"modify".to_owned())
-            || time.contains(&"mtime".to_owned()))
-        {
+        if !flags.update_only_mtime {
             mtime = st.1;
         }
     }
@@ -315,7 +324,7 @@ fn update_times(
     // set the times for a symbolic link itself, rather than the file it points to.
     if filename == "-" {
         filetime::set_file_times(path, atime, mtime)
-    } else if matches.get_flag(options::NO_DEREF) {
+    } else if flags.no_deref {
         set_symlink_file_times(path, atime, mtime)
     } else {
         set_file_times(path, atime, mtime)
