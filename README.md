@@ -51,11 +51,10 @@ that scripts can be easily transferred between platforms.
 <div class="oranda-hide">
 
 ## Documentation
-
 uutils has both user and developer documentation available:
 
 - [User Manual](https://uutils.github.io/coreutils/book/)
-- [Developer Documentation](https://uutils.github.io/dev/coreutils/) (currently offline, you can use docs.rs in the meantime)
+- [Developer Documentation](https://docs.rs/crate/coreutils/)
 
 Both can also be generated locally, the instructions for that can be found in
 the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.

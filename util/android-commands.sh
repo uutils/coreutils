@@ -371,7 +371,6 @@ run_command_via_ssh() {
 
 test_ssh_connection() {
     run_command_via_ssh echo ssh connection is working
-    run_command_via_ssh free -mh
 }
 
 # takes a local (on runner side) script file and runs it via ssh on the virtual android device. forwards return code.
@@ -509,7 +508,7 @@ snapshot() {
 
     apt_upgrade_all_packages
 
-    install_packages_via_ssh_using_apt "rust binutils openssl tar"
+    install_packages_via_ssh_using_apt "rust binutils openssl tar mount-utils"
 
     echo "Read /proc/cpuinfo"
     run_command_via_ssh "cat /proc/cpuinfo"
@@ -573,8 +572,7 @@ build() {
 
     reinit_ssh_connection
 
-    echo "Read /proc/cpuinfo"
-    run_command_via_ssh "cat /proc/cpuinfo"
+    run_script_file_via_ssh "$this_repo/util/android-scripts/collect-info.sh"
 
     command="export CARGO_TERM_COLOR=always;
              export CARGO_INCREMENTAL=0; \
@@ -589,8 +587,7 @@ tests() {
 
     reinit_ssh_connection
 
-    echo "Read /proc/cpuinfo"
-    run_command_via_ssh "cat /proc/cpuinfo"
+    run_script_file_via_ssh "$this_repo/util/android-scripts/collect-info.sh"
 
     run_script_file_via_ssh "$this_repo/util/android-scripts/run-tests.sh" || return
 

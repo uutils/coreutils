@@ -365,6 +365,7 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
         .or_else(|| {
             if let Some(size) = size_str_opt {
                 show_error!("invalid file size: {}", size.quote());
+                // TODO: replace with our error management
                 std::process::exit(1);
             }
             None
@@ -406,9 +407,10 @@ fn wipe_file(
         ));
     }
 
+    let metadata = fs::metadata(path).map_err_context(String::new)?;
+
     // If force is true, set file permissions to not-readonly.
     if force {
-        let metadata = fs::metadata(path).map_err_context(String::new)?;
         let mut perms = metadata.permissions();
         #[cfg(unix)]
         #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
@@ -428,38 +430,41 @@ fn wipe_file(
 
     // Fill up our pass sequence
     let mut pass_sequence = Vec::new();
+    if metadata.len() != 0 {
+        // Only add passes if the file is non-empty
 
-    if n_passes <= 3 {
-        // Only random passes if n_passes <= 3
-        for _ in 0..n_passes {
-            pass_sequence.push(PassType::Random);
-        }
-    } else {
-        // First fill it with Patterns, shuffle it, then evenly distribute Random
-        let n_full_arrays = n_passes / PATTERNS.len(); // How many times can we go through all the patterns?
-        let remainder = n_passes % PATTERNS.len(); // How many do we get through on our last time through?
+        if n_passes <= 3 {
+            // Only random passes if n_passes <= 3
+            for _ in 0..n_passes {
+                pass_sequence.push(PassType::Random);
+            }
+        } else {
+            // First fill it with Patterns, shuffle it, then evenly distribute Random
+            let n_full_arrays = n_passes / PATTERNS.len(); // How many times can we go through all the patterns?
+            let remainder = n_passes % PATTERNS.len(); // How many do we get through on our last time through?
 
-        for _ in 0..n_full_arrays {
-            for p in PATTERNS {
-                pass_sequence.push(PassType::Pattern(p));
+            for _ in 0..n_full_arrays {
+                for p in PATTERNS {
+                    pass_sequence.push(PassType::Pattern(p));
+                }
+            }
+            for pattern in PATTERNS.into_iter().take(remainder) {
+                pass_sequence.push(PassType::Pattern(pattern));
+            }
+            let mut rng = rand::thread_rng();
+            pass_sequence.shuffle(&mut rng); // randomize the order of application
+
+            let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
+                                              // Evenly space random passes; ensures one at the beginning and end
+            for i in 0..n_random {
+                pass_sequence[i * (n_passes - 1) / (n_random - 1)] = PassType::Random;
             }
         }
-        for pattern in PATTERNS.into_iter().take(remainder) {
-            pass_sequence.push(PassType::Pattern(pattern));
-        }
-        let mut rng = rand::thread_rng();
-        pass_sequence.shuffle(&mut rng); // randomize the order of application
 
-        let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
-                                          // Evenly space random passes; ensures one at the beginning and end
-        for i in 0..n_random {
-            pass_sequence[i * (n_passes - 1) / (n_random - 1)] = PassType::Random;
+        // --zero specifies whether we want one final pass of 0x00 on our file
+        if zero {
+            pass_sequence.push(PassType::Pattern(PATTERNS[0]));
         }
-    }
-
-    // --zero specifies whether we want one final pass of 0x00 on our file
-    if zero {
-        pass_sequence.push(PassType::Pattern(PATTERNS[0]));
     }
 
     let total_passes = pass_sequence.len();
@@ -471,29 +476,19 @@ fn wipe_file(
 
     let size = match size {
         Some(size) => size,
-        None => get_file_size(path)?,
+        None => metadata.len(),
     };
 
     for (i, pass_type) in pass_sequence.into_iter().enumerate() {
         if verbose {
             let pass_name = pass_name(&pass_type);
-            if total_passes < 10 {
-                show_error!(
-                    "{}: pass {}/{} ({})...",
-                    path.maybe_quote(),
-                    i + 1,
-                    total_passes,
-                    pass_name
-                );
-            } else {
-                show_error!(
-                    "{}: pass {:2.0}/{:2.0} ({})...",
-                    path.maybe_quote(),
-                    i + 1,
-                    total_passes,
-                    pass_name
-                );
-            }
+            show_error!(
+                "{}: pass {:2}/{} ({})...",
+                path.maybe_quote(),
+                i + 1,
+                total_passes,
+                pass_name
+            );
         }
         // size is an optional argument for exactly how many bytes we want to shred
         // Ignore failed writes; just keep trying
@@ -537,10 +532,6 @@ fn do_pass(
     file.sync_data()?;
 
     Ok(())
-}
-
-fn get_file_size(path: &Path) -> Result<u64, io::Error> {
-    Ok(fs::metadata(path)?.len())
 }
 
 // Repeatedly renames the file with strings of decreasing length (most likely all 0s)
@@ -589,7 +580,8 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Op
                         new_path.quote(),
                         e
                     );
-                    return None;
+                    // TODO: replace with our error management
+                    std::process::exit(1);
                 }
             }
         }
