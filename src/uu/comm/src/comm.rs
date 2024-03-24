@@ -160,7 +160,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // Note: This intentionally deviate from the GNU error message by inserting the word "conflicting".
             return Err(USimpleError::new(
                 1,
-                "comm: multiple conflicting output delimiters specified",
+                "multiple conflicting output delimiters specified",
             ));
         }
     }
