@@ -572,6 +572,30 @@ fn test_mv_simple_backup() {
 }
 
 #[test]
+fn test_mv_simple_backup_for_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "test_mv_simple_backup_dir_a";
+    let dir_b = "test_mv_simple_backup_dir_b";
+
+    at.mkdir(dir_a);
+    at.mkdir(dir_b);
+    at.touch(format!("{dir_a}/file_a"));
+    at.touch(format!("{dir_b}/file_b"));
+    ucmd.arg("-T")
+        .arg("-b")
+        .arg(dir_a)
+        .arg(dir_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+    assert!(at.dir_exists(&format!("{dir_b}~")));
+    assert!(at.file_exists(format!("{dir_b}/file_a")));
+    assert!(at.file_exists(format!("{dir_b}~/file_b")));
+}
+
+#[test]
 fn test_mv_simple_backup_with_file_extension() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_simple_backup_file_a.txt";
