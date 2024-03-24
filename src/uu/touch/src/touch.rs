@@ -12,7 +12,7 @@ use chrono::{
 };
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{set_file_times, set_symlink_file_times, FileTime};
+use filetime::{set_file_times, set_file_times_now, set_symlink_file_times, FileTime};
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -170,7 +170,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
 
-        update_times(&flags, path, atime, mtime, filename)?;
+        update_times(&flags, path, atime, mtime, time_is_now, filename)?;
     }
     Ok(())
 }
@@ -312,6 +312,7 @@ fn update_times(
     path: &Path,
     mut atime: FileTime,
     mut mtime: FileTime,
+    time_is_now: bool,
     filename: &OsString,
 ) -> UResult<()> {
     // If changing "only" atime or mtime, grab the existing value of the other.
@@ -332,12 +333,19 @@ fn update_times(
     // If the filename is not "-", indicating a special case for touch -h -,
     // the code checks if the NO_DEREF flag is set, which means the user wants to
     // set the times for a symbolic link itself, rather than the file it points to.
-    if filename == "-" {
-        filetime::set_file_times(path, atime, mtime)
-    } else if flags.no_deref {
-        set_symlink_file_times(path, atime, mtime)
+    if flags.no_deref && filename != "-" {
+        if time_is_now {
+            set_file_times_now(path, false)
+        } else {
+            set_symlink_file_times(path, atime, mtime)
+        }
     } else {
-        set_file_times(path, atime, mtime)
+        #[allow(clippy::collapsible_else_if)]
+        if time_is_now {
+            set_file_times_now(path, true)
+        } else {
+            set_file_times(path, atime, mtime)
+        }
     }
     .map_err_context(|| format!("setting times of {}", path.quote()))
 }

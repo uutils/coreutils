@@ -3,13 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms datetime mktime
+// spell-checker:ignore (jargon) openat userspace utimensat
 
 use crate::common::util::{AtPath, TestScenario};
 #[cfg(not(target_os = "freebsd"))]
 use filetime::set_symlink_file_times;
 use filetime::FileTime;
-use std::fs::remove_file;
-use std::path::PathBuf;
+use std::fs::{remove_file, File};
+use std::path::{Path, PathBuf};
 
 fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     let m = at.metadata(path);
@@ -712,6 +713,9 @@ fn test_touch_changes_time_of_file_in_stdout() {
     at.touch(file);
     assert!(at.file_exists(file));
     let (_, mtime) = get_file_times(&at, file);
+    // Discourage any kernel-side coalescing of mtime-events?
+    // TODO: Find out why exactly sleeping is necessary here
+    std::thread::sleep(std::time::Duration::from_millis(100));
 
     ucmd.args(&["-"])
         .set_stdout(at.make_file(file))
@@ -895,4 +899,143 @@ fn test_touch_reference_symlink_with_no_deref() {
         .succeeds();
     // Times should be taken from the symlink, not the destination
     assert_eq!((time, time), get_symlink_times(&at, arg));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_writable_root_common_assumptions() {
+    // All "test_touch_writable_root_*" tests make some common assumptions.
+    // Abuse `AtPath` to test these.
+    let at = AtPath::new(Path::new("/"));
+    // "something" exists there:
+    at.metadata("/dev/null");
+    // /dev/stderr is usually owned by root, but writable by everyone:
+    assert!(at.symlink_exists("/dev/stderr"));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_writable_root() {
+    new_ucmd!().arg("/dev/null").succeeds().no_output();
+    new_ucmd!()
+        .arg("-am")
+        .arg("/dev/null")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_writable_root_symlink() {
+    new_ucmd!().arg("/dev/stderr").succeeds().no_output();
+    new_ucmd!()
+        .arg("-am")
+        .arg("/dev/stderr")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_writable_root_trivial_no_deref() {
+    new_ucmd!()
+        .arg("-h")
+        .arg("/dev/null")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .arg("-ham")
+        .arg("/dev/null")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_writable_root_only_half_fails() {
+    // TODO: Skip if running tests as root
+    new_ucmd!()
+        .arg("-a")
+        .arg("/dev/null")
+        .fails()
+        .no_stdout()
+        .stderr_only("touch: setting times of '/dev/null': Permission denied\n");
+    new_ucmd!()
+        .arg("-m")
+        .arg("/dev/null")
+        .fails()
+        .no_stdout()
+        .stderr_only("touch: setting times of '/dev/null': Permission denied\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_writable_root_via_stdout() {
+    // "touch - 1< /dev/null", like in test_touch_changes_time_of_file_in_stdout
+    new_ucmd!()
+        .arg("-")
+        .set_stdout(File::open("/dev/null").unwrap())
+        .succeeds()
+        .no_stderr();
+    new_ucmd!()
+        .arg("-am")
+        .arg("-")
+        .set_stdout(File::open("/dev/null").unwrap())
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_writable_root_d_now() {
+    // Note: This particular use-case is the goal.
+    new_ucmd!()
+        .arg("-d")
+        .arg("now")
+        .arg("/dev/null")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .arg("-am")
+        .arg("-d")
+        .arg("now")
+        .arg("/dev/null")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_writable_root_d_now_whitespace() {
+    new_ucmd!()
+        .arg("-d")
+        .arg(" \n\t\r now  \n\t\r ")
+        .arg("/dev/null")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .arg("-am")
+        .arg("-d")
+        .arg(" \n\t\r now  \n\t\r ")
+        .arg("/dev/null")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_writable_root_d_now_indirect() {
+    new_ucmd!()
+        .arg("-d")
+        .arg("+2weeks -15days +24hours")
+        .arg("/dev/null")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .arg("-am")
+        .arg("-d")
+        .arg("+2weeks -15days +24hours")
+        .arg("/dev/null")
+        .succeeds()
+        .no_output();
 }
