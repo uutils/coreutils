@@ -13,7 +13,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 use uucore::display::Quotable;
-use uucore::error::{set_exit_code, UResult, USimpleError};
+use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
 use uucore::{format_usage, help_about, help_usage, show_error, show_warning};
 
 const ABOUT: &str = help_about!("factor.md");
@@ -41,8 +41,6 @@ fn print_factors_str(
         }
     };
 
-    write!(w, "{x}:")?;
-
     let (factorization, remaining) = if x > BigUint::from_u32(1).unwrap() {
         num_prime::nt_funcs::factors(x.clone(), None)
     } else {
@@ -56,8 +54,18 @@ fn print_factors_str(
         ));
     }
 
-    // If print_exponents is true, use the alternate format specifier {:#} from fmt to print the factors
-    // of x in the form of p^e.
+    write_result(w, x, factorization, print_exponents).map_err_context(|| "write error".into())?;
+
+    Ok(())
+}
+
+fn write_result(
+    w: &mut io::BufWriter<impl Write>,
+    x: BigUint,
+    factorization: BTreeMap<BigUint, usize>,
+    print_exponents: bool,
+) -> io::Result<()> {
+    write!(w, "{x}:")?;
     for (factor, n) in factorization {
         if print_exponents {
             if n > 1 {
@@ -72,8 +80,7 @@ fn print_factors_str(
         }
     }
     writeln!(w)?;
-    w.flush()?;
-    Ok(())
+    w.flush()
 }
 
 #[uucore::main]

@@ -32,4 +32,4 @@ name = "factor"
 path = "src/main.rs"
 
 [lib]
-path = "src/cli.rs"
+path = "src/factor.rs"
