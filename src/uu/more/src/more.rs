@@ -5,7 +5,7 @@
 
 use std::{
     fs::File,
-    io::{stdin, stdout, BufReader, Read, Stdout, Write},
+    io::{stdin, stdout, BufReader, IsTerminal, Read, Stdout, Write},
     panic::set_hook,
     path::Path,
     time::Duration,
@@ -158,10 +158,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         reset_term(&mut stdout);
     } else {
-        stdin().read_to_string(&mut buff).unwrap();
-        if buff.is_empty() {
+        if stdin().is_terminal() {
             return Err(UUsageError::new(1, "bad usage"));
         }
+        stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
         more(&buff, &mut stdout, false, None, None, &mut options)?;
         reset_term(&mut stdout);
