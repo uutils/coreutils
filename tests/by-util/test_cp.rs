@@ -274,19 +274,6 @@ fn test_cp_target_directory_is_file() {
         .stderr_contains(format!("'{TEST_HOW_ARE_YOU_SOURCE}' is not a directory"));
 }
 
-#[test]
-// FixMe: for FreeBSD, flaky test; track repair progress at GH:uutils/coreutils/issue/4725
-#[cfg(not(target_os = "freebsd"))]
-fn test_cp_arg_update_interactive() {
-    new_ucmd!()
-        .arg(TEST_HELLO_WORLD_SOURCE)
-        .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .arg("-i")
-        .arg("--update")
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
-}
 
 #[test]
 fn test_cp_arg_update_interactive_error() {
@@ -520,6 +507,7 @@ fn test_cp_arg_interactive_update_overwrite_newer() {
 fn test_cp_arg_interactive_update_overwrite_older() {
     // -u -i *WILL* show the prompt to validate the override.
     // Therefore, the error code depends on the prompt response.
+    // Option N
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b");
     std::thread::sleep(Duration::from_secs(1));
@@ -530,6 +518,16 @@ fn test_cp_arg_interactive_update_overwrite_older() {
         .code_is(1)
         .no_stdout()
         .stderr_is("cp: overwrite 'b'? ");
+    
+    // Option Y
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("b");
+    std::thread::sleep(Duration::from_secs(1));
+    at.touch("a");
+    ucmd.args(&["-i", "-u", "a", "b"])
+        .pipe_in("Y\n")
+        .succeeds()
+        .no_stdout();
 }
 
 #[test]
