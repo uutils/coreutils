@@ -21,6 +21,7 @@ use nix::fcntl::FcntlArg::F_SETFL;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::OFlag;
 use parseargs::Parser;
+use progress::ProgUpdateType;
 use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
 use uucore::io::OwnedFileDescriptorOrHandle;
 
@@ -39,10 +40,8 @@ use std::os::unix::{
 #[cfg(windows)]
 use std::os::windows::{fs::MetadataExt, io::AsHandle};
 use std::path::Path;
-use std::sync::{
-    atomic::{AtomicBool, Ordering::Relaxed},
-    mpsc, Arc,
-};
+use std::sync::atomic::AtomicU8;
+use std::sync::{atomic::Ordering::Relaxed, mpsc, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -87,38 +86,65 @@ struct Settings {
 
 /// A timer which triggers on a given interval
 ///
-/// After being constructed with [`Alarm::with_interval`], [`Alarm::is_triggered`]
-/// will return true once per the given [`Duration`].
+/// After being constructed with [`Alarm::with_interval`], [`Alarm::get_trigger`]
+/// will return [`ALARM_TRIGGER_TIMER`] once per the given [`Duration`].
+/// Alarm can be manually triggered with closure returned by [`Alarm::manual_trigger_fn`].
+/// [`Alarm::get_trigger`] will return [`ALARM_TRIGGER_SIGNAL`] in this case.
 ///
 /// Can be cloned, but the trigger status is shared across all instances so only
 /// the first caller each interval will yield true.
 ///
 /// When all instances are dropped the background thread will exit on the next interval.
-#[derive(Debug, Clone)]
 pub struct Alarm {
     interval: Duration,
-    trigger: Arc<AtomicBool>,
+    trigger: Arc<AtomicU8>,
 }
 
+pub const ALARM_TRIGGER_NONE: u8 = 0;
+pub const ALARM_TRIGGER_TIMER: u8 = 1;
+pub const ALARM_TRIGGER_SIGNAL: u8 = 2;
+
 impl Alarm {
+    /// use to construct alarm timer with duration
     pub fn with_interval(interval: Duration) -> Self {
-        let trigger = Arc::new(AtomicBool::default());
+        let trigger = Arc::new(AtomicU8::default());
 
         let weak_trigger = Arc::downgrade(&trigger);
         thread::spawn(move || {
             while let Some(trigger) = weak_trigger.upgrade() {
                 thread::sleep(interval);
-                trigger.store(true, Relaxed);
+                trigger.store(ALARM_TRIGGER_TIMER, Relaxed);
             }
         });
 
         Self { interval, trigger }
     }
 
-    pub fn is_triggered(&self) -> bool {
-        self.trigger.swap(false, Relaxed)
+    /// Returns a closure that allows to manually trigger the alarm
+    ///
+    /// This is useful for cases where more than one alarm even source exists
+    /// In case of `dd` there is the SIGUSR1/SIGINFO case where we want to
+    /// trigger an manual progress report.
+    pub fn manual_trigger_fn(&self) -> Box<dyn Send + Sync + Fn()> {
+        let weak_trigger = Arc::downgrade(&self.trigger);
+        Box::new(move || {
+            if let Some(trigger) = weak_trigger.upgrade() {
+                trigger.store(ALARM_TRIGGER_SIGNAL, Relaxed);
+            }
+        })
     }
 
+    /// Use this function to poll for any pending alarm event
+    ///
+    /// Returns `ALARM_TRIGGER_NONE` for no pending event.
+    /// Returns `ALARM_TRIGGER_TIMER` if the event was triggered by timer
+    /// Returns `ALARM_TRIGGER_SIGNAL` if the event was triggered manually
+    /// by the closure returned from `manual_trigger_fn`
+    pub fn get_trigger(&self) -> u8 {
+        self.trigger.swap(ALARM_TRIGGER_NONE, Relaxed)
+    }
+
+    // Getter function for the configured interval duration
     pub fn get_interval(&self) -> Duration {
         self.interval
     }
@@ -818,6 +844,30 @@ impl<'a> Output<'a> {
         }
     }
 
+    /// writes a block of data. optionally retries when first try didn't complete
+    ///
+    /// this is needed by gnu-test: tests/dd/stats.s
+    /// the write can be interrupted by a system signal.
+    /// e.g. SIGUSR1 which is send to report status
+    /// without retry, the data might not be fully written to destination.
+    fn write_block(&mut self, chunk: &[u8]) -> io::Result<usize> {
+        let full_len = chunk.len();
+        let mut base_idx = 0;
+        loop {
+            match self.dst.write(&chunk[base_idx..]) {
+                Ok(wlen) => {
+                    base_idx += wlen;
+                    // take iflags.fullblock as oflags shall not have this option
+                    if (base_idx >= full_len) || !self.settings.iflags.fullblock {
+                        return Ok(base_idx);
+                    }
+                }
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
     /// Write the given bytes one block at a time.
     ///
     /// This may write partial blocks (for example, if the underlying
@@ -831,7 +881,7 @@ impl<'a> Output<'a> {
         let mut bytes_total = 0;
 
         for chunk in buf.chunks(self.settings.obs) {
-            let wlen = self.dst.write(chunk)?;
+            let wlen = self.write_block(chunk)?;
             if wlen < self.settings.obs {
                 writes_partial += 1;
             } else {
@@ -922,6 +972,29 @@ impl<'a> BlockWriter<'a> {
     }
 }
 
+/// depending on the command line arguments, this function
+/// informs the OS to flush/discard the caches for input and/or output file.
+fn flush_caches_full_length(i: &Input, o: &Output) -> std::io::Result<()> {
+    // TODO Better error handling for overflowing `len`.
+    if i.settings.iflags.nocache {
+        let offset = 0;
+        #[allow(clippy::useless_conversion)]
+        let len = i.src.len()?.try_into().unwrap();
+        i.discard_cache(offset, len);
+    }
+    // Similarly, discard the system cache for the output file.
+    //
+    // TODO Better error handling for overflowing `len`.
+    if i.settings.oflags.nocache {
+        let offset = 0;
+        #[allow(clippy::useless_conversion)]
+        let len = o.dst.len()?.try_into().unwrap();
+        o.discard_cache(offset, len);
+    }
+
+    Ok(())
+}
+
 /// Copy the given input data to this output, consuming both.
 ///
 /// This method contains the main loop for the `dd` program. Bytes
@@ -981,22 +1054,7 @@ fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
         // requests that we inform the system that we no longer
         // need the contents of the input file in a system cache.
         //
-        // TODO Better error handling for overflowing `len`.
-        if i.settings.iflags.nocache {
-            let offset = 0;
-            #[allow(clippy::useless_conversion)]
-            let len = i.src.len()?.try_into().unwrap();
-            i.discard_cache(offset, len);
-        }
-        // Similarly, discard the system cache for the output file.
-        //
-        // TODO Better error handling for overflowing `len`.
-        if i.settings.oflags.nocache {
-            let offset = 0;
-            #[allow(clippy::useless_conversion)]
-            let len = o.dst.len()?.try_into().unwrap();
-            o.discard_cache(offset, len);
-        }
+        flush_caches_full_length(&i, &o)?;
         return finalize(
             BlockWriter::Unbuffered(o),
             rstat,
@@ -1017,6 +1075,18 @@ fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
     //
     // This avoids the need to query the OS monotonic clock for every block.
     let alarm = Alarm::with_interval(Duration::from_secs(1));
+
+    // The signal handler spawns an own thread that waits for signals.
+    // When the signal is received, it calls a handler function.
+    // We inject a handler function that manually triggers the alarm.
+    #[cfg(target_os = "linux")]
+    let signal_handler = progress::SignalHandler::install_signal_handler(alarm.manual_trigger_fn());
+    #[cfg(target_os = "linux")]
+    if let Err(e) = &signal_handler {
+        if Some(StatusLevel::None) != i.settings.status {
+            eprintln!("Internal dd Warning: Unable to register signal handler \n\t{e}");
+        }
+    }
 
     // Index in the input file where we are reading bytes and in
     // the output file where we are writing bytes.
@@ -1086,11 +1156,20 @@ fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
         // error.
         rstat += rstat_update;
         wstat += wstat_update;
-        if alarm.is_triggered() {
-            let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), false);
-            prog_tx.send(prog_update).unwrap_or(());
+        match alarm.get_trigger() {
+            ALARM_TRIGGER_NONE => {}
+            t @ ALARM_TRIGGER_TIMER | t @ ALARM_TRIGGER_SIGNAL => {
+                let tp = match t {
+                    ALARM_TRIGGER_TIMER => ProgUpdateType::Periodic,
+                    _ => ProgUpdateType::Signal,
+                };
+                let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
+                prog_tx.send(prog_update).unwrap_or(());
+            }
+            _ => {}
         }
     }
+
     finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)
 }
 
@@ -1118,12 +1197,13 @@ fn finalize<T>(
 
     // Print the final read/write statistics.
     let wstat = wstat + wstat_update;
-    let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), true);
+    let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), ProgUpdateType::Final);
     prog_tx.send(prog_update).unwrap_or(());
     // Wait for the output thread to finish
     output_thread
         .join()
         .expect("Failed to join with the output thread.");
+
     Ok(())
 }
 
