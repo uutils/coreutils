@@ -1041,8 +1041,13 @@ fn test_ls_long_format() {
     }
 
     // This checks for the line with the .. entry. The uname and group should be digits.
+    #[cfg(not(target_os = "macos"))]
     scene.ucmd().arg("-lan").arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
         r"\nd([r-][w-][xt-]){3}\.? +\d+ \d+ +\d+( +\d+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ \.\."
+    ).unwrap());
+    #[cfg(target_os = "macos")]
+    scene.ucmd().arg("-lan").arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
+        r"\nd([r-][w-][xt-]){3}@\.? +\d+ \d+ +\d+( +\d+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ \.\."
     ).unwrap());
 }
 
@@ -1347,27 +1352,45 @@ fn test_ls_long_formats() {
     // Zero or one "." for indicating a file with security context
 
     // Regex for three names, so all of author, group and owner
+    #[cfg(not(target_os = "macos"))]
+    let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
+    #[cfg(target_os = "macos")]
     let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){3}0").unwrap();
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let re_three_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){3}0").unwrap();
+    #[cfg(target_os = "macos")]
     let re_three_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){3}0").unwrap();
 
     // Regex for two names, either:
     // - group and owner
     // - author and owner
     // - author and group
+    #[cfg(not(target_os = "macos"))]
+    let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
+    #[cfg(target_os = "macos")]
     let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z.A-Z]+ ){2}0").unwrap();
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let re_two_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){2}0").unwrap();
+    #[cfg(target_os = "macos")]
     let re_two_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){2}0").unwrap();
 
     // Regex for one name: author, group or owner
+    #[cfg(not(target_os = "macos"))]
+    let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z.A-Z]+ 0").unwrap();
+    #[cfg(target_os = "macos")]
     let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z.A-Z]+ 0").unwrap();
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let re_one_num = Regex::new(r"[xrw-]{9}\.? \d \d+ 0").unwrap();
+    #[cfg(target_os = "macos")]
     let re_one_num = Regex::new(r"[xrw-]{9}\.? \d \d+ 0").unwrap();
 
     // Regex for no names
+    #[cfg(not(target_os = "macos"))]
+    let re_zero = Regex::new(r"[xrw-]{9}\.? \d 0").unwrap();
+    #[cfg(target_os = "macos")]
     let re_zero = Regex::new(r"[xrw-]{9}\.? \d 0").unwrap();
 
     scene
@@ -2086,6 +2109,9 @@ fn test_ls_inode() {
     at.touch(file);
 
     let re_short = Regex::new(r" *(\d+) test_inode").unwrap();
+    #[cfg(not(target_os = "macos"))]
+    let re_long = Regex::new(r" *(\d+) [xrw-]{10}\.? \d .+ test_inode").unwrap();
+    #[cfg(target_os = "macos")]
     let re_long = Regex::new(r" *(\d+) [xrw-]{10}\.? \d .+ test_inode").unwrap();
 
     let result = scene.ucmd().arg("test_inode").arg("-i").succeeds();
@@ -2100,6 +2126,17 @@ fn test_ls_inode() {
     let result = scene.ucmd().arg("test_inode").succeeds();
     assert!(!re_short.is_match(result.stdout_str()));
     assert!(!result.stdout_str().contains(inode_short));
+    use std::process::Command;
+
+    let mut binding = Command::new("ls");
+    let c = binding.args(["-li", "test_inode"]);
+    let output = c.output().expect("Failed to execute command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("stdout apple: {}", stdout);
+    println!("stderr apple: {}", stderr);
 
     let result = scene.ucmd().arg("-li").arg("test_inode").succeeds();
     assert!(re_long.is_match(result.stdout_str()));
@@ -4320,8 +4357,8 @@ fn test_term_colorterm() {
     );
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
+#[cfg(unix)]
 fn test_acl_display() {
     use std::process::Command;
 
@@ -4333,6 +4370,17 @@ fn test_acl_display() {
     let path = at.plus_as_string(path);
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
+    let mut binding = Command::new("ls");
+    let c = binding.args(["-ald", &path]);
+    let output = c.output().expect("Failed to execute command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("stdout: {}", stdout);
+    println!("stderr: {}", stderr);
+
+    #[cfg(not(target_os = "macos"))]
     match Command::new("setfacl")
         .args(["-d", "-m", "group::rwx", &path])
         .status()
@@ -4348,10 +4396,43 @@ fn test_acl_display() {
             return;
         }
     }
+    #[cfg(target_os = "macos")]
+    match Command::new("chmod")
+        .args([
+            "+a",
+            &format!("group:staff allow read,write,execute"),
+            &path,
+        ])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: chmod failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: chmod failed with {}", e);
+            return;
+        }
+    }
 
+    //#[cfg(not(target_os = "macos"))]
+    let extended = "+";
+    //#[cfg(target_os = "macos")]
+    //let extended = "@";
+    let mut binding = Command::new("ls");
+    let c = binding.args(["-ald", &path]);
+    let output = c.output().expect("Failed to execute command");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("stdout Apple: {}", stdout);
+    println!("stderr Apple: {}", stderr);
     scene
         .ucmd()
         .args(&["-lda", &path])
         .succeeds()
-        .stdout_contains("+");
+        .stdout_contains(extended);
 }

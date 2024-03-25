@@ -27,7 +27,7 @@ use uucore::fs::{
     are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
     path_ends_with_terminator,
 };
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(unix)]
 use uucore::fsxattr;
 use uucore::update_control;
 
@@ -633,8 +633,7 @@ fn rename_with_fallback(
                 } else {
                     None
                 };
-
-            #[cfg(all(unix, not(target_os = "macos")))]
+            #[cfg(unix)]
             let xattrs =
                 fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
 
@@ -647,8 +646,7 @@ fn rename_with_fallback(
             } else {
                 move_dir(from, to, &options)
             };
-
-            #[cfg(all(unix, not(target_os = "macos")))]
+            #[cfg(unix)]
             fsxattr::apply_xattrs(to, xattrs).unwrap();
 
             if let Err(err) = result {
