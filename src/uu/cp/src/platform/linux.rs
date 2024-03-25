@@ -27,11 +27,14 @@ macro_rules! FICLONE {
 /// The fallback behavior for [`clone`] on failed system call.
 #[derive(Clone, Copy)]
 enum CloneFallback {
-    /// Raise an error.
+    /// Raise an error
     Error,
 
     /// Use [`std::fs::copy`].
     FSCopy,
+
+    /// Perform a sparse_copy when copy on write is not supported
+    SparseCopy,
 }
 
 /// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
@@ -53,6 +56,7 @@ where
     match fallback {
         CloneFallback::Error => Err(std::io::Error::last_os_error()),
         CloneFallback::FSCopy => std::fs::copy(source, dest).map(|_| ()),
+        CloneFallback::SparseCopy => sparse_copy(source, dest),
     }
 }
 
@@ -145,6 +149,7 @@ fn check_for_non_null_element(
     _size: &mut usize,
     sparse_val: &mut SparseDebug,
     null_terminated_block_flag: &mut bool,
+    sparse_flag: &mut bool,
 ) -> std::io::Result<()> {
     //from testing GNU cp behaviour , any sparse file with non null byte , yields copy_offload:
     //avoided in the debug result and any file size < 512 yields the same.
@@ -157,6 +162,7 @@ fn check_for_non_null_element(
     let blocks: usize = f.metadata()?.blocks().try_into().unwrap();
     if check_for_seekhole(blocks, size) {
         *sparse_val = SparseDebug::SeekHole; //This estimation might be wrong sometimes
+        *sparse_flag = true;
     }
     *_size = size;
     let mut buf: Vec<u8> = vec![0; block_size];
@@ -217,6 +223,7 @@ pub(crate) fn copy_on_write(
     let mut null_terminated_block_flag = false;
     let mut _size = 0; // size > 512
     let mut non_null_flag = false; // contains non_null_byte
+    let mut sparse_flag = false;
     let result = match (reflink_mode, sparse_mode) {
         (ReflinkMode::Never, SparseMode::Always) => {
             let mut sparse_val = SparseDebug::Zeros; //Default sparse_debug val
@@ -226,6 +233,7 @@ pub(crate) fn copy_on_write(
                 &mut _size,
                 &mut sparse_val,
                 &mut null_terminated_block_flag,
+                &mut sparse_flag,
             );
             match (_size, non_null_flag, null_terminated_block_flag) {
                 (0..=511, _, _) => {
@@ -253,7 +261,7 @@ pub(crate) fn copy_on_write(
             sparse_copy(source, dest)
         }
 
-        (ReflinkMode::Never, _) => {
+        (ReflinkMode::Never, SparseMode::Never) => {
             let mut sparse_val = SparseDebug::No;
             let _ = check_for_non_null_element(
                 source,
@@ -261,6 +269,7 @@ pub(crate) fn copy_on_write(
                 &mut _size,
                 &mut sparse_val,
                 &mut null_terminated_block_flag,
+                &mut sparse_flag,
             );
             match (_size, non_null_flag, null_terminated_block_flag) {
                 (0..=511, _, _) => {
@@ -279,6 +288,37 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::No;
             std::fs::copy(source, dest).map(|_| ())
         }
+        (ReflinkMode::Never, SparseMode::Auto) => {
+            let mut sparse_val = SparseDebug::No;
+            let _ = check_for_non_null_element(
+                source,
+                &mut non_null_flag,
+                &mut _size,
+                &mut sparse_val,
+                &mut null_terminated_block_flag,
+                &mut sparse_flag,
+            );
+            match (_size, non_null_flag, null_terminated_block_flag) {
+                (0..=511, _, _) => {
+                    copy_debug.sparse_detection = sparse_val;
+                    copy_debug.offload = OffloadReflinkDebug::Avoided;
+                }
+                (_, false, _) => {
+                    copy_debug.sparse_detection = sparse_val;
+                    copy_debug.offload = OffloadReflinkDebug::Unknown;
+                }
+                (_, true, _) => {
+                    copy_debug.sparse_detection = sparse_val;
+                    copy_debug.offload = OffloadReflinkDebug::Avoided;
+                }
+            };
+            copy_debug.reflink = OffloadReflinkDebug::No;
+            if sparse_flag {
+                sparse_copy(source, dest)
+            } else {
+                std::fs::copy(source, dest).map(|_| ())
+            }
+        }
         (ReflinkMode::Auto, SparseMode::Always) => {
             let mut sparse_val = SparseDebug::Zeros;
             let _ = check_for_non_null_element(
@@ -287,6 +327,7 @@ pub(crate) fn copy_on_write(
                 &mut _size,
                 &mut sparse_val,
                 &mut null_terminated_block_flag,
+                &mut sparse_flag,
             );
             match (_size, non_null_flag, null_terminated_block_flag) {
                 (0..=511, _, _) => {
@@ -324,6 +365,7 @@ pub(crate) fn copy_on_write(
                     &mut _size,
                     &mut sparse_val,
                     &mut null_terminated_block_flag,
+                    &mut sparse_flag,
                 );
                 match (_size, non_null_flag, null_terminated_block_flag) {
                     (0, _, _) => {
@@ -340,7 +382,7 @@ pub(crate) fn copy_on_write(
                     }
                 };
 
-                clone(source, dest, CloneFallback::FSCopy)
+                clone(source, dest, CloneFallback::SparseCopy)
             }
         }
         (ReflinkMode::Auto, SparseMode::Never) => {
@@ -352,6 +394,7 @@ pub(crate) fn copy_on_write(
                 &mut _size,
                 &mut sparse_val,
                 &mut null_terminated_block_flag,
+                &mut sparse_flag,
             );
             match (_size, non_null_flag, null_terminated_block_flag) {
                 (0..=511, _, _) => {
