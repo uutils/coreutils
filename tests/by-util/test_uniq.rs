@@ -19,6 +19,20 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_help_and_version_on_stdout() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("Usage");
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("uniq");
+}
+
+#[test]
 fn test_stdin_default() {
     new_ucmd!()
         .pipe_in_fixture(INPUT)

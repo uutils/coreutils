@@ -518,7 +518,7 @@ fn handle_extract_obs_skip_chars(
 /// Unfortunately these overrides are necessary, since several GNU tests
 /// for `uniq` hardcode and require the exact wording of the error message
 /// and it is not compatible with how Clap formats and displays those error messages.
-fn map_clap_errors(clap_error: &Error) -> Box<dyn UError> {
+fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
     let footer = "Try 'uniq --help' for more information.";
     let override_arg_conflict =
         "--group is mutually exclusive with -c/-d/-D/-u\n".to_string() + footer;
@@ -547,7 +547,7 @@ fn map_clap_errors(clap_error: &Error) -> Box<dyn UError> {
         {
             override_all_repeated_badoption
         }
-        _ => clap_error.to_string(),
+        _ => return clap_error.into(),
     };
     USimpleError::new(1, error_message)
 }
@@ -558,7 +558,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app()
         .try_get_matches_from(args)
-        .map_err(|e| map_clap_errors(&e))?;
+        .map_err(map_clap_errors)?;
 
     let files = matches.get_many::<OsString>(ARG_FILES);
 
