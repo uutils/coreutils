@@ -3,10 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+pub mod physical_extents;
+
 use chrono::{DateTime, Local};
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use glob::Pattern;
-use std::collections::HashSet;
+use physical_extents::SeenPhysicalExtents;
+use std::collections::{BTreeMap, HashSet};
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
@@ -68,6 +71,7 @@ mod options {
     pub const FILES0_FROM: &str = "files0-from";
     pub const VERBOSE: &str = "verbose";
     pub const FILE: &str = "FILE";
+    pub const SHARED_EXTENTS: &str = "shared-extents";
 }
 
 const ABOUT: &str = help_about!("du.md");
@@ -82,6 +86,7 @@ struct TraversalOptions {
     separate_dirs: bool,
     one_file_system: bool,
     dereference: Deref,
+    shared_extents: bool,
     count_links: bool,
     verbose: bool,
     excludes: Vec<Pattern>,
@@ -129,6 +134,7 @@ struct FileInfo {
 struct Stat {
     path: PathBuf,
     is_dir: bool,
+    is_symlink: bool,
     size: u64,
     blocks: u64,
     inodes: u64,
@@ -165,6 +171,7 @@ impl Stat {
             Ok(Self {
                 path: path.to_path_buf(),
                 is_dir: metadata.is_dir(),
+                is_symlink: metadata.is_symlink(),
                 size: if path.is_dir() { 0 } else { metadata.len() },
                 blocks: metadata.blocks(),
                 inodes: 1,
@@ -297,103 +304,173 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
-// this takes `my_stat` to avoid having to stat files multiple times.
-#[allow(clippy::cognitive_complexity)]
-fn du(
-    mut my_stat: Stat,
-    options: &TraversalOptions,
-    depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
-    print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
-) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    if my_stat.is_dir {
-        let read = match fs::read_dir(&my_stat.path) {
-            Ok(read) => read,
+struct DiskUsageCalculator<'a> {
+    print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
+    options: &'a TraversalOptions,
+    seen_inodes: HashSet<FileInfo>,
+    seen_physical_extents: BTreeMap<u64, SeenPhysicalExtents>,
+}
+
+impl<'a> DiskUsageCalculator<'a> {
+    fn new(
+        print_tx: &'a mpsc::Sender<UResult<StatPrintInfo>>,
+        options: &'a TraversalOptions,
+    ) -> Self {
+        DiskUsageCalculator {
+            print_tx,
+            options,
+            seen_inodes: HashSet::new(),
+            seen_physical_extents: BTreeMap::new(),
+        }
+    }
+
+    fn is_entry_excluded(&self, entry: &fs::DirEntry, entry_stat: &Stat) -> bool {
+        for pattern in &self.options.excludes {
+            // Look at all patterns with both short and long paths
+            // if we have 'du foo' but search to exclude 'foo/bar'
+            // we need the full path
+            if pattern.matches(&entry_stat.path.to_string_lossy())
+                || pattern.matches(&entry.file_name().into_string().unwrap())
+            {
+                // if the directory is ignored, leave early
+                if self.options.verbose {
+                    println!("{} ignored", &entry_stat.path.quote());
+                }
+                // Go to the next file
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn du_handle_dir_entry(
+        &mut self,
+        base_stat: &mut Stat,
+        depth: usize,
+        entry: &fs::DirEntry,
+        entry_stat: Stat,
+    ) -> Result<(), Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
+        // We have an exclude list
+        if self.is_entry_excluded(entry, &entry_stat) {
+            return Ok(());
+        }
+
+        if let Some(inode) = entry_stat.inode {
+            if self.seen_inodes.contains(&inode) {
+                if self.options.count_links {
+                    base_stat.inodes += 1;
+                }
+                return Ok(());
+            }
+            self.seen_inodes.insert(inode);
+        }
+
+        let total_overlapping_by_extents = if self.options.shared_extents
+            && !entry_stat.is_symlink
+            && !entry_stat.is_dir
+            && entry_stat.inode.is_some()
+        {
+            let map_by_device = self
+                .seen_physical_extents
+                .entry(entry_stat.inode.unwrap().dev_id)
+                .or_default();
+
+            let (total_overlapping, errors) =
+                map_by_device.get_total_overlap_and_insert(&entry.path());
+
+            for error in errors {
+                self.print_tx.send(Err(error))?;
+            }
+
+            total_overlapping
+        } else {
+            0
+        };
+
+        let is_ignored_by_extents: bool =
+            total_overlapping_by_extents > 0 && total_overlapping_by_extents >= entry_stat.size;
+        if is_ignored_by_extents {
+            return Ok(());
+        }
+
+        if entry_stat.is_dir {
+            if self.options.one_file_system {
+                if let (Some(this_inode), Some(my_inode)) = (entry_stat.inode, base_stat.inode) {
+                    if this_inode.dev_id != my_inode.dev_id {
+                        return Ok(());
+                    }
+                }
+            }
+
+            let this_stat = self.run(entry_stat, depth + 1)?;
+
+            if !self.options.separate_dirs {
+                base_stat.size += this_stat.size;
+                base_stat.blocks += this_stat.blocks;
+                base_stat.inodes += this_stat.inodes;
+            }
+            self.print_tx.send(Ok(StatPrintInfo {
+                stat: this_stat,
+                depth: depth + 1,
+            }))?;
+        } else {
+            let mut adapted: Stat = entry_stat;
+            adapted.size -= total_overlapping_by_extents;
+            adapted.blocks -= total_overlapping_by_extents / 512;
+
+            base_stat.size += adapted.size;
+            base_stat.blocks += adapted.blocks;
+            base_stat.inodes += 1;
+
+            if self.options.all {
+                self.print_tx.send(Ok(StatPrintInfo {
+                    stat: adapted,
+                    depth: depth + 1,
+                }))?;
+            }
+        }
+
+        Ok(())
+    }
+
+    // this takes `my_stat` to avoid having to stat files multiple times.
+    #[allow(clippy::cognitive_complexity)]
+    fn run(
+        &mut self,
+        mut my_stat: Stat,
+        depth: usize,
+    ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
+        if !my_stat.is_dir {
+            return Ok(my_stat);
+        }
+
+        let dir_iterator = match fs::read_dir(&my_stat.path) {
+            Ok(dir_iterator) => dir_iterator,
             Err(e) => {
-                print_tx.send(Err(e.map_err_context(|| {
+                self.print_tx.send(Err(e.map_err_context(|| {
                     format!("cannot read directory {}", my_stat.path.quote())
                 })))?;
                 return Ok(my_stat);
             }
         };
 
-        'file_loop: for f in read {
+        for f in dir_iterator {
             match f {
-                Ok(entry) => {
-                    match Stat::new(&entry.path(), options) {
-                        Ok(this_stat) => {
-                            // We have an exclude list
-                            for pattern in &options.excludes {
-                                // Look at all patterns with both short and long paths
-                                // if we have 'du foo' but search to exclude 'foo/bar'
-                                // we need the full path
-                                if pattern.matches(&this_stat.path.to_string_lossy())
-                                    || pattern.matches(&entry.file_name().into_string().unwrap())
-                                {
-                                    // if the directory is ignored, leave early
-                                    if options.verbose {
-                                        println!("{} ignored", &this_stat.path.quote());
-                                    }
-                                    // Go to the next file
-                                    continue 'file_loop;
-                                }
-                            }
-
-                            if let Some(inode) = this_stat.inode {
-                                if seen_inodes.contains(&inode) {
-                                    if options.count_links {
-                                        my_stat.inodes += 1;
-                                    }
-                                    continue;
-                                }
-                                seen_inodes.insert(inode);
-                            }
-                            if this_stat.is_dir {
-                                if options.one_file_system {
-                                    if let (Some(this_inode), Some(my_inode)) =
-                                        (this_stat.inode, my_stat.inode)
-                                    {
-                                        if this_inode.dev_id != my_inode.dev_id {
-                                            continue;
-                                        }
-                                    }
-                                }
-
-                                let this_stat =
-                                    du(this_stat, options, depth + 1, seen_inodes, print_tx)?;
-
-                                if !options.separate_dirs {
-                                    my_stat.size += this_stat.size;
-                                    my_stat.blocks += this_stat.blocks;
-                                    my_stat.inodes += this_stat.inodes;
-                                }
-                                print_tx.send(Ok(StatPrintInfo {
-                                    stat: this_stat,
-                                    depth: depth + 1,
-                                }))?;
-                            } else {
-                                my_stat.size += this_stat.size;
-                                my_stat.blocks += this_stat.blocks;
-                                my_stat.inodes += 1;
-                                if options.all {
-                                    print_tx.send(Ok(StatPrintInfo {
-                                        stat: this_stat,
-                                        depth: depth + 1,
-                                    }))?;
-                                }
-                            }
-                        }
-                        Err(e) => print_tx.send(Err(e.map_err_context(|| {
-                            format!("cannot access {}", entry.path().quote())
-                        })))?,
+                Ok(directory_entry) => match Stat::new(&directory_entry.path(), self.options) {
+                    Ok(this_stat) => {
+                        self.du_handle_dir_entry(&mut my_stat, depth, &directory_entry, this_stat)?;
                     }
-                }
-                Err(error) => print_tx.send(Err(error.into()))?,
+                    Err(e) => self.print_tx.send(Err(e.map_err_context(|| {
+                        format!("cannot access {}", directory_entry.path().quote())
+                    })))?,
+                },
+                Err(error) => self.print_tx.send(Err(error.into()))?,
             }
         }
-    }
 
-    Ok(my_stat)
+        Ok(my_stat)
+    }
 }
 
 #[derive(Debug)]
@@ -716,6 +793,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             Deref::None
         },
+        shared_extents: matches.get_flag(options::SHARED_EXTENTS),
         count_links: matches.get_flag(options::COUNT_LINKS),
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
@@ -770,11 +848,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Check existence of path provided in argument
         if let Ok(stat) = Stat::new(&path, &traversal_options) {
             // Kick off the computation of disk usage from the initial path
-            let mut seen_inodes: HashSet<FileInfo> = HashSet::new();
+            let mut du_calc = DiskUsageCalculator::new(&print_tx, &traversal_options);
             if let Some(inode) = stat.inode {
-                seen_inodes.insert(inode);
+                du_calc.seen_inodes.insert(inode);
             }
-            let stat = du(stat, &traversal_options, 0, &mut seen_inodes, &print_tx)
+            let stat = du_calc
+                .run(stat, 0)
                 .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
             print_tx
@@ -939,7 +1018,7 @@ pub fn uu_app() -> Command {
                 .long(options::DEREFERENCE_ARGS)
                 .help("follow only symlinks that are listed on the command line")
                 .action(ArgAction::SetTrue)
-        )
+         )
          .arg(
              Arg::new(options::NO_DEREFERENCE)
                  .short('P')
@@ -947,7 +1026,14 @@ pub fn uu_app() -> Command {
                  .help("don't follow any symbolic links (this is the default)")
                  .overrides_with(options::DEREFERENCE)
                  .action(ArgAction::SetTrue),
-         )
+        )
+        .arg(
+            Arg::new(options::SHARED_EXTENTS)
+                .short('e')
+                .long(options::SHARED_EXTENTS)
+                .help("search for shared file extents (e.g. on CoW filesystems)")
+                .action(ArgAction::SetTrue),
+        )
         .arg(
             Arg::new(options::BLOCK_SIZE_1M)
                 .short('m')
