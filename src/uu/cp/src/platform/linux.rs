@@ -136,7 +136,7 @@ where
     Ok(num_bytes_copied)
 }
 
-fn check_sparse_detection(source: &Path, sparse_flag: &mut bool) -> std::io::Result<()> {
+fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     let src_file = File::open(source)?;
 
     use std::os::unix::prelude::MetadataExt;
@@ -144,9 +144,9 @@ fn check_sparse_detection(source: &Path, sparse_flag: &mut bool) -> std::io::Res
     let size: usize = src_file.metadata()?.size().try_into().unwrap();
     let blocks: usize = src_file.metadata()?.blocks().try_into().unwrap();
     if blocks < size / 512 {
-        *sparse_flag = true;
+        return Ok(true);
     }
-    Ok(())
+    Ok(false)
 }
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
@@ -183,16 +183,10 @@ pub(crate) fn copy_on_write(
         (ReflinkMode::Never, SparseMode::Auto) => {
             copy_debug.sparse_detection = SparseDebug::No;
             copy_debug.reflink = OffloadReflinkDebug::No;
-            let mut sparse_flag = false;
-            let res = check_sparse_detection(source, &mut sparse_flag);
-            if res.is_ok() {
-                if sparse_flag {
-                    sparse_copy(source, dest)
-                } else {
-                    std::fs::copy(source, dest).map(|_| ())
-                }
-            } else {
-                res
+            match check_sparse_detection(source) {
+                Ok(true) => sparse_copy(source, dest),
+                Ok(false) => std::fs::copy(source, dest).map(|_| ()),
+                Err(e) => Err(e),
             }
         }
         (ReflinkMode::Auto, SparseMode::Always) => {
@@ -208,16 +202,10 @@ pub(crate) fn copy_on_write(
             if source_is_fifo {
                 copy_fifo_contents(source, dest).map(|_| ())
             } else {
-                let mut sparse_flag = false;
-                let res = check_sparse_detection(source, &mut sparse_flag);
-                if res.is_ok() {
-                    if sparse_flag {
-                        clone(source, dest, CloneFallback::SparseCopy)
-                    } else {
-                        clone(source, dest, CloneFallback::FSCopy)
-                    }
-                } else {
-                    res
+                match check_sparse_detection(source) {
+                    Ok(true) => clone(source, dest, CloneFallback::SparseCopy),
+                    Ok(false) => clone(source, dest, CloneFallback::FSCopy),
+                    Err(e) => Err(e),
                 }
             }
         }
