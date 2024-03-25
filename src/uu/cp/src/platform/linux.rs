@@ -214,7 +214,7 @@ pub(crate) fn copy_on_write(
                     if sparse_flag {
                         clone(source, dest, CloneFallback::SparseCopy)
                     } else {
-                        std::fs::copy(source, dest).map(|_| ())
+                        clone(source, dest, CloneFallback::FSCopy)
                     }
                 } else {
                     res
