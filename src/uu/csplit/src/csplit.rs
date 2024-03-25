@@ -99,15 +99,17 @@ where
     let patterns: Vec<patterns::Pattern> = patterns::get_patterns(&patterns[..])?;
     let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
 
-    // consume the rest
-    input_iter.rewind_buffer();
-    if let Some((_, line)) = input_iter.next() {
-        split_writer.new_writer()?;
-        split_writer.writeln(&line?)?;
-        for (_, line) in input_iter {
+    // consume the rest, unless there was an error
+    if ret.is_ok() {
+        input_iter.rewind_buffer();
+        if let Some((_, line)) = input_iter.next() {
+            split_writer.new_writer()?;
             split_writer.writeln(&line?)?;
+            for (_, line) in input_iter {
+                split_writer.writeln(&line?)?;
+            }
+            split_writer.finish_split();
         }
-        split_writer.finish_split();
     }
     // delete files on error by default
     if ret.is_err() && !options.keep_files {
@@ -585,6 +587,7 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
+        .args_override_self(true)
         .infer_long_args(true)
         .arg(
             Arg::new(options::SUFFIX_FORMAT)
