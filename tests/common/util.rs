@@ -1207,6 +1207,15 @@ impl TestScenario {
     }
 }
 
+#[cfg(unix)]
+#[derive(Debug, Default)]
+pub struct TerminalSimulation {
+    size: Option<libc::winsize>,
+    stdin: bool,
+    stdout: bool,
+    stderr: bool,
+}
+
 /// A `UCommand` is a builder wrapping an individual Command that provides several additional features:
 /// 1. it has convenience functions that are more ergonomic to use for piping in stdin, spawning the command
 ///       and asserting on the results.
@@ -1242,9 +1251,7 @@ pub struct UCommand {
     stderr_to_stdout: bool,
     timeout: Option<Duration>,
     #[cfg(unix)]
-    terminal_simulation: bool,
-    #[cfg(unix)]
-    terminal_size: Option<libc::winsize>,
+    terminal_simulation: Option<TerminalSimulation>,
     tmpd: Option<Rc<TempDir>>, // drop last
 }
 
@@ -1425,22 +1432,32 @@ impl UCommand {
 
     /// Set if process should be run in a simulated terminal
     ///
-    /// This is useful to test behavior that is only active if [`stdout.is_terminal()`] is [`true`].
+    /// This is useful to test behavior that is only active if e.g. [`stdout.is_terminal()`] is [`true`].
+    /// This function uses default terminal size and attaches stdin, stdout and stderr to that terminal.
+    /// For more control over the terminal simulation, use `terminal_sim_stdio`
     /// (unix: pty, windows: ConPTY[not yet supported])
     #[cfg(unix)]
     pub fn terminal_simulation(&mut self, enable: bool) -> &mut Self {
-        self.terminal_simulation = enable;
+        if enable {
+            self.terminal_simulation = Some(TerminalSimulation {
+                stdin: true,
+                stdout: true,
+                stderr: true,
+                ..Default::default()
+            });
+        } else {
+            self.terminal_simulation = None;
+        }
         self
     }
 
-    /// Set if process should be run in a simulated terminal with specific size
+    /// Allows to simulate a terminal use-case with specific properties.
     ///
-    /// This is useful to test behavior that is only active if [`stdout.is_terminal()`] is [`true`].
-    /// And the size of the terminal matters additionally.
+    /// This is useful to test behavior that is only active if e.g. [`stdout.is_terminal()`] is [`true`].
+    /// This function allows to set a specific size and to attach the terminal to only parts of the in/out.
     #[cfg(unix)]
-    pub fn terminal_size(&mut self, win_size: libc::winsize) -> &mut Self {
-        self.terminal_simulation(true);
-        self.terminal_size = Some(win_size);
+    pub fn terminal_sim_stdio(&mut self, config: TerminalSimulation) -> &mut Self {
+        self.terminal_simulation = Some(config);
         self
     }
 
@@ -1628,35 +1645,48 @@ impl UCommand {
         };
 
         #[cfg(unix)]
-        if self.terminal_simulation {
-            let terminal_size = self.terminal_size.unwrap_or(libc::winsize {
+        if let Some(simulated_terminal) = &self.terminal_simulation {
+            let terminal_size = simulated_terminal.size.unwrap_or(libc::winsize {
                 ws_col: 80,
                 ws_row: 30,
                 ws_xpixel: 80 * 8,
                 ws_ypixel: 30 * 10,
             });
 
-            let OpenptyResult {
-                slave: pi_slave,
-                master: pi_master,
-            } = nix::pty::openpty(&terminal_size, None).unwrap();
-            let OpenptyResult {
-                slave: po_slave,
-                master: po_master,
-            } = nix::pty::openpty(&terminal_size, None).unwrap();
-            let OpenptyResult {
-                slave: pe_slave,
-                master: pe_master,
-            } = nix::pty::openpty(&terminal_size, None).unwrap();
+            if simulated_terminal.stdin {
+                let OpenptyResult {
+                    slave: pi_slave,
+                    master: pi_master,
+                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                stdin_pty = Some(File::from(pi_master));
+                command.stdin(pi_slave);
+            }
 
-            stdin_pty = Some(File::from(pi_master));
+            if simulated_terminal.stdout {
+                let OpenptyResult {
+                    slave: po_slave,
+                    master: po_master,
+                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                captured_stdout = self.spawn_reader_thread(
+                    captured_stdout,
+                    po_master,
+                    "stdout_reader".to_string(),
+                );
+                command.stdout(po_slave);
+            }
 
-            captured_stdout =
-                self.spawn_reader_thread(captured_stdout, po_master, "stdout_reader".to_string());
-            captured_stderr =
-                self.spawn_reader_thread(captured_stderr, pe_master, "stderr_reader".to_string());
-
-            command.stdin(pi_slave).stdout(po_slave).stderr(pe_slave);
+            if simulated_terminal.stderr {
+                let OpenptyResult {
+                    slave: pe_slave,
+                    master: pe_master,
+                } = nix::pty::openpty(&terminal_size, None).unwrap();
+                captured_stderr = self.spawn_reader_thread(
+                    captured_stderr,
+                    pe_master,
+                    "stderr_reader".to_string(),
+                );
+                command.stderr(pe_slave);
+            }
         }
 
         #[cfg(unix)]
@@ -3634,7 +3664,88 @@ mod tests {
             .succeeds();
         std::assert_eq!(
             String::from_utf8_lossy(out.stdout()),
-            "stdin is atty\r\nstdout is atty\r\nstderr is atty\r\nterminal size: 30 80\r\n"
+            "stdin is atty\r\nterminal size: 30 80\r\nstdout is atty\r\nstderr is atty\r\n"
+        );
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stderr()),
+            "This is an error message.\r\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[cfg(feature = "env")]
+    #[test]
+    fn test_simulation_of_terminal_for_stdin_only() {
+        let scene = TestScenario::new("util");
+
+        let out = scene
+            .ccmd("env")
+            .arg("sh")
+            .arg("is_atty.sh")
+            .terminal_sim_stdio(TerminalSimulation {
+                stdin: true,
+                stdout: false,
+                stderr: false,
+                ..Default::default()
+            })
+            .succeeds();
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            "stdin is atty\nterminal size: 30 80\nstdout is not atty\nstderr is not atty\n"
+        );
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stderr()),
+            "This is an error message.\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[cfg(feature = "env")]
+    #[test]
+    fn test_simulation_of_terminal_for_stdout_only() {
+        let scene = TestScenario::new("util");
+
+        let out = scene
+            .ccmd("env")
+            .arg("sh")
+            .arg("is_atty.sh")
+            .terminal_sim_stdio(TerminalSimulation {
+                stdin: false,
+                stdout: true,
+                stderr: false,
+                ..Default::default()
+            })
+            .succeeds();
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            "stdin is not atty\r\nstdout is atty\r\nstderr is not atty\r\n"
+        );
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stderr()),
+            "This is an error message.\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[cfg(feature = "env")]
+    #[test]
+    fn test_simulation_of_terminal_for_stderr_only() {
+        let scene = TestScenario::new("util");
+
+        let out = scene
+            .ccmd("env")
+            .arg("sh")
+            .arg("is_atty.sh")
+            .terminal_sim_stdio(TerminalSimulation {
+                stdin: false,
+                stdout: false,
+                stderr: true,
+                ..Default::default()
+            })
+            .succeeds();
+        std::assert_eq!(
+            String::from_utf8_lossy(out.stdout()),
+            "stdin is not atty\nstdout is not atty\nstderr is atty\n"
         );
         std::assert_eq!(
             String::from_utf8_lossy(out.stderr()),
@@ -3652,16 +3763,21 @@ mod tests {
             .ccmd("env")
             .arg("sh")
             .arg("is_atty.sh")
-            .terminal_size(libc::winsize {
-                ws_col: 40,
-                ws_row: 10,
-                ws_xpixel: 40 * 8,
-                ws_ypixel: 10 * 10,
+            .terminal_sim_stdio(TerminalSimulation {
+                size: Some(libc::winsize {
+                    ws_col: 40,
+                    ws_row: 10,
+                    ws_xpixel: 40 * 8,
+                    ws_ypixel: 10 * 10,
+                }),
+                stdout: true,
+                stdin: true,
+                stderr: true,
             })
             .succeeds();
         std::assert_eq!(
             String::from_utf8_lossy(out.stdout()),
-            "stdin is atty\r\nstdout is atty\r\nstderr is atty\r\nterminal size: 10 40\r\n"
+            "stdin is atty\r\nterminal size: 10 40\r\nstdout is atty\r\nstderr is atty\r\n"
         );
         std::assert_eq!(
             String::from_utf8_lossy(out.stderr()),
