@@ -1,6 +1,6 @@
 [package]
 name = "uu_tsort"
-version = "0.0.25"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tsort ~ (uutils) topologically sort input (partially ordered) pairs"
