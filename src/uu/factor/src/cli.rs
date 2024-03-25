@@ -103,6 +103,7 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
         .disable_help_flag(true)
+        .args_override_self(true)
         .arg(Arg::new(options::NUMBER).action(ArgAction::Append))
         .arg(
             Arg::new(options::EXPONENTS)
