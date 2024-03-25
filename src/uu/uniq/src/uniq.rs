@@ -558,7 +558,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let matches = uu_app()
         .try_get_matches_from(args)
-        .map_err(|e| map_clap_errors(e))?;
+        .map_err(map_clap_errors)?;
 
     let files = matches.get_many::<OsString>(ARG_FILES);
 
