@@ -17,10 +17,10 @@ array-init = "2.0.0"
 criterion = "0.3"
 rand = "0.8"
 rand_chacha = "0.3.1"
+num-bigint = "0.4.4"
+num-prime = "0.4.3"
+num-traits = "0.2.18"
 
-[[bench]]
-name = "gcd"
-harness = false
 
 [[bench]]
 name = "table"

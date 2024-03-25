@@ -3,16 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (methods) hexdigest
+// spell-checker:ignore (methods) hexdigest funcs nprimes
 
 use crate::common::util::TestScenario;
 
 use std::time::{Duration, SystemTime};
 
-#[path = "../../src/uu/factor/sieve.rs"]
-mod sieve;
-
-use self::sieve::Sieve;
 use rand::distributions::{Distribution, Uniform};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 
@@ -157,7 +153,7 @@ fn test_random() {
     use conv::prelude::ValueFrom;
 
     let log_num_primes = f64::value_from(NUM_PRIMES).unwrap().log2().ceil();
-    let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();
+    let primes = num_prime::nt_funcs::nprimes(NUM_PRIMES);
 
     let rng_seed = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)

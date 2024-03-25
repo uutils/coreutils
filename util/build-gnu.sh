@@ -221,7 +221,7 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r sed -Ei
 # we should not regress our project just to match what GNU is going.
 # So, do some changes on the fly
 
-patch -N -r - -d "$path_GNU" -p 1 -i "`realpath \"$path_UUTILS/util/gnu-patches/tests_env_env-S.pl.patch\"`" || true
+eval cat "$path_UUTILS/util/gnu-patches/*.patch" | patch -N -r - -d "$path_GNU" -p 1 -i - || true
 
 sed -i -e "s|rm: cannot remove 'e/slink'|rm: cannot remove 'e'|g" tests/rm/fail-eacces.sh
 
