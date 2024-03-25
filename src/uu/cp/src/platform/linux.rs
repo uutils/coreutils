@@ -32,6 +32,9 @@ enum CloneFallback {
 
     /// Use [`std::fs::copy`].
     FSCopy,
+
+    /// Use sparse_copy
+    SparseCopy,
 }
 
 /// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
@@ -53,6 +56,7 @@ where
     match fallback {
         CloneFallback::Error => Err(std::io::Error::last_os_error()),
         CloneFallback::FSCopy => std::fs::copy(source, dest).map(|_| ()),
+        CloneFallback::SparseCopy => sparse_copy(source, dest),
     }
 }
 
@@ -132,6 +136,18 @@ where
     Ok(num_bytes_copied)
 }
 
+fn check_sparse_detection(source: &Path, sparse_flag: &mut bool) -> std::io::Result<()> {
+    let src_file = File::open(source)?;
+
+    use std::os::unix::prelude::MetadataExt;
+
+    let size: usize = src_file.metadata()?.size().try_into().unwrap();
+    let blocks: usize = src_file.metadata()?.blocks().try_into().unwrap();
+    if blocks < size / 512 {
+        *sparse_flag = true;
+    }
+    Ok(())
+}
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
 /// The `source_is_fifo` flag must be set to `true` if and only if
@@ -159,10 +175,25 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::No;
             sparse_copy(source, dest)
         }
-        (ReflinkMode::Never, _) => {
+        (ReflinkMode::Never, SparseMode::Never) => {
             copy_debug.sparse_detection = SparseDebug::No;
             copy_debug.reflink = OffloadReflinkDebug::No;
             std::fs::copy(source, dest).map(|_| ())
+        }
+        (ReflinkMode::Never, SparseMode::Auto) => {
+            copy_debug.sparse_detection = SparseDebug::No;
+            copy_debug.reflink = OffloadReflinkDebug::No;
+            let mut sparse_flag = false;
+            let res = check_sparse_detection(source, &mut sparse_flag);
+            if res.is_ok() {
+                if sparse_flag {
+                    sparse_copy(source, dest)
+                } else {
+                    std::fs::copy(source, dest).map(|_| ())
+                }
+            } else {
+                res
+            }
         }
         (ReflinkMode::Auto, SparseMode::Always) => {
             copy_debug.offload = OffloadReflinkDebug::Avoided;
@@ -171,7 +202,26 @@ pub(crate) fn copy_on_write(
             sparse_copy(source, dest)
         }
 
-        (ReflinkMode::Auto, _) => {
+        (ReflinkMode::Auto, SparseMode::Auto) => {
+            copy_debug.sparse_detection = SparseDebug::No;
+            copy_debug.reflink = OffloadReflinkDebug::Unsupported;
+            if source_is_fifo {
+                copy_fifo_contents(source, dest).map(|_| ())
+            } else {
+                let mut sparse_flag = false;
+                let res = check_sparse_detection(source, &mut sparse_flag);
+                if res.is_ok() {
+                    if sparse_flag {
+                        clone(source, dest, CloneFallback::SparseCopy)
+                    } else {
+                        std::fs::copy(source, dest).map(|_| ())
+                    }
+                } else {
+                    res
+                }
+            }
+        }
+        (ReflinkMode::Auto, SparseMode::Never) => {
             copy_debug.sparse_detection = SparseDebug::No;
             copy_debug.reflink = OffloadReflinkDebug::Unsupported;
             if source_is_fifo {
