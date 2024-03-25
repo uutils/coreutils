@@ -2691,7 +2691,9 @@ dependencies = [
  "clap",
  "fs_extra",
  "indicatif",
+ "libc",
  "uucore",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
