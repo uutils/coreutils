@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore ficlone reflink ftruncate pwrite fiemap
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::Read;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
@@ -136,6 +136,14 @@ where
     Ok(num_bytes_copied)
 }
 
+fn check_dest_is_fifo(dest: &Path) -> bool {
+    let file_type = fs::metadata(dest);
+    match file_type {
+        Ok(f) => f.file_type().is_fifo(),
+
+        _ => false,
+    }
+}
 fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     let src_file = File::open(source)?;
 
@@ -148,6 +156,7 @@ fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     }
     Ok(false)
 }
+
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
 /// The `source_is_fifo` flag must be set to `true` if and only if
@@ -202,10 +211,11 @@ pub(crate) fn copy_on_write(
             if source_is_fifo {
                 copy_fifo_contents(source, dest).map(|_| ())
             } else {
-                match check_sparse_detection(source) {
-                    Ok(true) => clone(source, dest, CloneFallback::SparseCopy),
-                    Ok(false) => clone(source, dest, CloneFallback::FSCopy),
-                    Err(e) => Err(e),
+                match (check_sparse_detection(source), check_dest_is_fifo(dest)) {
+                    (Ok(true), false) => clone(source, dest, CloneFallback::SparseCopy),
+                    (Ok(true), true) => clone(source, dest, CloneFallback::FSCopy),
+                    (Ok(false), _) => clone(source, dest, CloneFallback::FSCopy),
+                    (Err(e), _) => Err(e),
                 }
             }
         }
