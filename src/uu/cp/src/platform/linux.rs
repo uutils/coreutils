@@ -215,7 +215,7 @@ pub(crate) fn copy_on_write(
                 match (check_sparse_detection(source), check_dest_is_fifo(dest)) {
                     (Ok(true), false) => clone(source, dest, CloneFallback::SparseCopy),
                     (Ok(true), true) => clone(source, dest, CloneFallback::FSCopy),
-                    (Ok(false), _) => std::fs::copy(source, dest).map(|_| ()),
+                    (Ok(false), _) => clone(source, dest, CloneFallback::FSCopy),
                     (Err(e), _) => Err(e),
                 }
             }
