@@ -151,7 +151,9 @@ fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
 
     let size: usize = src_file.metadata()?.size().try_into().unwrap();
     let blocks: usize = src_file.metadata()?.blocks().try_into().unwrap();
-    if blocks < size / 512 && blocks != 0 {
+    let block_size: usize = src_file.metadata()?.blocks().try_into().unwrap();
+
+    if size > block_size && blocks < size / 512 {
         return Ok(true);
     }
     Ok(false)
