@@ -151,9 +151,8 @@ fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
 
     let size: usize = src_file.metadata()?.size().try_into().unwrap();
     let blocks: usize = src_file.metadata()?.blocks().try_into().unwrap();
-    let block_size: usize = src_file.metadata()?.blocks().try_into().unwrap();
 
-    if size > block_size + 512 && blocks < size / 512 && blocks != 0 {
+    if blocks < size / 512 && blocks != 0 {
         return Ok(true);
     }
     Ok(false)
@@ -216,7 +215,7 @@ pub(crate) fn copy_on_write(
                 match (check_sparse_detection(source), check_dest_is_fifo(dest)) {
                     (Ok(true), false) => clone(source, dest, CloneFallback::SparseCopy),
                     (Ok(true), true) => clone(source, dest, CloneFallback::FSCopy),
-                    (Ok(false), _) => clone(source, dest, CloneFallback::FSCopy),
+                    (Ok(false), _) => std::fs::copy(source, dest).map(|_| ()),
                     (Err(e), _) => Err(e),
                 }
             }
