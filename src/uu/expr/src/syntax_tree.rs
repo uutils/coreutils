@@ -148,7 +148,7 @@ impl StringOp {
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
                 Ok(if re.captures_len() > 0 {
                     re.captures(&left)
-                        .map(|captures| captures.at(1).unwrap())
+                        .and_then(|captures| captures.at(1))
                         .unwrap_or("")
                         .to_string()
                 } else {
@@ -608,5 +608,15 @@ mod test {
             AstNode::parse(&["(", "42", "a"]),
             Err(ExprError::ExpectedClosingBraceInsteadOf("a".to_string()))
         );
+    }
+
+    #[test]
+    fn empty_substitution() {
+        // causes a panic in 0.0.25
+        let result = AstNode::parse(&["a", ":", r"\(b\)*"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "");
     }
 }
