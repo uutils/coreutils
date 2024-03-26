@@ -274,7 +274,6 @@ fn test_cp_target_directory_is_file() {
         .stderr_contains(format!("'{TEST_HOW_ARE_YOU_SOURCE}' is not a directory"));
 }
 
-
 #[test]
 fn test_cp_arg_update_interactive_error() {
     new_ucmd!()
@@ -518,7 +517,7 @@ fn test_cp_arg_interactive_update_overwrite_older() {
         .code_is(1)
         .no_stdout()
         .stderr_is("cp: overwrite 'b'? ");
-    
+
     // Option Y
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("b");
