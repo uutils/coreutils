@@ -442,13 +442,21 @@ impl<'a> Parser<'a> {
             },
             "(" => {
                 let s = self.parse_expression()?;
-                let close_paren = self.next()?;
-                if close_paren != ")" {
+                match self.next() {
+                    Ok(")") => {}
                     // Since we have parsed at least a '(', there will be a token
                     // at `self.index - 1`. So this indexing won't panic.
-                    return Err(ExprError::ExpectedClosingBraceAfter(
-                        self.input[self.index - 1].into(),
-                    ));
+                    Ok(_) => {
+                        return Err(ExprError::ExpectedClosingBraceInsteadOf(
+                            self.input[self.index - 1].into(),
+                        ));
+                    }
+                    Err(ExprError::MissingArgument(_)) => {
+                        return Err(ExprError::ExpectedClosingBraceAfter(
+                            self.input[self.index - 1].into(),
+                        ));
+                    }
+                    Err(e) => return Err(e),
                 }
                 s
             }
@@ -484,6 +492,8 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 
 #[cfg(test)]
 mod test {
+    use crate::ExprError;
+
     use super::{AstNode, BinOp, NumericOp, RelationOp, StringOp};
 
     impl From<&str> for AstNode {
@@ -585,6 +595,18 @@ mod test {
                 op(BinOp::Numeric(NumericOp::Mul), "1", "2"),
                 "3"
             )),
+        );
+    }
+
+    #[test]
+    fn missing_closing_parenthesis() {
+        assert_eq!(
+            AstNode::parse(&["(", "42"]),
+            Err(ExprError::ExpectedClosingBraceAfter("42".to_string()))
+        );
+        assert_eq!(
+            AstNode::parse(&["(", "42", "a"]),
+            Err(ExprError::ExpectedClosingBraceInsteadOf("a".to_string()))
         );
     }
 }
