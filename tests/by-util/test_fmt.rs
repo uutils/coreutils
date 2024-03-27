@@ -38,6 +38,14 @@ fn test_fmt_width() {
 }
 
 #[test]
+fn test_fmt_positional_width() {
+    new_ucmd!()
+        .args(&["-10", "one-word-per-line.txt"])
+        .succeeds()
+        .stdout_is("this is a\nfile with\none word\nper line\n");
+}
+
+#[test]
 fn test_small_width() {
     for width in ["0", "1", "2", "3"] {
         for param in ["-w", "--width"] {
@@ -71,6 +79,24 @@ fn test_fmt_invalid_width() {
     }
 }
 
+#[test]
+fn test_fmt_positional_width_not_first() {
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "-10"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("fmt: invalid option -- 1; -WIDTH is recognized only when it is the first\noption; use -w N instead");
+}
+
+#[test]
+fn test_fmt_width_not_valid_number() {
+    new_ucmd!()
+        .args(&["-25x", "one-word-per-line.txt"])
+        .fails()
+        .code_is(1)
+        .stderr_contains("fmt: invalid width: '25x'");
+}
+
 #[ignore]
 #[test]
 fn test_fmt_goal() {
@@ -102,6 +128,15 @@ fn test_fmt_goal_bigger_than_default_width_of_75() {
             .code_is(1)
             .stderr_is("fmt: GOAL cannot be greater than WIDTH.\n");
     }
+}
+
+#[test]
+fn test_fmt_non_existent_file() {
+    new_ucmd!()
+        .args(&["non-existing"])
+        .fails()
+        .code_is(1)
+        .stderr_is("fmt: cannot open 'non-existing' for reading: No such file or directory\n");
 }
 
 #[test]

@@ -9,8 +9,8 @@ use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Stdout, Write};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show_warning};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::{format_usage, help_about, help_usage};
 
 use linebreak::break_lines;
 use parasplit::ParagraphStream;
@@ -40,10 +40,11 @@ mod options {
     pub const GOAL: &str = "goal";
     pub const QUICK: &str = "quick";
     pub const TAB_WIDTH: &str = "tab-width";
-    pub const FILES: &str = "files";
+    pub const FILES_OR_WIDTH: &str = "files";
 }
 
 pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;
+
 pub struct FmtOptions {
     crown: bool,
     tagged: bool,
@@ -86,16 +87,16 @@ impl FmtOptions {
             .get_one::<String>(options::SKIP_PREFIX)
             .map(String::from);
 
-        let width_opt = matches.get_one::<usize>(options::WIDTH);
+        let width_opt = extract_width(matches);
         let goal_opt = matches.get_one::<usize>(options::GOAL);
         let (width, goal) = match (width_opt, goal_opt) {
-            (Some(&w), Some(&g)) => {
+            (Some(w), Some(&g)) => {
                 if g > w {
                     return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
                 }
                 (w, g)
             }
-            (Some(&w), None) => {
+            (Some(w), None) => {
                 // Only allow a goal of zero if the width is set to be zero
                 let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(if w == 0 { 0 } else { 1 });
                 (w, g)
@@ -169,16 +170,14 @@ fn process_file(
     fmt_opts: &FmtOptions,
     ostream: &mut BufWriter<Stdout>,
 ) -> UResult<()> {
-    let mut fp = match file_name {
-        "-" => BufReader::new(Box::new(stdin()) as Box<dyn Read + 'static>),
-        _ => match File::open(file_name) {
-            Ok(f) => BufReader::new(Box::new(f) as Box<dyn Read + 'static>),
-            Err(e) => {
-                show_warning!("{}: {}", file_name.maybe_quote(), e);
-                return Ok(());
-            }
-        },
-    };
+    let mut fp = BufReader::new(match file_name {
+        "-" => Box::new(stdin()) as Box<dyn Read + 'static>,
+        _ => {
+            let f = File::open(file_name)
+                .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))?;
+            Box::new(f) as Box<dyn Read + 'static>
+        }
+    });
 
     let p_stream = ParagraphStream::new(fmt_opts, &mut fp);
     for para_result in p_stream {
@@ -204,14 +203,90 @@ fn process_file(
     Ok(())
 }
 
+/// Extract the file names from the positional arguments, ignoring any negative width in the first
+/// position.
+///
+/// # Returns
+/// A `UResult<()>` with the file names, or an error if one of the file names could not be parsed
+/// (e.g., it is given as a negative number not in the first argument and not after a --
+fn extract_files(matches: &ArgMatches) -> UResult<Vec<String>> {
+    let in_first_pos = matches
+        .index_of(options::FILES_OR_WIDTH)
+        .is_some_and(|x| x == 1);
+    let is_neg = |s: &str| s.parse::<isize>().is_ok_and(|w| w < 0);
+
+    let files: UResult<Vec<String>> = matches
+        .get_many::<String>(options::FILES_OR_WIDTH)
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .filter_map(|(i, x)| {
+            if is_neg(x) {
+                if in_first_pos && i == 0 {
+                    None
+                } else {
+                    let first_num = x.chars().nth(1).expect("a negative number should be at least two characters long");
+                    Some(Err(
+                        UUsageError::new(1, format!("invalid option -- {}; -WIDTH is recognized only when it is the first\noption; use -w N instead", first_num))
+                    ))
+                }
+            } else {
+                Some(Ok(x.clone()))
+            }
+        })
+        .collect();
+
+    if files.as_ref().is_ok_and(|f| f.is_empty()) {
+        Ok(vec!["-".into()])
+    } else {
+        files
+    }
+}
+
+fn extract_width(matches: &ArgMatches) -> Option<usize> {
+    let width_opt = matches.get_one::<usize>(options::WIDTH);
+    if let Some(width) = width_opt {
+        return Some(*width);
+    }
+
+    if let Some(1) = matches.index_of(options::FILES_OR_WIDTH) {
+        let width_arg = matches.get_one::<String>(options::FILES_OR_WIDTH).unwrap();
+        if let Some(num) = width_arg.strip_prefix('-') {
+            num.parse::<usize>().ok()
+        } else {
+            // will be treated as a file name
+            None
+        }
+    } else {
+        None
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let args: Vec<_> = args.collect();
 
-    let files: Vec<String> = matches
-        .get_many::<String>(options::FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or(vec!["-".into()]);
+    // Warn the user if it looks like we're trying to pass a number in the first
+    // argument with non-numeric characters
+    if let Some(first_arg) = args.get(1) {
+        let first_arg = first_arg.to_string_lossy();
+        let malformed_number = first_arg.starts_with('-')
+            && first_arg.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
+            && first_arg.chars().skip(2).any(|c| !c.is_ascii_digit());
+        if malformed_number {
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "invalid width: {}",
+                    first_arg.strip_prefix('-').unwrap().quote()
+                ),
+            ));
+        }
+    }
+
+    let matches = uu_app().try_get_matches_from(&args)?;
+
+    let files = extract_files(&matches)?;
 
     let fmt_opts = FmtOptions::from_matches(&matches)?;
 
@@ -329,7 +404,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::WIDTH)
                 .short('w')
                 .long("width")
-                .help("Fill output lines up to a maximum of WIDTH columns, default 75.")
+                .help("Fill output lines up to a maximum of WIDTH columns, default 75. This can be specified as a negative number in the first argument.")
                 .value_name("WIDTH")
                 .value_parser(clap::value_parser!(usize)),
         )
@@ -363,8 +438,72 @@ pub fn uu_app() -> Command {
                 .value_name("TABWIDTH"),
         )
         .arg(
-            Arg::new(options::FILES)
+            Arg::new(options::FILES_OR_WIDTH)
                 .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
+                .value_name("FILES")
+                .value_hint(clap::ValueHint::FilePath)
+                .allow_negative_numbers(true),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use crate::uu_app;
+    use crate::{extract_files, extract_width};
+
+    #[test]
+    fn parse_negative_width() -> Result<(), Box<dyn Error>> {
+        let matches = uu_app().try_get_matches_from(vec!["fmt", "-3", "some-file"])?;
+
+        assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
+
+        assert_eq!(extract_width(&matches), Some(3));
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_width_as_arg() -> Result<(), Box<dyn Error>> {
+        let matches = uu_app().try_get_matches_from(vec!["fmt", "-w3", "some-file"])?;
+
+        assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
+
+        assert_eq!(extract_width(&matches), Some(3));
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_no_args() -> Result<(), Box<dyn Error>> {
+        let matches = uu_app().try_get_matches_from(vec!["fmt"])?;
+
+        assert_eq!(extract_files(&matches).unwrap(), vec!["-"]);
+
+        assert_eq!(extract_width(&matches), None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_just_file_name() -> Result<(), Box<dyn Error>> {
+        let matches = uu_app().try_get_matches_from(vec!["fmt", "some-file"])?;
+
+        assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
+
+        assert_eq!(extract_width(&matches), None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn parse_with_both_widths_positional_first() -> Result<(), Box<dyn Error>> {
+        let matches = uu_app().try_get_matches_from(vec!["fmt", "-10", "-w3", "some-file"])?;
+
+        assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
+
+        assert_eq!(extract_width(&matches), Some(3));
+        Ok(())
+    }
 }
