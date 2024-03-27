@@ -135,6 +135,7 @@ where
     Ok(num_bytes_copied)
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn check_dest_is_fifo(dest: &Path) -> bool {
     //If our destination file exists and its a fifo , we do a standard copy .
     let file_type = fs::metadata(dest);
@@ -145,6 +146,7 @@ fn check_dest_is_fifo(dest: &Path) -> bool {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     let src_file = File::open(source)?;
 
