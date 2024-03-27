@@ -3,10 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore ficlone reflink ftruncate pwrite fiemap
-use std::fs::{File, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::Read;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
+use std::os::unix::prelude::MetadataExt;
 use std::path::Path;
 
 use quick_error::ResultExt;
@@ -32,6 +33,9 @@ enum CloneFallback {
 
     /// Use [`std::fs::copy`].
     FSCopy,
+
+    /// Use sparse_copy
+    SparseCopy,
 }
 
 /// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
@@ -53,6 +57,7 @@ where
     match fallback {
         CloneFallback::Error => Err(std::io::Error::last_os_error()),
         CloneFallback::FSCopy => std::fs::copy(source, dest).map(|_| ()),
+        CloneFallback::SparseCopy => sparse_copy(source, dest),
     }
 }
 
@@ -62,8 +67,6 @@ fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    use std::os::unix::prelude::MetadataExt;
-
     let mut src_file = File::open(source)?;
     let dst_file = File::create(dest)?;
     let dst_fd = dst_file.as_raw_fd();
@@ -132,6 +135,33 @@ where
     Ok(num_bytes_copied)
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn check_dest_is_fifo(dest: &Path) -> bool {
+    //If our destination file exists and its a fifo , we do a standard copy .
+    let file_type = fs::metadata(dest);
+    match file_type {
+        Ok(f) => f.file_type().is_fifo(),
+
+        _ => false,
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
+    let src_file = File::open(source)?;
+
+    let size = src_file.metadata()?.size();
+    let blocks = src_file.metadata()?.blocks();
+
+    //cp uses a crude heuristic to detect sparse_files , an estimated formula which seems to accurately
+    //replicate that , might need to change if we observe any edge cases that i haven't thought of but this should work for majority of the files.
+    //Reference:https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks
+    if blocks < size / 512 && blocks != 0 {
+        return Ok(true);
+    }
+    Ok(false)
+}
+
 /// Copies `source` to `dest` using copy-on-write if possible.
 ///
 /// The `source_is_fifo` flag must be set to `true` if and only if
@@ -159,10 +189,19 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::No;
             sparse_copy(source, dest)
         }
-        (ReflinkMode::Never, _) => {
+        (ReflinkMode::Never, SparseMode::Never) => {
             copy_debug.sparse_detection = SparseDebug::No;
             copy_debug.reflink = OffloadReflinkDebug::No;
             std::fs::copy(source, dest).map(|_| ())
+        }
+        (ReflinkMode::Never, SparseMode::Auto) => {
+            copy_debug.sparse_detection = SparseDebug::No;
+            copy_debug.reflink = OffloadReflinkDebug::No;
+            match check_sparse_detection(source) {
+                Ok(true) => sparse_copy(source, dest),
+                Ok(false) => std::fs::copy(source, dest).map(|_| ()),
+                Err(e) => Err(e),
+            }
         }
         (ReflinkMode::Auto, SparseMode::Always) => {
             copy_debug.offload = OffloadReflinkDebug::Avoided;
@@ -171,7 +210,21 @@ pub(crate) fn copy_on_write(
             sparse_copy(source, dest)
         }
 
-        (ReflinkMode::Auto, _) => {
+        (ReflinkMode::Auto, SparseMode::Auto) => {
+            copy_debug.sparse_detection = SparseDebug::No;
+            copy_debug.reflink = OffloadReflinkDebug::Unsupported;
+            if source_is_fifo {
+                copy_fifo_contents(source, dest).map(|_| ())
+            } else {
+                match (check_sparse_detection(source), check_dest_is_fifo(dest)) {
+                    (Ok(true), false) => clone(source, dest, CloneFallback::SparseCopy),
+                    (Ok(true), true) => clone(source, dest, CloneFallback::FSCopy),
+                    (Ok(false), _) => clone(source, dest, CloneFallback::FSCopy),
+                    (Err(e), _) => Err(e),
+                }
+            }
+        }
+        (ReflinkMode::Auto, SparseMode::Never) => {
             copy_debug.sparse_detection = SparseDebug::No;
             copy_debug.reflink = OffloadReflinkDebug::Unsupported;
             if source_is_fifo {
