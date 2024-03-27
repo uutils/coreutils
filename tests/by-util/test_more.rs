@@ -8,7 +8,10 @@ use std::io::IsTerminal;
 #[test]
 fn test_more_no_arg() {
     if std::io::stdout().is_terminal() {
-        new_ucmd!().fails().stderr_contains("more: bad usage");
+        new_ucmd!()
+            .terminal_simulation(true)
+            .fails()
+            .stderr_contains("more: bad usage");
     }
 }
 
@@ -21,44 +24,136 @@ fn test_valid_arg() {
         let file = "test_file";
         at.touch(file);
 
-        scene.ucmd().arg(file).arg("-c").succeeds();
-        scene.ucmd().arg(file).arg("--print-over").succeeds();
-
-        scene.ucmd().arg(file).arg("-p").succeeds();
-        scene.ucmd().arg(file).arg("--clean-print").succeeds();
-
-        scene.ucmd().arg(file).arg("-s").succeeds();
-        scene.ucmd().arg(file).arg("--squeeze").succeeds();
-
-        scene.ucmd().arg(file).arg("-u").succeeds();
-        scene.ucmd().arg(file).arg("--plain").succeeds();
-
-        scene.ucmd().arg(file).arg("-n").arg("10").succeeds();
-        scene.ucmd().arg(file).arg("--lines").arg("0").succeeds();
-        scene.ucmd().arg(file).arg("--number").arg("0").succeeds();
-
-        scene.ucmd().arg(file).arg("-F").arg("10").succeeds();
         scene
             .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("-c")
+            .succeeds();
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("--print-over")
+            .succeeds();
+
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("-p")
+            .succeeds();
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("--clean-print")
+            .succeeds();
+
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("-s")
+            .succeeds();
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("--squeeze")
+            .succeeds();
+
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("-u")
+            .succeeds();
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("--plain")
+            .succeeds();
+
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("-n")
+            .arg("10")
+            .succeeds();
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("--lines")
+            .arg("0")
+            .succeeds();
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("--number")
+            .arg("0")
+            .succeeds();
+
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("-F")
+            .arg("10")
+            .succeeds();
+        scene
+            .ucmd()
+            .terminal_simulation(true)
             .arg(file)
             .arg("--from-line")
             .arg("0")
             .succeeds();
 
-        scene.ucmd().arg(file).arg("-P").arg("something").succeeds();
-        scene.ucmd().arg(file).arg("--pattern").arg("-1").succeeds();
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("-P")
+            .arg("something")
+            .succeeds();
+        scene
+            .ucmd()
+            .terminal_simulation(true)
+            .arg(file)
+            .arg("--pattern")
+            .arg("-1")
+            .succeeds();
     }
 }
 
 #[test]
 fn test_invalid_arg() {
     if std::io::stdout().is_terminal() {
-        new_ucmd!().arg("--invalid").fails();
+        new_ucmd!()
+            .terminal_simulation(true)
+            .arg("--invalid")
+            .fails();
 
-        new_ucmd!().arg("--lines").arg("-10").fails();
-        new_ucmd!().arg("--number").arg("-10").fails();
+        new_ucmd!()
+            .terminal_simulation(true)
+            .arg("--lines")
+            .arg("-10")
+            .fails();
+        new_ucmd!()
+            .terminal_simulation(true)
+            .arg("--number")
+            .arg("-10")
+            .fails();
 
-        new_ucmd!().arg("--from-line").arg("-10").fails();
+        new_ucmd!()
+            .terminal_simulation(true)
+            .arg("--from-line")
+            .arg("-10")
+            .fails();
     }
 }
 
@@ -75,6 +170,7 @@ fn test_argument_from_file() {
         // output all lines
         scene
             .ucmd()
+            .terminal_simulation(true)
             .arg("-F")
             .arg("0")
             .arg(file)
@@ -86,6 +182,7 @@ fn test_argument_from_file() {
         // output only the second line
         scene
             .ucmd()
+            .terminal_simulation(true)
             .arg("-F")
             .arg("2")
             .arg(file)
@@ -103,6 +200,7 @@ fn test_more_dir_arg() {
     // but I am leaving this for later
     if std::io::stdout().is_terminal() {
         new_ucmd!()
+            .terminal_simulation(true)
             .arg(".")
             .succeeds()
             .stderr_contains("'.' is a directory.");
@@ -121,6 +219,7 @@ fn test_more_invalid_file_perms() {
         at.make_file("invalid-perms.txt");
         set_permissions(at.plus("invalid-perms.txt"), permissions).unwrap();
         ucmd.arg("invalid-perms.txt")
+            .terminal_simulation(true)
             .succeeds()
             .stderr_contains("permission denied");
     }
@@ -132,10 +231,12 @@ fn test_more_error_on_single_arg() {
         let ts = TestScenario::new("more");
         ts.fixtures.mkdir_all("folder");
         ts.ucmd()
+            .terminal_simulation(true)
             .arg("folder")
             .succeeds()
             .stderr_contains("is a directory");
         ts.ucmd()
+            .terminal_simulation(true)
             .arg("file1")
             .succeeds()
             .stderr_contains("No such file or directory");
@@ -149,6 +250,7 @@ fn test_more_error_on_multiple_files() {
         ts.fixtures.mkdir_all("folder");
         ts.fixtures.make_file("file1");
         ts.ucmd()
+            .terminal_simulation(true)
             .arg("folder")
             .arg("file2")
             .arg("file1")
@@ -178,6 +280,7 @@ fn test_more_pattern_found() {
         // output only the second line "line2"
         scene
             .ucmd()
+            .terminal_simulation(true)
             .arg("-P")
             .arg("line2")
             .arg(file)
@@ -201,6 +304,7 @@ fn test_more_pattern_not_found() {
 
         scene
             .ucmd()
+            .terminal_simulation(true)
             .arg("-P")
             .arg("something")
             .arg(file)
