@@ -3220,6 +3220,39 @@ fn test_copy_contents_fifo() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn test_sparse_auto_for_sparse_files() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.write("a", "hello");
+    at.truncate("a", "-s10000");
+    ts.ucmd().arg("--sparse=auto").arg("a").arg("b").succeeds();
+    let result = ts.ccmd("du").arg("-h").arg("b").succeeds();
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("4.0K	b") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_sparse_auto_for_non_sparse_files() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let a_bytes = [1 as u8; 10000];
+    at.touch("a");
+    at.write("a", "hello");
+    at.append_bytes("a", &a_bytes);
+    ts.ucmd().arg("--sparse=auto").arg("a").arg("b").succeeds();
+    let result = ts.ccmd("du").arg("-h").arg("b").succeeds();
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("12.0K	b") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn test_reflink_never_sparse_always() {
     let (at, mut ucmd) = at_and_ucmd!();
 
