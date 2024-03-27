@@ -12,7 +12,7 @@ use chrono::{
 };
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{set_file_times, set_symlink_file_times, FileTime};
+use filetime::{set_file_times, set_file_times_now, set_symlink_file_times, FileTime};
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -60,6 +60,13 @@ mod format {
     pub(crate) const YYYYMMDDHHMM_OFFSET: &str = "%Y-%m-%d %H:%M %z";
 }
 
+struct Flags {
+    update_only_atime: bool,
+    update_only_mtime: bool,
+    no_create: bool,
+    no_deref: bool,
+}
+
 /// Convert a DateTime with a TZ offset into a FileTime
 ///
 /// The DateTime is converted into a unix timestamp from which the FileTime is
@@ -86,7 +93,35 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         )
     })?;
 
+    // Ideally, we would like to parse the date string in such a way that we still know whether it is logically "now".
+    // However, that would require re-implementing a lot of logic from scratch.
+    // Instead, we measure the time immediately before and after the times are computed, and use that to make an educated guess.
+    // TODO: Rewrite *all* the date-parsing logic.
+    let time_before_now = FileTime::now();
     let (atime, mtime) = determine_times(&matches)?;
+    let time_after_now = FileTime::now();
+
+    let time = matches
+        .get_one::<String>(options::TIME)
+        .map(|s| s.as_str())
+        .unwrap_or("");
+    let flags = Flags {
+        update_only_atime: matches.get_flag(options::ACCESS)
+            || time.contains(&"access".to_owned())
+            || time.contains(&"atime".to_owned())
+            || time.contains(&"use".to_owned()),
+        update_only_mtime: matches.get_flag(options::MODIFICATION)
+            || time.contains(&"modify".to_owned())
+            || time.contains(&"mtime".to_owned()),
+        no_create: matches.get_flag(options::NO_CREATE),
+        no_deref: matches.get_flag(options::NO_DEREF),
+    };
+
+    let time_is_now = (flags.update_only_atime == flags.update_only_mtime)
+        && (time_before_now <= atime)
+        && (atime <= time_after_now)
+        && (time_before_now <= mtime)
+        && (mtime <= time_after_now);
 
     for filename in files {
         // FIXME: find a way to avoid having to clone the path
@@ -98,7 +133,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let path = pathbuf.as_path();
 
-        let metadata_result = if matches.get_flag(options::NO_DEREF) {
+        let metadata_result = if flags.no_deref {
             path.symlink_metadata()
         } else {
             path.metadata()
@@ -109,11 +144,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(e.map_err_context(|| format!("setting times of {}", filename.quote())));
             }
 
-            if matches.get_flag(options::NO_CREATE) {
+            if flags.no_create {
                 continue;
             }
 
-            if matches.get_flag(options::NO_DEREF) {
+            if flags.no_deref {
                 show!(USimpleError::new(
                     1,
                     format!(
@@ -129,13 +164,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 continue;
             };
 
-            // Minor optimization: if no reference time was specified, we're done.
-            if !matches.contains_id(options::SOURCES) {
+            // Minor optimization: if the new atime/mtime is just "now", we're already done.
+            if time_is_now {
                 continue;
             }
         }
 
-        update_times(&matches, path, atime, mtime, filename)?;
+        update_times(&flags, path, atime, mtime, time_is_now, filename)?;
     }
     Ok(())
 }
@@ -273,36 +308,21 @@ fn determine_times(matches: &ArgMatches) -> UResult<(FileTime, FileTime)> {
 
 // Updating file access and modification times based on user-specified options
 fn update_times(
-    matches: &ArgMatches,
+    flags: &Flags,
     path: &Path,
     mut atime: FileTime,
     mut mtime: FileTime,
+    time_is_now: bool,
     filename: &OsString,
 ) -> UResult<()> {
     // If changing "only" atime or mtime, grab the existing value of the other.
-    // Note that "-a" and "-m" may be passed together; this is not an xor.
-    if matches.get_flag(options::ACCESS)
-        || matches.get_flag(options::MODIFICATION)
-        || matches.contains_id(options::TIME)
-    {
-        let st = stat(path, !matches.get_flag(options::NO_DEREF))?;
-        let time = matches
-            .get_one::<String>(options::TIME)
-            .map(|s| s.as_str())
-            .unwrap_or("");
-
-        if !(matches.get_flag(options::ACCESS)
-            || time.contains(&"access".to_owned())
-            || time.contains(&"atime".to_owned())
-            || time.contains(&"use".to_owned()))
-        {
+    // Note that "-a" and "-m" may be passed together. In that case, change both.
+    if flags.update_only_atime ^ flags.update_only_mtime {
+        let st = stat(path, !flags.no_deref)?;
+        if !flags.update_only_atime {
             atime = st.0;
         }
-
-        if !(matches.get_flag(options::MODIFICATION)
-            || time.contains(&"modify".to_owned())
-            || time.contains(&"mtime".to_owned()))
-        {
+        if !flags.update_only_mtime {
             mtime = st.1;
         }
     }
@@ -313,12 +333,19 @@ fn update_times(
     // If the filename is not "-", indicating a special case for touch -h -,
     // the code checks if the NO_DEREF flag is set, which means the user wants to
     // set the times for a symbolic link itself, rather than the file it points to.
-    if filename == "-" {
-        filetime::set_file_times(path, atime, mtime)
-    } else if matches.get_flag(options::NO_DEREF) {
-        set_symlink_file_times(path, atime, mtime)
+    if flags.no_deref && filename != "-" {
+        if time_is_now {
+            set_file_times_now(path, false)
+        } else {
+            set_symlink_file_times(path, atime, mtime)
+        }
     } else {
-        set_file_times(path, atime, mtime)
+        #[allow(clippy::collapsible_else_if)]
+        if time_is_now {
+            set_file_times_now(path, true)
+        } else {
+            set_file_times(path, atime, mtime)
+        }
     }
     .map_err_context(|| format!("setting times of {}", path.quote()))
 }

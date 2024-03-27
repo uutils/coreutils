@@ -532,3 +532,6 @@ inherits = "release"
 opt-level = "z"
 panic = "abort"
 strip = true
+
+[patch.crates-io]
+filetime = { git = 'https://github.com/BenWiederhake/filetime.git', branch = 'dev-touch-otheruser-now' }
