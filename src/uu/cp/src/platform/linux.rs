@@ -7,6 +7,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Read;
 use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
+use std::os::unix::prelude::MetadataExt;
 use std::path::Path;
 
 use quick_error::ResultExt;
@@ -66,8 +67,6 @@ fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    use std::os::unix::prelude::MetadataExt;
-
     let mut src_file = File::open(source)?;
     let dst_file = File::create(dest)?;
     let dst_fd = dst_file.as_raw_fd();
@@ -137,6 +136,7 @@ where
 }
 
 fn check_dest_is_fifo(dest: &Path) -> bool {
+    //If our destination file exists and its a fifo , we do a standard copy .
     let file_type = fs::metadata(dest);
     match file_type {
         Ok(f) => f.file_type().is_fifo(),
@@ -144,14 +144,16 @@ fn check_dest_is_fifo(dest: &Path) -> bool {
         _ => false,
     }
 }
+
 fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     let src_file = File::open(source)?;
 
-    use std::os::unix::prelude::MetadataExt;
+    let size = src_file.metadata()?.size();
+    let blocks = src_file.metadata()?.blocks();
 
-    let size: usize = src_file.metadata()?.size().try_into().unwrap();
-    let blocks: usize = src_file.metadata()?.blocks().try_into().unwrap();
-
+    //cp uses a crude heuristic to detect sparse_files , an estimated formula which seems to accurately
+    //replicate that , might need to change if we observe any edge cases that i haven't thought of but this should work for majority of the files.
+    //Reference:https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks
     if blocks < size / 512 && blocks != 0 {
         return Ok(true);
     }
