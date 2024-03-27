@@ -321,15 +321,7 @@ impl<'a> SplitWriter<'a> {
         while let Some((ln, line)) = input_iter.next() {
             let l = line?;
             match n.cmp(&(&ln + 1)) {
-                Ordering::Less => {
-                    assert!(
-                        input_iter.add_line_to_buffer(ln, l).is_none(),
-                        "the buffer is big enough to contain 1 line"
-                    );
-                    ret = Ok(());
-                    break;
-                }
-                Ordering::Equal => {
+                Ordering::Less | Ordering::Equal => {
                     assert!(
                         self.options.suppress_matched
                             || input_iter.add_line_to_buffer(ln, l).is_none(),
