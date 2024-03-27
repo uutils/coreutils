@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) ints paren prec multibytes
 
 use num_bigint::{BigInt, ParseBigIntError};
-use num_traits::ToPrimitive;
+use num_traits::{ToPrimitive, Zero};
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::{ExprError, ExprResult};
@@ -139,6 +139,7 @@ impl StringOp {
             Self::Match => {
                 let left = left.eval()?.eval_as_string();
                 let right = right.eval()?.eval_as_string();
+                validate_regex(&right)?;
                 let re_string = format!("^{right}");
                 let re = Regex::with_options(
                     &re_string,
@@ -170,6 +171,65 @@ impl StringOp {
                 Ok(0.into())
             }
         }
+    }
+}
+
+/// Check errors with a supplied regular expression
+///
+/// GNU coreutils shows messages for invalid regular expressions
+/// differently from the oniguruma library used by the regex crate.
+/// This method attempts to do these checks manually in one linear pass
+/// through the regular expression.
+fn validate_regex(pattern: &str) -> ExprResult<()> {
+    let mut escaped_parens: u64 = 0;
+    let mut escaped_braces: u64 = 0;
+    let mut escaped = false;
+
+    let mut comma_in_braces = false;
+    let mut invalid_content_error = false;
+
+    for c in pattern.chars() {
+        match (escaped, c) {
+            (true, ')') => {
+                escaped_parens = escaped_parens
+                    .checked_sub(1)
+                    .ok_or(ExprError::UnmatchedClosingParenthesis)?;
+            }
+            (true, '(') => {
+                escaped_parens += 1;
+            }
+            (true, '}') => {
+                escaped_braces = escaped_braces
+                    .checked_sub(1)
+                    .ok_or(ExprError::UnmatchedClosingBrace)?;
+
+                if !comma_in_braces {
+                    // Empty repeating patterns are not valid
+                    return Err(ExprError::InvalidContent(r"\{\}".to_string()));
+                }
+            }
+            (true, '{') => {
+                comma_in_braces = false;
+                escaped_braces += 1;
+            }
+            _ => {
+                if escaped_braces > 0 && !(c.is_ascii_digit() || c == '\\' || c == ',') {
+                    invalid_content_error = true;
+                }
+            }
+        }
+        escaped = !escaped && c == '\\';
+        comma_in_braces = escaped_braces > 0 && (comma_in_braces || c == ',')
+    }
+    match (
+        escaped_parens.is_zero(),
+        escaped_braces.is_zero(),
+        invalid_content_error,
+    ) {
+        (true, true, false) => Ok(()),
+        (_, false, _) => Err(ExprError::UnmatchedOpeningBrace),
+        (false, _, _) => Err(ExprError::UnmatchedOpeningParenthesis),
+        (true, true, true) => Err(ExprError::InvalidContent(r"\{\}".to_string())),
     }
 }
 
@@ -493,8 +553,9 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 #[cfg(test)]
 mod test {
     use crate::ExprError;
+    use crate::ExprError::InvalidContent;
 
-    use super::{AstNode, BinOp, NumericOp, RelationOp, StringOp};
+    use super::{validate_regex, AstNode, BinOp, NumericOp, RelationOp, StringOp};
 
     impl From<&str> for AstNode {
         fn from(value: &str) -> Self {
@@ -618,5 +679,44 @@ mod test {
             .eval()
             .unwrap();
         assert_eq!(result.eval_as_string(), "");
+    }
+
+    #[test]
+    fn validate_regex_valid() {
+        assert!(validate_regex(r"(a+b) \(a* b\)").is_ok());
+    }
+
+    #[test]
+    fn validate_regex_missing_closing() {
+        assert_eq!(
+            validate_regex(r"\(abc"),
+            Err(ExprError::UnmatchedOpeningParenthesis)
+        );
+
+        assert_eq!(
+            validate_regex(r"\{1,2"),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+    }
+
+    #[test]
+    fn validate_regex_missing_opening() {
+        assert_eq!(
+            validate_regex(r"abc\)"),
+            Err(ExprError::UnmatchedClosingParenthesis)
+        );
+
+        assert_eq!(
+            validate_regex(r"abc\}"),
+            Err(ExprError::UnmatchedClosingBrace)
+        );
+    }
+
+    #[test]
+    fn validate_regex_empty_repeating_pattern() {
+        assert_eq!(
+            validate_regex("ab\\{\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        )
     }
 }
