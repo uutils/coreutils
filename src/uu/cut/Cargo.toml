@@ -1,6 +1,6 @@
 [package]
 name = "uu_cut"
-version = "0.0.25"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "cut ~ (uutils) display byte/field columns of input lines"

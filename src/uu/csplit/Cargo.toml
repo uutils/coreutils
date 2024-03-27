@@ -1,6 +1,6 @@
 [package]
 name = "uu_csplit"
-version = "0.0.25"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "csplit ~ (uutils) Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output"
