@@ -2467,6 +2467,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "onig",
+ "rstest",
  "uucore",
 ]
 

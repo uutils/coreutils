@@ -7,7 +7,7 @@
 
 use num_bigint::{BigInt, ParseBigIntError};
 use num_traits::{ToPrimitive, Zero};
-use onig::{Regex, RegexOptions, Syntax};
+use onig::{Captures, Regex, RegexOptions, Syntax};
 
 use crate::{ExprError, ExprResult};
 
@@ -140,10 +140,8 @@ impl StringOp {
                 let left = left.eval()?.eval_as_string();
                 let right = right.eval()?.eval_as_string();
                 validate_regex(&right)?;
-                let prefix = if right.starts_with('*') { r"^\" } else { "^" };
-                let re_string = format!("{}{}", prefix, right);
                 let re = Regex::with_options(
-                    &re_string,
+                    &transform_regex(&right),
                     RegexOptions::REGEX_OPTION_NONE,
                     Syntax::grep(),
                 )
@@ -231,6 +229,21 @@ fn validate_regex(pattern: &str) -> ExprResult<()> {
         (_, false, _) => Err(ExprError::UnmatchedOpeningBrace),
         (false, _, _) => Err(ExprError::UnmatchedOpeningParenthesis),
         (true, true, true) => Err(ExprError::InvalidContent(r"\{\}".to_string())),
+    }
+}
+
+fn transform_regex(pattern: &str) -> String {
+    let re_string = Regex::new(r"([^\[\\])\^")
+        .unwrap()
+        .replace_all(&pattern, |caps: &Captures| {
+            format!(r"{}\^", caps.at(1).unwrap_or(""))
+        });
+
+    match pattern.chars().next() {
+        None => unimplemented!(),
+        Some('*') => format!(r"^\{}", re_string).to_string(),
+        Some('^') => re_string,
+        Some(_) => format!("^{}", re_string).to_string(),
     }
 }
 
@@ -555,8 +568,9 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 mod test {
     use crate::ExprError;
     use crate::ExprError::InvalidContent;
+    use rstest::rstest;
 
-    use super::{validate_regex, AstNode, BinOp, NumericOp, RelationOp, StringOp};
+    use super::{transform_regex, validate_regex, AstNode, BinOp, NumericOp, RelationOp, StringOp};
 
     impl From<&str> for AstNode {
         fn from(value: &str) -> Self {
@@ -698,6 +712,15 @@ mod test {
     }
 
     #[test]
+    fn mid_regex_anchors() {
+        let result = AstNode::parse(&["x^y", ":", r"x^y"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "3");
+    }
+
+    #[test]
     fn validate_regex_valid() {
         assert!(validate_regex(r"(a+b) \(a* b\)").is_ok());
     }
@@ -734,5 +757,16 @@ mod test {
             validate_regex("ab\\{\\}"),
             Err(InvalidContent(r"\{\}".to_string()))
         )
+    }
+
+    #[rstest]
+    #[case::adds_anchor("abc", "^abc")]
+    #[case::escapes_anchor_mid_regex("ab^c", r"^ab\^c")]
+    #[case::preserves_carrot_in_classes("ab[^cd]", "^ab[^cd]")]
+    #[case::initial_asterick("*abc", r"^\*abc")]
+    #[case::existing_anchor("^abc", "^abc")]
+    #[case::already_escaped_anchor(r"a\^bc", r"^a\^bc")]
+    fn transform_regex_tests(#[case] input: &str, #[case] expected: String) {
+        assert_eq!(transform_regex(input), expected)
     }
 }
