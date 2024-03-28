@@ -3227,11 +3227,24 @@ fn test_sparse_auto_for_sparse_files() {
     at.write("a", "hello");
     at.truncate("a", "-s10000");
     ts.ucmd().arg("--sparse=auto").arg("a").arg("b").succeeds();
-    let result = ts.ccmd("du").arg("-h").arg("b").succeeds();
-    let stdout_str = result.stdout_str();
-    if !stdout_str.contains("4.0K	b") {
-        panic!("Failure: stdout was \n{stdout_str}");
-    }
+
+    let src_size = std::fs::metadata(at.plus("a"))
+        .expect("Metadata of source file cannot be read")
+        .size();
+
+    let src_blocks = std::fs::metadata(at.plus("a"))
+        .expect("Metadata of source file cannot be read")
+        .blocks();
+
+    let dest_size = std::fs::metadata(at.plus("b"))
+        .expect("Metadata of copied file cannot be read")
+        .size();
+    let dest_blocks = std::fs::metadata(at.plus("b"))
+        .expect("Metadata of copied file cannot be read")
+        .blocks();
+
+    assert_eq!(src_size, dest_size);
+    assert_eq!(src_blocks, dest_blocks);
 }
 
 #[cfg(target_os = "linux")]
@@ -3244,11 +3257,24 @@ fn test_sparse_auto_for_non_sparse_files() {
     at.write("a", "hello");
     at.append_bytes("a", &a_bytes);
     ts.ucmd().arg("--sparse=auto").arg("a").arg("b").succeeds();
-    let result = ts.ccmd("du").arg("-h").arg("b").succeeds();
-    let stdout_str = result.stdout_str();
-    if !stdout_str.contains("12.0K	b") {
-        panic!("Failure: stdout was \n{stdout_str}");
-    }
+
+    let src_size = std::fs::metadata(at.plus("a"))
+        .expect("Metadata of source file cannot be read")
+        .size();
+
+    let src_blocks = std::fs::metadata(at.plus("a"))
+        .expect("Metadata of source file cannot be read")
+        .blocks();
+
+    let dest_size = std::fs::metadata(at.plus("b"))
+        .expect("Metadata of copied file cannot be read")
+        .size();
+    let dest_blocks = std::fs::metadata(at.plus("b"))
+        .expect("Metadata of copied file cannot be read")
+        .blocks();
+
+    assert_eq!(src_size, dest_size);
+    assert_eq!(src_blocks, dest_blocks);
 }
 
 #[cfg(target_os = "linux")]
