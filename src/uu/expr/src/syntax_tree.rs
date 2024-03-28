@@ -140,7 +140,8 @@ impl StringOp {
                 let left = left.eval()?.eval_as_string();
                 let right = right.eval()?.eval_as_string();
                 validate_regex(&right)?;
-                let re_string = format!("^{right}");
+                let prefix = if right.starts_with('*') { r"^\" } else { "^" };
+                let re_string = format!("{prefix}{right}");
                 let re = Regex::with_options(
                     &re_string,
                     RegexOptions::REGEX_OPTION_NONE,
@@ -679,6 +680,21 @@ mod test {
             .eval()
             .unwrap();
         assert_eq!(result.eval_as_string(), "");
+    }
+
+    #[test]
+    fn starting_stars_become_escaped() {
+        let result = AstNode::parse(&["yolo", ":", r"*yolo"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "0");
+
+        let result = AstNode::parse(&["*yolo", ":", r"*yolo"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "5");
     }
 
     #[test]
