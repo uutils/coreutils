@@ -21,6 +21,9 @@ num-traits = { workspace = true }
 onig = { workspace = true }
 uucore = { workspace = true }
 
+[dev-dependencies]
+rstest = { workspace = true }
+
 [[bin]]
 name = "expr"
 path = "src/main.rs"

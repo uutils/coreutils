@@ -6,8 +6,8 @@
 // spell-checker:ignore (ToDO) ints paren prec multibytes
 
 use num_bigint::{BigInt, ParseBigIntError};
-use num_traits::ToPrimitive;
-use onig::{Regex, RegexOptions, Syntax};
+use num_traits::{ToPrimitive, Zero};
+use onig::{Captures, Regex, RegexOptions, Syntax};
 
 use crate::{ExprError, ExprResult};
 
@@ -139,16 +139,16 @@ impl StringOp {
             Self::Match => {
                 let left = left.eval()?.eval_as_string();
                 let right = right.eval()?.eval_as_string();
-                let re_string = format!("^{}", right);
+                validate_regex(&right)?;
                 let re = Regex::with_options(
-                    &re_string,
+                    &transform_regex(&right),
                     RegexOptions::REGEX_OPTION_NONE,
                     Syntax::grep(),
                 )
                 .map_err(|_| ExprError::InvalidRegexExpression)?;
                 Ok(if re.captures_len() > 0 {
                     re.captures(&left)
-                        .map(|captures| captures.at(1).unwrap())
+                        .and_then(|captures| captures.at(1))
                         .unwrap_or("")
                         .to_string()
                 } else {
@@ -170,6 +170,80 @@ impl StringOp {
                 Ok(0.into())
             }
         }
+    }
+}
+
+/// Check errors with a supplied regular expression
+///
+/// GNU coreutils shows messages for invalid regular expressions
+/// differently from the oniguruma library used by the regex crate.
+/// This method attempts to do these checks manually in one linear pass
+/// through the regular expression.
+fn validate_regex(pattern: &str) -> ExprResult<()> {
+    let mut escaped_parens: u64 = 0;
+    let mut escaped_braces: u64 = 0;
+    let mut escaped = false;
+
+    let mut comma_in_braces = false;
+    let mut invalid_content_error = false;
+
+    for c in pattern.chars() {
+        match (escaped, c) {
+            (true, ')') => {
+                escaped_parens = escaped_parens
+                    .checked_sub(1)
+                    .ok_or(ExprError::UnmatchedClosingParenthesis)?;
+            }
+            (true, '(') => {
+                escaped_parens += 1;
+            }
+            (true, '}') => {
+                escaped_braces = escaped_braces
+                    .checked_sub(1)
+                    .ok_or(ExprError::UnmatchedClosingBrace)?;
+
+                if !comma_in_braces {
+                    // Empty repeating patterns are not valid
+                    return Err(ExprError::InvalidContent(r"\{\}".to_string()));
+                }
+            }
+            (true, '{') => {
+                comma_in_braces = false;
+                escaped_braces += 1;
+            }
+            _ => {
+                if escaped_braces > 0 && !(c.is_ascii_digit() || c == '\\' || c == ',') {
+                    invalid_content_error = true;
+                }
+            }
+        }
+        escaped = !escaped && c == '\\';
+        comma_in_braces = escaped_braces > 0 && (comma_in_braces || c == ',')
+    }
+    match (
+        escaped_parens.is_zero(),
+        escaped_braces.is_zero(),
+        invalid_content_error,
+    ) {
+        (true, true, false) => Ok(()),
+        (_, false, _) => Err(ExprError::UnmatchedOpeningBrace),
+        (false, _, _) => Err(ExprError::UnmatchedOpeningParenthesis),
+        (true, true, true) => Err(ExprError::InvalidContent(r"\{\}".to_string())),
+    }
+}
+
+fn transform_regex(pattern: &str) -> String {
+    let re_string = Regex::new(r"([^\[\\])\^")
+        .unwrap()
+        .replace_all(&pattern, |caps: &Captures| {
+            format!(r"{}\^", caps.at(1).unwrap_or(""))
+        });
+
+    match pattern.chars().next() {
+        None => unimplemented!(),
+        Some('*') => format!(r"^\{}", re_string).to_string(),
+        Some('^') => re_string,
+        Some(_) => format!("^{}", re_string).to_string(),
     }
 }
 
@@ -442,13 +516,21 @@ impl<'a> Parser<'a> {
             },
             "(" => {
                 let s = self.parse_expression()?;
-                let close_paren = self.next()?;
-                if close_paren != ")" {
+                match self.next() {
+                    Ok(")") => {}
                     // Since we have parsed at least a '(', there will be a token
                     // at `self.index - 1`. So this indexing won't panic.
-                    return Err(ExprError::ExpectedClosingBraceAfter(
-                        self.input[self.index - 1].into(),
-                    ));
+                    Ok(_) => {
+                        return Err(ExprError::ExpectedClosingBraceInsteadOf(
+                            self.input[self.index - 1].into(),
+                        ));
+                    }
+                    Err(ExprError::MissingArgument(_)) => {
+                        return Err(ExprError::ExpectedClosingBraceAfter(
+                            self.input[self.index - 1].into(),
+                        ));
+                    }
+                    Err(e) => return Err(e),
                 }
                 s
             }
@@ -484,7 +566,11 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::{AstNode, BinOp, NumericOp, RelationOp, StringOp};
+    use crate::ExprError;
+    use crate::ExprError::InvalidContent;
+    use rstest::rstest;
+
+    use super::{transform_regex, validate_regex, AstNode, BinOp, NumericOp, RelationOp, StringOp};
 
     impl From<&str> for AstNode {
         fn from(value: &str) -> Self {
@@ -586,5 +672,101 @@ mod test {
                 "3"
             )),
         );
+    }
+
+    #[test]
+    fn missing_closing_parenthesis() {
+        assert_eq!(
+            AstNode::parse(&["(", "42"]),
+            Err(ExprError::ExpectedClosingBraceAfter("42".to_string()))
+        );
+        assert_eq!(
+            AstNode::parse(&["(", "42", "a"]),
+            Err(ExprError::ExpectedClosingBraceInsteadOf("a".to_string()))
+        );
+    }
+
+    #[test]
+    fn empty_substitution() {
+        // causes a panic in 0.0.25
+        let result = AstNode::parse(&["a", ":", r"\(b\)*"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "");
+    }
+
+    #[test]
+    fn starting_stars_become_escaped() {
+        let result = AstNode::parse(&["yolo", ":", r"*yolo"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "0");
+
+        let result = AstNode::parse(&["*yolo", ":", r"*yolo"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "5");
+    }
+
+    #[test]
+    fn mid_regex_anchors() {
+        let result = AstNode::parse(&["x^y", ":", r"x^y"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "3");
+    }
+
+    #[test]
+    fn validate_regex_valid() {
+        assert!(validate_regex(r"(a+b) \(a* b\)").is_ok());
+    }
+
+    #[test]
+    fn validate_regex_missing_closing() {
+        assert_eq!(
+            validate_regex(r"\(abc"),
+            Err(ExprError::UnmatchedOpeningParenthesis)
+        );
+
+        assert_eq!(
+            validate_regex(r"\{1,2"),
+            Err(ExprError::UnmatchedOpeningBrace)
+        );
+    }
+
+    #[test]
+    fn validate_regex_missing_opening() {
+        assert_eq!(
+            validate_regex(r"abc\)"),
+            Err(ExprError::UnmatchedClosingParenthesis)
+        );
+
+        assert_eq!(
+            validate_regex(r"abc\}"),
+            Err(ExprError::UnmatchedClosingBrace)
+        );
+    }
+
+    #[test]
+    fn validate_regex_empty_repeating_pattern() {
+        assert_eq!(
+            validate_regex("ab\\{\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        )
+    }
+
+    #[rstest]
+    #[case::adds_anchor("abc", "^abc")]
+    #[case::escapes_anchor_mid_regex("ab^c", r"^ab\^c")]
+    #[case::preserves_carrot_in_classes("ab[^cd]", "^ab[^cd]")]
+    #[case::initial_asterick("*abc", r"^\*abc")]
+    #[case::existing_anchor("^abc", "^abc")]
+    #[case::already_escaped_anchor(r"a\^bc", r"^a\^bc")]
+    fn transform_regex_tests(#[case] input: &str, #[case] expected: String) {
+        assert_eq!(transform_regex(input), expected)
     }
 }
