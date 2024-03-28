@@ -1299,3 +1299,17 @@ fn check_regression_class_space() {
         .no_stderr()
         .stdout_only("a123456b");
 }
+
+#[test]
+fn check_regression_class_blank() {
+    // This invocation checks:
+    // 1. that the [:blank:] class has exactly 2 characters,
+    // 2. that the [:blank:] class contains at least the given 2 characters (and therefore no other characters), and
+    // 3. that the given characters occur in exactly this order.
+    new_ucmd!()
+        .args(&["[:blank:][:upper:]", "12[:lower:]"])
+        .pipe_in("A\t B")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("a12b");
+}
