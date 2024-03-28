@@ -179,14 +179,14 @@ impl StringOp {
 ///
 /// GNU coreutils shows messages for invalid regular expressions
 /// differently from the oniguruma library used by the regex crate.
-/// This method attempts to do these checks manually in one linear pass
+/// This method attempts to do these checks manually in one pass
 /// through the regular expression.
 fn validate_regex(pattern: &str) -> ExprResult<()> {
     let mut escaped_parens: u64 = 0;
     let mut escaped_braces: u64 = 0;
     let mut escaped = false;
 
-    let mut comma_in_braces = false;
+    let mut repeating_pattern_text = String::with_capacity(13);
     let mut invalid_content_error = false;
 
     for c in pattern.chars() {
@@ -203,24 +203,46 @@ fn validate_regex(pattern: &str) -> ExprResult<()> {
                 escaped_braces = escaped_braces
                     .checked_sub(1)
                     .ok_or(ExprError::UnmatchedClosingBrace)?;
-
-                if !comma_in_braces {
-                    // Empty repeating patterns are not valid
-                    return Err(ExprError::InvalidContent(r"\{\}".to_string()));
+                let mut repetition = repeating_pattern_text[..repeating_pattern_text.len() - 1]
+                    .splitn(2, |x| x == ',');
+                match (repetition.next(), repetition.next()) {
+                    (None, None) => {
+                        // Empty repeating pattern
+                        invalid_content_error = true;
+                    }
+                    (Some(x), None) | (Some(x), Some("")) => {
+                        if !x.parse::<i16>().is_ok() {
+                            invalid_content_error = true;
+                        }
+                    }
+                    (None, Some(x)) | (Some(""), Some(x)) => {
+                        if !x.parse::<i16>().is_ok() {
+                            invalid_content_error = true;
+                        }
+                    }
+                    (Some(f), Some(l)) => {
+                        if let (Ok(f), Ok(l)) = (f.parse::<i16>(), l.parse::<i16>()) {
+                            invalid_content_error = invalid_content_error || f > l;
+                        } else {
+                            invalid_content_error = true;
+                        }
+                    }
                 }
+                repeating_pattern_text.clear();
             }
             (true, '{') => {
-                comma_in_braces = false;
                 escaped_braces += 1;
             }
             _ => {
+                if escaped_braces > 0 && repeating_pattern_text.len() <= 13 {
+                    repeating_pattern_text.push(c);
+                }
                 if escaped_braces > 0 && !(c.is_ascii_digit() || c == '\\' || c == ',') {
                     invalid_content_error = true;
                 }
             }
         }
         escaped = !escaped && c == '\\';
-        comma_in_braces = escaped_braces > 0 && (comma_in_braces || c == ',')
     }
     match (
         escaped_parens.is_zero(),
@@ -698,8 +720,22 @@ mod test {
     }
 
     #[test]
+    fn only_match_in_beginning() {
+        let result = AstNode::parse(&["cowsay", ":", r"ow"])
+            .unwrap()
+            .eval()
+            .unwrap();
+        assert_eq!(result.eval_as_string(), "0");
+    }
+
+    #[test]
     fn validate_regex_valid() {
         assert!(validate_regex(r"(a+b) \(a* b\)").is_ok());
+    }
+
+    #[test]
+    fn validate_regex_simple_repeating_pattern() {
+        assert!(validate_regex(r"(a+b){4}").is_ok());
     }
 
     #[test]
@@ -734,5 +770,26 @@ mod test {
             validate_regex("ab\\{\\}"),
             Err(InvalidContent(r"\{\}".to_string()))
         )
+    }
+
+    #[test]
+    fn validate_regex_intervals_two_numbers() {
+        assert_eq!(
+            // out of order
+            validate_regex("ab\\{1,0\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        );
+        assert_eq!(
+            validate_regex("ab\\{1,a\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        );
+        assert_eq!(
+            validate_regex("ab\\{a,3\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        );
+        assert_eq!(
+            validate_regex("ab\\{a,b\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        );
     }
 }
