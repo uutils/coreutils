@@ -3929,15 +3929,16 @@ fn test_ls_perm_io_errors() {
 }
 
 #[test]
-fn test_ls_dired_incompatible() {
+fn test_ls_dired_implies_long() {
     let scene = TestScenario::new(util_name!());
 
     scene
         .ucmd()
         .arg("--dired")
-        .fails()
-        .code_is(1)
-        .stderr_contains("--dired requires --format=long");
+        .succeeds()
+        .stdout_does_not_contain("//DIRED//")
+        .stdout_contains("  total 0")
+        .stdout_contains("//DIRED-OPTIONS// --quoting-style");
 }
 
 #[test]

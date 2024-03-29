@@ -174,7 +174,6 @@ enum LsError {
     IOError(std::io::Error),
     IOErrorContext(std::io::Error, PathBuf, bool),
     BlockSizeParseError(String),
-    ConflictingArgumentDired,
     DiredAndZeroAreIncompatible,
     AlreadyListedError(PathBuf),
     TimeStyleParseError(String, Vec<String>),
@@ -188,7 +187,6 @@ impl UError for LsError {
             Self::IOErrorContext(_, _, false) => 1,
             Self::IOErrorContext(_, _, true) => 2,
             Self::BlockSizeParseError(_) => 2,
-            Self::ConflictingArgumentDired => 1,
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_, _) => 2,
@@ -203,9 +201,6 @@ impl Display for LsError {
         match self {
             Self::BlockSizeParseError(s) => {
                 write!(f, "invalid --block-size argument {}", s.quote())
-            }
-            Self::ConflictingArgumentDired => {
-                write!(f, "--dired requires --format=long")
             }
             Self::DiredAndZeroAreIncompatible => {
                 write!(f, "--dired and --zero are incompatible")
@@ -1084,8 +1079,9 @@ impl Config {
         };
 
         let dired = options.get_flag(options::DIRED);
-        if dired && format != Format::Long {
-            return Err(Box::new(LsError::ConflictingArgumentDired));
+        if dired {
+            // --dired implies --format=long
+            format = Format::Long;
         }
         if dired && format == Format::Long && options.get_flag(options::ZERO) {
             return Err(Box::new(LsError::DiredAndZeroAreIncompatible));
