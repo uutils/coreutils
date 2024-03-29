@@ -313,6 +313,8 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        // Must not use .args_override_self(true)!
+        // Some flags like --rfc-email do NOT override themselves.
         .arg(
             Arg::new(OPT_DATE)
                 .short('d')

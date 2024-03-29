@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+// spell-checker:ignore (arguments) Idate Idefinitely
+
 use crate::common::util::TestScenario;
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -490,4 +493,45 @@ fn test_date_empty_tz() {
         .arg("+%Z")
         .succeeds()
         .stdout_only("UTC\n");
+}
+
+#[test]
+#[ignore = "known issue https://github.com/uutils/coreutils/issues/4254#issuecomment-2026446634"]
+fn test_format_conflict_self() {
+    for param in ["-I", "-Idate", "-R", "--rfc-3339=date"] {
+        new_ucmd!()
+            .arg(param)
+            .arg(param)
+            .fails()
+            .stderr_contains("multiple output formats specified");
+    }
+}
+
+#[test]
+#[ignore = "known issue https://github.com/uutils/coreutils/issues/4254#issuecomment-2026446634"]
+fn test_format_conflict_other() {
+    new_ucmd!()
+        .args(&["-I", "-Idate", "-R", "--rfc-3339=date"])
+        .fails()
+        .stderr_contains("multiple output formats specified");
+}
+
+#[test]
+#[ignore = "known issue https://github.com/uutils/coreutils/issues/4254#issuecomment-2026446634"]
+fn test_format_error_priority() {
+    // First, try to parse the value to "-I", even though it cannot be useful:
+    new_ucmd!()
+        .args(&["-R", "-Idefinitely_invalid"])
+        .fails()
+        .stderr_contains("definitely_invalid");
+    // And then raise an error:
+    new_ucmd!()
+        .args(&["-R", "-R"])
+        .fails()
+        .stderr_contains("multiple output formats specified");
+    // Even if a later argument would be "even more invalid":
+    new_ucmd!()
+        .args(&["-R", "-R", "-Idefinitely_invalid"])
+        .fails()
+        .stderr_contains("multiple output formats specified");
 }
