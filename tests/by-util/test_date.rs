@@ -243,8 +243,7 @@ fn test_date_set_valid() {
             .arg("--set")
             .arg("2020-03-12 13:30:00+08:00")
             .succeeds()
-            // FIXME: .stdout_only("2020-03-12")
-            .no_stdout()
+            .stdout_only("2020-03-12\n")
             .no_stderr();
     }
 }
@@ -260,8 +259,7 @@ fn test_date_set_valid_repeated() {
             .arg("--set")
             .arg("2022-03-12 13:30:00+08:00")
             .succeeds()
-            // FIXME: .stdout_only("2022-03-12")
-            .no_stdout()
+            .stdout_only("2022-03-12\n")
             .no_stderr();
     }
 }

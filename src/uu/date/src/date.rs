@@ -204,27 +204,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         set_to,
     };
 
-    if let Some(date) = settings.set_to {
+    // Get the current time, either in the local time zone or UTC.
+    let now: DateTime<FixedOffset> = if settings.utc {
+        let now = Utc::now();
+        now.with_timezone(&now.offset().fix())
+    } else {
+        let now = Local::now();
+        now.with_timezone(now.offset())
+    };
+
+    // Iterate over all dates - whether it's a single date or a file.
+    let dates: Box<dyn Iterator<Item = _>> = if let Some(date) = settings.set_to {
         // All set time functions expect UTC datetimes.
         let date: DateTime<Utc> = if settings.utc {
             date.with_timezone(&Utc)
         } else {
             date.into()
         };
-
-        return set_system_datetime(date);
+        set_system_datetime(date)?;
+        let date_fixed: DateTime<FixedOffset> = date.into();
+        Box::new(std::iter::once(Ok(date_fixed)))
     } else {
-        // Get the current time, either in the local time zone or UTC.
-        let now: DateTime<FixedOffset> = if settings.utc {
-            let now = Utc::now();
-            now.with_timezone(&now.offset().fix())
-        } else {
-            let now = Local::now();
-            now.with_timezone(now.offset())
-        };
-
-        // Iterate over all dates - whether it's a single date or a file.
-        let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
+        match settings.date_source {
             DateSource::Custom(ref input) => {
                 let date = parse_date(input.clone());
                 let iter = std::iter::once(date);
@@ -276,42 +277,42 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let iter = std::iter::once(Ok(now));
                 Box::new(iter)
             }
-        };
+        }
+    };
 
-        let format_string = make_format_string(&settings);
+    let format_string = make_format_string(&settings);
 
-        // Format all the dates
-        for date in dates {
-            match date {
-                Ok(date) => {
-                    let format_string = custom_time_format(format_string);
-                    // Refuse to pass this string to chrono as it is crashing in this crate
-                    if format_string.contains("%#z") {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid format {}", format_string.replace("%f", "%N")),
-                        ));
-                    }
-                    // Hack to work around panic in chrono,
-                    // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
-                    let format_items = StrftimeItems::new(format_string.as_str());
-                    if format_items.clone().any(|i| i == Item::Error) {
-                        return Err(USimpleError::new(
-                            1,
-                            format!("invalid format {}", format_string.replace("%f", "%N")),
-                        ));
-                    }
-                    let formatted = date
-                        .format_with_items(format_items)
-                        .to_string()
-                        .replace("%f", "%N");
-                    println!("{formatted}");
+    // Format all the dates
+    for date in dates {
+        match date {
+            Ok(date) => {
+                let format_string = custom_time_format(format_string);
+                // Refuse to pass this string to chrono as it is crashing in this crate
+                if format_string.contains("%#z") {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("invalid format {}", format_string.replace("%f", "%N")),
+                    ));
                 }
-                Err((input, _err)) => show!(USimpleError::new(
-                    1,
-                    format!("invalid date {}", input.quote())
-                )),
+                // Hack to work around panic in chrono,
+                // TODO - remove when a fix for https://github.com/chronotope/chrono/issues/623 is released
+                let format_items = StrftimeItems::new(format_string.as_str());
+                if format_items.clone().any(|i| i == Item::Error) {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("invalid format {}", format_string.replace("%f", "%N")),
+                    ));
+                }
+                let formatted = date
+                    .format_with_items(format_items)
+                    .to_string()
+                    .replace("%f", "%N");
+                println!("{formatted}");
             }
+            Err((input, _err)) => show!(USimpleError::new(
+                1,
+                format!("invalid date {}", input.quote())
+            )),
         }
     }
 
