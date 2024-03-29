@@ -75,7 +75,7 @@ struct Settings {
     utc: bool,
     format: Format,
     date_source: DateSource,
-    set_to: Option<DateTime<FixedOffset>>,
+    set_to: Option<String>,
 }
 
 /// Various ways of displaying the date
@@ -186,22 +186,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         DateSource::Now
     };
 
-    let set_to = match matches.get_one::<String>(OPT_SET).map(parse_date) {
-        None => None,
-        Some(Err((input, _err))) => {
-            return Err(USimpleError::new(
-                1,
-                format!("invalid date {}", input.quote()),
-            ));
-        }
-        Some(Ok(date)) => Some(date),
-    };
+    let set_to = matches.get_one::<String>(OPT_SET);
 
     let settings = Settings {
         utc: matches.get_flag(OPT_UNIVERSAL),
         format,
         date_source,
-        set_to,
+        set_to: set_to.cloned(),
     };
 
     // Get the current time, either in the local time zone or UTC.
@@ -214,7 +205,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     // Iterate over all dates - whether it's a single date or a file.
-    let dates: Box<dyn Iterator<Item = _>> = if let Some(date) = settings.set_to {
+    let dates: Box<dyn Iterator<Item = _>> = if let Some(date_string) = &settings.set_to {
+        let date = parse_datetime::parse_datetime_at_date(now.into(), date_string)
+            .map_err(|_| USimpleError::new(1, format!("invalid date {}", date_string.quote())))?;
         // All set time functions expect UTC datetimes.
         let date: DateTime<Utc> = if settings.utc {
             date.with_timezone(&Utc)

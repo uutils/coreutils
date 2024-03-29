@@ -287,6 +287,28 @@ fn test_date_set_permissions_error() {
 
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_date_set_permissions_error_interpreted() {
+    // This implicitly tests that the given strings are interpreted as valid dates,
+    // because parsing errors would have been discovered earlier in the process.
+    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+        for date_string in [
+            "yesterday",
+            // TODO "a fortnight ago",
+            "42 days",
+            "2001-02-03",
+            "20010203",
+            // TODO "02/03/2001",
+        ] {
+            let result = new_ucmd!().arg("-s").arg(date_string).fails();
+            // stdout depends on the specific date; don't check the exact content:
+            assert!(!result.stdout_str().is_empty());
+            assert!(result.stderr_str().starts_with("date: cannot set date: "));
+        }
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_date_set_permissions_error_repeated() {
     if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
