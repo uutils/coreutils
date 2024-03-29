@@ -320,6 +320,7 @@ pub fn uu_app() -> Command {
                 .short('d')
                 .long(OPT_DATE)
                 .value_name("STRING")
+                .overrides_with(OPT_DATE)
                 .help("display time described by STRING, not 'now'"),
         )
         .arg(
@@ -328,6 +329,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_FILE)
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
+                .overrides_with(OPT_FILE)
                 .help("like --date; once for each line of DATEFILE"),
         )
         .arg(
@@ -360,6 +362,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_DEBUG)
                 .long(OPT_DEBUG)
                 .help("annotate the parsed date, and warn about questionable usage to stderr")
+                .overrides_with(OPT_DEBUG)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -383,6 +386,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_UNIVERSAL)
                 .alias(OPT_UNIVERSAL_2)
                 .help("print or set Coordinated Universal Time (UTC)")
+                .overrides_with(OPT_UNIVERSAL)
                 .action(ArgAction::SetTrue),
         )
         .arg(Arg::new(OPT_FORMAT))
