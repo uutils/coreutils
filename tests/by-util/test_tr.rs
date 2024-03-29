@@ -1283,3 +1283,33 @@ fn test_complement_flag_fails_with_more_than_two_operand() {
         .fails()
         .stderr_contains("extra operand 'c'");
 }
+
+#[test]
+fn check_regression_class_space() {
+    // This invocation checks:
+    // 1. that the [:space:] class has exactly 6 characters,
+    // 2. that the [:space:] class contains at least the given 6 characters (and therefore no other characters), and
+    // 3. that the given characters occur in exactly this order.
+    new_ucmd!()
+        .args(&["[:space:][:upper:]", "123456[:lower:]"])
+        // 0x0B = "\v" ("VERTICAL TAB")
+        // 0x0C = "\f" ("FEED FORWARD")
+        .pipe_in("A\t\n\u{0B}\u{0C}\r B")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("a123456b");
+}
+
+#[test]
+fn check_regression_class_blank() {
+    // This invocation checks:
+    // 1. that the [:blank:] class has exactly 2 characters,
+    // 2. that the [:blank:] class contains at least the given 2 characters (and therefore no other characters), and
+    // 3. that the given characters occur in exactly this order.
+    new_ucmd!()
+        .args(&["[:blank:][:upper:]", "12[:lower:]"])
+        .pipe_in("A\t B")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("a12b");
+}
