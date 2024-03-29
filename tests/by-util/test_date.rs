@@ -661,3 +661,27 @@ fn test_repeat_reference_older_last() {
         .stdout_only("2001-02-03\n")
         .no_stderr();
 }
+
+#[test]
+fn test_incompatible_args() {
+    for args in [
+        // Input with other input
+        vec!["-d", "now", "-f", "foo"],
+        vec!["-d", "now", "-r", "foo"],
+        vec!["-f", "foo", "-r", "foo"],
+        // Format with other format
+        vec!["-I", "-R"],
+        vec!["-I", "--rfc-3339=date"],
+        vec!["-R", "--rfc-3339=date"],
+        // Input with --set
+        vec!["-d", "now", "-s", "now"],
+        vec!["-r", "foo", "-s", "now"],
+        vec!["-f", "foo", "-s", "now"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .fails()
+            .no_stdout()
+            .stderr_contains(" cannot be used with ");
+    }
+}
