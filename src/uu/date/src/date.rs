@@ -328,6 +328,8 @@ pub fn uu_app() -> Command {
                 .long(OPT_DATE)
                 .value_name("STRING")
                 .overrides_with(OPT_DATE)
+                .conflicts_with(OPT_FILE)
+                .conflicts_with(OPT_REFERENCE)
                 .help("display time described by STRING, not 'now'"),
         )
         .arg(
@@ -337,6 +339,7 @@ pub fn uu_app() -> Command {
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .overrides_with(OPT_FILE)
+                .conflicts_with(OPT_REFERENCE)
                 .help("like --date; once for each line of DATEFILE"),
         )
         .arg(
@@ -349,6 +352,8 @@ pub fn uu_app() -> Command {
                 ]))
                 .num_args(0..=1)
                 .default_missing_value(OPT_DATE)
+                .conflicts_with(OPT_RFC_EMAIL)
+                .conflicts_with(OPT_RFC_3339)
                 .help(ISO_8601_HELP_STRING),
         )
         .arg(
@@ -356,6 +361,7 @@ pub fn uu_app() -> Command {
                 .short('R')
                 .long(OPT_RFC_EMAIL)
                 .help(RFC_5322_HELP_STRING)
+                .conflicts_with(OPT_RFC_3339)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -387,6 +393,9 @@ pub fn uu_app() -> Command {
                 .long(OPT_SET)
                 .value_name("STRING")
                 .overrides_with(OPT_SET)
+                .conflicts_with(OPT_DATE)
+                .conflicts_with(OPT_FILE)
+                .conflicts_with(OPT_REFERENCE)
                 .help(OPT_SET_HELP_STRING),
         )
         .arg(
