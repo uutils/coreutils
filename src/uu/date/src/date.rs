@@ -390,6 +390,7 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long(OPT_SET)
                 .value_name("STRING")
+                .overrides_with(OPT_SET)
                 .help(OPT_SET_HELP_STRING),
         )
         .arg(

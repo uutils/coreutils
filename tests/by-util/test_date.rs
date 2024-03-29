@@ -239,9 +239,28 @@ fn test_date_format_literal() {
 fn test_date_set_valid() {
     if geteuid() == 0 {
         new_ucmd!()
+            .arg("-I")
             .arg("--set")
             .arg("2020-03-12 13:30:00+08:00")
             .succeeds()
+            // FIXME: .stdout_only("2020-03-12")
+            .no_stdout()
+            .no_stderr();
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_date_set_valid_repeated() {
+    if geteuid() == 0 {
+        new_ucmd!()
+            .arg("-I")
+            .arg("--set")
+            .arg("2021-03-12 13:30:00+08:00")
+            .arg("--set")
+            .arg("2022-03-12 13:30:00+08:00")
+            .succeeds()
+            // FIXME: .stdout_only("2022-03-12")
             .no_stdout()
             .no_stderr();
     }
@@ -262,6 +281,21 @@ fn test_date_set_permissions_error() {
         let result = new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00+08:00")
+            .fails();
+        result.no_stdout();
+        assert!(result.stderr_str().starts_with("date: cannot set date: "));
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_date_set_permissions_error_repeated() {
+    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+        let result = new_ucmd!()
+            .arg("--set")
+            .arg("2020-03-11 21:45:00+08:00")
+            .arg("--set")
+            .arg("2021-03-11 21:45:00+08:00")
             .fails();
         result.no_stdout();
         assert!(result.stderr_str().starts_with("date: cannot set date: "));
