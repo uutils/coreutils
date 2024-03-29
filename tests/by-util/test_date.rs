@@ -5,10 +5,16 @@
 
 // spell-checker:ignore (arguments) Idate Idefinitely
 
-use crate::common::util::TestScenario;
+use crate::common::util::{AtPath, TestScenario};
+use filetime::{set_file_times, FileTime};
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
 use uucore::process::geteuid;
+
+fn set_file_times_unix(at: &AtPath, path: &str, secs_since_epoch: i64) {
+    let time = FileTime::from_unix_time(secs_since_epoch, 0);
+    set_file_times(at.plus_as_string(path), time, time).expect("touch failed");
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -570,4 +576,34 @@ fn test_repeat_flags() {
         .succeeds()
         .stdout_only("2001-02-03\n");
     // stderr may or may not contain something.
+}
+
+#[test]
+fn test_repeat_reference_newer_last() {
+    const FILE1: &str = "file1";
+    const FILE2: &str = "file2";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch(FILE1);
+    at.touch(FILE2);
+    set_file_times_unix(&at, FILE1, 981_203_696); // 2001-02-03 12:34:56
+    set_file_times_unix(&at, FILE2, 1_323_779_696); // 2011-12-13 12:34:56
+    ucmd.args(&["-I", "-r", FILE1, "-r", FILE2])
+        .succeeds()
+        .stdout_only("2011-12-13\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_repeat_reference_older_last() {
+    const FILE1: &str = "file1";
+    const FILE2: &str = "file2";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch(FILE1);
+    at.touch(FILE2);
+    set_file_times_unix(&at, FILE1, 1_323_779_696); // 2011-12-13 12:34:56
+    set_file_times_unix(&at, FILE2, 981_203_696); // 2001-02-03 12:34:56
+    ucmd.args(&["-I", "-r", FILE1, "-r", FILE2])
+        .succeeds()
+        .stdout_only("2001-02-03\n")
+        .no_stderr();
 }

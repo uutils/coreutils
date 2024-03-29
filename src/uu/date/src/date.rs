@@ -12,7 +12,7 @@ use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
-use std::fs::File;
+use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use uucore::custom_tz_fmt::custom_time_format;
@@ -93,6 +93,7 @@ enum DateSource {
     Custom(String),
     File(PathBuf),
     Stdin,
+    Reference(PathBuf),
     Human(TimeDelta),
 }
 
@@ -179,6 +180,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             "-" => DateSource::Stdin,
             _ => DateSource::File(file.into()),
         }
+    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+        DateSource::Reference(file.into())
     } else {
         DateSource::Now
     };
@@ -259,6 +262,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     .map_err_context(|| path.as_os_str().to_string_lossy().to_string())?;
                 let lines = BufReader::new(file).lines();
                 let iter = lines.map_while(Result::ok).map(parse_date);
+                Box::new(iter)
+            }
+            DateSource::Reference(ref path) => {
+                let metadata = metadata(path)?;
+                // TODO: "This field might not be available on all platforms" → which ones?
+                let date_utc: DateTime<Utc> = metadata.modified()?.into();
+                let date: DateTime<FixedOffset> = date_utc.into();
+                let iter = std::iter::once(Ok(date));
                 Box::new(iter)
             }
             DateSource::Now => {
@@ -371,6 +382,7 @@ pub fn uu_app() -> Command {
                 .long(OPT_REFERENCE)
                 .value_name("FILE")
                 .value_hint(clap::ValueHint::AnyPath)
+                .overrides_with(OPT_REFERENCE)
                 .help("display the last modification time of FILE"),
         )
         .arg(
