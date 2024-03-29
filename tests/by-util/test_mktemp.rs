@@ -629,7 +629,7 @@ fn test_too_few_xs_suffix() {
     new_ucmd!()
         .args(&["--suffix=X", "aXX"])
         .fails()
-        .stderr_only("mktemp: too few X's in template 'aXXX'\n");
+        .stderr_only("mktemp: too few X's in template 'aXX'\n");
 }
 
 #[test]
@@ -637,7 +637,7 @@ fn test_too_few_xs_suffix_directory() {
     new_ucmd!()
         .args(&["-d", "--suffix=X", "aXX"])
         .fails()
-        .stderr_only("mktemp: too few X's in template 'aXXX'\n");
+        .stderr_only("mktemp: too few X's in template 'aXX'\n");
 }
 
 #[test]
