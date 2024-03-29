@@ -535,3 +535,39 @@ fn test_format_error_priority() {
         .fails()
         .stderr_contains("multiple output formats specified");
 }
+
+#[test]
+fn test_pick_last_date() {
+    new_ucmd!()
+        .arg("-d20020304")
+        .arg("-d20010203")
+        .arg("-I")
+        .succeeds()
+        .stdout_only("2001-02-03\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_repeat_from_file() {
+    const FILE1: &str = "file1";
+    const FILE2: &str = "file2";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        FILE1,
+        "2001-01-01 13:30:00+08:00\n2010-01-10 13:30:00+08:00\n",
+    );
+    at.write(FILE2, "2020-03-12 13:30:00+08:00\n");
+    ucmd.args(&["-I", "-f", FILE1, "-f", FILE2])
+        .succeeds()
+        .stdout_only("2020-03-12\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_repeat_flags() {
+    new_ucmd!()
+        .args(&["-d20010203", "-I", "--debug", "--debug", "-u", "-u"])
+        .succeeds()
+        .stdout_only("2001-02-03\n");
+    // stderr may or may not contain something.
+}
