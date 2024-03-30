@@ -404,9 +404,8 @@ fn make_format_string(settings: &Settings) -> &str {
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
-) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
-    // TODO: The GNU date command can parse a wide variety of inputs.
-    s.as_ref().parse().map_err(|e| (s.as_ref().into(), e))
+) -> Result<DateTime<FixedOffset>, (String, parse_datetime::ParseDateTimeError)> {
+    parse_datetime::parse_datetime(s.as_ref()).map_err(|e| (s.as_ref().into(), e))
 }
 
 #[cfg(not(any(unix, windows)))]
