@@ -36,7 +36,7 @@ use std::{
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(all(unix, not(target_os = "android")))]
 use uucore::fsxattr::has_acl;
 #[cfg(any(
     target_os = "linux",
@@ -2665,10 +2665,9 @@ fn display_item_long(
         output_display += "  ";
     }
     if let Some(md) = item.get_metadata(out) {
-        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
-        // TODO: See how Mac should work here
+        #[cfg(any(not(unix), target_os = "android"))]
         let is_acl_set = false;
-        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+        #[cfg(all(unix, not(target_os = "android")))]
         let is_acl_set = has_acl(item.display_name.as_os_str());
         write!(
             output_display,
@@ -2683,7 +2682,13 @@ fn display_item_long(
             },
             if is_acl_set {
                 // if acl has been set, we display a "+" at the end of the file permissions
-                "+"
+                // and @ on mac
+                #[cfg(not(target_os = "macos"))]
+                let extended = "+";
+                #[cfg(target_os = "macos")]
+                let extended = "@";
+
+                extended
             } else {
                 ""
             },
