@@ -3,13 +3,23 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist testdir testfile
+use du::physical_extents::{Range, SeenPhysicalExtents};
+use pretty_assertions::assert_eq;
+use std::io::Write;
+
+// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist testdir testfile reflink rootdir
 #[cfg(not(windows))]
 use regex::Regex;
+use std::os::unix::fs::FileExt;
+use std::rc::Rc;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::common::util::expected_result;
+use crate::common::util::AtPath;
 use crate::common::util::TestScenario;
+use crate::common::util::TESTS_BINARY;
+
+extern crate alloc;
 
 const SUB_DIR: &str = "subdir/deeper";
 const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";
@@ -182,6 +192,25 @@ fn test_du_non_existing_files() {
             "du: cannot access 'non_existing_a': No such file or directory\n",
             "du: cannot access 'non_existing_b': No such file or directory\n"
         ));
+}
+
+#[test]
+fn test_du_soft_link_all() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.symlink_file(SUB_FILE, SUB_LINK);
+
+    let result = ts.ucmd().args(&[SUB_DIR_LINKS, "--all"]).succeeds();
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS, "--all"]));
+        if result_reference.succeeded() {
+            assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            return;
+        }
+    }
 }
 
 #[test]
@@ -1115,4 +1144,423 @@ fn test_du_files0_from_combined() {
     let stderr = result.stderr_str();
 
     assert!(stderr.contains("file operands cannot be combined with --files0-from"));
+}
+
+struct BtrfsFilesystemTmp {
+    ts: Rc<TestScenario>,
+    device_name: String,
+    root_dir: AtPath,
+}
+
+impl BtrfsFilesystemTmp {
+    fn new(ts: Rc<TestScenario>) -> Self {
+        // create temporary btrfs in an image file and mount it
+
+        ts.cmd("dd")
+            .args(&["bs=1M", "count=256", "if=/dev/zero", "of=small_btrfs.img"])
+            .succeeds();
+
+        ts.fixtures.mkdir_all("btrfs_template/home");
+        ts.cmd("/usr/sbin/mkfs.btrfs")
+            .args(&["--rootdir", "btrfs_template", "small_btrfs.img"])
+            .succeeds();
+
+        let result = ts
+            .cmd("udisksctl")
+            .args(&["loop-setup", "-f", "small_btrfs.img"])
+            .succeeds();
+        let re = Regex::new(r"(?m) as (?<device>\/dev\/\w+)\.$").unwrap();
+        let stdout_str = result.stdout_str();
+        let captures = re.captures(stdout_str);
+        let device_name = captures.unwrap()["device"].to_string();
+        println!("The name of the device is: {}", device_name);
+
+        let result = ts
+            .cmd("udisksctl")
+            .args(&["mount", "-b", device_name.as_str()])
+            .succeeds();
+        let re = Regex::new(r"(?m)Mounted (?<device>\/dev\/\w+) at (?<mount_path>/.*)$").unwrap();
+        let mount_path = re.captures(result.stdout_str()).unwrap()["mount_path"].to_string();
+
+        ts.fixtures
+            .symlink_dir((String::from(mount_path) + "/home").as_str(), "btrfs");
+
+        return Self {
+            ts: ts.clone(),
+            device_name,
+            root_dir: AtPath::new(ts.fixtures.plus("btrfs").as_path()),
+        };
+    }
+}
+
+impl Drop for BtrfsFilesystemTmp {
+    fn drop(&mut self) {
+        println!("BtrfsFilesystemTmp is being dropped");
+        self.ts
+            .cmd("udisksctl")
+            .args(&["unmount", "-b", self.device_name.as_str()])
+            .succeeds();
+    }
+}
+
+fn create_fixture_in_dir(path: String) -> TestScenario {
+    use tempfile::TempDir;
+
+    let path = alloc::rc::Rc::new(std::path::PathBuf::from(path));
+    std::fs::create_dir_all(path.as_path()).unwrap();
+    let tmpd = alloc::rc::Rc::new(TempDir::new_in(path.as_path()).unwrap());
+
+    let ts = TestScenario {
+        bin_path: std::path::PathBuf::from(TESTS_BINARY),
+        util_name: alloc::string::String::from(util_name!()),
+        fixtures: AtPath::new(tmpd.path()),
+        tmpd,
+    };
+
+    return ts;
+}
+
+fn create_binary_file(at: &AtPath, size_in_bytes: u64, filename: &str) {
+    let mut file = at.make_file(filename);
+    for _ in 0..size_in_bytes / 10 {
+        file.write_all(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap();
+    }
+    let remaining =
+        &([0, 1, 2, 3, 4, 5, 6, 7, 8, 9][..usize::try_from(size_in_bytes % 10).unwrap()]);
+    file.write_all(&remaining).unwrap();
+    file.flush().unwrap();
+}
+
+struct BtrfsFixture {
+    pub _orig_ts: Rc<TestScenario>,
+    pub _btrfs: BtrfsFilesystemTmp,
+    pub ts: TestScenario,
+}
+
+impl BtrfsFixture {
+    fn new() -> Self {
+        let orig_ts = Rc::new(TestScenario::new(util_name!()));
+        let btrfs = BtrfsFilesystemTmp::new(orig_ts.clone());
+        let ts = create_fixture_in_dir(btrfs.root_dir.as_string());
+        return Self {
+            _orig_ts: orig_ts,
+            _btrfs: btrfs,
+            ts,
+        };
+    }
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_reflink_copy_not_considered_as_extra_data() {
+    let bts = BtrfsFixture::new();
+    let ts = bts.ts;
+    let at = &ts.fixtures;
+
+    create_binary_file(&at, 10 * 1024 * 1024, "large_file1.bin");
+
+    ts.cmd("cp")
+        .arg("--reflink=always")
+        .arg("large_file1.bin")
+        .arg("large_file1_cp_reflink_always.bin")
+        .succeeds();
+
+    let result = ts.ucmd().args(&["--all", "--shared-extents"]).succeeds();
+    result.stdout_contains("10240\t./large_file1.bin\n");
+    //result.stdout_contains("0\t./large_file1_cp_reflink_always.bin\n");
+    result.stdout_contains("10240\t.\n");
+
+    // same, but with disabled extend searching feature:
+    let result = ts.ucmd().args(&["--all"]).succeeds();
+    result.stdout_contains("10240\t./large_file1.bin\n");
+    result.stdout_contains("10240\t./large_file1_cp_reflink_always.bin\n");
+    result.stdout_contains("20480\t.\n");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_reflink_copy_of_very_small_files_considered_as_extra_data_as_its_part_of_metadata() {
+    let bts = BtrfsFixture::new();
+    let ts = bts.ts;
+    let at = &ts.fixtures;
+
+    create_binary_file(&at, 50, "small_file1.bin");
+
+    ts.cmd("cp")
+        .arg("--reflink=always")
+        .arg("small_file1.bin")
+        .arg("small_file1_cp_reflink_always.bin")
+        .succeeds();
+
+    let result = ts
+        .ucmd()
+        .args(&["--all", "-b", "--shared-extents"])
+        .succeeds();
+    result.stdout_contains("50\t./small_file1.bin\n");
+    result.stdout_contains("50\t./small_file1_cp_reflink_always.bin\n");
+    result.stdout_contains("100\t.\n");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_reflink_partial_copy_not_considered_as_extra_data() {
+    let bts = BtrfsFixture::new();
+    let ts = bts.ts;
+    let at = &ts.fixtures;
+
+    create_binary_file(&at, 10 * 1024 * 1024, "large_file1.bin");
+
+    ts.cmd("cp")
+        .arg("--reflink=always")
+        .arg("large_file1.bin")
+        .arg("large_file1_cp_reflink_always_partial.bin")
+        .succeeds();
+
+    let mut f = at.open_read_write("large_file1_cp_reflink_always_partial.bin");
+    f.write_at(&[99; 1000 * 1024], 1024 * 1024).unwrap();
+    f.flush().unwrap();
+    drop(f);
+
+    // force sync on filesystem, otherwise modifications are still pending
+    ts.cmd("sync").args(&["-f", "."]).succeeds();
+
+    let result = ts.ucmd().args(&["--all", "--shared-extents"]).succeeds();
+    result.stdout_contains("10240\t./large_file1.bin\n");
+    result.stdout_contains("1000\t./large_file1_cp_reflink_always_partial.bin\n");
+    result.stdout_contains("11240\t.\n");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_du_symlink_to_reflink_copy_do_not_omit_symlink_printing() {
+    let bts = BtrfsFixture::new();
+    let ts = bts.ts;
+    let at = &ts.fixtures;
+
+    create_binary_file(&at, 1024 * 1024, "large_file1.bin");
+
+    ts.cmd("cp")
+        .arg("--reflink=always")
+        .arg("large_file1.bin")
+        .arg("large_file1_cp_reflink_always.bin")
+        .succeeds();
+
+    at.symlink_file("large_file1.bin", "large_file1_symlink.bin");
+
+    let result = ts.ucmd().args(&["--all", "--shared-extents"]).succeeds();
+    result.stdout_contains("1024\t./large_file1.bin\n");
+    result.stdout_contains("4\t./large_file1_symlink.bin\n");
+    //result.stdout_contains("0\t./large_file1_cp_reflink_always.bin\n");
+    result.stdout_contains("1028\t.\n");
+}
+
+#[test]
+fn test_du_overlapping_ranges() {
+    //let ts = TestScenario::new(util_name!());
+    //let at = &ts.fixtures;
+
+    let mut uut = SeenPhysicalExtents::default();
+
+    assert_eq!(uut.ranges.len(), 0);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range { start: 0, end: 100 }),
+        0
+    );
+    assert_eq!(uut.ranges.len(), 1);
+    assert_eq!(*uut.ranges.entry(0).or_default(), 100);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 400,
+            end: 500
+        }),
+        0
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(0).or_default(), 100);
+    assert_eq!(*uut.ranges.entry(400).or_default(), 500);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range { start: 0, end: 100 }),
+        100
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 400,
+            end: 500
+        }),
+        100
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 600,
+            end: 700
+        }),
+        0
+    );
+    assert_eq!(uut.ranges.len(), 3);
+    assert_eq!(*uut.ranges.entry(0).or_default(), 100);
+    assert_eq!(*uut.ranges.entry(400).or_default(), 500);
+    assert_eq!(*uut.ranges.entry(600).or_default(), 700);
+
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range { start: 0, end: 50 }),
+        50
+    );
+    assert_eq!(uut.ranges.len(), 3);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 400,
+            end: 450
+        }),
+        50
+    );
+    assert_eq!(uut.ranges.len(), 3);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 600,
+            end: 650
+        }),
+        50
+    );
+    assert_eq!(uut.ranges.len(), 3);
+
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 50,
+            end: 100
+        }),
+        50
+    );
+    assert_eq!(uut.ranges.len(), 3);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 450,
+            end: 500
+        }),
+        50
+    );
+    assert_eq!(uut.ranges.len(), 3);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 650,
+            end: 700
+        }),
+        50
+    );
+    assert_eq!(uut.ranges.len(), 3);
+}
+
+#[test]
+fn test_du_overlapping_ranges_and_extending() {
+    //let ts = TestScenario::new(util_name!());
+    //let at = &ts.fixtures;
+
+    let mut uut = SeenPhysicalExtents::default();
+
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 50,
+            end: 150
+        }),
+        0
+    );
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 400,
+            end: 500
+        }),
+        0
+    );
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 600,
+            end: 700
+        }),
+        0
+    );
+    assert_eq!(uut.ranges.len(), 3);
+    assert_eq!(*uut.ranges.entry(50).or_default(), 150);
+    assert_eq!(*uut.ranges.entry(400).or_default(), 500);
+    assert_eq!(*uut.ranges.entry(600).or_default(), 700);
+
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 25,
+            end: 100
+        }),
+        50
+    );
+    assert_eq!(uut.ranges.len(), 3);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 150);
+    assert_eq!(*uut.ranges.entry(400).or_default(), 500);
+    assert_eq!(*uut.ranges.entry(600).or_default(), 700);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 125,
+            end: 200
+        }),
+        25
+    );
+    assert_eq!(uut.ranges.len(), 3);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 200);
+    assert_eq!(*uut.ranges.entry(400).or_default(), 500);
+    assert_eq!(*uut.ranges.entry(600).or_default(), 700);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 390,
+            end: 800
+        }),
+        200
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 200);
+    assert_eq!(*uut.ranges.entry(390).or_default(), 800);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 200,
+            end: 210
+        }),
+        0
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 210);
+    assert_eq!(*uut.ranges.entry(390).or_default(), 800);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 380,
+            end: 390
+        }),
+        0
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 210);
+    assert_eq!(*uut.ranges.entry(380).or_default(), 800);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range { start: 25, end: 50 }),
+        25
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 210);
+    assert_eq!(*uut.ranges.entry(380).or_default(), 800);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 100,
+            end: 210
+        }),
+        110
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 210);
+    assert_eq!(*uut.ranges.entry(380).or_default(), 800);
+    assert_eq!(
+        uut.get_overlapping_and_insert(&Range {
+            start: 25,
+            end: 210
+        }),
+        185
+    );
+    assert_eq!(uut.ranges.len(), 2);
+    assert_eq!(*uut.ranges.entry(25).or_default(), 210);
+    assert_eq!(*uut.ranges.entry(380).or_default(), 800);
 }
