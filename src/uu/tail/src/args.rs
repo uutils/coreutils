@@ -510,7 +510,8 @@ pub fn uu_app() -> Command {
             Arg::new(options::PID)
                 .long(options::PID)
                 .value_name("PID")
-                .help("With -f, terminate after process ID, PID dies"),
+                .help("With -f, terminate after process ID, PID dies")
+                .overrides_with(options::PID),
         )
         .arg(
             Arg::new(options::verbosity::QUIET)
