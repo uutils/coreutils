@@ -624,7 +624,7 @@ jobs:
           ;;
           # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
           x86_64-pc-windows-gnu)
-            C:/msys64/usr/bin/pacman.exe -Syu --needed mingw-w64-x86_64-gcc --noconfirm
+            C:/msys64/usr/bin/pacman.exe -Sy --needed mingw-w64-x86_64-gcc --noconfirm
             echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
           ;;
         esac
@@ -998,7 +998,7 @@ jobs:
         esac
         case '${{ matrix.job.os }}' in
           # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
-          windows-latest) C:/msys64/usr/bin/pacman.exe -Syu --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
+          windows-latest) C:/msys64/usr/bin/pacman.exe -Sy --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
         esac
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
