@@ -3908,6 +3908,13 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
         .args(&["--pid=1000", "--retry", "data"])
         .stderr_to_stdout()
         .run()
+        .stdout_only(&expected_stdout)
+        .success();
+    scene
+        .ucmd()
+        .args(&["--pid=1000", "--pid=1000", "--retry", "data"])
+        .stderr_to_stdout()
+        .run()
         .stdout_only(expected_stdout)
         .success();
 }
