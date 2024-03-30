@@ -27,7 +27,7 @@ use std::io::{self, Write};
 use std::ops::Deref;
 
 #[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{self};
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
@@ -48,6 +48,7 @@ struct Options<'a> {
     unsets: Vec<&'a OsStr>,
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
     program: Vec<&'a OsStr>,
+    argv0: Option<&'a OsStr>,
 }
 
 // print name=value env pairs on screen
@@ -173,7 +174,7 @@ pub fn uu_app() -> Command {
             Arg::new("debug")
                 .short('v')
                 .long("debug")
-                .action(ArgAction::SetTrue)
+                .action(ArgAction::Count)
                 .help("print verbose information for each processing step"),
         )
         .arg(
@@ -184,6 +185,16 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
                 .help("process and split S into separate arguments; used to pass multiple arguments on shebang lines")
+        ).arg(
+            Arg::new("argv0")
+                .overrides_with("argv0")
+                .short('a')
+                .long("argv0")
+                .value_name("a")
+                .action(ArgAction::Set)
+                .value_parser(ValueParser::os_string())
+                .help("Override the zeroth argument passed to the command being executed.\
+                       Without this option a default value of `command` is used.")
         )
         .arg(
             Arg::new("vars")
@@ -248,6 +259,7 @@ fn check_and_handle_string_args(
 #[derive(Default)]
 struct EnvAppData {
     do_debug_printing: bool,
+    do_input_debug_printing: Option<bool>,
     had_string_argument: bool,
 }
 
@@ -273,14 +285,19 @@ impl EnvAppData {
                 b if check_and_handle_string_args(b, "-S", &mut all_args, None)? => {
                     self.had_string_argument = true;
                 }
+                b if check_and_handle_string_args(b, "-vS", &mut all_args, None)? => {
+                    self.do_debug_printing = true;
+                    self.had_string_argument = true;
+                }
                 b if check_and_handle_string_args(
                     b,
-                    "-vS",
+                    "-vvS",
                     &mut all_args,
                     Some(original_args),
                 )? =>
                 {
                     self.do_debug_printing = true;
+                    self.do_input_debug_printing = Some(false); // already done
                     self.had_string_argument = true;
                 }
                 _ => {
@@ -323,10 +340,15 @@ impl EnvAppData {
     fn run_env(&mut self, original_args: impl uucore::Args) -> UResult<()> {
         let (original_args, matches) = self.parse_arguments(original_args)?;
 
-        let did_debug_printing_before = self.do_debug_printing; // could have been done already as part of the "-vS" string parsing
-        let do_debug_printing = self.do_debug_printing || matches.get_flag("debug");
-        if do_debug_printing && !did_debug_printing_before {
-            debug_print_args(&original_args);
+        self.do_debug_printing = self.do_debug_printing || (0 != matches.get_count("debug"));
+        self.do_input_debug_printing = self
+            .do_input_debug_printing
+            .or(Some(matches.get_count("debug") >= 2));
+        if let Some(value) = self.do_input_debug_printing {
+            if value {
+                debug_print_args(&original_args);
+                self.do_input_debug_printing = Some(false);
+            }
         }
 
         let mut opts = make_options(&matches)?;
@@ -349,7 +371,7 @@ impl EnvAppData {
             // no program provided, so just dump all env vars to stdout
             print_env(opts.line_ending);
         } else {
-            return self.run_program(opts, do_debug_printing);
+            return self.run_program(opts, self.do_debug_printing);
         }
 
         Ok(())
@@ -361,14 +383,11 @@ impl EnvAppData {
         do_debug_printing: bool,
     ) -> Result<(), Box<dyn UError>> {
         let prog = Cow::from(opts.program[0]);
+        #[cfg(unix)]
+        let mut arg0 = prog.clone();
+        #[cfg(not(unix))]
+        let arg0 = prog.clone();
         let args = &opts.program[1..];
-        if do_debug_printing {
-            eprintln!("executable: {}", prog.quote());
-            for (i, arg) in args.iter().enumerate() {
-                eprintln!("arg[{}]: {}", i, arg.quote());
-            }
-        }
-        // we need to execute a command
 
         /*
          * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp
@@ -376,7 +395,36 @@ impl EnvAppData {
          * standard library contains many checks and fail-safes to ensure the process ends up being
          * created. This is much simpler than dealing with the hassles of calling execvp directly.
          */
-        match process::Command::new(&*prog).args(args).status() {
+        let mut cmd = process::Command::new(&*prog);
+        cmd.args(args);
+
+        if let Some(_argv0) = opts.argv0 {
+            #[cfg(unix)]
+            {
+                cmd.arg0(_argv0);
+                arg0 = Cow::Borrowed(_argv0);
+                if do_debug_printing {
+                    eprintln!("argv0:     {}", arg0.quote());
+                }
+            }
+
+            #[cfg(not(unix))]
+            return Err(USimpleError::new(
+                2,
+                "--argv0 is currently not supported on this platform",
+            ));
+        }
+
+        if do_debug_printing {
+            eprintln!("executing: {}", prog.maybe_quote());
+            let arg_prefix = "   arg";
+            eprintln!("{}[{}]= {}", arg_prefix, 0, arg0.quote());
+            for (i, arg) in args.iter().enumerate() {
+                eprintln!("{}[{}]= {}", arg_prefix, i + 1, arg.quote());
+            }
+        }
+
+        match cmd.status() {
             Ok(exit) if !exit.success() => {
                 #[cfg(unix)]
                 if let Some(exit_code) = exit.code() {
@@ -443,6 +491,7 @@ fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
         Some(v) => v.map(|s| s.as_os_str()).collect(),
         None => Vec::with_capacity(0),
     };
+    let argv0 = matches.get_one::<OsString>("argv0").map(|s| s.as_os_str());
 
     let mut opts = Options {
         ignore_env,
@@ -452,6 +501,7 @@ fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
         unsets,
         sets: vec![],
         program: vec![],
+        argv0,
     };
 
     let mut begin_prog_opts = false;

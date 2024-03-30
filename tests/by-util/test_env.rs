@@ -8,6 +8,7 @@
 use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
 use ::env::native_int_str::{Convert, NCvt};
+use regex::Regex;
 use std::env;
 use std::path::Path;
 use tempfile::tempdir;
@@ -53,6 +54,99 @@ fn test_if_windows_batch_files_can_be_executed() {
     let result = new_ucmd!().arg("./runBat.bat").succeeds();
 
     assert!(result.stdout_str().contains("Hello Windows World!"));
+}
+
+#[test]
+fn test_debug_1() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .arg("-v")
+        .arg(&ts.bin_path)
+        .args(&["echo", "hello"])
+        .succeeds();
+    result.stderr_matches(
+        &Regex::new(concat!(
+            r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
+            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
+            r"   arg\[1\]= 'echo'\n",
+            r"   arg\[2\]= 'hello'"
+        ))
+        .unwrap(),
+    );
+}
+
+#[test]
+fn test_debug_2() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .arg("-vv")
+        .arg(ts.bin_path)
+        .args(&["echo", "hello2"])
+        .succeeds();
+    result.stderr_matches(
+        &Regex::new(concat!(
+            r"input args:\n",
+            r"arg\[0\]: 'env'\n",
+            r"arg\[1\]: '-vv'\n",
+            r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+            r"arg\[3\]: 'echo'\n",
+            r"arg\[4\]: 'hello2'\n",
+            r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
+            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+            r"   arg\[1\]= 'echo'\n",
+            r"   arg\[2\]= 'hello2'"
+        ))
+        .unwrap(),
+    );
+}
+
+#[test]
+fn test_debug1_part_of_string_arg() {
+    let ts = TestScenario::new(util_name!());
+
+    let result = ts
+        .ucmd()
+        .arg("-vS FOO=BAR")
+        .arg(ts.bin_path)
+        .args(&["echo", "hello1"])
+        .succeeds();
+    result.stderr_matches(
+        &Regex::new(concat!(
+            r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
+            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
+            r"   arg\[1\]= 'echo'\n",
+            r"   arg\[2\]= 'hello1'"
+        ))
+        .unwrap(),
+    );
+}
+
+#[test]
+fn test_debug2_part_of_string_arg() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .arg("-vvS FOO=BAR")
+        .arg(ts.bin_path)
+        .args(&["echo", "hello2"])
+        .succeeds();
+    result.stderr_matches(
+        &Regex::new(concat!(
+            r"input args:\n",
+            r"arg\[0\]: 'env'\n",
+            r"arg\[1\]: '-vvS FOO=BAR'\n",
+            r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+            r"arg\[3\]: 'echo'\n",
+            r"arg\[4\]: 'hello2'\n",
+            r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
+            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+            r"   arg\[1\]= 'echo'\n",
+            r"   arg\[2\]= 'hello2'"
+        ))
+        .unwrap(),
+    );
 }
 
 #[test]
@@ -345,10 +439,15 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
 
     let out = scene
         .ucmd()
-        .args(&["-vS printf x%sx\\n A \t B \x0B\x0C\r\n"])
+        .args(&["-vvS printf x%sx\\n A \t B \x0B\x0C\r\n"])
         .succeeds();
     assert_eq!(out.stdout_str(), "xAx\nxBx\n");
-    assert_eq!(out.stderr_str(), "input args:\narg[0]: 'env'\narg[1]: $'-vS printf x%sx\\\\n A \\t B \\x0B\\x0C\\r\\n'\nexecutable: 'printf'\narg[0]: $'x%sx\\n'\narg[1]: 'A'\narg[2]: 'B'\n");
+    assert_eq!(
+        out.stderr_str(),
+        "input args:\narg[0]: 'env'\narg[1]: $\
+        '-vvS printf x%sx\\\\n A \\t B \\x0B\\x0C\\r\\n'\nexecuting: printf\
+        \n   arg[0]= 'printf'\n   arg[1]= $'x%sx\\n'\n   arg[2]= 'A'\n   arg[3]= 'B'\n"
+    );
 }
 
 // FixMe: This test fails on MACOS:
@@ -562,6 +661,136 @@ fn test_env_with_gnu_reference_empty_executable_double_quotes() {
         .code_is(127)
         .no_stdout()
         .stderr_is("env: '': No such file or directory\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_overwrite_arg0() {
+    let ts = TestScenario::new(util_name!());
+
+    let bin = ts.bin_path.clone();
+
+    ts.ucmd()
+        .args(&["--argv0", "echo"])
+        .arg(&bin)
+        .args(&["-n", "hello", "world!"])
+        .succeeds()
+        .stdout_is("hello world!")
+        .stderr_is("");
+
+    ts.ucmd()
+        .args(&["-a", "dirname"])
+        .arg(bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb\n")
+        .stderr_is("");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_argv0_overwrite() {
+    let ts = TestScenario::new(util_name!());
+
+    let bin = ts.bin_path.clone();
+
+    // overwrite --argv0 by --argv0
+    ts.ucmd()
+        .args(&["--argv0", "dirname"])
+        .args(&["--argv0", "echo"])
+        .arg(&bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // overwrite -a by -a
+    ts.ucmd()
+        .args(&["-a", "dirname"])
+        .args(&["-a", "echo"])
+        .arg(&bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // overwrite --argv0 by -a
+    ts.ucmd()
+        .args(&["--argv0", "dirname"])
+        .args(&["-a", "echo"])
+        .arg(&bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // overwrite -a by --argv0
+    ts.ucmd()
+        .args(&["-a", "dirname"])
+        .args(&["--argv0", "echo"])
+        .arg(&bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
+    let ts = TestScenario::new(util_name!());
+
+    let bin = ts.bin_path.clone();
+
+    // string arg following normal
+    ts.ucmd()
+        .args(&["-S--argv0 dirname"])
+        .args(&["--argv0", "echo"])
+        .arg(&bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // normal following string arg
+    ts.ucmd()
+        .args(&["-a", "dirname"])
+        .args(&["-S-a echo"])
+        .arg(&bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // one large string arg
+    ts.ucmd()
+        .args(&["-S--argv0 dirname -a echo"])
+        .arg(&bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // two string args
+    ts.ucmd()
+        .args(&["-S-a dirname"])
+        .args(&["-S--argv0 echo"])
+        .arg(&bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // three args: normal, string, normal
+    ts.ucmd()
+        .args(&["-a", "sleep"])
+        .args(&["-S-a dirname"])
+        .args(&["-a", "echo"])
+        .arg(&bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
 }
 
 #[cfg(test)]
