@@ -415,13 +415,12 @@ fn test_date_parse_from_format() {
     let (at, mut ucmd) = at_and_ucmd!();
     const FILE: &str = "file-with-dates";
 
-    std::fs::write(
-        at.plus(FILE),
+    at.write(
+        FILE,
         "2023-03-27 08:30:00\n\
          2023-04-01 12:00:00\n\
          2023-04-15 18:30:00",
-    )
-    .unwrap();
+    );
     ucmd.arg("-f")
         .arg(at.plus(FILE))
         .arg("+%Y-%m-%d %H:%M:%S")
