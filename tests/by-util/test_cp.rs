@@ -3218,7 +3218,7 @@ fn test_copy_contents_fifo() {
     assert_eq!(at.read("outfile"), "foo");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_sparse_auto_for_sparse_files() {
     let ts = TestScenario::new(util_name!());
@@ -3247,7 +3247,7 @@ fn test_sparse_auto_for_sparse_files() {
     assert_eq!(src_blocks, dest_blocks);
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_sparse_auto_for_non_sparse_files() {
     let ts = TestScenario::new(util_name!());
