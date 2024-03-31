@@ -246,3 +246,10 @@ fn test_dircolors_for_dir_as_file() {
         "dircolors: expected file, got directory '/'",
     );
 }
+
+#[test]
+fn test_repeated() {
+    for arg in ["-b", "-c", "--print-database", "--print-ls-colors"] {
+        new_ucmd!().arg(arg).arg(arg).succeeds().no_stderr();
+    }
+}
