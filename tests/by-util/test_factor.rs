@@ -154,9 +154,7 @@ fn test_cli_args() {
 
 #[test]
 fn test_random() {
-    use conv::prelude::ValueFrom;
-
-    let log_num_primes = f64::value_from(NUM_PRIMES).unwrap().log2().ceil();
+    let log_num_primes = f64::from(u32::try_from(NUM_PRIMES).unwrap()).log2().ceil();
     let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();
 
     let rng_seed = SystemTime::now()

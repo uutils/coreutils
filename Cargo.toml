@@ -477,7 +477,6 @@ yes = { optional = true, version = "0.0.26", package = "uu_yes", path = "src/uu/
 
 [dev-dependencies]
 chrono = { workspace = true }
-conv = "0.3"
 filetime = { workspace = true }
 glob = { workspace = true }
 libc = { workspace = true }
