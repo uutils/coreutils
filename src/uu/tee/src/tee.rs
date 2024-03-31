@@ -148,8 +148,7 @@ fn tee(options: &Options) -> Result<()> {
     }
     let mut writers: Vec<NamedWriter> = options
         .files
-        .clone()
-        .into_iter()
+        .iter()
         .filter_map(|file| open(file, options.append, options.output_error.as_ref()))
         .collect::<Result<Vec<NamedWriter>>>()?;
     let had_open_errors = writers.len() != options.files.len();
@@ -188,11 +187,11 @@ fn tee(options: &Options) -> Result<()> {
 /// If that error should lead to program termination, this function returns Some(Err()),
 /// otherwise it returns None.
 fn open(
-    name: String,
+    name: &str,
     append: bool,
     output_error: Option<&OutputErrorMode>,
 ) -> Option<Result<NamedWriter>> {
-    let path = PathBuf::from(name.clone());
+    let path = PathBuf::from(name);
     let mut options = OpenOptions::new();
     let mode = if append {
         options.append(true)
@@ -202,7 +201,7 @@ fn open(
     match mode.write(true).create(true).open(path.as_path()) {
         Ok(file) => Some(Ok(NamedWriter {
             inner: Box::new(file),
-            name,
+            name: name.to_owned(),
         })),
         Err(f) => {
             show_error!("{}: {}", name.maybe_quote(), f);
