@@ -1,6 +1,6 @@
 [package]
 name = "uu_hostid"
-version = "0.0.25"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "hostid ~ (uutils) display the numeric identifier of the current host"

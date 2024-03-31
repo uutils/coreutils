@@ -1,6 +1,6 @@
 [package]
 name = "uu_du"
-version = "0.0.25"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "du ~ (uutils) display disk usage"
