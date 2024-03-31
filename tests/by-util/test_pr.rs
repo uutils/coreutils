@@ -44,6 +44,15 @@ fn valid_last_modified_template_vars(from: DateTime<Utc>) -> Vec<Vec<(String, St
 }
 
 #[test]
+fn test_invalid_flag() {
+    new_ucmd!()
+        .arg("--invalid-argument")
+        .fails()
+        .no_stdout()
+        .code_is(1);
+}
+
+#[test]
 fn test_without_any_options() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page.log.expected";
