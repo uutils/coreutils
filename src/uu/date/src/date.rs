@@ -91,6 +91,7 @@ enum DateSource {
     Now,
     Custom(String),
     File(PathBuf),
+    Stdin,
     Human(TimeDelta),
 }
 
@@ -173,7 +174,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             DateSource::Custom(date.into())
         }
     } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
-        DateSource::File(file.into())
+        match file.as_ref() {
+            "-" => DateSource::Stdin,
+            _ => DateSource::File(file.into()),
+        }
     } else {
         DateSource::Now
     };
@@ -239,6 +243,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         ));
                     }
                 }
+            }
+            DateSource::Stdin => {
+                let lines = BufReader::new(std::io::stdin()).lines();
+                let iter = lines.map_while(Result::ok).map(parse_date);
+                Box::new(iter)
             }
             DateSource::File(ref path) => {
                 if path.is_dir() {
