@@ -163,10 +163,11 @@ fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
 
     // Reading the file to account for virtual files which have 0 blocks allocated in disk
     //and it is unknown if it contains data or not, virtual files need to be standard copied and
-    //categorised as not sparse.
+    //categorized as not sparse.
 
     if blocks == 0 {
-        src_file.read(&mut buf)?;
+        let _ = src_file.read(&mut buf)?;
+
         if buf.iter().any(|&x| x != 0x0) {
             return Ok(false);
         }
