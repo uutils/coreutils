@@ -148,17 +148,28 @@ fn check_dest_is_fifo(dest: &Path) -> bool {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
-    let src_file = File::open(source)?;
+    let mut src_file = File::open(source)?;
 
     let size = src_file.metadata()?.size();
     let blocks = src_file.metadata()?.blocks();
+    let blksize = src_file.metadata()?.blksize();
+
+    let mut data_flag = false;
+    let mut buf = vec![0; blksize as usize];
+    let read = src_file.read(&mut buf)?;
+    if buf.iter().any(|&x| x != 0x0) {
+        data_flag = true;
+    }
 
     //cp uses a crude heuristic to detect sparse_files , an estimated formula which seems to accurately
     //replicate that , might need to change if we observe any edge cases that i haven't thought of but this should work for majority of the files.
     //Reference:https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks
     if blocks < size / 512 && blocks != 0 {
         return Ok(true);
+    } else if blocks == 0 && data_flag == false {
+        return Ok(true);
     }
+
     Ok(false)
 }
 
