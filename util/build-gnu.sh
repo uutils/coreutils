@@ -60,7 +60,7 @@ fi
 
 ###
 
-release_tag_GNU="v9.4"
+release_tag_GNU="v9.5"
 
 if test ! -d "${path_GNU}"; then
     echo "Could not find GNU coreutils (expected at '${path_GNU}')"
@@ -258,15 +258,15 @@ sed -i -e "s|invalid suffix in --pages argument|invalid --pages argument|" \
 
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
 # it hit the decode error, while we don't write anything if the input is invalid.
-sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/misc/base64.pl
-sed -i "s/\(\(b2[ml]_[69]\|b32h_[56]\|z85_8\|z85_35\).*OUT=>\)[^}]*\(.*\)/\1\"\"\3/g" tests/misc/basenc.pl
+sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/basenc/base64.pl
+sed -i "s/\(\(b2[ml]_[69]\|b32h_[56]\|z85_8\|z85_35\).*OUT=>\)[^}]*\(.*\)/\1\"\"\3/g" tests/basenc/basenc.pl
 
 # add "error: " to the expected error message
-sed -i "s/\$prog: invalid input/\$prog: error: invalid input/g" tests/misc/basenc.pl
+sed -i "s/\$prog: invalid input/\$prog: error: invalid input/g" tests/basenc/basenc.pl
 
 # basenc: swap out error message for unexpected arg
-sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: Found argument '--foobar' which wasn't expected, or isn't valid in this context\n\n  If you tried to supply '--foobar' as a value rather than a flag, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information try '--help'\n\"}]/" tests/misc/basenc.pl
-sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]\*\/foobar\/\"}],//" tests/misc/basenc.pl
+sed -i "s/  {ERR=>\"\$prog: foobar\\\\n\" \. \$try_help }/  {ERR=>\"error: Found argument '--foobar' which wasn't expected, or isn't valid in this context\n\n  If you tried to supply '--foobar' as a value rather than a flag, use '-- --foobar'\n\nUsage: basenc [OPTION]... [FILE]\n\nFor more information try '--help'\n\"}]/" tests/basenc/basenc.pl
+sed -i "s/  {ERR_SUBST=>\"s\/(unrecognized|unknown) option \[-' \]\*foobar\[' \]\*\/foobar\/\"}],//" tests/basenc/basenc.pl
 
 # Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
 sed -i "s|require_built_ |# require_built_ |g" init.cfg

@@ -34,7 +34,10 @@ fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
 
 fn str_to_filetime(format: &str, s: &str) -> FileTime {
     let tm = chrono::NaiveDateTime::parse_from_str(s, format).unwrap();
-    FileTime::from_unix_time(tm.and_utc().timestamp(), tm.timestamp_subsec_nanos())
+    FileTime::from_unix_time(
+        tm.and_utc().timestamp(),
+        tm.and_utc().timestamp_subsec_nanos(),
+    )
 }
 
 #[test]

@@ -160,7 +160,6 @@ fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     if buf.iter().any(|&x| x != 0x0) {
         data_flag = true;
     }
-
     //cp uses a crude heuristic to detect sparse_files , an estimated formula which seems to accurately
     //replicate that , might need to change if we observe any edge cases that i haven't thought of but this should work for majority of the files.
     //Reference:https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks
