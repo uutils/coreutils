@@ -150,12 +150,7 @@ fn tee(options: &Options) -> Result<()> {
         .files
         .clone()
         .into_iter()
-        .map(|file| {
-            Ok(NamedWriter {
-                name: file.clone(),
-                inner: open(file, options.append, options.output_error.as_ref())?,
-            })
-        })
+        .map(|file| open(file, options.append, options.output_error.as_ref()))
         .collect::<Result<Vec<NamedWriter>>>()?;
 
     writers.insert(
@@ -188,31 +183,30 @@ fn tee(options: &Options) -> Result<()> {
     }
 }
 
-fn open(
-    name: String,
-    append: bool,
-    output_error: Option<&OutputErrorMode>,
-) -> Result<Box<dyn Write>> {
+fn open(name: String, append: bool, output_error: Option<&OutputErrorMode>) -> Result<NamedWriter> {
     let path = PathBuf::from(name.clone());
-    let inner: Box<dyn Write> = {
-        let mut options = OpenOptions::new();
-        let mode = if append {
-            options.append(true)
-        } else {
-            options.truncate(true)
-        };
-        match mode.write(true).create(true).open(path.as_path()) {
-            Ok(file) => Box::new(file),
-            Err(f) => {
-                show_error!("{}: {}", name.maybe_quote(), f);
-                match output_error {
-                    Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => return Err(f),
-                    _ => Box::new(sink()),
-                }
+    let mut options = OpenOptions::new();
+    let mode = if append {
+        options.append(true)
+    } else {
+        options.truncate(true)
+    };
+    match mode.write(true).create(true).open(path.as_path()) {
+        Ok(file) => Ok(NamedWriter {
+            inner: Box::new(file),
+            name,
+        }),
+        Err(f) => {
+            show_error!("{}: {}", name.maybe_quote(), f);
+            match output_error {
+                Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Err(f),
+                _ => Ok(NamedWriter {
+                    inner: Box::new(sink()),
+                    name,
+                }),
             }
         }
-    };
-    Ok(Box::new(NamedWriter { inner, name }) as Box<dyn Write>)
+    }
 }
 
 struct MultiWriter {
