@@ -29,6 +29,7 @@ use uucore::{
     error::{FromIo, UError, UResult},
     format_usage, help_about, help_usage,
     quoting_style::{escape_name, QuotingStyle},
+    shortcut_value_parser::ShortcutValueParser,
     show,
 };
 
@@ -439,7 +440,9 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::TOTAL)
                 .long(options::TOTAL)
-                .value_parser(["auto", "always", "only", "never"])
+                .value_parser(ShortcutValueParser::new([
+                    "auto", "always", "only", "never",
+                ]))
                 .value_name("WHEN")
                 .hide_possible_values(true)
                 .help(concat!(
