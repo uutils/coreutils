@@ -7,7 +7,7 @@
 #[cfg(target_os = "linux")]
 use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
-use env::native_int_str::{Convert, NCvt};
+use ::env::native_int_str::{Convert, NCvt};
 use std::env;
 use std::path::Path;
 use tempfile::tempdir;
@@ -376,8 +376,8 @@ fn test_gnu_e20() {
 
 #[test]
 fn test_split_string_misc() {
-    use env::native_int_str::NCvt;
-    use env::parse_args_from_str;
+    use ::env::native_int_str::NCvt;
+    use ::env::parse_args_from_str;
 
     assert_eq!(
         NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
@@ -687,8 +687,8 @@ mod tests_split_iterator {
 
     use std::ffi::OsString;
 
+    use ::env::parse_error::ParseError;
     use env::native_int_str::{from_native_int_representation_owned, Convert, NCvt};
-    use env::parse_error::ParseError;
 
     fn split(input: &str) -> Result<Vec<OsString>, ParseError> {
         ::env::split_iterator::split(&NCvt::convert(input)).map(|vec| {
