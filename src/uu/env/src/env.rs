@@ -323,6 +323,23 @@ impl EnvAppData {
     fn run_env(&mut self, original_args: impl uucore::Args) -> UResult<()> {
         let (original_args, matches) = self.parse_arguments(original_args)?;
 
+        // clap automatically removes '=' from the beginning of the argument, so we need to check for it
+        for arg in &original_args {
+            let arg = arg.to_string_lossy();
+            let prefix = if arg.starts_with("-u=") {
+                "-u="
+            } else {
+                "--unset="
+            };
+            if arg.starts_with(prefix) {
+                let invalid_arg = &arg[(prefix.len() - 1)..];
+                return Err(UUsageError::new(
+                    125,
+                    format!("cannot unset '{}': Invalid argument", invalid_arg),
+                ));
+            }
+        }
+
         let did_debug_printing_before = self.do_debug_printing; // could have been done already as part of the "-vS" string parsing
         let do_debug_printing = self.do_debug_printing || matches.get_flag("debug");
         if do_debug_printing && !did_debug_printing_before {

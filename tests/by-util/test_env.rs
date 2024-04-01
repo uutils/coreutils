@@ -7,7 +7,8 @@
 #[cfg(target_os = "linux")]
 use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
-use env::native_int_str::{Convert, NCvt};
+#[rustfmt::skip]
+use ::env::native_int_str::{Convert, NCvt};
 use std::env;
 use std::path::Path;
 use tempfile::tempdir;
@@ -376,8 +377,10 @@ fn test_gnu_e20() {
 
 #[test]
 fn test_split_string_misc() {
-    use env::native_int_str::NCvt;
-    use env::parse_args_from_str;
+    #[rustfmt::skip]
+    use ::env::native_int_str::NCvt;
+    #[rustfmt::skip]
+    use ::env::parse_args_from_str;
 
     assert_eq!(
         NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
@@ -564,6 +567,25 @@ fn test_env_with_gnu_reference_empty_executable_double_quotes() {
         .stderr_is("env: '': No such file or directory\n");
 }
 
+#[test]
+fn test_env_with_gnu_reference_unset_invalid_variables() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
+        .args(&["-u=2EKt"]) // invalid variable name
+        .fails()
+        .code_is(125)
+        .no_stdout()
+        .stderr_contains("env: cannot unset '=2EKt': Invalid argument\n");
+
+    ts.ucmd()
+        .args(&["-0", "-u=o", "6=C"]) // invalid variable name
+        .fails()
+        .code_is(125)
+        .no_stdout()
+        .stderr_contains("env: cannot unset '=o': Invalid argument\n");
+}
+
 #[cfg(test)]
 mod tests_split_iterator {
 
@@ -687,8 +709,9 @@ mod tests_split_iterator {
 
     use std::ffi::OsString;
 
+    #[rustfmt::skip]
+    use ::env::parse_error::ParseError;
     use env::native_int_str::{from_native_int_representation_owned, Convert, NCvt};
-    use env::parse_error::ParseError;
 
     fn split(input: &str) -> Result<Vec<OsString>, ParseError> {
         ::env::split_iterator::split(&NCvt::convert(input)).map(|vec| {
