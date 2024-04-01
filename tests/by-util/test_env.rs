@@ -7,7 +7,6 @@
 #[cfg(target_os = "linux")]
 use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
-#[rustfmt::skip]
 use ::env::native_int_str::{Convert, NCvt};
 use std::env;
 use std::path::Path;
@@ -377,9 +376,7 @@ fn test_gnu_e20() {
 
 #[test]
 fn test_split_string_misc() {
-    #[rustfmt::skip]
     use ::env::native_int_str::NCvt;
-    #[rustfmt::skip]
     use ::env::parse_args_from_str;
 
     assert_eq!(
@@ -709,7 +706,6 @@ mod tests_split_iterator {
 
     use std::ffi::OsString;
 
-    #[rustfmt::skip]
     use ::env::parse_error::ParseError;
     use env::native_int_str::{from_native_int_representation_owned, Convert, NCvt};
 
