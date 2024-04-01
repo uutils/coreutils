@@ -966,7 +966,12 @@ impl Config {
 
         let mut quoting_style = extract_quoting_style(options, show_control);
         let indicator_style = extract_indicator_style(options);
-        let time_style = parse_time_style(options)?;
+        // Only parse the value to "--time-style" if it will become relevant.
+        let time_style = if format == Format::Long {
+            parse_time_style(options)?
+        } else {
+            TimeStyle::Iso
+        };
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
 
