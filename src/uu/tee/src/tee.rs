@@ -9,6 +9,7 @@ use std::io::{copy, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
 // spell-checker:ignore nopipe
@@ -119,7 +120,7 @@ pub fn uu_app() -> Command {
                 .long(options::OUTPUT_ERROR)
                 .require_equals(true)
                 .num_args(0..=1)
-                .value_parser([
+                .value_parser(ShortcutValueParser::new([
                     PossibleValue::new("warn")
                         .help("produce warnings for errors writing to any output"),
                     PossibleValue::new("warn-nopipe")
@@ -127,7 +128,7 @@ pub fn uu_app() -> Command {
                     PossibleValue::new("exit").help("exit on write errors to any output"),
                     PossibleValue::new("exit-nopipe")
                         .help("exit on write errors to any output that are not pipe errors (equivalent to exit on non-unix platforms)"),
-                ])
+                ]))
                 .help("set write error behavior")
                 .conflicts_with(options::IGNORE_PIPE_ERRORS),
         )
