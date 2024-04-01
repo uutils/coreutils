@@ -137,7 +137,7 @@ where
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn check_dest_is_fifo(dest: &Path) -> bool {
-    //If our destination file exists and its a fifo , we do a standard copy .
+    // If our destination file exists and it is a FIFO, we do a standard copy .
     let file_type = fs::metadata(dest);
     match file_type {
         Ok(f) => f.file_type().is_fifo(),
@@ -155,15 +155,15 @@ fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     let blocks = metadata.blocks();
     let blksize = metadata.blksize();
     // cp uses a crude heuristic to detect sparse_files, an estimated formula which seems to accurately
-    //replicate that, is used. Modifications might be required if we observe any edges cases but this
-    //should work for majority of the files.
-    //Reference:https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks
+    // replicate that, is used. Modifications might be required if we observe any edges cases but this
+    // should work for majority of the files.
+    // Reference:https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks
 
     let mut buf = vec![0; blksize as usize];
 
     // Reading the file to account for virtual files which have 0 blocks allocated in disk
-    //and it is unknown if it contains data or not, virtual files need to be standard copied and
-    //categorized as not sparse.
+    // and it is unknown if it contains data or not, virtual files need to be standard copied and
+    // categorized as not sparse.
 
     if blocks == 0 {
         let _ = src_file.read(&mut buf)?;

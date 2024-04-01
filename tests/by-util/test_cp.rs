@@ -2330,6 +2330,26 @@ fn test_cp_sparse_always_non_empty() {
     assert_eq!(at.metadata("dst_file_sparse").blocks(), touched_block_count);
 }
 
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_for_virtual_files() {
+    use std::os::unix::prelude::MetadataExt;
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    ts.ucmd()
+        .arg("--sparse=auto")
+        .arg("/sys/kernel/address_bits")
+        .arg("b")
+        .succeeds();
+
+    let dest_size = std::fs::metadata(at.plus("b"))
+        .expect("Metadata of copied file cannot be read")
+        .size();
+    if dest_size == 0 {
+        panic!("Copy unsuccessful");
+    }
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_cp_sparse_invalid_option() {
