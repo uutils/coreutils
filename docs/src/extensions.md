@@ -75,6 +75,9 @@ number of spaces representing a tab when determining the line length.
 GNU `ls` provides two ways to use a long listing format: `-l` and `--format=long`. We support a
 third way: `--long`.
 
+GNU `ls --sort=VALUE` only supports special non-default sort orders.
+We support `--sort=name`, which makes it possible to override an earlier value.
+
 ## `du`
 
 `du` allows `birth` and `creation` as values for the `--time` argument to show the creation time. It
