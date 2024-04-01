@@ -722,8 +722,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let time_format = if let Some(_time) = time {
-        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?
-            .to_string()
+        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?.to_string()
     } else {
         "%Y-%m-%d %H:%M".to_string()
     };
