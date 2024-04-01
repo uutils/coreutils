@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile uufs xattrs
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
 
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
@@ -286,16 +286,18 @@ fn test_cp_arg_update_interactive_error() {
 
 #[test]
 fn test_cp_arg_update_none() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    for argument in ["--update=none", "--update=non", "--update=n"] {
+        let (at, mut ucmd) = at_and_ucmd!();
 
-    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-        .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .arg("--update=none")
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+        ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+            .arg(TEST_HOW_ARE_YOU_SOURCE)
+            .arg(argument)
+            .succeeds()
+            .no_stderr()
+            .no_stdout();
 
-    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+        assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+    }
 }
 
 #[test]
@@ -1402,29 +1404,28 @@ fn test_cp_preserve_no_args_before_opts() {
 
 #[test]
 fn test_cp_preserve_all() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let src_file = "a";
-    let dst_file = "b";
+    for argument in ["--preserve=all", "--preserve=al"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let src_file = "a";
+        let dst_file = "b";
 
-    // Prepare the source file
-    at.touch(src_file);
-    #[cfg(unix)]
-    at.set_mode(src_file, 0o0500);
+        // Prepare the source file
+        at.touch(src_file);
+        #[cfg(unix)]
+        at.set_mode(src_file, 0o0500);
 
-    // TODO: create a destination that does not allow copying of xattr and context
-    // Copy
-    ucmd.arg(src_file)
-        .arg(dst_file)
-        .arg("--preserve=all")
-        .succeeds();
+        // TODO: create a destination that does not allow copying of xattr and context
+        // Copy
+        ucmd.arg(src_file).arg(dst_file).arg(argument).succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
-    {
-        // Assert that the mode, ownership, and timestamps are preserved
-        // NOTICE: the ownership is not modified on the src file, because that requires root permissions
-        let metadata_src = at.metadata(src_file);
-        let metadata_dst = at.metadata(dst_file);
-        assert_metadata_eq!(metadata_src, metadata_dst);
+        #[cfg(all(unix, not(target_os = "freebsd")))]
+        {
+            // Assert that the mode, ownership, and timestamps are preserved
+            // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+            let metadata_src = at.metadata(src_file);
+            let metadata_dst = at.metadata(dst_file);
+            assert_metadata_eq!(metadata_src, metadata_dst);
+        }
     }
 }
 
@@ -1470,6 +1471,35 @@ fn test_cp_preserve_all_context_fails_on_non_selinux() {
         .arg(TEST_HELLO_WORLD_DEST)
         .arg("--preserve=all,context")
         .fails();
+}
+
+#[test]
+fn test_cp_preserve_link_parses() {
+    // TODO: Also check whether --preserve=link did the right thing!
+    for argument in [
+        "--preserve=links",
+        "--preserve=link",
+        "--preserve=li",
+        "--preserve=l",
+    ] {
+        new_ucmd!()
+            .arg(argument)
+            .arg(TEST_COPY_FROM_FOLDER_FILE)
+            .arg(TEST_HELLO_WORLD_DEST)
+            .succeeds()
+            .no_output();
+    }
+}
+
+#[test]
+fn test_cp_preserve_invalid_rejected() {
+    new_ucmd!()
+        .arg("--preserve=invalid-value")
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .fails()
+        .code_is(1)
+        .no_stdout();
 }
 
 #[test]
@@ -2196,14 +2226,16 @@ fn test_cp_reflink_none() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_never() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.arg("--reflink=never")
-        .arg(TEST_HELLO_WORLD_SOURCE)
-        .arg(TEST_EXISTING_FILE)
-        .succeeds();
+    for argument in ["--reflink=never", "--reflink=neve", "--reflink=n"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.arg(argument)
+            .arg(TEST_HELLO_WORLD_SOURCE)
+            .arg(TEST_EXISTING_FILE)
+            .succeeds();
 
-    // Check the content of the destination file
-    assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+        // Check the content of the destination file
+        assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+    }
 }
 
 #[test]
@@ -2286,19 +2318,21 @@ fn test_cp_sparse_never_empty() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_cp_sparse_always_empty() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    for argument in ["--sparse=always", "--sparse=alway", "--sparse=al"] {
+        let (at, mut ucmd) = at_and_ucmd!();
 
-    const BUFFER_SIZE: usize = 4096 * 4;
-    let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+        const BUFFER_SIZE: usize = 4096 * 4;
+        let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
-    at.make_file("src_file1");
-    at.write_bytes("src_file1", &buf);
+        at.make_file("src_file1");
+        at.write_bytes("src_file1", &buf);
 
-    ucmd.args(&["--sparse=always", "src_file1", "dst_file_sparse"])
-        .succeeds();
+        ucmd.args(&[argument, "src_file1", "dst_file_sparse"])
+            .succeeds();
 
-    assert_eq!(at.read_bytes("dst_file_sparse"), buf);
-    assert_eq!(at.metadata("dst_file_sparse").blocks(), 0);
+        assert_eq!(at.read_bytes("dst_file_sparse"), buf);
+        assert_eq!(at.metadata("dst_file_sparse").blocks(), 0);
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

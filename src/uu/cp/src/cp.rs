@@ -37,8 +37,8 @@ use uucore::{backup_control, update_control};
 // requires these enum.
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
-    format_usage, help_about, help_section, help_usage, prompt_yes, show_error, show_warning,
-    util_name,
+    format_usage, help_about, help_section, help_usage, prompt_yes,
+    shortcut_value_parser::ShortcutValueParser, show_error, show_warning, util_name,
 };
 
 use crate::copydir::copy_directory;
@@ -396,22 +396,14 @@ static PRESERVABLE_ATTRIBUTES: &[&str] = &[
     "ownership",
     "timestamps",
     "context",
-    "link",
     "links",
     "xattr",
     "all",
 ];
 
 #[cfg(not(unix))]
-static PRESERVABLE_ATTRIBUTES: &[&str] = &[
-    "mode",
-    "timestamps",
-    "context",
-    "link",
-    "links",
-    "xattr",
-    "all",
-];
+static PRESERVABLE_ATTRIBUTES: &[&str] =
+    &["mode", "timestamps", "context", "links", "xattr", "all"];
 
 pub fn uu_app() -> Command {
     const MODE_ARGS: &[&str] = &[
@@ -543,7 +535,7 @@ pub fn uu_app() -> Command {
                 .overrides_with_all(MODE_ARGS)
                 .require_equals(true)
                 .default_missing_value("always")
-                .value_parser(["auto", "always", "never"])
+                .value_parser(ShortcutValueParser::new(["auto", "always", "never"]))
                 .num_args(0..=1)
                 .help("control clone/CoW copies. See below"),
         )
@@ -559,9 +551,7 @@ pub fn uu_app() -> Command {
                 .long(options::PRESERVE)
                 .action(ArgAction::Append)
                 .use_value_delimiter(true)
-                .value_parser(clap::builder::PossibleValuesParser::new(
-                    PRESERVABLE_ATTRIBUTES,
-                ))
+                .value_parser(ShortcutValueParser::new(PRESERVABLE_ATTRIBUTES))
                 .num_args(0..)
                 .require_equals(true)
                 .value_name("ATTR_LIST")
@@ -655,7 +645,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::SPARSE)
                 .long(options::SPARSE)
                 .value_name("WHEN")
-                .value_parser(["never", "auto", "always"])
+                .value_parser(ShortcutValueParser::new(["never", "auto", "always"]))
                 .help("control creation of sparse files. See below"),
         )
         // TODO: implement the following args
