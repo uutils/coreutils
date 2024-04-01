@@ -721,7 +721,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         excludes: build_exclude_patterns(&matches)?,
     };
 
-    let time_format = if let Some(_time) = time {
+    let time_format = if time.is_some() {
         parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?.to_string()
     } else {
         "%Y-%m-%d %H:%M".to_string()
