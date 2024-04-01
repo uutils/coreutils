@@ -543,6 +543,34 @@ fn test_du_h_flag_empty_file() {
         .stdout_only("0\tempty.txt\n");
 }
 
+#[test]
+fn test_du_h_precision() {
+    let test_cases = [
+        (133456345, "128M"),
+        (12 * 1024 * 1024, "12M"),
+        (8500, "8.4K"),
+    ];
+
+    for &(test_len, expected_output) in &test_cases {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let fpath = at.plus("test.txt");
+        std::fs::File::create(&fpath)
+            .expect("cannot create test file")
+            .set_len(test_len)
+            .expect("cannot truncate test len to size");
+        ucmd.arg("-h")
+            .arg("--apparent-size")
+            .arg(&fpath)
+            .succeeds()
+            .stdout_only(format!(
+                "{}\t{}\n",
+                expected_output,
+                &fpath.to_string_lossy()
+            ));
+    }
+}
+
 #[cfg(feature = "touch")]
 #[test]
 fn test_du_time() {
