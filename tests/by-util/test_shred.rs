@@ -18,6 +18,11 @@ fn test_invalid_remove_arg() {
 }
 
 #[test]
+fn test_ambiguous_remove_arg() {
+    new_ucmd!().arg("--remove=wip").fails().code_is(1);
+}
+
+#[test]
 fn test_shred() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -49,15 +54,15 @@ fn test_shred_remove() {
 
 #[test]
 fn test_shred_remove_unlink() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    let file = "test_shred_remove_unlink";
-    at.touch(file);
-
-    ucmd.arg("--remove=unlink").arg(file).succeeds();
-
-    // File was deleted
-    assert!(!at.file_exists(file));
+    // spell-checker:disable-next-line
+    for argument in ["--remove=unlink", "--remove=unlin", "--remove=u"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file = "test_shred_remove_unlink";
+        at.touch(file);
+        ucmd.arg(argument).arg(file).succeeds();
+        // File was deleted
+        assert!(!at.file_exists(file));
+    }
 }
 
 #[test]
@@ -75,15 +80,15 @@ fn test_shred_remove_wipe() {
 
 #[test]
 fn test_shred_remove_wipesync() {
-    let (at, mut ucmd) = at_and_ucmd!();
-
-    let file = "test_shred_remove_wipesync";
-    at.touch(file);
-
-    ucmd.arg("--remove=wipesync").arg(file).succeeds();
-
-    // File was deleted
-    assert!(!at.file_exists(file));
+    // spell-checker:disable-next-line
+    for argument in ["--remove=wipesync", "--remove=wipesyn", "--remove=wipes"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file = "test_shred_remove_wipesync";
+        at.touch(file);
+        ucmd.arg(argument).arg(file).succeeds();
+        // File was deleted
+        assert!(!at.file_exists(file));
+    }
 }
 
 #[test]
