@@ -25,6 +25,8 @@ uu_sort = { path = "../src/uu/sort/" }
 uu_wc = { path = "../src/uu/wc/" }
 uu_cut = { path = "../src/uu/cut/" }
 uu_split = { path = "../src/uu/split/" }
+uu_tr = { path = "../src/uu/tr/" }
+uu_env = { path = "../src/uu/env/" }
 
 # Prevent this from interfering with workspaces
 [workspace]
@@ -105,5 +107,17 @@ doc = false
 [[bin]]
 name = "fuzz_parse_time"
 path = "fuzz_targets/fuzz_parse_time.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_tr"
+path = "fuzz_targets/fuzz_tr.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_env"
+path = "fuzz_targets/fuzz_env.rs"
 test = false
 doc = false
