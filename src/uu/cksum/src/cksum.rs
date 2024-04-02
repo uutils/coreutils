@@ -261,13 +261,10 @@ where
                 }
             }
         }
-        match options.zero {
-            true => {
-                print!("\0");
-            }
-            false => {
-                print!("\n");
-            }
+        if options.zero {
+            print!("\0");
+        } else {
+            print!("\n");
         }
     }
 
