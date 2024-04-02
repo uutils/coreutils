@@ -326,11 +326,7 @@ impl EnvAppData {
         // clap automatically removes '=' from the beginning of the argument, so we need to check for it
         for arg in &original_args {
             let arg = arg.to_string_lossy();
-            let prefix = if arg.starts_with("-u=") {
-                "-u="
-            } else {
-                "--unset="
-            };
+            let prefix = "-u=";
             if arg.starts_with(prefix) {
                 let invalid_arg = &arg[(prefix.len() - 1)..];
                 return Err(UUsageError::new(
