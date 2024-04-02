@@ -408,10 +408,13 @@ fn get_delimiters(
                 }
             }
         }
-        None => match whitespace_delimited {
-            true => Delimiter::Whitespace,
-            false => Delimiter::default(),
-        },
+        None => {
+            if whitespace_delimited {
+                Delimiter::Whitespace
+            } else {
+                Delimiter::default()
+            }
+        }
     };
     let out_delim = matches
         .get_one::<OsString>(options::OUTPUT_DELIMITER)

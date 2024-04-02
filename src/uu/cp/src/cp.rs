@@ -1065,10 +1065,13 @@ impl Options {
     #[cfg(unix)]
     fn preserve_mode(&self) -> (bool, bool) {
         match self.attributes.mode {
-            Preserve::No { explicit } => match explicit {
-                true => (false, true),
-                false => (false, false),
-            },
+            Preserve::No { explicit } => {
+                if explicit {
+                    (false, true)
+                } else {
+                    (false, false)
+                }
+            }
             Preserve::Yes { .. } => (true, false),
         }
     }
@@ -2034,9 +2037,10 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         {
             const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
             const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
-            match is_explicit_no_preserve_mode {
-                true => return MODE_RW_UGO,
-                false => return org_mode & S_IRWXUGO,
+            if is_explicit_no_preserve_mode {
+                return MODE_RW_UGO;
+            } else {
+                return org_mode & S_IRWXUGO;
             };
         }
 
@@ -2051,9 +2055,10 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
             const MODE_RW_UGO: u32 =
                 (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
             const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
-            match is_explicit_no_preserve_mode {
-                true => return MODE_RW_UGO,
-                false => return org_mode & S_IRWXUGO,
+            if is_explicit_no_preserve_mode {
+                return MODE_RW_UGO;
+            } else {
+                return org_mode & S_IRWXUGO;
             };
         }
     }
