@@ -541,9 +541,6 @@ jobs:
         PKG_BASENAME=${PROJECT_NAME}-${REF_TAG:-$REF_SHAS}-${{ matrix.job.target }}
         PKG_NAME=${PKG_BASENAME}${PKG_suffix}
         outputs PKG_suffix PKG_BASENAME PKG_NAME
-        # deployable tag? (ie, leading "vM" or "M"; M == version number)
-        unset DEPLOY ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DEPLOY='true' ; fi
-        outputs DEPLOY
         # DPKG architecture?
         unset DPKG_ARCH
         case ${{ matrix.job.target }} in
@@ -749,7 +746,7 @@ jobs:
         fi
     - name: Publish
       uses: softprops/action-gh-release@v2
-      if: steps.vars.outputs.DEPLOY
+      if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
