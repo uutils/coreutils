@@ -448,6 +448,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::BASE64)
             .long(options::BASE64)
+            .short('b')
             .help("emit a base64 digest, not hexadecimal")
             .action(ArgAction::SetTrue)
             // Even though this could easily just override an earlier '--raw',
