@@ -103,20 +103,17 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     // displayed as "0.01", but "1e2" will be displayed as "100",
     // without a decimal point.
     let x: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
-    let num_integral_digits = if is_minus_zero_float(s, &x) {
-        2
+
+    let total = j as i64 + exponent;
+    let result = if total < 1 {
+        1
     } else {
-        let total = j as i64 + exponent;
-        let result = if total < 1 {
-            1
-        } else {
-            total.try_into().unwrap()
-        };
-        if x.sign() == Sign::Minus {
-            result + 1
-        } else {
-            result
-        }
+        total.try_into().unwrap()
+    };
+    let num_integral_digits = if x.sign() == Sign::Minus {
+        result + 1
+    } else {
+        result
     };
     let num_fractional_digits = if exponent < 0 { -exponent as usize } else { 0 };
 
