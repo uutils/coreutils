@@ -104,16 +104,24 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     // without a decimal point.
     let x: BigDecimal = s.parse().map_err(|_| ParseNumberError::Float)?;
 
-    let total = j as i64 + exponent;
-    let result = if total < 1 {
-        1
+    let num_integral_digits = if is_minus_zero_float(s, &x) {
+        if exponent > 0 {
+            2usize + exponent as usize
+        } else {
+            2usize
+        }
     } else {
-        total.try_into().unwrap()
-    };
-    let num_integral_digits = if x.sign() == Sign::Minus {
-        result + 1
-    } else {
-        result
+        let total = j as i64 + exponent;
+        let result = if total < 1 {
+            1
+        } else {
+            total.try_into().unwrap()
+        };
+        if x.sign() == Sign::Minus {
+            result + 1
+        } else {
+            result
+        }
     };
     let num_fractional_digits = if exponent < 0 { -exponent as usize } else { 0 };
 
