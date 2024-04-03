@@ -117,24 +117,18 @@ fn parse_exponent_no_decimal(s: &str, j: usize) -> Result<PreciseNumber, ParseNu
     };
     let num_fractional_digits = if exponent < 0 { -exponent as usize } else { 0 };
 
-    if exponent < 0 {
-        if is_minus_zero_float(s, &x) {
-            Ok(PreciseNumber::new(
-                ExtendedBigDecimal::MinusZero,
-                num_integral_digits,
-                num_fractional_digits,
-            ))
-        } else {
-            Ok(PreciseNumber::new(
-                ExtendedBigDecimal::BigDecimal(x),
-                num_integral_digits,
-                num_fractional_digits,
-            ))
-        }
+    if is_minus_zero_float(s, &x) {
+        Ok(PreciseNumber::new(
+            ExtendedBigDecimal::MinusZero,
+            num_integral_digits,
+            num_fractional_digits,
+        ))
     } else {
-        let zeros = "0".repeat(exponent.try_into().unwrap());
-        let expanded = [&s[0..j], &zeros].concat();
-        parse_no_decimal_no_exponent(&expanded)
+        Ok(PreciseNumber::new(
+            ExtendedBigDecimal::BigDecimal(x),
+            num_integral_digits,
+            num_fractional_digits,
+        ))
     }
 }
 
