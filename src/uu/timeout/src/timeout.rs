@@ -202,15 +202,14 @@ fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
     // NOTE: GNU timeout doesn't check for errors of signal.
     // The subprocess might have exited just after the timeout.
     // Sending a signal now would return "No such process", but we should still try to kill the children.
-    match foreground {
-        true => _ = process.send_signal(signal),
-        false => {
-            _ = process.send_signal_group(signal);
-            let kill_signal = signal_by_name_or_value("KILL").unwrap();
-            let continued_signal = signal_by_name_or_value("CONT").unwrap();
-            if signal != kill_signal && signal != continued_signal {
-                _ = process.send_signal_group(continued_signal);
-            }
+    if foreground {
+        let _ = process.send_signal(signal);
+    } else {
+        let _ = process.send_signal_group(signal);
+        let kill_signal = signal_by_name_or_value("KILL").unwrap();
+        let continued_signal = signal_by_name_or_value("CONT").unwrap();
+        if signal != kill_signal && signal != continued_signal {
+            _ = process.send_signal_group(continued_signal);
         }
     }
 }

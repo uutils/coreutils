@@ -763,9 +763,10 @@ fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
 }
 
 fn parse_width(s: &str) -> Result<u16, LsError> {
-    let radix = match s.starts_with('0') && s.len() > 1 {
-        true => 8,
-        false => 10,
+    let radix = if s.starts_with('0') && s.len() > 1 {
+        8
+    } else {
+        10
     };
     match u16::from_str_radix(s, radix) {
         Ok(x) => Ok(x),
