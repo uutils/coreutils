@@ -211,12 +211,12 @@ fn validate_regex(pattern: &str) -> ExprResult<()> {
                         invalid_content_error = true;
                     }
                     (Some(x), None) | (Some(x), Some("")) => {
-                        if !x.parse::<i16>().is_ok() {
+                        if x.parse::<i16>().is_err() {
                             invalid_content_error = true;
                         }
                     }
                     (None, Some(x)) | (Some(""), Some(x)) => {
-                        if !x.parse::<i16>().is_ok() {
+                        if x.parse::<i16>().is_err() {
                             invalid_content_error = true;
                         }
                     }
@@ -706,13 +706,13 @@ mod test {
 
     #[test]
     fn starting_stars_become_escaped() {
-        let result = AstNode::parse(&["yolo", ":", r"*yolo"])
+        let result = AstNode::parse(&["cats", ":", r"*cats"])
             .unwrap()
             .eval()
             .unwrap();
         assert_eq!(result.eval_as_string(), "0");
 
-        let result = AstNode::parse(&["*yolo", ":", r"*yolo"])
+        let result = AstNode::parse(&["*cats", ":", r"*cats"])
             .unwrap()
             .eval()
             .unwrap();
@@ -721,7 +721,7 @@ mod test {
 
     #[test]
     fn only_match_in_beginning() {
-        let result = AstNode::parse(&["cowsay", ":", r"ow"])
+        let result = AstNode::parse(&["budget", ":", r"get"])
             .unwrap()
             .eval()
             .unwrap();
