@@ -41,6 +41,15 @@ pub mod options {
         pub const WIPESYNC: &str = "wipesync";
     }
 }
+struct Params {
+    iterations: usize,
+    remove_method: RemoveMethod,
+    size: Option<u64>,
+    exact: bool,
+    zero: bool,
+    verbose: bool,
+    force: bool,
+}
 
 // This block size seems to match GNU (2^16 = 65536)
 const BLOCK_SIZE: usize = 1 << 16;
@@ -253,26 +262,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         RemoveMethod::None
     };
 
-    let force = matches.get_flag(options::FORCE);
     let size_arg = matches
         .get_one::<String>(options::SIZE)
         .map(|s| s.to_string());
     let size = get_size(size_arg);
-    let exact = matches.get_flag(options::EXACT) || size.is_some();
-    let zero = matches.get_flag(options::ZERO);
-    let verbose = matches.get_flag(options::VERBOSE);
-
+    let opts = Params {
+        iterations,
+        remove_method,
+        force: matches.get_flag(options::FORCE),
+        size,
+        exact: matches.get_flag(options::EXACT) || size.is_some(),
+        zero: matches.get_flag(options::ZERO),
+        verbose: matches.get_flag(options::VERBOSE),
+    };
     for path_str in matches.get_many::<String>(options::FILE).unwrap() {
-        show_if_err!(wipe_file(
-            path_str,
-            iterations,
-            remove_method,
-            size,
-            exact,
-            zero,
-            verbose,
-            force,
-        ));
+        show_if_err!(wipe_file(path_str, &opts,));
     }
     Ok(())
 }
@@ -383,16 +387,7 @@ fn pass_name(pass_type: &PassType) -> String {
 
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
-fn wipe_file(
-    path_str: &str,
-    n_passes: usize,
-    remove_method: RemoveMethod,
-    size: Option<u64>,
-    exact: bool,
-    zero: bool,
-    verbose: bool,
-    force: bool,
-) -> UResult<()> {
+fn wipe_file(path_str: &str, opts: &Params) -> UResult<()> {
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
     if !path.exists() {
@@ -411,7 +406,7 @@ fn wipe_file(
     let metadata = fs::metadata(path).map_err_context(String::new)?;
 
     // If force is true, set file permissions to not-readonly.
-    if force {
+    if opts.force {
         let mut perms = metadata.permissions();
         #[cfg(unix)]
         #[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
@@ -433,7 +428,7 @@ fn wipe_file(
     let mut pass_sequence = Vec::new();
     if metadata.len() != 0 {
         // Only add passes if the file is non-empty
-
+        let n_passes = opts.iterations;
         if n_passes <= 3 {
             // Only random passes if n_passes <= 3
             for _ in 0..n_passes {
@@ -463,7 +458,7 @@ fn wipe_file(
         }
 
         // --zero specifies whether we want one final pass of 0x00 on our file
-        if zero {
+        if opts.zero {
             pass_sequence.push(PassType::Pattern(PATTERNS[0]));
         }
     }
@@ -475,13 +470,13 @@ fn wipe_file(
         .open(path)
         .map_err_context(|| format!("{}: failed to open for writing", path.maybe_quote()))?;
 
-    let size = match size {
+    let size = match opts.size {
         Some(size) => size,
         None => metadata.len(),
     };
 
     for (i, pass_type) in pass_sequence.into_iter().enumerate() {
-        if verbose {
+        if opts.verbose {
             let pass_name = pass_name(&pass_type);
             show_error!(
                 "{}: pass {:2}/{} ({})...",
@@ -493,12 +488,12 @@ fn wipe_file(
         }
         // size is an optional argument for exactly how many bytes we want to shred
         // Ignore failed writes; just keep trying
-        show_if_err!(do_pass(&mut file, &pass_type, exact, size)
+        show_if_err!(do_pass(&mut file, &pass_type, opts.exact, size)
             .map_err_context(|| format!("{}: File write pass failed", path.maybe_quote())));
     }
 
-    if remove_method != RemoveMethod::None {
-        do_remove(path, path_str, verbose, remove_method)
+    if opts.remove_method != RemoveMethod::None {
+        do_remove(path, path_str, opts.verbose, opts.remove_method)
             .map_err_context(|| format!("{}: failed to remove file", path.maybe_quote()))?;
     }
     Ok(())
