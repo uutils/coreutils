@@ -118,6 +118,17 @@ fn test_whitespace_with_char() {
 }
 
 #[test]
+fn test_delimiter_with_byte_and_char() {
+    for conflicting_arg in ["-c", "-b"] {
+        new_ucmd!()
+            .args(&[conflicting_arg, COMPLEX_SEQUENCE.sequence, "-d="])
+            .fails()
+            .stderr_is("cut: invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields\n")
+            .code_is(1);
+    }
+}
+
+#[test]
 fn test_too_large() {
     new_ucmd!()
         .args(&["-b1-18446744073709551615", "/dev/null"])
@@ -287,6 +298,13 @@ fn test_multiple_mode_args() {
         .fails()
         .stderr_is("cut: invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)\n");
     }
+}
+
+#[test]
+fn test_no_argument() {
+    new_ucmd!().fails().stderr_is(
+        "cut: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\n",
+    );
 }
 
 #[test]
