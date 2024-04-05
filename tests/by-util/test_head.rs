@@ -438,3 +438,21 @@ fn test_read_backwards_bytes_sys_kernel_profiling() {
     assert_eq!(stdout_str.len(), 1);
     assert!(stdout_str == "0" || stdout_str == "1");
 }
+
+#[test]
+fn test_value_too_large() {
+    const MAX: u64 = u64::MAX;
+
+    new_ucmd!()
+        .args(&["-n", format!("{MAX}0").as_str(), "lorem_ipsum.txt"])
+        .fails()
+        .stderr_contains("Value too large for defined data type");
+}
+
+#[test]
+fn test_all_but_last_lines() {
+    new_ucmd!()
+        .args(&["-n", "-15", "lorem_ipsum.txt"])
+        .succeeds()
+        .stdout_is_fixture("lorem_ipsum_backwards_15_lines.expected");
+}
