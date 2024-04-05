@@ -536,7 +536,7 @@ fn wipe_file(path_str: &str, opts: &Params) -> UResult<()> {
         if opts.verbose {
             let pass_name = pass_name(&pass_type);
             show_error!(
-                "{}: pass {:2}/{} ({})...",
+                "{}: pass {}/{} ({})...",
                 path.maybe_quote(),
                 i + 1,
                 total_passes,

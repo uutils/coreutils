@@ -164,7 +164,7 @@ fn test_shred_empty() {
         .arg("-uv")
         .arg(file_a)
         .succeeds()
-        .stderr_does_not_contain("1/3 (random)");
+        .stderr_does_not_contain("pass 1/3 (random)");
 
     assert!(!at.file_exists(file_a));
 
@@ -176,7 +176,7 @@ fn test_shred_empty() {
         .arg("-uv")
         .arg(file_a)
         .succeeds()
-        .stderr_contains("1/3 (random)");
+        .stderr_contains("pass 1/3 (random)");
 
     assert!(!at.file_exists(file_a));
 }
