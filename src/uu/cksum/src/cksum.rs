@@ -436,23 +436,27 @@ pub fn uu_app() -> Command {
                 .long(options::LENGTH)
                 .value_parser(value_parser!(usize))
                 .short('l')
-                .help("digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8")
+                .help(
+                    "digest length in bits; must not exceed the max for the blake2 algorithm \
+                    and must be a multiple of 8",
+                )
                 .action(ArgAction::Set),
         )
         .arg(
             Arg::new(options::RAW)
-            .long(options::RAW)
-            .help("emit a raw binary digest, not hexadecimal")
-            .action(ArgAction::SetTrue),
+                .long(options::RAW)
+                .help("emit a raw binary digest, not hexadecimal")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BASE64)
-            .long(options::BASE64)
-            .help("emit a base64 digest, not hexadecimal")
-            .action(ArgAction::SetTrue)
-            // Even though this could easily just override an earlier '--raw',
-            // GNU cksum does not permit these flags to be combined:
-            .conflicts_with(options::RAW),
+                .long(options::BASE64)
+                .short('b')
+                .help("emit a base64 digest, not hexadecimal")
+                .action(ArgAction::SetTrue)
+                // Even though this could easily just override an earlier '--raw',
+                // GNU cksum does not permit these flags to be combined:
+                .conflicts_with(options::RAW),
         )
         .after_help(AFTER_HELP)
 }
