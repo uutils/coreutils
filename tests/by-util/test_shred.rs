@@ -205,3 +205,26 @@ fn test_shred_fail_no_perm() {
         .fails()
         .stderr_contains("Couldn't rename to");
 }
+
+#[test]
+fn test_random_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let random_source = "random";
+    at.write(random_source, "random content");
+
+    let file = "test_src";
+    // Create a file and write 1 MB of data to it
+    let content = vec![0u8; 1024 * 1024]; // 1 MB of zeros, change as needed
+    std::fs::write(at.plus(file), content).unwrap();
+    // Get the updated file size
+    let metadata = std::fs::metadata(at.plus(file)).unwrap();
+    assert!(metadata.len() >= 1024 * 1024);
+
+    ucmd.arg("--verbose")
+        .arg("--random-source")
+        .arg(random_source)
+        .arg(file)
+        .succeeds()
+        .stderr_contains("1/3 (random)");
+}
