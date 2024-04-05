@@ -163,6 +163,9 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
         Some(Symbol::None) | None => Ok(false),
         Some(Symbol::BoolOp(op)) => {
             let b = eval(stack)?;
+            if stack.is_empty() {
+                return Err(ParseError::UnaryOperatorExpected(op.quote().to_string()));
+            }
             let a = eval(stack)?;
 
             Ok(if op == "-a" { a && b } else { a || b })
