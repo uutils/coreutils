@@ -14,6 +14,7 @@ use quick_error::ResultExt;
 use uucore::mode::get_umask;
 
 use crate::{CopyDebug, CopyResult, OffloadReflinkDebug, ReflinkMode, SparseDebug, SparseMode};
+use libc::O_NONBLOCK;
 
 // From /usr/include/linux/fs.h:
 // #define FICLONE		_IOW(0x94, 9, int)
@@ -120,13 +121,14 @@ where
     //
     // TODO Update the code below to respect the case where
     // `--preserve=ownership` is not true.
-    let mut src_file = File::open(&source)?;
+
+    let mut options = OpenOptions::new();
+    options.read(true);
+    options.custom_flags(O_NONBLOCK);
+    let mut src_file = options.open(&source)?;
+
     let mode = 0o622 & !get_umask();
-    let mut dst_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .mode(mode)
-        .open(&dest)?;
+    let mut dst_file = options.create(true).write(true).mode(mode).open(&dest)?;
     let num_bytes_copied = std::io::copy(&mut src_file, &mut dst_file)?;
     dst_file.set_permissions(src_file.metadata()?.permissions())?;
     Ok(num_bytes_copied)
