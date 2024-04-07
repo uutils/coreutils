@@ -159,13 +159,9 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
 }
 
 fn print_signals() {
-    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        if idx > 0 {
-            println!();
-        }
-        print!("{signal}");
+    for signal in ALL_SIGNALS.iter() {
+        println!("{signal}");
     }
-    println!();
 }
 
 fn list(arg: Option<&String>) -> UResult<()> {
