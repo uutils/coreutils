@@ -580,9 +580,8 @@ fn process_chunk<
         if SHOW_WORDS {
             if ch.is_whitespace() {
                 *in_word = false;
-            } else if ch.is_ascii_control() {
-                // These count as characters but do not affect the word state
             } else if !(*in_word) {
+                // This also counts control characters! (As of GNU coreutils 9.5)
                 *in_word = true;
                 total.words += 1;
             }
