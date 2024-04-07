@@ -161,7 +161,7 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
 fn print_signals() {
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
         if idx > 0 {
-            print!(" ");
+            println!();
         }
         print!("{signal}");
     }
