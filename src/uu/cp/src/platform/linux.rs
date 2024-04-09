@@ -3,9 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore ficlone reflink ftruncate pwrite fiemap
+
+use libc::SEEK_DATA;
 use std::fs::{File, OpenOptions};
 use std::io::Read;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
@@ -32,6 +35,20 @@ enum CloneFallback {
 
     /// Use [`std::fs::copy`].
     FSCopy,
+
+    /// Use sparse_copy
+    SparseCopy,
+}
+
+/// Type of method used for copying files
+#[derive(Clone, Copy)]
+enum CopyMethod {
+    /// Do a sparse copy
+    SparseCopy,
+    /// Use [`std::fs::copy`].
+    FSCopy,
+    /// Default (can either be sparse_copy or FSCopy)
+    Default,
 }
 
 /// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
@@ -53,7 +70,51 @@ where
     match fallback {
         CloneFallback::Error => Err(std::io::Error::last_os_error()),
         CloneFallback::FSCopy => std::fs::copy(source, dest).map(|_| ()),
+        CloneFallback::SparseCopy => sparse_copy(source, dest),
     }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
+    let mut src_file = File::open(source)?;
+    let metadata = src_file.metadata()?;
+
+    let size = metadata.size();
+    let blocks = metadata.blocks();
+    let blksize = metadata.blksize();
+
+    if size == 0 {
+        let mut buf: Vec<u8> = vec![0; blksize as usize];
+        let _ = src_file.read(&mut buf)?;
+        if buf.iter().any(|&x| x != 0x0) {
+            return Ok((true, 0, 0));
+        }
+        return Ok((false, 0, 0));
+    }
+
+    let src_fd = src_file.as_raw_fd();
+
+    let result = unsafe { libc::lseek(src_fd, 0, SEEK_DATA) };
+    if result == -1 {
+        return Ok((false, size, blocks));
+    } else if result >= 0 && result < size as i64 {
+        return Ok((true, size, blocks));
+    } else {
+        return Err(std::io::Error::last_os_error());
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
+    let src_file = File::open(source)?;
+    let metadata = src_file.metadata()?;
+    let size = metadata.size();
+    let blocks = metadata.blocks();
+
+    if blocks < size / 512 {
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 /// Perform a sparse copy from one file to another.
@@ -62,8 +123,6 @@ fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    use std::os::unix::prelude::MetadataExt;
-
     let mut src_file = File::open(source)?;
     let dst_file = File::create(dest)?;
     let dst_fd = dst_file.as_raw_fd();
@@ -95,6 +154,17 @@ where
         current_offset += this_read;
     }
     Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn check_dest_is_fifo(dest: &Path) -> bool {
+    // If our destination file exists and its a fifo , we do a standard copy .
+    let file_type = std::fs::metadata(dest);
+    match file_type {
+        Ok(f) => f.file_type().is_fifo(),
+
+        _ => false,
+    }
 }
 
 /// Copy the contents of the given source FIFO to the given file.
@@ -155,23 +225,106 @@ pub(crate) fn copy_on_write(
     let result = match (reflink_mode, sparse_mode) {
         (ReflinkMode::Never, SparseMode::Always) => {
             copy_debug.sparse_detection = SparseDebug::Zeros;
-            copy_debug.offload = OffloadReflinkDebug::Avoided;
             copy_debug.reflink = OffloadReflinkDebug::No;
-            sparse_copy(source, dest)
+
+            if source_is_fifo {
+                copy_debug.offload = OffloadReflinkDebug::Avoided;
+
+                copy_fifo_contents(source, dest).map(|_| ())
+            } else {
+                let mut copy_method = CopyMethod::Default;
+                let (data_flag, size, blocks) = check_for_data(source)?;
+                let sparse_flag = check_sparse_detection(source)?;
+                if data_flag == true || size < 512 {
+                    copy_debug.offload = OffloadReflinkDebug::Avoided;
+                }
+                match (sparse_flag, data_flag, blocks) {
+                    (true, true, 0) => {
+                        // Handling funny files with 0 block allocation but has data
+                        // in it
+                        copy_method = CopyMethod::FSCopy;
+                        copy_debug.sparse_detection = SparseDebug::SeekHoleZeros;
+                    }
+                    (false, true, 0) => copy_method = CopyMethod::FSCopy,
+
+                    (true, false, 0) => copy_debug.sparse_detection = SparseDebug::SeekHole,
+                    (true, true, _) => copy_debug.sparse_detection = SparseDebug::SeekHoleZeros,
+
+                    (true, false, _) => {
+                        copy_debug.offload = OffloadReflinkDebug::Unknown;
+                        copy_debug.sparse_detection = SparseDebug::SeekHole;
+                    }
+
+                    (_, _, _) => (),
+                }
+                match copy_method {
+                    CopyMethod::FSCopy => std::fs::copy(source, dest).map(|_| ()),
+                    _ => sparse_copy(source, dest),
+                }
+            }
         }
-        (ReflinkMode::Never, _) => {
-            copy_debug.sparse_detection = SparseDebug::No;
+        (ReflinkMode::Never, SparseMode::Never) => {
             copy_debug.reflink = OffloadReflinkDebug::No;
-            std::fs::copy(source, dest).map(|_| ())
+
+            if source_is_fifo {
+                copy_debug.offload = OffloadReflinkDebug::Avoided;
+
+                copy_fifo_contents(source, dest).map(|_| ())
+            } else {
+                let (data_flag, size, blocks) = check_for_data(source)?;
+                let sparse_flag = check_sparse_detection(source)?;
+
+                if sparse_flag == true {
+                    copy_debug.sparse_detection = SparseDebug::SeekHole;
+                }
+
+                if data_flag == true || size < 512 {
+                    copy_debug.offload = OffloadReflinkDebug::Avoided;
+                }
+
+                std::fs::copy(source, dest).map(|_| ())
+            }
+        }
+        (ReflinkMode::Never, SparseMode::Auto) => {
+            copy_debug.reflink = OffloadReflinkDebug::No;
+            if source_is_fifo {
+                copy_debug.offload = OffloadReflinkDebug::Avoided;
+
+                copy_fifo_contents(source, dest).map(|_| ())
+            } else {
+                let mut copy_method = CopyMethod::Default;
+                let (data_flag, size, blocks) = check_for_data(source)?;
+                let sparse_flag = check_sparse_detection(source)?;
+
+                if data_flag == true || size < 512 {
+                    copy_debug.offload = OffloadReflinkDebug::Avoided;
+                }
+
+                if sparse_flag {
+                    if blocks == 0 && data_flag {
+                        copy_method = CopyMethod::FSCopy;
+                    } else {
+                        copy_method = CopyMethod::SparseCopy;
+                    }
+                    copy_debug.sparse_detection = SparseDebug::SeekHole;
+                }
+                match copy_method {
+                    CopyMethod::SparseCopy => sparse_copy(source, dest),
+                    _ => std::fs::copy(source, dest).map(|_| ()),
+                }
+            }
         }
         (ReflinkMode::Auto, SparseMode::Always) => {
             copy_debug.offload = OffloadReflinkDebug::Avoided;
             copy_debug.sparse_detection = SparseDebug::Zeros;
             copy_debug.reflink = OffloadReflinkDebug::Unsupported;
+            let (data_flag, size, blocks) = check_for_data(source)?;
+            let sparse_flag = check_sparse_detection(source)?;
+
             sparse_copy(source, dest)
         }
 
-        (ReflinkMode::Auto, _) => {
+        (ReflinkMode::Auto, SparseMode::Never) => {
             copy_debug.sparse_detection = SparseDebug::No;
             copy_debug.reflink = OffloadReflinkDebug::Unsupported;
             if source_is_fifo {
@@ -180,6 +333,8 @@ pub(crate) fn copy_on_write(
                 clone(source, dest, CloneFallback::FSCopy)
             }
         }
+        (ReflinkMode::Auto, SparseMode::Auto) => Ok(()),
+
         (ReflinkMode::Always, SparseMode::Auto) => {
             copy_debug.sparse_detection = SparseDebug::No;
             copy_debug.reflink = OffloadReflinkDebug::Yes;
