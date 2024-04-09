@@ -5659,3 +5659,25 @@ fn test_cp_parents_absolute_path() {
     let res = format!("dest{}/a/b/f", at.root_dir_resolved());
     at.file_exists(res);
 }
+
+/// Test the behavior of copying a non existent file to a folder
+#[test]
+#[cfg(unix)]
+fn test_cp_existant_and_nonexistent_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir(TEST_COPY_TO_FOLDER_NEW);
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg(TEST_NONEXISTENT_FILE)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER_NEW)
+        .fails()
+        .stderr_only("cp: cannot stat 'nonexistent_file.txt': No such file or directory\n");
+
+    // Check existing file has been copied
+    assert!(at.file_exists(TEST_COPY_TO_FOLDER_NEW_FILE));
+}

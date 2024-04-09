@@ -9,6 +9,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 #[cfg(not(windows))]
 use std::ffi::CString;
+use std::ffi::OsString;
 use std::fs::{self, File, Metadata, OpenOptions, Permissions};
 use std::io;
 #[cfg(unix)]
@@ -677,7 +678,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::PATHS)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath)
-                .value_parser(ValueParser::path_buf()),
+                .value_parser(clap::value_parser!(OsString)),
         )
 }
 
@@ -707,8 +708,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         let paths: Vec<PathBuf> = matches
-            .remove_many::<PathBuf>(options::PATHS)
-            .map(|v| v.collect())
+            .remove_many::<OsString>(options::PATHS)
+            .map(|v| v.map(PathBuf::from).collect())
             .unwrap_or_default();
 
         let (sources, target) = parse_path_args(paths, &options)?;
@@ -1389,7 +1390,13 @@ fn copy_source(
                 }
             }
         }
-        res
+        // this is just for gnu tests compatibility
+        Ok(res.map_err(|err| {
+            if err.to_string().contains("No such file or directory") {
+                return format!("cannot stat {}: No such file or directory", source.quote());
+            }
+            err.to_string()
+        })?)
     }
 }
 
@@ -2129,19 +2136,10 @@ fn copy_file(
     let context = context_for(source, dest);
     let context = context.as_str();
 
-    let source_metadata = {
-        let result = if options.dereference(source_in_command_line) {
-            fs::metadata(source)
-        } else {
-            fs::symlink_metadata(source)
-        };
-        // this is just for gnu tests compatibility
-        result.map_err(|err| {
-            if err.to_string().contains("No such file or directory") {
-                return format!("cannot stat {}: No such file or directory", source.quote());
-            }
-            err.to_string()
-        })?
+    let source_metadata = if options.dereference(source_in_command_line) {
+        fs::metadata(source)?
+    } else {
+        fs::symlink_metadata(source)?
     };
 
     let dest_permissions = calculate_dest_permissions(dest, &source_metadata, options, context)?;
