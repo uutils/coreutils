@@ -71,7 +71,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             table();
             Ok(())
         }
-        Mode::List => list(pids_or_signals.first()),
+        Mode::List => {
+            list(&pids_or_signals);
+            Ok(())
+        }
     }
 }
 
@@ -164,12 +167,14 @@ fn print_signals() {
     }
 }
 
-fn list(arg: Option<&String>) -> UResult<()> {
-    match arg {
-        Some(x) => print_signal(x),
-        None => {
-            print_signals();
-            Ok(())
+fn list(signals: &Vec<String>) {
+    if signals.is_empty() {
+        print_signals();
+    } else {
+        for signal in signals {
+            if let Err(e) = print_signal(signal) {
+                uucore::show!(e)
+            }
         }
     }
 }
