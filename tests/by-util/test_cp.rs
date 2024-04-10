@@ -3550,7 +3550,7 @@ fn test_cp_debug_sparse_never() {
         .arg("b")
         .succeeds();
     let stdout_str = result.stdout_str();
-    if !stdout_str.contains("copy offload: unknown, reflink: unsupported, sparse detection: no") {
+    if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: no") {
         panic!("Failure: stdout was \n{stdout_str}");
     }
 }
