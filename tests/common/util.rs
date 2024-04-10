@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 //spell-checker: ignore (linux) rlimit prlimit coreutil ggroups uchild uncaptured scmd SHLVL canonicalized openpty
-//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE
+//spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE conpty
 
 #![allow(dead_code)]
 
@@ -3755,5 +3755,12 @@ mod tests {
             .succeeds()
             .no_stderr()
             .stdout_is("8\n16\n");
+    }
+
+    #[cfg(windows)]
+    fn test_os_error_126()
+    {
+        conpty::console::Console::current().unwrap();
+        conpty::spawn("cmd.exe").unwrap();
     }
 }

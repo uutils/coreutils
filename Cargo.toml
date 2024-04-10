@@ -501,6 +501,9 @@ rlimit = "0.10.1"
 rand_pcg = "0.3"
 xattr = { workspace = true }
 
+[target.'cfg(windows)'.dev-dependencies]
+conpty = "0"
+
 [build-dependencies]
 phf_codegen = { workspace = true }
 
