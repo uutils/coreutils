@@ -93,6 +93,16 @@ fn test_kill_list_one_signal_from_name() {
 }
 
 #[test]
+fn test_kill_list_all_vertically() {
+    // Check for a few signals.  Do not try to be comprehensive.
+    let command = new_ucmd!().arg("-l").succeeds();
+    let signals = command.stdout_str().split('\n').collect::<Vec<&str>>();
+    assert!(signals.contains(&"KILL"));
+    assert!(signals.contains(&"TERM"));
+    assert!(signals.contains(&"HUP"));
+}
+
+#[test]
 fn test_kill_list_two_signal_from_name() {
     new_ucmd!()
         .arg("-l")
