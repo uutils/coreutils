@@ -305,7 +305,7 @@ onig = { version = "~6.4", default-features = false }
 parse_datetime = "0.5.0"
 phf = "0.11.2"
 phf_codegen = "0.11.2"
-platform-info = "2.0.2"
+platform-info = "2.0.3"
 quick-error = "2.0.1"
 rand = { version = "0.8", features = ["small_rng"] }
 rand_core = "0.6"
