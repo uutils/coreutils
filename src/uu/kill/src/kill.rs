@@ -134,10 +134,8 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
 }
 
 fn table() {
-    let name_width = ALL_SIGNALS.iter().map(|n| n.len()).max().unwrap();
-
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        println!("{0: >#2} {1: <#2$}", idx + 1, signal, name_width + 2);
+        println!("{0: >#2} {1}", idx + 1, signal);
     }
 }
 
