@@ -137,12 +137,8 @@ fn table() {
     let name_width = ALL_SIGNALS.iter().map(|n| n.len()).max().unwrap();
 
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        print!("{0: >#2} {1: <#2$}", idx, signal, name_width + 2);
-        if (idx + 1) % 7 == 0 {
-            println!();
-        }
+        println!("{0: >#2} {1: <#2$}", idx + 1, signal, name_width + 2);
     }
-    println!();
 }
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
