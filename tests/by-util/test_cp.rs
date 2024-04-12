@@ -3800,6 +3800,349 @@ fn test_acl_preserve() {
 
     assert!(compare_xattrs(&file, &file_target));
 }
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_reflink_never_with_hole() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.write("a", "hello");
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("a"))
+        .unwrap();
+    f.set_len(10000).unwrap();
+
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: SEEK_HOLE") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_reflink_never_empty_file_with_hole() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("a"))
+        .unwrap();
+    f.set_len(10000).unwrap();
+
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: unknown, reflink: no, sparse detection: SEEK_HOLE") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_default_with_hole() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("a"))
+        .unwrap();
+    f.set_len(10000).unwrap();
+
+    at.append_bytes("a", "hello".as_bytes());
+    let result = ts.ucmd().arg("--debug").arg("a").arg("b").succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: yes, reflink: unsupported, sparse detection: SEEK_HOLE")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_default_less_than_512_bytes() {
+    let ts = TestScenario::new(util_name!());
+
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.append_bytes("a", "hello".as_bytes());
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("a"))
+        .unwrap();
+    f.set_len(400).unwrap();
+
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=auto")
+        .arg("--sparse=auto")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: yes, reflink: unsupported, sparse detection: no") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_default_without_hole() {
+    let ts = TestScenario::new(util_name!());
+
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.append_bytes("a", "hello".as_bytes());
+
+    let filler_bytes = [0 as u8; 10000];
+
+    at.append_bytes("a", &filler_bytes);
+
+    let result = ts.ucmd().arg("--debug").arg("a").arg("b").succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: yes, reflink: unsupported, sparse detection: no") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_default_empty_file_with_hole() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("a"))
+        .unwrap();
+    f.set_len(10000).unwrap();
+
+    let result = ts.ucmd().arg("--debug").arg("a").arg("b").succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str
+        .contains("copy offload: unknown, reflink: unsupported, sparse detection: SEEK_HOLE")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_reflink_never_sparse_always_with_hole() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.write("a", "hello");
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("a"))
+        .unwrap();
+    f.set_len(10000).unwrap();
+
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("--sparse=always")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str
+        .contains("copy offload: avoided, reflink: no, sparse detection: SEEK_HOLE + zeros")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_reflink_never_sparse_always_without_hole() {
+    let ts = TestScenario::new(util_name!());
+    let empty_bytes = [0 as u8; 10000];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.write("a", "hello");
+    at.append_bytes("a", &empty_bytes);
+
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("--sparse=always")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: zeros") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_reflink_never_sparse_always_empty_file_with_hole() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("a"))
+        .unwrap();
+    f.set_len(10000).unwrap();
+
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("--sparse=always")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: unknown, reflink: no, sparse detection: SEEK_HOLE") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_default_virtual_file() {
+    use std::os::unix::prelude::MetadataExt;
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    ts.ucmd()
+        .arg("/sys/kernel/address_bits")
+        .arg("b")
+        .succeeds();
+
+    let dest_size = std::fs::metadata(at.plus("b"))
+        .expect("Metadata of copied file cannot be read")
+        .size();
+    if dest_size == 0 {
+        panic!("Copy unsuccessful");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_sparse_always_sparse_virtual_file() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=always")
+        .arg("/sys/kernel/address_bits")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains(
+        "copy offload: avoided, reflink: unsupported, sparse detection: SEEK_HOLE + zeros",
+    ) {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_default_sparse_virtual_file() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("/sys/kernel/address_bits")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str
+        .contains("copy offload: unsupported, reflink: unsupported, sparse detection: SEEK_HOLE")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_sparse_never_zero_sized_virtual_file() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--sparse=never")
+        .arg("/proc/version")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: no") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_default_zero_sized_virtual_file() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("/proc/version")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: unsupported, reflink: unsupported, sparse detection: no")
+    {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_debug_reflink_never_without_hole() {
+    let ts = TestScenario::new(util_name!());
+    let filler_bytes = [0 as u8; 1000];
+    let at = &ts.fixtures;
+    at.touch("a");
+    at.write("a", "hello");
+    at.append_bytes("a", &filler_bytes);
+    let result = ts
+        .ucmd()
+        .arg("--debug")
+        .arg("--reflink=never")
+        .arg("a")
+        .arg("b")
+        .succeeds();
+
+    let stdout_str = result.stdout_str();
+    if !stdout_str.contains("copy offload: avoided, reflink: no, sparse detection: no") {
+        panic!("Failure: stdout was \n{stdout_str}");
+    }
+}
 
 #[test]
 fn test_cp_force_remove_destination_attributes_only_with_symlink() {
