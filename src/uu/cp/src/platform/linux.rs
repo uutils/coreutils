@@ -90,25 +90,22 @@ fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
     let blocks = metadata.blocks();
     let blksize = metadata.blksize();
 
+
     if size == 0 {
-        let mut buf: Vec<u8> = vec![0; blksize as usize];
-        let _ = src_file.read(&mut buf)?;
-        if buf.iter().any(|&x| x != 0x0) {
-            return Ok((true, size, 0));
-        }
-        return Ok((false, size, 0));
+        let mut buf: Vec<u8> = vec![0; metadata.blksize() as usize]; // Directly use metadata.blksize()
+        src_file.read(&mut buf)?;
+        return Ok((buf.iter().any(|&x| x != 0x0), size, 0));
     }
 
     let src_fd = src_file.as_raw_fd();
 
     let result = unsafe { libc::lseek(src_fd, 0, SEEK_DATA) };
 
-    if result == -1 {
-        Ok((false, size, blocks))
-    } else if result >= 0 && result < size as i64 {
-        Ok((true, size, blocks))
-    } else {
-        return Err(std::io::Error::last_os_error());
+
+    match result {
+        -1 => Ok((false, size, blocks)), // No data found or end of file
+        _ if result >= 0 => Ok((true, size, blocks)), // Data found
+        _ => Err(io::Error::last_os_error()),
     }
 }
 
