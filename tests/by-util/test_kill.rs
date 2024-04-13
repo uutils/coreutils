@@ -62,7 +62,8 @@ fn test_kill_list_all_signals() {
         .succeeds()
         .stdout_contains("KILL")
         .stdout_contains("TERM")
-        .stdout_contains("HUP");
+        .stdout_contains("HUP")
+        .stdout_does_not_contain("EXIT");
 }
 
 #[test]
