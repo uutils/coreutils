@@ -81,6 +81,9 @@ where
     }
 }
 
+/// Checks whether a file contains any non null bytes i.e. any byte != 0x0
+/// This function returns a tuple of (bool, u64, u64) signifying a tuple of (whether a file has
+/// data, its size, no of blocks it has allocated in disk)
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
     let mut src_file = File::open(source)?;
@@ -89,7 +92,7 @@ fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
     let size = metadata.size();
     let blocks = metadata.blocks();
     let blksize = metadata.blksize();
-
+    // checks edge case of virtual files in /proc which have a size of zero but contains data
     if size == 0 {
         let mut buf: Vec<u8> = vec![0; blksize as usize];
         let _ = src_file.read(&mut buf)?;
@@ -105,7 +108,7 @@ fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
 
     if result == -1 {
         Ok((false, size, blocks))
-    } else if result >= 0 && result < size as i64 {
+    } else if result >= 0 {
         Ok((true, size, blocks))
     } else {
         return Err(std::io::Error::last_os_error());
@@ -113,6 +116,8 @@ fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+/// Checks whether a file is sparse i.e. it contains holes, uses the crude heurestic blocks < size / 512
+/// Reference: https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks
 fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     let src_file = File::open(source)?;
     let metadata = src_file.metadata()?;
@@ -125,8 +130,8 @@ fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     Ok(false)
 }
 
-// Optimized sparse_copy, doesn't create holes for large sequences of zeros in non sparse_files
-// Used when --sparse=auto
+/// Optimized sparse_copy, doesn't create holes for large sequences of zeros in non sparse_files
+/// Used when --sparse=auto
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn sparse_copy_without_hole<P>(source: P, dest: P) -> std::io::Result<()>
 where
@@ -136,26 +141,31 @@ where
     let dst_file = File::create(dest)?;
     let dst_fd = dst_file.as_raw_fd();
 
-    let size: usize = src_file.metadata()?.size().try_into().unwrap();
+    let size: u64 = src_file.metadata()?.size();
     if unsafe { libc::ftruncate(dst_fd, size.try_into().unwrap()) } < 0 {
         return Err(std::io::Error::last_os_error());
     }
     let src_fd = src_file.as_raw_fd();
-    let mut current_offset: i64 = 0;
+    let mut current_offset: isize = 0;
     loop {
-        let result = unsafe { libc::lseek(src_fd, current_offset as i64, SEEK_DATA) };
+        let result = unsafe { libc::lseek(src_fd, current_offset.try_into().unwrap(), SEEK_DATA) }
+            .try_into()
+            .unwrap();
 
         current_offset = result;
-        let hole = unsafe { libc::lseek(src_fd, current_offset as i64, SEEK_HOLE) };
+        let hole: isize =
+            unsafe { libc::lseek(src_fd, current_offset.try_into().unwrap(), SEEK_HOLE) }
+                .try_into()
+                .unwrap();
         if result == -1 || hole == -1 {
             break;
         }
         if result <= -2 || hole <= -2 {
             return Err(std::io::Error::last_os_error());
         }
-        let len = hole - current_offset;
+        let len: isize = hole - current_offset;
         let mut buf: Vec<u8> = vec![0x0; len as usize];
-        let _ = src_file.read_exact_at(&mut buf, current_offset as u64)?;
+        src_file.read_exact_at(&mut buf, current_offset as u64)?;
         unsafe {
             libc::pwrite(
                 dst_fd,
@@ -169,7 +179,7 @@ where
     Ok(())
 }
 /// Perform a sparse copy from one file to another.
-/// Creates a holes for large sequences of zeros in non_sparse_files used for --sparse=always
+/// Creates a holes for large sequences of zeros in non_sparse_files, used for --sparse=always
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
 where
@@ -209,6 +219,7 @@ where
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+/// Checks whether an existing destination is a fifo
 fn check_dest_is_fifo(dest: &Path) -> bool {
     // If our destination file exists and its a fifo , we do a standard copy .
     let file_type = std::fs::metadata(dest);
@@ -348,7 +359,7 @@ pub(crate) fn copy_on_write(
 
                 match copy_method {
                     CopyMethod::FSCopy => clone(source, dest, CloneFallback::FSCopy),
-                    _ => clone(source, dest, CloneFallback::SparseCopy),
+                    _ => sparse_copy(source, dest),
                 }
             }
         }
@@ -402,6 +413,8 @@ pub(crate) fn copy_on_write(
     Ok(copy_debug)
 }
 
+/// Handles debug results when flags are "--reflink=auto" and "--sparse=always" and specifies what
+/// type of copy should be used
 fn handle_reflink_auto_sparse_always(
     source: &Path,
     dest: &Path,
@@ -440,6 +453,8 @@ fn handle_reflink_auto_sparse_always(
     Ok((copy_debug, copy_method))
 }
 
+/// Handles debug results when flags are "--reflink=auto" and "--sparse=auto" and specifies what
+/// type of copy should be used
 fn handle_reflink_never_sparse_never(source: &Path) -> Result<CopyDebug, std::io::Error> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
@@ -459,6 +474,8 @@ fn handle_reflink_never_sparse_never(source: &Path) -> Result<CopyDebug, std::io
     Ok(copy_debug)
 }
 
+/// Handles debug results when flags are "--reflink=auto" and "--sparse=never", files will be copied
+/// through cloning them with fallback switching to std::fs::copy
 fn handle_reflink_auto_sparse_never(source: &Path) -> Result<CopyDebug, std::io::Error> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
@@ -479,6 +496,8 @@ fn handle_reflink_auto_sparse_never(source: &Path) -> Result<CopyDebug, std::io:
     Ok(copy_debug)
 }
 
+/// Handles debug results when flags are "--reflink=auto" and "--sparse=auto" and specifies what
+/// type of copy should be used
 fn handle_reflink_auto_sparse_auto(
     source: &Path,
     dest: &Path,
@@ -506,10 +525,11 @@ fn handle_reflink_auto_sparse_auto(
             // Handling other "virtual" files
             copy_debug.offload = OffloadReflinkDebug::Unsupported;
 
-            copy_method = CopyMethod::FSCopy;
+            copy_method = CopyMethod::FSCopy; // Doing a standard copy for the virtual files
         } else {
             copy_method = CopyMethod::SparseCopyWithoutHole;
-        }
+        } // Since sparse_flag is true, sparse_detection shall be SeekHole for any non virtual
+          // regular sparse file and the file will be sparsely copied
         copy_debug.sparse_detection = SparseDebug::SeekHole;
     }
 
@@ -519,6 +539,8 @@ fn handle_reflink_auto_sparse_auto(
     Ok((copy_debug, copy_method))
 }
 
+/// Handles debug results when flags are "--reflink=never" and "--sparse=auto" and specifies what
+/// type of copy should be used
 fn handle_reflink_never_sparse_auto(
     source: &Path,
     dest: &Path,
@@ -539,9 +561,10 @@ fn handle_reflink_never_sparse_auto(
 
     if sparse_flag {
         if blocks == 0 && data_flag {
-            copy_method = CopyMethod::FSCopy;
+            copy_method = CopyMethod::FSCopy; // Handles virtual files which have size > 0 but no
+                                              // disk allocation
         } else {
-            copy_method = CopyMethod::SparseCopyWithoutHole;
+            copy_method = CopyMethod::SparseCopyWithoutHole; // Handles regular sparse-files
         }
         copy_debug.sparse_detection = SparseDebug::SeekHole;
     }
@@ -552,6 +575,8 @@ fn handle_reflink_never_sparse_auto(
     Ok((copy_debug, copy_method))
 }
 
+/// Handles debug results when flags are "--reflink=never" and "--sparse=always" and specifies what
+/// type of copy should be used
 fn handle_reflink_never_sparse_always(
     source: &Path,
     dest: &Path,
@@ -572,21 +597,22 @@ fn handle_reflink_never_sparse_always(
     match (sparse_flag, data_flag, blocks) {
         (true, true, 0) => {
             // Handling funny files with 0 block allocation but has data
-            // in it
+            // in it, e.g. files in /sys and other virtual files
             copy_method = CopyMethod::FSCopy;
             copy_debug.sparse_detection = SparseDebug::SeekHoleZeros;
         }
-        (false, true, 0) => copy_method = CopyMethod::FSCopy,
-
-        (true, false, 0) => copy_debug.sparse_detection = SparseDebug::SeekHole,
-        (true, true, _) => copy_debug.sparse_detection = SparseDebug::SeekHoleZeros,
-
+        (false, true, 0) => copy_method = CopyMethod::FSCopy, // Handling data containing zero sized
+        // files in /proc
+        (true, false, 0) => copy_debug.sparse_detection = SparseDebug::SeekHole, // Handles files
+        // with 0 blocks allocated in disk and
+        (true, true, _) => copy_debug.sparse_detection = SparseDebug::SeekHoleZeros, // Any
+        // sparse_files with data in it will display SeekHoleZeros
         (true, false, _) => {
             copy_debug.offload = OffloadReflinkDebug::Unknown;
             copy_debug.sparse_detection = SparseDebug::SeekHole;
         }
 
-        (_, _, _) => copy_method = CopyMethod::FSCopy,
+        (_, _, _) => (),
     }
     if check_dest_is_fifo(dest) {
         copy_method = CopyMethod::FSCopy;
