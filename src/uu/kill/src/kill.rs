@@ -162,7 +162,8 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
 }
 
 fn print_signals() {
-    for signal in ALL_SIGNALS.iter() {
+    // GNU kill doesn't list the EXIT signal with --list, so we ignore it, too
+    for signal in ALL_SIGNALS.iter().filter(|x| **x != "EXIT") {
         println!("{signal}");
     }
 }
