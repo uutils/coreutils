@@ -87,7 +87,7 @@ fn test_kill_table_starts_at_1() {
     new_ucmd!()
         .arg("-t")
         .succeeds()
-        .stdout_matches(&Regex::new("^\\s?1").unwrap());
+        .stdout_matches(&Regex::new("^\\s?1\\sHUP").unwrap());
 }
 
 #[test]

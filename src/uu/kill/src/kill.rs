@@ -134,8 +134,8 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
 }
 
 fn table() {
-    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        println!("{0: >#2} {1}", idx + 1, signal);
+    for (idx, signal) in ALL_SIGNALS.iter().enumerate().skip(1) {
+        println!("{0: >#2} {1}", idx, signal);
     }
 }
 
