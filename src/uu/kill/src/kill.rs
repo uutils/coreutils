@@ -142,15 +142,14 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
 }
 
 fn table() {
-    let name_width = ALL_SIGNALS.iter().map(|n| n.len()).max().unwrap();
-
-    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        print!("{0: >#2} {1: <#2$}", idx, signal, name_width + 2);
-        if (idx + 1) % 7 == 0 {
-            println!();
-        }
+    // GNU kill doesn't list the EXIT signal with --table, so we ignore it, too
+    for (idx, signal) in ALL_SIGNALS
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| **s != "EXIT")
+    {
+        println!("{0: >#2} {1}", idx, signal);
     }
-    println!();
 }
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {

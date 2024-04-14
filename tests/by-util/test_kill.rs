@@ -84,6 +84,29 @@ fn test_kill_list_all_signals_as_table() {
 }
 
 #[test]
+fn test_kill_table_starts_at_1() {
+    new_ucmd!()
+        .arg("-t")
+        .succeeds()
+        .stdout_matches(&Regex::new("^\\s?1\\sHUP").unwrap());
+}
+
+#[test]
+fn test_kill_table_lists_all_vertically() {
+    // Check for a few signals.  Do not try to be comprehensive.
+    let command = new_ucmd!().arg("-t").succeeds();
+    let signals = command
+        .stdout_str()
+        .split('\n')
+        .flat_map(|line| line.trim().split(" ").nth(1))
+        .collect::<Vec<&str>>();
+
+    assert!(signals.contains(&"KILL"));
+    assert!(signals.contains(&"TERM"));
+    assert!(signals.contains(&"HUP"));
+}
+
+#[test]
 fn test_kill_list_one_signal_from_name() {
     // Use SIGKILL because it is 9 on all unixes.
     new_ucmd!()
