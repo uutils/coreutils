@@ -154,7 +154,9 @@ fn table() {
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
-        if signal == signal_name_or_value || (format!("SIG{signal}")) == signal_name_or_value {
+        if signal.eq_ignore_ascii_case(signal_name_or_value)
+            || format!("SIG{signal}").eq_ignore_ascii_case(signal_name_or_value)
+        {
             println!("{value}");
             return Ok(());
         } else if signal_name_or_value == value.to_string() {

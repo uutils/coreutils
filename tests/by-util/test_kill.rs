@@ -117,6 +117,25 @@ fn test_kill_list_one_signal_from_name() {
 }
 
 #[test]
+fn test_kill_list_one_signal_ignore_case() {
+    // Use SIGKILL because it is 9 on all unixes.
+    new_ucmd!()
+        .arg("-l")
+        .arg("KiLl")
+        .succeeds()
+        .stdout_matches(&Regex::new("\\b9\\b").unwrap());
+}
+
+#[test]
+fn test_kill_list_unknown_must_match_input_case() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("IaMnOtAsIgNaL") // spell-checker:disable-line
+        .fails()
+        .stderr_contains("IaMnOtAsIgNaL"); // spell-checker:disable-line
+}
+
+#[test]
 fn test_kill_list_all_vertically() {
     // Check for a few signals.  Do not try to be comprehensive.
     let command = new_ucmd!().arg("-l").succeeds();
