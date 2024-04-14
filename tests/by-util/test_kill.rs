@@ -237,6 +237,17 @@ fn test_kill_with_signal_name_new_form() {
 }
 
 #[test]
+fn test_kill_with_signal_name_new_form_ignore_case() {
+    let mut target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("KiLl")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+}
+
+#[test]
 fn test_kill_with_signal_prefixed_name_new_form() {
     let mut target = Target::new();
     new_ucmd!()
@@ -245,6 +256,29 @@ fn test_kill_with_signal_prefixed_name_new_form() {
         .arg(format!("{}", target.pid()))
         .succeeds();
     assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+}
+
+#[test]
+fn test_kill_with_signal_prefixed_name_new_form_ignore_case() {
+    let mut target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("SiGKiLl")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+}
+
+#[test]
+fn test_kill_with_signal_name_new_form_unknown_must_match_input_case() {
+    let target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("IaMnOtAsIgNaL") // spell-checker:disable-line
+        .arg(format!("{}", target.pid()))
+        .fails()
+        .stderr_contains("unknown signal")
+        .stderr_contains("IaMnOtAsIgNaL"); // spell-checker:disable-line
 }
 
 #[test]
