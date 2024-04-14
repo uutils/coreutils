@@ -21,7 +21,7 @@ use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
 use uucore::error::USimpleError;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{set_exit_code, FromIo, UError, UResult};
 use uucore::sum::{
     Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224, Sha3_256,
     Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
@@ -46,6 +46,7 @@ struct Options {
     warn: bool,
     output_bits: usize,
     zero: bool,
+    ignore_missing: bool,
 }
 
 /// Creates a Blake2b hasher instance based on the specified length argument.
@@ -345,6 +346,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let strict = matches.get_flag("strict");
     let warn = matches.get_flag("warn") && !status;
     let zero = matches.get_flag("zero");
+    let ignore_missing = matches.get_flag("ignore-missing");
 
     let opts = Options {
         algoname: name,
@@ -359,6 +361,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         strict,
         warn,
         zero,
+        ignore_missing,
     };
 
     match matches.get_many::<OsString>("FILE") {
@@ -429,6 +432,12 @@ pub fn uu_app_common() -> Command {
             Arg::new("strict")
                 .long("strict")
                 .help("exit non-zero for improperly formatted checksum lines")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("ignore-missing")
+                .long("ignore-missing")
+                .help("don't fail or report status for missing files")
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -705,6 +714,11 @@ where
                 let (ck_filename_unescaped, prefix) = unescape_filename(&ck_filename);
                 let f = match File::open(ck_filename_unescaped) {
                     Err(_) => {
+                        if options.ignore_missing {
+                            // No need to show an error
+                            continue;
+                        }
+
                         failed_open_file += 1;
                         println!(
                             "{}: {}: No such file or directory",
@@ -712,6 +726,7 @@ where
                             ck_filename
                         );
                         println!("{ck_filename}: FAILED open or read");
+                        set_exit_code(1);
                         continue;
                     }
                     Ok(file) => file,
