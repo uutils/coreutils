@@ -192,7 +192,14 @@ fn test_touch_set_cymdhms_time() {
 
 #[test]
 fn test_touch_set_only_atime() {
-    let atime_args = ["-a", "--time=access", "--time=atime", "--time=use"];
+    let atime_args = [
+        "-a",
+        "--time=access",
+        "--time=atime",
+        "--time=atim", // spell-checker:disable-line
+        "--time=a",
+        "--time=use",
+    ];
     let file = "test_touch_set_only_atime";
 
     for atime_arg in atime_args {
@@ -293,7 +300,7 @@ fn test_touch_set_both_time_and_date() {
 
 #[test]
 fn test_touch_set_only_mtime() {
-    let mtime_args = ["-m", "--time=modify", "--time=mtime"];
+    let mtime_args = ["-m", "--time=modify", "--time=mtime", "--time=m"];
     let file = "test_touch_set_only_mtime";
 
     for mtime_arg in mtime_args {
