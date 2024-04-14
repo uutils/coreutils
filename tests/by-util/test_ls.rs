@@ -45,8 +45,86 @@ const COMMA_ARGS: &[&str] = &["-m", "--format=commas", "--for=commas"];
 const COLUMN_ARGS: &[&str] = &["-C", "--format=columns", "--for=columns"];
 
 #[test]
+fn test_invalid_flag() {
+    new_ucmd!()
+        .arg("--invalid-argument")
+        .fails()
+        .no_stdout()
+        .code_is(2);
+}
+
+#[test]
+fn test_invalid_value_returns_1() {
+    // Invalid values to flags *sometimes* result in error code 1:
+    for flag in [
+        "--classify",
+        "--color",
+        "--format",
+        "--hyperlink",
+        "--indicator-style",
+        "--quoting-style",
+        "--sort",
+        "--time",
+    ] {
+        new_ucmd!()
+            .arg(&format!("{flag}=definitely_invalid_value"))
+            .fails()
+            .no_stdout()
+            .code_is(1);
+    }
+}
+
+#[test]
+fn test_invalid_value_returns_2() {
+    // Invalid values to flags *sometimes* result in error code 2:
+    for flag in ["--block-size", "--width", "--tab-size"] {
+        new_ucmd!()
+            .arg(&format!("{flag}=definitely_invalid_value"))
+            .fails()
+            .no_stdout()
+            .code_is(2);
+    }
+}
+
+#[test]
+fn test_invalid_value_time_style() {
+    // This is the only flag which does not raise an error if it is invalid but not actually used:
+    new_ucmd!()
+        .arg("--time-style=definitely_invalid_value")
+        .succeeds()
+        .no_stderr()
+        .code_is(0);
+    // If it is used, error:
+    new_ucmd!()
+        .arg("-g")
+        .arg("--time-style=definitely_invalid_value")
+        .fails()
+        .no_stdout()
+        .code_is(2);
+    // If it only looks temporarily like it might be used, no error:
+    new_ucmd!()
+        .arg("-l")
+        .arg("--time-style=definitely_invalid_value")
+        .arg("--format=single-column")
+        .succeeds()
+        .no_stderr()
+        .code_is(0);
+}
+
+#[test]
 fn test_ls_ls() {
     new_ucmd!().succeeds();
+}
+
+#[test]
+fn test_ls_help() {
+    // Because we have to work around a lot of clap's error handling and
+    // modify the exit-code, this is actually non-trivial.
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("--version")
+        .no_stderr();
 }
 
 #[test]

@@ -1065,10 +1065,13 @@ impl Options {
     #[cfg(unix)]
     fn preserve_mode(&self) -> (bool, bool) {
         match self.attributes.mode {
-            Preserve::No { explicit } => match explicit {
-                true => (false, true),
-                false => (false, false),
-            },
+            Preserve::No { explicit } => {
+                if explicit {
+                    (false, true)
+                } else {
+                    (false, false)
+                }
+            }
             Preserve::Yes { .. } => (true, false),
         }
     }
@@ -1540,7 +1543,9 @@ fn handle_existing_dest(
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
-    options.overwrite.verify(dest)?;
+    if options.update != UpdateMode::ReplaceIfOlder {
+        options.overwrite.verify(dest)?;
+    }
 
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
@@ -1767,6 +1772,8 @@ fn handle_copy_mode(
                         if src_time <= dest_time {
                             return Ok(());
                         } else {
+                            options.overwrite.verify(dest)?;
+
                             copy_helper(
                                 source,
                                 dest,
@@ -1863,14 +1870,6 @@ fn copy_file(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    if (options.update == UpdateMode::ReplaceIfOlder || options.update == UpdateMode::ReplaceNone)
-        && options.overwrite == OverwriteMode::Interactive(ClobberMode::Standard)
-    {
-        // `cp -i --update old new` when `new` exists doesn't copy anything
-        // and exit with 0
-        return Ok(());
-    }
-
     // Fail if dest is a dangling symlink or a symlink this program created previously
     if dest.is_symlink() {
         if FileInformation::from_path(dest, false)
@@ -2034,9 +2033,10 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         {
             const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
             const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
-            match is_explicit_no_preserve_mode {
-                true => return MODE_RW_UGO,
-                false => return org_mode & S_IRWXUGO,
+            if is_explicit_no_preserve_mode {
+                return MODE_RW_UGO;
+            } else {
+                return org_mode & S_IRWXUGO;
             };
         }
 
@@ -2051,9 +2051,10 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
             const MODE_RW_UGO: u32 =
                 (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
             const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
-            match is_explicit_no_preserve_mode {
-                true => return MODE_RW_UGO,
-                false => return org_mode & S_IRWXUGO,
+            if is_explicit_no_preserve_mode {
+                return MODE_RW_UGO;
+            } else {
+                return org_mode & S_IRWXUGO;
             };
         }
     }

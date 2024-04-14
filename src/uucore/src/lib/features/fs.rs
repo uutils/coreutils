@@ -111,6 +111,7 @@ impl FileInformation {
         #[cfg(all(
             unix,
             not(target_vendor = "apple"),
+            not(target_os = "aix"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
             not(target_os = "netbsd"),
@@ -142,6 +143,8 @@ impl FileInformation {
             )
         ))]
         return self.0.st_nlink.into();
+        #[cfg(target_os = "aix")]
+        return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
         return self.0.number_of_links();
     }

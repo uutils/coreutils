@@ -53,6 +53,8 @@ jobs:
           - { name: fuzz_wc, should_pass: false }
           - { name: fuzz_cut, should_pass: false }
           - { name: fuzz_split, should_pass: false }
+          - { name: fuzz_tr, should_pass: false }
+          - { name: fuzz_env, should_pass: false }
           - { name: fuzz_parse_glob, should_pass: true }
           - { name: fuzz_parse_size, should_pass: true }
           - { name: fuzz_parse_time, should_pass: true }

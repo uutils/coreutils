@@ -71,7 +71,7 @@ fn test_utf8_words() {
         .arg("-w")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("87\n");
+        .stdout_is("89\n");
 }
 
 #[test]
@@ -80,7 +80,7 @@ fn test_utf8_line_length_words() {
         .arg("-Lw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     87      48\n");
+        .stdout_is("     89      48\n");
 }
 
 #[test]
@@ -98,7 +98,7 @@ fn test_utf8_line_length_chars_words() {
         .arg("-Lmw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     87     442      48\n");
+        .stdout_is("     89     442      48\n");
 }
 
 #[test]
@@ -143,7 +143,7 @@ fn test_utf8_chars_words() {
         .arg("-mw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     87     442\n");
+        .stdout_is("     89     442\n");
 }
 
 #[test]
@@ -161,7 +161,7 @@ fn test_utf8_line_length_lines_words() {
         .arg("-Llw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     25      87      48\n");
+        .stdout_is("     25      89      48\n");
 }
 
 #[test]
@@ -179,7 +179,7 @@ fn test_utf8_lines_words_chars() {
         .arg("-mlw")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     25      87     442\n");
+        .stdout_is("     25      89     442\n");
 }
 
 #[test]
@@ -197,7 +197,17 @@ fn test_utf8_all() {
         .arg("-lwmcL")
         .pipe_in_fixture("UTF_8_weirdchars.txt")
         .run()
-        .stdout_is("     25      87     442     513      48\n");
+        .stdout_is("     25      89     442     513      48\n");
+}
+
+#[test]
+fn test_ascii_control() {
+    // GNU coreutils "d1" test
+    new_ucmd!()
+        .arg("-w")
+        .pipe_in(*b"\x01\n")
+        .run()
+        .stdout_is("1\n");
 }
 
 #[test]

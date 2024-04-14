@@ -1116,3 +1116,13 @@ fn test_du_files0_from_combined() {
 
     assert!(stderr.contains("file operands cannot be combined with --files0-from"));
 }
+
+#[test]
+fn test_invalid_time_style() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .arg("-s")
+        .arg("--time-style=banana")
+        .succeeds()
+        .stdout_does_not_contain("du: invalid argument 'banana' for 'time style'");
+}

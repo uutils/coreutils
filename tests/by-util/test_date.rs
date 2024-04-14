@@ -426,3 +426,21 @@ fn test_date_parse_from_format() {
         .arg("+%Y-%m-%d %H:%M:%S")
         .succeeds();
 }
+
+#[test]
+fn test_date_from_stdin() {
+    new_ucmd!()
+        .arg("-f")
+        .arg("-")
+        .pipe_in(
+            "2023-03-27 08:30:00\n\
+             2023-04-01 12:00:00\n\
+             2023-04-15 18:30:00\n",
+        )
+        .succeeds()
+        .stdout_is(
+            "Mon Mar 27 08:30:00 2023\n\
+             Sat Apr  1 12:00:00 2023\n\
+             Sat Apr 15 18:30:00 2023\n",
+        );
+}

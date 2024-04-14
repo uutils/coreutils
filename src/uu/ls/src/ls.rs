@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
 
 use clap::{
     builder::{NonEmptyStringValueParser, ValueParser},
@@ -36,6 +36,7 @@ use std::{
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
+use uucore::error::USimpleError;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(any(
@@ -762,9 +763,10 @@ fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
 }
 
 fn parse_width(s: &str) -> Result<u16, LsError> {
-    let radix = match s.starts_with('0') && s.len() > 1 {
-        true => 8,
-        false => 10,
+    let radix = if s.starts_with('0') && s.len() > 1 {
+        8
+    } else {
+        10
     };
     match u16::from_str_radix(s, radix) {
         Ok(x) => Ok(x),
@@ -965,7 +967,12 @@ impl Config {
 
         let mut quoting_style = extract_quoting_style(options, show_control);
         let indicator_style = extract_indicator_style(options);
-        let time_style = parse_time_style(options)?;
+        // Only parse the value to "--time-style" if it will become relevant.
+        let time_style = if format == Format::Long {
+            parse_time_style(options)?
+        } else {
+            TimeStyle::Iso
+        };
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
 
@@ -1150,7 +1157,22 @@ impl Config {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let command = uu_app();
 
-    let matches = command.try_get_matches_from(args)?;
+    let matches = match command.try_get_matches_from(args) {
+        // clap successfully parsed the arguments:
+        Ok(matches) => matches,
+        // --help, --version, etc.:
+        Err(e) if e.exit_code() == 0 => {
+            return Err(e.into());
+        }
+        // Errors in argument *values* cause exit code 1:
+        Err(e) if e.kind() == clap::error::ErrorKind::InvalidValue => {
+            return Err(USimpleError::new(1, e.to_string()));
+        }
+        // All other argument parsing errors cause exit code 2:
+        Err(e) => {
+            return Err(USimpleError::new(2, e.to_string()));
+        }
+    };
 
     let config = Config::from(&matches)?;
 

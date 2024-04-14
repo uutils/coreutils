@@ -93,6 +93,38 @@ fn test_kill_list_one_signal_from_name() {
 }
 
 #[test]
+fn test_kill_list_all_vertically() {
+    // Check for a few signals.  Do not try to be comprehensive.
+    let command = new_ucmd!().arg("-l").succeeds();
+    let signals = command.stdout_str().split('\n').collect::<Vec<&str>>();
+    assert!(signals.contains(&"KILL"));
+    assert!(signals.contains(&"TERM"));
+    assert!(signals.contains(&"HUP"));
+}
+
+#[test]
+fn test_kill_list_two_signal_from_name() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("INT")
+        .arg("KILL")
+        .succeeds()
+        .stdout_matches(&Regex::new("\\d\n\\d").unwrap());
+}
+
+#[test]
+fn test_kill_list_three_signal_first_unknown() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("IAMNOTASIGNAL") // spell-checker:disable-line
+        .arg("INT")
+        .arg("KILL")
+        .fails()
+        .stderr_contains("unknown signal")
+        .stdout_matches(&Regex::new("\\d\n\\d").unwrap());
+}
+
+#[test]
 fn test_kill_set_bad_signal_name() {
     // spell-checker:disable-line
     new_ucmd!()

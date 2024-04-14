@@ -374,7 +374,7 @@ pub fn generate_random_string(max_length: usize) -> String {
     let invalid_utf8 = [0xC3, 0x28]; // Invalid UTF-8 sequence
     let mut result = String::new();
 
-    for _ in 0..rng.gen_range(1..=max_length) {
+    for _ in 0..rng.gen_range(0..=max_length) {
         if rng.gen_bool(0.9) {
             let ch = valid_utf8.choose(&mut rng).unwrap();
             result.push(*ch);
