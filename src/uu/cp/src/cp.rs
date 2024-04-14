@@ -467,8 +467,8 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::RECURSIVE)
-                .short('r')
-                .visible_short_alias('R')
+                .short('R')
+                .visible_short_alias('r')
                 .long(options::RECURSIVE)
                 // --archive sets this option
                 .help("copy directories recursively")
