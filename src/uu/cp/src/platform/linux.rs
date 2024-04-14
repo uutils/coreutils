@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore ficlone reflink ftruncate pwrite fiemap
+// spell-checker:ignore ficlone reflink ftruncate pwrite fiemap lseek
 
 use libc::{SEEK_DATA, SEEK_HOLE};
 use std::fs::{File, OpenOptions};
@@ -110,7 +110,7 @@ fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-/// Checks whether a file is sparse i.e. it contains holes, uses the crude heurestic blocks < size / 512
+/// Checks whether a file is sparse i.e. it contains holes, uses the crude heuristic blocks < size / 512
 /// Reference:`<https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks>`
 fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     let src_file = File::open(source)?;
