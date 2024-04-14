@@ -800,3 +800,9 @@ fn test_invalid_format() {
         .no_stdout()
         .stderr_contains("format '%g%g' has too many % directives");
 }
+
+#[test]
+#[ignore = "slow test - see issue #6182"]
+fn test_big_values() {
+    new_ucmd!().args(&["4e4000003", "4e4000003"]).succeeds();
+}
