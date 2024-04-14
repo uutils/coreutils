@@ -134,7 +134,12 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
 }
 
 fn table() {
-    for (idx, signal) in ALL_SIGNALS.iter().enumerate().skip(1) {
+    // GNU kill doesn't list the EXIT signal with --table, so we ignore it, too
+    for (idx, signal) in ALL_SIGNALS
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| **s != "EXIT")
+    {
         println!("{0: >#2} {1}", idx, signal);
     }
 }
