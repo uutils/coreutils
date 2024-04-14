@@ -68,7 +68,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 Err(USimpleError::new(
                     1,
                     "no process ID specified\n\
-                              Try --help for more information.",
+                     Try --help for more information.",
                 ))
             } else {
                 kill(sig, &pids);
