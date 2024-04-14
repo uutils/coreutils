@@ -94,7 +94,7 @@ fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
     // checks edge case of virtual files in /proc which have a size of zero but contains data
     if size == 0 {
         let mut buf: Vec<u8> = vec![0; metadata.blksize() as usize]; // Directly use metadata.blksize()
-        src_file.read(&mut buf)?;
+        let _ = src_file.read(&mut buf)?;
         return Ok((buf.iter().any(|&x| x != 0x0), size, 0));
     }
 
@@ -111,7 +111,7 @@ fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 /// Checks whether a file is sparse i.e. it contains holes, uses the crude heurestic blocks < size / 512
-/// Reference: https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks
+/// Reference:`<https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks>`
 fn check_sparse_detection(source: &Path) -> Result<bool, std::io::Error> {
     let src_file = File::open(source)?;
     let metadata = src_file.metadata()?;
@@ -135,7 +135,7 @@ where
     let dst_file = File::create(dest)?;
     let dst_fd = dst_file.as_raw_fd();
 
-    let size: u64 = src_file.metadata()?.size();
+    let size = src_file.metadata()?.size();
     if unsafe { libc::ftruncate(dst_fd, size.try_into().unwrap()) } < 0 {
         return Err(std::io::Error::last_os_error());
     }
@@ -353,7 +353,7 @@ pub(crate) fn copy_on_write(
 
                 match copy_method {
                     CopyMethod::FSCopy => clone(source, dest, CloneFallback::FSCopy),
-                    _ => sparse_copy(source, dest),
+                    _ => clone(source, dest, CloneFallback::SparseCopy),
                 }
             }
         }

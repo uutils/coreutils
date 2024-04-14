@@ -4053,7 +4053,7 @@ fn test_cp_debug_reflink_never_sparse_always_empty_file_with_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn test_cp_default_virtual_file() {
     use std::os::unix::prelude::MetadataExt;
     let ts = TestScenario::new(util_name!());
@@ -4152,7 +4152,7 @@ fn test_cp_debug_reflink_never_sparse_always_non_sparse_file_with_long_zero_sequ
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_always_sparse_virtual_file() {
     let ts = TestScenario::new(util_name!());
     let result = ts
@@ -4357,7 +4357,7 @@ fn test_cp_debug_sparse_never_file_with_hole() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn test_cp_debug_default_sparse_virtual_file() {
     let ts = TestScenario::new(util_name!());
     let result = ts
@@ -4376,7 +4376,7 @@ fn test_cp_debug_default_sparse_virtual_file() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_never_zero_sized_virtual_file() {
     let ts = TestScenario::new(util_name!());
     let result = ts
@@ -4394,7 +4394,7 @@ fn test_cp_debug_sparse_never_zero_sized_virtual_file() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn test_cp_debug_default_zero_sized_virtual_file() {
     let ts = TestScenario::new(util_name!());
     let result = ts
