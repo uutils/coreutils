@@ -64,8 +64,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .try_into()
                 .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
             let pids = parse_pids(&pids_or_signals)?;
-            kill(sig, &pids);
-            Ok(())
+            if pids.is_empty() {
+                Err(USimpleError::new(
+                    1,
+                    "no process ID specified\n\
+                     Try --help for more information.",
+                ))
+            } else {
+                kill(sig, &pids);
+                Ok(())
+            }
         }
         Mode::Table => {
             table();

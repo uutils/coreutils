@@ -204,3 +204,11 @@ fn test_kill_with_signal_prefixed_name_new_form() {
         .succeeds();
     assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
 }
+
+#[test]
+fn test_kill_no_pid_provided() {
+    // spell-checker:disable-line
+    new_ucmd!()
+        .fails()
+        .stderr_contains("no process ID specified");
+}
