@@ -148,7 +148,7 @@ fn test_tag_after_untagged() {
         .arg("-a=md5")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_is("cd724690f7dc61775dfac400a71f2caa  lorem_ipsum.txt\n");
+        .stdout_is_fixture("md5_single_file.expected");
 }
 
 #[test]
@@ -235,10 +235,11 @@ fn test_untagged_algorithm_single_file() {
 fn test_tag_short() {
     new_ucmd!()
         .arg("-t")
+        .arg("--untagged")
         .arg("--algorithm=md5")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_is("MD5 (lorem_ipsum.txt) = cd724690f7dc61775dfac400a71f2caa\n");
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa  lorem_ipsum.txt\n");
 }
 
 #[test]
@@ -281,6 +282,22 @@ fn test_untagged_algorithm_stdin() {
 fn test_check_algo() {
     new_ucmd!()
         .arg("-a=bsd")
+        .arg("--check")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .code_is(1);
+    new_ucmd!()
+        .arg("-a=sysv")
+        .arg("--check")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .code_is(1);
+    new_ucmd!()
+        .arg("-a=crc")
         .arg("--check")
         .arg("lorem_ipsum.txt")
         .fails()
@@ -455,6 +472,58 @@ fn test_all_algorithms_fail_on_folder() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn test_dev_null() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--algorithm=md5")
+        .arg("/dev/null")
+        .succeeds()
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e ");
+}
+
+#[test]
+fn test_reset_binary() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--binary") // should disappear because of the following option
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--algorithm=md5")
+        .arg(at.subdir.join("f"))
+        .succeeds()
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e  ");
+}
+
+#[test]
+fn test_text_tag() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--text") // should disappear because of the following option
+        .arg("--tag")
+        .arg(at.subdir.join("f"))
+        .succeeds()
+        .stdout_contains("4294967295 0 ");
+}
+
 #[test]
 fn test_binary_file() {
     let scene = TestScenario::new(util_name!());
@@ -471,16 +540,69 @@ fn test_binary_file() {
         .succeeds()
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 
-    // no "*" in this case
     scene
         .ucmd()
-        .arg("--untagged")
         .arg("--tag")
+        .arg("--untagged")
         .arg("--binary")
         .arg("--algorithm=md5")
         .arg(at.subdir.join("f"))
         .succeeds()
-        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e  ");
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
+
+    scene
+        .ucmd()
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--binary")
+        .arg("--algorithm=md5")
+        .arg("raw/blake2b_single_file.expected")
+        .succeeds()
+        .stdout_contains("7e297c07ed8e053600092f91bdd1dad7 *");
+
+    new_ucmd!()
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--binary")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa *lorem_ipsum.txt\n");
+
+    new_ucmd!()
+        .arg("--untagged")
+        .arg("--binary")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa *lorem_ipsum.txt\n");
+
+    new_ucmd!()
+        .arg("--binary")
+        .arg("--untagged")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa *lorem_ipsum.txt\n");
+
+    new_ucmd!()
+        .arg("-a")
+        .arg("md5")
+        .arg("--binary")
+        .arg("--untagged")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa *lorem_ipsum.txt\n");
+
+    new_ucmd!()
+        .arg("-a")
+        .arg("md5")
+        .arg("--binary")
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa  lorem_ipsum.txt\n");
 }
 
 #[test]
@@ -499,4 +621,25 @@ fn test_folder_and_file() {
         .fails()
         .stderr_contains(format!("cksum: {folder_name}: Is a directory"))
         .stdout_is_fixture("crc_single_file.expected");
+}
+
+#[test]
+fn test_conflicting_options() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--binary")
+        .arg("--check")
+        .arg("f")
+        .fails()
+        .no_stdout()
+        .stderr_contains(
+            "cksum: the --binary and --text options are meaningless when verifying checksums",
+        )
+        .code_is(1);
 }
