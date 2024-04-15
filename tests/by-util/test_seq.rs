@@ -773,7 +773,7 @@ fn test_undefined() {
     new_ucmd!()
         .args(&["1e-9223372036854775808"])
         .succeeds()
-        .stdout_only("");
+        .no_output();
 }
 
 #[test]
