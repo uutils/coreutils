@@ -43,11 +43,9 @@ pub(crate) trait Arithmetic: Copy + Sized {
     fn one(&self) -> Self::ModInt {
         self.to_mod(1)
     }
+
     fn minus_one(&self) -> Self::ModInt {
         self.to_mod(self.modulus() - 1)
-    }
-    fn zero(&self) -> Self::ModInt {
-        self.to_mod(0)
     }
 }
 
