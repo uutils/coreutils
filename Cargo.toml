@@ -263,7 +263,7 @@ binary-heap-plus = "0.5.0"
 bstr = "1.9.1"
 bytecount = "0.6.7"
 byteorder = "1.5.0"
-chrono = { version = "0.4.37", default-features = false, features = [
+chrono = { version = "0.4.38", default-features = false, features = [
   "std",
   "alloc",
   "clock",
