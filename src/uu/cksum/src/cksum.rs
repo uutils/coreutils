@@ -17,7 +17,9 @@ use std::path::Path;
 use uucore::{
     encoding,
     error::{FromIo, UError, UResult, USimpleError},
-    format_usage, help_about, help_section, help_usage, show,
+    format_usage, help_about, help_section, help_usage,
+    line_ending::LineEnding,
+    show,
     sum::{
         div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
         BSD, CRC, SYSV,
@@ -261,11 +263,8 @@ where
                 }
             }
         }
-        if options.zero {
-            print!("\0");
-        } else {
-            print!("\n");
-        }
+        let line_ending = LineEnding::from_zero_flag(options.zero);
+        print!("{}", line_ending);
     }
 
     Ok(())
