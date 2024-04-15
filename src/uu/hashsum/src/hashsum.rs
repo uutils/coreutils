@@ -348,6 +348,11 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let zero = matches.get_flag("zero");
     let ignore_missing = matches.get_flag("ignore-missing");
 
+    if ignore_missing && !check {
+        // --ignore-missing needs -c
+        return Err(HashsumError::IgnoreNotCheck.into());
+    }
+
     let opts = Options {
         algoname: name,
         digest: algo,
@@ -573,6 +578,7 @@ fn uu_app(binary_name: &str) -> Command {
 enum HashsumError {
     InvalidRegex,
     InvalidFormat,
+    IgnoreNotCheck,
 }
 
 impl Error for HashsumError {}
@@ -583,6 +589,10 @@ impl std::fmt::Display for HashsumError {
         match self {
             Self::InvalidRegex => write!(f, "invalid regular expression"),
             Self::InvalidFormat => Ok(()),
+            Self::IgnoreNotCheck => write!(
+                f,
+                "the --ignore-missing option is meaningful only when verifying checksums"
+            ),
         }
     }
 }
@@ -715,7 +725,7 @@ where
                 let f = match File::open(ck_filename_unescaped) {
                     Err(_) => {
                         if options.ignore_missing {
-                            // No need to show an error
+                            // No need to show or return an error.
                             continue;
                         }
 

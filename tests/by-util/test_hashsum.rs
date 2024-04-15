@@ -154,6 +154,13 @@ fn test_check_md5_ignore_missing() {
         .succeeds()
         .stdout_is("testf: OK\n")
         .stderr_is("");
+
+    scene
+        .ccmd("md5sum")
+        .arg("--ignore-missing")
+        .arg(at.subdir.join("testf.sha1"))
+        .fails()
+        .stderr_contains("the --ignore-missing option is meaningful only when verifying checksums");
 }
 
 #[test]
