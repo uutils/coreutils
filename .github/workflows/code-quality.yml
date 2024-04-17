@@ -49,11 +49,6 @@ jobs:
           *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
         esac;
         outputs FAIL_ON_FAULT FAULT_TYPE
-        # target-specific options
-        # * CARGO_FEATURES_OPTION
-        CARGO_FEATURES_OPTION='' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        outputs CARGO_FEATURES_OPTION
     - name: "`cargo fmt` testing"
       shell: bash
       run: |
