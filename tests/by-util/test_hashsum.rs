@@ -130,6 +130,40 @@ fn test_check_sha1() {
 }
 
 #[test]
+fn test_check_md5_ignore_missing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+    at.write(
+        "testf.sha1",
+        "14758f1afd44c09b7992073ccf00b43d  testf\n14758f1afd44c09b7992073ccf00b43d  testf2\n",
+    );
+    scene
+        .ccmd("md5sum")
+        .arg("-c")
+        .arg(at.subdir.join("testf.sha1"))
+        .fails()
+        .stdout_contains("testf2: FAILED open or read");
+
+    scene
+        .ccmd("md5sum")
+        .arg("-c")
+        .arg("--ignore-missing")
+        .arg(at.subdir.join("testf.sha1"))
+        .succeeds()
+        .stdout_is("testf: OK\n")
+        .stderr_is("");
+
+    scene
+        .ccmd("md5sum")
+        .arg("--ignore-missing")
+        .arg(at.subdir.join("testf.sha1"))
+        .fails()
+        .stderr_contains("the --ignore-missing option is meaningful only when verifying checksums");
+}
+
+#[test]
 fn test_check_b2sum_length_option_0() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -208,7 +242,7 @@ fn test_check_file_not_found_warning() {
         .ccmd("sha1sum")
         .arg("-c")
         .arg(at.subdir.join("testf.sha1"))
-        .succeeds()
+        .fails()
         .stdout_is("sha1sum: testf: No such file or directory\ntestf: FAILED open or read\n")
         .stderr_is("sha1sum: warning: 1 listed file could not be read\n");
 }
