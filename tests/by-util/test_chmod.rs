@@ -278,7 +278,7 @@ fn test_chmod_many_options() {
 #[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_reference_file() {
-    let tests = vec![
+    let tests = [
         TestCase {
             args: vec!["--reference", REFERENCE_FILE, TEST_FILE],
             before: 0o100070,

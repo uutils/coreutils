@@ -98,7 +98,7 @@ fn test_kill_table_lists_all_vertically() {
     let signals = command
         .stdout_str()
         .split('\n')
-        .flat_map(|line| line.trim().split(" ").nth(1))
+        .flat_map(|line| line.trim().split(' ').nth(1))
         .collect::<Vec<&str>>();
 
     assert!(signals.contains(&"KILL"));
