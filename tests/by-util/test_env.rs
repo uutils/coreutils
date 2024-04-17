@@ -7,7 +7,6 @@
 #[cfg(target_os = "linux")]
 use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
-use env::native_int_str::{Convert, NCvt};
 use regex::Regex;
 use std::env;
 use std::path::Path;
@@ -471,40 +470,6 @@ fn test_gnu_e20() {
 
     let out = scene.ucmd().args(&input).succeeds();
     assert_eq!(out.stdout_str(), output);
-}
-
-#[test]
-fn test_split_string_misc() {
-    use env::native_int_str::NCvt;
-    use env::parse_args_from_str;
-
-    assert_eq!(
-        NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
-        parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c "echo \$A\$FOO""#)).unwrap(),
-    );
-    assert_eq!(
-        NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
-        parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#)).unwrap()
-    );
-    assert_eq!(
-        NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
-        parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#)).unwrap()
-    );
-
-    assert_eq!(
-        NCvt::convert(vec!["-i", "A=B ' C"]),
-        parse_args_from_str(&NCvt::convert(r#"-i A='B \' C'"#)).unwrap()
-    );
-}
-
-#[test]
-fn test_split_string_environment_vars_test() {
-    std::env::set_var("FOO", "BAR");
-    assert_eq!(
-        NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
-        ::env::parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))
-            .unwrap(),
-    );
 }
 
 #[macro_export]
