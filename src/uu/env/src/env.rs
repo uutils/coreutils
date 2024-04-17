@@ -606,3 +606,39 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     EnvAppData::default().run_env(args)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_split_string_environment_vars_test() {
+        std::env::set_var("FOO", "BAR");
+        assert_eq!(
+            NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
+            parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))
+                .unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_split_string_misc() {
+        assert_eq!(
+            NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
+            parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c "echo \$A\$FOO""#)).unwrap(),
+        );
+        assert_eq!(
+            NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
+            parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#)).unwrap()
+        );
+        assert_eq!(
+            NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
+            parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#)).unwrap()
+        );
+
+        assert_eq!(
+            NCvt::convert(vec!["-i", "A=B ' C"]),
+            parse_args_from_str(&NCvt::convert(r#"-i A='B \' C'"#)).unwrap()
+        );
+    }
+}
