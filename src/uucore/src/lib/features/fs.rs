@@ -770,6 +770,25 @@ pub mod sane_blksize {
     }
 }
 
+/// Extracts the filename component from the given `file` path and returns it as an `Option<&str>`.
+///
+/// If the `file` path contains a filename, this function returns `Some(filename)` where `filename` is
+/// the extracted filename as a string slice (`&str`). If the `file` path does not have a filename
+/// component or if the filename is not valid UTF-8, it returns `None`.
+///
+/// # Arguments
+///
+/// * `file`: A reference to a `Path` representing the file path from which to extract the filename.
+///
+/// # Returns
+///
+/// * `Some(filename)`: If a valid filename exists in the `file` path, where `filename` is the
+///   extracted filename as a string slice (`&str`).
+/// * `None`: If the `file` path does not contain a valid filename or if the filename is not valid UTF-8.
+pub fn get_filename(file: &Path) -> Option<&str> {
+    file.file_name().and_then(|filename| filename.to_str())
+}
+
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -1005,5 +1024,10 @@ mod tests {
         assert_eq!(4096, sane_blksize::sane_blksize(4096));
         assert_eq!(0x2000_0000, sane_blksize::sane_blksize(0x2000_0000));
         assert_eq!(512, sane_blksize::sane_blksize(0x2000_0001));
+    }
+    #[test]
+    fn test_get_file_name() {
+        let file_path = PathBuf::from("~/foo.txt");
+        assert!(matches!(get_filename(&file_path), Some("foo.txt")));
     }
 }
