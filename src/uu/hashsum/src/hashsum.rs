@@ -597,6 +597,47 @@ impl std::fmt::Display for HashsumError {
     }
 }
 
+/// Creates a Regex for parsing lines based on the given format.
+/// The default value of `gnu_re` created with this function has to be recreated
+/// after the initial line has been parsed, as this line dictates the format
+/// for the rest of them, and mixing of formats is disallowed.
+fn gnu_re_template(bytes_marker: &str, format_marker: &str) -> Result<Regex, HashsumError> {
+    Regex::new(&format!(
+        r"^(?P<digest>[a-fA-F0-9]{bytes_marker}) {format_marker}(?P<fileName>.*)"
+    ))
+    .map_err(|_| HashsumError::InvalidRegex)
+}
+
+fn handle_captures(
+    caps: &Captures,
+    bytes_marker: &str,
+    bsd_reversed: &mut Option<bool>,
+    gnu_re: &mut Regex,
+) -> Result<(String, String, bool), HashsumError> {
+    if bsd_reversed.is_none() {
+        let is_bsd_reversed = caps.name("binary").is_none();
+        let format_marker = if is_bsd_reversed {
+            ""
+        } else {
+            r"(?P<binary>[ \*])"
+        }
+        .to_string();
+
+        *bsd_reversed = Some(is_bsd_reversed);
+        *gnu_re = gnu_re_template(bytes_marker, &format_marker)?;
+    }
+
+    Ok((
+        caps.name("fileName").unwrap().as_str().to_string(),
+        caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
+        if *bsd_reversed == Some(false) {
+            caps.name("binary").unwrap().as_str() == "*"
+        } else {
+            false
+        },
+    ))
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn hashsum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
@@ -636,19 +677,6 @@ where
             // BSD reversed mode format is similar to the default mode, but doesn’t use a character to distinguish binary and text modes.
             let mut bsd_reversed = None;
 
-            /// Creates a Regex for parsing lines based on the given format.
-            /// The default value of `gnu_re` created with this function has to be recreated
-            /// after the initial line has been parsed, as this line dictates the format
-            /// for the rest of them, and mixing of formats is disallowed.
-            fn gnu_re_template(
-                bytes_marker: &str,
-                format_marker: &str,
-            ) -> Result<Regex, HashsumError> {
-                Regex::new(&format!(
-                    r"^(?P<digest>[a-fA-F0-9]{bytes_marker}) {format_marker}(?P<fileName>.*)"
-                ))
-                .map_err(|_| HashsumError::InvalidRegex)
-            }
             let mut gnu_re = gnu_re_template(&bytes_marker, r"(?P<binary>[ \*])?")?;
             let bsd_re = Regex::new(&format!(
                 // it can start with \
@@ -657,36 +685,6 @@ where
                 digest_size = bytes_marker,
             ))
             .map_err(|_| HashsumError::InvalidRegex)?;
-
-            fn handle_captures(
-                caps: &Captures,
-                bytes_marker: &str,
-                bsd_reversed: &mut Option<bool>,
-                gnu_re: &mut Regex,
-            ) -> Result<(String, String, bool), HashsumError> {
-                if bsd_reversed.is_none() {
-                    let is_bsd_reversed = caps.name("binary").is_none();
-                    let format_marker = if is_bsd_reversed {
-                        ""
-                    } else {
-                        r"(?P<binary>[ \*])"
-                    }
-                    .to_string();
-
-                    *bsd_reversed = Some(is_bsd_reversed);
-                    *gnu_re = gnu_re_template(bytes_marker, &format_marker)?;
-                }
-
-                Ok((
-                    caps.name("fileName").unwrap().as_str().to_string(),
-                    caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
-                    if *bsd_reversed == Some(false) {
-                        caps.name("binary").unwrap().as_str() == "*"
-                    } else {
-                        false
-                    },
-                ))
-            }
 
             let buffer = file;
             for (i, maybe_line) in buffer.lines().enumerate() {
