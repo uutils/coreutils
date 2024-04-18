@@ -692,6 +692,10 @@ where
                     Ok(l) => l,
                     Err(e) => return Err(e.map_err_context(|| "failed to read file".to_string())),
                 };
+                if line.is_empty() {
+                    // empty line, skip it
+                    continue;
+                }
                 let (ck_filename, sum, binary_check) = match gnu_re.captures(&line) {
                     Some(caps) => {
                         handle_captures(&caps, &bytes_marker, &mut bsd_reversed, &mut gnu_re)?

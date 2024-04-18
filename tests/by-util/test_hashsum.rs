@@ -458,6 +458,24 @@ fn test_with_escape_filename_zero_text() {
 }
 
 #[test]
+fn test_check_empty_line() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write(
+        "in.md5",
+        "d41d8cd98f00b204e9800998ecf8427e  f\n\nd41d8cd98f00b204e9800998ecf8427e  f\ninvalid\n\n",
+    );
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .fails()
+        .stderr_contains("WARNING: 1 line is improperly formatted");
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_check_with_escape_filename() {
     let scene = TestScenario::new(util_name!());
