@@ -346,3 +346,6 @@ sed -i -e "s|WARNING: 1 line is improperly formatted|warning: 1 line is improper
 echo "n_stat1 = \$n_stat1"\n\
 echo "n_stat2 = \$n_stat2"\n\
 test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
+
+# no need to replicate this output with hashsum
+sed -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
