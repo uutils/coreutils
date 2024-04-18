@@ -26,7 +26,8 @@ use uucore::sum::{
     Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224, Sha3_256,
     Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
 };
-use uucore::{display::Quotable, show_warning};
+use uucore::util_name;
+use uucore::{display::Quotable, show_warning_caps};
 use uucore::{format_usage, help_about, help_usage};
 
 const NAME: &str = "hashsum";
@@ -577,7 +578,6 @@ fn uu_app(binary_name: &str) -> Command {
 #[derive(Debug)]
 enum HashsumError {
     InvalidRegex,
-    InvalidFormat,
     IgnoreNotCheck,
 }
 
@@ -588,7 +588,6 @@ impl std::fmt::Display for HashsumError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::InvalidRegex => write!(f, "invalid regular expression"),
-            Self::InvalidFormat => Ok(()),
             Self::IgnoreNotCheck => write!(
                 f,
                 "the --ignore-missing option is meaningful only when verifying checksums"
@@ -644,8 +643,10 @@ where
     I: Iterator<Item = &'a OsStr>,
 {
     let mut bad_format = 0;
+    let mut correct_format = 0;
     let mut failed_cksum = 0;
     let mut failed_open_file = 0;
+    let mut skip_summary = false;
     let binary_marker = if options.binary { "*" } else { " " };
     for filename in files {
         let filename = Path::new(filename);
@@ -680,13 +681,14 @@ where
             let mut gnu_re = gnu_re_template(&bytes_marker, r"(?P<binary>[ \*])?")?;
             let bsd_re = Regex::new(&format!(
                 // it can start with \
-                r"^(|\\){algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
+                r"^(\\)?{algorithm}\s*\((?P<fileName>.*)\)\s*=\s*(?P<digest>[a-fA-F0-9]{digest_size})$",
                 algorithm = options.algoname,
                 digest_size = bytes_marker,
             ))
             .map_err(|_| HashsumError::InvalidRegex)?;
 
             let buffer = file;
+            // iterate on the lines of the file
             for (i, maybe_line) in buffer.lines().enumerate() {
                 let line = match maybe_line {
                     Ok(l) => l,
@@ -701,6 +703,7 @@ where
                         handle_captures(&caps, &bytes_marker, &mut bsd_reversed, &mut gnu_re)?
                     }
                     None => match bsd_re.captures(&line) {
+                        // if the GNU style parsing failed, try the BSD style
                         Some(caps) => (
                             caps.name("fileName").unwrap().as_str().to_string(),
                             caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
@@ -709,11 +712,14 @@ where
                         None => {
                             bad_format += 1;
                             if options.strict {
-                                return Err(HashsumError::InvalidFormat.into());
+                                // if we use strict, the warning "lines are improperly formatted"
+                                // will trigger an exit code of 1
+                                set_exit_code(1);
                             }
                             if options.warn {
-                                show_warning!(
-                                    "{}: {}: improperly formatted {} checksum line",
+                                eprintln!(
+                                    "{}: {}: {}: improperly formatted {} checksum line",
+                                    util_name(),
                                     filename.maybe_quote(),
                                     i + 1,
                                     options.algoname
@@ -727,7 +733,8 @@ where
                 let f = match File::open(ck_filename_unescaped) {
                     Err(_) => {
                         if options.ignore_missing {
-                            // No need to show or return an error.
+                            // No need to show or return an error
+                            // except when the file doesn't have any successful checks
                             continue;
                         }
 
@@ -762,6 +769,7 @@ where
                 // and display it using uucore::display::print_verbatim(). This is
                 // easier (and more important) on Unix than on Windows.
                 if sum == real_sum {
+                    correct_format += 1;
                     if !options.quiet {
                         println!("{prefix}{ck_filename}: OK");
                     }
@@ -770,6 +778,7 @@ where
                         println!("{prefix}{ck_filename}: FAILED");
                     }
                     failed_cksum += 1;
+                    set_exit_code(1);
                 }
             }
         } else {
@@ -795,20 +804,57 @@ where
                 println!("{}{} {}{}", prefix, sum, binary_marker, escaped_filename);
             }
         }
+        if bad_format > 0 && failed_cksum == 0 && correct_format == 0 && !options.status {
+            // we have only bad format. we didn't have anything correct.
+            // GNU has a different error message for this (with the filename)
+            set_exit_code(1);
+            eprintln!(
+                "{}: {}: no properly formatted checksum lines found",
+                util_name(),
+                filename.maybe_quote(),
+            );
+            skip_summary = true;
+        }
+        if options.ignore_missing && correct_format == 0 {
+            // we have only bad format
+            // and we had ignore-missing
+            eprintln!(
+                "{}: {}: no file was verified",
+                util_name(),
+                filename.maybe_quote(),
+            );
+            skip_summary = true;
+            set_exit_code(1);
+        }
     }
-    if !options.status {
+
+    if !options.status && !skip_summary {
         match bad_format.cmp(&1) {
-            Ordering::Equal => show_warning!("{} line is improperly formatted", bad_format),
-            Ordering::Greater => show_warning!("{} lines are improperly formatted", bad_format),
+            Ordering::Equal => {
+                show_warning_caps!("{} line is improperly formatted", bad_format)
+            }
+            Ordering::Greater => {
+                show_warning_caps!("{} lines are improperly formatted", bad_format)
+            }
             Ordering::Less => {}
         };
-        if failed_cksum > 0 {
-            show_warning!("{} computed checksum did NOT match", failed_cksum);
-        }
-        match failed_open_file.cmp(&1) {
-            Ordering::Equal => show_warning!("{} listed file could not be read", failed_open_file),
+
+        match failed_cksum.cmp(&1) {
+            Ordering::Equal => {
+                show_warning_caps!("{} computed checksum did NOT match", failed_cksum)
+            }
             Ordering::Greater => {
-                show_warning!("{} listed files could not be read", failed_open_file);
+                show_warning_caps!("{} computed checksums did NOT match", failed_cksum)
+            }
+            Ordering::Less => {}
+        };
+
+        match failed_open_file.cmp(&1) {
+            Ordering::Equal => {
+                show_warning_caps!("{} listed file could not be read", failed_open_file)
+            }
+            Ordering::Greater => {
+                show_warning_caps!("{} listed files could not be read", failed_open_file);
             }
             Ordering::Less => {}
         }

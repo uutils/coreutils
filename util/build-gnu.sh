@@ -337,9 +337,6 @@ ls: invalid --time-style argument 'XX'\nPossible values are: [\"full-iso\", \"lo
 # "hostid BEFORE --help AFTER " same for this
 sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/help/help-version-getopt.sh
 
-# The case doesn't really matter here
-sed -i -e "s|WARNING: 1 line is improperly formatted|warning: 1 line is improperly formatted|" tests/cksum/md5sum-bsd.sh
-
 # Add debug info + we have less syscall then GNU's. Adjust our check.
 # Use GNU sed for /c command
 "${SED}" -i -e '/test \$n_stat1 = \$n_stat2 \\/c\
