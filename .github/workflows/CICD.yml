@@ -1047,3 +1047,23 @@ jobs:
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
         fail_ci_if_error: false
+
+  test_separately:
+    name: Separate Builds
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: build and test all programs individually
+      shell: bash
+      run: |
+        for f in $(util/show-utils.sh)
+        do
+          echo "Building and testing $f"
+          cargo test -p "uu_$f" || exit 1
+        done
