@@ -1,6 +1,6 @@
 [package]
 name = "uu_printf"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["Nathan Ross", "uutils developers"]
 license = "MIT"
 description = "printf ~ (uutils) FORMAT and display ARGUMENTS"

@@ -3,10 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm
+// spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
 
 use clap::{
-    builder::{NonEmptyStringValueParser, ValueParser},
+    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
@@ -36,6 +36,7 @@ use std::{
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
+use uucore::error::USimpleError;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(any(
@@ -61,6 +62,7 @@ use uucore::{
     format_usage,
     fs::display_permissions,
     parse_size::parse_size_u64,
+    shortcut_value_parser::ShortcutValueParser,
     version_cmp::version_cmp,
 };
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
@@ -762,9 +764,10 @@ fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
 }
 
 fn parse_width(s: &str) -> Result<u16, LsError> {
-    let radix = match s.starts_with('0') && s.len() > 1 {
-        true => 8,
-        false => 10,
+    let radix = if s.starts_with('0') && s.len() > 1 {
+        8
+    } else {
+        10
     };
     match u16::from_str_radix(s, radix) {
         Ok(x) => Ok(x),
@@ -965,7 +968,12 @@ impl Config {
 
         let mut quoting_style = extract_quoting_style(options, show_control);
         let indicator_style = extract_indicator_style(options);
-        let time_style = parse_time_style(options)?;
+        // Only parse the value to "--time-style" if it will become relevant.
+        let time_style = if format == Format::Long {
+            parse_time_style(options)?
+        } else {
+            TimeStyle::Iso
+        };
 
         let mut ignore_patterns: Vec<Pattern> = Vec::new();
 
@@ -1150,7 +1158,22 @@ impl Config {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let command = uu_app();
 
-    let matches = command.try_get_matches_from(args)?;
+    let matches = match command.try_get_matches_from(args) {
+        // clap successfully parsed the arguments:
+        Ok(matches) => matches,
+        // --help, --version, etc.:
+        Err(e) if e.exit_code() == 0 => {
+            return Err(e.into());
+        }
+        // Errors in argument *values* cause exit code 1:
+        Err(e) if e.kind() == clap::error::ErrorKind::InvalidValue => {
+            return Err(USimpleError::new(1, e.to_string()));
+        }
+        // All other argument parsing errors cause exit code 2:
+        Err(e) => {
+            return Err(USimpleError::new(2, e.to_string()));
+        }
+    };
 
     let config = Config::from(&matches)?;
 
@@ -1181,7 +1204,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FORMAT)
                 .long(options::FORMAT)
                 .help("Set the display format.")
-                .value_parser([
+                .value_parser(ShortcutValueParser::new([
                     "long",
                     "verbose",
                     "single-column",
@@ -1190,7 +1213,7 @@ pub fn uu_app() -> Command {
                     "across",
                     "horizontal",
                     "commas",
-                ])
+                ]))
                 .hide_possible_values(true)
                 .require_equals(true)
                 .overrides_with_all([
@@ -1281,9 +1304,11 @@ pub fn uu_app() -> Command {
             Arg::new(options::HYPERLINK)
                 .long(options::HYPERLINK)
                 .help("hyperlink file names WHEN")
-                .value_parser([
-                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
-                ])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("always").alias("yes").alias("force"),
+                    PossibleValue::new("auto").alias("tty").alias("if-tty"),
+                    PossibleValue::new("never").alias("no").alias("none"),
+                ]))
                 .require_equals(true)
                 .num_args(0..=1)
                 .default_missing_value("always")
@@ -1329,15 +1354,15 @@ pub fn uu_app() -> Command {
             Arg::new(options::QUOTING_STYLE)
                 .long(options::QUOTING_STYLE)
                 .help("Set quoting style.")
-                .value_parser([
-                    "literal",
-                    "shell",
-                    "shell-always",
-                    "shell-escape",
-                    "shell-escape-always",
-                    "c",
-                    "escape",
-                ])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("literal"),
+                    PossibleValue::new("shell"),
+                    PossibleValue::new("shell-escape"),
+                    PossibleValue::new("shell-always"),
+                    PossibleValue::new("shell-escape-always"),
+                    PossibleValue::new("c").alias("c-maybe"),
+                    PossibleValue::new("escape"),
+                ]))
                 .overrides_with_all([
                     options::QUOTING_STYLE,
                     options::quoting::LITERAL,
@@ -1412,9 +1437,11 @@ pub fn uu_app() -> Command {
                         \tbirth time: birth, creation;",
                 )
                 .value_name("field")
-                .value_parser([
-                    "atime", "access", "use", "ctime", "status", "birth", "creation",
-                ])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("atime").alias("access").alias("use"),
+                    PossibleValue::new("ctime").alias("status"),
+                    PossibleValue::new("birth").alias("creation"),
+                ]))
                 .hide_possible_values(true)
                 .require_equals(true)
                 .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE]),
@@ -1474,7 +1501,7 @@ pub fn uu_app() -> Command {
                 .long(options::SORT)
                 .help("Sort by <field>: name, none (-U), time (-t), size (-S), extension (-X) or width")
                 .value_name("field")
-                .value_parser(["name", "none", "time", "size", "version", "extension", "width"])
+                .value_parser(ShortcutValueParser::new(["name", "none", "time", "size", "version", "extension", "width"]))
                 .require_equals(true)
                 .overrides_with_all([
                     options::SORT,
@@ -1722,9 +1749,11 @@ pub fn uu_app() -> Command {
             Arg::new(options::COLOR)
                 .long(options::COLOR)
                 .help("Color output based on file type.")
-                .value_parser([
-                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
-                ])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("always").alias("yes").alias("force"),
+                    PossibleValue::new("auto").alias("tty").alias("if-tty"),
+                    PossibleValue::new("never").alias("no").alias("none"),
+                ]))
                 .require_equals(true)
                 .num_args(0..=1),
         )
@@ -1735,7 +1764,7 @@ pub fn uu_app() -> Command {
                     "Append indicator with style WORD to entry names: \
                 none (default),  slash (-p), file-type (--file-type), classify (-F)",
                 )
-                .value_parser(["none", "slash", "file-type", "classify"])
+                .value_parser(ShortcutValueParser::new(["none", "slash", "file-type", "classify"]))
                 .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
@@ -1766,9 +1795,11 @@ pub fn uu_app() -> Command {
                     --dereference-command-line-symlink-to-dir options are specified.",
                 )
                 .value_name("when")
-                .value_parser([
-                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
-                ])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("always").alias("yes").alias("force"),
+                    PossibleValue::new("auto").alias("tty").alias("if-tty"),
+                    PossibleValue::new("never").alias("no").alias("none"),
+                ]))
                 .default_missing_value("always")
                 .require_equals(true)
                 .num_args(0..=1)
@@ -2981,7 +3012,8 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
         Some(time) => {
             //Date is recent if from past 6 months
             //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-            let recent = time + chrono::Duration::seconds(31_556_952 / 2) > chrono::Local::now();
+            let recent = time + chrono::TimeDelta::try_seconds(31_556_952 / 2).unwrap()
+                > chrono::Local::now();
 
             match &config.time_style {
                 TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),

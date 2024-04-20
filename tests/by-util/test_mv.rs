@@ -1590,7 +1590,7 @@ fn test_acl() {
     // calling the command directly. xattr requires some dev packages to be installed
     // and it adds a complex dependency just for a test
     match Command::new("setfacl")
-        .args(["-m", "group::rwx", &path1])
+        .args(["-m", "group::rwx", path1])
         .status()
         .map(|status| status.code())
     {

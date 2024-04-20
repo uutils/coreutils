@@ -118,6 +118,17 @@ fn test_whitespace_with_char() {
 }
 
 #[test]
+fn test_delimiter_with_byte_and_char() {
+    for conflicting_arg in ["-c", "-b"] {
+        new_ucmd!()
+            .args(&[conflicting_arg, COMPLEX_SEQUENCE.sequence, "-d="])
+            .fails()
+            .stderr_is("cut: invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields\n")
+            .code_is(1);
+    }
+}
+
+#[test]
 fn test_too_large() {
     new_ucmd!()
         .args(&["-b1-18446744073709551615", "/dev/null"])
@@ -269,4 +280,43 @@ fn test_multiple() {
         .succeeds();
     assert_eq!(result.stdout_str(), "b\n");
     assert_eq!(result.stderr_str(), "");
+}
+
+#[test]
+fn test_multiple_mode_args() {
+    for args in [
+        vec!["-b1", "-b2"],
+        vec!["-c1", "-c2"],
+        vec!["-f1", "-f2"],
+        vec!["-b1", "-c2"],
+        vec!["-b1", "-f2"],
+        vec!["-c1", "-f2"],
+        vec!["-b1", "-c2", "-f3"],
+    ] {
+        new_ucmd!()
+        .args(&args)
+        .fails()
+        .stderr_is("cut: invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)\n");
+    }
+}
+
+#[test]
+fn test_no_argument() {
+    new_ucmd!().fails().stderr_is(
+        "cut: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\n",
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_8bit_non_utf8_delimiter() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    let delim = OsStr::from_bytes(b"\xAD".as_slice());
+    new_ucmd!()
+        .arg("-d")
+        .arg(delim)
+        .args(&["--out=_", "-f2,3", "8bit-delim.txt"])
+        .succeeds()
+        .stdout_check(|out| out == "b_c\n".as_bytes());
 }

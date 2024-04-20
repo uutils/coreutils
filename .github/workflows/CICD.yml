@@ -18,6 +18,7 @@ env:
 on:
   pull_request:
   push:
+    tags:
     branches:
       - main
 
@@ -137,7 +138,7 @@ jobs:
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v15
+    - uses: DavidAnson/markdownlint-cli2-action@v16
       with:
         fix: "true"
         globs: |
@@ -308,7 +309,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.4
     - name: Test
-      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
         RUST_BACKTRACE: "1"
 
@@ -335,7 +336,7 @@ jobs:
     - name: Run sccache-cache
       uses: mozilla-actions/sccache-action@v0.0.4
     - name: Test
-      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }}
+      run: cargo nextest run --hide-progress-bar --profile ci --features ${{ matrix.job.features }}
       env:
         RUST_BACKTRACE: "1"
 
@@ -540,9 +541,6 @@ jobs:
         PKG_BASENAME=${PROJECT_NAME}-${REF_TAG:-$REF_SHAS}-${{ matrix.job.target }}
         PKG_NAME=${PKG_BASENAME}${PKG_suffix}
         outputs PKG_suffix PKG_BASENAME PKG_NAME
-        # deployable tag? (ie, leading "vM" or "M"; M == version number)
-        unset DEPLOY ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DEPLOY='true' ; fi
-        outputs DEPLOY
         # DPKG architecture?
         unset DPKG_ARCH
         case ${{ matrix.job.target }} in
@@ -623,7 +621,7 @@ jobs:
           ;;
           # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
           x86_64-pc-windows-gnu)
-            C:/msys64/usr/bin/pacman.exe -Syu --needed mingw-w64-x86_64-gcc --noconfirm
+            C:/msys64/usr/bin/pacman.exe -Sy --needed mingw-w64-x86_64-gcc --noconfirm
             echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
           ;;
         esac
@@ -747,8 +745,8 @@ jobs:
           fakeroot dpkg-deb --build "${DPKG_DIR}" "${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.DPKG_NAME }}"
         fi
     - name: Publish
-      uses: softprops/action-gh-release@v1
-      if: steps.vars.outputs.DEPLOY
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
@@ -997,7 +995,7 @@ jobs:
         esac
         case '${{ matrix.job.os }}' in
           # Update binutils if MinGW due to https://github.com/rust-lang/rust/issues/112368
-          windows-latest) C:/msys64/usr/bin/pacman.exe -Syu --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
+          windows-latest) C:/msys64/usr/bin/pacman.exe -Sy --needed mingw-w64-x86_64-gcc --noconfirm ; echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH ;;
         esac
     - name: Initialize toolchain-dependent workflow variables
       id: dep_vars
@@ -1042,11 +1040,30 @@ jobs:
         echo "report=${COVERAGE_REPORT_FILE}" >> $GITHUB_OUTPUT
     - name: Upload coverage results (to Codecov.io)
       uses: codecov/codecov-action@v4
-      # if: steps.vars.outputs.HAS_CODECOV_TOKEN
       with:
-        # token: ${{ secrets.CODECOV_TOKEN }}
+        token: ${{ secrets.CODECOV_TOKEN }}
         file: ${{ steps.coverage.outputs.report }}
         ## flags: IntegrationTests, UnitTests, ${{ steps.vars.outputs.CODECOV_FLAGS }}
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
         fail_ci_if_error: false
+
+  test_separately:
+    name: Separate Builds
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: build and test all programs individually
+      shell: bash
+      run: |
+        for f in $(util/show-utils.sh)
+        do
+          echo "Building and testing $f"
+          cargo test -p "uu_$f" || exit 1
+        done

@@ -64,14 +64,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .try_into()
                 .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
             let pids = parse_pids(&pids_or_signals)?;
-            kill(sig, &pids);
-            Ok(())
+            if pids.is_empty() {
+                Err(USimpleError::new(
+                    1,
+                    "no process ID specified\n\
+                     Try --help for more information.",
+                ))
+            } else {
+                kill(sig, &pids);
+                Ok(())
+            }
         }
         Mode::Table => {
             table();
             Ok(())
         }
-        Mode::List => list(pids_or_signals.first()),
+        Mode::List => {
+            list(&pids_or_signals);
+            Ok(())
+        }
     }
 }
 
@@ -131,20 +142,21 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
 }
 
 fn table() {
-    let name_width = ALL_SIGNALS.iter().map(|n| n.len()).max().unwrap();
-
-    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        print!("{0: >#2} {1: <#2$}", idx, signal, name_width + 2);
-        if (idx + 1) % 7 == 0 {
-            println!();
-        }
+    // GNU kill doesn't list the EXIT signal with --table, so we ignore it, too
+    for (idx, signal) in ALL_SIGNALS
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| **s != "EXIT")
+    {
+        println!("{0: >#2} {1}", idx, signal);
     }
-    println!();
 }
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
-        if signal == signal_name_or_value || (format!("SIG{signal}")) == signal_name_or_value {
+        if signal.eq_ignore_ascii_case(signal_name_or_value)
+            || format!("SIG{signal}").eq_ignore_ascii_case(signal_name_or_value)
+        {
             println!("{value}");
             return Ok(());
         } else if signal_name_or_value == value.to_string() {
@@ -159,27 +171,27 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
 }
 
 fn print_signals() {
-    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        if idx > 0 {
-            print!(" ");
-        }
-        print!("{signal}");
+    // GNU kill doesn't list the EXIT signal with --list, so we ignore it, too
+    for signal in ALL_SIGNALS.iter().filter(|x| **x != "EXIT") {
+        println!("{signal}");
     }
-    println!();
 }
 
-fn list(arg: Option<&String>) -> UResult<()> {
-    match arg {
-        Some(x) => print_signal(x),
-        None => {
-            print_signals();
-            Ok(())
+fn list(signals: &Vec<String>) {
+    if signals.is_empty() {
+        print_signals();
+    } else {
+        for signal in signals {
+            if let Err(e) = print_signal(signal) {
+                uucore::show!(e)
+            }
         }
     }
 }
 
 fn parse_signal_value(signal_name: &str) -> UResult<usize> {
-    let optional_signal_value = signal_by_name_or_value(signal_name);
+    let signal_name_upcase = signal_name.to_uppercase();
+    let optional_signal_value = signal_by_name_or_value(&signal_name_upcase);
     match optional_signal_value {
         Some(x) => Ok(x),
         None => Err(USimpleError::new(

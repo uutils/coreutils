@@ -61,6 +61,7 @@ pub enum UpdateMode {
 }
 
 pub mod arguments {
+    use crate::shortcut_value_parser::ShortcutValueParser;
     use clap::ArgAction;
 
     pub static OPT_UPDATE: &str = "update";
@@ -71,7 +72,7 @@ pub mod arguments {
         clap::Arg::new(OPT_UPDATE)
             .long("update")
             .help("move only when the SOURCE file is newer than the destination file or when the destination file is missing")
-            .value_parser(["none", "all", "older"])
+            .value_parser(ShortcutValueParser::new(["none", "all", "older"]))
             .num_args(0..=1)
             .default_missing_value("older")
             .require_equals(true)

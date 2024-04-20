@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use chrono::{DateTime, Local};
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, ArgMatches, Command};
 use glob::Pattern;
 use std::collections::HashSet;
 use std::env;
@@ -30,6 +30,7 @@ use uucore::error::{set_exit_code, FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_glob;
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show, show_error, show_warning};
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
@@ -721,6 +722,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         excludes: build_exclude_patterns(&matches)?,
     };
 
+    let time_format = if time.is_some() {
+        parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?.to_string()
+    } else {
+        "%Y-%m-%d %H:%M".to_string()
+    };
+
     let stat_printer = StatPrinter {
         max_depth,
         size_format,
@@ -737,8 +744,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .transpose()?,
         apparent_size: matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES),
         time,
-        time_format: parse_time_style(matches.get_one::<String>("time-style").map(|s| s.as_str()))?
-            .to_string(),
+        time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
     };
 
@@ -1035,7 +1041,11 @@ pub fn uu_app() -> Command {
                 .value_name("WORD")
                 .require_equals(true)
                 .num_args(0..)
-                .value_parser(["atime", "access", "use", "ctime", "status", "birth", "creation"])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("atime").alias("access").alias("use"),
+                    PossibleValue::new("ctime").alias("status"),
+                    PossibleValue::new("creation").alias("birth"),
+                ]))
                 .help(
                     "show time of the last modification of any file in the \
                     directory, or any of its subdirectories. If WORD is given, show time as WORD instead \

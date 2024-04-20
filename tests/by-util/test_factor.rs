@@ -31,6 +31,15 @@ fn test_valid_arg_exponents() {
 }
 
 #[test]
+fn test_repeated_exponents() {
+    new_ucmd!()
+        .args(&["-hh", "1234", "10240"])
+        .succeeds()
+        .stdout_only("1234: 2 617\n10240: 2^11 5\n")
+        .no_stderr();
+}
+
+#[test]
 #[cfg(feature = "sort")]
 #[cfg(not(target_os = "android"))]
 fn test_parallel() {
@@ -145,9 +154,7 @@ fn test_cli_args() {
 
 #[test]
 fn test_random() {
-    use conv::prelude::ValueFrom;
-
-    let log_num_primes = f64::value_from(NUM_PRIMES).unwrap().log2().ceil();
+    let log_num_primes = f64::from(u32::try_from(NUM_PRIMES).unwrap()).log2().ceil();
     let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();
 
     let rng_seed = SystemTime::now()

@@ -130,6 +130,40 @@ fn test_check_sha1() {
 }
 
 #[test]
+fn test_check_md5_ignore_missing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+    at.write(
+        "testf.sha1",
+        "14758f1afd44c09b7992073ccf00b43d  testf\n14758f1afd44c09b7992073ccf00b43d  testf2\n",
+    );
+    scene
+        .ccmd("md5sum")
+        .arg("-c")
+        .arg(at.subdir.join("testf.sha1"))
+        .fails()
+        .stdout_contains("testf2: FAILED open or read");
+
+    scene
+        .ccmd("md5sum")
+        .arg("-c")
+        .arg("--ignore-missing")
+        .arg(at.subdir.join("testf.sha1"))
+        .succeeds()
+        .stdout_is("testf: OK\n")
+        .stderr_is("");
+
+    scene
+        .ccmd("md5sum")
+        .arg("--ignore-missing")
+        .arg(at.subdir.join("testf.sha1"))
+        .fails()
+        .stderr_contains("the --ignore-missing option is meaningful only when verifying checksums");
+}
+
+#[test]
 fn test_check_b2sum_length_option_0() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -208,7 +242,7 @@ fn test_check_file_not_found_warning() {
         .ccmd("sha1sum")
         .arg("-c")
         .arg(at.subdir.join("testf.sha1"))
-        .succeeds()
+        .fails()
         .stdout_is("sha1sum: testf: No such file or directory\ntestf: FAILED open or read\n")
         .stderr_is("sha1sum: warning: 1 listed file could not be read\n");
 }
@@ -357,6 +391,22 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_conflicting_arg() {
+    new_ucmd!()
+        .arg("--tag")
+        .arg("--check")
+        .arg("--md5")
+        .fails()
+        .code_is(1);
+    new_ucmd!()
+        .arg("--tag")
+        .arg("--text")
+        .arg("--md5")
+        .fails()
+        .code_is(1);
+}
+
+#[test]
 fn test_tag() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -385,4 +435,48 @@ fn test_with_escape_filename() {
     println!("stdout {}", stdout);
     assert!(stdout.starts_with('\\'));
     assert!(stdout.trim().ends_with("a\\nb"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_with_escape_filename_zero_text() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    let filename = "a\nb";
+    at.touch(filename);
+    let result = scene
+        .ccmd("md5sum")
+        .arg("--text")
+        .arg("--zero")
+        .arg(filename)
+        .succeeds();
+    let stdout = result.stdout_str();
+    println!("stdout {}", stdout);
+    assert!(!stdout.starts_with('\\'));
+    assert!(stdout.contains("a\nb"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_check_with_escape_filename() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    let filename = "a\nb";
+    at.touch(filename);
+    let result = scene.ccmd("md5sum").arg("--tag").arg(filename).succeeds();
+    let stdout = result.stdout_str();
+    println!("stdout {}", stdout);
+    assert!(stdout.starts_with("\\MD5"));
+    assert!(stdout.contains("a\\nb"));
+    at.write("check.md5", stdout);
+    let result = scene
+        .ccmd("md5sum")
+        .arg("--strict")
+        .arg("-c")
+        .arg("check.md5")
+        .succeeds();
+    result.stdout_is("\\a\\nb: OK\n");
 }

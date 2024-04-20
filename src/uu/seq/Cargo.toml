@@ -1,7 +1,7 @@
 # spell-checker:ignore bigdecimal
 [package]
 name = "uu_seq"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "seq ~ (uutils) display a sequence of numbers"

@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use crate::common::util::TestScenario;
+use regex::Regex;
 #[cfg(target_os = "linux")]
 use std::fmt::Write;
 
@@ -77,7 +78,7 @@ fn test_tee_no_more_writeable_1() {
     // equals to 'tee /dev/full out2 <multi_read' call
     let (at, mut ucmd) = at_and_ucmd!();
     let content = (1..=10).fold(String::new(), |mut output, x| {
-        let _ = writeln!(output, "{x}");
+        writeln!(output, "{x}").unwrap();
         output
     });
     let file_out = "tee_file_out";
@@ -90,6 +91,27 @@ fn test_tee_no_more_writeable_1() {
         .stderr_contains("No space left on device");
 
     assert_eq!(at.read(file_out), content);
+}
+
+#[test]
+fn test_readonly() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content_tee = "hello";
+    let content_file = "world";
+    let file_out = "tee_file_out";
+    let writable_file = "tee_file_out2";
+    at.write(file_out, content_file);
+    at.set_readonly(file_out);
+    ucmd.arg(file_out)
+        .arg(writable_file)
+        .pipe_in(content_tee)
+        .ignore_stdin_write_error()
+        .fails()
+        .stdout_is(content_tee)
+        // Windows says "Access is denied" for some reason.
+        .stderr_matches(&Regex::new("(Permission|Access is) denied").unwrap());
+    assert_eq!(at.read(file_out), content_file);
+    assert_eq!(at.read(writable_file), content_tee);
 }
 
 #[test]
@@ -290,6 +312,23 @@ mod linux_only {
     }
 
     #[test]
+    fn test_pipe_error_warn_nopipe_3_shortcut() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=warn-")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
     fn test_pipe_error_warn() {
         let (at, mut ucmd) = at_and_ucmd!();
 
@@ -331,6 +370,23 @@ mod linux_only {
 
         let proc = ucmd
             .arg("--output-error=exit-nopipe")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_error_exit_nopipe_shortcut() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=exit-nop")
             .arg(file_out_a)
             .set_stdout(make_broken_pipe());
 

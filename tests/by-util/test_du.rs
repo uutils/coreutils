@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist testdir testfile
+// spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist testdir testfile
 #[cfg(not(windows))]
 use regex::Regex;
 
@@ -576,13 +576,15 @@ fn test_du_time() {
         .succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
 
-    let result = ts
-        .ucmd()
-        .env("TZ", "UTC")
-        .arg("--time=atime")
-        .arg("date_test")
-        .succeeds();
-    result.stdout_only("0\t2015-05-15 00:00\tdate_test\n");
+    for argument in ["--time=atime", "--time=atim", "--time=a"] {
+        let result = ts
+            .ucmd()
+            .env("TZ", "UTC")
+            .arg(argument)
+            .arg("date_test")
+            .succeeds();
+        result.stdout_only("0\t2015-05-15 00:00\tdate_test\n");
+    }
 
     let result = ts
         .ucmd()
@@ -1115,4 +1117,14 @@ fn test_du_files0_from_combined() {
     let stderr = result.stderr_str();
 
     assert!(stderr.contains("file operands cannot be combined with --files0-from"));
+}
+
+#[test]
+fn test_invalid_time_style() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .arg("-s")
+        .arg("--time-style=banana")
+        .succeeds()
+        .stdout_does_not_contain("du: invalid argument 'banana' for 'time style'");
 }

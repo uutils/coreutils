@@ -278,7 +278,7 @@ fn test_chmod_many_options() {
 #[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_reference_file() {
-    let tests = vec![
+    let tests = [
         TestCase {
             args: vec!["--reference", REFERENCE_FILE, TEST_FILE],
             before: 0o100070,
@@ -643,6 +643,20 @@ fn test_quiet_n_verbose_used_multiple_times() {
         .arg("--quiet")
         .arg("file")
         .succeeds();
+}
+
+#[test]
+fn test_changes_from_identical_reference() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+    scene
+        .ucmd()
+        .arg("-c")
+        .arg("--reference=file")
+        .arg("file")
+        .succeeds()
+        .no_stdout();
 }
 
 #[test]

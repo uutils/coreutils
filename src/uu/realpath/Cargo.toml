@@ -1,6 +1,6 @@
 [package]
 name = "uu_realpath"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "realpath ~ (uutils) display resolved absolute path of PATHNAME"

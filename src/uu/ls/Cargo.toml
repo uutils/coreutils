@@ -1,6 +1,6 @@
 [package]
 name = "uu_ls"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "ls ~ (uutils) display directory contents"

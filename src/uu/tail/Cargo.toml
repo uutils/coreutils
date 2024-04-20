@@ -1,7 +1,7 @@
 # spell-checker:ignore (libs) kqueue fundu
 [package]
 name = "uu_tail"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tail ~ (uutils) display the last lines of input"

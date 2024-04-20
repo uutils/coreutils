@@ -275,7 +275,7 @@ impl Parser {
 
     fn parse_n(val: &str) -> Result<Num, ParseError> {
         let n = parse_bytes_with_opt_multiplier(val)?;
-        Ok(if val.ends_with('B') {
+        Ok(if val.contains('B') {
             Num::Bytes(n)
         } else {
             Num::Blocks(n)
@@ -631,8 +631,9 @@ fn conversion_mode(
 #[cfg(test)]
 mod tests {
 
-    use crate::parseargs::parse_bytes_with_opt_multiplier;
-
+    use crate::parseargs::{parse_bytes_with_opt_multiplier, Parser};
+    use crate::Num;
+    use std::matches;
     const BIG: &str = "9999999999999999999999999999999999999999999999999999999999999";
 
     #[test]
@@ -658,5 +659,14 @@ mod tests {
             parse_bytes_with_opt_multiplier("1wx2cx3w").unwrap(),
             2 * 2 * (3 * 2) // (1 * 2) * (2 * 1) * (3 * 2)
         );
+    }
+    #[test]
+    fn test_parse_n() {
+        for arg in ["1x8x4", "1c", "123b", "123w"] {
+            assert!(matches!(Parser::parse_n(arg), Ok(Num::Blocks(_))));
+        }
+        for arg in ["1Bx8x4", "2Bx8", "2Bx8B", "2x8B"] {
+            assert!(matches!(Parser::parse_n(arg), Ok(Num::Bytes(_))));
+        }
     }
 }

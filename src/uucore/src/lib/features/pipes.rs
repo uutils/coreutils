@@ -8,7 +8,6 @@ use std::fs::File;
 use std::io::IoSlice;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::io::AsRawFd;
-use std::os::unix::io::FromRawFd;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::SpliceFFlags;
@@ -21,8 +20,7 @@ pub use nix::{Error, Result};
 /// from the first.
 pub fn pipe() -> Result<(File, File)> {
     let (read, write) = nix::unistd::pipe()?;
-    // SAFETY: The file descriptors do not have other owners.
-    unsafe { Ok((File::from_raw_fd(read), File::from_raw_fd(write))) }
+    Ok((File::from(read), File::from(write)))
 }
 
 /// Less noisy wrapper around [`nix::fcntl::splice`].

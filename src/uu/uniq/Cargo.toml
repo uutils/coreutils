@@ -1,6 +1,6 @@
 [package]
 name = "uu_uniq"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uniq ~ (uutils) filter identical adjacent lines from input"

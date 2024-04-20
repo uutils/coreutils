@@ -21,7 +21,7 @@ use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
 use uucore::error::USimpleError;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{set_exit_code, FromIo, UError, UResult};
 use uucore::sum::{
     Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224, Sha3_256,
     Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
@@ -46,6 +46,7 @@ struct Options {
     warn: bool,
     output_bits: usize,
     zero: bool,
+    ignore_missing: bool,
 }
 
 /// Creates a Blake2b hasher instance based on the specified length argument.
@@ -345,6 +346,12 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let strict = matches.get_flag("strict");
     let warn = matches.get_flag("warn") && !status;
     let zero = matches.get_flag("zero");
+    let ignore_missing = matches.get_flag("ignore-missing");
+
+    if ignore_missing && !check {
+        // --ignore-missing needs -c
+        return Err(HashsumError::IgnoreNotCheck.into());
+    }
 
     let opts = Options {
         algoname: name,
@@ -359,6 +366,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         strict,
         warn,
         zero,
+        ignore_missing,
     };
 
     match matches.get_many::<OsString>("FILE") {
@@ -393,13 +401,15 @@ pub fn uu_app_common() -> Command {
                 .short('c')
                 .long("check")
                 .help("read hashsums from the FILEs and check them")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .conflicts_with("tag"),
         )
         .arg(
             Arg::new("tag")
                 .long("tag")
                 .help("create a BSD-style checksum")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .conflicts_with("text"),
         )
         .arg(
             Arg::new("text")
@@ -427,6 +437,12 @@ pub fn uu_app_common() -> Command {
             Arg::new("strict")
                 .long("strict")
                 .help("exit non-zero for improperly formatted checksum lines")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("ignore-missing")
+                .long("ignore-missing")
+                .help("don't fail or report status for missing files")
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -562,6 +578,7 @@ fn uu_app(binary_name: &str) -> Command {
 enum HashsumError {
     InvalidRegex,
     InvalidFormat,
+    IgnoreNotCheck,
 }
 
 impl Error for HashsumError {}
@@ -572,6 +589,10 @@ impl std::fmt::Display for HashsumError {
         match self {
             Self::InvalidRegex => write!(f, "invalid regular expression"),
             Self::InvalidFormat => Ok(()),
+            Self::IgnoreNotCheck => write!(
+                f,
+                "the --ignore-missing option is meaningful only when verifying checksums"
+            ),
         }
     }
 }
@@ -630,7 +651,8 @@ where
             }
             let mut gnu_re = gnu_re_template(&bytes_marker, r"(?P<binary>[ \*])?")?;
             let bsd_re = Regex::new(&format!(
-                r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
+                // it can start with \
+                r"^(|\\){algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
                 algorithm = options.algoname,
                 digest_size = bytes_marker,
             ))
@@ -699,8 +721,14 @@ where
                         }
                     },
                 };
-                let f = match File::open(ck_filename.clone()) {
+                let (ck_filename_unescaped, prefix) = unescape_filename(&ck_filename);
+                let f = match File::open(ck_filename_unescaped) {
                     Err(_) => {
+                        if options.ignore_missing {
+                            // No need to show or return an error.
+                            continue;
+                        }
+
                         failed_open_file += 1;
                         println!(
                             "{}: {}: No such file or directory",
@@ -708,6 +736,7 @@ where
                             ck_filename
                         );
                         println!("{ck_filename}: FAILED open or read");
+                        set_exit_code(1);
                         continue;
                     }
                     Ok(file) => file,
@@ -732,11 +761,11 @@ where
                 // easier (and more important) on Unix than on Windows.
                 if sum == real_sum {
                     if !options.quiet {
-                        println!("{ck_filename}: OK");
+                        println!("{prefix}{ck_filename}: OK");
                     }
                 } else {
                     if !options.status {
-                        println!("{ck_filename}: FAILED");
+                        println!("{prefix}{ck_filename}: FAILED");
                     }
                     failed_cksum += 1;
                 }
@@ -749,16 +778,19 @@ where
                 options.output_bits,
             )
             .map_err_context(|| "failed to read input".to_string())?;
+            let (escaped_filename, prefix) = escape_filename(filename);
             if options.tag {
-                println!("{} ({}) = {}", options.algoname, filename.display(), sum);
+                println!(
+                    "{}{} ({}) = {}",
+                    prefix, options.algoname, escaped_filename, sum
+                );
             } else if options.nonames {
                 println!("{sum}");
             } else if options.zero {
+                // with zero, we don't escape the filename
                 print!("{} {}{}\0", sum, binary_marker, filename.display());
             } else {
-                let (filename, has_prefix) = escape_filename(filename);
-                let prefix = if has_prefix { "\\" } else { "" };
-                println!("{}{} {}{}", prefix, sum, binary_marker, filename);
+                println!("{}{} {}{}", prefix, sum, binary_marker, escaped_filename);
             }
         }
     }
@@ -783,14 +815,23 @@ where
     Ok(())
 }
 
-fn escape_filename(filename: &Path) -> (String, bool) {
+fn unescape_filename(filename: &str) -> (String, &'static str) {
+    let unescaped = filename
+        .replace("\\\\", "\\")
+        .replace("\\n", "\n")
+        .replace("\\r", "\r");
+    let prefix = if unescaped == filename { "" } else { "\\" };
+    (unescaped, prefix)
+}
+
+fn escape_filename(filename: &Path) -> (String, &'static str) {
     let original = filename.as_os_str().to_string_lossy();
     let escaped = original
         .replace('\\', "\\\\")
         .replace('\n', "\\n")
         .replace('\r', "\\r");
-    let has_changed = escaped != original;
-    (escaped, has_changed)
+    let prefix = if escaped == original { "" } else { "\\" };
+    (escaped, prefix)
 }
 
 fn digest_reader<T: Read>(

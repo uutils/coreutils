@@ -1,6 +1,6 @@
 [package]
 name = "uu_whoami"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "whoami ~ (uutils) display user name of current effective user ID"

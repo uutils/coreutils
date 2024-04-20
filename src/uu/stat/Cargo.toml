@@ -1,6 +1,6 @@
 [package]
 name = "uu_stat"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stat ~ (uutils) display FILE status"
@@ -17,6 +17,7 @@ path = "src/stat.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "libc", "fs", "fsext"] }
+chrono = { workspace = true }
 
 [[bin]]
 name = "stat"

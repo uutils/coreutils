@@ -93,7 +93,8 @@ enum DateSource {
     Now,
     Custom(String),
     File(PathBuf),
-    Human(Duration),
+    Stdin,
+    Human(TimeDelta),
 }
 
 enum Iso8601Format {
@@ -175,7 +176,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             DateSource::Custom(date.into())
         }
     } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
-        DateSource::File(file.into())
+        match file.as_ref() {
+            "-" => DateSource::Stdin,
+            _ => DateSource::File(file.into()),
+        }
     } else {
         DateSource::Now
     };
@@ -241,6 +245,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         ));
                     }
                 }
+            }
+            DateSource::Stdin => {
+                let lines = BufReader::new(std::io::stdin()).lines();
+                let iter = lines.map_while(Result::ok).map(parse_date);
+                Box::new(iter)
             }
             DateSource::File(ref path) => {
                 if path.is_dir() {
@@ -413,9 +422,8 @@ fn make_format_string(settings: &Settings) -> &str {
 /// If it fails, return a tuple of the `String` along with its `ParseError`.
 fn parse_date<S: AsRef<str> + Clone>(
     s: S,
-) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
-    // TODO: The GNU date command can parse a wide variety of inputs.
-    s.as_ref().parse().map_err(|e| (s.as_ref().into(), e))
+) -> Result<DateTime<FixedOffset>, (String, parse_datetime::ParseDateTimeError)> {
+    parse_datetime::parse_datetime(s.as_ref()).map_err(|e| (s.as_ref().into(), e))
 }
 
 #[cfg(not(any(unix, windows)))]

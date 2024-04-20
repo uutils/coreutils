@@ -1,6 +1,6 @@
 [package]
 name = "uu_split"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "split ~ (uutils) split input into output files"

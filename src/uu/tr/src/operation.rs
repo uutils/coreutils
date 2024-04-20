@@ -122,18 +122,17 @@ impl Sequence {
     }
 
     // Hide all the nasty sh*t in here
-    // TODO: Make the 2 set lazily generate the character mapping as necessary.
     pub fn solve_set_characters(
         set1_str: &[u8],
         set2_str: &[u8],
         truncate_set1_flag: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
         let set1 = Self::from_str(set1_str)?;
-        let set2 = Self::from_str(set2_str)?;
 
         let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
         let set1_star_count = set1.iter().filter(is_char_star).count();
         if set1_star_count == 0 {
+            let set2 = Self::from_str(set2_str)?;
             let set2_star_count = set2.iter().filter(is_char_star).count();
             if set2_star_count < 2 {
                 let char_star = set2.iter().find_map(|s| match s {
@@ -339,6 +338,32 @@ impl Sequence {
 
 pub trait SymbolTranslator {
     fn translate(&mut self, current: u8) -> Option<u8>;
+
+    /// Takes two SymbolTranslators and creates a new SymbolTranslator over both in sequence.
+    ///
+    /// This behaves pretty much identical to [`Iterator::chain`].
+    fn chain<T>(self, other: T) -> ChainedSymbolTranslator<Self, T>
+    where
+        Self: Sized,
+    {
+        ChainedSymbolTranslator::<Self, T> {
+            stage_a: self,
+            stage_b: other,
+        }
+    }
+}
+
+pub struct ChainedSymbolTranslator<A, B> {
+    stage_a: A,
+    stage_b: B,
+}
+
+impl<A: SymbolTranslator, B: SymbolTranslator> SymbolTranslator for ChainedSymbolTranslator<A, B> {
+    fn translate(&mut self, current: u8) -> Option<u8> {
+        self.stage_a
+            .translate(current)
+            .and_then(|c| self.stage_b.translate(c))
+    }
 }
 
 #[derive(Debug)]

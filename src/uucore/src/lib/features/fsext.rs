@@ -7,14 +7,11 @@
 
 // spell-checker:ignore DATETIME getmntinfo subsecond (arch) bitrig ; (fs) cifs smbfs
 
-use time::macros::format_description;
-use time::UtcOffset;
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 static MOUNT_OPT_BIND: &str = "bind";
 #[cfg(windows)]
 const MAX_PATH: usize = 266;
@@ -66,7 +63,6 @@ use libc::{
     mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK,
 };
 use std::borrow::Cow;
-use std::convert::From;
 #[cfg(unix)]
 use std::ffi::CStr;
 #[cfg(unix)]
@@ -87,6 +83,7 @@ use std::time::UNIX_EPOCH;
 ))]
 pub use libc::statfs as StatFs;
 #[cfg(any(
+    target_os = "aix",
     target_os = "netbsd",
     target_os = "bitrig",
     target_os = "dragonfly",
@@ -105,6 +102,7 @@ pub use libc::statvfs as StatFs;
 ))]
 pub use libc::statfs as statfs_fn;
 #[cfg(any(
+    target_os = "aix",
     target_os = "netbsd",
     target_os = "bitrig",
     target_os = "illumos",
@@ -115,26 +113,16 @@ pub use libc::statfs as statfs_fn;
 pub use libc::statvfs as statfs_fn;
 
 pub trait BirthTime {
-    fn pretty_birth(&self) -> String;
-    fn birth(&self) -> u64;
+    fn birth(&self) -> Option<(u64, u32)>;
 }
 
 use std::fs::Metadata;
 impl BirthTime for Metadata {
-    fn pretty_birth(&self) -> String {
+    fn birth(&self) -> Option<(u64, u32)> {
         self.created()
             .ok()
             .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|e| pretty_time(e.as_secs() as i64, i64::from(e.subsec_nanos())))
-            .unwrap_or_else(|| "-".to_owned())
-    }
-
-    fn birth(&self) -> u64 {
-        self.created()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|e| e.as_secs())
-            .unwrap_or_default()
+            .map(|e| (e.as_secs(), e.subsec_nanos()))
     }
 }
 
@@ -318,7 +306,7 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -337,14 +325,14 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:enable
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
     dev_name.find(':').is_some()
         || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
         || dev_name == "-hosts"
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn mount_dev_id(mount_dir: &str) -> String {
     use std::os::unix::fs::MetadataExt;
 
@@ -486,7 +474,12 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         }
         Ok(mounts)
     }
-    #[cfg(any(target_os = "redox", target_os = "illumos", target_os = "solaris"))]
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "redox",
+        target_os = "illumos",
+        target_os = "solaris"
+    ))]
     {
         // No method to read mounts, yet
         Ok(Vec::new())
@@ -647,6 +640,7 @@ impl FsMeta for StatFs {
         #[cfg(all(
             not(target_env = "musl"),
             not(target_vendor = "apple"),
+            not(target_os = "aix"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
             not(target_os = "openbsd"),
@@ -664,7 +658,7 @@ impl FsMeta for StatFs {
             any(
                 target_arch = "s390x",
                 target_vendor = "apple",
-                target_os = "android",
+                all(target_os = "android", target_pointer_width = "32"),
                 target_os = "openbsd",
                 not(target_pointer_width = "64")
             )
@@ -672,10 +666,12 @@ impl FsMeta for StatFs {
         return self.f_bsize.into();
         #[cfg(any(
             target_env = "musl",
+            target_os = "aix",
             target_os = "freebsd",
             target_os = "illumos",
             target_os = "solaris",
-            target_os = "redox"
+            target_os = "redox",
+            all(target_os = "android", target_pointer_width = "64"),
         ))]
         return self.f_bsize.try_into().unwrap();
     }
@@ -741,14 +737,17 @@ impl FsMeta for StatFs {
             not(target_env = "musl"),
             any(
                 target_vendor = "apple",
-                target_os = "android",
+                all(target_os = "android", target_pointer_width = "32"),
                 target_os = "freebsd",
                 target_arch = "s390x",
                 not(target_pointer_width = "64")
             )
         ))]
         return self.f_type.into();
-        #[cfg(target_env = "musl")]
+        #[cfg(any(
+            target_env = "musl",
+            all(target_os = "android", target_pointer_width = "64"),
+        ))]
         return self.f_type.try_into().unwrap();
     }
     #[cfg(not(any(
@@ -862,50 +861,6 @@ where
             }
         }
         Err(e) => Err(e.to_string()),
-    }
-}
-
-// match strftime "%Y-%m-%d %H:%M:%S.%f %z"
-const PRETTY_DATETIME_FORMAT: &[time::format_description::FormatItem] = format_description!(
-    "\
-[year]-[month]-[day padding:zero] \
-[hour]:[minute]:[second].[subsecond digits:9] \
-[offset_hour sign:mandatory][offset_minute]"
-);
-
-pub fn pretty_time(sec: i64, nsec: i64) -> String {
-    // sec == seconds since UNIX_EPOCH
-    // nsec == nanoseconds since (UNIX_EPOCH + sec)
-    let ts_nanos: i128 = (sec * 1_000_000_000 + nsec).into();
-
-    // Return the date in UTC
-    let tm = match time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos) {
-        Ok(tm) => tm,
-        Err(e) => {
-            panic!("error: {e}");
-        }
-    };
-
-    // Get the offset to convert to local time
-    // Because of DST (daylight saving), we get the local time back when
-    // the date was set
-    let local_offset = match UtcOffset::local_offset_at(tm) {
-        Ok(lo) => lo,
-        Err(_) if cfg!(target_os = "redox") => UtcOffset::UTC,
-        Err(e) => {
-            panic!("error: {e}");
-        }
-    };
-
-    // Include the conversion to local time
-    let res = tm
-        .to_offset(local_offset)
-        .format(&PRETTY_DATETIME_FORMAT)
-        .unwrap();
-    if res.ends_with(" -0000") {
-        res.replace(" -0000", " +0000")
-    } else {
-        res
     }
 }
 
@@ -1048,6 +1003,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x5846_5342 => "xfs".into(),
         0x012F_D16D => "xia".into(),
         0x2FC1_2FC1 => "zfs".into(),
+        0xDE => "zfs".into(),
         other => format!("UNKNOWN ({other:#x})").into(),
     }
     // spell-checker:enable

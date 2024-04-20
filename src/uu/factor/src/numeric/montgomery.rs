@@ -31,14 +31,11 @@ pub(crate) trait Arithmetic: Copy + Sized {
 
         // Check that r (reduced back to the usual representation) equals
         //  a^b % n, unless the latter computation overflows
-        // Temporarily commented-out, as there u64::checked_pow is not available
-        //  on the minimum supported Rust version, nor is an appropriate method
-        //  for compiling the check conditionally.
-        //debug_assert!(self
-        //    .to_u64(_a)
-        //    .checked_pow(_b as u32)
-        //    .map(|r| r % self.modulus() == self.to_u64(result))
-        //    .unwrap_or(true));
+        debug_assert!(self
+            .to_u64(_a)
+            .checked_pow(_b as u32)
+            .map(|r| r % self.modulus() == self.to_u64(result))
+            .unwrap_or(true));
 
         result
     }
@@ -46,11 +43,9 @@ pub(crate) trait Arithmetic: Copy + Sized {
     fn one(&self) -> Self::ModInt {
         self.to_mod(1)
     }
+
     fn minus_one(&self) -> Self::ModInt {
         self.to_mod(self.modulus() - 1)
-    }
-    fn zero(&self) -> Self::ModInt {
-        self.to_mod(0)
     }
 }
 
@@ -111,7 +106,7 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
     }
 
     fn to_mod(&self, x: u64) -> Self::ModInt {
-        // TODO: optimise!
+        // TODO: optimize!
         debug_assert!(x < self.n.as_u64());
         let r = T::from_double_width(
             ((T::DoubleWidth::from_u64(x)) << T::zero().count_zeros() as usize)

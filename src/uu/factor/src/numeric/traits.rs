@@ -13,6 +13,7 @@ use num_traits::{
 };
 use std::fmt::{Debug, Display};
 
+#[allow(dead_code)] // Rust doesn't recognize the use in the macro
 pub(crate) trait Int:
     Display + Debug + PrimInt + OverflowingAdd + WrappingNeg + WrappingSub + WrappingMul
 {
@@ -23,6 +24,7 @@ pub(crate) trait Int:
     fn as_u128(&self) -> u128;
 }
 
+#[allow(dead_code)] // Rust doesn't recognize the use in the macro
 pub(crate) trait DoubleInt: Int {
     /// An integer type with twice the width of `Self`.
     /// In particular, multiplications (of `Int` values) can be performed in

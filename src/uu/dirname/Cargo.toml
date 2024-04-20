@@ -1,6 +1,6 @@
 [package]
 name = "uu_dirname"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "dirname ~ (uutils) display parent directory of PATHNAME"

@@ -2,7 +2,7 @@
 
 [package]
 name = "uucore"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uutils ~ 'core' uutils code library (cross-platform)"
@@ -77,10 +77,10 @@ colors = []
 encoding = ["data-encoding", "data-encoding-macro", "z85", "thiserror"]
 entries = ["libc"]
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
-fsext = ["libc", "time", "windows-sys"]
+fsext = ["libc", "windows-sys"]
 fsxattr = ["xattr"]
 lines = []
-format = ["itertools"]
+format = ["itertools", "quoting-style"]
 mode = ["libc"]
 perms = ["libc", "walkdir"]
 pipes = []

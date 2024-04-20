@@ -9,9 +9,10 @@ mod operation;
 mod unicode_table;
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use nom::AsBytes;
-use operation::{translate_input, Sequence, SqueezeOperation, TranslateOperation};
-use std::io::{stdin, stdout, BufReader, BufWriter};
+use operation::{
+    translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
+};
+use std::io::{stdin, stdout, BufWriter};
 use uucore::{format_usage, help_about, help_section, help_usage, show};
 
 use crate::operation::DeleteOperation;
@@ -57,8 +58,42 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if !(delete_flag || squeeze_flag) && sets_len < 2 {
         return Err(UUsageError::new(
             1,
-            format!("missing operand after {}", sets[0].quote()),
+            format!(
+                "missing operand after {}\nTwo strings must be given when translating.",
+                sets[0].quote()
+            ),
         ));
+    }
+
+    if delete_flag & squeeze_flag && sets_len < 2 {
+        return Err(UUsageError::new(
+            1,
+            format!(
+                "missing operand after {}\nTwo strings must be given when deleting and squeezing.",
+                sets[0].quote()
+            ),
+        ));
+    }
+
+    if sets_len > 1 {
+        let start = "extra operand";
+        if delete_flag && !squeeze_flag {
+            let op = sets[1].quote();
+            let msg = if sets_len == 2 {
+                format!(
+                    "{} {}\nOnly one string may be given when deleting without squeezing repeats.",
+                    start, op,
+                )
+            } else {
+                format!("{} {}", start, op,)
+            };
+            return Err(UUsageError::new(1, msg));
+        }
+        if sets_len > 2 {
+            let op = sets[2].quote();
+            let msg = format!("{} {}", start, op);
+            return Err(UUsageError::new(1, msg));
+        }
     }
 
     if let Some(first) = sets.first() {
@@ -83,19 +118,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         truncate_set1_flag,
     )?;
 
+    // '*_op' are the operations that need to be applied, in order.
     if delete_flag {
         if squeeze_flag {
-            let mut delete_buffer = vec![];
-            {
-                let mut delete_writer = BufWriter::new(&mut delete_buffer);
-                let delete_op = DeleteOperation::new(set1, complement_flag);
-                translate_input(&mut locked_stdin, &mut delete_writer, delete_op);
-            }
-            {
-                let mut squeeze_reader = BufReader::new(delete_buffer.as_bytes());
-                let op = SqueezeOperation::new(set2, complement_flag);
-                translate_input(&mut squeeze_reader, &mut buffered_stdout, op);
-            }
+            let delete_op = DeleteOperation::new(set1, complement_flag);
+            let squeeze_op = SqueezeOperation::new(set2, false);
+            let op = delete_op.chain(squeeze_op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
             let op = DeleteOperation::new(set1, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
@@ -105,17 +134,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let op = SqueezeOperation::new(set1, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let mut translate_buffer = vec![];
-            {
-                let mut writer = BufWriter::new(&mut translate_buffer);
-                let op = TranslateOperation::new(set1, set2.clone(), complement_flag)?;
-                translate_input(&mut locked_stdin, &mut writer, op);
-            }
-            {
-                let mut reader = BufReader::new(translate_buffer.as_bytes());
-                let squeeze_op = SqueezeOperation::new(set2, false);
-                translate_input(&mut reader, &mut buffered_stdout, squeeze_op);
-            }
+            let translate_op = TranslateOperation::new(set1, set2.clone(), complement_flag)?;
+            let squeeze_op = SqueezeOperation::new(set2, false);
+            let op = translate_op.chain(squeeze_op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else {
         let op = TranslateOperation::new(set1, set2, complement_flag)?;
@@ -130,20 +152,23 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .trailing_var_arg(true)
         .arg(
             Arg::new(options::COMPLEMENT)
                 .visible_short_alias('C')
                 .short('c')
                 .long(options::COMPLEMENT)
                 .help("use the complement of SET1")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::COMPLEMENT),
         )
         .arg(
             Arg::new(options::DELETE)
                 .short('d')
                 .long(options::DELETE)
                 .help("delete characters in SET1, do not translate")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DELETE),
         )
         .arg(
             Arg::new(options::SQUEEZE)
@@ -154,14 +179,16 @@ pub fn uu_app() -> Command {
                      listed in the last specified SET, with a single occurrence \
                      of that character",
                 )
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SQUEEZE),
         )
         .arg(
             Arg::new(options::TRUNCATE_SET1)
                 .long(options::TRUNCATE_SET1)
                 .short('t')
                 .help("first truncate SET1 to length of SET2")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TRUNCATE_SET1),
         )
-        .arg(Arg::new(options::SETS).num_args(1..=2))
+        .arg(Arg::new(options::SETS).num_args(1..))
 }

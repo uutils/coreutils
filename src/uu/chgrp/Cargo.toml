@@ -1,6 +1,6 @@
 [package]
 name = "uu_chgrp"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chgrp ~ (uutils) change the group ownership of FILE"
