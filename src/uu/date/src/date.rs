@@ -6,7 +6,7 @@
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, TimeDelta, FixedOffset, Local, Offset, TimeZone, Utc};
+use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, TimeZone, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use chrono_tz::{OffsetName, Tz};
