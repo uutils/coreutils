@@ -377,6 +377,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .into());
     }
 
+    let untagged: bool = matches.get_flag(options::UNTAGGED);
+    let tag: bool = matches.get_flag(options::TAG);
+
+    let binary = if untagged && tag {
+        false
+    } else {
+        matches.get_flag(options::BINARY)
+    };
+
     let (name, algo, bits) = detect_algo(algo_name, length);
 
     let output_format = if matches.get_flag(options::RAW) {
@@ -392,9 +401,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         digest: algo,
         output_bits: bits,
         length,
-        untagged: matches.get_flag(options::UNTAGGED),
+        untagged,
         output_format,
-        binary: matches.get_flag(options::BINARY),
+        binary,
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -442,8 +451,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::UNTAGGED)
                 .long(options::UNTAGGED)
                 .help("create a reversed style checksum, without digest type")
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::TAG),
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::TAG)
