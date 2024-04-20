@@ -439,8 +439,8 @@ fn test_date_from_stdin() {
         )
         .succeeds()
         .stdout_is(
-            "Mon Mar 27 08:30:00 2023\n\
-             Sat Apr  1 12:00:00 2023\n\
-             Sat Apr 15 18:30:00 2023\n",
+            "Mon Mar 27 08:30:00 UTC 2023\n\
+             Sat Apr  1 12:00:00 UTC 2023\n\
+             Sat Apr 15 18:30:00 UTC 2023\n",
         );
 }

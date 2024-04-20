@@ -414,7 +414,7 @@ fn make_format_string(settings: &Settings) -> &str {
             Rfc3339Format::Ns => "%F %T.%f%:z",
         },
         Format::Custom(ref fmt) => fmt,
-        Format::Default => "%a %b %-d %X %Z %Y",
+        Format::Default => "%a %b %e %X %Z %Y",
     }
 }
 
