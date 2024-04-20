@@ -278,6 +278,18 @@ fn test_untagged_algorithm_stdin() {
 }
 
 #[test]
+fn test_check_algo() {
+    new_ucmd!()
+        .arg("-a=bsd")
+        .arg("--check")
+        .arg("lorem_ipsum.txt")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --check is not supported with --algorithm={bsd,sysv,crc}")
+        .code_is(1);
+}
+
+#[test]
 fn test_length_with_wrong_algorithm() {
     new_ucmd!()
         .arg("--length=16")
