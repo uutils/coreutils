@@ -148,7 +148,7 @@ fn test_tag_after_untagged() {
         .arg("-a=md5")
         .arg("lorem_ipsum.txt")
         .succeeds()
-        .stdout_is_fixture("md5_single_file.expected");
+        .stdout_is("cd724690f7dc61775dfac400a71f2caa  lorem_ipsum.txt\n");
 }
 
 #[test]
@@ -470,6 +470,17 @@ fn test_binary_file() {
         .arg(at.subdir.join("f"))
         .succeeds()
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
+
+    // no "*" in this case
+    scene
+        .ucmd()
+        .arg("--untagged")
+        .arg("--tag")
+        .arg("--binary")
+        .arg("--algorithm=md5")
+        .arg(at.subdir.join("f"))
+        .succeeds()
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e  ");
 }
 
 #[test]
