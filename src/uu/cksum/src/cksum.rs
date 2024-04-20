@@ -147,6 +147,7 @@ struct Options {
     untagged: bool,
     length: Option<usize>,
     output_format: OutputFormat,
+    binary: bool,
 }
 
 /// Calculate checksum
@@ -170,6 +171,8 @@ where
         let stdin_buf;
         let file_buf;
         let not_file = filename == OsStr::new("-");
+
+        // Handle the file input
         let mut file = BufReader::new(if not_file {
             stdin_buf = stdin();
             Box::new(stdin_buf) as Box<dyn Read>
@@ -185,6 +188,7 @@ where
             };
             Box::new(file_buf) as Box<dyn Read>
         });
+
         let (sum_hex, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
         if filename.is_dir() {
@@ -250,7 +254,8 @@ where
             }
             _ => {
                 if options.untagged {
-                    println!("{sum}  {}", filename.display());
+                    let prefix = if options.binary { "*" } else { " " };
+                    println!("{sum} {prefix}{}", filename.display());
                 } else {
                     println!(
                         "{} ({}) = {sum}",
@@ -306,6 +311,10 @@ mod options {
     pub const LENGTH: &str = "length";
     pub const RAW: &str = "raw";
     pub const BASE64: &str = "base64";
+    pub const CHECK: &str = "check";
+    // for legacy compat reasons
+    pub const TEXT: &str = "text";
+    pub const BINARY: &str = "binary";
 }
 
 #[uucore::main]
@@ -375,6 +384,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         length,
         untagged: matches.get_flag(options::UNTAGGED),
         output_format,
+        binary: matches.get_flag(options::BINARY),
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -448,15 +458,42 @@ pub fn uu_app() -> Command {
                 .help("emit a raw binary digest, not hexadecimal")
                 .action(ArgAction::SetTrue),
         )
+        /*.arg(
+            Arg::new(options::STRICT)
+                .long(options::STRICT)
+                .help("exit non-zero for improperly formatted checksum lines")
+                .action(ArgAction::SetTrue),
+        )*/
+        .arg(
+            Arg::new(options::CHECK)
+                .short('c')
+                .long(options::CHECK)
+                .help("read hashsums from the FILEs and check them")
+                .action(ArgAction::SetTrue)
+                .conflicts_with("tag"),
+        )
         .arg(
             Arg::new(options::BASE64)
                 .long(options::BASE64)
-                .short('b')
                 .help("emit a base64 digest, not hexadecimal")
                 .action(ArgAction::SetTrue)
                 // Even though this could easily just override an earlier '--raw',
                 // GNU cksum does not permit these flags to be combined:
                 .conflicts_with(options::RAW),
+        )
+        .arg(
+            Arg::new(options::TEXT)
+                .long(options::TEXT)
+                .short('t')
+                .hide(true) // for legacy compatibility, no action
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::BINARY)
+                .long(options::BINARY)
+                .short('b')
+                .hide(true) // for legacy compatibility, no action
+                .action(ArgAction::SetTrue),
         )
         .after_help(AFTER_HELP)
 }

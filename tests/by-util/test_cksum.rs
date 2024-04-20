@@ -232,6 +232,16 @@ fn test_untagged_algorithm_single_file() {
 }
 
 #[test]
+fn test_tag_short() {
+    new_ucmd!()
+        .arg("-t")
+        .arg("--algorithm=md5")
+        .arg("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("MD5 (lorem_ipsum.txt) = cd724690f7dc61775dfac400a71f2caa\n");
+}
+
+#[test]
 fn test_untagged_algorithm_after_tag() {
     new_ucmd!()
         .arg("--tag")
@@ -379,15 +389,13 @@ fn test_base64_raw_conflicts() {
 #[test]
 fn test_base64_single_file() {
     for algo in ALGOS {
-        for base64_option in ["--base64", "-b"] {
-            new_ucmd!()
-                .arg(base64_option)
-                .arg("lorem_ipsum.txt")
-                .arg(format!("--algorithm={algo}"))
-                .succeeds()
-                .no_stderr()
-                .stdout_is_fixture_bytes(format!("base64/{algo}_single_file.expected"));
-        }
+        new_ucmd!()
+            .arg("--base64")
+            .arg("lorem_ipsum.txt")
+            .arg(format!("--algorithm={algo}"))
+            .succeeds()
+            .no_stderr()
+            .stdout_is_fixture_bytes(format!("base64/{algo}_single_file.expected"));
     }
 }
 #[test]
@@ -433,6 +441,23 @@ fn test_all_algorithms_fail_on_folder() {
             .no_stdout()
             .stderr_contains(format!("cksum: {folder_name}: Is a directory"));
     }
+}
+
+#[test]
+fn test_binary_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--untagged")
+        .arg("-b")
+        .arg("--algorithm=md5")
+        .arg(at.subdir.join("f"))
+        .succeeds()
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 }
 
 #[test]
