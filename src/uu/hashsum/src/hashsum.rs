@@ -481,7 +481,8 @@ fn uu_app_opt_length(command: Command) -> Command {
             .long("length")
             .help("digest length in bits; must not exceed the max for the blake2 algorithm (512) and must be a multiple of 8")
             .value_name("BITS")
-            .value_parser(parse_bit_num),
+            .value_parser(parse_bit_num)
+            .overrides_with("length"),
     )
 }
 
