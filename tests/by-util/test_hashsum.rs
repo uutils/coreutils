@@ -181,6 +181,22 @@ fn test_check_b2sum_length_option_0() {
 }
 
 #[test]
+fn test_check_b2sum_length_duplicate() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("testf", "foobar\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=123")
+        .arg("--length=128")
+        .arg("testf")
+        .succeeds()
+        .stdout_contains("d6d45901dec53e65d2b55fb6e2ab67b0");
+}
+
+#[test]
 fn test_check_b2sum_length_option_8() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
