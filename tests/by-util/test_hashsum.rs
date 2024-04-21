@@ -504,7 +504,7 @@ fn test_check_strict_error() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("f", "");
+    at.touch("f");
     at.write(
         "in.md5",
         "ERR\nERR\nd41d8cd98f00b204e9800998ecf8427e  f\nERR\n",
@@ -523,7 +523,7 @@ fn test_check_warn() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("f", "");
+    at.touch("f");
     at.write(
         "in.md5",
         "d41d8cd98f00b204e9800998ecf8427e  f\nd41d8cd98f00b204e9800998ecf8427e  f\ninvalid\n",
@@ -551,7 +551,7 @@ fn test_check_status() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("f", "");
+    at.touch("f");
     at.write("in.md5", "MD5(f)= d41d8cd98f00b204e9800998ecf8427f\n");
     scene
         .ccmd("md5sum")
@@ -567,7 +567,7 @@ fn test_check_status_code() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("f", "");
+    at.touch("f");
     at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427f  f\n");
     scene
         .ccmd("md5sum")
@@ -584,7 +584,7 @@ fn test_check_no_backslash_no_space() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("f", "");
+    at.touch("f");
     at.write("in.md5", "MD5(f)= d41d8cd98f00b204e9800998ecf8427e\n");
     scene
         .ccmd("md5sum")
@@ -599,7 +599,7 @@ fn test_check_check_ignore_no_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("f", "");
+    at.touch("f");
     at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427f  missing\n");
     scene
         .ccmd("md5sum")
