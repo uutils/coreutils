@@ -1689,7 +1689,7 @@ fn test_target_file_ends_with_slash() {
 #[test]
 fn test_install_root_combined() {
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = &ts.fixtures;
     at.touch("a");
     at.touch("c");
 
