@@ -101,6 +101,8 @@ skip = [
   { name = "terminal_size", version = "0.2.6" },
   # filetime, parking_lot_core
   { name = "redox_syscall", version = "0.4.1" },
+  # num-prime, rust-ini
+  { name = "hashbrown", version = "0.12.3" },
 ]
 # spell-checker: enable
 
