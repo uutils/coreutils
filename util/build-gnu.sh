@@ -221,7 +221,7 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r sed -Ei
 # we should not regress our project just to match what GNU is going.
 # So, do some changes on the fly
 
-patch -N -r - -d "$path_GNU" -p 1 -i "`realpath \"$path_UUTILS/util/gnu-patches/tests_env_env-S.pl.patch\"`" || true
+eval cat "$path_UUTILS/util/gnu-patches/*.patch" | patch -N -r - -d "$path_GNU" -p 1 -i - || true
 
 sed -i -e "s|rm: cannot remove 'e/slink'|rm: cannot remove 'e'|g" tests/rm/fail-eacces.sh
 
@@ -337,12 +337,12 @@ ls: invalid --time-style argument 'XX'\nPossible values are: [\"full-iso\", \"lo
 # "hostid BEFORE --help AFTER " same for this
 sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/help/help-version-getopt.sh
 
-# The case doesn't really matter here
-sed -i -e "s|WARNING: 1 line is improperly formatted|warning: 1 line is improperly formatted|" tests/cksum/md5sum-bsd.sh
-
 # Add debug info + we have less syscall then GNU's. Adjust our check.
 # Use GNU sed for /c command
 "${SED}" -i -e '/test \$n_stat1 = \$n_stat2 \\/c\
 echo "n_stat1 = \$n_stat1"\n\
 echo "n_stat2 = \$n_stat2"\n\
 test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
+
+# no need to replicate this output with hashsum
+sed -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl

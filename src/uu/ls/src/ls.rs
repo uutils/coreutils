@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
 
 use clap::{
-    builder::{NonEmptyStringValueParser, ValueParser},
+    builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
@@ -62,6 +62,7 @@ use uucore::{
     format_usage,
     fs::display_permissions,
     parse_size::parse_size_u64,
+    shortcut_value_parser::ShortcutValueParser,
     version_cmp::version_cmp,
 };
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
@@ -1203,7 +1204,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FORMAT)
                 .long(options::FORMAT)
                 .help("Set the display format.")
-                .value_parser([
+                .value_parser(ShortcutValueParser::new([
                     "long",
                     "verbose",
                     "single-column",
@@ -1212,7 +1213,7 @@ pub fn uu_app() -> Command {
                     "across",
                     "horizontal",
                     "commas",
-                ])
+                ]))
                 .hide_possible_values(true)
                 .require_equals(true)
                 .overrides_with_all([
@@ -1303,9 +1304,11 @@ pub fn uu_app() -> Command {
             Arg::new(options::HYPERLINK)
                 .long(options::HYPERLINK)
                 .help("hyperlink file names WHEN")
-                .value_parser([
-                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
-                ])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("always").alias("yes").alias("force"),
+                    PossibleValue::new("auto").alias("tty").alias("if-tty"),
+                    PossibleValue::new("never").alias("no").alias("none"),
+                ]))
                 .require_equals(true)
                 .num_args(0..=1)
                 .default_missing_value("always")
@@ -1351,15 +1354,15 @@ pub fn uu_app() -> Command {
             Arg::new(options::QUOTING_STYLE)
                 .long(options::QUOTING_STYLE)
                 .help("Set quoting style.")
-                .value_parser([
-                    "literal",
-                    "shell",
-                    "shell-always",
-                    "shell-escape",
-                    "shell-escape-always",
-                    "c",
-                    "escape",
-                ])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("literal"),
+                    PossibleValue::new("shell"),
+                    PossibleValue::new("shell-escape"),
+                    PossibleValue::new("shell-always"),
+                    PossibleValue::new("shell-escape-always"),
+                    PossibleValue::new("c").alias("c-maybe"),
+                    PossibleValue::new("escape"),
+                ]))
                 .overrides_with_all([
                     options::QUOTING_STYLE,
                     options::quoting::LITERAL,
@@ -1434,9 +1437,11 @@ pub fn uu_app() -> Command {
                         \tbirth time: birth, creation;",
                 )
                 .value_name("field")
-                .value_parser([
-                    "atime", "access", "use", "ctime", "status", "birth", "creation",
-                ])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("atime").alias("access").alias("use"),
+                    PossibleValue::new("ctime").alias("status"),
+                    PossibleValue::new("birth").alias("creation"),
+                ]))
                 .hide_possible_values(true)
                 .require_equals(true)
                 .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE]),
@@ -1496,7 +1501,7 @@ pub fn uu_app() -> Command {
                 .long(options::SORT)
                 .help("Sort by <field>: name, none (-U), time (-t), size (-S), extension (-X) or width")
                 .value_name("field")
-                .value_parser(["name", "none", "time", "size", "version", "extension", "width"])
+                .value_parser(ShortcutValueParser::new(["name", "none", "time", "size", "version", "extension", "width"]))
                 .require_equals(true)
                 .overrides_with_all([
                     options::SORT,
@@ -1744,9 +1749,11 @@ pub fn uu_app() -> Command {
             Arg::new(options::COLOR)
                 .long(options::COLOR)
                 .help("Color output based on file type.")
-                .value_parser([
-                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
-                ])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("always").alias("yes").alias("force"),
+                    PossibleValue::new("auto").alias("tty").alias("if-tty"),
+                    PossibleValue::new("never").alias("no").alias("none"),
+                ]))
                 .require_equals(true)
                 .num_args(0..=1),
         )
@@ -1757,7 +1764,7 @@ pub fn uu_app() -> Command {
                     "Append indicator with style WORD to entry names: \
                 none (default),  slash (-p), file-type (--file-type), classify (-F)",
                 )
-                .value_parser(["none", "slash", "file-type", "classify"])
+                .value_parser(ShortcutValueParser::new(["none", "slash", "file-type", "classify"]))
                 .overrides_with_all([
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
@@ -1788,9 +1795,11 @@ pub fn uu_app() -> Command {
                     --dereference-command-line-symlink-to-dir options are specified.",
                 )
                 .value_name("when")
-                .value_parser([
-                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
-                ])
+                .value_parser(ShortcutValueParser::new([
+                    PossibleValue::new("always").alias("yes").alias("force"),
+                    PossibleValue::new("auto").alias("tty").alias("if-tty"),
+                    PossibleValue::new("never").alias("no").alias("none"),
+                ]))
                 .default_missing_value("always")
                 .require_equals(true)
                 .num_args(0..=1)

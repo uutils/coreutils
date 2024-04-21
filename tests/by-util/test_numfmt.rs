@@ -550,10 +550,14 @@ fn test_delimiter_with_padding_and_fields() {
 fn test_round() {
     for (method, exp) in [
         ("from-zero", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
+        ("from-zer", ["9.1K", "-9.1K", "9.1K", "-9.1K"]), // spell-checker:disable-line
+        ("f", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
         ("towards-zero", ["9.0K", "-9.0K", "9.0K", "-9.0K"]),
         ("up", ["9.1K", "-9.0K", "9.1K", "-9.0K"]),
         ("down", ["9.0K", "-9.1K", "9.0K", "-9.1K"]),
         ("nearest", ["9.0K", "-9.0K", "9.1K", "-9.1K"]),
+        ("near", ["9.0K", "-9.0K", "9.1K", "-9.1K"]),
+        ("n", ["9.0K", "-9.0K", "9.1K", "-9.1K"]),
     ] {
         new_ucmd!()
             .args(&[

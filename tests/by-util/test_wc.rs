@@ -531,6 +531,10 @@ fn test_total_auto() {
         .args(&["lorem_ipsum.txt", "--total=auto"])
         .run()
         .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "--tot=au"])
+        .run()
+        .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
 
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=auto"])
@@ -546,6 +550,13 @@ fn test_total_auto() {
 fn test_total_always() {
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "--total=always"])
+        .run()
+        .stdout_is(concat!(
+            " 13 109 772 lorem_ipsum.txt\n",
+            " 13 109 772 total\n",
+        ));
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "--total=al"])
         .run()
         .stdout_is(concat!(
             " 13 109 772 lorem_ipsum.txt\n",
@@ -576,6 +587,13 @@ fn test_total_never() {
             "  13  109  772 lorem_ipsum.txt\n",
             "  18  204 1115 moby_dick.txt\n",
         ));
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=n"])
+        .run()
+        .stdout_is(concat!(
+            "  13  109  772 lorem_ipsum.txt\n",
+            "  18  204 1115 moby_dick.txt\n",
+        ));
 }
 
 #[test]
@@ -587,6 +605,10 @@ fn test_total_only() {
 
     new_ucmd!()
         .args(&["lorem_ipsum.txt", "moby_dick.txt", "--total=only"])
+        .run()
+        .stdout_is("31 313 1887\n");
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "moby_dick.txt", "--t=o"])
         .run()
         .stdout_is("31 313 1887\n");
 }

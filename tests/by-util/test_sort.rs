@@ -126,7 +126,16 @@ fn test_ext_sort_zero_terminated() {
 
 #[test]
 fn test_months_whitespace() {
-    test_helper("months-whitespace", &["-M", "--month-sort", "--sort=month"]);
+    test_helper(
+        "months-whitespace",
+        &[
+            "-M",
+            "--month-sort",
+            "--sort=month",
+            "--sort=mont", // spell-checker:disable-line
+            "--sort=m",
+        ],
+    );
 }
 
 #[test]
@@ -138,6 +147,16 @@ fn test_version_empty_lines() {
 fn test_version_sort_unstable() {
     new_ucmd!()
         .arg("--sort=version")
+        .pipe_in("0.1\n0.02\n0.2\n0.002\n0.3\n")
+        .succeeds()
+        .stdout_is("0.1\n0.002\n0.02\n0.2\n0.3\n");
+    new_ucmd!()
+        .arg("--sort=versio") // spell-checker:disable-line
+        .pipe_in("0.1\n0.02\n0.2\n0.002\n0.3\n")
+        .succeeds()
+        .stdout_is("0.1\n0.002\n0.02\n0.2\n0.3\n");
+    new_ucmd!()
+        .arg("--sort=v")
         .pipe_in("0.1\n0.02\n0.2\n0.002\n0.3\n")
         .succeeds()
         .stdout_is("0.1\n0.002\n0.02\n0.2\n0.3\n");
@@ -157,7 +176,14 @@ fn test_version_sort_stable() {
 fn test_human_numeric_whitespace() {
     test_helper(
         "human-numeric-whitespace",
-        &["-h", "--human-numeric-sort", "--sort=human-numeric"],
+        &[
+            "-h",
+            "--human-numeric-sort",
+            "--sort=human-numeric",
+            "--sort=human-numeri", // spell-checker:disable-line
+            "--sort=human",
+            "--sort=h",
+        ],
     );
 }
 
@@ -177,7 +203,14 @@ fn test_ext_sort_as64_bailout() {
 fn test_multiple_decimals_general() {
     test_helper(
         "multiple_decimals_general",
-        &["-g", "--general-numeric-sort", "--sort=general-numeric"],
+        &[
+            "-g",
+            "--general-numeric-sort",
+            "--sort=general-numeric",
+            "--sort=general-numeri", // spell-checker:disable-line
+            "--sort=general",
+            "--sort=g",
+        ],
     );
 }
 
@@ -185,7 +218,7 @@ fn test_multiple_decimals_general() {
 fn test_multiple_decimals_numeric() {
     test_helper(
         "multiple_decimals_numeric",
-        &["-n", "--numeric-sort", "--sort=numeric"],
+        &["-n", "--numeric-sort", "--sort=numeric", "--sort=n"],
     );
 }
 
@@ -784,7 +817,13 @@ fn test_pipe() {
 
 #[test]
 fn test_check() {
-    for diagnose_arg in ["-c", "--check", "--check=diagnose-first"] {
+    for diagnose_arg in [
+        "-c",
+        "--check",
+        "--check=diagnose-first",
+        "--check=diagnose",
+        "--check=d",
+    ] {
         new_ucmd!()
             .arg(diagnose_arg)
             .arg("check_fail.txt")
@@ -802,12 +841,25 @@ fn test_check() {
 
 #[test]
 fn test_check_silent() {
-    for silent_arg in ["-C", "--check=silent", "--check=quiet"] {
+    for silent_arg in [
+        "-C",
+        "--check=silent",
+        "--check=quiet",
+        "--check=silen", // spell-checker:disable-line
+        "--check=quie",  // spell-checker:disable-line
+        "--check=s",
+        "--check=q",
+    ] {
         new_ucmd!()
             .arg(silent_arg)
             .arg("check_fail.txt")
             .fails()
             .stdout_is("");
+        new_ucmd!()
+            .arg(silent_arg)
+            .arg("empty.txt")
+            .succeeds()
+            .no_output();
     }
 }
 

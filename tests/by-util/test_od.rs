@@ -53,6 +53,20 @@ fn test_file() {
         .no_stderr()
         .stdout_is(unindent(ALPHA_OUT));
 
+    new_ucmd!()
+        .arg("--endian=littl") // spell-checker:disable-line
+        .arg(file.as_os_str())
+        .succeeds()
+        .no_stderr()
+        .stdout_is(unindent(ALPHA_OUT));
+
+    new_ucmd!()
+        .arg("--endian=l")
+        .arg(file.as_os_str())
+        .succeeds()
+        .no_stderr()
+        .stdout_is(unindent(ALPHA_OUT));
+
     // Ensure that default format matches `-t o2`, and that `-t` does not absorb file argument
     new_ucmd!()
         .arg("--endian=little")
@@ -456,6 +470,16 @@ fn test_big_endian() {
 
     new_ucmd!()
         .arg("--endian=big")
+        .arg("-F")
+        .arg("-f")
+        .arg("-X")
+        .arg("-x")
+        .run_piped_stdin(&input[..])
+        .no_stderr()
+        .success()
+        .stdout_is(&expected_output);
+    new_ucmd!()
+        .arg("--endian=b")
         .arg("-F")
         .arg("-f")
         .arg("-X")

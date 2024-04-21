@@ -58,6 +58,8 @@ jobs:
           - { name: fuzz_parse_glob, should_pass: true }
           - { name: fuzz_parse_size, should_pass: true }
           - { name: fuzz_parse_time, should_pass: true }
+          - { name: fuzz_seq_parse_number, should_pass: true }
+
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@nightly

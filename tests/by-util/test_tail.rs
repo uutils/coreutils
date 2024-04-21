@@ -533,37 +533,40 @@ fn test_follow_multiple() {
 #[test]
 #[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_name_multiple() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let mut child = ucmd
-        .arg("--follow=name")
-        .arg(FOOBAR_TXT)
-        .arg(FOOBAR_2_TXT)
-        .run_no_wait();
+    // spell-checker:disable-next-line
+    for argument in ["--follow=name", "--follo=nam", "--f=n"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let mut child = ucmd
+            .arg(argument)
+            .arg(FOOBAR_TXT)
+            .arg(FOOBAR_2_TXT)
+            .run_no_wait();
 
-    child
-        .make_assertion_with_delay(500)
-        .is_alive()
-        .with_current_output()
-        .stdout_only_fixture("foobar_follow_multiple.expected");
+        child
+            .make_assertion_with_delay(500)
+            .is_alive()
+            .with_current_output()
+            .stdout_only_fixture("foobar_follow_multiple.expected");
 
-    let first_append = "trois\n";
-    at.append(FOOBAR_2_TXT, first_append);
+        let first_append = "trois\n";
+        at.append(FOOBAR_2_TXT, first_append);
 
-    child
-        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
-        .with_current_output()
-        .stdout_only(first_append);
+        child
+            .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+            .with_current_output()
+            .stdout_only(first_append);
 
-    let second_append = "twenty\nthirty\n";
-    at.append(FOOBAR_TXT, second_append);
+        let second_append = "twenty\nthirty\n";
+        at.append(FOOBAR_TXT, second_append);
 
-    child
-        .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
-        .with_current_output()
-        .stdout_only_fixture("foobar_follow_multiple_appended.expected");
+        child
+            .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
+            .with_current_output()
+            .stdout_only_fixture("foobar_follow_multiple_appended.expected");
 
-    child.make_assertion().is_alive();
-    child.kill();
+        child.make_assertion().is_alive();
+        child.kill();
+    }
 }
 
 #[test]
@@ -844,7 +847,7 @@ fn test_follow_missing() {
     // Ensure that --follow=name does not imply --retry.
     // Ensure that --follow={descriptor,name} (without --retry) does *not wait* for the
     // file to appear.
-    for follow_mode in &["--follow=descriptor", "--follow=name"] {
+    for follow_mode in &["--follow=descriptor", "--follow=name", "--fo=d", "--fo=n"] {
         new_ucmd!()
             .arg(follow_mode)
             .arg("missing")

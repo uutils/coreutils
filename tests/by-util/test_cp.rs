@@ -2,8 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs ROOTDIR USERDIR procfs outfile uufs xattrs
-
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
+// spell-checker:ignore bdfl hlsl
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -286,16 +286,18 @@ fn test_cp_arg_update_interactive_error() {
 
 #[test]
 fn test_cp_arg_update_none() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    for argument in ["--update=none", "--update=non", "--update=n"] {
+        let (at, mut ucmd) = at_and_ucmd!();
 
-    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-        .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .arg("--update=none")
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+        ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+            .arg(TEST_HOW_ARE_YOU_SOURCE)
+            .arg(argument)
+            .succeeds()
+            .no_stderr()
+            .no_stdout();
 
-    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+        assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
+    }
 }
 
 #[test]
@@ -1402,29 +1404,28 @@ fn test_cp_preserve_no_args_before_opts() {
 
 #[test]
 fn test_cp_preserve_all() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let src_file = "a";
-    let dst_file = "b";
+    for argument in ["--preserve=all", "--preserve=al"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let src_file = "a";
+        let dst_file = "b";
 
-    // Prepare the source file
-    at.touch(src_file);
-    #[cfg(unix)]
-    at.set_mode(src_file, 0o0500);
+        // Prepare the source file
+        at.touch(src_file);
+        #[cfg(unix)]
+        at.set_mode(src_file, 0o0500);
 
-    // TODO: create a destination that does not allow copying of xattr and context
-    // Copy
-    ucmd.arg(src_file)
-        .arg(dst_file)
-        .arg("--preserve=all")
-        .succeeds();
+        // TODO: create a destination that does not allow copying of xattr and context
+        // Copy
+        ucmd.arg(src_file).arg(dst_file).arg(argument).succeeds();
 
-    #[cfg(all(unix, not(target_os = "freebsd")))]
-    {
-        // Assert that the mode, ownership, and timestamps are preserved
-        // NOTICE: the ownership is not modified on the src file, because that requires root permissions
-        let metadata_src = at.metadata(src_file);
-        let metadata_dst = at.metadata(dst_file);
-        assert_metadata_eq!(metadata_src, metadata_dst);
+        #[cfg(all(unix, not(target_os = "freebsd")))]
+        {
+            // Assert that the mode, ownership, and timestamps are preserved
+            // NOTICE: the ownership is not modified on the src file, because that requires root permissions
+            let metadata_src = at.metadata(src_file);
+            let metadata_dst = at.metadata(dst_file);
+            assert_metadata_eq!(metadata_src, metadata_dst);
+        }
     }
 }
 
@@ -1470,6 +1471,35 @@ fn test_cp_preserve_all_context_fails_on_non_selinux() {
         .arg(TEST_HELLO_WORLD_DEST)
         .arg("--preserve=all,context")
         .fails();
+}
+
+#[test]
+fn test_cp_preserve_link_parses() {
+    // TODO: Also check whether --preserve=link did the right thing!
+    for argument in [
+        "--preserve=links",
+        "--preserve=link",
+        "--preserve=li",
+        "--preserve=l",
+    ] {
+        new_ucmd!()
+            .arg(argument)
+            .arg(TEST_COPY_FROM_FOLDER_FILE)
+            .arg(TEST_HELLO_WORLD_DEST)
+            .succeeds()
+            .no_output();
+    }
+}
+
+#[test]
+fn test_cp_preserve_invalid_rejected() {
+    new_ucmd!()
+        .arg("--preserve=invalid-value")
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .fails()
+        .code_is(1)
+        .no_stdout();
 }
 
 #[test]
@@ -2196,14 +2226,16 @@ fn test_cp_reflink_none() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_never() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.arg("--reflink=never")
-        .arg(TEST_HELLO_WORLD_SOURCE)
-        .arg(TEST_EXISTING_FILE)
-        .succeeds();
+    for argument in ["--reflink=never", "--reflink=neve", "--reflink=n"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.arg(argument)
+            .arg(TEST_HELLO_WORLD_SOURCE)
+            .arg(TEST_EXISTING_FILE)
+            .succeeds();
 
-    // Check the content of the destination file
-    assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+        // Check the content of the destination file
+        assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+    }
 }
 
 #[test]
@@ -2286,19 +2318,21 @@ fn test_cp_sparse_never_empty() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_cp_sparse_always_empty() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    for argument in ["--sparse=always", "--sparse=alway", "--sparse=al"] {
+        let (at, mut ucmd) = at_and_ucmd!();
 
-    const BUFFER_SIZE: usize = 4096 * 4;
-    let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+        const BUFFER_SIZE: usize = 4096 * 4;
+        let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
 
-    at.make_file("src_file1");
-    at.write_bytes("src_file1", &buf);
+        at.make_file("src_file1");
+        at.write_bytes("src_file1", &buf);
 
-    ucmd.args(&["--sparse=always", "src_file1", "dst_file_sparse"])
-        .succeeds();
+        ucmd.args(&[argument, "src_file1", "dst_file_sparse"])
+            .succeeds();
 
-    assert_eq!(at.read_bytes("dst_file_sparse"), buf);
-    assert_eq!(at.metadata("dst_file_sparse").blocks(), 0);
+        assert_eq!(at.read_bytes("dst_file_sparse"), buf);
+        assert_eq!(at.metadata("dst_file_sparse").blocks(), 0);
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -4487,4 +4521,928 @@ fn test_cp_no_dereference_attributes_only_with_symlink() {
         at.read("file2.exp"),
         "file2 content does not match expected"
     );
+}
+#[cfg(all(unix, not(target_os = "android")))]
+#[cfg(test)]
+/// contains the test for cp when the source and destination points to the same file
+mod same_file {
+
+    use crate::common::util::TestScenario;
+
+    const FILE_NAME: &str = "foo";
+    const SYMLINK_NAME: &str = "symlink";
+    const CONTENTS: &str = "abcd";
+
+    // the following tests tries to copy a file to the symlink of the same file with
+    // various options
+    #[test]
+    fn test_same_file_from_file_to_symlink() {
+        for option in ["-d", "-f", "-df"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, SYMLINK_NAME])
+                .fails()
+                .stderr_contains("'foo' and 'symlink' are the same file");
+            assert!(at.symlink_exists(SYMLINK_NAME));
+            assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+            assert!(at.file_exists(FILE_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_symlink_with_rem_option() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        scene
+            .ucmd()
+            .args(&["--rem", FILE_NAME, SYMLINK_NAME])
+            .succeeds();
+        assert!(at.file_exists(SYMLINK_NAME));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert!(at.file_exists(FILE_NAME));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_symlink_with_backup_option() {
+        for option in ["-b", "-bd", "-bf", "-bdf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let backup = "symlink~";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, SYMLINK_NAME])
+                .succeeds();
+            assert!(at.symlink_exists(backup));
+            assert_eq!(FILE_NAME, at.resolve_link(backup));
+            assert!(at.file_exists(SYMLINK_NAME));
+            assert_eq!(at.read(SYMLINK_NAME), CONTENTS,);
+            assert!(at.file_exists(FILE_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_symlink_with_link_option() {
+        for option in ["-l", "-dl"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, SYMLINK_NAME])
+                .fails()
+                .stderr_contains("cp: cannot create hard link 'symlink' to 'foo'");
+            assert!(at.symlink_exists(SYMLINK_NAME));
+            assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+            assert!(at.file_exists(FILE_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_symlink_with_options_link_and_force() {
+        for option in ["-fl", "-dfl"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, SYMLINK_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.file_exists(SYMLINK_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_symlink_with_options_backup_and_link() {
+        for option in ["-bl", "-bdl", "-bfl", "-bdfl"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let backup = "symlink~";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, SYMLINK_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.file_exists(SYMLINK_NAME));
+            assert!(at.symlink_exists(backup));
+            assert_eq!(FILE_NAME, at.resolve_link(backup));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_symlink_with_options_symlink() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        scene
+            .ucmd()
+            .args(&["-s", FILE_NAME, SYMLINK_NAME])
+            .fails()
+            .stderr_contains("cp: cannot create symlink 'symlink' to 'foo'");
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.symlink_exists(SYMLINK_NAME));
+        assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_symlink_with_options_symlink_and_force() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        scene
+            .ucmd()
+            .args(&["-sf", FILE_NAME, SYMLINK_NAME])
+            .succeeds();
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.symlink_exists(SYMLINK_NAME));
+        assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+    }
+    // the following tests tries to copy a symlink to the file that symlink points to with
+    // various options
+    #[test]
+    fn test_same_file_from_symlink_to_file() {
+        for option in ["-d", "-f", "-df", "--rem"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            scene
+                .ucmd()
+                .args(&[option, SYMLINK_NAME, FILE_NAME])
+                .fails()
+                .stderr_contains("'symlink' and 'foo' are the same file");
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.symlink_exists(SYMLINK_NAME));
+            assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_symlink_to_file_with_option_backup() {
+        for option in ["-b", "-bf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            scene
+                .ucmd()
+                .args(&[option, SYMLINK_NAME, FILE_NAME])
+                .fails()
+                .stderr_contains("'symlink' and 'foo' are the same file");
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.symlink_exists(SYMLINK_NAME));
+            assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+    #[test]
+    fn test_same_file_from_symlink_to_file_with_option_backup_without_deref() {
+        for option in ["-bd", "-bdf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let backup = "foo~";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            scene
+                .ucmd()
+                .args(&[option, SYMLINK_NAME, FILE_NAME])
+                .succeeds();
+            assert!(at.file_exists(backup));
+            assert!(at.symlink_exists(FILE_NAME));
+            // this doesn't makes sense but this is how gnu does it
+            assert_eq!(FILE_NAME, at.resolve_link(FILE_NAME));
+            assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+            assert_eq!(at.read(backup), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_symlink_to_file_with_options_link() {
+        for option in ["-l", "-dl", "-fl", "-bl", "-bfl"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            scene
+                .ucmd()
+                .args(&[option, SYMLINK_NAME, FILE_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.symlink_exists(SYMLINK_NAME));
+            assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_symlink_to_file_with_option_symlink() {
+        for option in ["-s", "-sf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            scene
+                .ucmd()
+                .args(&[option, SYMLINK_NAME, FILE_NAME])
+                .fails()
+                .stderr_contains("'symlink' and 'foo' are the same file");
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.symlink_exists(SYMLINK_NAME));
+            assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    // the following tests tries to copy a file to the same file with various options
+    #[test]
+    fn test_same_file_from_file_to_file() {
+        for option in ["-d", "-f", "-df", "--rem"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.write(FILE_NAME, CONTENTS);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, FILE_NAME])
+                .fails()
+                .stderr_contains("'foo' and 'foo' are the same file");
+            assert!(at.file_exists(FILE_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+    #[test]
+    fn test_same_file_from_file_to_file_with_backup() {
+        for option in ["-b", "-bd"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.write(FILE_NAME, CONTENTS);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, FILE_NAME])
+                .fails()
+                .stderr_contains("'foo' and 'foo' are the same file");
+            assert!(at.file_exists(FILE_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_file_with_options_backup_and_no_deref() {
+        for option in ["-bf", "-bdf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let backup = "foo~";
+            at.write(FILE_NAME, CONTENTS);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, FILE_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.file_exists(backup));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(backup), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_file_with_options_link() {
+        for option in ["-l", "-dl", "-fl", "-dfl", "-bl", "-bdl"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let backup = "foo~";
+            at.write(FILE_NAME, CONTENTS);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, FILE_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(!at.file_exists(backup));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_file_with_options_link_and_backup_and_force() {
+        for option in ["-bfl", "-bdfl"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let backup = "foo~";
+            at.write(FILE_NAME, CONTENTS);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, FILE_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.file_exists(backup));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(backup), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_file_with_options_symlink() {
+        for option in ["-s", "-sf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            at.write(FILE_NAME, CONTENTS);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, FILE_NAME])
+                .fails()
+                .stderr_contains("'foo' and 'foo' are the same file");
+            assert!(at.file_exists(FILE_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    // the following tests tries to copy a symlink that points to a file to a symlink
+    // that points to the same file with various options
+    #[test]
+    fn test_same_file_from_symlink_to_symlink_with_option_no_deref() {
+        for option in ["-d", "-df"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let symlink1 = "sl1";
+            let symlink2 = "sl2";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, symlink1);
+            at.symlink_file(FILE_NAME, symlink2);
+            scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(FILE_NAME, at.resolve_link(symlink1));
+            assert_eq!(FILE_NAME, at.resolve_link(symlink2));
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_symlink_to_symlink_with_option_force() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let symlink1 = "sl1";
+        let symlink2 = "sl2";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, symlink1);
+        at.symlink_file(FILE_NAME, symlink2);
+        scene
+            .ucmd()
+            .args(&["-f", symlink1, symlink2])
+            .fails()
+            .stderr_contains("'sl1' and 'sl2' are the same file");
+        assert!(at.file_exists(FILE_NAME));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(FILE_NAME, at.resolve_link(symlink1));
+        assert_eq!(FILE_NAME, at.resolve_link(symlink2));
+    }
+
+    #[test]
+    fn test_same_file_from_symlink_to_symlink_with_option_rem() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let symlink1 = "sl1";
+        let symlink2 = "sl2";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, symlink1);
+        at.symlink_file(FILE_NAME, symlink2);
+        scene.ucmd().args(&["--rem", symlink1, symlink2]).succeeds();
+        assert!(at.file_exists(FILE_NAME));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(FILE_NAME, at.resolve_link(symlink1));
+        assert!(at.file_exists(symlink2));
+        assert_eq!(at.read(symlink2), CONTENTS,);
+    }
+
+    #[test]
+    fn test_same_file_from_symlink_to_symlink_with_option_backup() {
+        for option in ["-b", "-bf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let symlink1 = "sl1";
+            let symlink2 = "sl2";
+            let backup = "sl2~";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, symlink1);
+            at.symlink_file(FILE_NAME, symlink2);
+            scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(FILE_NAME, at.resolve_link(symlink1));
+            assert!(at.file_exists(symlink2));
+            assert_eq!(at.read(symlink2), CONTENTS,);
+            assert_eq!(FILE_NAME, at.resolve_link(backup));
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_symlink_to_symlink_with_option_backup_and_no_deref() {
+        for option in ["-bd", "-bdf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let symlink1 = "sl1";
+            let symlink2 = "sl2";
+            let backup = "sl2~";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, symlink1);
+            at.symlink_file(FILE_NAME, symlink2);
+            scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(FILE_NAME, at.resolve_link(symlink1));
+            assert_eq!(FILE_NAME, at.resolve_link(symlink2));
+            assert_eq!(FILE_NAME, at.resolve_link(backup));
+        }
+    }
+    #[test]
+    fn test_same_file_from_symlink_to_symlink_with_option_link() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let symlink1 = "sl1";
+        let symlink2 = "sl2";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, symlink1);
+        at.symlink_file(FILE_NAME, symlink2);
+        scene
+            .ucmd()
+            .args(&["-l", symlink1, symlink2])
+            .fails()
+            .stderr_contains("cannot create hard link 'sl2' to 'sl1'");
+        assert!(at.file_exists(FILE_NAME));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(FILE_NAME, at.resolve_link(symlink1));
+        assert_eq!(FILE_NAME, at.resolve_link(symlink2));
+    }
+
+    #[test]
+    fn test_same_file_from_symlink_to_symlink_with_option_force_link() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let symlink1 = "sl1";
+        let symlink2 = "sl2";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, symlink1);
+        at.symlink_file(FILE_NAME, symlink2);
+        scene.ucmd().args(&["-fl", symlink1, symlink2]).succeeds();
+        assert!(at.file_exists(FILE_NAME));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(FILE_NAME, at.resolve_link(symlink1));
+        assert!(at.file_exists(symlink2));
+        assert_eq!(at.read(symlink2), CONTENTS,);
+    }
+
+    #[test]
+    fn test_same_file_from_symlink_to_symlink_with_option_backup_and_link() {
+        for option in ["-bl", "-bfl"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let symlink1 = "sl1";
+            let symlink2 = "sl2";
+            let backup = "sl2~";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, symlink1);
+            at.symlink_file(FILE_NAME, symlink2);
+            scene.ucmd().args(&[option, symlink1, symlink2]).succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(FILE_NAME, at.resolve_link(symlink1));
+            assert!(at.file_exists(symlink2));
+            assert_eq!(at.read(symlink2), CONTENTS,);
+            assert_eq!(FILE_NAME, at.resolve_link(backup));
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_symlink_to_symlink_with_option_symlink() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let symlink1 = "sl1";
+        let symlink2 = "sl2";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, symlink1);
+        at.symlink_file(FILE_NAME, symlink2);
+        scene
+            .ucmd()
+            .args(&["-s", symlink1, symlink2])
+            .fails()
+            .stderr_contains("cannot create symlink 'sl2' to 'sl1'");
+        assert!(at.file_exists(FILE_NAME));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(FILE_NAME, at.resolve_link(symlink1));
+        assert_eq!(FILE_NAME, at.resolve_link(symlink2));
+    }
+
+    #[test]
+    fn test_same_file_from_symlink_to_symlink_with_option_symlink_and_force() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let symlink1 = "sl1";
+        let symlink2 = "sl2";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, symlink1);
+        at.symlink_file(FILE_NAME, symlink2);
+        scene.ucmd().args(&["-sf", symlink1, symlink2]).succeeds();
+        assert!(at.file_exists(FILE_NAME));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(FILE_NAME, at.resolve_link(symlink1));
+        assert_eq!(symlink1, at.resolve_link(symlink2));
+    }
+
+    // the following tests tries to copy file to a hardlink of the same file with
+    // various options
+    #[test]
+    fn test_same_file_from_file_to_hardlink() {
+        for option in ["-d", "-f", "-df"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let hardlink = "hardlink";
+            at.write(FILE_NAME, CONTENTS);
+            at.hard_link(FILE_NAME, hardlink);
+
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, hardlink])
+                .fails()
+                .stderr_contains("'foo' and 'hardlink' are the same file");
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.file_exists(hardlink));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_hardlink_with_option_rem() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let hardlink = "hardlink";
+        at.write(FILE_NAME, CONTENTS);
+        at.hard_link(FILE_NAME, hardlink);
+        scene
+            .ucmd()
+            .args(&["--rem", FILE_NAME, hardlink])
+            .succeeds();
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.file_exists(hardlink));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_hardlink_with_option_backup() {
+        for option in ["-b", "-bd", "-bf", "-bdf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let hardlink = "hardlink";
+            let backup = "hardlink~";
+            at.write(FILE_NAME, CONTENTS);
+            at.hard_link(FILE_NAME, hardlink);
+            scene.ucmd().args(&[option, FILE_NAME, hardlink]).succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.file_exists(hardlink));
+            assert!(at.file_exists(backup));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_hardlink_with_option_link() {
+        for option in ["-l", "-dl", "-fl", "-dfl", "-bl", "-bdl", "-bfl", "-bdfl"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let hardlink = "hardlink";
+            at.write(FILE_NAME, CONTENTS);
+            at.hard_link(FILE_NAME, hardlink);
+            scene.ucmd().args(&[option, FILE_NAME, hardlink]).succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.file_exists(hardlink));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_file_to_hardlink_with_option_symlink() {
+        for option in ["-s", "-sf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let hardlink = "hardlink";
+            at.write(FILE_NAME, CONTENTS);
+            at.hard_link(FILE_NAME, hardlink);
+            scene
+                .ucmd()
+                .args(&[option, FILE_NAME, hardlink])
+                .fails()
+                .stderr_contains("'foo' and 'hardlink' are the same file");
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.file_exists(hardlink));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    // the following tests tries to copy symlink to a hardlink of the same symlink with
+    // various options
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let hardlink_to_symlink = "hlsl";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+        scene
+            .ucmd()
+            .args(&[hardlink_to_symlink, SYMLINK_NAME])
+            .fails()
+            .stderr_contains("cp: 'hlsl' and 'symlink' are the same file");
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.symlink_exists(SYMLINK_NAME));
+        assert!(at.symlink_exists(hardlink_to_symlink));
+        assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+        assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_force() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let hardlink_to_symlink = "hlsl";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+        scene
+            .ucmd()
+            .args(&["-f", hardlink_to_symlink, SYMLINK_NAME])
+            .fails()
+            .stderr_contains("cp: 'hlsl' and 'symlink' are the same file");
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.symlink_exists(SYMLINK_NAME));
+        assert!(at.symlink_exists(hardlink_to_symlink));
+        assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+        assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_no_deref() {
+        for option in ["-d", "-df"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let hardlink_to_symlink = "hlsl";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+            scene
+                .ucmd()
+                .args(&[option, hardlink_to_symlink, SYMLINK_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.symlink_exists(SYMLINK_NAME));
+            assert!(at.symlink_exists(hardlink_to_symlink));
+            assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+            assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_rem() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let hardlink_to_symlink = "hlsl";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+        scene
+            .ucmd()
+            .args(&["--rem", hardlink_to_symlink, SYMLINK_NAME])
+            .succeeds();
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.file_exists(SYMLINK_NAME));
+        assert!(!at.symlink_exists(SYMLINK_NAME));
+        assert!(at.symlink_exists(hardlink_to_symlink));
+        assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        assert_eq!(at.read(SYMLINK_NAME), CONTENTS,);
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_backup() {
+        for option in ["-b", "-bf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let backup = "symlink~";
+            let hardlink_to_symlink = "hlsl";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+            scene
+                .ucmd()
+                .args(&[option, hardlink_to_symlink, SYMLINK_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.file_exists(SYMLINK_NAME));
+            assert!(!at.symlink_exists(SYMLINK_NAME));
+            assert!(at.symlink_exists(hardlink_to_symlink));
+            assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+            assert!(at.symlink_exists(backup));
+            assert_eq!(FILE_NAME, at.resolve_link(backup));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+            assert_eq!(at.read(SYMLINK_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_backup_and_no_deref() {
+        for option in ["-bd", "-bdf"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let backup = "symlink~";
+            let hardlink_to_symlink = "hlsl";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+            scene
+                .ucmd()
+                .args(&[option, hardlink_to_symlink, SYMLINK_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.symlink_exists(SYMLINK_NAME));
+            assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+            assert!(at.symlink_exists(hardlink_to_symlink));
+            assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+            assert!(at.symlink_exists(backup));
+            assert_eq!(FILE_NAME, at.resolve_link(backup));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_link() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let hardlink_to_symlink = "hlsl";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+        scene
+            .ucmd()
+            .args(&["-l", hardlink_to_symlink, SYMLINK_NAME])
+            .fails()
+            .stderr_contains("cannot create hard link 'symlink' to 'hlsl'");
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.symlink_exists(SYMLINK_NAME));
+        assert!(at.symlink_exists(hardlink_to_symlink));
+        assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+        assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_link_and_no_deref() {
+        for option in ["-dl", "-dfl"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let hardlink_to_symlink = "hlsl";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+            scene
+                .ucmd()
+                .args(&[option, hardlink_to_symlink, SYMLINK_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.symlink_exists(SYMLINK_NAME));
+            assert!(at.symlink_exists(hardlink_to_symlink));
+            assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+            assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_link_and_force() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let hardlink_to_symlink = "hlsl";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+        scene
+            .ucmd()
+            .args(&["-fl", hardlink_to_symlink, SYMLINK_NAME])
+            .succeeds();
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.file_exists(SYMLINK_NAME));
+        assert!(!at.symlink_exists(SYMLINK_NAME));
+        assert!(at.symlink_exists(hardlink_to_symlink));
+        assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_link_and_backup() {
+        for option in ["-bl", "-bfl"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let backup = "symlink~";
+            let hardlink_to_symlink = "hlsl";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+            scene
+                .ucmd()
+                .args(&[option, hardlink_to_symlink, SYMLINK_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.file_exists(SYMLINK_NAME));
+            assert!(!at.symlink_exists(SYMLINK_NAME));
+            assert!(at.symlink_exists(hardlink_to_symlink));
+            assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+            assert!(at.symlink_exists(backup));
+            assert_eq!(FILE_NAME, at.resolve_link(backup));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_options_backup_link_no_deref() {
+        for option in ["-bdl", "-bdfl"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            let hardlink_to_symlink = "hlsl";
+            at.write(FILE_NAME, CONTENTS);
+            at.symlink_file(FILE_NAME, SYMLINK_NAME);
+            at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+            scene
+                .ucmd()
+                .args(&[option, hardlink_to_symlink, SYMLINK_NAME])
+                .succeeds();
+            assert!(at.file_exists(FILE_NAME));
+            assert!(at.symlink_exists(SYMLINK_NAME));
+            assert!(at.symlink_exists(hardlink_to_symlink));
+            assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+            assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+            assert_eq!(at.read(FILE_NAME), CONTENTS,);
+        }
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_symlink() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let hardlink_to_symlink = "hlsl";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+        scene
+            .ucmd()
+            .args(&["-s", hardlink_to_symlink, SYMLINK_NAME])
+            .fails()
+            .stderr_contains("cannot create symlink 'symlink' to 'hlsl'");
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.symlink_exists(SYMLINK_NAME));
+        assert!(at.symlink_exists(hardlink_to_symlink));
+        assert_eq!(FILE_NAME, at.resolve_link(SYMLINK_NAME));
+        assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+    }
+
+    #[test]
+    fn test_same_file_from_hard_link_of_symlink_to_symlink_with_option_symlink_and_force() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let hardlink_to_symlink = "hlsl";
+        at.write(FILE_NAME, CONTENTS);
+        at.symlink_file(FILE_NAME, SYMLINK_NAME);
+        at.hard_link(SYMLINK_NAME, hardlink_to_symlink);
+        scene
+            .ucmd()
+            .args(&["-sf", hardlink_to_symlink, SYMLINK_NAME])
+            .succeeds();
+        assert!(at.file_exists(FILE_NAME));
+        assert!(at.symlink_exists(SYMLINK_NAME));
+        assert!(at.symlink_exists(hardlink_to_symlink));
+        assert_eq!(hardlink_to_symlink, at.resolve_link(SYMLINK_NAME));
+        assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
+        assert_eq!(at.read(FILE_NAME), CONTENTS,);
+    }
 }

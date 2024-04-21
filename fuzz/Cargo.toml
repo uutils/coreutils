@@ -93,6 +93,12 @@ test = false
 doc = false
 
 [[bin]]
+name = "fuzz_seq_parse_number"
+path = "fuzz_targets/fuzz_seq_parse_number.rs"
+test = false
+doc = false
+
+[[bin]]
 name = "fuzz_parse_glob"
 path = "fuzz_targets/fuzz_parse_glob.rs"
 test = false
