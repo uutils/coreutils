@@ -3958,7 +3958,7 @@ fn test_cp_debug_default_without_hole() {
     at.touch("a");
     at.append_bytes("a", "hello".as_bytes());
 
-    let filler_bytes = [0 as u8; 10000];
+    let filler_bytes = [0_u8; 10000];
 
     at.append_bytes("a", &filler_bytes);
 
@@ -4034,7 +4034,7 @@ fn test_cp_debug_reflink_never_sparse_always_with_hole() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_sparse_always_without_hole() {
     let ts = TestScenario::new(util_name!());
-    let empty_bytes = [0 as u8; 10000];
+    let empty_bytes = [0_u8; 10000];
     let at = &ts.fixtures;
     at.touch("a");
     at.write("a", "hello");
@@ -4321,7 +4321,7 @@ fn test_cp_debug_sparse_never_without_hole() {
     at.touch("a");
     at.append_bytes("a", "hello".as_bytes());
 
-    let filler_bytes = [0 as u8; 10000];
+    let filler_bytes = [0_u8; 10000];
 
     at.append_bytes("a", &filler_bytes);
 
@@ -4449,7 +4449,7 @@ fn test_cp_debug_default_zero_sized_virtual_file() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_debug_reflink_never_without_hole() {
     let ts = TestScenario::new(util_name!());
-    let filler_bytes = [0 as u8; 1000];
+    let filler_bytes = [0_u8; 1000];
     let at = &ts.fixtures;
     at.touch("a");
     at.write("a", "hello");
