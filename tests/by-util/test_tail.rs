@@ -3622,7 +3622,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("empty", "");
+    at.touch("empty");
     at.write("data", "file data");
     at.write("fifo", "fifo data");
 
@@ -3724,7 +3724,7 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("empty", "");
+    at.touch("empty");
     at.write("data", "file data");
     at.write("fifo", "fifo data");
 
