@@ -3620,11 +3620,11 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
 #[cfg(disabled_until_fixed)]
 fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() {
     let scene = TestScenario::new(util_name!());
-    let fixtures = &scene.fixtures;
+    let at = &scene.fixtures;
 
-    fixtures.write("empty", "");
-    fixtures.write("data", "file data");
-    fixtures.write("fifo", "fifo data");
+    at.touch("empty");
+    at.write("data", "file data");
+    at.write("fifo", "fifo data");
 
     let expected = "==> standard input <==\n\
                 fifo data\n\
@@ -3632,7 +3632,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "empty"])
-        .set_stdin(File::open(fixtures.plus("fifo")).unwrap())
+        .set_stdin(File::open(at.plus("fifo")).unwrap())
         .run()
         .success()
         .stdout_only(expected);
@@ -3666,7 +3666,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
     scene
         .ucmd()
         .args(&["-c", "+0", "empty", "-"])
-        .set_stdin(File::open(fixtures.plus("fifo")).unwrap())
+        .set_stdin(File::open(at.plus("fifo")).unwrap())
         .run()
         .success()
         .stdout_only(expected);
@@ -3712,7 +3712,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "-"])
-        .set_stdin(File::open(fixtures.plus("fifo")).unwrap())
+        .set_stdin(File::open(at.plus("fifo")).unwrap())
         .run()
         .success()
         .stdout_only(expected);
@@ -3722,11 +3722,11 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
 #[cfg(disabled_until_fixed)]
 fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_file() {
     let scene = TestScenario::new(util_name!());
-    let fixtures = &scene.fixtures;
+    let at = &scene.fixtures;
 
-    fixtures.write("empty", "");
-    fixtures.write("data", "file data");
-    fixtures.write("fifo", "fifo data");
+    at.touch("empty");
+    at.write("data", "file data");
+    at.write("fifo", "fifo data");
 
     let expected = "==> standard input <==\n\
                 \n\
@@ -3737,7 +3737,7 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "empty", "-"])
-        .set_stdin(File::open(fixtures.plus("empty")).unwrap())
+        .set_stdin(File::open(at.plus("empty")).unwrap())
         .run()
         .stdout_only(expected)
         .success();
@@ -3817,7 +3817,7 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
     scene
         .ucmd()
         .args(&["-c", "+0", "-", "data", "-"])
-        .set_stdin(File::open(fixtures.plus("fifo")).unwrap())
+        .set_stdin(File::open(at.plus("fifo")).unwrap())
         .run()
         .stdout_only(expected)
         .success();
@@ -3833,10 +3833,10 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
 #[cfg(disable_until_fixed)]
 fn test_when_follow_retry_then_initial_print_of_file_is_written_to_stdout() {
     let scene = TestScenario::new(util_name!());
-    let fixtures = &scene.fixtures;
+    let at = &scene.fixtures;
 
     let expected_stdout = "file data";
-    fixtures.write("data", expected_stdout);
+    at.write("data", expected_stdout);
 
     let mut child = scene
         .ucmd()
@@ -3855,10 +3855,10 @@ fn test_when_follow_retry_then_initial_print_of_file_is_written_to_stdout() {
 #[test]
 fn test_args_when_settings_check_warnings_then_shows_warnings() {
     let scene = TestScenario::new(util_name!());
-    let fixtures = &scene.fixtures;
+    let at = &scene.fixtures;
 
     let file_data = "file data\n";
-    fixtures.write("data", file_data);
+    at.write("data", file_data);
 
     let expected_stdout = format!(
         "tail: warning: --retry ignored; --retry is useful only when following\n\
@@ -4051,7 +4051,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_warning() {
 #[cfg(unix)]
 fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() {
     let scene = TestScenario::new(util_name!());
-    let fixtures = &scene.fixtures;
+    let at = &scene.fixtures;
 
     #[cfg(target_vendor = "apple")]
     let delay = 1000;
@@ -4062,8 +4062,8 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
     let fifo_data = "fifo data\n";
     let fifo_name = "fifo";
     let file_name = "data";
-    fixtures.write(file_name, file_data);
-    fixtures.write(fifo_name, fifo_data);
+    at.write(file_name, file_data);
+    at.write(fifo_name, fifo_data);
 
     let pipe_data = "pipe data";
     let expected_stdout = format!(
@@ -4106,7 +4106,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
         let mut child = scene
             .ucmd()
             .args(&["--follow=descriptor", "-", file_name])
-            .set_stdin(File::open(fixtures.plus(fifo_name)).unwrap())
+            .set_stdin(File::open(at.plus(fifo_name)).unwrap())
             .stderr_to_stdout()
             .run_no_wait();
 
@@ -4126,7 +4126,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
         let mut child = scene
             .ucmd()
             .args(&["--follow=descriptor", "--pid=0", "-", file_name])
-            .set_stdin(File::open(fixtures.plus(fifo_name)).unwrap())
+            .set_stdin(File::open(at.plus(fifo_name)).unwrap())
             .stderr_to_stdout()
             .run_no_wait();
 
@@ -4144,13 +4144,13 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
 #[cfg(disable_until_fixed)]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_data_is_appended() {
     let scene = TestScenario::new(util_name!());
-    let fixtures = &scene.fixtures;
+    let at = &scene.fixtures;
 
     let file_data = "file data";
     let relative_path_name = "data";
 
-    fixtures.write(relative_path_name, file_data);
-    let absolute_path = fixtures.plus("data").canonicalize().unwrap();
+    at.write(relative_path_name, file_data);
+    let absolute_path = at.plus("data").canonicalize().unwrap();
 
     // run with relative path first and then the absolute path
     let mut child = scene
@@ -4165,7 +4165,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_data_is_appende
     let more_data = "more data";
     child.delay(500);
 
-    fixtures.append(relative_path_name, more_data);
+    at.append(relative_path_name, more_data);
 
     let expected_stdout = format!(
         "==> {0} <==\n\
@@ -4190,7 +4190,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_data_is_appende
         .stderr_only(expected_stdout);
 
     // run with absolute path first and then the relative path
-    fixtures.write(relative_path_name, file_data);
+    at.write(relative_path_name, file_data);
     let mut child = scene
         .ucmd()
         .args(&[
@@ -4202,7 +4202,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_data_is_appende
 
     child.delay(500);
     let more_data = "more data";
-    fixtures.append(relative_path_name, more_data);
+    at.append(relative_path_name, more_data);
 
     let expected_stdout = format!(
         "==> {0} <==\n\
@@ -4232,13 +4232,13 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_data_is_appende
 #[cfg(disable_until_fixed)]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_is_truncated() {
     let scene = TestScenario::new(util_name!());
-    let fixtures = &scene.fixtures;
+    let at = &scene.fixtures;
 
     let file_data = "file data";
     let relative_path_name = "data";
 
-    fixtures.write(relative_path_name, file_data);
-    let absolute_path = fixtures.plus("data").canonicalize().unwrap();
+    at.write(relative_path_name, file_data);
+    let absolute_path = at.plus("data").canonicalize().unwrap();
 
     let mut child = scene
         .ucmd()
@@ -4254,7 +4254,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_is_truncat
 
     child.delay(500);
     let less_data = "less";
-    fixtures.write(relative_path_name, "less");
+    at.write(relative_path_name, "less");
 
     let expected_stdout = format!(
         "==> {0} <==\n\
@@ -4285,14 +4285,14 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_is_truncat
 #[cfg(disable_until_fixed)]
 fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data() {
     let scene = TestScenario::new(util_name!());
-    let fixtures = &scene.fixtures;
+    let at = &scene.fixtures;
 
     let file_data = "file data";
     let path_name = "data";
     let link_name = "link";
 
-    fixtures.write(path_name, file_data);
-    fixtures.symlink_file(path_name, link_name);
+    at.write(path_name, file_data);
+    at.symlink_file(path_name, link_name);
 
     let mut child = scene
         .ucmd()
@@ -4307,7 +4307,7 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
 
     child.delay(500);
     let more_data = "more data";
-    fixtures.append(path_name, more_data);
+    at.append(path_name, more_data);
 
     let expected_stdout = format!(
         "==> {0} <==\n\
@@ -4331,7 +4331,7 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
         .with_current_output()
         .stdout_only(expected_stdout);
 
-    fixtures.write(path_name, file_data);
+    at.write(path_name, file_data);
     let mut child = scene
         .ucmd()
         .args(&[
@@ -4345,7 +4345,7 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
 
     child.delay(500);
     let more_data = "more data";
-    fixtures.append(path_name, more_data);
+    at.append(path_name, more_data);
 
     let expected_stdout = format!(
         "==> {0} <==\n\
@@ -4373,10 +4373,10 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
 #[test]
 fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     let scene = TestScenario::new(util_name!());
-    let fixtures = &scene.fixtures;
+    let at = &scene.fixtures;
 
     let dirname = "dir";
-    fixtures.mkdir(dirname);
+    at.mkdir(dirname);
     let expected_stderr = format!(
         "tail: error reading '{0}': Is a directory\n\
          tail: {0}: cannot follow end of this type of file\n",
@@ -4432,12 +4432,12 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
 ))]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same_size() {
     let scene = TestScenario::new(util_name!());
-    let fixtures = &scene.fixtures;
+    let at = &scene.fixtures;
 
     let file_data = "file data";
     let relative_path_name = "data";
 
-    fixtures.write(relative_path_name, file_data);
+    at.write(relative_path_name, file_data);
     let absolute_path = scene.fixtures.plus("data").canonicalize().unwrap();
 
     let mut child = scene
@@ -4453,7 +4453,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_stays_same
 
     child.delay(500);
     let same_data = "same data"; // equal size to file_data
-    fixtures.write(relative_path_name, same_data);
+    at.write(relative_path_name, same_data);
 
     let expected_stdout = format!(
         "==> {0} <==\n\

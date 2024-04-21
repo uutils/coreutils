@@ -29,8 +29,9 @@ use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, is_symlink_loop, path_ends_with_terminator,
-    paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
+    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop,
+    path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
+    ResolveMode,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
@@ -1468,16 +1469,23 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    context: &str,
     symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
     #[cfg(not(windows))]
     {
-        std::os::unix::fs::symlink(source, dest).context(context)?;
+        std::os::unix::fs::symlink(source, dest).context(format!(
+            "cannot create symlink {} to {}",
+            get_filename(dest).unwrap_or("invalid file name").quote(),
+            get_filename(source).unwrap_or("invalid file name").quote()
+        ))?;
     }
     #[cfg(windows)]
     {
-        std::os::windows::fs::symlink_file(source, dest).context(context)?;
+        std::os::windows::fs::symlink_file(source, dest).context(format!(
+            "cannot create symlink {} to {}",
+            get_filename(dest).unwrap_or("invalid file name").quote(),
+            get_filename(source).unwrap_or("invalid file name").quote()
+        ))?;
     }
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
@@ -1489,10 +1497,11 @@ fn context_for(src: &Path, dest: &Path) -> String {
     format!("{} -> {}", src.quote(), dest.quote())
 }
 
-/// Implements a simple backup copy for the destination file.
+/// Implements a simple backup copy for the destination file .
+/// if is_dest_symlink flag is set to true dest will be renamed to backup_path
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
-fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
-    if dest.is_symlink() {
+fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<PathBuf> {
+    if is_dest_symlink {
         fs::rename(dest, backup_path)?;
     } else {
         fs::copy(dest, backup_path)?;
@@ -1513,11 +1522,38 @@ fn is_forbidden_to_copy_to_same_file(
 ) -> bool {
     // TODO To match the behavior of GNU cp, we also need to check
     // that the file is a regular file.
+    let source_is_symlink = source.is_symlink();
+    let dest_is_symlink = dest.is_symlink();
+    // only disable dereference if both source and dest is symlink and dereference flag is disabled
     let dereference_to_compare =
-        options.dereference(source_in_command_line) || !source.is_symlink();
-    paths_refer_to_same_file(source, dest, dereference_to_compare)
-        && !(options.force() && options.backup != BackupMode::NoBackup)
-        && !(dest.is_symlink() && options.backup != BackupMode::NoBackup)
+        options.dereference(source_in_command_line) || (!source_is_symlink || !dest_is_symlink);
+    if !paths_refer_to_same_file(source, dest, dereference_to_compare) {
+        return false;
+    }
+    if options.backup != BackupMode::NoBackup {
+        if options.force() && !source_is_symlink {
+            return false;
+        }
+        if source_is_symlink && !options.dereference {
+            return false;
+        }
+        if dest_is_symlink {
+            return false;
+        }
+        if !dest_is_symlink && !source_is_symlink && dest != source {
+            return false;
+        }
+    }
+    if options.copy_mode == CopyMode::Link {
+        return false;
+    }
+    if options.copy_mode == CopyMode::SymLink && dest_is_symlink {
+        return false;
+    }
+    if dest_is_symlink && source_is_symlink && !options.dereference {
+        return false;
+    }
+    true
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
@@ -1526,6 +1562,7 @@ fn handle_existing_dest(
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
@@ -1537,6 +1574,7 @@ fn handle_existing_dest(
         options.overwrite.verify(dest)?;
     }
 
+    let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
         if paths_refer_to_same_file(source, &backup_path, true) {
@@ -1547,13 +1585,16 @@ fn handle_existing_dest(
             )
             .into());
         } else {
-            backup_dest(dest, &backup_path)?;
+            is_dest_removed = dest.is_symlink();
+            backup_dest(dest, &backup_path, is_dest_removed)?;
         }
     }
     match options.overwrite {
         // FIXME: print that the file was removed if --verbose is enabled
         OverwriteMode::Clobber(ClobberMode::Force) => {
-            if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
+            if !is_dest_removed
+                && (is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly())
+            {
                 fs::remove_file(dest)?;
             }
         }
@@ -1574,7 +1615,19 @@ fn handle_existing_dest(
             // `dest/src/f` and `dest/src/f` has the contents of
             // `src/f`, we delete the existing file to allow the hard
             // linking.
-            if options.preserve_hard_links() {
+
+            if options.preserve_hard_links()
+            // only try to remove dest file only if the current source 
+            // is hardlink to a file that is already copied  
+                && copied_files.contains_key(
+                    &FileInformation::from_path(
+                        source,
+                        options.dereference(source_in_command_line),
+                    )
+                    .context(format!("cannot stat {}", source.quote()))?,
+                )
+                && !is_dest_removed
+            {
                 fs::remove_file(dest)?;
             }
         }
@@ -1700,7 +1753,7 @@ fn handle_copy_mode(
                 let backup_path =
                     backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
                 if let Some(backup_path) = backup_path {
-                    backup_dest(dest, &backup_path)?;
+                    backup_dest(dest, &backup_path, dest.is_symlink())?;
                     fs::remove_file(dest)?;
                 }
                 if options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
@@ -1714,7 +1767,11 @@ fn handle_copy_mode(
             } else {
                 fs::hard_link(source, dest)
             }
-            .context(context)?;
+            .context(format!(
+                "cannot create hard link {} to {}",
+                get_filename(dest).unwrap_or("invalid file name").quote(),
+                get_filename(source).unwrap_or("invalid file name").quote()
+            ))?;
         }
         CopyMode::Copy => {
             copy_helper(
@@ -1731,7 +1788,7 @@ fn handle_copy_mode(
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
                 fs::remove_file(dest)?;
             }
-            symlink_file(source, dest, context, symlinked_files)?;
+            symlink_file(source, dest, symlinked_files)?;
         }
         CopyMode::Update => {
             if dest.exists() {
@@ -1860,8 +1917,10 @@ fn copy_file(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
+    let source_is_symlink = source.is_symlink();
+    let dest_is_symlink = dest.is_symlink();
     // Fail if dest is a dangling symlink or a symlink this program created previously
-    if dest.is_symlink() {
+    if dest_is_symlink {
         if FileInformation::from_path(dest, false)
             .map(|info| symlinked_files.contains(&info))
             .unwrap_or(false)
@@ -1872,7 +1931,7 @@ fn copy_file(
                 dest.display()
             )));
         }
-        let copy_contents = options.dereference(source_in_command_line) || !source.is_symlink();
+        let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
         if copy_contents
             && !dest.exists()
             && !matches!(
@@ -1898,6 +1957,7 @@ fn copy_file(
     }
 
     if are_hardlinks_to_same_file(source, dest)
+        && source != dest
         && matches!(
             options.overwrite,
             OverwriteMode::Clobber(ClobberMode::RemoveDestination)
@@ -1913,19 +1973,37 @@ fn copy_file(
                 OverwriteMode::Clobber(ClobberMode::RemoveDestination)
             ))
     {
-        if are_hardlinks_to_same_file(source, dest)
-            && !options.force()
-            && options.backup == BackupMode::NoBackup
-            && source != dest
-            || (source == dest && options.copy_mode == CopyMode::Link)
-        {
-            return Ok(());
+        if paths_refer_to_same_file(source, dest, true) && options.copy_mode == CopyMode::Link {
+            if source_is_symlink {
+                if !dest_is_symlink {
+                    return Ok(());
+                }
+                if !options.dereference {
+                    return Ok(());
+                }
+            } else if options.backup != BackupMode::NoBackup && !dest_is_symlink {
+                if source == dest {
+                    if !options.force() {
+                        return Ok(());
+                    }
+                } else {
+                    return Ok(());
+                }
+            }
         }
-        handle_existing_dest(source, dest, options, source_in_command_line)?;
+        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        if are_hardlinks_to_same_file(source, dest) {
+            if options.copy_mode == CopyMode::Copy && options.backup != BackupMode::NoBackup {
+                return Ok(());
+            }
+            if options.copy_mode == CopyMode::Link && (!source_is_symlink || !dest_is_symlink) {
+                return Ok(());
+            }
+        }
     }
 
     if options.attributes_only
-        && source.is_symlink()
+        && source_is_symlink
         && !matches!(
             options.overwrite,
             OverwriteMode::Clobber(ClobberMode::RemoveDestination)
@@ -1981,7 +2059,7 @@ fn copy_file(
     )?;
 
     // TODO: implement something similar to gnu's lchown
-    if !dest.is_symlink() {
+    if !dest_is_symlink {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.
@@ -2130,7 +2208,7 @@ fn copy_link(
     if dest.is_symlink() || dest.is_file() {
         fs::remove_file(dest)?;
     }
-    symlink_file(&link, dest, &context_for(&link, dest), symlinked_files)
+    symlink_file(&link, dest, symlinked_files)
 }
 
 /// Generate an error message if `target` is not the correct `target_type`
