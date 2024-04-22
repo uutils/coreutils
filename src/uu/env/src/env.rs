@@ -193,7 +193,7 @@ pub fn uu_app() -> Command {
                 .value_name("a")
                 .action(ArgAction::Set)
                 .value_parser(ValueParser::os_string())
-                .help("Override the zeroth argument passed to the command being executed.\
+                .help("Override the zeroth argument passed to the command being executed. \
                        Without this option a default value of `command` is used.")
         )
         .arg(
