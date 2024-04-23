@@ -11,7 +11,7 @@ use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
-use libc::{clock_settime, timespec, CLOCK_REALTIME};
+use libc::{clock_settime, timespec, CLOCK_MONOTONIC, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -103,6 +103,74 @@ enum Iso8601Format {
     Ns,
 }
 
+// Timespec resolution
+enum TimeResolution {}
+
+impl<'a> TimeResolution {
+    // Resolution for linux
+    // #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+    fn new() -> f64 {
+        // Getting time from system
+        let time = std::time::SystemTime::now();
+
+        let duration = time
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+
+        let secs = duration.as_secs();
+        let nsecs = duration.subsec_nanos();
+
+        let mut ts = timespec {
+            tv_sec: secs as i64,
+            tv_nsec: nsecs as i64,
+        };
+
+        let resolution: f64 = match Self::clock_type(&mut ts) {
+            Some(CLOCK_REALTIME) => {
+                let mut res_ts = ts.clone();
+                let _ = unsafe { libc::clock_getres(CLOCK_REALTIME, &mut res_ts) };
+                let resolution_secs =
+                    res_ts.tv_sec as f64 + res_ts.tv_nsec as f64 / 1_000_000_000.0;
+                resolution_secs
+            }
+            Some(CLOCK_MONOTONIC) => {
+                let mut res_ts = ts.clone();
+                let _ = unsafe { libc::clock_getres(CLOCK_MONOTONIC, &mut res_ts) };
+                let resolution_secs =
+                    res_ts.tv_sec as f64 + res_ts.tv_nsec as f64 / 1_000_000_000.0;
+                resolution_secs
+            }
+            _ => {
+                let resolution_secs = ts.tv_nsec as f64 / 1_000_000_000.0;
+                let resolution_string = format!("{}", resolution_secs);
+                let resolution_length = resolution_string.len() - 4;
+                let mut resolution_final: String = String::new();
+                resolution_final.push_str("0.");
+                let mut i = 0;
+                while i <= resolution_length {
+                    resolution_final.push_str("0");
+                    i = i + 1;
+                }
+                resolution_final.push_str("1");
+
+                resolution_final.parse::<f64>().unwrap_or(0.1)
+            }
+        };
+
+        resolution
+    }
+
+    fn clock_type(ts: &mut timespec) -> Option<i32> {
+        if unsafe { libc::clock_gettime(CLOCK_REALTIME, &mut *ts) } == 0 {
+            Some(CLOCK_REALTIME)
+        } else if unsafe { libc::clock_gettime(CLOCK_MONOTONIC, &mut *ts) } == 0 {
+            Some(CLOCK_MONOTONIC)
+        } else {
+            None
+        }
+    }
+}
+
 impl<'a> From<&'a str> for Iso8601Format {
     fn from(s: &str) -> Self {
         match s {
@@ -138,6 +206,7 @@ impl<'a> From<&'a str> for Rfc3339Format {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    println!("{}", TimeResolution::new());
     let matches = uu_app().try_get_matches_from(args)?;
 
     let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
