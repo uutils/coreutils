@@ -2606,10 +2606,8 @@ fn test_copy_through_just_created_symlink() {
         at.mkdir("b");
         at.mkdir("c");
         at.relative_symlink_file("../t", "a/1");
-        at.touch("b/1");
         at.write("b/1", "hello");
         if create_t {
-            at.touch("t");
             at.write("t", "world");
         }
         ucmd.arg("--no-dereference")
@@ -2839,7 +2837,6 @@ fn test_copy_no_dereference_1() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
     at.mkdir("b");
-    at.touch("a/foo");
     at.write("a/foo", "bar");
     at.relative_symlink_file("../a/foo", "b/foo");
     ucmd.args(&["-P", "a/foo", "b"]).fails();
@@ -2852,10 +2849,8 @@ fn test_abuse_existing() {
     at.mkdir("b");
     at.mkdir("c");
     at.relative_symlink_file("../t", "a/1");
-    at.touch("b/1");
     at.write("b/1", "hello");
     at.relative_symlink_file("../t", "c/1");
-    at.touch("t");
     at.write("t", "i");
     ucmd.args(&["-dR", "a/1", "b/1", "c"])
         .fails()
@@ -2967,7 +2962,6 @@ fn test_cp_copy_symlink_contents_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("src-dir");
     at.mkdir("dest-dir");
-    at.touch("f");
     at.write("f", "f");
     at.relative_symlink_file("f", "slink");
     at.relative_symlink_file("no-file", &path_concat!("src-dir", "slink"));
@@ -2985,7 +2979,6 @@ fn test_cp_copy_symlink_contents_recursive() {
 fn test_cp_mode_symlink() {
     for from in ["file", "slink", "slink2"] {
         let (at, mut ucmd) = at_and_ucmd!();
-        at.touch("file");
         at.write("file", "f");
         at.relative_symlink_file("file", "slink");
         at.relative_symlink_file("slink", "slink2");
@@ -3001,7 +2994,6 @@ fn test_cp_mode_symlink() {
 fn test_cp_mode_hardlink() {
     for from in ["file", "slink", "slink2"] {
         let (at, mut ucmd) = at_and_ucmd!();
-        at.touch("file");
         at.write("file", "f");
         at.relative_symlink_file("file", "slink");
         at.relative_symlink_file("slink", "slink2");
@@ -3019,7 +3011,6 @@ fn test_cp_mode_hardlink() {
 #[test]
 fn test_cp_mode_hardlink_no_dereference() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.touch("file");
     at.write("file", "f");
     at.relative_symlink_file("file", "slink");
     at.relative_symlink_file("slink", "slink2");
@@ -3836,7 +3827,6 @@ fn test_acl_preserve() {
 fn test_cp_debug_reflink_never_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    at.touch("a");
     at.write("a", "hello");
     let f = std::fs::OpenOptions::new()
         .write(true)
@@ -3926,8 +3916,7 @@ fn test_cp_debug_default_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
 
     let at = &ts.fixtures;
-    at.touch("a");
-    at.append_bytes("a", "hello".as_bytes());
+    at.write_bytes("a", "hello".as_bytes());
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
@@ -3955,8 +3944,7 @@ fn test_cp_debug_default_without_hole() {
     let ts = TestScenario::new(util_name!());
 
     let at = &ts.fixtures;
-    at.touch("a");
-    at.append_bytes("a", "hello".as_bytes());
+    at.write_bytes("a", "hello".as_bytes());
 
     let filler_bytes = [0_u8; 10000];
 
@@ -4001,7 +3989,6 @@ fn test_cp_debug_default_empty_file_with_hole() {
 fn test_cp_debug_reflink_never_sparse_always_with_hole() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    at.touch("a");
     at.write("a", "hello");
     let f = std::fs::OpenOptions::new()
         .write(true)
@@ -4036,7 +4023,6 @@ fn test_cp_debug_reflink_never_sparse_always_without_hole() {
     let ts = TestScenario::new(util_name!());
     let empty_bytes = [0_u8; 10000];
     let at = &ts.fixtures;
-    at.touch("a");
     at.write("a", "hello");
     at.append_bytes("a", &empty_bytes);
 
@@ -4210,8 +4196,7 @@ fn test_cp_debug_reflink_never_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
 
     let at = &ts.fixtures;
-    at.touch("a");
-    at.append_bytes("a", "hello".as_bytes());
+    at.write_bytes("a", "hello".as_bytes());
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
@@ -4289,8 +4274,7 @@ fn test_cp_debug_sparse_never_less_than_512_bytes() {
     let ts = TestScenario::new(util_name!());
 
     let at = &ts.fixtures;
-    at.touch("a");
-    at.append_bytes("a", "hello".as_bytes());
+    at.write_bytes("a", "hello".as_bytes());
     let f = std::fs::OpenOptions::new()
         .write(true)
         .open(at.plus("a"))
@@ -4318,8 +4302,7 @@ fn test_cp_debug_sparse_never_without_hole() {
     let ts = TestScenario::new(util_name!());
 
     let at = &ts.fixtures;
-    at.touch("a");
-    at.append_bytes("a", "hello".as_bytes());
+    at.write_bytes("a", "hello".as_bytes());
 
     let filler_bytes = [0_u8; 10000];
 
@@ -4451,7 +4434,6 @@ fn test_cp_debug_reflink_never_without_hole() {
     let ts = TestScenario::new(util_name!());
     let filler_bytes = [0_u8; 1000];
     let at = &ts.fixtures;
-    at.touch("a");
     at.write("a", "hello");
     at.append_bytes("a", &filler_bytes);
     let result = ts
