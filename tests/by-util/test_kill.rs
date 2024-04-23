@@ -288,3 +288,13 @@ fn test_kill_no_pid_provided() {
         .fails()
         .stderr_contains("no process ID specified");
 }
+
+#[test]
+fn test_kill_with_signal_exit_new_form() {
+    let mut target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("EXIT")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+}

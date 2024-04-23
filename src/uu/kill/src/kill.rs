@@ -11,7 +11,7 @@ use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::signals::{signal_by_name_or_value, ALL_SIGNALS};
+use uucore::signals::{signal_by_name_or_value, signal_name_by_value, ALL_SIGNALS};
 use uucore::{format_usage, help_about, help_usage, show};
 
 static ABOUT: &str = help_about!("kill.md");
@@ -60,9 +60,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else {
                 15_usize //SIGTERM
             };
-            let sig: Signal = (sig as i32)
-                .try_into()
-                .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+            let sig_name = signal_name_by_value(sig);
+            let sig: Option<Signal> = if sig_name.is_some_and(|name| name == "EXIT") {
+                None
+            } else {
+                let sig = (sig as i32)
+                    .try_into()
+                    .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+                Some(sig)
+            };
+
             let pids = parse_pids(&pids_or_signals)?;
             if pids.is_empty() {
                 Err(USimpleError::new(
@@ -211,7 +218,7 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
         .collect()
 }
 
-fn kill(sig: Signal, pids: &[i32]) {
+fn kill(sig: Option<Signal>, pids: &[i32]) {
     for &pid in pids {
         if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
             show!(Error::from_raw_os_error(e as i32)
