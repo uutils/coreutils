@@ -24,6 +24,9 @@ unicode-segmentation = { workspace = true }
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 nix = { workspace = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+crossterm = { workspace = true, features = ["use-dev-tty"] }
+
 [[bin]]
 name = "more"
 path = "src/main.rs"

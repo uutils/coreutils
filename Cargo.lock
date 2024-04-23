@@ -409,7 +409,6 @@ dependencies = [
  "clap",
  "clap_complete",
  "clap_mangen",
- "crossterm",
  "filetime",
  "glob",
  "hex-literal",
