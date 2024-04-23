@@ -476,6 +476,9 @@ yes = { optional = true, version = "0.0.26", package = "uu_yes", path = "src/uu/
 # Not needed for now. Keep as examples:
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
 
+[target.'cfg(target_os = "macos")'.dependencies]
+crossterm = { version = ">=0.27.0", features = ["use-dev-tty"] }
+
 [dev-dependencies]
 chrono = { workspace = true }
 filetime = { workspace = true }
