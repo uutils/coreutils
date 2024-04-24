@@ -60,7 +60,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else {
                 15_usize //SIGTERM
             };
+
             let sig_name = signal_name_by_value(sig);
+            // Signal does not support converting from SIGEXIT/0
+            // Instead, nix::signal::kill expects Option::None to properly handle SIGEXIT
             let sig: Option<Signal> = if sig_name.is_some_and(|name| name == "EXIT") {
                 None
             } else {
