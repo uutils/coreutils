@@ -291,7 +291,7 @@ fn test_kill_no_pid_provided() {
 
 #[test]
 fn test_kill_with_signal_exit_new_form() {
-    let mut target = Target::new();
+    let target = Target::new();
     new_ucmd!()
         .arg("-s")
         .arg("EXIT")
