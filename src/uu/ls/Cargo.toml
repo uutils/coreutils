@@ -26,6 +26,7 @@ lscolors = { workspace = true }
 uucore = { workspace = true, features = [
   "colors",
   "entries",
+  "format",
   "fs",
   "fsxattr",
   "quoting-style",

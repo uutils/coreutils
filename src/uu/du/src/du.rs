@@ -75,9 +75,6 @@ const ABOUT: &str = help_about!("du.md");
 const AFTER_HELP: &str = help_section!("after help", "du.md");
 const USAGE: &str = help_usage!("du.md");
 
-// TODO: Support Z & Y (currently limited by size of u64)
-const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
-
 struct TraversalOptions {
     all: bool,
     separate_dirs: bool,
@@ -117,7 +114,8 @@ enum Time {
 
 #[derive(Clone)]
 enum SizeFormat {
-    Human(u64),
+    HumanDecimal,
+    HumanBinary,
     BlockSize(u64),
 }
 
@@ -549,18 +547,14 @@ impl StatPrinter {
             return size.to_string();
         }
         match self.size_format {
-            SizeFormat::Human(multiplier) => {
-                if size == 0 {
-                    return "0".to_string();
-                }
-                for &(unit, power) in &UNITS {
-                    let limit = multiplier.pow(power);
-                    if size >= limit {
-                        return format!("{:.1}{}", (size as f64) / (limit as f64), unit);
-                    }
-                }
-                format!("{size}B")
-            }
+            SizeFormat::HumanDecimal => uucore::format::human::human_readable(
+                size,
+                uucore::format::human::SizeFormat::Decimal,
+            ),
+            SizeFormat::HumanBinary => uucore::format::human::human_readable(
+                size,
+                uucore::format::human::SizeFormat::Binary,
+            ),
             SizeFormat::BlockSize(block_size) => div_ceil(size, block_size).to_string(),
         }
     }
@@ -688,9 +682,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     });
 
     let size_format = if matches.get_flag(options::HUMAN_READABLE) {
-        SizeFormat::Human(1024)
+        SizeFormat::HumanBinary
     } else if matches.get_flag(options::SI) {
-        SizeFormat::Human(1000)
+        SizeFormat::HumanDecimal
     } else if matches.get_flag(options::BYTES) {
         SizeFormat::BlockSize(1)
     } else if matches.get_flag(options::BLOCK_SIZE_1K) {
