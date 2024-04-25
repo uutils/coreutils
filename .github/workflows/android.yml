@@ -35,7 +35,7 @@ jobs:
         os: [ubuntu-latest] # , macos-latest
         cores: [4] # , 6
         ram: [4096, 8192]
-        api-level: [28]
+        api-level: [30]
         target: [google_apis_playstore]
         arch: [x86, x86_64] # , arm64-v8a
         exclude:
