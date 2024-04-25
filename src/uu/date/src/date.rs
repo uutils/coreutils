@@ -38,6 +38,7 @@ const OPT_DATE: &str = "date";
 const OPT_FORMAT: &str = "format";
 const OPT_FILE: &str = "file";
 const OPT_DEBUG: &str = "debug";
+const OPT_RESOLUTION: &str = "resolution";
 const OPT_ISO_8601: &str = "iso-8601";
 const OPT_RFC_EMAIL: &str = "rfc-email";
 const OPT_RFC_3339: &str = "rfc-3339";
@@ -206,7 +207,6 @@ impl<'a> From<&'a str> for Rfc3339Format {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    println!("{}", TimeResolution::new());
     let matches = uu_app().try_get_matches_from(args)?;
 
     let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
@@ -250,6 +250,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         DateSource::Now
     };
+
+    if matches.get_flag(OPT_RESOLUTION){
+        println!("{}", TimeResolution::new());
+        return Ok(())
+    }
 
     let set_to = match matches.get_one::<String>(OPT_SET).map(parse_date) {
         None => None,
@@ -398,6 +403,13 @@ pub fn uu_app() -> Command {
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .help("like --date; once for each line of DATEFILE"),
+        )
+        .arg(
+            Arg::new(OPT_RESOLUTION)
+                .long(OPT_RESOLUTION)
+                .value_name("RESOLUTION")
+                .help("like --date; once for each line of DATEFILE")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_ISO_8601)
