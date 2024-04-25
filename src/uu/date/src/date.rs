@@ -107,10 +107,9 @@ enum Iso8601Format {
 // Timespec resolution
 enum TimeResolution {}
 
-impl<'a> TimeResolution {
+impl TimeResolution {
     // Resolution for linux
-    // #[cfg(not(any(target_os = "macos", target_os = "redox")))]
-    fn new() -> f64 {
+    fn new() -> f32 {
         // Getting time from system
         let time = std::time::SystemTime::now();
 
@@ -118,33 +117,33 @@ impl<'a> TimeResolution {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default();
 
-        let secs = duration.as_secs();
-        let nsecs = duration.subsec_nanos();
+        let secs: u64 = duration.as_secs();
+        let nsecs: u32 = duration.subsec_nanos();
 
-        let mut ts = timespec {
+        let mut ts: timespec = timespec {
             tv_sec: secs as i64,
             tv_nsec: nsecs as i64,
         };
 
-        let resolution: f64 = match Self::clock_type(&mut ts) {
+        let resolution: f32 = match Self::clock_type(&mut ts) {
             Some(CLOCK_REALTIME) => {
                 let mut res_ts = ts.clone();
-                let _ = unsafe { libc::clock_getres(CLOCK_REALTIME, &mut res_ts) };
-                let resolution_secs =
-                    res_ts.tv_sec as f64 + res_ts.tv_nsec as f64 / 1_000_000_000.0;
+                unsafe { libc::clock_getres(CLOCK_REALTIME, &mut res_ts) };
+                let resolution_secs: f32 =
+                    res_ts.tv_sec as f32 + res_ts.tv_nsec as f32 / 1_000_000_000.0;
                 resolution_secs
             }
             Some(CLOCK_MONOTONIC) => {
-                let mut res_ts = ts.clone();
-                let _ = unsafe { libc::clock_getres(CLOCK_MONOTONIC, &mut res_ts) };
-                let resolution_secs =
-                    res_ts.tv_sec as f64 + res_ts.tv_nsec as f64 / 1_000_000_000.0;
+                let mut res_ts: timespec = ts.clone();
+                unsafe { libc::clock_getres(CLOCK_MONOTONIC, &mut res_ts) };
+                let resolution_secs: f32 =
+                    res_ts.tv_sec as f32 + res_ts.tv_nsec as f32 / 1_000_000_000.0;
                 resolution_secs
             }
             _ => {
-                let resolution_secs = ts.tv_nsec as f64 / 1_000_000_000.0;
-                let resolution_string = format!("{}", resolution_secs);
-                let resolution_length = resolution_string.len() - 4;
+                let resolution_secs: f32 = ts.tv_nsec as f32 / 1_000_000_000.0;
+                let resolution_string: &String = &format!("{}", resolution_secs);
+                let resolution_length: u8 = (resolution_string.len() - 4).try_into().unwrap_or(1);
                 let mut resolution_final: String = String::new();
                 resolution_final.push_str("0.");
                 let mut i = 0;
@@ -154,7 +153,7 @@ impl<'a> TimeResolution {
                 }
                 resolution_final.push_str("1");
 
-                resolution_final.parse::<f64>().unwrap_or(0.1)
+                resolution_final.parse::<f32>().unwrap_or(0.1)
             }
         };
 
@@ -251,9 +250,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         DateSource::Now
     };
 
-    if matches.get_flag(OPT_RESOLUTION){
+    if matches.get_flag(OPT_RESOLUTION) {
         println!("{}", TimeResolution::new());
-        return Ok(())
+        return Ok(());
     }
 
     let set_to = match matches.get_one::<String>(OPT_SET).map(parse_date) {
@@ -408,7 +407,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_RESOLUTION)
                 .long(OPT_RESOLUTION)
                 .value_name("RESOLUTION")
-                .help("like --date; once for each line of DATEFILE")
+                .help("output the available resolution of timestamps")
                 .action(ArgAction::SetTrue),
         )
         .arg(
