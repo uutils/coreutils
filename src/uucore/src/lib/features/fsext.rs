@@ -643,6 +643,7 @@ impl FsMeta for StatFs {
             not(target_os = "aix"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_os = "netbsd"),
             not(target_os = "openbsd"),
             not(target_os = "illumos"),
             not(target_os = "solaris"),
@@ -654,6 +655,7 @@ impl FsMeta for StatFs {
         #[cfg(all(
             not(target_env = "musl"),
             not(target_os = "freebsd"),
+            not(target_os = "netbsd"),
             not(target_os = "redox"),
             any(
                 target_arch = "s390x",
@@ -668,6 +670,7 @@ impl FsMeta for StatFs {
             target_env = "musl",
             target_os = "aix",
             target_os = "freebsd",
+            target_os = "netbsd",
             target_os = "illumos",
             target_os = "solaris",
             target_os = "redox",

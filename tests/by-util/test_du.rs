@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist testdir testfile
+// spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
 #[cfg(not(windows))]
 use regex::Regex;
 
@@ -541,6 +541,34 @@ fn test_du_h_flag_empty_file() {
         .arg("empty.txt")
         .succeeds()
         .stdout_only("0\tempty.txt\n");
+}
+
+#[test]
+fn test_du_h_precision() {
+    let test_cases = [
+        (133456345, "128M"),
+        (12 * 1024 * 1024, "12M"),
+        (8500, "8.4K"),
+    ];
+
+    for &(test_len, expected_output) in &test_cases {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let fpath = at.plus("test.txt");
+        std::fs::File::create(&fpath)
+            .expect("cannot create test file")
+            .set_len(test_len)
+            .expect("cannot truncate test len to size");
+        ucmd.arg("-h")
+            .arg("--apparent-size")
+            .arg(&fpath)
+            .succeeds()
+            .stdout_only(format!(
+                "{}\t{}\n",
+                expected_output,
+                &fpath.to_string_lossy()
+            ));
+    }
 }
 
 #[cfg(feature = "touch")]

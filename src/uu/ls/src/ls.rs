@@ -12,7 +12,6 @@ use clap::{
 use glob::{MatchOptions, Pattern};
 use lscolors::{LsColors, Style};
 
-use number_prefix::NumberPrefix;
 use std::{cell::OnceCell, num::IntErrorKind};
 use std::{collections::HashSet, io::IsTerminal};
 
@@ -37,6 +36,7 @@ use std::{
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use unicode_width::UnicodeWidthStr;
 use uucore::error::USimpleError;
+use uucore::format::human::{human_readable, SizeFormat};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(any(
@@ -311,13 +311,6 @@ enum Sort {
     Version,
     Extension,
     Width,
-}
-
-#[derive(PartialEq)]
-enum SizeFormat {
-    Bytes,
-    Binary,  // Powers of 1024, --human-readable, -h
-    Decimal, // Powers of 1000, --si
 }
 
 #[derive(PartialEq, Eq)]
@@ -3038,30 +3031,6 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
     }
 }
 
-// There are a few peculiarities to how GNU formats the sizes:
-// 1. One decimal place is given if and only if the size is smaller than 10
-// 2. It rounds sizes up.
-// 3. The human-readable format uses powers for 1024, but does not display the "i"
-//    that is commonly used to denote Kibi, Mebi, etc.
-// 4. Kibi and Kilo are denoted differently ("k" and "K", respectively)
-fn format_prefixed(prefixed: &NumberPrefix<f64>) -> String {
-    match prefixed {
-        NumberPrefix::Standalone(bytes) => bytes.to_string(),
-        NumberPrefix::Prefixed(prefix, bytes) => {
-            // Remove the "i" from "Ki", "Mi", etc. if present
-            let prefix_str = prefix.symbol().trim_end_matches('i');
-
-            // Check whether we get more than 10 if we round up to the first decimal
-            // because we want do display 9.81 as "9.9", not as "10".
-            if (10.0 * bytes).ceil() >= 100.0 {
-                format!("{:.0}{}", bytes.ceil(), prefix_str)
-            } else {
-                format!("{:.1}{}", (10.0 * bytes).ceil() / 10.0, prefix_str)
-            }
-        }
-    }
-}
-
 #[allow(dead_code)]
 enum SizeOrDeviceId {
     Size(String),
@@ -3104,13 +3073,7 @@ fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
 }
 
 fn display_size(size: u64, config: &Config) -> String {
-    // NOTE: The human-readable behavior deviates from the GNU ls.
-    // The GNU ls uses binary prefixes by default.
-    match config.size_format {
-        SizeFormat::Binary => format_prefixed(&NumberPrefix::binary(size as f64)),
-        SizeFormat::Decimal => format_prefixed(&NumberPrefix::decimal(size as f64)),
-        SizeFormat::Bytes => size.to_string(),
-    }
+    human_readable(size, config.size_format)
 }
 
 #[cfg(unix)]
