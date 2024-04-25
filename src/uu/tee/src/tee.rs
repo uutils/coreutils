@@ -90,6 +90,16 @@ pub fn uu_app() -> Command {
         .override_usage(format_usage(USAGE))
         .after_help(AFTER_HELP)
         .infer_long_args(true)
+        // Since we use value-specific help texts for "--output-error", clap's "short help" and "long help" differ.
+        // However, this is something that the GNU tests explicitly test for, so we *always* show the long help instead.
+        .disable_help_flag(true)
+        .arg(
+            Arg::new("--help")
+                .short('h')
+                .long("help")
+                .help("Print help")
+                .action(ArgAction::HelpLong)
+        )
         .arg(
             Arg::new(options::APPEND)
                 .long(options::APPEND)

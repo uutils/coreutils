@@ -19,6 +19,22 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_short_help_is_long_help() {
+    // I can't believe that this test is necessary.
+    let help_short = new_ucmd!()
+        .arg("-h")
+        .succeeds()
+        .no_stderr()
+        .stdout_str()
+        .to_owned();
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(help_short);
+}
+
+#[test]
 fn test_tee_processing_multiple_operands() {
     // POSIX says: "Processing of at least 13 file operands shall be supported."
 
