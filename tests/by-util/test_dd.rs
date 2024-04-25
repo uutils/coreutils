@@ -1715,6 +1715,46 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     assert!(output.stderr.starts_with(expected));
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_reading_and_writing_with_direct_flag_from_and_to_files_with_irregular_size() {
+    use uucore::fs::sane_blksize::sane_blksize_from_path;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let min_direct_block_size = sane_blksize_from_path(at.plus(".").as_path()) as i64;
+
+    let p = |m: i64, o: i64| (min_direct_block_size * m + o).to_string();
+
+    ts.ccmd("truncate")
+        .args(&["-s", p(1, -1).as_str(), "short"])
+        .succeeds();
+    ts.ccmd("truncate")
+        .args(&["-s", p(16, 0).as_str(), "in"])
+        .succeeds();
+    ts.ccmd("truncate")
+        .args(&["-s", p(16, -1).as_str(), "m1"])
+        .succeeds();
+    ts.ccmd("truncate")
+        .args(&["-s", p(16, 1).as_str(), "p1"])
+        .succeeds();
+
+    ts.ucmd()
+        .arg(format!("bs={}", min_direct_block_size))
+        .args(&["if=in", "oflag=direct", "of=out"])
+        .succeeds();
+
+    for testfile in ["short", "m1", "p1"] {
+        at.remove("out");
+        ts.ucmd()
+            .arg(format!("if={testfile}"))
+            .arg(format!("bs={}", min_direct_block_size))
+            .args(&["iflag=direct", "oflag=direct", "of=out"])
+            .succeeds();
+    }
+}
+
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {

@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput, SETFL
+// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput
+// spell-checker:ignore GETFL SETFL
 
 mod blocks;
 mod bufferedoutput;
@@ -47,6 +48,8 @@ use std::time::{Duration, Instant};
 
 use clap::{crate_version, Arg, Command};
 use gcd::Gcd;
+#[cfg(any(target_os = "android", target_os = "linux"))]
+use nix::fcntl::{fcntl, FcntlArg};
 #[cfg(target_os = "linux")]
 use nix::{
     errno::Errno,
@@ -568,6 +571,20 @@ enum Dest {
 }
 
 impl Dest {
+    fn unset_direct(&mut self) -> io::Result<()> {
+        match self {
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            Self::File(f, _d) => {
+                let mut mode = OFlag::from_bits_retain(fcntl(f.as_raw_fd(), FcntlArg::F_GETFL)?);
+                mode.remove(OFlag::O_DIRECT);
+                nix::fcntl::fcntl(f.as_raw_fd(), FcntlArg::F_SETFL(mode))?;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
     fn fsync(&mut self) -> io::Result<()> {
         match self {
             Self::Stdout(stdout) => stdout.flush(),
@@ -880,7 +897,14 @@ impl<'a> Output<'a> {
         let mut writes_partial = 0;
         let mut bytes_total = 0;
 
-        for chunk in buf.chunks(self.settings.obs) {
+        let chunk_size = self.settings.obs;
+        for chunk in buf.chunks(chunk_size) {
+            if (self.settings.oflags.direct) && (chunk.len() < chunk_size) {
+                // in case of direct io, only buffers with chunk_size are accepted.
+                // thus, for writing a (last) buffer with irregular length, we need to switch off the direct io.
+                self.dst.unset_direct()?;
+            }
+
             let wlen = self.write_block(chunk)?;
             if wlen < self.settings.obs {
                 writes_partial += 1;
@@ -1006,7 +1030,7 @@ fn flush_caches_full_length(i: &Input, o: &Output) -> std::io::Result<()> {
 ///
 /// If there is a problem reading from the input or writing to
 /// this output.
-fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
+fn dd_copy(mut i: Input, o: Output) -> UResult<()> {
     // The read and write statistics.
     //
     // These objects are counters, initialized to zero. After each
@@ -1118,11 +1142,18 @@ fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(&i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
-        let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
+        let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)
+            .map_err_context(|| format!("reading, ls: {loop_bsize}, rbt: {}", rstat.bytes_total))?;
         if rstat_update.is_empty() {
             break;
         }
-        let wstat_update = o.write_blocks(&buf)?;
+        let wstat_update = o.write_blocks(&buf).map_err_context(|| {
+            format!(
+                "writing, ls: {}/{loop_bsize}, wbt: {}",
+                buf.len(),
+                wstat.bytes_total
+            )
+        })?;
 
         // Discard the system file cache for the read portion of
         // the input file.
@@ -1182,7 +1213,7 @@ fn finalize<T>(
     prog_tx: &mpsc::Sender<ProgUpdate>,
     output_thread: thread::JoinHandle<T>,
     truncate: bool,
-) -> std::io::Result<()> {
+) -> UResult<()> {
     // Flush the output in case a partial write has been buffered but
     // not yet written.
     let wstat_update = output.flush()?;
@@ -1426,7 +1457,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
     };
-    dd_copy(i, o).map_err_context(|| "IO error".to_string())
+    dd_copy(i, o)
 }
 
 pub fn uu_app() -> Command {
