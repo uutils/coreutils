@@ -39,26 +39,29 @@ jobs:
         cores: [4] # , 6
         ram: [4096, 8192]
         include:
-          - api-level: [28,29]
-            arch: x86
-            target: google_apis_playstore
+        - api-level: 28
+          arch: x86google_apis_playstore
+          target: google_apis_playstore
+        - api-level: 29
+          arch: x86
+          target: google_apis_playstore
         exclude:
-          - api-level: 28
-            target: default # fails at f16c intrinsic
-          - api-level: 30
-            arch: x86 # image doesn't exist
-          - api-level: 31
-            arch: x86 # image doesn't exist
-          - api-level: 32
-            arch: x86 # image doesn't exist
-          - api-level: 33
-            arch: x86 # image doesn't exist
-          - api-level: 34
-            arch: x86 # image doesn't exist
-          - ram: 8192
-            arch: x86
-          - ram: 4096
-            arch: x86_64
+        - api-level: 28
+          target: default # fails at f16c intrinsic
+        - api-level: 30
+          arch: x86 # image doesn't exist
+        - api-level: 31
+          arch: x86 # image doesn't exist
+        - api-level: 32
+          arch: x86 # image doesn't exist
+        - api-level: 33
+          arch: x86 # image doesn't exist
+        - api-level: 34
+          arch: x86 # image doesn't exist
+        - ram: 8192
+          arch: x86
+        - ram: 4096
+          arch: x86_64
     runs-on: ${{ matrix.os }}
     env:
       EMULATOR_RAM_SIZE: ${{ matrix.ram }}
