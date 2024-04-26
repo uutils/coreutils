@@ -40,7 +40,7 @@ jobs:
         ram: [4096, 8192]
         include:
         - api-level: 28
-          arch: x86google_apis_playstore
+          arch: x86
           target: google_apis_playstore
         - api-level: 29
           arch: x86
