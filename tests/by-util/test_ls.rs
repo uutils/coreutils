@@ -153,19 +153,32 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
-#[cfg(all(unix, feature = "df", not(target_os = "freebsd")))]
-fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
-    let mut cmd = scene.ccmd("df");
-    cmd.args(&["-PT"]).arg(path);
-    let output = cmd.succeeds();
-    let stdout_str = String::from_utf8_lossy(output.stdout());
-    println!("output of stat call ({:?}):\n{}", cmd, stdout_str);
-    let regex_str = r#"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+"#;
-    let regex = Regex::new(regex_str).unwrap();
-    let m = regex.captures(&stdout_str).unwrap();
-    let fstype = m["fstype"].to_owned();
-    println!("detected fstype: {}", fstype);
-    fstype
+#[cfg(not(target_os = "freebsd"))]
+enum AllocatedSizeVariant {
+    Default4096,
+    Android10Plus4100,
+}
+
+#[cfg(not(target_os = "freebsd"))]
+fn get_allocated_size_variant(scene: &TestScenario) -> AllocatedSizeVariant {
+    if cfg!(target_os = "android") {
+        let mut cmd = scene.cmd("termux-info");
+        let output = cmd.run();
+        let stdout_str = String::from_utf8_lossy(output.stdout());
+        println!("output of stat call ({:?}):\n{}", cmd, stdout_str);
+        let regex_str = r#"Android version:\s*[\r\n]+(?<android_version>[0-9]+)\s*[\r\n]+"#;
+        let regex = Regex::new(regex_str).unwrap();
+        let m = regex.captures(&stdout_str).unwrap();
+        let android_version = m["android_version"].to_owned();
+        println!("detected android_version: {}", android_version);
+        if android_version.parse::<i64>().unwrap_or_default() >= 10 {
+            AllocatedSizeVariant::Android10Plus4100
+        } else {
+            AllocatedSizeVariant::Default4096
+        }
+    } else {
+        AllocatedSizeVariant::Default4096
+    }
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
@@ -212,10 +225,9 @@ fn test_ls_allocation_size() {
 
         #[cfg(not(target_os = "freebsd"))]
         let (zero_file_size_4k, zero_file_size_1k, zero_file_size_8k, zero_file_size_4m) =
-            match get_filesystem_type(&scene, &scene.fixtures.subdir).as_str() {
-                // apparently f2fs (flash friendly fs) accepts small overhead for better performance
-                "f2fs" => (4100, 1025, 8200, "4.1M"),
-                _ => (4096, 1024, 8192, "4.0M"),
+            match get_allocated_size_variant(&scene) {
+                AllocatedSizeVariant::Android10Plus4100 => (4100, 1025, 8200, "4.1M"),
+                AllocatedSizeVariant::Default4096 => (4096, 1024, 8192, "4.0M"),
             };
 
         #[cfg(not(target_os = "freebsd"))]
