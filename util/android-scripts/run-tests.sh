@@ -53,8 +53,8 @@ run_tests_in_subprocess() (
     # run tests
     cd ~/coreutils && \
         run_with_retry 3 timeout --preserve-status --verbose -k 1m 10m \
-            cargo nextest run --no-run "${nextest_params[@]}" &&
-        timeout --preserve-status --verbose -k 1m 60m \
+            cargo nextest run --no-run "${nextest_params[@]}" && \
+            timeout --preserve-status --verbose -k 1m 60m \
             cargo nextest run "${nextest_params[@]}"
 
     result=$?
