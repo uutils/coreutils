@@ -169,7 +169,7 @@ fn get_allocated_size_variant(scene: &TestScenario, path: &Path) -> AllocatedSiz
     }
 
     if cfg!(target_os = "android") {
-        let mut cmd = scene.cmd("termux-info");
+        let mut cmd = scene.cmd("/data/data/com.termux/files/usr/bin/termux-info");
         let output = cmd.run();
         let stdout_str = String::from_utf8_lossy(output.stdout());
         println!("output of stat call ({:?}):\n{}", cmd, stdout_str);
