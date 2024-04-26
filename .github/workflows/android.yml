@@ -33,31 +33,36 @@ jobs:
       fail-fast: false
       matrix:
         api-level: [28,29,30,31,32,33,34]
-        arch: [x86_64]
-        target: [default]
-        os: [ubuntu-latest] # , macos-latest
+        arch: [x86, x86_64]
+        target: [default, google_apis_playstore]
         cores: [4] # , 6
         ram: [4096, 8192]
-        include:
-        - api-level: 28
-          arch: x86
-          target: google_apis_playstore
-        - api-level: 29
-          arch: x86
-          target: google_apis_playstore
+        os: [ubuntu-latest] # , macos-latest
         exclude:
         - api-level: 28
           target: default # fails at f16c intrinsic
+        - api-level: 29
+          target: google_apis_playstore # no need
         - api-level: 30
           arch: x86 # image doesn't exist
+        - api-level: 30
+          target: google_apis_playstore # no need
         - api-level: 31
           arch: x86 # image doesn't exist
+        - api-level: 31
+          target: google_apis_playstore # no need
         - api-level: 32
           arch: x86 # image doesn't exist
+        - api-level: 32
+          target: google_apis_playstore # no need
         - api-level: 33
           arch: x86 # image doesn't exist
+        - api-level: 33
+          target: google_apis_playstore # no need
         - api-level: 34
           arch: x86 # image doesn't exist
+        - api-level: 34
+          target: google_apis_playstore # no need
         - ram: 8192
           arch: x86
         - ram: 4096
