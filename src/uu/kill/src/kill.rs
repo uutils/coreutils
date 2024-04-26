@@ -62,8 +62,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             };
 
             let sig_name = signal_name_by_value(sig);
-            // Signal does not support converting from SIGEXIT/0
-            // Instead, nix::signal::kill expects Option::None to properly handle SIGEXIT
+            // Signal does not support converting from EXIT
+            // Instead, nix::signal::kill expects Option::None to properly handle EXIT
             let sig: Option<Signal> = if sig_name.is_some_and(|name| name == "EXIT") {
                 None
             } else {
