@@ -149,6 +149,7 @@ launch_termux() {
     take_screen_shot "launch_termux_after_wait_activity"
 
     touch_cmd() {
+        adb_input_text_long "    echo clear leftovers" && hit_enter
         adb_input_text_long "touch $dev_probe_dir/launch.probe" && hit_enter
         sleep 1
     }

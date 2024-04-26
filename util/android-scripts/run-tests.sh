@@ -36,7 +36,7 @@ run_tests_in_subprocess() (
         # call: watchplus <interval> <command>
         while true; do
             "${@:2}"
-            sleep "$1"
+            sleep "$1" || return 1
         done
     }
 
