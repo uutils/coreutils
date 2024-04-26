@@ -156,11 +156,18 @@ fn test_ls_ordering() {
 #[cfg(not(target_os = "freebsd"))]
 enum AllocatedSizeVariant {
     Default4096,
-    Android10Plus4100,
+    F2fs4100,
+    Android10Plus,
 }
 
 #[cfg(not(target_os = "freebsd"))]
-fn get_allocated_size_variant(scene: &TestScenario) -> AllocatedSizeVariant {
+fn get_allocated_size_variant(scene: &TestScenario, path: &Path) -> AllocatedSizeVariant {
+
+    match get_filesystem_type(scene, path).as_str() {
+        "f2fs" => return AllocatedSizeVariant::F2fs4100,
+        _ => {}
+    }
+
     if cfg!(target_os = "android") {
         let mut cmd = scene.cmd("termux-info");
         let output = cmd.run();
@@ -172,13 +179,28 @@ fn get_allocated_size_variant(scene: &TestScenario) -> AllocatedSizeVariant {
         let android_version = m["android_version"].to_owned();
         println!("detected android_version: {}", android_version);
         if android_version.parse::<i64>().unwrap_or_default() >= 10 {
-            AllocatedSizeVariant::Android10Plus4100
+            AllocatedSizeVariant::Android10Plus
         } else {
             AllocatedSizeVariant::Default4096
         }
     } else {
         AllocatedSizeVariant::Default4096
     }
+}
+
+#[cfg(all(unix, feature = "df", not(target_os = "freebsd")))]
+fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
+    let mut cmd = scene.ccmd("df");
+    cmd.args(&["-PT"]).arg(path);
+    let output = cmd.succeeds();
+    let stdout_str = String::from_utf8_lossy(output.stdout());
+    println!("output of stat call ({:?}):\n{}", cmd, stdout_str);
+    let regex_str = r#"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+"#;
+    let regex = Regex::new(regex_str).unwrap();
+    let m = regex.captures(&stdout_str).unwrap();
+    let fstype = m["fstype"].to_owned();
+    println!("detected fstype: {}", fstype);
+    fstype
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
@@ -225,8 +247,9 @@ fn test_ls_allocation_size() {
 
         #[cfg(not(target_os = "freebsd"))]
         let (zero_file_size_4k, zero_file_size_1k, zero_file_size_8k, zero_file_size_4m) =
-            match get_allocated_size_variant(&scene) {
-                AllocatedSizeVariant::Android10Plus4100 => (4100, 1025, 8200, "4.1M"),
+            match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+                AllocatedSizeVariant::Android10Plus => (4108, 1025, 8216, "8.2M"),
+                AllocatedSizeVariant::F2fs4100 => (4100, 1025, 8200, "4.1M"),
                 AllocatedSizeVariant::Default4096 => (4096, 1024, 8192, "4.0M"),
             };
 
