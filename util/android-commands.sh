@@ -514,7 +514,7 @@ snapshot() {
     echo "Installing cargo-nextest"
     # We need to install nextest via cargo currently, since there is no pre-built binary for android x86
     command="export CARGO_TERM_COLOR=always && export CARGO_TARGET_DIR=\"cargo_install_target_dir\" && cargo install cargo-nextest"
-    run_with_retry 3 run_command_via_ssh "$command"
+    run_with_retry 6 run_command_via_ssh "$command"
     return_code=$?
 
     echo "Info about cargo and rust - via SSH Script"
