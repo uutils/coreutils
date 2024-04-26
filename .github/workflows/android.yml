@@ -127,7 +127,7 @@ jobs:
         script: |
           util/android-commands.sh init "${{ matrix.arch }}" "${{ matrix.api-level }}" "${{ env.TERMUX }}"
     - name: Save AVD cache
-      if: steps.avd-cache.outputs.cache-hit != 'true'
+      if: false
       uses: actions/cache/save@v4
       with:
         path: |
