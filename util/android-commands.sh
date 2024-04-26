@@ -149,7 +149,7 @@ launch_termux() {
     take_screen_shot "launch_termux_after_wait_activity"
 
     touch_cmd() {
-        adb shell input text "\"touch $dev_probe_dir/launch.probe\"" && hit_enter
+        adb_input_text_long "touch $dev_probe_dir/launch.probe" && hit_enter
         sleep 1
     }
 
@@ -414,11 +414,8 @@ install_rsa_pub() {
     echo "$rsa_pub_key"
     echo "====================================="
 
-    adb shell input text \"echo \"
+    adb_input_text_long "echo \"$rsa_pub_key\" >> ~/.ssh/authorized_keys" && hit_enter
 
-    adb_input_text_long "$rsa_pub_key"
-
-    adb shell input text "\" >> ~/.ssh/authorized_keys\"" && hit_enter
     sleep 1
 }
 
