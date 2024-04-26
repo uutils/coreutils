@@ -29,8 +29,18 @@ run_with_retry() {
 
 run_tests_in_subprocess() (
 
-    # limit virtual memory to 3GB to avoid that OS kills sshd
-    ulimit -v $((1024 * 1024 * 3))
+    # limit memory to 3GB to avoid that OS kills sshd.
+    android_version="$(termux-info | sed -n '/Android version/{n;p}')"
+    echo "detected Android version: $android_version"
+    if [ "$android_version" -ge 12 ]; then
+        # On newer android versions (since API 31, Android 12),
+        # the virtual memory size is 10GB by default for each process.
+        # This prevents a meaningfull ulimit on virtual memory size.
+        # We use physical memory limit instead:
+        ulimit -m $((1024 * 1024 * 3))
+    else
+        ulimit -v $((1024 * 1024 * 3))
+    fi
 
     watchplus() {
         # call: watchplus <interval> <command>
