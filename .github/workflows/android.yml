@@ -35,13 +35,13 @@ jobs:
         api-level: [28,29,30,31,32,33,34]
         arch: [x86_64]
         target: [default]
+        os: [ubuntu-latest] # , macos-latest
+        cores: [4] # , 6
+        ram: [4096, 8192]
         include:
           - api-level: [28,29]
             arch: x86
             target: google_apis_playstore
-        os: [ubuntu-latest] # , macos-latest
-        cores: [4] # , 6
-        ram: [4096, 8192]
         exclude:
           - api-level: 28
             target: default # fails at f16c intrinsic
