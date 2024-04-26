@@ -162,7 +162,6 @@ enum AllocatedSizeVariant {
 
 #[cfg(not(target_os = "freebsd"))]
 fn get_allocated_size_variant(scene: &TestScenario, path: &Path) -> AllocatedSizeVariant {
-
     match get_filesystem_type(scene, path).as_str() {
         "f2fs" => return AllocatedSizeVariant::F2fs4100,
         _ => {}
