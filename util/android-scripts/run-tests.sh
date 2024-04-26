@@ -22,7 +22,7 @@ run_with_retry() {
 
     exit_code=$?
 
-    echo "Still failing after $tries. Code: $exit_code"
+    echo "Still failing after $tries tries. Code: $exit_code"
 
     return $exit_code
 }
