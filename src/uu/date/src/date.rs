@@ -105,8 +105,9 @@ enum Iso8601Format {
     Ns,
 }
 
-// Timespec resolution
+// Enum for system clock resolution
 enum TimeResolution {}
+const RESOLUTION_DIVISOR: f32 = 1_000_000_000.0;
 
 impl TimeResolution {
     fn generate() -> f32 {
@@ -130,20 +131,22 @@ impl TimeResolution {
                 let mut res_ts = ts;
                 unsafe { libc::clock_getres(CLOCK_REALTIME, &mut res_ts) };
                 let resolution_secs: f32 =
-                    res_ts.tv_sec as f32 + res_ts.tv_nsec as f32 / 1_000_000_000.0;
+                    res_ts.tv_sec as f32 + res_ts.tv_nsec as f32 / RESOLUTION_DIVISOR;
                 resolution_secs
             }
             Some(CLOCK_MONOTONIC) => {
                 let mut res_ts: timespec = ts;
                 unsafe { libc::clock_getres(CLOCK_MONOTONIC, &mut res_ts) };
                 let resolution_secs: f32 =
-                    res_ts.tv_sec as f32 + res_ts.tv_nsec as f32 / 1_000_000_000.0;
+                    res_ts.tv_sec as f32 + res_ts.tv_nsec as f32 / RESOLUTION_DIVISOR;
                 resolution_secs
             }
             _ => {
-                let resolution_secs: f32 = ts.tv_nsec as f32 / 1_000_000_000.0;
+                // We 'create' a resolution here based on how many digits we get for resolution_secs
+                let resolution_secs: f32 = ts.tv_nsec as f32 / RESOLUTION_DIVISOR;
                 let resolution_string: &String = &format!("{}", resolution_secs);
-                let resolution_length: u8 = (resolution_string.len() - 4).try_into().unwrap_or(1);
+                // We take 3 numbers off to add the '0.' for the decimal and add '1' to the end.
+                let resolution_length: u8 = (resolution_string.len() - 3).try_into().unwrap_or(1);
                 let mut resolution_final: String = String::new();
                 resolution_final.push_str("0.");
                 let mut i: u8 = 0;
