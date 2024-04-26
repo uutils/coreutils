@@ -32,9 +32,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api-level: [28, 29, 30, 31, 32, 33, 34]
-        arch: [x86, x86_64] # , arm64-v8a
-        target: [google_apis_playstore, default]
+        job:
+          - {api-level: 28, arch: [x86, x86_64], target: google_apis_playstore}
+          - {api-level: 29, arch: [x86, x86_64], target: default}
+          - {api-level: 30, arch: x86_64, target: default}
+          - {api-level: 31, arch: x86_64, target: default}
+          - {api-level: 32, arch: x86_64, target: default}
+          - {api-level: 33, arch: x86_64, target: default}
+          - {api-level: 34, arch: x86_64, target: default}
         os: [ubuntu-latest] # , macos-latest
         cores: [4] # , 6
         ram: [4096, 8192]

@@ -243,23 +243,26 @@ fn test_ls_allocation_size() {
         #[cfg(not(target_os = "freebsd"))]
         let (empty_file_size, zero_file_size_4k, zero_file_size_1k, zero_file_size_8k, zero_file_size_4m) =
             match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
-                AllocatedSizeVariant::Android10Plus => (4, 4108, 1025, 8216, "8.2M"),
+                AllocatedSizeVariant::Android10Plus => (4, 4100, 1025, 8216, "8.2M"),
                 AllocatedSizeVariant::F2fs4100 => (0, 4100, 1025, 8200, "4.1M"),
                 AllocatedSizeVariant::Default4096 => (0, 4096, 1024, 8192, "4.0M"),
             };
 
         #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .arg("-s1")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_is(format!(
-                "total {zero_file_size_4k}\n\
-                   {empty_file_size} empty-file\n\
-                   {empty_file_size} file-with-holes\n\
-                {zero_file_size_4k} zero-file\n"
-            ));
+        {
+            let total = zero_file_size_4k + 2*empty_file_size;
+            scene
+                .ucmd()
+                .arg("-s1")
+                .arg("some-dir1")
+                .succeeds()
+                .stdout_is(format!(
+                    "total {total}\
+                    \n   {empty_file_size} empty-file\
+                    \n   {empty_file_size} file-with-holes\n\
+                    {zero_file_size_4k} zero-file\n"
+                ));
+        }
 
         scene
             .ucmd()
@@ -4122,6 +4125,13 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
 fn test_posixly_correct_and_block_size_env_vars() {
     let scene = TestScenario::new(util_name!());
 
+    let (total, total_posix) =
+        match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+            AllocatedSizeVariant::Android10Plus => (8, 16),
+            AllocatedSizeVariant::F2fs4100 => (4, 8),
+            AllocatedSizeVariant::Default4096 => (4, 8),
+        };
+
     scene
         .ccmd("dd")
         .arg("if=/dev/zero")
@@ -4134,7 +4144,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .ucmd()
         .arg("-l")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {total}"))
         .stdout_contains(" 1024 ");
 
     scene
@@ -4142,7 +4152,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("POSIXLY_CORRECT", "some_value")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {total_posix}"))
         .stdout_contains(" 1024 ");
 
     scene
@@ -4150,7 +4160,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("LS_BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {total_posix}"))
         .stdout_contains(" 2 ");
 
     scene
@@ -4158,7 +4168,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {total_posix}"))
         .stdout_contains(" 2 ");
 
     scene
@@ -4166,7 +4176,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("BLOCKSIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {total_posix}"))
         .stdout_contains(" 1024 ");
 }
 
@@ -4175,6 +4185,14 @@ fn test_posixly_correct_and_block_size_env_vars() {
 fn test_posixly_correct_and_block_size_env_vars_with_k() {
     let scene = TestScenario::new(util_name!());
 
+    let total =
+        match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+            AllocatedSizeVariant::Android10Plus => 8,
+            AllocatedSizeVariant::F2fs4100 => 4,
+            AllocatedSizeVariant::Default4096 => 4,
+        };
+
+
     scene
         .ccmd("dd")
         .arg("if=/dev/zero")
@@ -4189,7 +4207,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("POSIXLY_CORRECT", "some_value")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {total}"))
         .stdout_contains(" 1024 ");
 
     scene
@@ -4198,7 +4216,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("LS_BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {total}"))
         .stdout_contains(" 2 ");
 
     scene
@@ -4207,7 +4225,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {total}"))
         .stdout_contains(" 2 ");
 
     scene
@@ -4216,7 +4234,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("BLOCKSIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {total}"))
         .stdout_contains(" 1024 ");
 }
 
