@@ -14,6 +14,7 @@ use clap::{crate_version, Arg, ArgAction, Command};
 use libc::{clock_settime, timespec, CLOCK_MONOTONIC, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::os::raw::c_long;
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
@@ -108,8 +109,7 @@ enum Iso8601Format {
 enum TimeResolution {}
 
 impl TimeResolution {
-    // Resolution for linux
-    fn new() -> f32 {
+    fn generate() -> f32 {
         // Getting time from system
         let time = std::time::SystemTime::now();
 
@@ -121,20 +121,20 @@ impl TimeResolution {
         let nsecs: u32 = duration.subsec_nanos();
 
         let mut ts: timespec = timespec {
-            tv_sec: secs as i64,
-            tv_nsec: nsecs as i64,
+            tv_sec: secs as c_long,
+            tv_nsec: nsecs as c_long,
         };
 
         let resolution: f32 = match Self::clock_type(&mut ts) {
             Some(CLOCK_REALTIME) => {
-                let mut res_ts = ts.clone();
+                let mut res_ts = ts;
                 unsafe { libc::clock_getres(CLOCK_REALTIME, &mut res_ts) };
                 let resolution_secs: f32 =
                     res_ts.tv_sec as f32 + res_ts.tv_nsec as f32 / 1_000_000_000.0;
                 resolution_secs
             }
             Some(CLOCK_MONOTONIC) => {
-                let mut res_ts: timespec = ts.clone();
+                let mut res_ts: timespec = ts;
                 unsafe { libc::clock_getres(CLOCK_MONOTONIC, &mut res_ts) };
                 let resolution_secs: f32 =
                     res_ts.tv_sec as f32 + res_ts.tv_nsec as f32 / 1_000_000_000.0;
@@ -146,12 +146,12 @@ impl TimeResolution {
                 let resolution_length: u8 = (resolution_string.len() - 4).try_into().unwrap_or(1);
                 let mut resolution_final: String = String::new();
                 resolution_final.push_str("0.");
-                let mut i = 0;
+                let mut i: u8 = 0;
                 while i <= resolution_length {
-                    resolution_final.push_str("0");
-                    i = i + 1;
+                    resolution_final.push('0');
+                    i += 1;
                 }
-                resolution_final.push_str("1");
+                resolution_final.push('1');
 
                 resolution_final.parse::<f32>().unwrap_or(0.1)
             }
@@ -251,7 +251,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if matches.get_flag(OPT_RESOLUTION) {
-        println!("{}", TimeResolution::new());
+        println!("{}", TimeResolution::generate());
         return Ok(());
     }
 
