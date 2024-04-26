@@ -423,7 +423,7 @@ install_rsa_pub() {
 install_packages_via_adb_shell() {
     install_package_list="$*"
 
-    install_packages_via_adb_shell_using_apt "$install_package_list"
+    install_packages_via_adb_shell_using_pkg "$install_package_list"
     if [[ $? -ne 0 ]]; then
         echo "apt failed. Now try install with pkg as fallback."
         probe="$dev_probe_dir/pkg.probe"
@@ -434,17 +434,32 @@ install_packages_via_adb_shell() {
     return 0
 }
 
-# We use apt to install the packages as pkg doesn't respect any pre-defined mirror list.
-# Its important to have a defined mirror list to avoid issues with broken mirrors.
-install_packages_via_adb_shell_using_apt() {
-    install_package_list="$*"
-
+set_apt_and_pkg_package_mirrors() {
     repo_url=$(get_current_repo_url)
     move_to_next_repo_url
     echo "set apt repository url: $repo_url"
     probe="$dev_probe_dir/sourceslist.probe"
     command="'echo $repo_url | dd of=\$PREFIX/etc/apt/sources.list; echo \$? > $probe'"
     run_termux_command "$command" "$probe"
+}
+
+install_packages_via_adb_shell_using_pkg() {
+    install_package_list="$*"
+
+    set_apt_and_pkg_package_mirrors
+
+    # as of https://github.com/termux/termux-tools/blob/5b30fbf3b0306c9f3dcd67b68755d990e83f1263/packages/termux-tools/pkg there is one
+    # broken mirror, which is not properly detected. thus skipping mirror detection altogether
+    command="'mkdir -vp ~/.cargo/bin; export TERMUX_PKG_NO_MIRROR_SELECT=y; yes | pkg install $install_package_list -y; echo \$? > $probe'"
+    run_termux_command "$command" "$probe"
+}
+
+# We use apt to install the packages as pkg doesn't respect any pre-defined mirror list.
+# Its important to have a defined mirror list to avoid issues with broken mirrors.
+install_packages_via_adb_shell_using_apt() {
+    install_package_list="$*"
+
+    set_apt_and_pkg_package_mirrors
 
     probe="$dev_probe_dir/adb_install.probe"
     command="'mkdir -vp ~/.cargo/bin; apt update; yes | apt install $install_package_list -y; echo \$? > $probe'"
@@ -453,13 +468,23 @@ install_packages_via_adb_shell_using_apt() {
 
 install_packages_via_ssh_using_apt() {
     install_package_list="$*"
+    run_command_via_ssh "apt update; yes | apt install $install_package_list -y"
+}
+
+install_packages_via_ssh_using_pkg() {
+    install_package_list="$*"
+    run_command_via_ssh "export TERMUX_PKG_NO_MIRROR_SELECT=y; pkg update; yes | pkg install $install_package_list -y"
+}
+
+install_packages_via_ssh() {
+    install_package_list=("$@")
 
     repo_url=$(get_current_repo_url)
     move_to_next_repo_url
     echo "set apt repository url: $repo_url"
     run_command_via_ssh "echo $repo_url | dd of=\$PREFIX/etc/apt/sources.list"
 
-    run_command_via_ssh "apt update; yes | apt install $install_package_list -y"
+    install_packages_via_ssh_using_pkg "${install_package_list[@]}"
 }
 
 apt_upgrade_all_packages() {
@@ -506,7 +531,7 @@ snapshot() {
 
     apt_upgrade_all_packages
 
-    install_packages_via_ssh_using_apt "rust binutils openssl tar mount-utils"
+    install_packages_via_ssh "rust binutils openssl tar mount-utils"
 
     echo "Read /proc/cpuinfo"
     run_command_via_ssh "cat /proc/cpuinfo"
