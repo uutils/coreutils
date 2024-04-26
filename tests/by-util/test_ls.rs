@@ -241,16 +241,21 @@ fn test_ls_allocation_size() {
             .stdout_matches(&Regex::new("[^ ] 2 [^ ]").unwrap());
 
         #[cfg(not(target_os = "freebsd"))]
-        let (empty_file_size, zero_file_size_4k, zero_file_size_1k, zero_file_size_8k, zero_file_size_4m) =
-            match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
-                AllocatedSizeVariant::Android10Plus => (4, 4100, 1025, 8216, "8.2M"),
-                AllocatedSizeVariant::F2fs4100 => (0, 4100, 1025, 8200, "4.1M"),
-                AllocatedSizeVariant::Default4096 => (0, 4096, 1024, 8192, "4.0M"),
-            };
+        let (
+            empty_file_size,
+            zero_file_size_4k,
+            zero_file_size_1k,
+            zero_file_size_8k,
+            zero_file_size_4m,
+        ) = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+            AllocatedSizeVariant::Android10Plus => (4, 4100, 1025, 8216, "8.2M"),
+            AllocatedSizeVariant::F2fs4100 => (0, 4100, 1025, 8200, "4.1M"),
+            AllocatedSizeVariant::Default4096 => (0, 4096, 1024, 8192, "4.0M"),
+        };
 
         #[cfg(not(target_os = "freebsd"))]
         {
-            let total = zero_file_size_4k + 2*empty_file_size;
+            let total = zero_file_size_4k + 2 * empty_file_size;
             scene
                 .ucmd()
                 .arg("-s1")
@@ -4125,12 +4130,11 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
 fn test_posixly_correct_and_block_size_env_vars() {
     let scene = TestScenario::new(util_name!());
 
-    let (total, total_posix) =
-        match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
-            AllocatedSizeVariant::Android10Plus => (8, 16),
-            AllocatedSizeVariant::F2fs4100 => (4, 8),
-            AllocatedSizeVariant::Default4096 => (4, 8),
-        };
+    let (total, total_posix) = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+        AllocatedSizeVariant::Android10Plus => (8, 16),
+        AllocatedSizeVariant::F2fs4100 => (4, 8),
+        AllocatedSizeVariant::Default4096 => (4, 8),
+    };
 
     scene
         .ccmd("dd")
@@ -4185,13 +4189,11 @@ fn test_posixly_correct_and_block_size_env_vars() {
 fn test_posixly_correct_and_block_size_env_vars_with_k() {
     let scene = TestScenario::new(util_name!());
 
-    let total =
-        match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
-            AllocatedSizeVariant::Android10Plus => 8,
-            AllocatedSizeVariant::F2fs4100 => 4,
-            AllocatedSizeVariant::Default4096 => 4,
-        };
-
+    let total = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+        AllocatedSizeVariant::Android10Plus => 8,
+        AllocatedSizeVariant::F2fs4100 => 4,
+        AllocatedSizeVariant::Default4096 => 4,
+    };
 
     scene
         .ccmd("dd")
@@ -4297,7 +4299,6 @@ fn test_ls_block_size_override() {
             AllocatedSizeVariant::F2fs4100 => ("4.1k", 8, "4.0K"),
             AllocatedSizeVariant::Default4096 => ("4.1k", 8, "4.0K"),
         };
-
 
     scene
         .ccmd("dd")
