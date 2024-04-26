@@ -153,14 +153,12 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
-#[cfg(not(target_os = "freebsd"))]
 enum AllocatedSizeVariant {
     Default4096,
     F2fs4100,
     Android10Plus,
 }
 
-#[cfg(not(target_os = "freebsd"))]
 fn get_allocated_size_variant(scene: &TestScenario, path: &Path) -> AllocatedSizeVariant {
     match get_filesystem_type(scene, path).as_str() {
         "f2fs" => return AllocatedSizeVariant::F2fs4100,
@@ -171,7 +169,6 @@ fn get_allocated_size_variant(scene: &TestScenario, path: &Path) -> AllocatedSiz
         let mut cmd = scene.cmd("/data/data/com.termux/files/usr/bin/termux-info");
         let output = cmd.run();
         let stdout_str = String::from_utf8_lossy(output.stdout());
-        println!("output of stat call ({:?}):\n{}", cmd, stdout_str);
         let regex_str = r#"Android version:\s*[\r\n]+(?<android_version>[0-9]+)\s*[\r\n]+"#;
         let regex = Regex::new(regex_str).unwrap();
         let m = regex.captures(&stdout_str).unwrap();
@@ -187,13 +184,12 @@ fn get_allocated_size_variant(scene: &TestScenario, path: &Path) -> AllocatedSiz
     }
 }
 
-#[cfg(all(unix, feature = "df", not(target_os = "freebsd")))]
+#[cfg(all(unix, feature = "df"))]
 fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
     let mut cmd = scene.ccmd("df");
     cmd.args(&["-PT"]).arg(path);
     let output = cmd.succeeds();
     let stdout_str = String::from_utf8_lossy(output.stdout());
-    println!("output of stat call ({:?}):\n{}", cmd, stdout_str);
     let regex_str = r#"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+"#;
     let regex = Regex::new(regex_str).unwrap();
     let m = regex.captures(&stdout_str).unwrap();
@@ -245,11 +241,11 @@ fn test_ls_allocation_size() {
             .stdout_matches(&Regex::new("[^ ] 2 [^ ]").unwrap());
 
         #[cfg(not(target_os = "freebsd"))]
-        let (zero_file_size_4k, zero_file_size_1k, zero_file_size_8k, zero_file_size_4m) =
+        let (empty_file_size, zero_file_size_4k, zero_file_size_1k, zero_file_size_8k, zero_file_size_4m) =
             match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
-                AllocatedSizeVariant::Android10Plus => (4108, 1025, 8216, "8.2M"),
-                AllocatedSizeVariant::F2fs4100 => (4100, 1025, 8200, "4.1M"),
-                AllocatedSizeVariant::Default4096 => (4096, 1024, 8192, "4.0M"),
+                AllocatedSizeVariant::Android10Plus => (4, 4108, 1025, 8216, "8.2M"),
+                AllocatedSizeVariant::F2fs4100 => (0, 4100, 1025, 8200, "4.1M"),
+                AllocatedSizeVariant::Default4096 => (0, 4096, 1024, 8192, "4.0M"),
             };
 
         #[cfg(not(target_os = "freebsd"))]
@@ -259,7 +255,9 @@ fn test_ls_allocation_size() {
             .arg("some-dir1")
             .succeeds()
             .stdout_is(format!(
-                "total {zero_file_size_4k}\n   0 empty-file\n   0 file-with-holes\n\
+                "total {zero_file_size_4k}\n\
+                   {empty_file_size} empty-file\n\
+                   {empty_file_size} file-with-holes\n\
                 {zero_file_size_4k} zero-file\n"
             ));
 
@@ -4275,6 +4273,14 @@ fn test_ls_invalid_block_size_in_env_var() {
 fn test_ls_block_size_override() {
     let scene = TestScenario::new(util_name!());
 
+    let (si_size, blocks512, human_size) =
+        match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+            AllocatedSizeVariant::Android10Plus => ("8.2k", 16, "8.0K"),
+            AllocatedSizeVariant::F2fs4100 => ("4.1k", 8, "4.0K"),
+            AllocatedSizeVariant::Default4096 => ("4.1k", 8, "4.0K"),
+        };
+
+
     scene
         .ccmd("dd")
         .arg("if=/dev/zero")
@@ -4290,7 +4296,7 @@ fn test_ls_block_size_override() {
         .arg("--block-size=512")
         .arg("--si")
         .succeeds()
-        .stdout_contains_line("total 4.1k");
+        .stdout_contains_line(format!("total {si_size}"));
 
     // --block-size "wins"
     scene
@@ -4299,7 +4305,7 @@ fn test_ls_block_size_override() {
         .arg("--si")
         .arg("--block-size=512")
         .succeeds()
-        .stdout_contains_line("total 8");
+        .stdout_contains_line(format!("total {blocks512}"));
 
     // --human-readable "wins"
     scene
@@ -4308,7 +4314,7 @@ fn test_ls_block_size_override() {
         .arg("--block-size=512")
         .arg("--human-readable")
         .succeeds()
-        .stdout_contains_line("total 4.0K");
+        .stdout_contains_line(format!("total {human_size}"));
 
     // --block-size "wins"
     scene
@@ -4317,7 +4323,7 @@ fn test_ls_block_size_override() {
         .arg("--human-readable")
         .arg("--block-size=512")
         .succeeds()
-        .stdout_contains_line("total 8");
+        .stdout_contains_line(format!("total {blocks512}"));
 }
 
 #[test]
