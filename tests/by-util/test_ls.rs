@@ -1425,36 +1425,42 @@ fn test_ls_long_total_size() {
     at.touch(at.plus_as_string("test-long2"));
     at.append("test-long2", "2");
 
+    let (total_long_vanilla, total_long_human, total_long_si) = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+        AllocatedSizeVariant::Android10Plus => (16, "16.0K", "16.4k"),
+        AllocatedSizeVariant::F2fs4100 => (8, "8.0K", "8.2k"),
+        AllocatedSizeVariant::Default4096 => (8, "8.0K", "8.2k"),
+    };
+
     let expected_prints: HashMap<_, _> = if cfg!(unix) {
         [
-            ("long_vanilla", "total 8"),
-            ("long_human_readable", "total 8.0K"),
-            ("long_si", "total 8.2k"),
+            ("long_vanilla", format!("total {total_long_vanilla}")),
+            ("long_human_readable", format!("total {total_long_human}")),
+            ("long_si", format!("total {total_long_si}")),
         ]
         .iter()
-        .copied()
+        .cloned()
         .collect()
     } else {
         [
-            ("long_vanilla", "total 2"),
-            ("long_human_readable", "total 2"),
-            ("long_si", "total 2"),
+            ("long_vanilla", "total 2".to_string()),
+            ("long_human_readable", "total 2".to_string()),
+            ("long_si", "total 2".to_string()),
         ]
         .iter()
-        .copied()
+        .cloned()
         .collect()
     };
 
     for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).succeeds();
-        result.stdout_contains(expected_prints["long_vanilla"]);
+        result.stdout_contains(&expected_prints["long_vanilla"]);
 
         for arg2 in ["-h", "--human-readable", "--si"] {
             let result = scene.ucmd().arg(arg).arg(arg2).succeeds();
             result.stdout_contains(if arg2 == "--si" {
-                expected_prints["long_si"]
+                &expected_prints["long_si"]
             } else {
-                expected_prints["long_human_readable"]
+                &expected_prints["long_human_readable"]
             });
         }
     }
