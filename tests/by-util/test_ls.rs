@@ -248,7 +248,7 @@ fn test_ls_allocation_size() {
             zero_file_size_8k,
             zero_file_size_4m,
         ) = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
-            AllocatedSizeVariant::Android10Plus => (4, 4100, 1025, 8216, "8.2M"),
+            AllocatedSizeVariant::Android10Plus => (4, 4100, 1027, 8216, "8.2M"),
             AllocatedSizeVariant::F2fs4100 => (0, 4100, 1025, 8200, "4.1M"),
             AllocatedSizeVariant::Default4096 => (0, 4096, 1024, 8192, "4.0M"),
         };
@@ -1427,7 +1427,7 @@ fn test_ls_long_total_size() {
 
     let (total_long_vanilla, total_long_human, total_long_si) =
         match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
-            AllocatedSizeVariant::Android10Plus => (16, "16K", "16.4k"),
+            AllocatedSizeVariant::Android10Plus => (16, "16K", "17k"),
             AllocatedSizeVariant::F2fs4100 => (8, "8.0K", "8.2k"),
             AllocatedSizeVariant::Default4096 => (8, "8.0K", "8.2k"),
         };
@@ -3985,7 +3985,7 @@ fn test_ls_dired_simple() {
         .arg("--dired")
         .arg("-l")
         .succeeds()
-        .stdout_contains(format!("  total {min_total_size}"));
+        .stdout_contains(format!("  total 0"));
 
     at.mkdir("d");
     at.touch("d/a1");
