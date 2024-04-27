@@ -190,7 +190,7 @@ impl Num {
 ///
 /// Use [`Source::stdin_as_file`] if available to enable more
 /// fine-grained access to reading from stdin.
-enum Source {
+enum SourceVariant {
     /// Input from stdin.
     #[cfg(not(unix))]
     Stdin(io::Stdin),
@@ -207,12 +207,40 @@ enum Source {
     Fifo(File),
 }
 
+struct Source {
+    variant: SourceVariant,
+}
+
 impl Source {
     fn unset_direct(&mut self) -> io::Result<()> {
-        if let Self::File(f) = self {
+        if let Some(f) = self.get_file_mut() {
             unset_direct(f)?
         }
         Ok(())
+    }
+
+    fn get_file(&self) -> Option<&File> {
+        match &self.variant {
+            SourceVariant::File(f) => Some(f),
+            #[cfg(unix)]
+            SourceVariant::Fifo(f) => Some(f),
+            #[cfg(unix)]
+            SourceVariant::StdinFile(f) => Some(f),
+            #[cfg(not(unix))]
+            _ => None,
+        }
+    }
+
+    fn get_file_mut(&mut self) -> Option<&mut File> {
+        match &mut self.variant {
+            SourceVariant::File(f) => Some(f),
+            #[cfg(unix)]
+            SourceVariant::Fifo(f) => Some(f),
+            #[cfg(unix)]
+            SourceVariant::StdinFile(f) => Some(f),
+            #[cfg(not(unix))]
+            _ => None,
+        }
     }
 
     /// Create a source from stdin using its raw file descriptor.
@@ -226,23 +254,24 @@ impl Source {
     fn stdin_as_file() -> Self {
         let fd = io::stdin().as_raw_fd();
         let f = unsafe { File::from_raw_fd(fd) };
-        Self::StdinFile(f)
+        Self{ variant: SourceVariant::StdinFile(f) }
     }
 
     /// The length of the data source in number of bytes.
     ///
     /// If it cannot be determined, then this function returns 0.
     fn len(&self) -> std::io::Result<i64> {
-        match self {
-            Self::File(f) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
-            _ => Ok(0),
+        if let Some(f) = self.get_file() {
+            Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX))
+        } else {
+            Ok(0)
         }
     }
 
     fn skip(&mut self, n: u64) -> io::Result<u64> {
-        match self {
+        match &mut self.variant {
             #[cfg(not(unix))]
-            Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
+            SourceVariant::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
                 Ok(m) if m < n => {
                     show_error!("'standard input': cannot skip to specified offset");
                     Ok(m)
@@ -251,7 +280,7 @@ impl Source {
                 Err(e) => Err(e),
             },
             #[cfg(unix)]
-            Self::StdinFile(f) => {
+            SourceVariant::StdinFile(f) => {
                 if let Ok(Some(len)) = try_get_len_of_block_device(f) {
                     if len < n {
                         // GNU compatibility:
@@ -270,9 +299,9 @@ impl Source {
                     Err(e) => Err(e),
                 }
             }
-            Self::File(f) => f.seek(io::SeekFrom::Current(n.try_into().unwrap())),
+            SourceVariant::File(f) => f.seek(io::SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
-            Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
+            SourceVariant::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
         }
     }
 
@@ -284,26 +313,25 @@ impl Source {
     /// then this function returns an error.
     #[cfg(target_os = "linux")]
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
-        match self {
-            Self::File(f) => {
-                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_raw_fd(), offset, len, advice)
-            }
-            _ => Err(Errno::ESPIPE), // "Illegal seek"
+        if let Some(f) = self.get_file() {
+            let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
+            posix_fadvise(f.as_raw_fd(), offset, len, advice)
+        } else {
+            Err(Errno::ESPIPE) // "Illegal seek"
         }
     }
 }
 
 impl Read for Source {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            #[cfg(not(unix))]
-            Self::Stdin(stdin) => stdin.read(buf),
-            Self::File(f) => f.read(buf),
-            #[cfg(unix)]
-            Self::StdinFile(f) => f.read(buf),
-            #[cfg(unix)]
-            Self::Fifo(f) => f.read(buf),
+        if let Some(f) = self.get_file_mut() {
+            f.read(buf)
+        } else {
+            match self.variant {
+                #[cfg(not(unix))]
+                SourceVariant::Stdin(stdin) => stdin.read(buf),
+                _ => panic!("not implemented!"),
+            }
         }
     }
 }
@@ -347,7 +375,7 @@ impl<'a> Input<'a> {
         #[cfg(unix)]
         let mut src = Source::stdin_as_file();
         #[cfg(unix)]
-        if let Source::StdinFile(f) = &src {
+        if let SourceVariant::StdinFile(f) = &src.variant {
             // GNU compatibility:
             // this will check whether stdin points to a folder or not
             if f.metadata()?.is_file() && settings.iflags.directory {
@@ -376,7 +404,7 @@ impl<'a> Input<'a> {
                 .map_err_context(|| format!("failed to open {}", filename.quote()))?
         };
 
-        let mut src = Source::File(src);
+        let mut src = Source{ variant: SourceVariant::File(src) };
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
@@ -390,7 +418,7 @@ impl<'a> Input<'a> {
         opts.read(true);
         #[cfg(any(target_os = "linux", target_os = "android"))]
         opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
-        let mut src = Source::Fifo(opts.open(filename)?);
+        let mut src = Source{ variant: SourceVariant::Fifo(opts.open(filename)?) };
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }

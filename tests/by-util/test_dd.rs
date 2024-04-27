@@ -1553,19 +1553,34 @@ fn test_multiple_processes_reading_stdin() {
         .stdout_only("def\n");
 }
 
-/// Test that discarding system file cache fails for stdin.
+/// Test that discarding system file cache fails for pipes.
 #[test]
 #[cfg(target_os = "linux")]
-fn test_nocache_stdin_error() {
+fn test_nocache_stdin_pipe_error() {
     #[cfg(not(target_env = "musl"))]
     let detail = "Illegal seek";
     #[cfg(target_env = "musl")]
     let detail = "Invalid seek";
     new_ucmd!()
         .args(&["iflag=nocache", "count=0", "status=noxfer"])
+        .set_stdin(Stdio::piped())
         .fails()
         .code_is(1)
         .stderr_only(format!("dd: failed to discard cache for: 'standard input': {detail}\n0+0 records in\n0+0 records out\n"));
+}
+
+/// Test that discarding system file cache works on stdin when mapped to regular file
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nocache_stdin_success() {
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures;
+    let infile = at.make_file("stdin.txt");
+    new_ucmd!()
+        .args(&["iflag=nocache", "count=0", "status=noxfer"])
+        .set_stdin(infile)
+        .succeeds()
+        .code_is(0);
 }
 
 /// Test that dd fails when no number in count.
