@@ -119,6 +119,20 @@ take_screen_shot() {
     adb exec-out screencap -p > "$filename"
 }
 
+# shellcheck disable=SC2317  # Don't warn about unreachable commands in this function
+adb_shell_start_termux_activity() {
+    if ! adb shell 'am start -n com.termux/.HomeActivity'; then
+        echo "failed to launch termux"
+        return 1
+    fi
+
+    take_screen_shot "launch_termux_after_start_activity"
+
+    # the emulator can sometimes be a little slow to launch the app
+    run_with_retry 20 sleep 1 && adb shell "dumpsys window windows" |
+        grep -E "imeInputTarget in display# 0 Window{[^}]+com.termux\/com\.termux\.HomeActivity}"
+}
+
 launch_termux() {
     echo "launching termux"
     take_screen_shot "launch_termux_enter"
@@ -127,24 +141,7 @@ launch_termux() {
                                  # should not cause side effects when dialog is not there as there are
                                  # no relevant GUI elements at this position otherwise.
 
-    if ! adb shell 'am start -n com.termux/.HomeActivity'; then
-        echo "failed to launch termux"
-        exit 1
-    fi
-
-    take_screen_shot "launch_termux_after_start_activity"
-
-    # the emulator can sometimes be a little slow to launch the app
-    loop_count=0
-    while ! adb shell "dumpsys window windows" | \
-            grep -E "imeInputTarget in display# 0 Window{[^}]+com.termux\/com\.termux\.HomeActivity}"
-    do
-        sleep 1
-        loop_count=$((loop_count + 1))
-        if [[ loop_count -ge 20 ]]; then
-            break
-        fi
-    done
+    run_with_retry 6 adb_shell_start_termux_activity || exit 1
 
     take_screen_shot "launch_termux_after_wait_activity"
 
