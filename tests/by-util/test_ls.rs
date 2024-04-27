@@ -202,10 +202,12 @@ fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
 struct ExpectedSizes {
     empty_file_size: i32,
     empty_file_4k_blocks: i32,
+    empty_file_4k_si_size: &'static str,
     zero_file_size_4k: i32,
     zero_file_size_1k: i32,
     zero_file_size_8k: i32,
     zero_file_size_4m: &'static str,
+    zero_file_size_si_4m2: &'static str,
 }
 
 impl ExpectedSizes {
@@ -214,26 +216,32 @@ impl ExpectedSizes {
             AllocatedSizeVariant::Android10Plus => Self {
                 empty_file_size: 4,
                 empty_file_4k_blocks: 1,
+                empty_file_4k_si_size: "4.1k",
                 zero_file_size_4k: 4100,
                 zero_file_size_1k: 1025,
                 zero_file_size_8k: 8216,
                 zero_file_size_4m: "8.2M",
+                zero_file_size_si_4m2: "4.3M",
             },
             AllocatedSizeVariant::F2fs4100 => Self {
                 empty_file_size: 0,
                 empty_file_4k_blocks: 0,
+                empty_file_4k_si_size: "0",
                 zero_file_size_4k: 4100,
                 zero_file_size_1k: 1025,
                 zero_file_size_8k: 8200,
                 zero_file_size_4m: "4.1M",
+                zero_file_size_si_4m2: "4.2M",
             },
             AllocatedSizeVariant::Default4096 => Self {
                 empty_file_size: 0,
                 empty_file_4k_blocks: 0,
+                empty_file_4k_si_size: "0",
                 zero_file_size_4k: 4096,
                 zero_file_size_1k: 1024,
                 zero_file_size_8k: 8192,
                 zero_file_size_4m: "4.0M",
+                zero_file_size_si_4m2: "4.2M",
             },
         }
     }
@@ -534,10 +542,10 @@ fn test_ls_allocation_size_13(test_setup_1: (TestScenario, ExpectedSizes)) {
         .arg("--si")
         .arg("some-dir1")
         .succeeds()
-        .stdout_contains("total 4.2M")
-        .stdout_contains("0 empty-file")
-        .stdout_contains("0 file-with-holes")
-        .stdout_contains("4.2M zero-file");
+        .stdout_contains(format!("total {}", es.zero_file_size_si_4m2))
+        .stdout_contains(format!("{} empty-file", es.empty_file_4k_si_size))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_4k_si_size))
+        .stdout_contains(format!("{} zero-file", es.zero_file_size_si_4m2));
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
