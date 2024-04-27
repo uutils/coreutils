@@ -32,7 +32,7 @@ run_tests_in_subprocess() (
     # limit memory to 3GB to avoid that OS kills sshd.
     android_version="$(termux-info | sed -n '/Android version/{n;p}')"
     echo "detected Android version: $android_version"
-    if [ "$android_version" -ge 12 ]; then
+    if [ "$android_version" -ge 11 ]; then
         # On newer android versions (since API 31, Android 12),
         # the virtual memory size is 10GB by default for each process.
         # This prevents a meaningfull ulimit on virtual memory size.
