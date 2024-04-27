@@ -1983,23 +1983,17 @@ impl PathData {
                 if !self.must_dereference {
                     if let Some(dir_entry) = &self.de {
                         let metadata = dir_entry.metadata();
-                        eprintln!("get metadata from {:?}:\n{:?}", dir_entry, metadata);
+                        //eprintln!("get metadata from {:?}:\n{:?}", dir_entry, metadata);
                         if let Ok(md) = &metadata {
                             eprintln!("metadata from {:?}:\n\
                                     size: {}\n\
                                     blocks: {}\n\
                                     blksize: {}\n\
-                                    st_blksize: {}\n\
-                                    st_size: {}\n\
-                                    st_blocks: {}\n\
                                     file_type: {:?}",
                                     dir_entry.path(),
                                     std::os::unix::fs::MetadataExt::size(md),
                                     std::os::unix::fs::MetadataExt::blocks(md),
                                     std::os::unix::fs::MetadataExt::blksize(md),
-                                    std::os::linux::fs::MetadataExt::st_blksize(md),
-                                    std::os::linux::fs::MetadataExt::st_size(md),
-                                    std::os::linux::fs::MetadataExt::st_blocks(md),
                                     md.file_type(),
                                 );
                         }
@@ -2405,6 +2399,7 @@ fn display_dir_entry_size(
             ),
             SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
         };
+        eprintln!("success metadata from entry: size_len: {size_len}, major_len: {major_len}, minor_len: {minor_len}");
         (
             display_symlink_count(md).len(),
             display_uname(md, config).len(),
@@ -2414,6 +2409,7 @@ fn display_dir_entry_size(
             minor_len,
         )
     } else {
+        eprintln!("failed to get metadata from entry: {:?}", entry);
         (0, 0, 0, 0, 0, 0)
     }
 }
