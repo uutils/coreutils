@@ -123,7 +123,7 @@ take_screen_shot() {
 check_if_termux_is_active() {
     dumsys=$(adb shell "dumpsys window windows")
     echo "dumpsys: $dumsys"
-    echo "$dumsys" | grep -E "imeInputTarget in display# 0 Window{[^}]+com.termux\/com\.termux\.HomeActivity}"
+    echo "$dumsys" | grep -E "(imeInputTarget|mInputMethodTarget) in display# 0 Window{[^}]+com.termux\/com\.termux\.HomeActivity}"
 }
 
 # shellcheck disable=SC2317  # Don't warn about unreachable commands in this function
