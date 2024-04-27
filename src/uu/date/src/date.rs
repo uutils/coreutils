@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
+// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getresgettime
 
 use chrono::format::{Item, StrftimeItems};
 use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
@@ -11,7 +11,9 @@ use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
-use libc::{clock_settime, timespec, CLOCK_MONOTONIC, CLOCK_REALTIME};
+use libc::clock_settime;
+#[cfg(all(unix))]
+use libc::{timespec, CLOCK_MONOTONIC, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::os::raw::c_long;
