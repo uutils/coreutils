@@ -243,14 +243,15 @@ fn test_ls_allocation_size() {
         #[cfg(not(target_os = "freebsd"))]
         let (
             empty_file_size,
+            empty_file_4k_blocks,
             zero_file_size_4k,
             zero_file_size_1k,
             zero_file_size_8k,
             zero_file_size_4m,
         ) = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
-            AllocatedSizeVariant::Android10Plus => (4, 4100, 1027, 8216, "8.2M"),
-            AllocatedSizeVariant::F2fs4100 => (0, 4100, 1025, 8200, "4.1M"),
-            AllocatedSizeVariant::Default4096 => (0, 4096, 1024, 8192, "4.0M"),
+            AllocatedSizeVariant::Android10Plus => (4, 1, 4100, 1025, 8216, "8.2M"),
+            AllocatedSizeVariant::F2fs4100 => (0, 0, 4100, 1025, 8200, "4.1M"),
+            AllocatedSizeVariant::Default4096 => (0, 0, 4096, 1024, 8192, "4.0M"),
         };
 
         #[cfg(not(target_os = "freebsd"))]
@@ -325,16 +326,19 @@ fn test_ls_allocation_size() {
             .stdout_contains("512 zero-file");
 
         #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .env("BLOCK_SIZE", "4K")
-            .arg("-s1")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains(format!("total {zero_file_size_1k}"))
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains(format!("{zero_file_size_1k} zero-file"));
+        {
+            let total = zero_file_size_1k + 2 * empty_file_4k_blocks;
+            scene
+                .ucmd()
+                .env("BLOCK_SIZE", "4K")
+                .arg("-s1")
+                .arg("some-dir1")
+                .succeeds()
+                .stdout_contains(format!("total {total}"))
+                .stdout_contains(format!("{empty_file_4k_blocks} empty-file"))
+                .stdout_contains(format!("{empty_file_4k_blocks} file-with-holes"))
+                .stdout_contains(format!("{zero_file_size_1k} zero-file"));
+        }
 
         #[cfg(not(target_os = "freebsd"))]
         scene
