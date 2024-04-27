@@ -806,7 +806,6 @@ pub fn get_seeking_strategy(input: &mut std::fs::File) -> std::io::Result<Seekin
     }
 }
 
-
 /// Extracts the filename component from the given `file` path and returns it as an `Option<&str>`.
 ///
 /// If the `file` path contains a filename, this function returns `Some(filename)` where `filename` is

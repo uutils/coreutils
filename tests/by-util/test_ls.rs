@@ -1425,11 +1425,12 @@ fn test_ls_long_total_size() {
     at.touch(at.plus_as_string("test-long2"));
     at.append("test-long2", "2");
 
-    let (total_long_vanilla, total_long_human, total_long_si) = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
-        AllocatedSizeVariant::Android10Plus => (16, "16.0K", "16.4k"),
-        AllocatedSizeVariant::F2fs4100 => (8, "8.0K", "8.2k"),
-        AllocatedSizeVariant::Default4096 => (8, "8.0K", "8.2k"),
-    };
+    let (total_long_vanilla, total_long_human, total_long_si) =
+        match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+            AllocatedSizeVariant::Android10Plus => (16, "16.0K", "16.4k"),
+            AllocatedSizeVariant::F2fs4100 => (8, "8.0K", "8.2k"),
+            AllocatedSizeVariant::Default4096 => (8, "8.0K", "8.2k"),
+        };
 
     let expected_prints: HashMap<_, _> = if cfg!(unix) {
         [

@@ -254,7 +254,9 @@ impl Source {
     fn stdin_as_file() -> Self {
         let fd = io::stdin().as_raw_fd();
         let f = unsafe { File::from_raw_fd(fd) };
-        Self{ variant: SourceVariant::StdinFile(f) }
+        Self {
+            variant: SourceVariant::StdinFile(f),
+        }
     }
 
     /// The length of the data source in number of bytes.
@@ -404,7 +406,9 @@ impl<'a> Input<'a> {
                 .map_err_context(|| format!("failed to open {}", filename.quote()))?
         };
 
-        let mut src = Source{ variant: SourceVariant::File(src) };
+        let mut src = Source {
+            variant: SourceVariant::File(src),
+        };
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
@@ -418,7 +422,9 @@ impl<'a> Input<'a> {
         opts.read(true);
         #[cfg(any(target_os = "linux", target_os = "android"))]
         opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
-        let mut src = Source{ variant: SourceVariant::Fifo(opts.open(filename)?) };
+        let mut src = Source {
+            variant: SourceVariant::Fifo(opts.open(filename)?),
+        };
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }

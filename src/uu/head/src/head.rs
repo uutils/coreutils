@@ -6,11 +6,11 @@
 // spell-checker:ignore (vars) BUFWRITER seekable
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-use uucore::fs::{get_seeking_strategy, SeekingStrategy};
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::fs::{get_seeking_strategy, SeekingStrategy};
 use uucore::line_ending::LineEnding;
 use uucore::lines::lines;
 use uucore::{format_usage, help_about, help_usage, show};
