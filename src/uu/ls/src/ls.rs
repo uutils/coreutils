@@ -1876,7 +1876,7 @@ pub fn uu_app() -> Command {
 #[derive(Debug)]
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
-    md: OnceCell<Option<Metadata>>,
+    metadata: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     // can be used to avoid reading the metadata. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
@@ -1964,7 +1964,7 @@ impl PathData {
         };
 
         Self {
-            md: OnceCell::new(),
+            metadata: OnceCell::new(),
             ft,
             de,
             display_name,
@@ -1976,13 +1976,15 @@ impl PathData {
     }
 
     fn get_metadata(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
-        self.md
+        self.metadata
             .get_or_init(|| {
                 // check if we can use DirEntry metadata
                 // it will avoid a call to stat()
                 if !self.must_dereference {
                     if let Some(dir_entry) = &self.de {
-                        return dir_entry.metadata().ok();
+                        let metadata = dir_entry.metadata();
+                        eprintln!("get metadata from {:?}:\n{:?}", dir_entry, metadata);
+                        return metadata.ok();
                     }
                 }
 
@@ -2176,7 +2178,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
                 // We will always try to deref symlinks to group directories, so PathData.md
                 // is not always useful.
                 if p.must_dereference {
-                    p.md.get()
+                    p.metadata.get()
                 } else {
                     None
                 }
