@@ -1427,7 +1427,7 @@ fn test_ls_long_total_size() {
 
     let (total_long_vanilla, total_long_human, total_long_si) =
         match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
-            AllocatedSizeVariant::Android10Plus => (16, "16.0K", "16.4k"),
+            AllocatedSizeVariant::Android10Plus => (16, "16K", "16.4k"),
             AllocatedSizeVariant::F2fs4100 => (8, "8.0K", "8.2k"),
             AllocatedSizeVariant::Default4096 => (8, "8.0K", "8.2k"),
         };
@@ -3971,20 +3971,28 @@ fn test_ls_dired_recursive_multiple() {
 #[test]
 fn test_ls_dired_simple() {
     let scene = TestScenario::new(util_name!());
+
+    let min_total_size =
+        match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+            AllocatedSizeVariant::Android10Plus => 4,
+            AllocatedSizeVariant::F2fs4100 => 0,
+            AllocatedSizeVariant::Default4096 => 0,
+        };
+
     let at = &scene.fixtures;
     scene
         .ucmd()
         .arg("--dired")
         .arg("-l")
         .succeeds()
-        .stdout_contains("  total 0");
+        .stdout_contains(format!("  total {min_total_size}"));
 
     at.mkdir("d");
     at.touch("d/a1");
     let mut cmd = scene.ucmd();
     cmd.arg("--dired").arg("-l").arg("d");
     let result = cmd.succeeds();
-    result.stdout_contains("  total 0");
+    result.stdout_contains(format!("  total {min_total_size}"));
     println!("    result.stdout = {:#?}", result.stdout_str());
 
     let dired_line = result
@@ -4262,6 +4270,13 @@ fn test_ls_invalid_block_size() {
 fn test_ls_invalid_block_size_in_env_var() {
     let scene = TestScenario::new(util_name!());
 
+    let file_size =
+        match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+            AllocatedSizeVariant::Android10Plus => 8,
+            AllocatedSizeVariant::F2fs4100 => 4,
+            AllocatedSizeVariant::Default4096 => 4,
+        };
+
     scene
         .ccmd("dd")
         .arg("if=/dev/zero")
@@ -4275,7 +4290,7 @@ fn test_ls_invalid_block_size_in_env_var() {
         .arg("-og")
         .env("LS_BLOCK_SIZE", "invalid")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {file_size}"))
         .stdout_contains(" 1 1 "); // hardlink count + file size
 
     scene
@@ -4283,7 +4298,7 @@ fn test_ls_invalid_block_size_in_env_var() {
         .arg("-og")
         .env("BLOCK_SIZE", "invalid")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {file_size}"))
         .stdout_contains(" 1 1 "); // hardlink count + file size
 
     scene
@@ -4291,7 +4306,7 @@ fn test_ls_invalid_block_size_in_env_var() {
         .arg("-og")
         .env("BLOCKSIZE", "invalid")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {file_size}"))
         .stdout_contains(" 1024 ");
 }
 
