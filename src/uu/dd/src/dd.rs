@@ -24,11 +24,11 @@ use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
+use uucore::fs::FileExtSeekable;
 use uucore::io::OwnedFileDescriptorOrHandle;
 
 use std::cmp;
 use std::env;
-use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1417,20 +1417,6 @@ fn below_count_limit(count: &Option<Num>, rstat: &ReadStat) -> bool {
     }
 }
 
-/// Canonicalized file name of `/dev/stdout`.
-///
-/// For example, if this process were invoked from the command line as
-/// `dd`, then this function returns the [`OsString`] form of
-/// `"/dev/stdout"`. However, if this process were invoked as `dd >
-/// outfile`, then this function returns the canonicalized path to
-/// `outfile`, something like `"/path/to/outfile"`.
-fn stdout_canonicalized() -> OsString {
-    match Path::new("/dev/stdout").canonicalize() {
-        Ok(p) => p.into_os_string(),
-        Err(_) => OsString::from("/dev/stdout"),
-    }
-}
-
 /// Decide whether stdout is being redirected to a seekable file.
 ///
 /// For example, if this process were invoked from the command line as
@@ -1448,14 +1434,11 @@ fn stdout_canonicalized() -> OsString {
 ///
 /// then this function would return false.
 fn is_stdout_redirected_to_seekable_file() -> bool {
-    let s = stdout_canonicalized();
-    let p = Path::new(&s);
-    match File::open(p) {
-        Ok(mut f) => {
-            f.stream_position().is_ok() && f.seek(SeekFrom::End(0)).is_ok() && f.rewind().is_ok()
-        }
-        Err(_) => false,
-    }
+    let Ok(fx) = OwnedFileDescriptorOrHandle::from(std::io::stdout()) else {
+        return false;
+    };
+    let mut f = fx.into_file();
+    f.is_seekable()
 }
 
 /// Try to get the len if it is a block device

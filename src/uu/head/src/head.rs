@@ -6,6 +6,7 @@
 // spell-checker:ignore (vars) BUFWRITER seekable
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use uucore::fs::{get_seeking_strategy, SeekingStrategy};
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
@@ -391,22 +392,11 @@ where
     }
 }
 
-fn is_seekable(input: &mut std::fs::File) -> bool {
-    let current_pos = input.stream_position();
-    current_pos.is_ok()
-        && input.seek(SeekFrom::End(0)).is_ok()
-        && input.seek(SeekFrom::Start(current_pos.unwrap())).is_ok()
-}
-
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
-    let st = input.metadata()?;
-    let seekable = is_seekable(input);
-    let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
-    if !seekable || st.len() <= blksize_limit {
-        return head_backwards_without_seek_file(input, options);
+    match get_seeking_strategy(input)? {
+        SeekingStrategy::Read => head_backwards_without_seek_file(input, options),
+        SeekingStrategy::Seek => head_backwards_on_seekable_file(input, options),
     }
-
-    head_backwards_on_seekable_file(input, options)
 }
 
 fn head_backwards_without_seek_file(

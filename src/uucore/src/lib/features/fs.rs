@@ -5,7 +5,7 @@
 
 //! Set of functions to manage files and symlinks
 
-// spell-checker:ignore backport
+// spell-checker:ignore backport seekable
 
 #[cfg(unix)]
 use libc::{
@@ -19,7 +19,10 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::read_dir;
+use std::fs::File;
 use std::hash::Hash;
+use std::io::Seek;
+use std::io::SeekFrom;
 use std::io::{Error, ErrorKind, Result as IOResult};
 #[cfg(unix)]
 use std::os::unix::{fs::MetadataExt, io::AsRawFd};
@@ -769,6 +772,40 @@ pub mod sane_blksize {
         }
     }
 }
+
+pub trait FileExtSeekable {
+    #[allow(clippy::wrong_self_convention)]
+    fn is_seekable(&mut self) -> bool;
+}
+
+impl FileExtSeekable for File {
+    /// Test if File is seekable.
+    /// Set the current position offset to `current_offset`.
+    fn is_seekable(&mut self) -> bool {
+        let current_offset = self.stream_position();
+        current_offset.is_ok()
+            && self.seek(SeekFrom::End(0)).is_ok()
+            && self.rewind().is_ok()
+            && self.seek(SeekFrom::Start(current_offset.unwrap())).is_ok()
+    }
+}
+
+pub enum SeekingStrategy {
+    Seek,
+    Read,
+}
+
+pub fn get_seeking_strategy(input: &mut std::fs::File) -> std::io::Result<SeekingStrategy> {
+    let st = input.metadata()?;
+    let seekable = input.is_seekable();
+    let blksize_limit = sane_blksize::sane_blksize_from_metadata(&st);
+    if !seekable || st.len() <= blksize_limit {
+        Ok(SeekingStrategy::Read)
+    } else {
+        Ok(SeekingStrategy::Seek)
+    }
+}
+
 
 /// Extracts the filename component from the given `file` path and returns it as an `Option<&str>`.
 ///
