@@ -158,11 +158,13 @@ enum AllocatedSizeVariant {
     Default4096,
     F2fs4100,
     Android10Plus,
+    ZFS,
 }
 
 fn get_allocated_size_variant(scene: &TestScenario, path: &Path) -> AllocatedSizeVariant {
     match get_filesystem_type(scene, path).as_str() {
         "f2fs" => return AllocatedSizeVariant::F2fs4100,
+        "zfs" => return AllocatedSizeVariant::ZFS,
         _ => {}
     }
 
@@ -200,12 +202,14 @@ fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
 }
 
 struct ExpectedSizes {
-    empty_file_size: i32,
+    empty_file_1k_blocks: i32,
+    empty_file_size_bytes: i32,
     empty_file_4k_blocks: i32,
     empty_file_4k_si_size: &'static str,
     zero_file_size_4k: i32,
     zero_file_size_1k: i32,
-    zero_file_size_8k: i32,
+    zero_file_size_blocksize_512: i32,
+    zero_file_size_blocksize_8192: i32,
     zero_file_size_4m: &'static str,
     zero_file_size_si_4m2: &'static str,
 }
@@ -214,34 +218,52 @@ impl ExpectedSizes {
     fn new(scene: &TestScenario, path: &Path) -> Self {
         match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
             AllocatedSizeVariant::Android10Plus => Self {
-                empty_file_size: 4,
+                empty_file_1k_blocks: 4,
+                empty_file_size_bytes: 4*512,
                 empty_file_4k_blocks: 1,
                 empty_file_4k_si_size: "4.1k",
                 zero_file_size_4k: 4100,
                 zero_file_size_1k: 1025,
-                zero_file_size_8k: 8216,
+                zero_file_size_blocksize_512: 8216,
+                zero_file_size_blocksize_8192: 512,
                 zero_file_size_4m: "8.2M",
                 zero_file_size_si_4m2: "4.3M",
             },
             AllocatedSizeVariant::F2fs4100 => Self {
-                empty_file_size: 0,
+                empty_file_1k_blocks: 0,
+                empty_file_size_bytes: 0,
                 empty_file_4k_blocks: 0,
                 empty_file_4k_si_size: "0",
                 zero_file_size_4k: 4100,
                 zero_file_size_1k: 1025,
-                zero_file_size_8k: 8200,
+                zero_file_size_blocksize_512: 8200,
+                zero_file_size_blocksize_8192: 512,
                 zero_file_size_4m: "4.1M",
                 zero_file_size_si_4m2: "4.2M",
             },
             AllocatedSizeVariant::Default4096 => Self {
-                empty_file_size: 0,
+                empty_file_1k_blocks: 0,
+                empty_file_size_bytes: 0,
                 empty_file_4k_blocks: 0,
                 empty_file_4k_si_size: "0",
                 zero_file_size_4k: 4096,
                 zero_file_size_1k: 1024,
-                zero_file_size_8k: 8192,
+                zero_file_size_blocksize_512: 8192,
+                zero_file_size_blocksize_8192: 512,
                 zero_file_size_4m: "4.0M",
                 zero_file_size_si_4m2: "4.2M",
+            },
+            AllocatedSizeVariant::ZFS => Self {
+                empty_file_1k_blocks: 1,
+                empty_file_size_bytes: 512,
+                empty_file_4k_blocks: 1,
+                empty_file_4k_si_size: "0",
+                zero_file_size_4k: 4104,
+                zero_file_size_1k: 1026,
+                zero_file_size_blocksize_512: 8209,
+                zero_file_size_blocksize_8192: 513,
+                zero_file_size_4m: "4.1M",
+                zero_file_size_si_4m2: "4.3M",
             },
         }
     }
@@ -284,6 +306,16 @@ fn test_setup_0() -> TestScenario {
         .arg("count=777")
         .succeeds();
 
+
+    #[cfg(target_os = "freebsd")]
+    {
+        // FreeBSD/zfs doesn't immediately report the correct number of blocks
+        // we need to force it to sync the data to disk.
+        scene.cmd("sync").args(&["-f", "."]).succeeds();
+        // sync command apparently doesn't work, we need to wait 5 seconds
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    }
+
     scene
         .ucmd()
         .arg("-l")
@@ -304,26 +336,27 @@ fn test_setup_1() -> (TestScenario, ExpectedSizes) {
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_1(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
-    let total = es.zero_file_size_4k + 2 * es.empty_file_size;
+    let total = es.zero_file_size_4k + 2 * es.empty_file_1k_blocks;
     scene
         .ucmd()
         .arg("-s1")
         .arg("some-dir1")
+        .request_print_outputs()
         .succeeds()
         .stdout_is(format!(
             "total {total}\
             \n   {} empty-file\
             \n   {} file-with-holes\n\
             {} zero-file\n",
-            es.empty_file_size, es.empty_file_size, es.zero_file_size_4k,
+            es.empty_file_1k_blocks, es.empty_file_1k_blocks, es.zero_file_size_4k,
         ));
 }
 
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_2(test_setup_0: TestScenario) {
     test_setup_0
         .ucmd()
@@ -335,21 +368,20 @@ fn test_ls_allocation_size_2(test_setup_0: TestScenario) {
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_3(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
-    #[cfg(not(target_os = "freebsd"))]
     scene
         .ucmd()
         .arg("-s1")
         .arg("some-dir1")
         .succeeds()
-        .stdout_contains(format!("{} empty-file", es.empty_file_size))
+        .stdout_contains(format!("{} empty-file", es.empty_file_1k_blocks))
         .stdout_contains(format!("{} zero-file", es.zero_file_size_4k));
 }
 
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_4(test_setup_0: TestScenario) {
     let scene = test_setup_0;
     // Test alignment of different block sized files
@@ -379,11 +411,11 @@ fn test_ls_allocation_size_4(test_setup_0: TestScenario) {
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_5(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
-    #[cfg(not(target_os = "freebsd"))]
+    let total = es.zero_file_size_blocksize_8192 + 2 * es.empty_file_4k_blocks;
     scene
         .ucmd()
         .env("LS_BLOCK_SIZE", "8K")
@@ -391,18 +423,17 @@ fn test_ls_allocation_size_5(test_setup_1: (TestScenario, ExpectedSizes)) {
         .arg("-s1")
         .arg("some-dir1")
         .succeeds()
-        .stdout_contains("total 512")
-        .stdout_contains("0 empty-file")
-        .stdout_contains("0 file-with-holes")
-        .stdout_contains("512 zero-file");
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} zero-file", es.zero_file_size_blocksize_8192));
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_6(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
-    #[cfg(not(target_os = "freebsd"))]
     {
         let total = es.zero_file_size_1k + 2 * es.empty_file_4k_blocks;
         scene
@@ -419,11 +450,10 @@ fn test_ls_allocation_size_6(test_setup_1: (TestScenario, ExpectedSizes)) {
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_7(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
-    #[cfg(not(target_os = "freebsd"))]
     scene
         .ucmd()
         .env("BLOCK_SIZE", "4K")
@@ -431,111 +461,110 @@ fn test_ls_allocation_size_7(test_setup_1: (TestScenario, ExpectedSizes)) {
         .arg("--si")
         .arg("some-dir1")
         .succeeds()
-        .stdout_contains("total 4.2M")
-        .stdout_contains("0 empty-file")
-        .stdout_contains("0 file-with-holes")
-        .stdout_contains("4.2M zero-file");
+        .stdout_contains(format!("total {}", es.zero_file_size_si_4m2))
+        .stdout_contains(format!("{} empty-file", es.empty_file_size_bytes))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_size_bytes))
+        .stdout_contains(format!("{} zero-file", es.zero_file_size_si_4m2));
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_8(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
-    #[cfg(not(target_os = "freebsd"))]
+    let total = es.zero_file_size_1k + 2 * es.empty_file_4k_blocks;
     scene
         .ucmd()
         .env("BLOCK_SIZE", "4096")
         .arg("-s1")
         .arg("some-dir1")
         .succeeds()
-        .stdout_contains(format!("total {}", es.zero_file_size_1k))
-        .stdout_contains("0 empty-file")
-        .stdout_contains("0 file-with-holes")
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_4k_blocks))
         .stdout_contains(format!("{} zero-file", es.zero_file_size_1k));
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_9(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
-    #[cfg(not(target_os = "freebsd"))]
+    let total = es.zero_file_size_blocksize_512 + 2 * es.empty_file_4k_blocks;
     scene
         .ucmd()
         .env("POSIXLY_CORRECT", "true")
         .arg("-s1")
         .arg("some-dir1")
         .succeeds()
-        .stdout_contains(format!("total {}", es.zero_file_size_8k))
-        .stdout_contains("0 empty-file")
-        .stdout_contains("0 file-with-holes")
-        .stdout_contains(format!("{} zero-file", es.zero_file_size_8k));
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} zero-file", es.zero_file_size_blocksize_512));
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_10(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
     // -k should make 'ls' ignore the env var
-    #[cfg(not(target_os = "freebsd"))]
+    let total = es.zero_file_size_4k + 2 * es.empty_file_1k_blocks;
     scene
         .ucmd()
         .env("BLOCK_SIZE", "4K")
         .arg("-s1k")
         .arg("some-dir1")
         .succeeds()
-        .stdout_contains(format!("total {}", es.zero_file_size_4k))
-        .stdout_contains("0 empty-file")
-        .stdout_contains("0 file-with-holes")
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_1k_blocks))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_1k_blocks))
         .stdout_contains(format!("{} zero-file", es.zero_file_size_4k));
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_11(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
     // but manually specified blocksize overrides -k
-    #[cfg(not(target_os = "freebsd"))]
+    let total = es.zero_file_size_1k + 2 * es.empty_file_4k_blocks;
     scene
         .ucmd()
         .arg("-s1k")
         .arg("--block-size=4K")
         .arg("some-dir1")
         .succeeds()
-        .stdout_contains(format!("total {}", es.zero_file_size_1k))
-        .stdout_contains("0 empty-file")
-        .stdout_contains("0 file-with-holes")
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_4k_blocks))
         .stdout_contains(format!("{} zero-file", es.zero_file_size_1k));
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_12(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
-    #[cfg(not(target_os = "freebsd"))]
+    let total = es.zero_file_size_1k + 2 * es.empty_file_4k_blocks;
     scene
         .ucmd()
         .arg("-s1")
         .arg("--block-size=4K")
         .arg("some-dir1")
         .succeeds()
-        .stdout_contains(format!("total {}", es.zero_file_size_1k))
-        .stdout_contains("0 empty-file")
-        .stdout_contains("0 file-with-holes")
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_4k_blocks))
         .stdout_contains(format!("{} zero-file", es.zero_file_size_1k));
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_13(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
     // si option should always trump the human-readable option
-    #[cfg(not(target_os = "freebsd"))]
     scene
         .ucmd()
         .arg("-s1h")
@@ -543,17 +572,16 @@ fn test_ls_allocation_size_13(test_setup_1: (TestScenario, ExpectedSizes)) {
         .arg("some-dir1")
         .succeeds()
         .stdout_contains(format!("total {}", es.zero_file_size_si_4m2))
-        .stdout_contains(format!("{} empty-file", es.empty_file_4k_si_size))
-        .stdout_contains(format!("{} file-with-holes", es.empty_file_4k_si_size))
+        .stdout_contains(format!("{} empty-file", es.empty_file_size_bytes))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_size_bytes))
         .stdout_contains(format!("{} zero-file", es.zero_file_size_si_4m2));
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_14(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
-    #[cfg(not(target_os = "freebsd"))]
     scene
         .ucmd()
         .arg("-s1")
@@ -561,27 +589,26 @@ fn test_ls_allocation_size_14(test_setup_1: (TestScenario, ExpectedSizes)) {
         .arg("some-dir1")
         .succeeds()
         .stdout_contains(format!("total {}", es.zero_file_size_4m))
-        .stdout_contains("0 empty-file")
-        .stdout_contains("0 file-with-holes")
+        .stdout_contains(format!("{} empty-file", es.empty_file_size_bytes))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_size_bytes))
         .stdout_contains(format!("{} zero-file", es.zero_file_size_4m));
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[rstest] // FIXME: fix this test for FreeBSD
+#[rstest]
 fn test_ls_allocation_size_15(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
-    #[cfg(not(target_os = "freebsd"))]
     scene
         .ucmd()
         .arg("-s1")
         .arg("--block-size=si")
         .arg("some-dir1")
         .succeeds()
-        .stdout_contains("total 4.2M")
-        .stdout_contains("0 empty-file")
-        .stdout_contains("0 file-with-holes")
-        .stdout_contains("4.2M zero-file");
+        .stdout_contains(format!("total {}", es.zero_file_size_si_4m2))
+        .stdout_contains(format!("{} empty-file", es.empty_file_size_bytes))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_size_bytes))
+        .stdout_contains(format!("{} zero-file", es.zero_file_size_si_4m2));
 }
 
 #[test]
@@ -1562,8 +1589,7 @@ fn test_ls_long_total_size() {
     let (total_long_vanilla, total_long_human, total_long_si) =
         match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
             AllocatedSizeVariant::Android10Plus => (16, "16K", "17k"),
-            AllocatedSizeVariant::F2fs4100 => (8, "8.0K", "8.2k"),
-            AllocatedSizeVariant::Default4096 => (8, "8.0K", "8.2k"),
+            AllocatedSizeVariant::Default4096 | _ => (8, "8.0K", "8.2k"),
         };
 
     let expected_prints: HashMap<_, _> = if cfg!(unix) {
@@ -4108,8 +4134,7 @@ fn test_ls_dired_simple() {
 
     let min_total_size = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
         AllocatedSizeVariant::Android10Plus => 4,
-        AllocatedSizeVariant::F2fs4100 => 0,
-        AllocatedSizeVariant::Default4096 => 0,
+        AllocatedSizeVariant::Default4096 | _ => 0,
     };
 
     let at = &scene.fixtures;
@@ -4280,8 +4305,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
 
     let (total, total_posix) = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
         AllocatedSizeVariant::Android10Plus => (8, 16),
-        AllocatedSizeVariant::F2fs4100 => (4, 8),
-        AllocatedSizeVariant::Default4096 => (4, 8),
+        _ => (4, 8),
     };
 
     scene
@@ -4339,8 +4363,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
 
     let total = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
         AllocatedSizeVariant::Android10Plus => 8,
-        AllocatedSizeVariant::F2fs4100 => 4,
-        AllocatedSizeVariant::Default4096 => 4,
+        _ => 4,
     };
 
     scene
@@ -4405,8 +4428,7 @@ fn test_ls_invalid_block_size_in_env_var() {
 
     let file_size = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
         AllocatedSizeVariant::Android10Plus => 8,
-        AllocatedSizeVariant::F2fs4100 => 4,
-        AllocatedSizeVariant::Default4096 => 4,
+        _ => 4,
     };
 
     scene
@@ -4450,8 +4472,7 @@ fn test_ls_block_size_override() {
     let (si_size, blocks512, human_size) =
         match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
             AllocatedSizeVariant::Android10Plus => ("8.2k", 16, "8.0K"),
-            AllocatedSizeVariant::F2fs4100 => ("4.1k", 8, "4.0K"),
-            AllocatedSizeVariant::Default4096 => ("4.1k", 8, "4.0K"),
+            _ => ("4.1k", 8, "4.0K"),
         };
 
     scene
