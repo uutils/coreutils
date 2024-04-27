@@ -1990,6 +1990,7 @@ pub struct UChild {
     stdin_pty: Option<File>,
     ignore_stdin_write_error: bool,
     stderr_to_stdout: bool,
+    print_outputs: bool,
     join_handle: Option<JoinHandle<io::Result<()>>>,
     timeout: Option<Duration>,
     tmpd: Option<Rc<TempDir>>, // drop last
@@ -2011,6 +2012,7 @@ impl UChild {
             captured_stderr,
             stdin_pty,
             ignore_stdin_write_error: ucommand.ignore_stdin_write_error,
+            print_outputs: false,
             stderr_to_stdout: ucommand.stderr_to_stdout,
             join_handle: None,
             timeout: ucommand.timeout,
@@ -2128,14 +2130,16 @@ impl UChild {
         #[allow(deprecated)]
         let output = self.wait_with_output()?;
 
-        Ok(CmdResult {
+        let result = CmdResult {
             bin_path,
             util_name,
             tmpd,
             exit_status: Some(output.status),
             stdout: output.stdout,
             stderr: output.stderr,
-        })
+        };
+
+        Ok(result)
     }
 
     /// Wait for the child process to terminate and return an instance of [`Output`].
