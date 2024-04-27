@@ -120,6 +120,13 @@ take_screen_shot() {
 }
 
 # shellcheck disable=SC2317  # Don't warn about unreachable commands in this function
+check_if_termux_is_active() {
+    dumsys=$(adb shell "dumpsys window windows")
+    echo "dumpsys: $dumsys"
+    echo "$dumsys" | grep -E "imeInputTarget in display# 0 Window{[^}]+com.termux\/com\.termux\.HomeActivity}"
+}
+
+# shellcheck disable=SC2317  # Don't warn about unreachable commands in this function
 adb_shell_start_termux_activity() {
     if ! adb shell 'am start -n com.termux/.HomeActivity'; then
         echo "failed to launch termux"
@@ -129,8 +136,7 @@ adb_shell_start_termux_activity() {
     take_screen_shot "launch_termux_after_start_activity"
 
     # the emulator can sometimes be a little slow to launch the app
-    run_with_retry 20 bash -c "sleep 1 && adb shell 'dumpsys window windows' | \
-        grep -E \"imeInputTarget in display# 0 Window{[^}]+com.termux\/com\.termux\.HomeActivity}\""
+    run_with_retry 20 check_if_termux_is_active
 }
 
 launch_termux() {
