@@ -746,6 +746,16 @@ impl CmdResult {
         );
         self
     }
+
+    /// Print process output information for debugging purposes.
+    pub fn print_outputs(&self) {
+        println!("command exit status: {:?}", self.exit_status);
+        println!(
+            "stdout2:\n{}\nstderr2:\n{}",
+            self.stdout().escape_ascii(),
+            self.stderr().escape_ascii()
+        );
+    }
 }
 
 pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
