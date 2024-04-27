@@ -751,9 +751,9 @@ impl CmdResult {
     pub fn print_outputs(&self) {
         println!("command exit status: {:?}", self.exit_status);
         println!(
-            "stdout2:\n{}\nstderr2:\n{}",
-            self.stdout().escape_ascii(),
-            self.stderr().escape_ascii()
+            "child-stdout:\n{}\nchild-stderr:\n{}",
+            String::from_utf8_lossy(self.stdout()),
+            String::from_utf8_lossy(self.stderr()),
         );
     }
 }
