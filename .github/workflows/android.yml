@@ -18,55 +18,45 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
+  RUNNER_OS: ubuntu-latest
   TERMUX: v0.118.0
   KEY_POSTFIX: nextest+rustc-hash+adb+sshd+upgrade+XGB+inc18
   COMMON_EMULATOR_OPTIONS: -no-window -noaudio -no-boot-anim -camera-back none -gpu swiftshader_indirect
   EMULATOR_DISK_SIZE: 12GB
   EMULATOR_HEAP_SIZE: 2048M
   EMULATOR_BOOT_TIMEOUT: 1200 # 20min
+  VM_CORES: 4
+  VM32_RAM: 4096
+  VM64_RAM: 8192
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Create matrix
+        id: create_matrix
+        uses: fabiocaccamo/create-matrix-action@v3
+        with:
+          matrix: |
+            api-level {28}         , arch {x86}   , target {google_apis_playstore}, cores {${{ env.VM_CORES }}}, ram {${{ env.VM32_RAM }}}, os {${{ env.RUNNER_OS }}}
+            api-level {28}         , arch {x86_64}, target {google_apis_playstore}, cores {${{ env.VM_CORES }}}, ram {${{ env.VM64_RAM }}}, os {${{ env.RUNNER_OS }}}
+            api-level {29}         , arch {x86}   , target {default}              , cores {${{ env.VM_CORES }}}, ram {${{ env.VM32_RAM }}}, os {${{ env.RUNNER_OS }}}
+            api-level {29}         , arch {x86_64}, target {default}              , cores {${{ env.VM_CORES }}}, ram {${{ env.VM64_RAM }}}, os {${{ env.RUNNER_OS }}}
+            api-level {30}         , arch {x86}   , target {google_apis}          , cores {${{ env.VM_CORES }}}, ram {${{ env.VM32_RAM }}}, os {${{ env.RUNNER_OS }}}
+            api-level {30}         , arch {x86_64}, target {google_apis}          , cores {${{ env.VM_CORES }}}, ram {${{ env.VM64_RAM }}}, os {${{ env.RUNNER_OS }}}
+            api-level {31,32,33,34}, arch {x86_64}, target {default}              , cores {${{ env.VM_CORES }}}, ram {${{ env.VM64_RAM }}}, os {${{ env.RUNNER_OS }}}
+    outputs:
+      matrix: ${{ steps.create_matrix.outputs.matrix }}
   test_android:
+    needs: prepare
     name: Test builds
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        api-level: [28,29,30,31,32,33,34]
-        arch: [x86, x86_64]
-        target: [default, google_apis_playstore]
-        cores: [4] # , 6
-        ram: [4096, 8192]
-        os: [ubuntu-latest] # , macos-latest
-        exclude:
-        - api-level: 28
-          target: default # fails at f16c intrinsic
-        - api-level: 29
-          target: google_apis_playstore # no need
-        - api-level: 30
-          arch: x86 # image doesn't exist
-        - api-level: 30
-          target: google_apis_playstore # no need
-        - api-level: 31
-          arch: x86 # image doesn't exist
-        - api-level: 31
-          target: google_apis_playstore # no need
-        - api-level: 32
-          arch: x86 # image doesn't exist
-        - api-level: 32
-          target: google_apis_playstore # no need
-        - api-level: 33
-          arch: x86 # image doesn't exist
-        - api-level: 33
-          target: google_apis_playstore # no need
-        - api-level: 34
-          arch: x86 # image doesn't exist
-        - api-level: 34
-          target: google_apis_playstore # no need
-        - ram: 8192
-          arch: x86
-        - ram: 4096
-          arch: x86_64
+        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     env:
       EMULATOR_RAM_SIZE: ${{ matrix.ram }}
