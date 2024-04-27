@@ -129,8 +129,8 @@ adb_shell_start_termux_activity() {
     take_screen_shot "launch_termux_after_start_activity"
 
     # the emulator can sometimes be a little slow to launch the app
-    run_with_retry 20 sleep 1 "&&" adb shell "dumpsys window windows" "|"
-        grep -E "imeInputTarget in display# 0 Window{[^}]+com.termux\/com\.termux\.HomeActivity}"
+    run_with_retry 20 bash -c "sleep 1 && adb shell 'dumpsys window windows' | \
+        grep -E \"imeInputTarget in display# 0 Window{[^}]+com.termux\/com\.termux\.HomeActivity}\""
 }
 
 launch_termux() {
