@@ -790,11 +790,23 @@ impl FileExtSeekable for File {
     }
 }
 
+/// Variants of seeking a file.
+///
+/// Seek: Do real seek API calls
+/// Read: Do dummy read API calls
 pub enum SeekingStrategy {
     Seek,
     Read,
 }
 
+/// Returns the to be used strategy for seeking a provided file handle/descriptor
+///
+/// Additionally for checking the seek-ability of the file, the file size is checked.
+/// This is due to some '/proc/*' filesystems report wrong actual file-size information.
+/// The file-size is reported to be the blksize, but actually its much less.
+/// To handle this case, all files that have smaller or equal size as the reported blksize
+/// are not to be seek-ed. This includes cases where seeking would actually work properly,
+/// but due to the small file size, it is assumed that the performance impact is not significant.
 pub fn get_seeking_strategy(input: &mut std::fs::File) -> std::io::Result<SeekingStrategy> {
     let st = input.metadata()?;
     let seekable = input.is_seekable();
