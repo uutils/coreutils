@@ -208,6 +208,10 @@ fn test_ls_allocation_size() {
 
     #[cfg(all(unix, feature = "df"))]
     {
+        // use /dev/random instead of /dev/zero to avoid
+        // compression on zfs (freebsd)
+        let dd_if_dev_random = "if=/dev/random";
+
         scene
             .ccmd("truncate")
             .arg("-s")
@@ -218,7 +222,7 @@ fn test_ls_allocation_size() {
         // fill empty file with zeros
         scene
             .ccmd("dd")
-            .arg("if=/dev/zero")
+            .arg(dd_if_dev_random)
             .arg("of=some-dir1/zero-file")
             .arg("bs=1024")
             .arg("count=4096")
@@ -226,7 +230,7 @@ fn test_ls_allocation_size() {
 
         scene
             .ccmd("dd")
-            .arg("if=/dev/zero")
+            .arg(dd_if_dev_random)
             .arg("of=irregular-file")
             .arg("bs=1")
             .arg("count=777")
