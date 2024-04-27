@@ -39,14 +39,14 @@ jobs:
         id: create_matrix
         uses: fabiocaccamo/create-matrix-action@v3
         with:
+#          api-level {28}         , arch {x86}   , target {google_apis_playstore}, cores {${{ env.VM_CORES }}}, ram {${{ env.VM32_RAM }}}, os {${{ env.RUNNER_OS }}}
+#          api-level {28}         , arch {x86_64}, target {google_apis_playstore}, cores {${{ env.VM_CORES }}}, ram {${{ env.VM64_RAM }}}, os {${{ env.RUNNER_OS }}}
           matrix: |
-            api-level {28}         , arch {x86}   , target {google_apis_playstore}, cores {${{ env.VM_CORES }}}, ram {${{ env.VM32_RAM }}}, os {${{ env.RUNNER_OS }}}
-            api-level {28}         , arch {x86_64}, target {google_apis_playstore}, cores {${{ env.VM_CORES }}}, ram {${{ env.VM64_RAM }}}, os {${{ env.RUNNER_OS }}}
             api-level {29}         , arch {x86}   , target {default}              , cores {${{ env.VM_CORES }}}, ram {${{ env.VM32_RAM }}}, os {${{ env.RUNNER_OS }}}
             api-level {29}         , arch {x86_64}, target {default}              , cores {${{ env.VM_CORES }}}, ram {${{ env.VM64_RAM }}}, os {${{ env.RUNNER_OS }}}
-            api-level {30}         , arch {x86}   , target {google_apis}          , cores {${{ env.VM_CORES }}}, ram {${{ env.VM32_RAM }}}, os {${{ env.RUNNER_OS }}}
-            api-level {30}         , arch {x86_64}, target {google_apis}          , cores {${{ env.VM_CORES }}}, ram {${{ env.VM64_RAM }}}, os {${{ env.RUNNER_OS }}}
-            api-level {31,32,33,34}, arch {x86_64}, target {default}              , cores {${{ env.VM_CORES }}}, ram {${{ env.VM64_RAM }}}, os {${{ env.RUNNER_OS }}}
+#            api-level {30}         , arch {x86}   , target {google_apis}          , cores {${{ env.VM_CORES }}}, ram {${{ env.VM32_RAM }}}, os {${{ env.RUNNER_OS }}}
+#            api-level {30}         , arch {x86_64}, target {google_apis}          , cores {${{ env.VM_CORES }}}, ram {${{ env.VM64_RAM }}}, os {${{ env.RUNNER_OS }}}
+#            api-level {31,32,33,34}, arch {x86_64}, target {default}              , cores {${{ env.VM_CORES }}}, ram {${{ env.VM64_RAM }}}, os {${{ env.RUNNER_OS }}}
     outputs:
       matrix: ${{ steps.create_matrix.outputs.matrix }}
   test_android:
