@@ -356,11 +356,11 @@ setup_ssh_forwarding() {
 }
 
 copy_file_or_dir_to_device_via_ssh() {
-    scp -r "$1" "scp://termux@127.0.0.1:9022/$2"
+    scp -vr "$1" "scp://termux@127.0.0.1:9022/$2"
 }
 
 copy_file_or_dir_from_device_via_ssh() {
-    scp -r "scp://termux@127.0.0.1:9022/$1" "$2"
+    scp -vr "scp://termux@127.0.0.1:9022/$1" "$2"
 }
 
 # runs the in args provided command on android side via ssh. forwards return code.

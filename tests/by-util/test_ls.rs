@@ -283,7 +283,7 @@ fn test_ls_allocation_size() {
             .arg("-s1")
             .arg("some-dir1")
             .succeeds()
-            .stdout_contains("0 empty-file")
+            .stdout_contains(format!("{empty_file_size} empty-file"))
             .stdout_contains(format!("{zero_file_size_4k} zero-file"));
 
         // Test alignment of different block sized files
