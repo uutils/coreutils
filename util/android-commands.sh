@@ -164,6 +164,8 @@ launch_termux() {
         sleep 4
         touch_cmd
 
+        echo "active window dump: " && adb shell "dumpsys window windows"
+
         timeout=$((timeout - 4))
         if [[ timeout -le 0 ]]; then
             take_screen_shot "error_launch_termux"
@@ -366,6 +368,7 @@ copy_file_or_dir_from_device_via_ssh() {
 # runs the in args provided command on android side via ssh. forwards return code.
 # adds a timestamp to every line to be able to see where delays are
 run_command_via_ssh() {
+    echo "run command via ssh: $*"
     ssh -p 9022 termux:@127.0.0.1 -o StrictHostKeyChecking=accept-new "$@" 2>&1 | add_timestamp_to_lines
     return "${PIPESTATUS[0]}"
 }
