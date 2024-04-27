@@ -327,7 +327,7 @@ textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "1.0"
 time = { version = "0.3" }
 unicode-segmentation = "1.11.0"
-unicode-width = "0.1.11"
+unicode-width = "0.1.12"
 utf-8 = "0.7.6"
 walkdir = "2.5"
 winapi-util = "0.1.8"
