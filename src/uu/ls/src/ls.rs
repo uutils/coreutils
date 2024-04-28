@@ -2602,7 +2602,7 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         };
         match config.size_format {
             SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
-            SizeFormat::Bytes => raw_blocks / config.block_size,
+            SizeFormat::Bytes => (raw_blocks + config.block_size - 1 /* ceiling div */) / config.block_size,
         }
     }
     #[cfg(not(unix))]
