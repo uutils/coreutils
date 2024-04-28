@@ -1169,8 +1169,8 @@ pub struct TestScenario {
     pub bin_path: PathBuf,
     pub util_name: String,
     pub fixtures: AtPath,
-    tmpd: Rc<TempDir>,
     log_guard: Option<LogPrintGuard>,
+    tmpd: Rc<TempDir>,
 }
 
 struct LogPrintGuard {
