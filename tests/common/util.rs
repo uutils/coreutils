@@ -927,6 +927,20 @@ impl AtPath {
             .unwrap_or_else(|e| panic!("Couldn't write(truncate) {name}: {e}"));
     }
 
+    /// Create a file with non-zero content of specified size.
+    ///
+    /// Benefit: OS independent alternative to `dd if=/dev/[random|zero] count=... of=...`
+    pub fn create_filled_file(&self, size_in_bytes: u64, filename: &str) {
+        let mut file = self.make_file(filename);
+        for _ in 0..size_in_bytes / 10 {
+            file.write_all(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap();
+        }
+        let remaining =
+            &([0, 1, 2, 3, 4, 5, 6, 7, 8, 9][..usize::try_from(size_in_bytes % 10).unwrap()]);
+        file.write_all(&remaining).unwrap();
+        file.flush().unwrap();
+    }
+
     pub fn rename(&self, source: &str, target: &str) {
         let source = self.plus(source);
         let target = self.plus(target);
@@ -1247,6 +1261,23 @@ impl TestScenario {
             cmd.env(UUTILS_LOG_FILE_ENV_NAME, &guard.log_file);
             cmd.env(UUTILS_LOG_LEVEL_ENV_NAME, &guard.log_level.as_str());
         }
+    }
+
+    /// Provides the name of the filesystem at path, using the own uutils df util
+    #[cfg(all(unix, feature = "df"))]
+    pub fn get_filesystem_type(&self, path: &Path) -> String {
+        use regex::Regex;
+
+        let mut cmd = self.ccmd("df");
+        cmd.args(&["-PT"]).arg(path);
+        let output = cmd.succeeds();
+        let stdout_str = String::from_utf8_lossy(output.stdout());
+        let regex_str = r#"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+"#;
+        let regex = Regex::new(regex_str).unwrap();
+        let m = regex.captures(&stdout_str).unwrap();
+        let fstype = m["fstype"].to_owned();
+        println!("detected fstype: {}", fstype);
+        fstype
     }
 
     /// Returns builder for invoking the target uutils binary. Paths given are

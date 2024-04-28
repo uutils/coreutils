@@ -163,7 +163,7 @@ enum AllocatedSizeVariant {
 }
 
 fn get_allocated_size_variant(scene: &TestScenario, path: &Path) -> AllocatedSizeVariant {
-    match get_filesystem_type(scene, path).as_str() {
+    match scene.get_filesystem_type(path).as_str() {
         "f2fs" => return AllocatedSizeVariant::F2fs4100,
         "zfs" => return AllocatedSizeVariant::ZFS,
         "ufs" => return AllocatedSizeVariant::UFS,
@@ -187,20 +187,6 @@ fn get_allocated_size_variant(scene: &TestScenario, path: &Path) -> AllocatedSiz
     } else {
         AllocatedSizeVariant::Default4096
     }
-}
-
-#[cfg(all(unix, feature = "df"))]
-fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
-    let mut cmd = scene.ccmd("df");
-    cmd.args(&["-PT"]).arg(path);
-    let output = cmd.succeeds();
-    let stdout_str = String::from_utf8_lossy(output.stdout());
-    let regex_str = r#"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+"#;
-    let regex = Regex::new(regex_str).unwrap();
-    let m = regex.captures(&stdout_str).unwrap();
-    let fstype = m["fstype"].to_owned();
-    println!("detected fstype: {}", fstype);
-    fstype
 }
 
 struct ExpectedSizes {
@@ -317,10 +303,6 @@ fn test_setup_0() -> TestScenario {
     at.mkdir("some-dir1");
     at.touch("some-dir1/empty-file");
 
-    // use /dev/random instead of /dev/zero to avoid
-    // compression on zfs (freebsd)
-    let dd_if_dev_random = ["if=/dev/random", "iflag=fullblock"];
-
     scene
         .ccmd("truncate")
         .arg("-s")
@@ -329,31 +311,18 @@ fn test_setup_0() -> TestScenario {
         .request_print_outputs()
         .succeeds();
 
-    // fill empty file with zeros
-    scene
-        .ccmd("dd")
-        .args(&dd_if_dev_random)
-        .arg("of=some-dir1/zero-file")
-        .arg("bs=1024")
-        .arg("count=4096")
-        .request_print_outputs()
-        .succeeds();
+    // fill empty file with some data (not zeros!)
+    at.create_filled_file(1024 * 4096, "some-dir1/zero-file");
 
-    scene
-        .ccmd("dd")
-        .args(&dd_if_dev_random)
-        .arg("of=irregular-file")
-        .arg("bs=1")
-        .arg("count=777")
-        .request_print_outputs()
-        .succeeds();
+    at.create_filled_file(777, "irregular-file");
 
     #[cfg(target_os = "freebsd")]
+    if scene.get_filesystem_type(at.plus(".") == "zfs")
     {
         // FreeBSD/zfs doesn't immediately report the correct number of blocks
         // we need to force it to sync the data to disk.
         scene.cmd("sync").args(&["-f", "."]).succeeds();
-        // sync command apparently doesn't work, we need to wait 5 seconds
+        // sync command apparently doesn't work here, we need to wait 5 seconds
         std::thread::sleep(std::time::Duration::from_secs(5));
     }
 
@@ -622,6 +591,7 @@ fn test_ls_allocation_size_13(test_setup_1: (TestScenario, ExpectedSizes)) {
 #[rstest]
 fn test_ls_allocation_size_14(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
+    let scene = scene.enable_uu_logs_debug();
 
     scene
         .ucmd()
