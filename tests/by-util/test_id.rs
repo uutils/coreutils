@@ -327,6 +327,11 @@ fn test_id_default_format() {
             .args(&args)
             .succeeds()
             .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
+        let args = [opt2, opt2];
+        ts.ucmd()
+            .args(&args)
+            .succeeds()
+            .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
     }
 }
 
