@@ -2429,14 +2429,20 @@ fn return_total(
 ) -> UResult<String> {
     let mut total_size = 0;
     for item in items {
-        total_size += item
-            .get_metadata(out)
+        let md = item.get_metadata(out);
+        eprintln!("item md {}: {:?}", item.display_name.to_string_lossy(), md);
+        if let Some(md) = md {
+            let gbs = get_block_size(md, config);
+            eprintln!("item gbs {:?}, blocks: {}, size: {}", gbs, md.blocks(), md.size());
+        }
+        total_size += md
             .as_ref()
             .map_or(0, |md| get_block_size(md, config));
     }
     if config.dired {
         dired::indent(out)?;
     }
+    eprintln!("total {total_size} of {:?}", items);
     Ok(format!(
         "total {}{}",
         display_size(total_size, config),
@@ -2600,7 +2606,13 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         } else {
             md.blocks() * 512
         };
-        match config.size_format {
+
+        eprintln!("md.file_type().is_char_device(): {}, md.file_type().is_block_device(): {},\
+                   blocks: {}, size: {}, raw: {}, cfg.block_size: {}, cfg.size_format: {:?}",
+            md.file_type().is_char_device(), md.file_type().is_block_device(),
+            md.blocks(), md.size(), raw_blocks, config.block_size, config.size_format);
+
+            match config.size_format {
             SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
             SizeFormat::Bytes => (raw_blocks + config.block_size - 1 /* ceiling div */) / config.block_size,
         }
