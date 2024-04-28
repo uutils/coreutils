@@ -1985,17 +1985,18 @@ impl PathData {
                         let metadata = dir_entry.metadata();
                         //eprintln!("get metadata from {:?}:\n{:?}", dir_entry, metadata);
                         if let Ok(md) = &metadata {
-                            eprintln!("metadata from {:?}:\n\
+                            eprintln!(
+                                "metadata from {:?}:\n\
                                     size: {}\n\
                                     blocks: {}\n\
                                     blksize: {}\n\
                                     file_type: {:?}",
-                                    dir_entry.path(),
-                                    std::os::unix::fs::MetadataExt::size(md),
-                                    std::os::unix::fs::MetadataExt::blocks(md),
-                                    std::os::unix::fs::MetadataExt::blksize(md),
-                                    md.file_type(),
-                                );
+                                dir_entry.path(),
+                                std::os::unix::fs::MetadataExt::size(md),
+                                std::os::unix::fs::MetadataExt::blocks(md),
+                                std::os::unix::fs::MetadataExt::blksize(md),
+                                md.file_type(),
+                            );
                         }
                         return metadata.ok();
                     }
@@ -2433,11 +2434,14 @@ fn return_total(
         eprintln!("item md {}: {:?}", item.display_name.to_string_lossy(), md);
         if let Some(md) = md {
             let gbs = get_block_size(md, config);
-            eprintln!("item gbs {:?}, blocks: {}, size: {}", gbs, md.blocks(), md.size());
+            eprintln!(
+                "item gbs {:?}, blocks: {}, size: {}",
+                gbs,
+                md.blocks(),
+                md.size()
+            );
         }
-        total_size += md
-            .as_ref()
-            .map_or(0, |md| get_block_size(md, config));
+        total_size += md.as_ref().map_or(0, |md| get_block_size(md, config));
     }
     if config.dired {
         dired::indent(out)?;
@@ -2607,14 +2611,23 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
             md.blocks() * 512
         };
 
-        eprintln!("md.file_type().is_char_device(): {}, md.file_type().is_block_device(): {},\
+        eprintln!(
+            "md.file_type().is_char_device(): {}, md.file_type().is_block_device(): {},\
                    blocks: {}, size: {}, raw: {}, cfg.block_size: {}, cfg.size_format: {:?}",
-            md.file_type().is_char_device(), md.file_type().is_block_device(),
-            md.blocks(), md.size(), raw_blocks, config.block_size, config.size_format);
+            md.file_type().is_char_device(),
+            md.file_type().is_block_device(),
+            md.blocks(),
+            md.size(),
+            raw_blocks,
+            config.block_size,
+            config.size_format
+        );
 
-            match config.size_format {
+        match config.size_format {
             SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
-            SizeFormat::Bytes => (raw_blocks + config.block_size - 1 /* ceiling div */) / config.block_size,
+            SizeFormat::Bytes => {
+                (raw_blocks + config.block_size - 1/* ceiling div */) / config.block_size
+            }
         }
     }
     #[cfg(not(unix))]
