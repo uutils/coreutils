@@ -194,6 +194,7 @@ fn util_invalid_name_invalid_command() {
 }
 
 #[test]
+#[cfg(feature = "true")]
 fn util_completion() {
     use std::{
         io::Write,
@@ -222,6 +223,7 @@ fn util_completion() {
 }
 
 #[test]
+#[cfg(feature = "true")]
 fn util_manpage() {
     use std::{
         io::Write,
