@@ -397,6 +397,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::OPT_PASSWORD)
                 .short('P')
                 .help("Display the id as a password file entry.")
+                .conflicts_with(options::OPT_HUMAN_READABLE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
