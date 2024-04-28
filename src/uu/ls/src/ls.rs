@@ -2610,24 +2610,29 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
             md.blocks() * 512
         };
 
+        let result = match config.size_format {
+            SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
+            SizeFormat::Bytes => {
+                (raw_blocks + config.block_size - 1/* ceiling div */) / config.block_size
+            }
+        };
+
         log::debug!(
-            "md.file_type().is_char_device(): {}, md.file_type().is_block_device(): {},\
-                   blocks: {}, size: {}, raw: {}, cfg.block_size: {}, cfg.size_format: {:?}",
+            "is_char_device: {}, is_block_device(): {}, \
+                   blocks: {}, size: {}, raw: {}, \
+                   cfg.block_size: {}, result: {}, \
+                   cfg.size_format: {:?}",
             md.file_type().is_char_device(),
             md.file_type().is_block_device(),
             md.blocks(),
             md.size(),
             raw_blocks,
             config.block_size,
+            result,
             config.size_format
         );
 
-        match config.size_format {
-            SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
-            SizeFormat::Bytes => {
-                (raw_blocks + config.block_size - 1/* ceiling div */) / config.block_size
-            }
-        }
+        result
     }
     #[cfg(not(unix))]
     {

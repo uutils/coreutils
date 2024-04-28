@@ -19,7 +19,6 @@ mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
 mod parser; // string parsing modules
 
-use log::info;
 use log::LevelFilter;
 pub use uucore_procs::*;
 

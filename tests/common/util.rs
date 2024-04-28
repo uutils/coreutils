@@ -1204,7 +1204,7 @@ impl Drop for LogPrintGuard {
 
         std::io::stderr().flush().unwrap();
         let mut reader = std::io::BufReader::new(f);
-        let result = std::io::copy(&mut reader, &mut PrintSink{}).unwrap_or_else(|e| {
+        let result = std::io::copy(&mut reader, &mut PrintSink {}).unwrap_or_else(|e| {
             eprintln!(
                 "Failed to read contents of log-file: {}, Err: {:?}",
                 self.log_file.display(),
