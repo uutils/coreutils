@@ -1983,15 +1983,14 @@ impl PathData {
                 if !self.must_dereference {
                     if let Some(dir_entry) = &self.de {
                         let metadata = dir_entry.metadata();
-                        //eprintln!("get metadata from {:?}:\n{:?}", dir_entry, metadata);
                         if let Ok(md) = &metadata {
-                            eprintln!(
-                                "metadata from {:?}:\n\
+                            log::debug!(
+                                "metadata from {}:\n\
                                     size: {}\n\
                                     blocks: {}\n\
                                     blksize: {}\n\
                                     file_type: {:?}",
-                                dir_entry.path(),
+                                dir_entry.path().display(),
                                 std::os::unix::fs::MetadataExt::size(md),
                                 std::os::unix::fs::MetadataExt::blocks(md),
                                 std::os::unix::fs::MetadataExt::blksize(md),
@@ -2400,7 +2399,7 @@ fn display_dir_entry_size(
             ),
             SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
         };
-        eprintln!("success metadata from entry: size_len: {size_len}, major_len: {major_len}, minor_len: {minor_len}");
+        log::debug!("success metadata from entry: size_len: {size_len}, major_len: {major_len}, minor_len: {minor_len}");
         (
             display_symlink_count(md).len(),
             display_uname(md, config).len(),
@@ -2410,7 +2409,7 @@ fn display_dir_entry_size(
             minor_len,
         )
     } else {
-        eprintln!("failed to get metadata from entry: {:?}", entry);
+        log::debug!("failed to get metadata from entry: {:?}", entry);
         (0, 0, 0, 0, 0, 0)
     }
 }
@@ -2431,10 +2430,10 @@ fn return_total(
     let mut total_size = 0;
     for item in items {
         let md = item.get_metadata(out);
-        eprintln!("item md {}: {:?}", item.display_name.to_string_lossy(), md);
+        log::debug!("item md {}: {:?}", item.display_name.to_string_lossy(), md);
         if let Some(md) = md {
             let gbs = get_block_size(md, config);
-            eprintln!(
+            log::debug!(
                 "item gbs {:?}, blocks: {}, size: {}",
                 gbs,
                 md.blocks(),
@@ -2446,7 +2445,7 @@ fn return_total(
     if config.dired {
         dired::indent(out)?;
     }
-    eprintln!("total {total_size} of {:?}", items);
+    log::debug!("total {total_size} of {} items", items.len());
     Ok(format!(
         "total {}{}",
         display_size(total_size, config),
@@ -2611,7 +2610,7 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
             md.blocks() * 512
         };
 
-        eprintln!(
+        log::debug!(
             "md.file_type().is_char_device(): {}, md.file_type().is_block_device(): {},\
                    blocks: {}, size: {}, raw: {}, cfg.block_size: {}, cfg.size_format: {:?}",
             md.file_type().is_char_device(),

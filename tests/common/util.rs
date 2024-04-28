@@ -1178,16 +1178,33 @@ struct LogPrintGuard {
     log_level: log::LevelFilter,
 }
 
+// In the context of test execution, writing to std::io::stderr() is
+// apparently handled differently than writing using eprint!-macro
+// To still be able to use the std::io::copy, this PrintSink is created.
+struct PrintSink {}
+
+impl std::io::Write for PrintSink {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        eprint!("{}", String::from_utf8_lossy(buf));
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
 impl Drop for LogPrintGuard {
     fn drop(&mut self) {
         let Ok(f) = File::open(&self.log_file) else {
             eprintln!("Failed to open log-file: {}", self.log_file.display());
             return;
         };
-        eprintln!("Dump collected logs:");
+        eprintln!("=============== Dump collected logs: ===============");
+
+        std::io::stderr().flush().unwrap();
         let mut reader = std::io::BufReader::new(f);
-        let mut writer = std::io::BufWriter::new(std::io::stderr());
-        std::io::copy(&mut reader, &mut writer).unwrap_or_else(|e| {
+        let result = std::io::copy(&mut reader, &mut PrintSink{}).unwrap_or_else(|e| {
             eprintln!(
                 "Failed to read contents of log-file: {}, Err: {:?}",
                 self.log_file.display(),
@@ -1195,6 +1212,8 @@ impl Drop for LogPrintGuard {
             );
             0
         });
+        std::io::stderr().flush().unwrap();
+        eprintln!("=============== Dumped {result} bytes. =============");
     }
 }
 

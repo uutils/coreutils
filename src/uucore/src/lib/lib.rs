@@ -232,7 +232,6 @@ pub fn initialize_logging() {
                 e
             );
         }
-        info!("this is a INFO level test log!");
     }
 }
 

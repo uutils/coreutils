@@ -2746,6 +2746,7 @@ dependencies = [
  "clap",
  "glob",
  "hostname",
+ "log",
  "lscolors",
  "number_prefix",
  "once_cell",
