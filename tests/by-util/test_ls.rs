@@ -159,12 +159,14 @@ enum AllocatedSizeVariant {
     F2fs4100,
     Android10Plus,
     ZFS,
+    UFS,
 }
 
 fn get_allocated_size_variant(scene: &TestScenario, path: &Path) -> AllocatedSizeVariant {
     match get_filesystem_type(scene, path).as_str() {
         "f2fs" => return AllocatedSizeVariant::F2fs4100,
         "zfs" => return AllocatedSizeVariant::ZFS,
+        "ufs" => return AllocatedSizeVariant::UFS,
         _ => {}
     }
 
@@ -206,7 +208,8 @@ struct ExpectedSizes {
     empty_file_size_bytes: i32,
     empty_file_4k_blocks: i32,
     empty_file_4k_si_size: &'static str,
-    zero_file_size_4k: i32,
+    file_with_holes_1k_blocks: i32,
+    zero_file_size_1k_blocks: i32,
     zero_file_size_1k: i32,
     zero_file_size_blocksize_512: i32,
     zero_file_size_blocksize_8192: i32,
@@ -217,12 +220,26 @@ struct ExpectedSizes {
 impl ExpectedSizes {
     fn new(scene: &TestScenario, path: &Path) -> Self {
         match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+            AllocatedSizeVariant::Default4096 => Self {
+                empty_file_1k_blocks: 0,
+                empty_file_size_bytes: 0,
+                empty_file_4k_blocks: 0,
+                empty_file_4k_si_size: "0",
+                file_with_holes_1k_blocks: 0,
+                zero_file_size_1k_blocks: 4096,
+                zero_file_size_1k: 1024,
+                zero_file_size_blocksize_512: 8192,
+                zero_file_size_blocksize_8192: 512,
+                zero_file_size_4m: "4.0M",
+                zero_file_size_si_4m2: "4.2M",
+            },
             AllocatedSizeVariant::Android10Plus => Self {
                 empty_file_1k_blocks: 4,
                 empty_file_size_bytes: 4*512,
                 empty_file_4k_blocks: 1,
                 empty_file_4k_si_size: "4.1k",
-                zero_file_size_4k: 4100,
+                file_with_holes_1k_blocks: 4,
+                zero_file_size_1k_blocks: 4100,
                 zero_file_size_1k: 1025,
                 zero_file_size_blocksize_512: 8216,
                 zero_file_size_blocksize_8192: 512,
@@ -234,23 +251,12 @@ impl ExpectedSizes {
                 empty_file_size_bytes: 0,
                 empty_file_4k_blocks: 0,
                 empty_file_4k_si_size: "0",
-                zero_file_size_4k: 4100,
+                file_with_holes_1k_blocks: 0,
+                zero_file_size_1k_blocks: 4100,
                 zero_file_size_1k: 1025,
                 zero_file_size_blocksize_512: 8200,
                 zero_file_size_blocksize_8192: 512,
                 zero_file_size_4m: "4.1M",
-                zero_file_size_si_4m2: "4.2M",
-            },
-            AllocatedSizeVariant::Default4096 => Self {
-                empty_file_1k_blocks: 0,
-                empty_file_size_bytes: 0,
-                empty_file_4k_blocks: 0,
-                empty_file_4k_si_size: "0",
-                zero_file_size_4k: 4096,
-                zero_file_size_1k: 1024,
-                zero_file_size_blocksize_512: 8192,
-                zero_file_size_blocksize_8192: 512,
-                zero_file_size_4m: "4.0M",
                 zero_file_size_si_4m2: "4.2M",
             },
             AllocatedSizeVariant::ZFS => Self {
@@ -258,7 +264,21 @@ impl ExpectedSizes {
                 empty_file_size_bytes: 512,
                 empty_file_4k_blocks: 1,
                 empty_file_4k_si_size: "0",
-                zero_file_size_4k: 4104,
+                file_with_holes_1k_blocks: 1,
+                zero_file_size_1k_blocks: 4104,
+                zero_file_size_1k: 1026,
+                zero_file_size_blocksize_512: 8209,
+                zero_file_size_blocksize_8192: 513,
+                zero_file_size_4m: "4.1M",
+                zero_file_size_si_4m2: "4.3M",
+            },
+            AllocatedSizeVariant::UFS => Self {
+                empty_file_1k_blocks: 1,
+                empty_file_size_bytes: 512,
+                empty_file_4k_blocks: 1,
+                empty_file_4k_si_size: "0",
+                file_with_holes_1k_blocks: 64,
+                zero_file_size_1k_blocks: 4128,
                 zero_file_size_1k: 1026,
                 zero_file_size_blocksize_512: 8209,
                 zero_file_size_blocksize_8192: 513,
@@ -287,6 +307,7 @@ fn test_setup_0() -> TestScenario {
         .arg("-s")
         .arg("4M")
         .arg("some-dir1/file-with-holes")
+        .request_print_outputs()
         .succeeds();
 
     // fill empty file with zeros
@@ -296,6 +317,7 @@ fn test_setup_0() -> TestScenario {
         .arg("of=some-dir1/zero-file")
         .arg("bs=1024")
         .arg("count=4096")
+        .request_print_outputs()
         .succeeds();
 
     scene
@@ -304,6 +326,7 @@ fn test_setup_0() -> TestScenario {
         .arg("of=irregular-file")
         .arg("bs=1")
         .arg("count=777")
+        .request_print_outputs()
         .succeeds();
 
 
@@ -340,7 +363,7 @@ fn test_setup_1() -> (TestScenario, ExpectedSizes) {
 fn test_ls_allocation_size_1(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
-    let total = es.zero_file_size_4k + 2 * es.empty_file_1k_blocks;
+    let total = es.zero_file_size_1k_blocks + 2 * es.empty_file_1k_blocks;
     scene
         .ucmd()
         .arg("-s1")
@@ -352,7 +375,7 @@ fn test_ls_allocation_size_1(test_setup_1: (TestScenario, ExpectedSizes)) {
             \n   {} empty-file\
             \n   {} file-with-holes\n\
             {} zero-file\n",
-            es.empty_file_1k_blocks, es.empty_file_1k_blocks, es.zero_file_size_4k,
+            es.empty_file_1k_blocks, es.file_with_holes_1k_blocks, es.zero_file_size_1k_blocks,
         ));
 }
 
@@ -378,7 +401,7 @@ fn test_ls_allocation_size_3(test_setup_1: (TestScenario, ExpectedSizes)) {
         .arg("some-dir1")
         .succeeds()
         .stdout_contains(format!("{} empty-file", es.empty_file_1k_blocks))
-        .stdout_contains(format!("{} zero-file", es.zero_file_size_4k));
+        .stdout_contains(format!("{} zero-file", es.zero_file_size_1k_blocks));
 }
 
 #[rstest]
@@ -509,7 +532,7 @@ fn test_ls_allocation_size_10(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
     // -k should make 'ls' ignore the env var
-    let total = es.zero_file_size_4k + 2 * es.empty_file_1k_blocks;
+    let total = es.zero_file_size_1k_blocks + 2 * es.empty_file_1k_blocks;
     scene
         .ucmd()
         .env("BLOCK_SIZE", "4K")
@@ -519,7 +542,7 @@ fn test_ls_allocation_size_10(test_setup_1: (TestScenario, ExpectedSizes)) {
         .stdout_contains(format!("total {}", total))
         .stdout_contains(format!("{} empty-file", es.empty_file_1k_blocks))
         .stdout_contains(format!("{} file-with-holes", es.empty_file_1k_blocks))
-        .stdout_contains(format!("{} zero-file", es.zero_file_size_4k));
+        .stdout_contains(format!("{} zero-file", es.zero_file_size_1k_blocks));
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
