@@ -219,7 +219,7 @@ struct ExpectedSizes {
 
 impl ExpectedSizes {
     fn new(scene: &TestScenario, path: &Path) -> Self {
-        match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+        match get_allocated_size_variant(&scene, path) {
             AllocatedSizeVariant::Default4096 => Self {
                 empty_file_1k_blocks: 0,
                 empty_file_size_bytes: 0,
@@ -265,10 +265,10 @@ impl ExpectedSizes {
                 empty_file_4k_blocks: 1,
                 empty_file_4k_si_size: "0",
                 file_with_holes_1k_blocks: 1,
-                zero_file_size_1k_blocks: 4104,
-                zero_file_size_1k: 1026,
+                zero_file_size_1k_blocks: 4105,
+                zero_file_size_1k: 1027,
                 zero_file_size_blocksize_512: 8209,
-                zero_file_size_blocksize_8192: 513,
+                zero_file_size_blocksize_8192: 514,
                 zero_file_size_4m: "4.1M",
                 zero_file_size_si_4m2: "4.3M",
             },
