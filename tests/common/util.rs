@@ -1250,6 +1250,7 @@ pub struct UCommand {
     #[cfg(unix)]
     limits: Vec<(rlimit::Resource, u64, u64)>,
     stderr_to_stdout: bool,
+    print_outputs: bool,
     timeout: Option<Duration>,
     #[cfg(unix)]
     terminal_simulation: bool,
@@ -1304,6 +1305,11 @@ impl UCommand {
         T: Into<PathBuf>,
     {
         self.bin_path = Some(bin_path.into());
+        self
+    }
+
+    pub fn request_print_outputs(&mut self) -> &mut Self {
+        self.print_outputs = true;
         self
     }
 
@@ -1703,6 +1709,8 @@ impl UCommand {
         let child = command.spawn().unwrap();
 
         let mut child = UChild::from(self, child, captured_stdout, captured_stderr, stdin_pty);
+
+        child.print_outputs = self.print_outputs;
 
         if let Some(input) = self.bytes_into_stdin.take() {
             child.pipe_in(input);
@@ -2127,6 +2135,8 @@ impl UChild {
             self.tmpd.clone(),
         );
 
+        let print_outputs = self.print_outputs;
+
         #[allow(deprecated)]
         let output = self.wait_with_output()?;
 
@@ -2138,6 +2148,10 @@ impl UChild {
             stdout: output.stdout,
             stderr: output.stderr,
         };
+
+        if print_outputs {
+            result.print_outputs();
+        }
 
         Ok(result)
     }
