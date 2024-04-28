@@ -293,6 +293,7 @@ impl ExpectedSizes {
 #[fixture]
 fn test_setup_0() -> TestScenario {
     let scene = TestScenario::new(util_name!());
+    let scene = scene.enable_uu_logs_debug();
     let at = &scene.fixtures;
 
     at.mkdir("some-dir1");
@@ -436,7 +437,6 @@ fn test_ls_allocation_size_4(test_setup_0: TestScenario) {
 #[rstest]
 fn test_ls_allocation_size_5(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
-    let scene = scene.enable_uu_logs_debug();
 
     let total = es.zero_file_size_blocksize_8192 + 2 * es.empty_file_4k_blocks;
     scene
