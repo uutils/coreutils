@@ -235,7 +235,7 @@ impl ExpectedSizes {
             },
             AllocatedSizeVariant::Android10Plus => Self {
                 empty_file_1k_blocks: 4,
-                empty_file_size_bytes: 4*512,
+                empty_file_size_bytes: 4 * 512,
                 empty_file_4k_blocks: 1,
                 empty_file_4k_si_size: "4.1k",
                 file_with_holes_1k_blocks: 4,
@@ -300,7 +300,7 @@ fn test_setup_0() -> TestScenario {
 
     // use /dev/random instead of /dev/zero to avoid
     // compression on zfs (freebsd)
-    let dd_if_dev_random = "if=/dev/random";
+    let dd_if_dev_random = ["if=/dev/random", "iflag=fullblock"];
 
     scene
         .ccmd("truncate")
@@ -313,7 +313,7 @@ fn test_setup_0() -> TestScenario {
     // fill empty file with zeros
     scene
         .ccmd("dd")
-        .arg(dd_if_dev_random)
+        .args(&dd_if_dev_random)
         .arg("of=some-dir1/zero-file")
         .arg("bs=1024")
         .arg("count=4096")
@@ -322,13 +322,12 @@ fn test_setup_0() -> TestScenario {
 
     scene
         .ccmd("dd")
-        .arg(dd_if_dev_random)
+        .args(&dd_if_dev_random)
         .arg("of=irregular-file")
         .arg("bs=1")
         .arg("count=777")
         .request_print_outputs()
         .succeeds();
-
 
     #[cfg(target_os = "freebsd")]
     {
