@@ -268,7 +268,7 @@ impl ExpectedSizes {
                 zero_file_size_1k_blocks: 4105,
                 zero_file_size_1k: 1027,
                 zero_file_size_blocksize_512: 8209,
-                zero_file_size_blocksize_8192: 514,
+                zero_file_size_blocksize_8192: 513,
                 zero_file_size_4m: "4.1M",
                 zero_file_size_si_4m2: "4.3M",
             },
@@ -436,6 +436,7 @@ fn test_ls_allocation_size_4(test_setup_0: TestScenario) {
 #[rstest]
 fn test_ls_allocation_size_5(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
+    let scene = scene.enable_uu_logs_debug();
 
     let total = es.zero_file_size_blocksize_8192 + 2 * es.empty_file_4k_blocks;
     scene

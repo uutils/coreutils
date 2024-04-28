@@ -229,7 +229,7 @@ fn util_manpage() {
     };
 
     let scenario = TestScenario::new("completion");
-    let child = Command::new(scenario.bin_path)
+    let child = Command::new(&scenario.bin_path)
         .arg("manpage")
         .arg("true")
         .stdin(Stdio::piped())
