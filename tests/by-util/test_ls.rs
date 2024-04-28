@@ -329,8 +329,7 @@ fn test_setup_0() -> TestScenario {
     at.create_filled_file(777, "irregular-file");
 
     #[cfg(target_os = "freebsd")]
-    if scene.get_filesystem_type(at.plus(".") == "zfs")
-    {
+    if scene.get_filesystem_type(at.plus(".") == "zfs") {
         // FreeBSD/zfs doesn't immediately report the correct number of blocks
         // we need to force it to sync the data to disk.
         scene.cmd("sync").args(&["-f", "."]).succeeds();
@@ -531,7 +530,8 @@ fn test_ls_allocation_size_10(test_setup_1: (TestScenario, ExpectedSizes)) {
     let (scene, es) = test_setup_1;
 
     // -k should make 'ls' ignore the env var
-    let total = es.zero_file_size_1k_blocks + es.file_with_holes_1k_blocks + es.empty_file_1k_blocks;
+    let total =
+        es.zero_file_size_1k_blocks + es.file_with_holes_1k_blocks + es.empty_file_1k_blocks;
     scene
         .ucmd()
         .env("BLOCK_SIZE", "4K")
