@@ -85,5 +85,7 @@ also provides a `-v`/`--verbose` flag.
 
 ## `id`
 
-`id` has three additional flags: `-P` displays the id as a password file entry, `-p` makes the
-output human-readable, and `-A` displays the process audit user ID.
+`id` has three additional flags: 
+* `-P` displays the id as a password file entry
+* `-p` makes the output human-readable
+* `-A` displays the process audit user ID
