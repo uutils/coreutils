@@ -6,22 +6,14 @@
 // spell-checker:ignore abcdefghijklmnopqrstuvwxyz
 
 use crate::common::util::TestScenario;
-use std::env;
-use std::fs::remove_file;
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
 use unindent::unindent;
 
-// octal dump of 'abcdefghijklmnopqrstuvwxyz\n'     // spell-checker:disable-line
+// octal dump of 'abcdefghijklmnopqrstuvwxyz\n'
 static ALPHA_OUT: &str = "
         0000000 061141 062143 063145 064147 065151 066153 067155 070157
         0000020 071161 072163 073165 074167 075171 000012
         0000033
         ";
-
-// XXX We could do a better job of ensuring that we have a fresh temp dir to ourselves,
-// not a general one full of other process leftovers.
 
 #[test]
 fn test_invalid_arg() {
@@ -31,96 +23,58 @@ fn test_invalid_arg() {
 // Test that od can read one file and dump with default format
 #[test]
 fn test_file() {
-    // TODO: Can this be replaced by AtPath?
-    use std::env;
-    let temp = env::temp_dir();
-    let tmpdir = Path::new(&temp);
-    let file = tmpdir.join("test");
-
-    {
-        let mut f = File::create(&file).unwrap();
-        // spell-checker:disable-next-line
-        assert!(
-            f.write_all(b"abcdefghijklmnopqrstuvwxyz\n").is_ok(),
-            "Test setup failed - could not write file"
-        );
-    }
-
-    new_ucmd!()
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("test", "abcdefghijklmnopqrstuvwxyz\n");
+    scene
+        .ucmd()
         .arg("--endian=little")
-        .arg(file.as_os_str())
+        .arg("test")
         .succeeds()
         .no_stderr()
         .stdout_is(unindent(ALPHA_OUT));
-
-    new_ucmd!()
+    scene
+        .ucmd()
         .arg("--endian=littl") // spell-checker:disable-line
-        .arg(file.as_os_str())
+        .arg("test")
         .succeeds()
         .no_stderr()
         .stdout_is(unindent(ALPHA_OUT));
-
-    new_ucmd!()
+    scene
+        .ucmd()
         .arg("--endian=l")
-        .arg(file.as_os_str())
+        .arg("test")
         .succeeds()
         .no_stderr()
         .stdout_is(unindent(ALPHA_OUT));
-
     // Ensure that default format matches `-t o2`, and that `-t` does not absorb file argument
-    new_ucmd!()
+    scene
+        .ucmd()
         .arg("--endian=little")
         .arg("-t")
         .arg("o2")
-        .arg(file.as_os_str())
-        .succeeds()
-        .no_stderr()
-        .stdout_is(unindent(ALPHA_OUT));
-
-    let _ = remove_file(file);
+        .arg("test");
 }
 
 // Test that od can read 2 files and concatenate the contents
 #[test]
 fn test_2files() {
-    let temp = env::temp_dir();
-    let tmpdir = Path::new(&temp);
-    let file1 = tmpdir.join("test1");
-    let file2 = tmpdir.join("test2");
-
-    for (n, a) in [(1, "a"), (2, "b")] {
-        println!("number: {n} letter:{a}");
-    }
-
-    // spell-checker:disable-next-line
-    for (path, data) in [(&file1, "abcdefghijklmnop"), (&file2, "qrstuvwxyz\n")] {
-        let mut f = File::create(path).unwrap();
-        assert!(
-            f.write_all(data.as_bytes()).is_ok(),
-            "Test setup failed - could not write file"
-        );
-    }
-
-    new_ucmd!()
-        .arg("--endian=little")
-        .arg(file1.as_os_str())
-        .arg(file2.as_os_str())
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("test1", "abcdefghijklmnop"); // spell-checker:disable-line
+    at.write("test2", "qrstuvwxyz\n"); // spell-checker:disable-line
+    ucmd.arg("--endian=little")
+        .arg("test1")
+        .arg("test2")
         .succeeds()
         .no_stderr()
         .stdout_is(unindent(ALPHA_OUT));
-    // TODO: Handle errors?
-    let _ = remove_file(file1);
-    let _ = remove_file(file2);
 }
 
 // Test that od gives non-0 exit val for filename that doesn't exist.
 #[test]
 fn test_no_file() {
-    let temp = env::temp_dir();
-    let tmpdir = Path::new(&temp);
-    let file = tmpdir.join("}surely'none'would'thus'a'file'name"); // spell-checker:disable-line
-
-    new_ucmd!().arg(file.as_os_str()).fails();
+    let (_at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("}surely'none'would'thus'a'file'name").fails(); // spell-checker:disable-line
 }
 
 // Test that od reads from stdin instead of a file
@@ -138,26 +92,16 @@ fn test_from_stdin() {
 // Test that od reads from stdin and also from files
 #[test]
 fn test_from_mixed() {
-    let temp = env::temp_dir();
-    let tmpdir = Path::new(&temp);
-    let file1 = tmpdir.join("test-1");
-    let file3 = tmpdir.join("test-3");
-
+    let (at, mut ucmd) = at_and_ucmd!();
     // spell-checker:disable-next-line
     let (data1, data2, data3) = ("abcdefg", "hijklmnop", "qrstuvwxyz\n");
-    for (path, data) in [(&file1, data1), (&file3, data3)] {
-        let mut f = File::create(path).unwrap();
-        assert!(
-            f.write_all(data.as_bytes()).is_ok(),
-            "Test setup failed - could not write file"
-        );
-    }
+    at.write("test-1", data1);
+    at.write("test-3", data3);
 
-    new_ucmd!()
-        .arg("--endian=little")
-        .arg(file1.as_os_str())
+    ucmd.arg("--endian=little")
+        .arg("test-1")
         .arg("-")
-        .arg(file3.as_os_str())
+        .arg("test-3")
         .run_piped_stdin(data2.as_bytes())
         .success()
         .no_stderr()
