@@ -132,7 +132,7 @@ fn test_months_whitespace() {
             "-M",
             "--month-sort",
             "--sort=month",
-            "--sort=mont", // spell-checker:disable-line
+            "--sort=mont",
             "--sort=m",
         ],
     );

@@ -252,7 +252,9 @@ impl Output {
         let file = if let Some(name) = name {
             // This is different from `File::create()` because we don't truncate the output yet.
             // This allows using the output file as an input file.
-            #[allow(clippy::suspicious_open_options)]
+            // clippy::suspicious_open_options supported only for Rust >= 1.77.0
+            // Rust version = 1.76 on OpenBSD stable/7.5
+            #[cfg_attr(not(target_os = "openbsd"), allow(clippy::suspicious_open_options))]
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)

@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD
 
-#[cfg(target_os = "linux")]
-use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
 use regex::Regex;
 use std::env;
@@ -472,127 +470,105 @@ fn test_gnu_e20() {
     assert_eq!(out.stdout_str(), output);
 }
 
-#[macro_export]
-macro_rules! compare_with_gnu {
-    ( $ts:expr, $args:expr ) => {{
-        println!("==========================================================================");
-        let result = $ts.ucmd().args($args).run();
-
-        #[cfg(target_os = "linux")]
-        {
-            let reference = expected_result(&$ts, $args);
-            if let Ok(reference) = reference {
-                let success = result.code() == reference.code()
-                    && result.stdout_str() == reference.stdout_str()
-                    && result.stderr_str() == reference.stderr_str();
-                if !success {
-                    println!("reference.code: {}", reference.code());
-                    println!("   result.code: {}", result.code());
-                    println!("reference.cout: {}", reference.stdout_str());
-                    println!("   result.cout: {}", result.stdout_str());
-                    println!("reference.cerr: {}", reference.stderr_str_lossy());
-                    println!("   result.cerr: {}", result.stderr_str_lossy());
-                }
-                assert_eq!(result.code(), reference.code());
-                assert_eq!(result.stdout_str(), reference.stdout_str());
-                assert_eq!(result.stderr_str(), reference.stderr_str());
-            } else {
-                println!(
-                    "gnu reference test skipped. Reason: {:?}",
-                    reference.unwrap_err()
-                );
-            }
-        }
-
-        result
-    }};
-}
-
 #[test]
 #[allow(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
-fn test_env_with_gnu_reference_parsing_errors() {
+fn test_env_parsing_errors() {
     let ts = TestScenario::new(util_name!());
 
-    compare_with_gnu!(ts, &["-S\\|echo hallo"]) // no quotes, invalid escape sequence |
-        .failure()
+    ts.ucmd()
+        .arg("-S\\|echo hallo") // no quotes, invalid escape sequence |
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\|' in -S\n");
 
-    compare_with_gnu!(ts, &["-S\\a"]) // no quotes, invalid escape sequence a
-        .failure()
+    ts.ucmd()
+        .arg("-S\\a") // no quotes, invalid escape sequence a
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
-    compare_with_gnu!(ts, &["-S\"\\a\""]) // double quotes, invalid escape sequence a
-        .failure()
+    ts.ucmd()
+        .arg("-S\"\\a\"") // double quotes, invalid escape sequence a
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S"\a""#]) // same as before, just using r#""#
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S"\a""#) // same as before, just using r#""#
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
-    compare_with_gnu!(ts, &["-S'\\a'"]) // single quotes, invalid escape sequence a
-        .failure()
+    ts.ucmd()
+        .arg("-S'\\a'") // single quotes, invalid escape sequence a
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S\|\&\;"#]) // no quotes, invalid escape sequence |
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S\|\&\;"#) // no quotes, invalid escape sequence |
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\|' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S\<\&\;"#]) // no quotes, invalid escape sequence <
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S\<\&\;"#) // no quotes, invalid escape sequence <
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\<' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S\>\&\;"#]) // no quotes, invalid escape sequence >
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S\>\&\;"#) // no quotes, invalid escape sequence >
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\>' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S\`\&\;"#]) // no quotes, invalid escape sequence `
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S\`\&\;"#) // no quotes, invalid escape sequence `
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S"\`\&\;""#]) // double quotes, invalid escape sequence `
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S"\`\&\;""#) // double quotes, invalid escape sequence `
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S'\`\&\;'"#]) // single quotes, invalid escape sequence `
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S'\`\&\;'"#) // single quotes, invalid escape sequence `
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S\`"#]) // ` escaped without quotes
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S\`"#) // ` escaped without quotes
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S"\`""#]) // ` escaped in double quotes
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S"\`""#) // ` escaped in double quotes
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S'\`'"#]) // ` escaped in single quotes
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S'\`'"#) // ` escaped in single quotes
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
@@ -606,7 +582,7 @@ fn test_env_with_gnu_reference_parsing_errors() {
 }
 
 #[test]
-fn test_env_with_gnu_reference_empty_executable_single_quotes() {
+fn test_env_with_empty_executable_single_quotes() {
     let ts = TestScenario::new(util_name!());
 
     ts.ucmd()
@@ -618,11 +594,12 @@ fn test_env_with_gnu_reference_empty_executable_single_quotes() {
 }
 
 #[test]
-fn test_env_with_gnu_reference_empty_executable_double_quotes() {
+fn test_env_with_empty_executable_double_quotes() {
     let ts = TestScenario::new(util_name!());
 
-    compare_with_gnu!(ts, &["-S\"\""]) // empty double quotes, considered as program name
-        .failure()
+    ts.ucmd()
+        .args(&["-S\"\""]) // empty double quotes, considered as program name
+        .fails()
         .code_is(127)
         .no_stdout()
         .stderr_is("env: '': No such file or directory\n");

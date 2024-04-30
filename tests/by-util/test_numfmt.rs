@@ -550,7 +550,7 @@ fn test_delimiter_with_padding_and_fields() {
 fn test_round() {
     for (method, exp) in [
         ("from-zero", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
-        ("from-zer", ["9.1K", "-9.1K", "9.1K", "-9.1K"]), // spell-checker:disable-line
+        ("from-zer", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
         ("f", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
         ("towards-zero", ["9.0K", "-9.0K", "9.0K", "-9.0K"]),
         ("up", ["9.1K", "-9.0K", "9.1K", "-9.0K"]),
