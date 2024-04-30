@@ -1,0 +1,49 @@
+diff --git a/tests/uniq/uniq.pl b/tests/uniq/uniq.pl
+index a61f26485..9c5e830f3 100755
+--- a/tests/uniq/uniq.pl
++++ b/tests/uniq/uniq.pl
+@@ -26,12 +26,17 @@ my $try = "Try '$prog --help' for more information.\n";
+ # Turn off localization of executable's output.
+ @ENV{qw(LANGUAGE LANG LC_ALL)} = ('C') x 3;
+ 
++print "hello, I'm here!\n";
++
+ my $mb_locale;
+ #Comment out next line to disable multibyte tests
+ $mb_locale = $ENV{LOCALE_FR_UTF8};
++print "1 - mb_locale: ".$mb_locale."\n";
+ ! defined $mb_locale || $mb_locale eq 'none'
+   and $mb_locale = 'C';
+ 
++print "2 - mb_locale: ".$mb_locale."\n";
++
+ # When possible, create a "-z"-testing variant of each test.
+ sub add_z_variants($)
+ {
+@@ -269,6 +274,7 @@ foreach my $t (@Tests)
+       and push @$t, {ENV=>'_POSIX2_VERSION=199209'};
+   }
+ 
++print "========= checking mb_locale: ".$mb_locale."\n";
+ if ($mb_locale ne 'C')
+   {
+     # Duplicate each test vector, appending "-mb" to the test name and
+@@ -301,9 +307,12 @@ if ($mb_locale ne 'C')
+       ['w1-mb', '-w1',  {IN => $trouble_with_w1}, {OUT => $trouble_with_w1},
+         {ENV => "LC_ALL=$mb_locale"}]
+     );
++    print "========= adding w1-mb: ".$mb_locale."\n";
+     push @Tests, @Locale_Tests;
+    }
+ 
++print "========= after checking mb_locale: ".$mb_locale."\n";
++
+ # Remember that triple_test creates from each test with exactly one "IN"
+ # file two more tests (.p and .r suffix on name) corresponding to reading
+ # input from a file and from a pipe.  The pipe-reading test would fail
+@@ -320,4 +329,5 @@ my $save_temps = $ENV{DEBUG};
+ my $verbose = $ENV{VERBOSE};
+ 
+ my $fail = run_tests ($prog, $prog, \@Tests, $save_temps, $verbose);
++exit 1;
+ exit $fail;
