@@ -70,7 +70,7 @@ fn test_multiple_param() {
         new_ucmd!()
             .args(&[multiple_param, path, path])
             .succeeds()
-            .stdout_only("baz\nbaz\n"); // spell-checker:disable-line
+            .stdout_only("baz\nbaz\n");
     }
 }
 
@@ -81,7 +81,7 @@ fn test_suffix_param() {
         new_ucmd!()
             .args(&[suffix_param, ".exe", path, path])
             .succeeds()
-            .stdout_only("baz\nbaz\n"); // spell-checker:disable-line
+            .stdout_only("baz\nbaz\n");
     }
 }
 
