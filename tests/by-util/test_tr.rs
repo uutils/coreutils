@@ -124,10 +124,10 @@ fn test_complement2() {
 #[test]
 fn test_complement3() {
     new_ucmd!()
-        .args(&["-c", "abcdefgh", "123"]) // spell-checker:disable-line
+        .args(&["-c", "abcdefgh", "123"])
         .pipe_in("the cat and the bat")
         .run()
-        .stdout_is("3he3ca33a3d33he3ba3"); // spell-checker:disable-line
+        .stdout_is("3he3ca33a3d33he3ba3");
 }
 
 #[test]
@@ -291,7 +291,7 @@ fn test_set1_shorter_than_set2() {
         .args(&["ab", "xyz"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde"); // spell-checker:disable-line
+        .stdout_is("xycde");
 }
 
 #[test]
@@ -301,7 +301,7 @@ fn test_truncate() {
         .args(&["-t", "abc", "xy"])
         .pipe_in("abcde")
         .succeeds()
-        .stdout_is("xycde"); // spell-checker:disable-line
+        .stdout_is("xycde");
 }
 
 #[test]
@@ -310,7 +310,7 @@ fn test_truncate_multi() {
         .args(&["-tt", "-t", "abc", "xy"])
         .pipe_in("abcde")
         .succeeds()
-        .stdout_is("xycde"); // spell-checker:disable-line
+        .stdout_is("xycde");
 }
 
 #[test]
@@ -319,7 +319,7 @@ fn test_truncate_with_set1_shorter_than_set2() {
         .args(&["-t", "ab", "xyz"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde"); // spell-checker:disable-line
+        .stdout_is("xycde");
 }
 
 #[test]
