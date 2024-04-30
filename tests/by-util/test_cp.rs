@@ -4079,7 +4079,7 @@ fn test_cp_default_virtual_file() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     ts.ucmd()
-        .arg("/sys/kernel/address_bits")
+        .arg("/sys/kernel/profiling")
         .arg("b")
         .succeeds();
 
@@ -4179,7 +4179,7 @@ fn test_cp_debug_sparse_always_sparse_virtual_file() {
         .ucmd()
         .arg("--debug")
         .arg("--sparse=always")
-        .arg("/sys/kernel/address_bits")
+        .arg("/sys/kernel/profiling")
         .arg("b")
         .succeeds();
 
@@ -4380,7 +4380,7 @@ fn test_cp_debug_default_sparse_virtual_file() {
     let result = ts
         .ucmd()
         .arg("--debug")
-        .arg("/sys/kernel/address_bits")
+        .arg("/sys/kernel/profiling")
         .arg("b")
         .succeeds();
 
