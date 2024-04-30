@@ -289,7 +289,7 @@ hostname = "0.4"
 humantime = "2.1.0"
 indicatif = "0.17"
 itertools = "0.12.1"
-libc = "0.2.153"
+libc = "0.2.154"
 log = "0.4"
 fern = { version = "0.6.2", default-features = false }
 lscolors = { version = "0.16.0", default-features = false, features = [
@@ -330,13 +330,13 @@ textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "1.0"
 time = { version = "0.3" }
 unicode-segmentation = "1.11.0"
-unicode-width = "0.1.11"
+unicode-width = "0.1.12"
 utf-8 = "0.7.6"
 walkdir = "2.5"
 winapi-util = "0.1.8"
 windows-sys = { version = "0.48.0", default-features = false }
 xattr = "1.3.1"
-zip = { version = "1.1.1", default-features = false, features = ["deflate"] }
+zip = { version = "1.1.3", default-features = false, features = ["deflate"] }
 
 hex = "0.4.3"
 md-5 = "0.10.6"

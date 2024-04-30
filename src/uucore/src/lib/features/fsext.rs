@@ -359,7 +359,7 @@ use libc::c_int;
 ))]
 extern "C" {
     #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
-    #[link_name = "getmntinfo$INODE64"] // spell-checker:disable-line
+    #[link_name = "getmntinfo$INODE64"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
     #[cfg(any(
@@ -367,14 +367,14 @@ extern "C" {
         target_os = "openbsd",
         all(target_vendor = "apple", target_arch = "aarch64")
     ))]
-    #[link_name = "getmntinfo"] // spell-checker:disable-line
+    #[link_name = "getmntinfo"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
     // Rust on FreeBSD uses 11.x ABI for filesystem metadata syscalls.
     // Call the right version of the symbol for getmntinfo() result to
     // match libc StatFS layout.
     #[cfg(target_os = "freebsd")]
-    #[link_name = "getmntinfo@FBSD_1.0"] // spell-checker:disable-line
+    #[link_name = "getmntinfo@FBSD_1.0"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 }
 

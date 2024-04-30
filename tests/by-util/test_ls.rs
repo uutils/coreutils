@@ -2512,7 +2512,7 @@ fn test_ls_indicator_style() {
         "--ind=slash",
         "--classify",
         "--classify=always",
-        "--classify=alway", // spell-checker:disable-line
+        "--classify=alway",
         "--classify=al",
         "--classify=yes",
         "--classify=force",
@@ -4583,7 +4583,7 @@ fn test_ls_hyperlink() {
     for argument in [
         "--hyperlink=never",
         "--hyperlink=neve", // spell-checker:disable-line
-        "--hyperlink=ne",   // spell-checker:disable-line
+        "--hyperlink=ne",
         "--hyperlink=n",
     ] {
         scene
