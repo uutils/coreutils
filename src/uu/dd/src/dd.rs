@@ -472,6 +472,7 @@ impl<'a> Read for Input<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut base_idx = 0;
         let target_len = buf.len();
+        log::debug!("Read: @{}, size: {}", buf.as_ptr() as usize, buf.len());
         loop {
             if self.settings.iflags.direct {
                 let remaining = target_len - base_idx;
@@ -482,11 +483,24 @@ impl<'a> Read for Input<'a> {
                     // OR when previous read was short (e.g. due to End of File)
                     // we need to do a irregular read.
                     // we can do that by disabling direct read.
-                    self.src.unset_direct()?;
+                    // Thats also what GNU is doing.
+                    let result = self.src.unset_direct();
+                    log::debug!(
+                        "{:?} - unset_direct, @{} - remaining: {remaining}",
+                        result,
+                        (buf.as_ptr() as usize % self.settings.ibs)
+                    );
+                    result?
                 }
             }
 
-            match self.src.read(&mut buf[base_idx..]) {
+            let dest = &mut buf[base_idx..];
+            log::debug!(
+                "Read - iter: @{}, size: {}",
+                dest.as_ptr() as usize,
+                dest.len()
+            );
+            match self.src.read(dest) {
                 Ok(0) => return Ok(base_idx),
                 Ok(rlen) if self.settings.iflags.fullblock => {
                     base_idx += rlen;

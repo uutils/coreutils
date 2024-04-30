@@ -2499,6 +2499,7 @@ dependencies = [
  "clap",
  "gcd",
  "libc",
+ "log",
  "nix",
  "signal-hook",
  "uucore",
