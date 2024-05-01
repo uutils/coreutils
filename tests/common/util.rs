@@ -42,6 +42,7 @@ use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, Instant};
 use std::{env, hint, mem, thread};
 use tempfile::{Builder, TempDir};
+use uucore::UUTILS_LOG_FILE_ENV_NAME;
 
 static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
@@ -1158,7 +1159,50 @@ pub struct TestScenario {
     pub bin_path: PathBuf,
     pub util_name: String,
     pub fixtures: AtPath,
+    log_guard: LogPrintGuard,
     tmpd: Rc<TempDir>,
+}
+
+struct LogPrintGuard {
+    log_file: PathBuf,
+}
+
+// In the context of test execution, writing to std::io::stderr() is
+// apparently handled differently than writing using eprint!-macro
+// To still be able to use the std::io::copy, this PrintSink is needed.
+struct PrintSink {}
+
+impl std::io::Write for PrintSink {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        eprint!("{}", String::from_utf8_lossy(buf));
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Drop for LogPrintGuard {
+    fn drop(&mut self) {
+        let Ok(f) = File::open(&self.log_file) else {
+            return;
+        };
+        eprintln!("=============== collected logs: ===============");
+
+        std::io::stderr().flush().unwrap();
+        let mut reader = std::io::BufReader::new(f);
+        let result = std::io::copy(&mut reader, &mut PrintSink {}).unwrap_or_else(|e| {
+            eprintln!(
+                "Failed to read contents of log-file: {}, Err: {:?}",
+                self.log_file.display(),
+                e
+            );
+            0
+        });
+        std::io::stderr().flush().unwrap();
+        eprintln!("=============== log-size: {result} bytes =============");
+    }
 }
 
 impl TestScenario {
@@ -1167,10 +1211,15 @@ impl TestScenario {
         T: AsRef<str>,
     {
         let tmpd = Rc::new(TempDir::new().unwrap());
+        let fixtures = AtPath::new(tmpd.as_ref().path());
+        let log_guard = LogPrintGuard {
+            log_file: fixtures.plus("uu_logs.txt")
+        };
         let ts = Self {
             bin_path: PathBuf::from(TESTS_BINARY),
             util_name: util_name.as_ref().into(),
-            fixtures: AtPath::new(tmpd.as_ref().path()),
+            fixtures,
+            log_guard,
             tmpd,
         };
         let mut fixture_path_builder = env::current_dir().unwrap();
@@ -1185,10 +1234,16 @@ impl TestScenario {
         ts
     }
 
+    fn activate_uu_logs_on_command(&self, cmd: &mut UCommand) {
+        cmd.env(UUTILS_LOG_FILE_ENV_NAME, &self.log_guard.log_file);
+    }
+
     /// Returns builder for invoking the target uutils binary. Paths given are
     /// treated relative to the environment's unique temporary test directory.
     pub fn ucmd(&self) -> UCommand {
-        UCommand::from_test_scenario(self)
+        let mut cmd = UCommand::from_test_scenario(self);
+        self.activate_uu_logs_on_command(&mut cmd);
+        cmd
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
@@ -1197,13 +1252,16 @@ impl TestScenario {
         let mut command = UCommand::new();
         command.bin_path(bin_path);
         command.temp_dir(self.tmpd.clone());
+        self.activate_uu_logs_on_command(&mut command);
         command
     }
 
     /// Returns builder for invoking any uutils command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn ccmd<S: AsRef<str>>(&self, util_name: S) -> UCommand {
-        UCommand::with_util(util_name, self.tmpd.clone())
+        let mut cmd = UCommand::with_util(util_name, self.tmpd.clone());
+        self.activate_uu_logs_on_command(&mut cmd);
+        cmd
     }
 }
 
