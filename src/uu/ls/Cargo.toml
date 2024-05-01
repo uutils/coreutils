@@ -15,7 +15,7 @@ edition = "2021"
 path = "src/ls.rs"
 
 [dependencies]
-ansi-width= { workspace = true }
+ansi-width = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 chrono = { workspace = true }
 number_prefix = { workspace = true }
