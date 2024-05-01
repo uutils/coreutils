@@ -293,7 +293,7 @@ libc = "0.2.154"
 lscolors = { version = "0.16.0", default-features = false, features = [
   "gnu_legacy",
 ] }
-memchr = "2"
+memchr = "2.7.2"
 memmap2 = "0.9"
 nix = { version = "0.28", default-features = false }
 nom = "7.1.3"
