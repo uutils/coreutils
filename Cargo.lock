@@ -44,6 +44,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ansi-width"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "219e3ce6f2611d83b51ec2098a12702112c29e57203a6b0a0929b2cddb486608"
+dependencies = [
+ "unicode-width",
+]
+
+[[package]]
 name = "anstream"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2727,6 +2736,7 @@ dependencies = [
 name = "uu_ls"
 version = "0.0.26"
 dependencies = [
+ "ansi-width",
  "chrono",
  "clap",
  "glob",
@@ -2736,7 +2746,6 @@ dependencies = [
  "once_cell",
  "selinux",
  "terminal_size 0.3.0",
- "unicode-width",
  "uucore",
  "uutils_term_grid",
 ]
@@ -3366,11 +3375,11 @@ checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
 
 [[package]]
 name = "uutils_term_grid"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b389452a568698688dda38802068378a16c15c4af9b153cdd99b65391292bbc7"
+checksum = "9f8d288de1b98c546a4d17b857689ec9c84234ee317eaa018804112fb91e607a"
 dependencies = [
- "unicode-width",
+ "ansi-width",
 ]
 
 [[package]]
