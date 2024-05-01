@@ -24,4 +24,4 @@ cpp = "0.5"
 libc = { workspace = true }
 
 [build-dependencies]
-cpp_build = "0.5"
+cpp_build = "0.5.9"
