@@ -17,6 +17,7 @@ mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
 mod parser; // string parsing modules
 
+use mods::io::OwnedFileDescriptorOrHandle;
 pub use uucore_procs::*;
 
 // * cross-platform modules
@@ -98,10 +99,13 @@ pub use crate::features::fsxattr;
 //## core functions
 
 use std::ffi::OsString;
+use std::fs::File;
+use std::io::Write;
 use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
 
+pub const UUTILS_LOG_FILE_ENV_NAME: &str = "UUTILS_LOG_FILE";
 /// Execute utility code for `util`.
 ///
 /// This macro expands to a main function that invokes the `uumain` function in `util`
@@ -177,6 +181,28 @@ static EXECUTION_PHRASE: Lazy<String> = Lazy::new(|| {
 /// Derive the complete execution phrase for "usage".
 pub fn execution_phrase() -> &'static str {
     &EXECUTION_PHRASE
+}
+
+struct SimpleLogSink {
+    file: Option<OwnedFileDescriptorOrHandle>,
+}
+
+pub fn uu_log_file() -> Box<dyn Write> {
+    static SINK: Lazy<SimpleLogSink> = Lazy::<SimpleLogSink>::new(|| SimpleLogSink {
+        file: std::env::var_os(UUTILS_LOG_FILE_ENV_NAME)
+            .and_then(|path| File::create(path).ok())
+            .and_then(|f| OwnedFileDescriptorOrHandle::from(f).ok()),
+    });
+    SINK.file
+        .as_ref()
+        .and_then(|f| f.try_clone().ok())
+        .map(|fx| Box::new(fx.into_file()) as Box<dyn Write>)
+        .unwrap_or(Box::new(std::io::sink()))
+}
+
+#[macro_export]
+macro_rules! uu_log {
+    ($($arg:tt)*) => { let _ = writeln!(uu_log_file(), $($arg)*); };
 }
 
 pub trait Args: Iterator<Item = OsString> + Sized {

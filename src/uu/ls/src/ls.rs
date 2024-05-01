@@ -35,7 +35,6 @@ use std::{
     time::Duration,
 };
 use term_grid::{Direction, Filling, Grid, GridOptions};
-use uucore::error::USimpleError;
 use uucore::format::human::{human_readable, SizeFormat};
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
@@ -65,6 +64,7 @@ use uucore::{
     shortcut_value_parser::ShortcutValueParser,
     version_cmp::version_cmp,
 };
+use uucore::{error::USimpleError, uu_log, uu_log_file};
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 mod dired;
 use dired::DiredOutput;
@@ -2384,6 +2384,7 @@ fn display_dir_entry_size(
             ),
             SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
         };
+        uu_log!("success metadata from entry: size_len: {size_len}, major_len: {major_len}, minor_len: {minor_len}");
         (
             display_symlink_count(md).len(),
             display_uname(md, config).len(),
@@ -2393,6 +2394,7 @@ fn display_dir_entry_size(
             minor_len,
         )
     } else {
+        uu_log!("failed to get metadata from entry: {:?}", entry);
         (0, 0, 0, 0, 0, 0)
     }
 }
@@ -2412,14 +2414,23 @@ fn return_total(
 ) -> UResult<String> {
     let mut total_size = 0;
     for item in items {
-        total_size += item
-            .get_metadata(out)
-            .as_ref()
-            .map_or(0, |md| get_block_size(md, config));
+        let md = item.get_metadata(out);
+        uu_log!("item md {}: {:?}", item.display_name.to_string_lossy(), md);
+        if let Some(md) = md {
+            let gbs = get_block_size(md, config);
+            uu_log!(
+                "item gbs {:?}, blocks: {}, size: {}",
+                gbs,
+                md.blocks(),
+                md.size()
+            );
+        }
+        total_size += md.as_ref().map_or(0, |md| get_block_size(md, config));
     }
     if config.dired {
         dired::indent(out)?;
     }
+    uu_log!("total {total_size} of {} items", items.len());
     Ok(format!(
         "total {}{}",
         display_size(total_size, config),
