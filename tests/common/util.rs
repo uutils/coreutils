@@ -42,6 +42,7 @@ use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, Instant};
 use std::{env, hint, mem, thread};
 use tempfile::{Builder, TempDir};
+use uucore::{UUTILS_LOG_FILE_ENV_NAME, UUTILS_LOG_LEVEL_ENV_NAME};
 
 static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
@@ -1158,7 +1159,52 @@ pub struct TestScenario {
     pub bin_path: PathBuf,
     pub util_name: String,
     pub fixtures: AtPath,
+    log_guard: Option<LogPrintGuard>,
     tmpd: Rc<TempDir>,
+}
+
+struct LogPrintGuard {
+    log_file: PathBuf,
+    log_level: log::LevelFilter,
+}
+
+// In the context of test execution, writing to std::io::stderr() is
+// apparently handled differently than writing using eprint!-macro
+// To still be able to use the std::io::copy, this PrintSink is created.
+struct PrintSink {}
+
+impl std::io::Write for PrintSink {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        eprint!("{}", String::from_utf8_lossy(buf));
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Drop for LogPrintGuard {
+    fn drop(&mut self) {
+        let Ok(f) = File::open(&self.log_file) else {
+            eprintln!("Failed to open log-file: {}", self.log_file.display());
+            return;
+        };
+        eprintln!("=============== Dump collected logs: ===============");
+
+        std::io::stderr().flush().unwrap();
+        let mut reader = std::io::BufReader::new(f);
+        let result = std::io::copy(&mut reader, &mut PrintSink {}).unwrap_or_else(|e| {
+            eprintln!(
+                "Failed to read contents of log-file: {}, Err: {:?}",
+                self.log_file.display(),
+                e
+            );
+            0
+        });
+        std::io::stderr().flush().unwrap();
+        eprintln!("=============== Dumped {result} bytes. =============");
+    }
 }
 
 impl TestScenario {
@@ -1172,6 +1218,7 @@ impl TestScenario {
             util_name: util_name.as_ref().into(),
             fixtures: AtPath::new(tmpd.as_ref().path()),
             tmpd,
+            log_guard: None,
         };
         let mut fixture_path_builder = env::current_dir().unwrap();
         fixture_path_builder.push(TESTS_DIR);
@@ -1185,10 +1232,19 @@ impl TestScenario {
         ts
     }
 
+    fn activate_uu_logs_on_command(&self, cmd: &mut UCommand) {
+        if let Some(guard) = &self.log_guard {
+            cmd.env(UUTILS_LOG_FILE_ENV_NAME, &guard.log_file);
+            cmd.env(UUTILS_LOG_LEVEL_ENV_NAME, &guard.log_level.as_str());
+        }
+    }
+
     /// Returns builder for invoking the target uutils binary. Paths given are
     /// treated relative to the environment's unique temporary test directory.
     pub fn ucmd(&self) -> UCommand {
-        UCommand::from_test_scenario(self)
+        let mut cmd = UCommand::from_test_scenario(self);
+        self.activate_uu_logs_on_command(&mut cmd);
+        cmd
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
@@ -1197,13 +1253,28 @@ impl TestScenario {
         let mut command = UCommand::new();
         command.bin_path(bin_path);
         command.temp_dir(self.tmpd.clone());
+        self.activate_uu_logs_on_command(&mut command);
         command
     }
 
     /// Returns builder for invoking any uutils command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn ccmd<S: AsRef<str>>(&self, util_name: S) -> UCommand {
-        UCommand::with_util(util_name, self.tmpd.clone())
+        let mut cmd = UCommand::with_util(util_name, self.tmpd.clone());
+        self.activate_uu_logs_on_command(&mut cmd);
+        cmd
+    }
+
+    pub fn enable_uu_logs(mut self, log_level: log::LevelFilter) -> Self {
+        self.log_guard = Some(LogPrintGuard {
+            log_file: self.fixtures.plus("uu_logs.txt"),
+            log_level: log_level,
+        });
+        self
+    }
+
+    pub fn enable_uu_logs_debug(self) -> Self {
+        self.enable_uu_logs(log::LevelFilter::Debug)
     }
 }
 

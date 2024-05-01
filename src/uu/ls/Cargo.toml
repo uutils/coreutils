@@ -22,6 +22,7 @@ number_prefix = { workspace = true }
 uutils_term_grid = { workspace = true }
 terminal_size = { workspace = true }
 glob = { workspace = true }
+log = { workspace = true }
 lscolors = { workspace = true }
 uucore = { workspace = true, features = [
   "colors",

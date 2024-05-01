@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // library ~ (core/bundler file)
 
+// spell-checker:ignore manpages mangen humantime
+
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
 pub extern crate libc;
@@ -17,6 +19,7 @@ mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
 mod parser; // string parsing modules
 
+use log::LevelFilter;
 pub use uucore_procs::*;
 
 // * cross-platform modules
@@ -97,10 +100,16 @@ pub use crate::features::fsxattr;
 
 //## core functions
 
+use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::str::FromStr;
 use std::sync::atomic::Ordering;
+use std::time::SystemTime;
 
 use once_cell::sync::Lazy;
+
+pub const UUTILS_LOG_FILE_ENV_NAME: &str = "UUTILS_LOG_FILE";
+pub const UUTILS_LOG_LEVEL_ENV_NAME: &str = "UUTILS_LOG_LEVEL";
 
 /// Execute utility code for `util`.
 ///
@@ -177,6 +186,52 @@ static EXECUTION_PHRASE: Lazy<String> = Lazy::new(|| {
 /// Derive the complete execution phrase for "usage".
 pub fn execution_phrase() -> &'static str {
     &EXECUTION_PHRASE
+}
+
+fn setup_logger(log_file: &OsStr, log_level: log::LevelFilter) -> Result<(), fern::InitError> {
+    fern::Dispatch::new()
+        .format(|out, message, record| {
+            out.finish(format_args!(
+                "[{} {} {}] {}",
+                humantime::format_rfc3339_seconds(SystemTime::now()),
+                record.level(),
+                record.target(),
+                message
+            ))
+        })
+        .level(log_level)
+        .chain(fern::log_file(log_file)?)
+        .apply()?;
+    Ok(())
+}
+
+/// Default initialization of global logging facade
+pub fn initialize_logging() {
+    let default_log_level = LevelFilter::Debug;
+    let logging_out_file = std::env::var_os(UUTILS_LOG_FILE_ENV_NAME);
+    let logging_level_name = std::env::var_os(UUTILS_LOG_LEVEL_ENV_NAME);
+    if let Some(log_file) = logging_out_file {
+        let lln = logging_level_name
+            .map(|x| x.to_string_lossy().into_owned())
+            .unwrap_or(default_log_level.as_str().into());
+        let log_level = log::LevelFilter::from_str(&lln).unwrap_or_else(|e| {
+            eprintln!(
+                "Log level name invalid: {}. Err: {}. Using default: {}",
+                lln,
+                e,
+                default_log_level.as_str()
+            );
+            default_log_level
+        });
+        let result = setup_logger(&log_file, log_level);
+        if let Err(e) = result {
+            eprintln!(
+                "Failed to setup logging to file {}. Error: {:?}",
+                log_file.to_string_lossy(),
+                e
+            );
+        }
+    }
 }
 
 pub trait Args: Iterator<Item = OsString> + Sized {
