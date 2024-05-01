@@ -3375,9 +3375,9 @@ checksum = "f00cc9702ca12d3c81455259621e676d0f7251cec66a21e98fe2e9a37db93b2a"
 
 [[package]]
 name = "uutils_term_grid"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f8d288de1b98c546a4d17b857689ec9c84234ee317eaa018804112fb91e607a"
+checksum = "f89defb4adb4ba5703a57abc879f96ddd6263a444cacc446db90bf2617f141fb"
 dependencies = [
  "ansi-width",
 ]
