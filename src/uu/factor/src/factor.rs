@@ -51,14 +51,14 @@ fn print_factors_str(
         ));
     }
 
-    write_result(w, x, factorization, print_exponents).map_err_context(|| "write error".into())?;
+    write_result(w, &x, factorization, print_exponents).map_err_context(|| "write error".into())?;
 
     Ok(())
 }
 
 fn write_result(
     w: &mut io::BufWriter<impl Write>,
-    x: BigUint,
+    x: &BigUint,
     factorization: BTreeMap<BigUint, usize>,
     print_exponents: bool,
 ) -> io::Result<()> {

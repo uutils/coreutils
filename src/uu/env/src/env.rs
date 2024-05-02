@@ -104,7 +104,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
-            for (key, value) in prop.iter() {
+            for (key, value) in prop {
                 env::set_var(key, value);
             }
         }
@@ -371,7 +371,7 @@ impl EnvAppData {
             // no program provided, so just dump all env vars to stdout
             print_env(opts.line_ending);
         } else {
-            return self.run_program(opts, self.do_debug_printing);
+            return self.run_program(&opts, self.do_debug_printing);
         }
 
         Ok(())
@@ -379,7 +379,7 @@ impl EnvAppData {
 
     fn run_program(
         &mut self,
-        opts: Options<'_>,
+        opts: &Options<'_>,
         do_debug_printing: bool,
     ) -> Result<(), Box<dyn UError>> {
         let prog = Cow::from(opts.program[0]);
