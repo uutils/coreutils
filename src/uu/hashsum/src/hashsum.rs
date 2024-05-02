@@ -831,27 +831,27 @@ where
     if !options.status && !skip_summary {
         match bad_format.cmp(&1) {
             Ordering::Equal => {
-                show_warning_caps!("{} line is improperly formatted", bad_format)
+                show_warning_caps!("{} line is improperly formatted", bad_format);
             }
             Ordering::Greater => {
-                show_warning_caps!("{} lines are improperly formatted", bad_format)
+                show_warning_caps!("{} lines are improperly formatted", bad_format);
             }
             Ordering::Less => {}
         };
 
         match failed_cksum.cmp(&1) {
             Ordering::Equal => {
-                show_warning_caps!("{} computed checksum did NOT match", failed_cksum)
+                show_warning_caps!("{} computed checksum did NOT match", failed_cksum);
             }
             Ordering::Greater => {
-                show_warning_caps!("{} computed checksums did NOT match", failed_cksum)
+                show_warning_caps!("{} computed checksums did NOT match", failed_cksum);
             }
             Ordering::Less => {}
         };
 
         match failed_open_file.cmp(&1) {
             Ordering::Equal => {
-                show_warning_caps!("{} listed file could not be read", failed_open_file)
+                show_warning_caps!("{} listed file could not be read", failed_open_file);
             }
             Ordering::Greater => {
                 show_warning_caps!("{} listed files could not be read", failed_open_file);

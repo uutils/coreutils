@@ -193,7 +193,7 @@ fn list(signals: &Vec<String>) {
     } else {
         for signal in signals {
             if let Err(e) = print_signal(signal) {
-                uucore::show!(e)
+                uucore::show!(e);
             }
         }
     }

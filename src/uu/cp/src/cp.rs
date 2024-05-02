@@ -1120,6 +1120,7 @@ fn parse_path_args(
     };
 
     if options.strip_trailing_slashes {
+        #[allow(clippy::assigning_clones)]
         for source in &mut paths {
             *source = source.components().as_path().to_owned();
         }
@@ -1617,8 +1618,8 @@ fn handle_existing_dest(
             // linking.
 
             if options.preserve_hard_links()
-            // only try to remove dest file only if the current source 
-            // is hardlink to a file that is already copied  
+            // only try to remove dest file only if the current source
+            // is hardlink to a file that is already copied
                 && copied_files.contains_key(
                     &FileInformation::from_path(
                         source,
@@ -1734,7 +1735,7 @@ fn handle_copy_mode(
     dest: &Path,
     options: &Options,
     context: &str,
-    source_metadata: Metadata,
+    source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
@@ -2053,7 +2054,7 @@ fn copy_file(
         dest,
         options,
         context,
-        source_metadata,
+        &source_metadata,
         symlinked_files,
         source_in_command_line,
     )?;
