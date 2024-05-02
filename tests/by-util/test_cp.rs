@@ -4075,13 +4075,13 @@ fn test_cp_debug_reflink_never_sparse_always_empty_file_with_hole() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cp_default_virtual_file() {
+    // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
+    // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
+
     use std::os::unix::prelude::MetadataExt;
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    ts.ucmd()
-        .arg("/sys/kernel/profiling")
-        .arg("b")
-        .succeeds();
+    ts.ucmd().arg("/sys/kernel/profiling").arg("b").succeeds();
 
     let dest_size = std::fs::metadata(at.plus("b"))
         .expect("Metadata of copied file cannot be read")
@@ -4174,6 +4174,8 @@ fn test_cp_debug_reflink_never_sparse_always_non_sparse_file_with_long_zero_sequ
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_sparse_always_sparse_virtual_file() {
+    // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
+    // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
     let ts = TestScenario::new(util_name!());
     let result = ts
         .ucmd()
@@ -4376,6 +4378,8 @@ fn test_cp_debug_sparse_never_file_with_hole() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cp_debug_default_sparse_virtual_file() {
+    // This file has existed at least since 2008, so we assume that it is present on "all" Linux kernels.
+    // https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-profiling
     let ts = TestScenario::new(util_name!());
     let result = ts
         .ucmd()
