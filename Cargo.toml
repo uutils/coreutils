@@ -486,7 +486,7 @@ num-prime = { workspace = true }
 pretty_assertions = "1.4.0"
 rand = { workspace = true }
 regex = { workspace = true }
-sha1 = { version = "0.10", features = ["std"] }
+sha1 = { version = "0.10.6", features = ["std"] }
 tempfile = { workspace = true }
 time = { workspace = true, features = ["local-offset"] }
 unindent = "0.2"
