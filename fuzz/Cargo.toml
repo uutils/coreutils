@@ -8,7 +8,7 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "0.4"
+libfuzzer-sys = "0.4.7"
 libc = "0.2.154"
 tempfile = "3.10.1"
 rand = { version = "0.8", features = ["small_rng"] }
