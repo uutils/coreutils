@@ -483,7 +483,7 @@ filetime = { workspace = true }
 glob = { workspace = true }
 libc = { workspace = true }
 num-prime = { workspace = true }
-pretty_assertions = "1"
+pretty_assertions = "1.4.0"
 rand = { workspace = true }
 regex = { workspace = true }
 sha1 = { version = "0.10", features = ["std"] }
