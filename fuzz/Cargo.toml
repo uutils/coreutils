@@ -11,7 +11,7 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4.7"
 libc = "0.2.154"
 tempfile = "3.10.1"
-rand = { version = "0.8", features = ["small_rng"] }
+rand = { version = "0.8.5", features = ["small_rng"] }
 similar = "2"
 
 uucore = { path = "../src/uucore/" }
