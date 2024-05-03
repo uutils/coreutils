@@ -23,7 +23,7 @@ uucore_procs = { workspace = true }
 number_prefix = { workspace = true }
 dns-lookup = { version = "2.0.4", optional = true }
 dunce = { version = "1.0.4", optional = true }
-wild = "2.2"
+wild = "2.2.1"
 glob = { workspace = true }
 # * optional
 itertools = { workspace = true, optional = true }
