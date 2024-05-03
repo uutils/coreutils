@@ -12,7 +12,7 @@ libfuzzer-sys = "0.4.7"
 libc = "0.2.154"
 tempfile = "3.10.1"
 rand = { version = "0.8.5", features = ["small_rng"] }
-similar = "2"
+similar = "2.5.0"
 
 uucore = { path = "../src/uucore/" }
 uu_date = { path = "../src/uu/date/" }
