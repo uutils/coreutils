@@ -249,6 +249,10 @@ macro_rules! uu_log {
     }};
 }
 
+pub fn get_uu_log_enabled() -> bool {
+    cfg!(feature = "uu_log")
+}
+
 pub trait Args: Iterator<Item = OsString> + Sized {
     /// Collects the iterator into a `Vec<String>`, lossily converting the `OsString`s to `Strings`.
     fn collect_lossy(self) -> Vec<String> {
