@@ -71,8 +71,9 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
 ] }
 
 [features]
-default = []
+default = [] # add "uu_log" here to activate logging during tests
 # * non-default features
+uu_log = []
 backup-control = []
 colors = []
 encoding = ["data-encoding", "data-encoding-macro", "z85", "thiserror"]

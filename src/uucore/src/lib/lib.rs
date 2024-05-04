@@ -180,6 +180,7 @@ pub fn execution_phrase() -> &'static str {
     &EXECUTION_PHRASE
 }
 
+#[cfg(feature = "uu_log")]
 pub mod uu_logging {
     use once_cell::sync::Lazy;
     use std::{cell::Cell, fs::File, io::Write};
@@ -230,6 +231,7 @@ pub mod uu_logging {
     }
 }
 
+#[cfg(feature = "uu_log")]
 #[macro_export]
 macro_rules! uu_log {
     ($($arg:tt)*) => {
@@ -237,6 +239,14 @@ macro_rules! uu_log {
             uucore::uu_logging::uu_log_to_file(format!($($arg)*));
         }
     };
+}
+
+#[cfg(not(feature = "uu_log"))]
+#[macro_export]
+macro_rules! uu_log {
+    ($($arg:tt)*) => { if cfg!(feature = "uu_log") {
+        let _ /* avoid warning about unused variable at caller side */ = ($($arg)*);
+    }};
 }
 
 pub trait Args: Iterator<Item = OsString> + Sized {
