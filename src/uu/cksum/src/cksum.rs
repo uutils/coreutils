@@ -17,7 +17,9 @@ use std::path::Path;
 use uucore::{
     encoding,
     error::{FromIo, UError, UResult, USimpleError},
-    format_usage, help_about, help_section, help_usage, show,
+    format_usage, help_about, help_section, help_usage,
+    line_ending::LineEnding,
+    show,
     sum::{
         div_ceil, Blake2b, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha512, Sm3,
         BSD, CRC, SYSV,
@@ -147,6 +149,7 @@ struct Options {
     untagged: bool,
     length: Option<usize>,
     output_format: OutputFormat,
+    zero: bool,
 }
 
 /// Calculate checksum
@@ -216,43 +219,43 @@ where
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
         match (options.algo_name, not_file) {
-            (ALGORITHM_OPTIONS_SYSV, true) => println!(
+            (ALGORITHM_OPTIONS_SYSV, true) => print!(
                 "{} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits)
             ),
-            (ALGORITHM_OPTIONS_SYSV, false) => println!(
+            (ALGORITHM_OPTIONS_SYSV, false) => print!(
                 "{} {} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits),
                 filename.display()
             ),
-            (ALGORITHM_OPTIONS_BSD, true) => println!(
+            (ALGORITHM_OPTIONS_BSD, true) => print!(
                 "{:0bsd_width$} {:bsd_width$}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits)
             ),
-            (ALGORITHM_OPTIONS_BSD, false) => println!(
+            (ALGORITHM_OPTIONS_BSD, false) => print!(
                 "{:0bsd_width$} {:bsd_width$} {}",
                 sum.parse::<u16>().unwrap(),
                 div_ceil(sz, options.output_bits),
                 filename.display()
             ),
-            (ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
-            (ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
+            (ALGORITHM_OPTIONS_CRC, true) => print!("{sum} {sz}"),
+            (ALGORITHM_OPTIONS_CRC, false) => print!("{sum} {sz} {}", filename.display()),
             (ALGORITHM_OPTIONS_BLAKE2B, _) if !options.untagged => {
                 if let Some(length) = options.length {
                     // Multiply by 8 here, as we want to print the length in bits.
-                    println!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());
+                    print!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());
                 } else {
-                    println!("BLAKE2b ({}) = {sum}", filename.display());
+                    print!("BLAKE2b ({}) = {sum}", filename.display());
                 }
             }
             _ => {
                 if options.untagged {
-                    println!("{sum}  {}", filename.display());
+                    print!("{sum}  {}", filename.display());
                 } else {
-                    println!(
+                    print!(
                         "{} ({}) = {sum}",
                         options.algo_name.to_ascii_uppercase(),
                         filename.display()
@@ -260,6 +263,8 @@ where
                 }
             }
         }
+        let line_ending = LineEnding::from_zero_flag(options.zero);
+        print!("{}", line_ending);
     }
 
     Ok(())
@@ -306,6 +311,7 @@ mod options {
     pub const LENGTH: &str = "length";
     pub const RAW: &str = "raw";
     pub const BASE64: &str = "base64";
+    pub const ZERO: &str = "zero";
 }
 
 #[uucore::main]
@@ -375,6 +381,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         length,
         untagged: matches.get_flag(options::UNTAGGED),
         output_format,
+        zero: matches.get_flag(options::ZERO),
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -457,6 +464,13 @@ pub fn uu_app() -> Command {
                 // Even though this could easily just override an earlier '--raw',
                 // GNU cksum does not permit these flags to be combined:
                 .conflicts_with(options::RAW),
+        )
+        .arg(
+            Arg::new(options::ZERO)
+            .long(options::ZERO)
+            .short('z')
+            .action(ArgAction::SetTrue)
+            .help("end each output line with NUL, not newline,\n and disable file name escaping"),
         )
         .after_help(AFTER_HELP)
 }
