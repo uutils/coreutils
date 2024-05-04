@@ -19,6 +19,7 @@ use std::{
     error::Error,
     fmt::{Debug, Display},
     io::{BufRead, Write},
+    ops::Not,
 };
 use uucore::error::UError;
 
@@ -125,6 +126,7 @@ impl Sequence {
     pub fn solve_set_characters(
         set1_str: &[u8],
         set2_str: &[u8],
+        complement_flag: bool,
         truncate_set1_flag: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
         let set1 = Self::from_str(set1_str)?;
@@ -189,6 +191,9 @@ impl Sequence {
                     },
                 };
                 let mut set1_solved: Vec<_> = set1.iter().flat_map(Self::flatten).collect();
+                if complement_flag {
+                    set1_solved = (0..=u8::MAX).filter(|x| !set1_solved.contains(x)).collect();
+                }
                 if truncate_set1_flag {
                     set1_solved.truncate(set2_solved.len());
                 }
@@ -369,56 +374,28 @@ impl<A: SymbolTranslator, B: SymbolTranslator> SymbolTranslator for ChainedSymbo
 #[derive(Debug)]
 pub struct DeleteOperation {
     set: Vec<u8>,
-    complement_flag: bool,
 }
 
 impl DeleteOperation {
-    pub fn new(set: Vec<u8>, complement_flag: bool) -> Self {
-        Self {
-            set,
-            complement_flag,
-        }
+    pub fn new(set: Vec<u8>) -> Self {
+        Self { set }
     }
 }
 
 impl SymbolTranslator for DeleteOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        let found = self.set.iter().any(|sequence| *sequence == current);
-        if self.complement_flag == found {
-            Some(current)
-        } else {
-            None
-        }
-    }
-}
-
-pub struct TranslateOperationComplement {
-    iter: u8,
-    set2_iter: usize,
-    set1: Vec<u8>,
-    set2: Vec<u8>,
-    translation_map: HashMap<u8, u8>,
-}
-
-impl TranslateOperationComplement {
-    fn new(set1: Vec<u8>, set2: Vec<u8>) -> Self {
-        Self {
-            iter: 0,
-            set2_iter: 0,
-            set1,
-            set2,
-            translation_map: HashMap::new(),
-        }
+        // keep if not present in the set
+        self.set.contains(&current).not().then_some(current)
     }
 }
 
 #[derive(Debug)]
-pub struct TranslateOperationStandard {
+pub struct TranslateOperation {
     translation_map: HashMap<u8, u8>,
 }
 
-impl TranslateOperationStandard {
-    fn new(set1: Vec<u8>, set2: Vec<u8>) -> Result<Self, BadSequence> {
+impl TranslateOperation {
+    pub fn new(set1: Vec<u8>, set2: Vec<u8>) -> Result<Self, BadSequence> {
         if let Some(fallback) = set2.last().copied() {
             Ok(Self {
                 translation_map: set1
@@ -436,86 +413,27 @@ impl TranslateOperationStandard {
     }
 }
 
-pub enum TranslateOperation {
-    Standard(TranslateOperationStandard),
-    Complement(TranslateOperationComplement),
-}
-
-impl TranslateOperation {
-    fn next_complement_char(iter: u8, ignore_list: &[u8]) -> (u8, u8) {
-        (iter..)
-            .filter(|c| !ignore_list.iter().any(|s| s == c))
-            .map(|c| (c + 1, c))
-            .next()
-            .expect("exhausted all possible characters")
-    }
-}
-
-impl TranslateOperation {
-    pub fn new(set1: Vec<u8>, set2: Vec<u8>, complement: bool) -> Result<Self, BadSequence> {
-        if complement {
-            Ok(Self::Complement(TranslateOperationComplement::new(
-                set1, set2,
-            )))
-        } else {
-            Ok(Self::Standard(TranslateOperationStandard::new(set1, set2)?))
-        }
-    }
-}
-
 impl SymbolTranslator for TranslateOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        match self {
-            Self::Standard(TranslateOperationStandard { translation_map }) => Some(
-                translation_map
-                    .iter()
-                    .find_map(|(l, r)| if l.eq(&current) { Some(*r) } else { None })
-                    .unwrap_or(current),
-            ),
-            Self::Complement(TranslateOperationComplement {
-                iter,
-                set2_iter,
-                set1,
-                set2,
-                translation_map,
-            }) => {
-                // First, try to see if current char is already mapped
-                // If so, return the mapped char
-                // Else, pop from set2
-                // If we popped something, map the next complement character to this value
-                // If set2 is empty, we just map the current char directly to fallback --- to avoid looping unnecessarily
-                if let Some(c) = set1.iter().find(|c| c.eq(&&current)) {
-                    Some(*c)
-                } else {
-                    while translation_map.get(&current).is_none() {
-                        if let Some(value) = set2.get(*set2_iter) {
-                            let (next_iter, next_key) = Self::next_complement_char(*iter, &*set1);
-                            *iter = next_iter;
-                            *set2_iter = set2_iter.saturating_add(1);
-                            translation_map.insert(next_key, *value);
-                        } else {
-                            translation_map.insert(current, *set2.last().unwrap());
-                        }
-                    }
-                    Some(*translation_map.get(&current).unwrap())
-                }
-            }
-        }
+        Some(
+            self.translation_map
+                .get(&current)
+                .copied()
+                .unwrap_or(current),
+        )
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct SqueezeOperation {
     set1: HashSet<u8>,
-    complement: bool,
     previous: Option<u8>,
 }
 
 impl SqueezeOperation {
-    pub fn new(set1: Vec<u8>, complement: bool) -> Self {
+    pub fn new(set1: Vec<u8>) -> Self {
         Self {
             set1: set1.into_iter().collect(),
-            complement,
             previous: None,
         }
     }
@@ -523,35 +441,16 @@ impl SqueezeOperation {
 
 impl SymbolTranslator for SqueezeOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        if self.complement {
-            let next = if self.set1.contains(&current) {
-                Some(current)
-            } else {
-                match self.previous {
-                    Some(v) => {
-                        if v.eq(&current) {
-                            None
-                        } else {
-                            Some(current)
-                        }
-                    }
-                    None => Some(current),
-                }
-            };
-            self.previous = Some(current);
-            next
+        let next = if self.set1.contains(&current) {
+            match self.previous {
+                Some(v) if v == current => None,
+                _ => Some(current),
+            }
         } else {
-            let next = if self.set1.contains(&current) {
-                match self.previous {
-                    Some(v) if v == current => None,
-                    _ => Some(current),
-                }
-            } else {
-                Some(current)
-            };
-            self.previous = Some(current);
-            next
-        }
+            Some(current)
+        };
+        self.previous = Some(current);
+        next
     }
 }
 

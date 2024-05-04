@@ -121,26 +121,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // '*_op' are the operations that need to be applied, in order.
     if delete_flag {
         if squeeze_flag {
-            let delete_op = DeleteOperation::new(set1, complement_flag);
-            let squeeze_op = SqueezeOperation::new(set2, false);
+            let delete_op = DeleteOperation::new(set1);
+            let squeeze_op = SqueezeOperation::new(set2);
             let op = delete_op.chain(squeeze_op);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let op = DeleteOperation::new(set1, complement_flag);
+            let op = DeleteOperation::new(set1);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else if squeeze_flag {
         if sets_len < 2 {
-            let op = SqueezeOperation::new(set1, complement_flag);
+            let op = SqueezeOperation::new(set1);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let translate_op = TranslateOperation::new(set1, set2.clone(), complement_flag)?;
-            let squeeze_op = SqueezeOperation::new(set2, false);
+            let translate_op = TranslateOperation::new(set1, set2.clone())?;
+            let squeeze_op = SqueezeOperation::new(set2);
             let op = translate_op.chain(squeeze_op);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else {
-        let op = TranslateOperation::new(set1, set2, complement_flag)?;
+        let op = TranslateOperation::new(set1, set2)?;
         translate_input(&mut locked_stdin, &mut buffered_stdout, op);
     }
     Ok(())

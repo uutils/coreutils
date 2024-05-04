@@ -1313,3 +1313,24 @@ fn check_regression_class_blank() {
         .no_stderr()
         .stdout_only("a12b");
 }
+
+// Check regression found in https://github.com/uutils/coreutils/issues/6163
+#[test]
+fn check_regression_issue_6163_no_match() {
+    new_ucmd!()
+        .args(&["-c", "-t", "Y", "Z"])
+        .pipe_in("X\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("X\n");
+}
+
+#[test]
+fn check_regression_issue_6163_match() {
+    new_ucmd!()
+        .args(&["-c", "-t", "Y", "Z"])
+        .pipe_in("\0\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("Z\n");
+}
