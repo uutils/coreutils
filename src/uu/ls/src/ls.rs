@@ -64,7 +64,7 @@ use uucore::{
     shortcut_value_parser::ShortcutValueParser,
     version_cmp::version_cmp,
 };
-use uucore::{error::USimpleError, uu_log, uu_log_file};
+use uucore::{error::USimpleError, uu_log};
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 mod dired;
 use dired::DiredOutput;

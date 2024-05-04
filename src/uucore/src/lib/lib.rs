@@ -17,7 +17,6 @@ mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
 mod parser; // string parsing modules
 
-use mods::io::OwnedFileDescriptorOrHandle;
 pub use uucore_procs::*;
 
 // * cross-platform modules
@@ -98,14 +97,12 @@ pub use crate::features::fsxattr;
 
 //## core functions
 
+use once_cell::sync::Lazy;
 use std::ffi::OsString;
-use std::fs::File;
-use std::io::Write;
 use std::sync::atomic::Ordering;
 
-use once_cell::sync::Lazy;
-
 pub const UUTILS_LOG_FILE_ENV_NAME: &str = "UUTILS_LOG_FILE";
+
 /// Execute utility code for `util`.
 ///
 /// This macro expands to a main function that invokes the `uumain` function in `util`
@@ -183,26 +180,63 @@ pub fn execution_phrase() -> &'static str {
     &EXECUTION_PHRASE
 }
 
-struct SimpleLogSink {
-    file: Option<OwnedFileDescriptorOrHandle>,
-}
+pub mod uu_logging {
+    use once_cell::sync::Lazy;
+    use std::{cell::Cell, fs::File, io::Write};
 
-pub fn uu_log_file() -> Box<dyn Write> {
-    static SINK: Lazy<SimpleLogSink> = Lazy::<SimpleLogSink>::new(|| SimpleLogSink {
-        file: std::env::var_os(UUTILS_LOG_FILE_ENV_NAME)
-            .and_then(|path| File::create(path).ok())
-            .and_then(|f| OwnedFileDescriptorOrHandle::from(f).ok()),
-    });
-    SINK.file
-        .as_ref()
-        .and_then(|f| f.try_clone().ok())
-        .map(|fx| Box::new(fx.into_file()) as Box<dyn Write>)
-        .unwrap_or(Box::new(std::io::sink()))
+    use crate::{io::OwnedFileDescriptorOrHandle, UUTILS_LOG_FILE_ENV_NAME};
+
+    pub static GLOBAL_LOG_FILE_HANDLE: Lazy<Option<OwnedFileDescriptorOrHandle>> =
+        Lazy::new(|| {
+            std::env::var_os(UUTILS_LOG_FILE_ENV_NAME).and_then(|path| {
+                File::create(path)
+                    .ok()
+                    .and_then(|f| OwnedFileDescriptorOrHandle::from(f).ok())
+            })
+        });
+
+    thread_local! {
+        static THREAD_LOCAL_SINK: Cell<Lazy<Option<SimpleLogSink>>> = Cell::new(Lazy::<Option<SimpleLogSink>>::new(|| {
+            SimpleLogSink::try_create()
+        }));
+    }
+
+    pub struct SimpleLogSink {
+        file: File,
+    }
+
+    impl SimpleLogSink {
+        fn try_create() -> Option<Self> {
+            let fx = GLOBAL_LOG_FILE_HANDLE.as_ref()?;
+            let owned_fx = fx.try_clone().ok()?;
+            Some(Self {
+                file: owned_fx.into_file(),
+            })
+        }
+    }
+
+    pub fn uu_log_to_file(line: String) {
+        THREAD_LOCAL_SINK.with(|cell| {
+            // temporarily take the cell content such that we can modify it.
+            // there is not risk for race conditions as this is a thread local variable,
+            // and we do not allow nested calls to this function by evaluating arguments
+            // beforehand.
+            let mut log = cell.take();
+            if let Some(mf) = log.as_mut() {
+                let _ = writeln!(mf.file, "{}", line);
+            }
+            cell.set(log);
+        });
+    }
 }
 
 #[macro_export]
 macro_rules! uu_log {
-    ($($arg:tt)*) => { let _ = writeln!(uu_log_file(), $($arg)*); };
+    ($($arg:tt)*) => {
+        if uucore::uu_logging::GLOBAL_LOG_FILE_HANDLE.is_some() {
+            uucore::uu_logging::uu_log_to_file(format!($($arg)*));
+        }
+    };
 }
 
 pub trait Args: Iterator<Item = OsString> + Sized {
