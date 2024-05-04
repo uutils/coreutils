@@ -19,7 +19,7 @@ fn test_fmt() {
 
 #[test]
 fn test_fmt_quick() {
-    for param in ["-q", "--quick"] {
+    for param in ["-q", "--quick", "-qq"] {
         new_ucmd!()
             .args(&["one-word-per-line.txt", param])
             .succeeds()
@@ -35,6 +35,10 @@ fn test_fmt_width() {
             .succeeds()
             .stdout_is("this is a\nfile with\none word\nper line\n");
     }
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "-w50", "--width", "10"])
+        .succeeds()
+        .stdout_is("this is a\nfile with\none word\nper line\n");
 }
 
 #[test]
@@ -66,6 +70,11 @@ fn test_fmt_width_too_big() {
             .code_is(1)
             .stderr_is("fmt: invalid width: '2501': Numerical result out of range\n");
     }
+    // However, as a temporary value it is okay:
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "-w2501", "--width", "10"])
+        .succeeds()
+        .stdout_is("this is a\nfile with\none word\nper line\n");
 }
 
 #[test]
@@ -97,7 +106,7 @@ fn test_fmt_width_not_valid_number() {
         .stderr_contains("fmt: invalid width: '25x'");
 }
 
-#[ignore]
+#[ignore = "our 'goal' algorithm is very different from GNU; fix this!"]
 #[test]
 fn test_fmt_goal() {
     for param in ["-g", "--goal"] {
@@ -106,6 +115,10 @@ fn test_fmt_goal() {
             .succeeds()
             .stdout_is("this is a\nfile with one\nword per line\n");
     }
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "-g40", "-g7"])
+        .succeeds()
+        .stdout_is("this is a\nfile with one\nword per line\n");
 }
 
 #[test]
@@ -128,6 +141,19 @@ fn test_fmt_goal_bigger_than_default_width_of_75() {
             .code_is(1)
             .stderr_is("fmt: GOAL cannot be greater than WIDTH.\n");
     }
+}
+
+#[ignore = "our 'goal' algorithm is very different from GNU; fix this!"]
+#[test]
+fn test_fmt_too_big_goal_sometimes_okay() {
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "--width=75", "-g76", "-g10"])
+        .succeeds()
+        .stdout_is("this is a\nfile with one\nword per line\n");
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "-g76", "-g10"])
+        .succeeds()
+        .stdout_is("this is a\nfile with one\nword per line\n");
 }
 
 #[test]
