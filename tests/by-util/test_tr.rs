@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn
+// spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
 use crate::common::util::TestScenario;
 
 #[test]
@@ -1333,4 +1333,34 @@ fn check_regression_issue_6163_match() {
         .succeeds()
         .no_stderr()
         .stdout_only("Z\n");
+}
+
+#[test]
+fn check_ignore_truncate_when_deleting_and_squeezing() {
+    new_ucmd!()
+        .args(&["-dts", "asdf", "qwe"])
+        .pipe_in("asdfqqwweerr\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("qwerr\n");
+}
+
+#[test]
+fn check_ignore_truncate_when_deleting() {
+    new_ucmd!()
+        .args(&["-dt", "asdf"])
+        .pipe_in("asdfqwer\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("qwer\n");
+}
+
+#[test]
+fn check_ignore_truncate_when_squeezing() {
+    new_ucmd!()
+        .args(&["-ts", "asdf"])
+        .pipe_in("aassddffqwer\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("asdfqwer\n");
 }

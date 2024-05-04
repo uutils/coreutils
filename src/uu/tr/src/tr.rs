@@ -111,11 +111,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let locked_stdout = stdout.lock();
     let mut buffered_stdout = BufWriter::new(locked_stdout);
 
+    // According to the man page: translating only happens if deleting or if a second set is given
+    let translating = !delete_flag && sets.len() > 1;
     let mut sets_iter = sets.iter().map(|c| c.as_str());
     let (set1, set2) = Sequence::solve_set_characters(
         sets_iter.next().unwrap_or_default().as_bytes(),
         sets_iter.next().unwrap_or_default().as_bytes(),
-        truncate_set1_flag,
+        complement_flag,
+        // if we are not translating then we don't truncate set1
+        truncate_set1_flag && translating,
     )?;
 
     // '*_op' are the operations that need to be applied, in order.
