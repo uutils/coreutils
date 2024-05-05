@@ -185,3 +185,74 @@ fn test_fmt_set_goal_not_contain_width() {
             .stdout_is("this is a file with one word per line\n");
     }
 }
+
+#[test]
+fn split_does_not_reflow() {
+    for arg in ["-s", "-ss", "--split-only"] {
+        new_ucmd!()
+            .arg("one-word-per-line.txt")
+            .arg(arg)
+            .succeeds()
+            .stdout_is_fixture("one-word-per-line.txt");
+    }
+}
+
+#[test]
+fn prefix_minus() {
+    for prefix_args in [
+        vec!["-p-"],
+        vec!["-p", "-"],
+        vec!["--prefix=-"],
+        vec!["--prefix", "-"],
+        vec!["--pref=-"],
+        vec!["--pref", "-"],
+        // Test self-overriding:
+        vec!["--prefix==", "--prefix=-"],
+    ] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .arg("prefixed-one-word-per-line.txt")
+            .succeeds()
+            .stdout_is_fixture("prefixed-one-word-per-line_p-.txt");
+    }
+}
+
+#[test]
+fn prefix_equal() {
+    for prefix_args in [
+        // FIXME: #6353 vec!["-p="],
+        vec!["-p", "="],
+        vec!["--prefix=="],
+        vec!["--prefix", "="],
+        vec!["--pref=="],
+        vec!["--pref", "="],
+        // Test self-overriding:
+        vec!["--prefix=-", "--prefix=="],
+    ] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .arg("prefixed-one-word-per-line.txt")
+            .succeeds()
+            .stdout_is_fixture("prefixed-one-word-per-line_p=.txt");
+    }
+}
+
+#[test]
+fn prefix_equal_skip_prefix_equal_two() {
+    for prefix_args in [
+        // FIXME: #6353 vec!["--prefix==", "-P=2"],
+        vec!["--prefix==", "-P", "=2"],
+        vec!["--prefix==", "--skip-prefix==2"],
+        vec!["--prefix==", "--skip-prefix", "=2"],
+        vec!["--prefix==", "--skip-pref==2"],
+        vec!["--prefix==", "--skip-pref", "=2"],
+        // Test self-overriding:
+        vec!["--prefix==", "--skip-pref", "asdf", "-P", "=2"],
+    ] {
+        new_ucmd!()
+            .args(&prefix_args)
+            .arg("prefixed-one-word-per-line.txt")
+            .succeeds()
+            .stdout_is_fixture("prefixed-one-word-per-line_p=_P=2.txt");
+    }
+}
