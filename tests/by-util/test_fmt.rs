@@ -157,6 +157,16 @@ fn test_fmt_too_big_goal_sometimes_okay() {
 }
 
 #[test]
+fn test_fmt_goal_too_small_to_check_negative_minlength() {
+    for param in ["-g", "--goal"] {
+        new_ucmd!()
+            .args(&["one-word-per-line.txt", "--width=75", param, "10"])
+            .succeeds()
+            .stdout_is("this is a file with one word per line\n");
+    }
+}
+
+#[test]
 fn test_fmt_non_existent_file() {
     new_ucmd!()
         .args(&["non-existing"])
