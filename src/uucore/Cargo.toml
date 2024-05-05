@@ -71,7 +71,9 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
 ] }
 
 [features]
-default = ["uu_log"] # add "uu_log" here to activate logging during tests
+default = [] # Add "uu_log" here to activate logging during tests.
+             # When disabled, it will not compile with `uu_log!` statments.
+             # This is intented to avoid accidential left overs afer debugging is finished.
 # * non-default features
 uu_log = []
 backup-control = []

@@ -241,18 +241,6 @@ macro_rules! uu_log {
     };
 }
 
-#[cfg(not(feature = "uu_log"))]
-#[macro_export]
-macro_rules! uu_log {
-    ($($arg:tt)*) => { if cfg!(feature = "uu_log") {
-        let _ /* avoid warning about unused variable at caller side */ = ($($arg)*);
-    }};
-}
-
-pub fn get_uu_log_enabled() -> bool {
-    cfg!(feature = "uu_log")
-}
-
 pub trait Args: Iterator<Item = OsString> + Sized {
     /// Collects the iterator into a `Vec<String>`, lossily converting the `OsString`s to `Strings`.
     fn collect_lossy(self) -> Vec<String> {
