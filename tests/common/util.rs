@@ -782,7 +782,7 @@ pub fn get_root_path() -> &'static str {
 /// # Returns
 ///
 /// `true` if both paths have the same set of extended attributes, `false` otherwise.
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
 pub fn compare_xattrs<P: AsRef<std::path::Path>>(path1: P, path2: P) -> bool {
     let get_sorted_xattrs = |path: P| {
         xattr::list(path)
@@ -3611,7 +3611,7 @@ mod tests {
         assert!(command.tmpd.is_some());
     }
 
-    #[cfg(all(unix, not(target_os = "macos")))]
+    #[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
     #[test]
     fn test_compare_xattrs() {
         use tempfile::tempdir;
