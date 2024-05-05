@@ -239,7 +239,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     let mut next_active_breaks = vec![];
 
     let stretch = args.opts.width - args.opts.goal;
-    let minlength = args.opts.goal - stretch;
+    let minlength = args.opts.goal.max(stretch + 1) - stretch;
     let mut new_linebreaks = vec![];
     let mut is_sentence_start = false;
     let mut least_demerits = 0;
