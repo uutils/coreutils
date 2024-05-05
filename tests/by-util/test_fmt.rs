@@ -42,6 +42,21 @@ fn test_fmt_width() {
 }
 
 #[test]
+fn test_fmt_width_invalid() {
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "-w", "apple"])
+        .fails()
+        .code_is(1)
+        .no_stdout()
+        .stderr_is("fmt: invalid width: 'apple'\n");
+    // an invalid width can be successfully overwritten later:
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "-w", "apple", "-w10"])
+        .succeeds()
+        .stdout_is("this is a\nfile with\none word\nper line\n");
+}
+
+#[test]
 fn test_fmt_positional_width() {
     new_ucmd!()
         .args(&["-10", "one-word-per-line.txt"])
@@ -84,7 +99,7 @@ fn test_fmt_invalid_width() {
             .args(&["one-word-per-line.txt", param, "invalid"])
             .fails()
             .code_is(1)
-            .stderr_contains("invalid value 'invalid'");
+            .stderr_contains("invalid width: 'invalid'");
     }
 }
 
@@ -182,8 +197,34 @@ fn test_fmt_invalid_goal() {
             .args(&["one-word-per-line.txt", param, "invalid"])
             .fails()
             .code_is(1)
-            .stderr_contains("invalid value 'invalid'");
+            // GNU complains about "invalid width", which is confusing.
+            // We intentionally deviate from GNU, and show a more helpful message:
+            .stderr_contains("invalid goal: 'invalid'");
     }
+}
+
+#[test]
+fn test_fmt_invalid_goal_override() {
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "-g", "apple", "-g", "74"])
+        .succeeds()
+        .stdout_is("this is a file with one word per line\n");
+}
+
+#[test]
+fn test_fmt_invalid_goal_width_priority() {
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "-g", "apple", "-w", "banana"])
+        .fails()
+        .code_is(1)
+        .no_stdout()
+        .stderr_is("fmt: invalid width: 'banana'\n");
+    new_ucmd!()
+        .args(&["one-word-per-line.txt", "-w", "banana", "-g", "apple"])
+        .fails()
+        .code_is(1)
+        .no_stdout()
+        .stderr_is("fmt: invalid width: 'banana'\n");
 }
 
 #[test]
