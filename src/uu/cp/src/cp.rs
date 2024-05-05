@@ -1120,7 +1120,9 @@ fn parse_path_args(
     };
 
     if options.strip_trailing_slashes {
-        #[allow(clippy::assigning_clones)]
+        // clippy::assigning_clones added with Rust 1.78
+        // Rust version = 1.76 on OpenBSD stable/7.5
+        #[cfg_attr(not(target_os = "openbsd"), allow(clippy::assigning_clones))]
         for source in &mut paths {
             *source = source.components().as_path().to_owned();
         }
