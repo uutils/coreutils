@@ -97,12 +97,14 @@ fn test_preserve_status() {
 fn test_preserve_status_even_when_send_signal() {
     // When sending CONT signal, process doesn't get killed or stopped.
     // So, expected result is success and code 0.
-    new_ucmd!()
-        .args(&["-s", "CONT", "--preserve-status", ".1", "sleep", "5"])
-        .succeeds()
-        .code_is(0)
-        .no_stderr()
-        .no_stdout();
+    for cont_spelling in ["CONT", "cOnT", "SIGcont"] {
+        new_ucmd!()
+            .args(&["-s", cont_spelling, "--preserve-status", ".1", "sleep", "2"])
+            .succeeds()
+            .code_is(0)
+            .no_stderr()
+            .no_stdout();
+    }
 }
 
 #[test]
