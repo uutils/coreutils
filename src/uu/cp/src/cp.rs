@@ -1220,6 +1220,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 target_type,
                 options,
                 &mut symlinked_files,
+                &copied_destinations,
                 &mut copied_files,
             ) {
                 show_error_if_needed(&error);
@@ -1279,6 +1280,7 @@ fn copy_source(
     target_type: TargetType,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
@@ -1290,6 +1292,7 @@ fn copy_source(
             target,
             options,
             symlinked_files,
+            copied_destinations,
             copied_files,
             true,
         )
@@ -1302,6 +1305,7 @@ fn copy_source(
             dest.as_path(),
             options,
             symlinked_files,
+            copied_destinations,
             copied_files,
             true,
         );
@@ -1917,6 +1921,7 @@ fn copy_file(
     dest: &Path,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
@@ -1934,6 +1939,17 @@ fn copy_file(
                 dest.display()
             )));
         }
+        // Fail if cp tries to copy two sources of the same name into a single symlink
+        // Example: "cp file1 dir1/file1 tmp" where "tmp" is a directory containing a symlink "file1" pointing to a file named "foo".
+        // foo will contain the contents of "file1" and "dir1/file1" will not be copied over to "tmp/file1"
+        if copied_destinations.contains(dest) {
+            return Err(Error::Error(format!(
+                "will not copy '{}' through just-created symlink '{}'",
+                source.display(),
+                dest.display()
+            )));
+        }
+
         let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
         if copy_contents
             && !dest.exists()

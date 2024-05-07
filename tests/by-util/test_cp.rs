@@ -2660,6 +2660,42 @@ fn test_copy_through_dangling_symlink_no_dereference() {
         .no_stdout();
 }
 
+#[test]
+fn test_cp_symlink_overwrite_detection() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("good");
+    at.mkdir("tmp");
+    at.touch("README");
+    at.touch("good/README");
+
+    at.write("README", "file1");
+    at.write("good/README", "file2");
+
+    ts.ccmd("ln")
+        .arg("-s")
+        .arg("foo")
+        .arg("tmp/README")
+        .succeeds();
+
+    at.touch("tmp/foo");
+
+    let result = ts
+        .ucmd()
+        .arg("README")
+        .arg("good/README")
+        .arg("tmp")
+        .fails();
+    let stderr = result.stderr_str();
+
+    assert_eq!(
+        "cp: will not copy 'good/README' through just-created symlink 'tmp/README'\n",
+        stderr
+    );
+    let contents = at.read("tmp/foo");
+    assert_eq!(contents, "file1");
+}
 /// Test for copying a dangling symbolic link and its permissions.
 #[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
 #[test]
