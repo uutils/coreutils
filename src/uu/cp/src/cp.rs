@@ -1272,7 +1272,7 @@ fn construct_dest_path(
         TargetType::File => target.to_path_buf(),
     })
 }
-
+#[allow(clippy::too_many_arguments)]
 fn copy_source(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
@@ -1914,7 +1914,7 @@ fn calculate_dest_permissions(
 ///
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
-#[allow(clippy::cognitive_complexity)]
+#[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
 fn copy_file(
     progress_bar: &Option<ProgressBar>,
     source: &Path,

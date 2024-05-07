@@ -213,7 +213,7 @@ where
     // `path.ends_with(".")` does not seem to work
     path.as_ref().display().to_string().ends_with("/.")
 }
-
+#[allow(clippy::too_many_arguments)]
 /// Copy a single entry during a directory traversal.
 fn copy_direntry(
     progress_bar: &Option<ProgressBar>,
@@ -326,6 +326,7 @@ fn copy_direntry(
 ///
 /// Any errors encountered copying files in the tree will be logged but
 /// will not cause a short-circuit.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn copy_directory(
     progress_bar: &Option<ProgressBar>,
     root: &Path,

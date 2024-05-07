@@ -2667,9 +2667,6 @@ fn test_cp_symlink_overwrite_detection() {
 
     at.mkdir("good");
     at.mkdir("tmp");
-    at.touch("README");
-    at.touch("good/README");
-
     at.write("README", "file1");
     at.write("good/README", "file2");
 
@@ -2681,18 +2678,18 @@ fn test_cp_symlink_overwrite_detection() {
 
     at.touch("tmp/foo");
 
-    let result = ts
-        .ucmd()
+    ts.ucmd()
         .arg("README")
         .arg("good/README")
         .arg("tmp")
-        .fails();
-    let stderr = result.stderr_str();
-
-    assert_eq!(
-        "cp: will not copy 'good/README' through just-created symlink 'tmp/README'\n",
-        stderr
-    );
+        .fails()
+        .stderr_only(if cfg!(target_os = "windows") {
+            "cp: will not copy 'good/README' through just-created symlink 'tmp\\README'\n"
+        } else if cfg!(target_os = "macos") {
+            "cp: will not overwrite just-created 'tmp/README' with 'good/README'\n"
+        } else {
+            "cp: will not copy 'good/README' through just-created symlink 'tmp/README'\n"
+        });
     let contents = at.read("tmp/foo");
     assert_eq!(contents, "file1");
 }
