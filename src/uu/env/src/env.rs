@@ -19,7 +19,9 @@ use native_int_str::{
     from_native_int_representation_owned, Convert, NCvt, NativeIntStr, NativeIntString, NativeStr,
 };
 #[cfg(unix)]
-use nix::sys::signal::{raise, sigaction, SaFlags, SigAction, SigHandler, SigSet, Signal, signal, SigHandler::SigIgn};
+use nix::sys::signal::{
+    raise, sigaction, signal, SaFlags, SigAction, SigHandler, SigHandler::SigIgn, SigSet, Signal,
+};
 use std::borrow::Cow;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -33,8 +35,8 @@ use std::process::{self};
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 use uucore::signals::signal_by_name_or_value;
+use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 
 const ABOUT: &str = help_about!("env.md");
 const USAGE: &str = help_usage!("env.md");
@@ -42,6 +44,7 @@ const AFTER_HELP: &str = help_section!("after help", "env.md");
 
 const ERROR_MSG_S_SHEBANG: &str = "use -[v]S to pass options in shebang lines";
 
+#[derive(Debug)]
 struct Options<'a> {
     ignore_env: bool,
     line_ending: LineEnding,
@@ -94,15 +97,15 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
     if opt.is_empty() {
         return Ok(());
     }
+    #[cfg(unix)]
     let signals: Vec<&'a OsStr> = opt
-        .as_bytes()
+        .as_encoded_bytes()
         .split(|&b| b == b',')
-        .map(|s| OsStr::from_bytes(s))
+        .map(OsStr::from_bytes)
         .collect();
+
     signals.iter().for_each(|&sig| {
-        if opts.ignore_signal.contains(&sig) || sig.is_empty() {
-            return;
-        } else {
+        if !(opts.ignore_signal.contains(&sig) || sig.is_empty()) {
             opts.ignore_signal.push(sig);
         }
     });
@@ -673,15 +676,22 @@ fn apply_ignore_signal(opts: &Options<'_>) -> UResult<()> {
                 .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
             Some(sig)
         };
-        ignore_signal(sig);
+
+        match sig {
+            Some(signal) => ignore_signal(signal),
+            None => {
+                return Err(USimpleError::new(
+                    125,
+                    "cannot ignore STOP signal".to_string(),
+                ))
+            }
+        }
     }
     Ok(())
 }
 
-fn ignore_signal(sig: Option<Signal>) {
-    if let Some(sig) = sig {
-        let _ = unsafe { signal(sig, SigIgn) }.map(|_| ());
-    }
+fn ignore_signal(sig: Signal) {
+    let _ = unsafe { signal(sig, SigIgn) }.map(|_| ());
 }
 
 #[uucore::main]
