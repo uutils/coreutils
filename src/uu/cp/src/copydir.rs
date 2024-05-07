@@ -221,6 +221,7 @@ fn copy_direntry(
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
     preserve_hard_links: bool,
+    copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let Entry {
@@ -267,6 +268,7 @@ fn copy_direntry(
                 local_to_target.as_path(),
                 options,
                 symlinked_files,
+                copied_destinations,
                 copied_files,
                 false,
             ) {
@@ -295,6 +297,7 @@ fn copy_direntry(
                 local_to_target.as_path(),
                 options,
                 symlinked_files,
+                copied_destinations,
                 copied_files,
                 false,
             ) {
@@ -329,6 +332,7 @@ pub(crate) fn copy_directory(
     target: &Path,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
@@ -344,6 +348,7 @@ pub(crate) fn copy_directory(
             target,
             options,
             symlinked_files,
+            copied_destinations,
             copied_files,
             source_in_command_line,
         );
@@ -417,6 +422,7 @@ pub(crate) fn copy_directory(
                     options,
                     symlinked_files,
                     preserve_hard_links,
+                    copied_destinations,
                     copied_files,
                 )?;
             }
