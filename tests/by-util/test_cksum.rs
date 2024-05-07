@@ -508,6 +508,26 @@ fn test_reset_binary() {
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e  ");
 }
 
+#[ignore = "issue #6375"]
+#[test]
+fn test_reset_binary_but_set() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--binary")
+        .arg("--tag")
+        .arg("--untagged")
+        .arg("--binary")
+        .arg("--algorithm=md5")
+        .arg(at.subdir.join("f"))
+        .succeeds()
+        .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *"); // currently, asterisk=false. It should be true
+}
+
 #[test]
 fn test_text_tag() {
     let scene = TestScenario::new(util_name!());
