@@ -332,10 +332,6 @@ pub(crate) fn copy_directory(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    if !options.recursive {
-        return Err(format!("-r not specified; omitting directory {}", root.quote()).into());
-    }
-
     // if no-dereference is enabled and this is a symlink, copy it as a file
     if !options.dereference(source_in_command_line) && root.is_symlink() {
         return copy_file(
@@ -347,6 +343,10 @@ pub(crate) fn copy_directory(
             copied_files,
             source_in_command_line,
         );
+    }
+
+    if !options.recursive {
+        return Err(format!("-r not specified; omitting directory {}", root.quote()).into());
     }
 
     // check if root is a prefix of target
