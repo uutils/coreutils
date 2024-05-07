@@ -97,9 +97,8 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
     if opt.is_empty() {
         return Ok(());
     }
-    #[cfg(unix)]
     let signals: Vec<&'a OsStr> = opt
-        .as_encoded_bytes()
+        .as_bytes()
         .split(|&b| b == b',')
         .map(OsStr::from_bytes)
         .collect();
