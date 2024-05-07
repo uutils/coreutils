@@ -470,62 +470,54 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
-
     use crate::uu_app;
     use crate::{extract_files, extract_width};
 
     #[test]
-    fn parse_negative_width() -> Result<(), Box<dyn Error>> {
-        let matches = uu_app().try_get_matches_from(vec!["fmt", "-3", "some-file"])?;
+    fn parse_negative_width() {
+        let matches = uu_app()
+            .try_get_matches_from(vec!["fmt", "-3", "some-file"])
+            .unwrap();
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
-
         assert_eq!(extract_width(&matches).ok(), Some(Some(3)));
-
-        Ok(())
     }
 
     #[test]
-    fn parse_width_as_arg() -> Result<(), Box<dyn Error>> {
-        let matches = uu_app().try_get_matches_from(vec!["fmt", "-w3", "some-file"])?;
+    fn parse_width_as_arg() {
+        let matches = uu_app()
+            .try_get_matches_from(vec!["fmt", "-w3", "some-file"])
+            .unwrap();
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
-
         assert_eq!(extract_width(&matches).ok(), Some(Some(3)));
-
-        Ok(())
     }
 
     #[test]
-    fn parse_no_args() -> Result<(), Box<dyn Error>> {
-        let matches = uu_app().try_get_matches_from(vec!["fmt"])?;
+    fn parse_no_args() {
+        let matches = uu_app().try_get_matches_from(vec!["fmt"]).unwrap();
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["-"]);
-
         assert_eq!(extract_width(&matches).ok(), Some(None));
-
-        Ok(())
     }
 
     #[test]
-    fn parse_just_file_name() -> Result<(), Box<dyn Error>> {
-        let matches = uu_app().try_get_matches_from(vec!["fmt", "some-file"])?;
+    fn parse_just_file_name() {
+        let matches = uu_app()
+            .try_get_matches_from(vec!["fmt", "some-file"])
+            .unwrap();
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
-
         assert_eq!(extract_width(&matches).ok(), Some(None));
-
-        Ok(())
     }
 
     #[test]
-    fn parse_with_both_widths_positional_first() -> Result<(), Box<dyn Error>> {
-        let matches = uu_app().try_get_matches_from(vec!["fmt", "-10", "-w3", "some-file"])?;
+    fn parse_with_both_widths_positional_first() {
+        let matches = uu_app()
+            .try_get_matches_from(vec!["fmt", "-10", "-w3", "some-file"])
+            .unwrap();
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
-
         assert_eq!(extract_width(&matches).ok(), Some(Some(3)));
-        Ok(())
     }
 }
