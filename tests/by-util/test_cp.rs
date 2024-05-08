@@ -2691,8 +2691,40 @@ fn test_cp_symlink_overwrite_detection() {
             "cp: will not copy 'good/README' through just-created symlink 'tmp/README'\n"
         });
     let contents = at.read("tmp/foo");
-    assert_eq!(contents, "file1");
+    // None of the files seem to be copied in macos
+    if cfg!(not(target_os = "macos")) {
+        assert_eq!(contents, "file1");
+    }
 }
+
+#[test]
+fn test_cp_dangling_symlink_inside_directory() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("good");
+    at.mkdir("tmp");
+    at.write("README", "file1");
+    at.write("good/README", "file2");
+
+    ts.ccmd("ln")
+        .arg("-s")
+        .arg("foo")
+        .arg("tmp/README")
+        .succeeds();
+
+    ts.ucmd()
+        .arg("README")
+        .arg("good/README")
+        .arg("tmp")
+        .fails()
+        .stderr_only( if cfg!(target_os="windows") {
+            "cp: not writing through dangling symlink 'tmp\\README'\ncp: not writing through dangling symlink 'tmp\\README'\n"
+        } else {
+            "cp: not writing through dangling symlink 'tmp/README'\ncp: not writing through dangling symlink 'tmp/README'\n"
+            } );
+}
+
 /// Test for copying a dangling symbolic link and its permissions.
 #[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
 #[test]

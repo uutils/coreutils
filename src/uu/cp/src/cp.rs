@@ -1225,8 +1225,9 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             ) {
                 show_error_if_needed(&error);
                 non_fatal_errors = true;
+            } else {
+                copied_destinations.insert(dest.clone());
             }
-            copied_destinations.insert(dest.clone());
         }
         seen_sources.insert(source);
     }
