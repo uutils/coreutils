@@ -44,7 +44,6 @@ const AFTER_HELP: &str = help_section!("after help", "env.md");
 
 const ERROR_MSG_S_SHEBANG: &str = "use -[v]S to pass options in shebang lines";
 
-#[derive(Debug)]
 struct Options<'a> {
     ignore_env: bool,
     line_ending: LineEnding,
