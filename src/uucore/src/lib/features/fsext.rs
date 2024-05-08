@@ -5,7 +5,7 @@
 
 //! Set of functions to manage file systems
 
-// spell-checker:ignore DATETIME getmntinfo subsecond (arch) bitrig ; (fs) cifs smbfs
+// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MTAB: &str = "/etc/mtab";
@@ -85,7 +85,6 @@ pub use libc::statfs as StatFs;
 #[cfg(any(
     target_os = "aix",
     target_os = "netbsd",
-    target_os = "bitrig",
     target_os = "dragonfly",
     target_os = "illumos",
     target_os = "solaris",
@@ -104,7 +103,6 @@ pub use libc::statfs as statfs_fn;
 #[cfg(any(
     target_os = "aix",
     target_os = "netbsd",
-    target_os = "bitrig",
     target_os = "illumos",
     target_os = "solaris",
     target_os = "dragonfly",
