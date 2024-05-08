@@ -2670,12 +2670,7 @@ fn test_cp_symlink_overwrite_detection() {
     at.write("README", "file1");
     at.write("good/README", "file2");
 
-    ts.ccmd("ln")
-        .arg("-s")
-        .arg("foo")
-        .arg("tmp/README")
-        .succeeds();
-
+    at.symlink_file("tmp/foo", "tmp/README");
     at.touch("tmp/foo");
 
     ts.ucmd()
@@ -2707,11 +2702,7 @@ fn test_cp_dangling_symlink_inside_directory() {
     at.write("README", "file1");
     at.write("good/README", "file2");
 
-    ts.ccmd("ln")
-        .arg("-s")
-        .arg("foo")
-        .arg("tmp/README")
-        .succeeds();
+    at.symlink_file("foo", "tmp/README");
 
     ts.ucmd()
         .arg("README")
