@@ -54,7 +54,7 @@ struct Options<'a> {
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
     program: Vec<&'a OsStr>,
     argv0: Option<&'a OsStr>,
-    ignore_signal: Vec<&'a OsStr>,
+    ignore_signal: Vec<usize>,
 }
 
 // print name=value env pairs on screen
@@ -93,6 +93,22 @@ fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> 
     }
 }
 
+fn parse_signal_value(signal_name: &str) -> UResult<usize> {
+    let signal_name_upcase = signal_name.to_uppercase();
+    let optional_signal_value = signal_by_name_or_value(&signal_name_upcase);
+    let error = USimpleError::new(125, format!("{}: invalid signal", signal_name.quote()));
+    match optional_signal_value {
+        Some(sig_val) => {
+            if sig_val == 0 {
+                Err(error)
+            } else {
+                Ok(sig_val)
+            }
+        }
+        None => Err(error),
+    }
+}
+
 fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
     if opt.is_empty() {
         return Ok(());
@@ -103,24 +119,27 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
         .map(OsStr::from_bytes)
         .collect();
 
-    signals.iter().for_each(|&sig| {
-        if !(opts.ignore_signal.contains(&sig) || sig.is_empty()) {
-            opts.ignore_signal.push(sig);
+    let mut sig_vec = Vec::with_capacity(signals.len());
+    signals.into_iter().for_each(|sig| {
+        if !(sig_vec.contains(&sig) || sig.is_empty()) {
+            sig_vec.push(sig);
         }
     });
-    Ok(())
-}
-
-fn parse_signal_value(signal_name: &str) -> UResult<usize> {
-    let signal_name_upcase = signal_name.to_uppercase();
-    let optional_signal_value = signal_by_name_or_value(&signal_name_upcase);
-    match optional_signal_value {
-        Some(x) => Ok(x),
-        None => Err(USimpleError::new(
-            1,
-            format!("unknown signal name {}", signal_name.quote()),
-        )),
+    for sig in sig_vec {
+        let sig_str = match sig.to_str() {
+            Some(s) => s,
+            None => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("{}: invalid signal", sig.quote()),
+                ))
+            }
+        };
+        let sig_val = parse_signal_value(sig_str)?;
+        opts.ignore_signal.push(sig_val);
     }
+
+    Ok(())
 }
 
 fn load_config_file(opts: &mut Options) -> UResult<()> {
@@ -656,17 +675,7 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
 }
 
 fn apply_ignore_signal(opts: &Options<'_>) -> UResult<()> {
-    for sig in &opts.ignore_signal {
-        let sig_str = match sig.to_str() {
-            Some(s) => s,
-            None => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("invalid signal name: {}", sig.quote()),
-                ))
-            }
-        };
-        let sig_value = parse_signal_value(sig_str)?;
+    for &sig_value in &opts.ignore_signal {
         let sig: Signal = (sig_value as i32)
             .try_into()
             .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
