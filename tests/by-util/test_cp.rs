@@ -5292,7 +5292,7 @@ mod link_deref {
                 at.is_symlink(DST);
                 let src_ino = at.symlink_metadata(src).ino();
                 let dest_ino = at.symlink_metadata(DST).ino();
-                assert_eq!(src_ino, dest_ino,);
+                assert_eq!(src_ino, dest_ino);
             }
         }
     }
