@@ -667,30 +667,29 @@ fn apply_ignore_signal(opts: &Options<'_>) -> UResult<()> {
             }
         };
         let sig_value = parse_signal_value(sig_str)?;
-        let sig: Option<Signal> = if sig_str == "STOP" {
-            None
-        } else {
-            let sig = (sig_value as i32)
-                .try_into()
-                .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
-            Some(sig)
-        };
+        let sig: Signal = (sig_value as i32)
+            .try_into()
+            .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
 
-        match sig {
-            Some(signal) => ignore_signal(signal),
-            None => {
-                return Err(USimpleError::new(
-                    125,
-                    "cannot ignore STOP signal".to_string(),
-                ))
-            }
-        }
+        ignore_signal(sig)?;
     }
     Ok(())
 }
 
-fn ignore_signal(sig: Signal) {
-    let _ = unsafe { signal(sig, SigIgn) }.map(|_| ());
+fn ignore_signal(sig: Signal) -> UResult<()> {
+    // SAFETY: this is unsafe because we're just ignoring the signal with the default signal handler SigIgn
+    let result = unsafe { signal(sig, SigIgn) }.map(|_| ());
+    match result {
+        Ok(_) => Ok(()),
+        Err(err) => Err(USimpleError::new(
+            1,
+            format!(
+                "failed to set signal action for signal {}: {}",
+                sig as i32,
+                err.desc()
+            ),
+        )),
+    }
 }
 
 #[uucore::main]
