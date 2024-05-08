@@ -353,6 +353,41 @@ fn had_reset(args: &[String]) -> bool {
     }
 }
 
+/// Calculates the length of the digest for the given algorithm.
+fn calculate_length(algo_name: &str, length: usize) -> UResult<Option<usize>> {
+    match length {
+        0 => Ok(None),
+        n if n % 8 != 0 => {
+            uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "length is not a multiple of 8",
+            )
+            .into())
+        },
+        n if n > 512 => {
+            uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
+            )
+            .into())
+        },
+        n => {
+            if algo_name == ALGORITHM_OPTIONS_BLAKE2B {
+                // Divide by 8, as our blake2b implementation expects bytes instead of bits.
+                Ok(Some(n / 8))
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "--length is only supported with --algorithm=blake2b",
+                )
+                .into())
+            }
+        }
+    }
+}
+
 /***
  * cksum has a bunch of legacy behavior.
  * We handle this in this function to make sure they are self contained
@@ -391,46 +426,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let input_length = matches.get_one::<usize>(options::LENGTH);
-    let check = matches.get_flag(options::CHECK);
 
-    let length = if let Some(length) = input_length {
-        match length.to_owned() {
-            0 => None,
-            n if n % 8 != 0 => {
-                // GNU's implementation seem to use these quotation marks
-                // in their error messages, so we do the same.
-                uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "length is not a multiple of 8",
-                )
-                .into());
-            }
-            n if n > 512 => {
-                uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
-
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
-                )
-                .into());
-            }
-            n => {
-                if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--length is only supported with --algorithm=blake2b",
-                    )
-                    .into());
-                }
-
-                // Divide by 8, as our blake2b implementation expects bytes
-                // instead of bits.
-                Some(n / 8)
-            }
-        }
-    } else {
-        None
+    let length = match input_length {
+        Some(length) => calculate_length(algo_name, *length)?,
+        None => None,
     };
 
     let (tag, asterisk) = handle_tag_text_binary_flags(&matches, check)?;
@@ -581,6 +580,7 @@ pub fn uu_app() -> Command {
 mod tests {
     use super::had_reset;
     use crate::prompt_asterisk;
+    use crate::calculate_length;
 
     #[test]
     fn test_had_reset() {
@@ -645,5 +645,21 @@ mod tests {
         assert!(!prompt_asterisk(false, false, true));
         assert!(prompt_asterisk(false, true, false));
         assert!(!prompt_asterisk(false, false, false));
+    }
+
+    #[test]
+    fn test_calculate_length() {
+        assert_eq!(
+            calculate_length(crate::ALGORITHM_OPTIONS_BLAKE2B, 256).unwrap(),
+            Some(32)
+        );
+
+        calculate_length(crate::ALGORITHM_OPTIONS_BLAKE2B, 255).unwrap_err();
+
+        calculate_length(crate::ALGORITHM_OPTIONS_SHA256, 33).unwrap_err();
+
+        calculate_length(crate::ALGORITHM_OPTIONS_BLAKE2B, 513).unwrap_err();
+
+        calculate_length(crate::ALGORITHM_OPTIONS_SHA256, 256).unwrap_err();
     }
 }
