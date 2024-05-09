@@ -84,7 +84,7 @@ fn test_stdin_explicit() {
 
 #[test]
 // FIXME: the -f test fails with: Assertion failed. Expected 'tail' to be running but exited with status=exit status: 0
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 #[cfg(not(target_vendor = "apple"))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_file() {
     // $ echo foo > f
@@ -2596,7 +2596,7 @@ fn test_fifo() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_illegal_seek() {
     // This is here for reference only.
     // We don't call seek on fifos, so we don't hit this error case.
@@ -3434,7 +3434,7 @@ fn test_args_when_presume_input_pipe_given_input_is_file() {
 }
 
 #[test]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 // FIXME: currently missing in the error message is the last line >>tail: no files remaining<<
 fn test_when_follow_retry_given_redirected_stdin_from_directory_then_correct_error_message() {
     let ts = TestScenario::new(util_name!());
@@ -3830,7 +3830,7 @@ fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_fil
 // test system. However, this behavior shows up on the command line and, at the time of writing this
 // description, with this test on macos and windows.
 #[test]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_when_follow_retry_then_initial_print_of_file_is_written_to_stdout() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4141,7 +4141,7 @@ fn test_args_when_settings_check_warnings_follow_indefinitely_then_no_warning() 
 
 /// The expected test outputs come from gnu's tail.
 #[test]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_data_is_appended() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4229,7 +4229,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_data_is_appende
 
 /// The expected test outputs come from gnu's tail.
 #[test]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_is_truncated() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4282,7 +4282,7 @@ fn test_follow_when_files_are_pointing_to_same_relative_file_and_file_is_truncat
 /// The expected test outputs come from gnu's tail.
 #[test]
 #[cfg(unix)]
-#[cfg(disable_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
