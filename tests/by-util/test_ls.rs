@@ -1387,7 +1387,6 @@ fn test_ls_long_dangling_symlink_color() {
     let at = &ts.fixtures;
 
     at.mkdir("dir1");
-    at.mkdir("dir2");
     at.symlink_dir("foo", "dir1/dangling_symlink");
     let result = ts
         .ucmd()
