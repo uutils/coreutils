@@ -5,8 +5,6 @@
 
 // spell-checker:ignore (ToDO) fname, algo
 use clap::{crate_version, value_parser, Arg, ArgAction, Command};
-use hex::decode;
-use hex::encode;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt::Display;
@@ -205,7 +203,7 @@ where
                     ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => {
                         sum_hex.parse::<u16>().unwrap().to_be_bytes().to_vec()
                     }
-                    _ => decode(sum_hex).unwrap(),
+                    _ => hex::decode(sum_hex).unwrap(),
                 };
                 // Cannot handle multiple files anyway, output immediately.
                 stdout().write_all(&bytes)?;
@@ -214,7 +212,7 @@ where
             OutputFormat::Hexadecimal => sum_hex,
             OutputFormat::Base64 => match options.algo_name {
                 ALGORITHM_OPTIONS_CRC | ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => sum_hex,
-                _ => encoding::encode(encoding::Format::Base64, &decode(sum_hex).unwrap()).unwrap(),
+                _ => encoding::encode(encoding::Format::Base64, &hex::decode(sum_hex).unwrap()).unwrap(),
             },
         };
         // The BSD checksum output is 5 digit integer
@@ -299,7 +297,7 @@ fn digest_read<T: Read>(
         // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
         let mut bytes = vec![0; (output_bits + 7) / 8];
         digest.hash_finalize(&mut bytes);
-        Ok((encode(bytes), output_size))
+        Ok((hex::encode(bytes), output_size))
     }
 }
 
