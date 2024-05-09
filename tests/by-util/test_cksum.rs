@@ -663,3 +663,146 @@ fn test_conflicting_options() {
         )
         .code_is(1);
 }
+
+#[test]
+fn test_check_algo_err() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--a")
+        .arg("sm3")
+        .arg("--check")
+        .arg("f")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: no properly formatted checksum lines found")
+        .code_is(1);
+}
+
+#[test]
+fn test_cksum_check() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let commands = [
+        vec!["-a", "sha384"],
+        vec!["-a", "blake2b"],
+        vec!["-a", "blake2b", "-l", "384"],
+        vec!["-a", "sm3"],
+    ];
+    at.touch("f");
+    at.touch("CHECKSUM");
+    for command in &commands {
+        let result = scene.ucmd().args(command).arg("f").succeeds();
+        at.append("CHECKSUM", result.stdout_str());
+    }
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--strict")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n");
+    // inject invalid content
+    at.append("CHECKSUM", "incorrect data");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n")
+        .stderr_contains("line is improperly formatted");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--strict")
+        .arg("CHECKSUM")
+        .fails()
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n")
+        .stderr_contains("line is improperly formatted");
+}
+
+#[test]
+fn test_cksum_check_invalid() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let commands = [vec!["-a", "sha384"]];
+    at.touch("f");
+    at.touch("CHECKSUM");
+    for command in &commands {
+        let result = scene.ucmd().args(command).arg("f").succeeds();
+        at.append("CHECKSUM", result.stdout_str());
+    }
+    // inject invalid content
+    at.append("CHECKSUM", "again incorrect data\naze\n");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("--strict")
+        .arg("CHECKSUM")
+        .fails()
+        .stdout_contains("f: OK\n")
+        .stderr_contains("2 lines");
+
+    // without strict, it passes
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK\n")
+        .stderr_contains("2 lines");
+}
+
+#[test]
+fn test_cksum_check_failed() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let commands = [vec!["-a", "sha384"]];
+    at.touch("f");
+    at.touch("CHECKSUM");
+    for command in &commands {
+        let result = scene.ucmd().args(command).arg("f").succeeds();
+        at.append("CHECKSUM", result.stdout_str());
+    }
+    // inject invalid content
+    at.append("CHECKSUM", "again incorrect data\naze\nSM3 (input) = 7cfb120d4fabea2a904948538a438fdb57c725157cb40b5aee8d937b8351477e\n");
+
+    let result = scene
+        .ucmd()
+        .arg("--check")
+        .arg("--strict")
+        .arg("CHECKSUM")
+        .fails();
+
+    assert!(result.stderr_str().contains("Failed to open file: input"));
+    assert!(result
+        .stderr_str()
+        .contains("2 lines are improperly formatted\n"));
+    assert!(result
+        .stderr_str()
+        .contains("1 listed file could not be read\n"));
+    assert!(result.stdout_str().contains("f: OK\n"));
+
+    // without strict
+    let result = scene.ucmd().arg("--check").arg("CHECKSUM").fails();
+
+    assert!(result.stderr_str().contains("Failed to open file: input"));
+    assert!(result
+        .stderr_str()
+        .contains("2 lines are improperly formatted\n"));
+    assert!(result
+        .stderr_str()
+        .contains("1 listed file could not be read\n"));
+    assert!(result.stdout_str().contains("f: OK\n"));
+}
