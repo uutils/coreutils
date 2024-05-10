@@ -1379,7 +1379,7 @@ fn test_ls_long_symlink_color() {
 /// This test is for "ls -l --color=auto|--color=always"
 /// We use "--color=always" as the colors are the same regardless of the color option being "auto" or "always"
 /// tests whether the specific color of the target and the dangling_symlink are equal and checks
-/// whether checks whether ls outputs the corrent path for the symlink and the file it points to and applies the color code to it.
+/// whether checks whether ls outputs the correct path for the symlink and the file it points to and applies the color code to it.
 #[test]
 fn test_ls_long_dangling_symlink_color() {
     let ts = TestScenario::new(util_name!());
