@@ -6,7 +6,6 @@
 // spell-checker:ignore (ToDO) fname, algo
 use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use regex::Regex;
-use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt::Display;
@@ -15,8 +14,8 @@ use std::io::BufRead;
 use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
+use uucore::checksum::cksum_output;
 use uucore::error::set_exit_code;
-use uucore::show_warning_caps;
 use uucore::{
     encoding,
     error::{FromIo, UError, UResult, USimpleError},
@@ -501,41 +500,13 @@ where
         set_exit_code(1);
     }
 
-    // if any incorrectly formatted line, show it
-    match bad_format.cmp(&1) {
-        Ordering::Equal => {
-            show_warning_caps!("{} line is improperly formatted", bad_format);
-        }
-        Ordering::Greater => {
-            show_warning_caps!("{} lines are improperly formatted", bad_format);
-        }
-        Ordering::Less => {}
-    };
-
     // if we have any failed checksum verification, we set an exit code
     if failed_cksum > 0 || failed_open_file > 0 {
         set_exit_code(1);
     }
 
-    match failed_open_file.cmp(&1) {
-        Ordering::Equal => {
-            show_warning_caps!("{} listed file could not be read", failed_open_file);
-        }
-        Ordering::Greater => {
-            show_warning_caps!("{} listed files could not be read", failed_open_file);
-        }
-        Ordering::Less => {}
-    }
-
-    match failed_cksum.cmp(&1) {
-        Ordering::Equal => {
-            show_warning_caps!("{} computed checksum did NOT match", failed_cksum);
-        }
-        Ordering::Greater => {
-            show_warning_caps!("{} computed checksums did NOT match", failed_cksum);
-        }
-        Ordering::Less => {}
-    };
+    // if any incorrectly formatted line, show it
+    cksum_output(bad_format, failed_cksum, failed_open_file);
 
     Ok(())
 }
