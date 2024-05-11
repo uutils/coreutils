@@ -75,10 +75,10 @@ impl Display for CkSumError {
 }
 
 fn detect_algo(
-    program: &str,
+    algo: &str,
     length: Option<usize>,
 ) -> (&'static str, Box<dyn Digest + 'static>, usize) {
-    match program {
+    match algo {
         ALGORITHM_OPTIONS_SYSV => (
             ALGORITHM_OPTIONS_SYSV,
             Box::new(SYSV::new()) as Box<dyn Digest>,
@@ -411,48 +411,99 @@ fn handle_tag_text_binary_flags(matches: &clap::ArgMatches) -> UResult<(bool, bo
 /***
  * Do the checksum validation (can be strict or not)
 */
-fn perform_checksum_validation<'a, I>(files: I, strict: bool) -> UResult<()>
+fn perform_checksum_validation<'a, I>(
+    files: I,
+    strict: bool,
+    algo_name_input: Option<&str>,
+) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
 {
-    let re = Regex::new(r"(?P<algo>\w+)(-(?P<bits>\d+))? \((?P<filename>.*)\) = (?P<checksum>.*)")
-        .unwrap();
-    let mut properly_formatted = false;
-    let mut bad_format = 0;
-    let mut failed_cksum = 0;
-    let mut failed_open_file = 0;
+    // Regexp to handle the two input formats:
+    // 1. <algo>[-<bits>] (<filename>) = <checksum>
+    // 2. <checksum> [* ]<filename>
+    let regex_pattern = r"^(?P<algo>\w+)(-(?P<bits>\d+))?\s?\((?P<filename1>.*)\) = (?P<checksum1>[a-fA-F0-9]+)$|^(?P<checksum2>[a-fA-F0-9]+)\s[* ](?P<filename2>.*)";
+    let re = Regex::new(regex_pattern).unwrap();
+
+    // if cksum has several input files, it will print the result for each file
     for filename_input in files {
+        let mut bad_format = 0;
+        let mut failed_cksum = 0;
+        let mut failed_open_file = 0;
+        let mut properly_formatted = false;
         let input_is_stdin = filename_input == OsStr::new("-");
+
         let file: Box<dyn Read> = if input_is_stdin {
             Box::new(stdin()) // Use stdin if "-" is specified
         } else {
             match File::open(filename_input) {
                 Ok(f) => Box::new(f),
-                Err(err) => {
-                    show!(err.map_err_context(|| format!(
-                        "Failed to open file: {}",
-                        filename_input.to_string_lossy()
-                    )));
-                    return Err(io::Error::new(io::ErrorKind::Other, "Failed to open file").into());
+                Err(_) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "{}: No such file or directory",
+                            filename_input.to_string_lossy()
+                        ),
+                    )
+                    .into());
                 }
             }
         };
         let reader = BufReader::new(file);
 
+        // for each line in the input, check if it is a valid checksum line
         for line in reader.lines() {
-            let line = line?;
-
+            let line = line.unwrap_or_else(|_| String::new());
             if let Some(caps) = re.captures(&line) {
                 properly_formatted = true;
-                let algo_name = caps.name("algo").unwrap().as_str().to_lowercase();
-                let filename_to_check = caps.name("filename").unwrap().as_str();
-                let expected_checksum = caps.name("checksum").unwrap().as_str();
 
-                let length = caps
-                    .name("bits")
-                    .map(|m| m.as_str().parse::<usize>().unwrap() / 8);
-                let (_, mut algo, bits) = detect_algo(&algo_name, length);
+                // Determine what kind of file input we had
+                // we need it for case "--check -a sm3 <file>" when <file> is
+                // <algo>[-<bits>] (<filename>) = <checksum>
+                let algo_based_format =
+                    caps.name("filename1").is_some() && caps.name("checksum1").is_some();
 
+                let filename_to_check = caps
+                    .name("filename1")
+                    .or(caps.name("filename2"))
+                    .unwrap()
+                    .as_str();
+                let expected_checksum = caps
+                    .name("checksum1")
+                    .or(caps.name("checksum2"))
+                    .unwrap()
+                    .as_str();
+
+                // If the algo_name is provided, we use it, otherwise we try to detect it
+                let algo_details = if algo_based_format {
+                    // When the algo-based format is matched, extract details from regex captures
+                    let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
+                    let bits = caps
+                        .name("bits")
+                        .map(|m| m.as_str().parse::<usize>().unwrap() / 8);
+                    (algorithm, bits)
+                } else if let Some(a) = algo_name_input {
+                    // When a specific algorithm name is input, use it and default bits to None
+                    (a.to_lowercase(), None)
+                } else {
+                    // Default case if no algorithm is specified and non-algo based format is matched
+                    (String::new(), None)
+                };
+                if algo_based_format
+                    && algo_name_input.map_or(false, |input| algo_details.0 != input)
+                {
+                    bad_format += 1;
+                    continue;
+                }
+                if algo_details.0.is_empty() {
+                    // we haven't been able to detect the algo name. No point to continue
+                    properly_formatted = false;
+                    continue;
+                }
+                let (_, mut algo, bits) = detect_algo(&algo_details.0, algo_details.1);
+
+                // manage the input file
                 let file_to_check: Box<dyn Read> = if filename_to_check == "-" {
                     Box::new(stdin()) // Use stdin if "-" is specified in the checksum file
                 } else {
@@ -470,9 +521,11 @@ where
                     }
                 };
                 let mut file_reader = BufReader::new(file_to_check);
+                // Read the file and calculate the checksum
+                let (calculated_checksum, _) =
+                    digest_read(&mut algo, &mut file_reader, bits).unwrap();
 
-                let (calculated_checksum, _) = digest_read(&mut algo, &mut file_reader, bits)
-                    .map_err_context(|| "failed to read input".to_string())?;
+                // Do the checksum validation
                 if expected_checksum == calculated_checksum {
                     println!("{}: OK", filename_to_check);
                 } else {
@@ -483,31 +536,29 @@ where
                 bad_format += 1;
             }
         }
+
+        // not a single line correctly formatted found
+        // return an error
+        if !properly_formatted {
+            uucore::show_error!(
+                "{}: no properly formatted checksum lines found",
+                filename_input.to_string_lossy()
+            );
+            set_exit_code(1);
+        }
+        // strict means that we should have an exit code.
+        if strict && bad_format > 0 {
+            set_exit_code(1);
+        }
+
+        // if we have any failed checksum verification, we set an exit code
+        if failed_cksum > 0 || failed_open_file > 0 {
+            set_exit_code(1);
+        }
+
+        // if any incorrectly formatted line, show it
+        cksum_output(bad_format, failed_cksum, failed_open_file);
     }
-
-    // not a single line correctly formatted found
-    // return an error
-    if !properly_formatted {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            "no properly formatted checksum lines found",
-        )
-        .into());
-    }
-
-    // strict means that we should have an exit code.
-    if strict && bad_format > 0 {
-        set_exit_code(1);
-    }
-
-    // if we have any failed checksum verification, we set an exit code
-    if failed_cksum > 0 || failed_open_file > 0 {
-        set_exit_code(1);
-    }
-
-    // if any incorrectly formatted line, show it
-    cksum_output(bad_format, failed_cksum, failed_open_file);
-
     Ok(())
 }
 
@@ -549,10 +600,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             )
             .into());
         }
+        // Determine the appropriate algorithm option to pass
+        let algo_option = if algo_name.is_empty() {
+            None
+        } else {
+            Some(algo_name)
+        };
 
+        // Execute the checksum validation based on the presence of files or the use of stdin
         return match matches.get_many::<String>(options::FILE) {
-            Some(files) => perform_checksum_validation(files.map(OsStr::new), strict),
-            None => perform_checksum_validation(iter::once(OsStr::new("-")), strict),
+            Some(files) => perform_checksum_validation(files.map(OsStr::new), strict, algo_option),
+            None => perform_checksum_validation(iter::once(OsStr::new("-")), strict, algo_option),
         };
     }
 

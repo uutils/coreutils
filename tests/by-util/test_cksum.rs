@@ -474,6 +474,21 @@ fn test_all_algorithms_fail_on_folder() {
 
 #[cfg(unix)]
 #[test]
+fn test_check_error_incorrect_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("checksum", "e5773576fc75ff0f8eba14f61587ae28  README.md");
+
+    scene
+        .ucmd()
+        .arg("-c")
+        .arg("checksum")
+        .fails()
+        .stderr_contains("no properly formatted checksum lines found");
+}
+
+#[cfg(unix)]
+#[test]
 fn test_dev_null() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -674,13 +689,13 @@ fn test_check_algo_err() {
 
     scene
         .ucmd()
-        .arg("--a")
+        .arg("-a")
         .arg("sm3")
         .arg("--check")
         .arg("f")
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: no properly formatted checksum lines found")
+        .stderr_contains("cksum: f: no properly formatted checksum lines found")
         .code_is(1);
 }
 
@@ -705,14 +720,16 @@ fn test_cksum_check() {
         .arg("--check")
         .arg("CHECKSUM")
         .succeeds()
-        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n");
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n")
+        .stderr_does_not_contain("line is improperly formatted");
     scene
         .ucmd()
         .arg("--check")
         .arg("--strict")
         .arg("CHECKSUM")
         .succeeds()
-        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n");
+        .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n")
+        .stderr_does_not_contain("line is improperly formatted");
     // inject invalid content
     at.append("CHECKSUM", "incorrect data");
     scene
@@ -805,4 +822,127 @@ fn test_cksum_check_failed() {
         .stderr_str()
         .contains("1 listed file could not be read\n"));
     assert!(result.stdout_str().contains("f: OK\n"));
+
+    // tests with two files
+    at.touch("CHECKSUM2");
+    at.write("f2", "42");
+    for command in &commands {
+        let result = scene.ucmd().args(command).arg("f2").succeeds();
+        at.append("CHECKSUM2", result.stdout_str());
+    }
+    // inject invalid content
+    at.append("CHECKSUM2", "again incorrect data\naze\nSM3 (input2) = 7cfb120d4fabea2a904948538a438fdb57c725157cb40b5aee8d937b8351477e\n");
+    at.append("CHECKSUM2", "again incorrect data\naze\nSM3 (input2) = 7cfb120d4fabea2a904948538a438fdb57c725157cb40b5aee8d937b8351477e\n");
+
+    let result = scene
+        .ucmd()
+        .arg("--check")
+        .arg("CHECKSUM")
+        .arg("CHECKSUM2")
+        .fails();
+    println!("result.stderr_str() {}", result.stderr_str());
+    println!("result.stdout_str() {}", result.stdout_str());
+    assert!(result.stderr_str().contains("Failed to open file: input2"));
+    assert!(result
+        .stderr_str()
+        .contains("4 lines are improperly formatted\n"));
+    assert!(result
+        .stderr_str()
+        .contains("2 listed files could not be read\n"));
+    assert!(result.stdout_str().contains("f: OK\n"));
+    assert!(result.stdout_str().contains("2: OK\n"));
+}
+
+#[test]
+fn test_check_md5_format() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+    at.touch("empty");
+    at.write("f", "d41d8cd98f00b204e9800998ecf8427e *empty\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .arg("f")
+        .succeeds()
+        .stdout_contains("empty: OK");
+
+    // with a second file
+    at.write("not-empty", "42");
+    at.write("f2", "a1d0c6e83f027327d8461063f4ac58a6 *not-empty\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .arg("f")
+        .arg("f2")
+        .succeeds()
+        .stdout_contains("empty: OK")
+        .stdout_contains("not-empty: OK");
+}
+
+// Manage the mixed behavior
+// cksum --check -a sm3 CHECKSUMS
+// when CHECKSUM contains among other lines:
+// SHA384 (input) = f392fd0ae43879ced890c665a1d47179116b5eddf6fb5b49f4982746418afdcbd54ba5eedcd422af3592f57f666da285
+#[test]
+fn test_cksum_mixed() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let commands = [
+        vec!["-a", "sha384"],
+        vec!["-a", "blake2b"],
+        vec!["-a", "blake2b", "-l", "384"],
+        vec!["-a", "sm3"],
+    ];
+    at.touch("f");
+    at.touch("CHECKSUM");
+    for command in &commands {
+        let result = scene.ucmd().args(command).arg("f").succeeds();
+        at.append("CHECKSUM", result.stdout_str());
+    }
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("-a")
+        .arg("sm3")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK")
+        .stderr_contains("3 lines are improperly formatted");
+}
+
+#[test]
+fn test_cksum_garbage() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Incorrect data at the start
+    at.write(
+        "check-file",
+        "garbage MD5 (README.md) = e5773576fc75ff0f8eba14f61587ae28",
+    );
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("check-file")
+        .fails()
+        .stderr_contains("check-file: no properly formatted checksum lines found");
+
+    // Incorrect data at the end
+    at.write(
+        "check-file",
+        "MD5 (README.md) = e5773576fc75ff0f8eba14f61587ae28 garbage",
+    );
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("check-file")
+        .fails()
+        .stderr_contains("check-file: no properly formatted checksum lines found");
 }
