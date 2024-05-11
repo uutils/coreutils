@@ -3353,10 +3353,9 @@ fn color_name(
         // use the optional target_symlink
         // Use fn get_metadata_with_deref_opt instead of get_metadata() here because ls
         // should not exit with an err, if we are unable to obtain the target_metadata
-        let md = get_metadata_with_deref_opt(target.p_buf.as_path(), path.must_dereference)
-            .unwrap_or_else(|_| target.get_metadata(out).unwrap().clone());
-
-        apply_style_based_on_metadata(path, Some(&md), ls_colors, style_manager, &name)
+        let md_res = get_metadata_with_deref_opt(target.p_buf.as_path(), path.must_dereference);
+        let md = md_res.or(path.p_buf.symlink_metadata());
+        apply_style_based_on_metadata(path, md.ok().as_ref(), ls_colors, style_manager, &name)
     } else {
         let md_option = path.get_metadata(out);
         let symlink_metadata = path.p_buf.symlink_metadata().ok();

@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -1374,6 +1374,44 @@ fn test_ls_long_symlink_color() {
             .arg("ln-file-invalid")
             .succeeds();
     }
+}
+
+/// This test is for "ls -l --color=auto|--color=always"
+/// We use "--color=always" as the colors are the same regardless of the color option being "auto" or "always"
+/// tests whether the specific color of the target and the dangling_symlink are equal and checks
+/// whether checks whether ls outputs the correct path for the symlink and the file it points to and applies the color code to it.
+#[test]
+fn test_ls_long_dangling_symlink_color() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.symlink_dir("foo", "dir1/dangling_symlink");
+    let result = ts
+        .ucmd()
+        .arg("-l")
+        .arg("--color=always")
+        .arg("dir1/dangling_symlink")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    // stdout contains output like in the below sequence. We match for the color i.e. 01;36
+    // \x1b[0m\x1b[01;36mdir1/dangling_symlink\x1b[0m -> \x1b[01;36mfoo\x1b[0m
+    let color_regex = Regex::new(r"(\d\d;)\d\dm").unwrap();
+    // colors_vec[0] contains the symlink color and style and colors_vec[1] contains the color and style of the file the
+    // symlink points to.
+    let colors_vec: Vec<_> = color_regex
+        .find_iter(stdout)
+        .map(|color| color.as_str())
+        .collect();
+
+    assert_eq!(colors_vec[0], colors_vec[1]);
+    // constructs the string of file path with the color code
+    let symlink_color_name = colors_vec[0].to_owned() + "dir1/dangling_symlink\x1b";
+    let target_color_name = colors_vec[1].to_owned() + at.plus_as_string("foo\x1b").as_str();
+
+    assert!(stdout.contains(&symlink_color_name));
+    assert!(stdout.contains(&target_color_name));
 }
 
 #[test]
