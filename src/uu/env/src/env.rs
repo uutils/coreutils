@@ -30,6 +30,7 @@ use std::ops::Deref;
 
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{self};
 use uucore::display::Quotable;
@@ -112,15 +113,22 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
     if opt.is_empty() {
         return Ok(());
     }
+    #[cfg(unix)]
     let signals: Vec<&'a OsStr> = opt
         .as_bytes()
+        .split(|&b| b == b',')
+        .map(OsStr::from_bytes)
+        .collect();
+    #[cfg(not(unix))]
+    let signals: Vec<&'a OsStr> = opt
+        .as_encoded_bytes()
         .split(|&b| b == b',')
         .map(OsStr::from_bytes)
         .collect();
 
     let mut sig_vec = Vec::with_capacity(signals.len());
     signals.into_iter().for_each(|sig| {
-        if !(sig_vec.contains(&sig) || sig.is_empty()) {
+        if !(sig.is_empty()) {
             sig_vec.push(sig);
         }
     });
@@ -135,7 +143,9 @@ fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
             }
         };
         let sig_val = parse_signal_value(sig_str)?;
-        opts.ignore_signal.push(sig_val);
+        if !opts.ignore_signal.contains(&sig_val) {
+            opts.ignore_signal.push(sig_val);
+        }
     }
 
     Ok(())
@@ -685,19 +695,19 @@ fn apply_ignore_signal(opts: &Options<'_>) -> UResult<()> {
 }
 
 fn ignore_signal(sig: Signal) -> UResult<()> {
-    // SAFETY: this is unsafe because we're just ignoring the signal with the default signal handler SigIgn
-    let result = unsafe { signal(sig, SigIgn) }.map(|_| ());
-    match result {
-        Ok(_) => Ok(()),
-        Err(err) => Err(USimpleError::new(
-            1,
+    // SAFETY: This is safe because we write the handler for each signal only once, and therefore "the current handler is the default", as the documentation requires it.
+    let result = unsafe { signal(sig, SigIgn) };
+    if let Err(err) = result {
+        return Err(USimpleError::new(
+            125,
             format!(
                 "failed to set signal action for signal {}: {}",
                 sig as i32,
                 err.desc()
             ),
-        )),
+        ));
     }
+    Ok(())
 }
 
 #[uucore::main]
