@@ -1507,7 +1507,7 @@ fn test_cp_preserve_invalid_rejected() {
 
 #[test]
 #[cfg(target_os = "android")]
-#[cfg(disabled_until_fixed)] // FIXME: the test looks to .succeed on android
+#[ignore = "disabled until fixed"] // FIXME: the test looks to .succeed on android
 fn test_cp_preserve_xattr_fails_on_android() {
     // Because of the SELinux extended attributes used on Android, trying to copy extended
     // attributes has to fail in this case, since we specify `--preserve=xattr` and this puts it
