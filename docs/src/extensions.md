@@ -92,4 +92,4 @@ also provides a `-v`/`--verbose` flag.
 
 ## `uptime`
 
-`uptime` provides `-s`/`--since` to show since when the system is up.
+Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides `-s`/`--since` to show since when the system is up.
