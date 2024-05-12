@@ -3599,7 +3599,7 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     let result = file.write_all(random_string.as_bytes());
     assert!(result.is_ok());
 
-    let expected_stdout = vec![format!("==> {} <==", path), random_string].join("\n");
+    let expected_stdout = [format!("==> {} <==", path), random_string].join("\n");
     ts.ucmd()
         .args(&["-c", "+0", path, socket])
         .fails()
