@@ -24,7 +24,7 @@ pub use args::uu_app;
 use args::{parse_args, FilterMode, Settings, Signum};
 use chunks::ReverseChunks;
 use follow::Observer;
-use paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
+use paths::{HeaderPrinter, Input, InputKind, MetadataExtTail};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
@@ -32,6 +32,7 @@ use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Seek, Se
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{get_exit_code, set_exit_code, FromIo, UResult, USimpleError};
+use uucore::fs::FileExtSeekable;
 use uucore::{show, show_error};
 
 #[uucore::main]
@@ -144,7 +145,8 @@ fn tail_file(
                 header_printer.print_input(input);
                 let mut reader;
                 if !settings.presume_input_pipe
-                    && file.is_seekable(if input.is_stdin() { offset } else { 0 })
+                    && file.is_seekable()
+                    && file.seek(SeekFrom::Start(offset)).is_ok()
                     && metadata.as_ref().unwrap().get_block_size() > 0
                 {
                     bounded_tail(&mut file, settings);

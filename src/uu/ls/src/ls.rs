@@ -1876,7 +1876,7 @@ pub fn uu_app() -> Command {
 #[derive(Debug)]
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
-    md: OnceCell<Option<Metadata>>,
+    metadata: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     // can be used to avoid reading the metadata. Can be also called d_type:
     // https://www.gnu.org/software/libc/manual/html_node/Directory-Entries.html
@@ -1964,7 +1964,7 @@ impl PathData {
         };
 
         Self {
-            md: OnceCell::new(),
+            metadata: OnceCell::new(),
             ft,
             de,
             display_name,
@@ -1976,13 +1976,28 @@ impl PathData {
     }
 
     fn get_metadata(&self, out: &mut BufWriter<Stdout>) -> Option<&Metadata> {
-        self.md
+        self.metadata
             .get_or_init(|| {
                 // check if we can use DirEntry metadata
                 // it will avoid a call to stat()
                 if !self.must_dereference {
                     if let Some(dir_entry) = &self.de {
-                        return dir_entry.metadata().ok();
+                        let metadata = dir_entry.metadata();
+                        if let Ok(md) = &metadata {
+                            log::debug!(
+                                "metadata from {}:\n\
+                                    size: {}\n\
+                                    blocks: {}\n\
+                                    blksize: {}\n\
+                                    file_type: {:?}",
+                                dir_entry.path().display(),
+                                std::os::unix::fs::MetadataExt::size(md),
+                                std::os::unix::fs::MetadataExt::blocks(md),
+                                std::os::unix::fs::MetadataExt::blksize(md),
+                                md.file_type(),
+                            );
+                        }
+                        return metadata.ok();
                     }
                 }
 
@@ -2176,7 +2191,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config, out: &mut BufWriter<S
                 // We will always try to deref symlinks to group directories, so PathData.md
                 // is not always useful.
                 if p.must_dereference {
-                    p.md.get()
+                    p.metadata.get()
                 } else {
                     None
                 }
@@ -2384,6 +2399,7 @@ fn display_dir_entry_size(
             ),
             SizeOrDeviceId::Size(size) => (size.len(), 0usize, 0usize),
         };
+        log::debug!("success metadata from entry: size_len: {size_len}, major_len: {major_len}, minor_len: {minor_len}");
         (
             display_symlink_count(md).len(),
             display_uname(md, config).len(),
@@ -2393,6 +2409,7 @@ fn display_dir_entry_size(
             minor_len,
         )
     } else {
+        log::debug!("failed to get metadata from entry: {:?}", entry);
         (0, 0, 0, 0, 0, 0)
     }
 }
@@ -2412,14 +2429,23 @@ fn return_total(
 ) -> UResult<String> {
     let mut total_size = 0;
     for item in items {
-        total_size += item
-            .get_metadata(out)
-            .as_ref()
-            .map_or(0, |md| get_block_size(md, config));
+        let md = item.get_metadata(out);
+        log::debug!("item md {}: {:?}", item.display_name.to_string_lossy(), md);
+        if let Some(md) = md {
+            let gbs = get_block_size(md, config);
+            log::debug!(
+                "item gbs {:?}, blocks: {}, size: {}",
+                gbs,
+                md.blocks(),
+                md.size()
+            );
+        }
+        total_size += md.as_ref().map_or(0, |md| get_block_size(md, config));
     }
     if config.dired {
         dired::indent(out)?;
     }
+    log::debug!("total {total_size} of {} items", items.len());
     Ok(format!(
         "total {}{}",
         display_size(total_size, config),
@@ -2582,10 +2608,30 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
         } else {
             md.blocks() * 512
         };
-        match config.size_format {
+
+        let result = match config.size_format {
             SizeFormat::Binary | SizeFormat::Decimal => raw_blocks,
-            SizeFormat::Bytes => raw_blocks / config.block_size,
-        }
+            SizeFormat::Bytes => {
+                (raw_blocks + config.block_size - 1/* ceiling div */) / config.block_size
+            }
+        };
+
+        log::debug!(
+            "is_char_device: {}, is_block_device(): {}, \
+                   blocks: {}, size: {}, raw: {}, \
+                   cfg.block_size: {}, result: {}, \
+                   cfg.size_format: {:?}",
+            md.file_type().is_char_device(),
+            md.file_type().is_block_device(),
+            md.blocks(),
+            md.size(),
+            raw_blocks,
+            config.block_size,
+            result,
+            config.size_format
+        );
+
+        result
     }
     #[cfg(not(unix))]
     {

@@ -10,6 +10,7 @@ use crate::common::util::TestScenario;
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
 use regex::Regex;
+use rstest::*;
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::ffi::OsStr;
@@ -153,261 +154,483 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
-#[cfg(all(unix, feature = "df", not(target_os = "freebsd")))]
-fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
-    let mut cmd = scene.ccmd("df");
-    cmd.args(&["-PT"]).arg(path);
-    let output = cmd.succeeds();
-    let stdout_str = String::from_utf8_lossy(output.stdout());
-    println!("output of stat call ({:?}):\n{}", cmd, stdout_str);
-    let regex_str = r#"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+"#;
-    let regex = Regex::new(regex_str).unwrap();
-    let m = regex.captures(&stdout_str).unwrap();
-    let fstype = m["fstype"].to_owned();
-    println!("detected fstype: {}", fstype);
-    fstype
+enum AllocatedSizeVariant {
+    Default4096,
+    F2fs4100,
+    Android10Plus,
+    ZFS,
+    UFS,
+}
+
+fn get_allocated_size_variant(scene: &TestScenario, path: &Path) -> AllocatedSizeVariant {
+    match scene.get_filesystem_type(path).as_str() {
+        "f2fs" => return AllocatedSizeVariant::F2fs4100,
+        "zfs" => return AllocatedSizeVariant::ZFS,
+        "ufs" => return AllocatedSizeVariant::UFS,
+        _ => {}
+    }
+
+    if cfg!(target_os = "android") {
+        let mut cmd = scene.cmd("/data/data/com.termux/files/usr/bin/termux-info");
+        let output = cmd.run();
+        let stdout_str = String::from_utf8_lossy(output.stdout());
+        let regex_str = r#"Android version:\s*[\r\n]+(?<android_version>[0-9]+)\s*[\r\n]+"#;
+        let regex = Regex::new(regex_str).unwrap();
+        let m = regex.captures(&stdout_str).unwrap();
+        let android_version = m["android_version"].to_owned();
+        println!("detected android_version: {}", android_version);
+        if android_version.parse::<i64>().unwrap_or_default() >= 10 {
+            AllocatedSizeVariant::Android10Plus
+        } else {
+            AllocatedSizeVariant::Default4096
+        }
+    } else {
+        AllocatedSizeVariant::Default4096
+    }
+}
+
+struct ExpectedSizes {
+    empty_file_1k_blocks: i32,
+    empty_file_blocks_512: i32,
+    empty_file_bytes: &'static str,
+    empty_file_4k_blocks: i32,
+    empty_file_si: &'static str,
+    file_with_holes_1k_blocks: i32,
+    file_with_holes_4k_blocks: i32,
+    file_with_holes_bytes: &'static str,
+    file_with_holes_si: &'static str,
+    zero_file_size_1k_blocks: i32,
+    zero_file_4k_blocks: i32,
+    zero_file_size_blocksize_512: i32,
+    zero_file_size_blocksize_8192: i32,
+    zero_file_bytes: &'static str,
+    zero_file_si: &'static str,
+    total_si: &'static str,
+}
+
+impl ExpectedSizes {
+    fn new(scene: &TestScenario, path: &Path) -> Self {
+        match get_allocated_size_variant(&scene, path) {
+            AllocatedSizeVariant::Default4096 => Self {
+                empty_file_1k_blocks: 0,
+                empty_file_blocks_512: 0,
+                empty_file_bytes: "0",
+                empty_file_4k_blocks: 0,
+                empty_file_si: "0",
+                file_with_holes_1k_blocks: 0,
+                file_with_holes_4k_blocks: 0,
+                file_with_holes_bytes: "0",
+                file_with_holes_si: "0",
+                zero_file_size_1k_blocks: 4096,
+                zero_file_4k_blocks: 1024,
+                zero_file_size_blocksize_512: 8192,
+                zero_file_size_blocksize_8192: 512,
+                zero_file_bytes: "4.0M",
+                zero_file_si: "4.2M",
+                total_si: "4.2M",
+            },
+            AllocatedSizeVariant::Android10Plus => Self {
+                empty_file_1k_blocks: 4,
+                empty_file_blocks_512: 4 * 2,
+                empty_file_bytes: "4.0K",
+                empty_file_4k_blocks: 1,
+                empty_file_si: "4.1k",
+                file_with_holes_1k_blocks: 4,
+                file_with_holes_4k_blocks: 1,
+                file_with_holes_bytes: "4.0K",
+                file_with_holes_si: "4.1k",
+                zero_file_size_1k_blocks: 4100,
+                zero_file_4k_blocks: 1025,
+                zero_file_size_blocksize_512: 8200,
+                zero_file_size_blocksize_8192: 513,
+                zero_file_bytes: "4.1M",
+                zero_file_si: "4.2M",
+                total_si: "4.3M",
+            },
+            AllocatedSizeVariant::F2fs4100 => Self {
+                empty_file_1k_blocks: 0,
+                empty_file_blocks_512: 0,
+                empty_file_bytes: "0",
+                empty_file_4k_blocks: 0,
+                empty_file_si: "0",
+                file_with_holes_1k_blocks: 0,
+                file_with_holes_4k_blocks: 0,
+                file_with_holes_bytes: "0",
+                file_with_holes_si: "0",
+                zero_file_size_1k_blocks: 4100,
+                zero_file_4k_blocks: 1025,
+                zero_file_size_blocksize_512: 8200,
+                zero_file_size_blocksize_8192: 512,
+                zero_file_bytes: "4.1M",
+                zero_file_si: "4.2M",
+                total_si: "4.2M",
+            },
+            AllocatedSizeVariant::ZFS => Self {
+                empty_file_1k_blocks: 1,
+                empty_file_blocks_512: 2,
+                empty_file_bytes: "1.0K",
+                empty_file_4k_blocks: 1,
+                empty_file_si: "512",
+                file_with_holes_1k_blocks: 1,
+                file_with_holes_4k_blocks: 1,
+                file_with_holes_bytes: "512",
+                file_with_holes_si: "512",
+                zero_file_size_1k_blocks: 4105,
+                zero_file_4k_blocks: 1027,
+                zero_file_size_blocksize_512: 8209,
+                zero_file_size_blocksize_8192: 514,
+                zero_file_bytes: "4.1M",
+                zero_file_si: "4.3M",
+                total_si: "4.3M",
+            },
+            AllocatedSizeVariant::UFS => Self {
+                empty_file_1k_blocks: 0,
+                empty_file_blocks_512: 0,
+                empty_file_bytes: "0",
+                empty_file_4k_blocks: 0,
+                empty_file_si: "0",
+                file_with_holes_1k_blocks: 64,
+                file_with_holes_4k_blocks: 16,
+                file_with_holes_bytes: "64K",
+                file_with_holes_si: "66k",
+                zero_file_size_1k_blocks: 4128,
+                zero_file_4k_blocks: 1032,
+                zero_file_size_blocksize_512: 8209,
+                zero_file_size_blocksize_8192: 514,
+                zero_file_bytes: "4.1M",
+                zero_file_si: "4.3M",
+                total_si: "4.3M",
+            },
+        }
+    }
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[test] // FIXME: fix this test for FreeBSD
-fn test_ls_allocation_size() {
+#[fixture]
+fn test_setup_0() -> TestScenario {
     let scene = TestScenario::new(util_name!());
+    let scene = scene.enable_uu_logs_debug();
     let at = &scene.fixtures;
+
     at.mkdir("some-dir1");
     at.touch("some-dir1/empty-file");
 
-    #[cfg(all(unix, feature = "df"))]
-    {
-        scene
-            .ccmd("truncate")
-            .arg("-s")
-            .arg("4M")
-            .arg("some-dir1/file-with-holes")
-            .succeeds();
+    scene
+        .ccmd("truncate")
+        .arg("-s")
+        .arg("4M")
+        .arg("some-dir1/file-with-holes")
+        .request_print_outputs()
+        .succeeds();
 
-        // fill empty file with zeros
-        scene
-            .ccmd("dd")
-            .arg("if=/dev/zero")
-            .arg("of=some-dir1/zero-file")
-            .arg("bs=1024")
-            .arg("count=4096")
-            .succeeds();
+    // fill empty file with some data (not zeros!)
+    at.create_filled_file(1024 * 4096, "some-dir1/zero-file");
 
-        scene
-            .ccmd("dd")
-            .arg("if=/dev/zero")
-            .arg("of=irregular-file")
-            .arg("bs=1")
-            .arg("count=777")
-            .succeeds();
+    at.create_filled_file(777, "irregular-file");
 
-        scene
-            .ucmd()
-            .arg("-l")
-            .arg("--block-size=512")
-            .arg("irregular-file")
-            .succeeds()
-            .stdout_matches(&Regex::new("[^ ] 2 [^ ]").unwrap());
-
-        #[cfg(not(target_os = "freebsd"))]
-        let (zero_file_size_4k, zero_file_size_1k, zero_file_size_8k, zero_file_size_4m) =
-            match get_filesystem_type(&scene, &scene.fixtures.subdir).as_str() {
-                // apparently f2fs (flash friendly fs) accepts small overhead for better performance
-                "f2fs" => (4100, 1025, 8200, "4.1M"),
-                _ => (4096, 1024, 8192, "4.0M"),
-            };
-
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .arg("-s1")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_is(format!(
-                "total {zero_file_size_4k}\n   0 empty-file\n   0 file-with-holes\n\
-                {zero_file_size_4k} zero-file\n"
-            ));
-
-        scene
-            .ucmd()
-            .arg("-sl")
-            .arg("some-dir1")
-            .succeeds()
-            // block size is 0 whereas size/len is 4194304
-            .stdout_contains("4194304");
-
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .arg("-s1")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains("0 empty-file")
-            .stdout_contains(format!("{zero_file_size_4k} zero-file"));
-
-        // Test alignment of different block sized files
-        let res = scene.ucmd().arg("-si1").arg("some-dir1").succeeds();
-
-        let empty_file_len = String::from_utf8(res.stdout().to_owned())
-            .ok()
-            .unwrap()
-            .lines()
-            .nth(1)
-            .unwrap()
-            .strip_suffix("empty-file")
-            .unwrap()
-            .len();
-
-        let file_with_holes_len = String::from_utf8(res.stdout().to_owned())
-            .ok()
-            .unwrap()
-            .lines()
-            .nth(2)
-            .unwrap()
-            .strip_suffix("file-with-holes")
-            .unwrap()
-            .len();
-
-        assert_eq!(empty_file_len, file_with_holes_len);
-
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .env("LS_BLOCK_SIZE", "8K")
-            .env("BLOCK_SIZE", "4K")
-            .arg("-s1")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains("total 512")
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains("512 zero-file");
-
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .env("BLOCK_SIZE", "4K")
-            .arg("-s1")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains(format!("total {zero_file_size_1k}"))
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains(format!("{zero_file_size_1k} zero-file"));
-
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .env("BLOCK_SIZE", "4K")
-            .arg("-s1")
-            .arg("--si")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains("total 4.2M")
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains("4.2M zero-file");
-
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .env("BLOCK_SIZE", "4096")
-            .arg("-s1")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains(format!("total {zero_file_size_1k}"))
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains(format!("{zero_file_size_1k} zero-file"));
-
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .env("POSIXLY_CORRECT", "true")
-            .arg("-s1")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains(format!("total {zero_file_size_8k}"))
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains(format!("{zero_file_size_8k} zero-file"));
-
-        // -k should make 'ls' ignore the env var
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .env("BLOCK_SIZE", "4K")
-            .arg("-s1k")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains(format!("total {zero_file_size_4k}"))
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains(format!("{zero_file_size_4k} zero-file"));
-
-        // but manually specified blocksize overrides -k
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .arg("-s1k")
-            .arg("--block-size=4K")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains(format!("total {zero_file_size_1k}"))
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains(format!("{zero_file_size_1k} zero-file"));
-
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .arg("-s1")
-            .arg("--block-size=4K")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains(format!("total {zero_file_size_1k}"))
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains(format!("{zero_file_size_1k} zero-file"));
-
-        // si option should always trump the human-readable option
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .arg("-s1h")
-            .arg("--si")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains("total 4.2M")
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains("4.2M zero-file");
-
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .arg("-s1")
-            .arg("--block-size=human-readable")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains(format!("total {zero_file_size_4m}"))
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains(format!("{zero_file_size_4m} zero-file"));
-
-        #[cfg(not(target_os = "freebsd"))]
-        scene
-            .ucmd()
-            .arg("-s1")
-            .arg("--block-size=si")
-            .arg("some-dir1")
-            .succeeds()
-            .stdout_contains("total 4.2M")
-            .stdout_contains("0 empty-file")
-            .stdout_contains("0 file-with-holes")
-            .stdout_contains("4.2M zero-file");
+    #[cfg(target_os = "freebsd")]
+    if scene.get_filesystem_type(at.plus(".") == "zfs") {
+        // FreeBSD/zfs doesn't immediately report the correct number of blocks
+        // we need to force it to sync the data to disk.
+        scene.cmd("sync").args(&["-f", "."]).succeeds();
+        // sync command apparently doesn't work here, we need to wait 5 seconds
+        std::thread::sleep(std::time::Duration::from_secs(5));
     }
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--block-size=512")
+        .arg("irregular-file")
+        .succeeds()
+        .stdout_matches(&Regex::new("[^ ] 2 [^ ]").unwrap());
+
+    scene
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[fixture]
+fn test_setup_1() -> (TestScenario, ExpectedSizes) {
+    let scene = test_setup_0();
+    let es = ExpectedSizes::new(&scene, &scene.fixtures.subdir);
+    (scene, es)
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_1(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    let total = es.zero_file_size_1k_blocks + 2 * es.empty_file_1k_blocks;
+    scene
+        .ucmd()
+        .arg("-s1")
+        .arg("some-dir1")
+        .request_print_outputs()
+        .succeeds()
+        .stdout_is(format!(
+            "total {total}\
+            \n   {} empty-file\
+            \n   {} file-with-holes\n\
+            {} zero-file\n",
+            es.empty_file_1k_blocks, es.file_with_holes_1k_blocks, es.zero_file_size_1k_blocks,
+        ));
+}
+
+#[rstest]
+fn test_ls_allocation_size_2(test_setup_0: TestScenario) {
+    test_setup_0
+        .ucmd()
+        .arg("-sl")
+        .arg("some-dir1")
+        .succeeds()
+        // block size is 0 whereas size/len is 4194304
+        .stdout_contains("4194304");
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_3(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    scene
+        .ucmd()
+        .arg("-s1")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains(format!("{} empty-file", es.empty_file_1k_blocks))
+        .stdout_contains(format!("{} zero-file", es.zero_file_size_1k_blocks));
+}
+
+#[rstest]
+fn test_ls_allocation_size_4(test_setup_0: TestScenario) {
+    let scene = test_setup_0;
+    // Test alignment of different block sized files
+    let res = scene.ucmd().arg("-si1").arg("some-dir1").succeeds();
+
+    let empty_file_len = String::from_utf8(res.stdout().to_owned())
+        .ok()
+        .unwrap()
+        .lines()
+        .nth(1)
+        .unwrap()
+        .strip_suffix("empty-file")
+        .unwrap()
+        .len();
+
+    let file_with_holes_len = String::from_utf8(res.stdout().to_owned())
+        .ok()
+        .unwrap()
+        .lines()
+        .nth(2)
+        .unwrap()
+        .strip_suffix("file-with-holes")
+        .unwrap()
+        .len();
+
+    assert_eq!(empty_file_len, file_with_holes_len);
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_5(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    let total = es.zero_file_size_blocksize_8192 + 2 * es.empty_file_4k_blocks;
+    scene
+        .ucmd()
+        .env("LS_BLOCK_SIZE", "8K")
+        .env("BLOCK_SIZE", "4K")
+        .arg("-s1")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} zero-file", es.zero_file_size_blocksize_8192));
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_6(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    {
+        let total = es.zero_file_4k_blocks + 2 * es.empty_file_4k_blocks;
+        scene
+            .ucmd()
+            .env("BLOCK_SIZE", "4K")
+            .arg("-s1")
+            .arg("some-dir1")
+            .succeeds()
+            .stdout_contains(format!("total {total}"))
+            .stdout_contains(format!("{} empty-file", es.empty_file_4k_blocks))
+            .stdout_contains(format!("{} file-with-holes", es.empty_file_4k_blocks))
+            .stdout_contains(format!("{} zero-file", es.zero_file_4k_blocks));
+    }
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_7(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    scene
+        .ucmd()
+        .env("BLOCK_SIZE", "4K")
+        .arg("-s1")
+        .arg("--si")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains(format!("total {}", es.total_si))
+        .stdout_contains(format!("{} empty-file", es.empty_file_si))
+        .stdout_contains(format!("{} file-with-holes", es.file_with_holes_si))
+        .stdout_contains(format!("{} zero-file", es.zero_file_si));
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_8(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    let total = es.zero_file_4k_blocks + 2 * es.empty_file_4k_blocks;
+    scene
+        .ucmd()
+        .env("BLOCK_SIZE", "4096")
+        .arg("-s1")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} zero-file", es.zero_file_4k_blocks));
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_9(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    let total = es.zero_file_size_blocksize_512 + 2 * es.empty_file_blocks_512;
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "true")
+        .arg("-s1")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_blocks_512))
+        .stdout_contains(format!("{} file-with-holes", es.empty_file_blocks_512))
+        .stdout_contains(format!("{} zero-file", es.zero_file_size_blocksize_512));
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_10(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    // -k should make 'ls' ignore the env var
+    let total =
+        es.zero_file_size_1k_blocks + es.file_with_holes_1k_blocks + es.empty_file_1k_blocks;
+    scene
+        .ucmd()
+        .env("BLOCK_SIZE", "4K")
+        .arg("-s1k")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_1k_blocks))
+        .stdout_contains(format!("{} file-with-holes", es.file_with_holes_1k_blocks))
+        .stdout_contains(format!("{} zero-file", es.zero_file_size_1k_blocks));
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_11(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    // but manually specified blocksize overrides -k
+    let total = es.zero_file_4k_blocks + es.file_with_holes_4k_blocks + es.empty_file_4k_blocks;
+    scene
+        .ucmd()
+        .arg("-s1k")
+        .arg("--block-size=4K")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} file-with-holes", es.file_with_holes_4k_blocks))
+        .stdout_contains(format!("{} zero-file", es.zero_file_4k_blocks));
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_12(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    let total = es.zero_file_4k_blocks + es.file_with_holes_4k_blocks + es.empty_file_4k_blocks;
+    scene
+        .ucmd()
+        .arg("-s1")
+        .arg("--block-size=4K")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains(format!("total {}", total))
+        .stdout_contains(format!("{} empty-file", es.empty_file_4k_blocks))
+        .stdout_contains(format!("{} file-with-holes", es.file_with_holes_4k_blocks))
+        .stdout_contains(format!("{} zero-file", es.zero_file_4k_blocks));
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_13(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    // si option should always trump the human-readable option
+    scene
+        .ucmd()
+        .arg("-s1h")
+        .arg("--si")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains(format!("total {}", es.total_si))
+        .stdout_contains(format!("{} empty-file", es.empty_file_si))
+        .stdout_contains(format!("{} file-with-holes", es.file_with_holes_si))
+        .stdout_contains(format!("{} zero-file", es.zero_file_si));
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_14(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    scene
+        .ucmd()
+        .arg("-s1")
+        .arg("--block-size=human-readable")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains(format!("total {}", es.zero_file_bytes))
+        .stdout_contains(format!("{} empty-file", es.empty_file_bytes))
+        .stdout_contains(format!("{} file-with-holes", es.file_with_holes_bytes))
+        .stdout_contains(format!("{} zero-file", es.zero_file_bytes));
+}
+
+#[cfg(all(feature = "truncate", feature = "dd"))]
+#[rstest]
+fn test_ls_allocation_size_15(test_setup_1: (TestScenario, ExpectedSizes)) {
+    let (scene, es) = test_setup_1;
+
+    scene
+        .ucmd()
+        .arg("-s1")
+        .arg("--block-size=si")
+        .arg("some-dir1")
+        .succeeds()
+        .stdout_contains(format!("total {}", es.total_si))
+        .stdout_contains(format!("{} empty-file", es.empty_file_si))
+        .stdout_contains(format!("{} file-with-holes", es.file_with_holes_si))
+        .stdout_contains(format!("{} zero-file", es.zero_file_si));
 }
 
 #[test]
@@ -1423,36 +1646,42 @@ fn test_ls_long_total_size() {
     at.touch(at.plus_as_string("test-long2"));
     at.append("test-long2", "2");
 
+    let (total_long_vanilla, total_long_human, total_long_si) =
+        match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+            AllocatedSizeVariant::Android10Plus => (16, "16K", "17k"),
+            AllocatedSizeVariant::Default4096 | _ => (8, "8.0K", "8.2k"),
+        };
+
     let expected_prints: HashMap<_, _> = if cfg!(unix) {
         [
-            ("long_vanilla", "total 8"),
-            ("long_human_readable", "total 8.0K"),
-            ("long_si", "total 8.2k"),
+            ("long_vanilla", format!("total {total_long_vanilla}")),
+            ("long_human_readable", format!("total {total_long_human}")),
+            ("long_si", format!("total {total_long_si}")),
         ]
         .iter()
-        .copied()
+        .cloned()
         .collect()
     } else {
         [
-            ("long_vanilla", "total 2"),
-            ("long_human_readable", "total 2"),
-            ("long_si", "total 2"),
+            ("long_vanilla", "total 2".to_string()),
+            ("long_human_readable", "total 2".to_string()),
+            ("long_si", "total 2".to_string()),
         ]
         .iter()
-        .copied()
+        .cloned()
         .collect()
     };
 
     for arg in LONG_ARGS {
         let result = scene.ucmd().arg(arg).succeeds();
-        result.stdout_contains(expected_prints["long_vanilla"]);
+        result.stdout_contains(&expected_prints["long_vanilla"]);
 
         for arg2 in ["-h", "--human-readable", "--si"] {
             let result = scene.ucmd().arg(arg).arg(arg2).succeeds();
             result.stdout_contains(if arg2 == "--si" {
-                expected_prints["long_si"]
+                &expected_prints["long_si"]
             } else {
-                expected_prints["long_human_readable"]
+                &expected_prints["long_human_readable"]
             });
         }
     }
@@ -3962,20 +4191,26 @@ fn test_ls_dired_recursive_multiple() {
 #[test]
 fn test_ls_dired_simple() {
     let scene = TestScenario::new(util_name!());
+
+    let min_total_size = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+        AllocatedSizeVariant::Android10Plus => 4,
+        AllocatedSizeVariant::Default4096 | _ => 0,
+    };
+
     let at = &scene.fixtures;
     scene
         .ucmd()
         .arg("--dired")
         .arg("-l")
         .succeeds()
-        .stdout_contains("  total 0");
+        .stdout_contains(format!("  total 0"));
 
     at.mkdir("d");
     at.touch("d/a1");
     let mut cmd = scene.ucmd();
     cmd.arg("--dired").arg("-l").arg("d");
     let result = cmd.succeeds();
-    result.stdout_contains("  total 0");
+    result.stdout_contains(format!("  total {min_total_size}"));
     println!("    result.stdout = {:#?}", result.stdout_str());
 
     let dired_line = result
@@ -4128,6 +4363,11 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
 fn test_posixly_correct_and_block_size_env_vars() {
     let scene = TestScenario::new(util_name!());
 
+    let (total, total_posix) = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+        AllocatedSizeVariant::Android10Plus => (8, 16),
+        _ => (4, 8),
+    };
+
     scene
         .ccmd("dd")
         .arg("if=/dev/zero")
@@ -4140,7 +4380,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .ucmd()
         .arg("-l")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {total}"))
         .stdout_contains(" 1024 ");
 
     scene
@@ -4148,7 +4388,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("POSIXLY_CORRECT", "some_value")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {total_posix}"))
         .stdout_contains(" 1024 ");
 
     scene
@@ -4156,7 +4396,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("LS_BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {total_posix}"))
         .stdout_contains(" 2 ");
 
     scene
@@ -4164,7 +4404,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {total_posix}"))
         .stdout_contains(" 2 ");
 
     scene
@@ -4172,7 +4412,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
         .arg("-l")
         .env("BLOCKSIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 8")
+        .stdout_contains_line(format!("total {total_posix}"))
         .stdout_contains(" 1024 ");
 }
 
@@ -4181,6 +4421,11 @@ fn test_posixly_correct_and_block_size_env_vars() {
 fn test_posixly_correct_and_block_size_env_vars_with_k() {
     let scene = TestScenario::new(util_name!());
 
+    let total = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+        AllocatedSizeVariant::Android10Plus => 8,
+        _ => 4,
+    };
+
     scene
         .ccmd("dd")
         .arg("if=/dev/zero")
@@ -4195,7 +4440,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("POSIXLY_CORRECT", "some_value")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {total}"))
         .stdout_contains(" 1024 ");
 
     scene
@@ -4204,7 +4449,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("LS_BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {total}"))
         .stdout_contains(" 2 ");
 
     scene
@@ -4213,7 +4458,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("BLOCK_SIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {total}"))
         .stdout_contains(" 2 ");
 
     scene
@@ -4222,7 +4467,7 @@ fn test_posixly_correct_and_block_size_env_vars_with_k() {
         .arg("-k")
         .env("BLOCKSIZE", "512")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {total}"))
         .stdout_contains(" 1024 ");
 }
 
@@ -4241,6 +4486,11 @@ fn test_ls_invalid_block_size() {
 fn test_ls_invalid_block_size_in_env_var() {
     let scene = TestScenario::new(util_name!());
 
+    let file_size = match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+        AllocatedSizeVariant::Android10Plus => 8,
+        _ => 4,
+    };
+
     scene
         .ccmd("dd")
         .arg("if=/dev/zero")
@@ -4254,7 +4504,7 @@ fn test_ls_invalid_block_size_in_env_var() {
         .arg("-og")
         .env("LS_BLOCK_SIZE", "invalid")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {file_size}"))
         .stdout_contains(" 1 1 "); // hardlink count + file size
 
     scene
@@ -4262,7 +4512,7 @@ fn test_ls_invalid_block_size_in_env_var() {
         .arg("-og")
         .env("BLOCK_SIZE", "invalid")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {file_size}"))
         .stdout_contains(" 1 1 "); // hardlink count + file size
 
     scene
@@ -4270,7 +4520,7 @@ fn test_ls_invalid_block_size_in_env_var() {
         .arg("-og")
         .env("BLOCKSIZE", "invalid")
         .succeeds()
-        .stdout_contains_line("total 4")
+        .stdout_contains_line(format!("total {file_size}"))
         .stdout_contains(" 1024 ");
 }
 
@@ -4278,6 +4528,12 @@ fn test_ls_invalid_block_size_in_env_var() {
 #[test]
 fn test_ls_block_size_override() {
     let scene = TestScenario::new(util_name!());
+
+    let (si_size, blocks512, human_size) =
+        match get_allocated_size_variant(&scene, &scene.fixtures.subdir) {
+            AllocatedSizeVariant::Android10Plus => ("8.2k", 16, "8.0K"),
+            _ => ("4.1k", 8, "4.0K"),
+        };
 
     scene
         .ccmd("dd")
@@ -4294,7 +4550,7 @@ fn test_ls_block_size_override() {
         .arg("--block-size=512")
         .arg("--si")
         .succeeds()
-        .stdout_contains_line("total 4.1k");
+        .stdout_contains_line(format!("total {si_size}"));
 
     // --block-size "wins"
     scene
@@ -4303,7 +4559,7 @@ fn test_ls_block_size_override() {
         .arg("--si")
         .arg("--block-size=512")
         .succeeds()
-        .stdout_contains_line("total 8");
+        .stdout_contains_line(format!("total {blocks512}"));
 
     // --human-readable "wins"
     scene
@@ -4312,7 +4568,7 @@ fn test_ls_block_size_override() {
         .arg("--block-size=512")
         .arg("--human-readable")
         .succeeds()
-        .stdout_contains_line("total 4.0K");
+        .stdout_contains_line(format!("total {human_size}"));
 
     // --block-size "wins"
     scene
@@ -4321,7 +4577,7 @@ fn test_ls_block_size_override() {
         .arg("--human-readable")
         .arg("--block-size=512")
         .succeeds()
-        .stdout_contains_line("total 8");
+        .stdout_contains_line(format!("total {blocks512}"));
 }
 
 #[test]

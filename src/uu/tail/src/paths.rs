@@ -3,12 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore tailable seekable stdlib (stdlib)
+// spell-checker:ignore tailable stdlib (stdlib)
 
 use crate::text;
 use std::ffi::OsStr;
-use std::fs::{File, Metadata};
-use std::io::{Seek, SeekFrom};
+use std::fs::Metadata;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
@@ -134,20 +133,6 @@ impl HeaderPrinter {
             );
             self.first_header = false;
         }
-    }
-}
-pub trait FileExtTail {
-    #[allow(clippy::wrong_self_convention)]
-    fn is_seekable(&mut self, current_offset: u64) -> bool;
-}
-
-impl FileExtTail for File {
-    /// Test if File is seekable.
-    /// Set the current position offset to `current_offset`.
-    fn is_seekable(&mut self, current_offset: u64) -> bool {
-        self.stream_position().is_ok()
-            && self.seek(SeekFrom::End(0)).is_ok()
-            && self.seek(SeekFrom::Start(current_offset)).is_ok()
     }
 }
 

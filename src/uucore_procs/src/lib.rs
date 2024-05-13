@@ -21,6 +21,7 @@ pub fn main(_args: TokenStream, stream: TokenStream) -> TokenStream {
     let new = quote!(
         pub fn uumain(args: impl uucore::Args) -> i32 {
             #stream
+            uucore::initialize_logging();
             let result = uumain(args);
             match result {
                 Ok(()) => uucore::error::get_exit_code(),

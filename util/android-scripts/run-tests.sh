@@ -22,21 +22,31 @@ run_with_retry() {
 
     exit_code=$?
 
-    echo "Still failing after $tries. Code: $exit_code"
+    echo "Still failing after $tries tries. Code: $exit_code"
 
     return $exit_code
 }
 
 run_tests_in_subprocess() (
 
-    # limit virtual memory to 3GB to avoid that OS kills sshd
-    ulimit -v $((1024 * 1024 * 3))
+    # limit memory to 3GB to avoid that OS kills sshd.
+    android_version="$(termux-info | sed -n '/Android version/{n;p}')"
+    echo "detected Android version: $android_version"
+    if [ "$android_version" -ge 11 ]; then
+        # On newer android versions (since API 31, Android 12),
+        # the virtual memory size is 10GB by default for each process.
+        # This prevents a meaningfull ulimit on virtual memory size.
+        # We use physical memory limit instead:
+        ulimit -m $((1024 * 1024 * 3))
+    else
+        ulimit -v $((1024 * 1024 * 3))
+    fi
 
     watchplus() {
         # call: watchplus <interval> <command>
         while true; do
             "${@:2}"
-            sleep "$1"
+            sleep "$1" || return 1
         done
     }
 
@@ -52,9 +62,9 @@ run_tests_in_subprocess() (
 
     # run tests
     cd ~/coreutils && \
-        run_with_retry 3 timeout --preserve-status --verbose -k 1m 10m \
-            cargo nextest run --no-run "${nextest_params[@]}" &&
-        timeout --preserve-status --verbose -k 1m 60m \
+        run_with_retry 6 timeout --preserve-status --verbose -k 1m 10m \
+            cargo nextest run --no-run "${nextest_params[@]}" && \
+            timeout --preserve-status --verbose -k 1m 60m \
             cargo nextest run "${nextest_params[@]}"
 
     result=$?

@@ -1553,19 +1553,34 @@ fn test_multiple_processes_reading_stdin() {
         .stdout_only("def\n");
 }
 
-/// Test that discarding system file cache fails for stdin.
+/// Test that discarding system file cache fails for pipes.
 #[test]
 #[cfg(target_os = "linux")]
-fn test_nocache_stdin_error() {
+fn test_nocache_stdin_pipe_error() {
     #[cfg(not(target_env = "musl"))]
     let detail = "Illegal seek";
     #[cfg(target_env = "musl")]
     let detail = "Invalid seek";
     new_ucmd!()
         .args(&["iflag=nocache", "count=0", "status=noxfer"])
+        .set_stdin(Stdio::piped())
         .fails()
         .code_is(1)
         .stderr_only(format!("dd: failed to discard cache for: 'standard input': {detail}\n0+0 records in\n0+0 records out\n"));
+}
+
+/// Test that discarding system file cache works on stdin when mapped to regular file
+#[test]
+#[cfg(target_os = "linux")]
+fn test_nocache_stdin_success() {
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures;
+    let infile = at.make_file("stdin.txt");
+    new_ucmd!()
+        .args(&["iflag=nocache", "count=0", "status=noxfer"])
+        .set_stdin(infile)
+        .succeeds()
+        .code_is(0);
 }
 
 /// Test that dd fails when no number in count.
@@ -1713,6 +1728,46 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     assert_eq!(output.stdout, b"abcd");
     let expected = b"0+2 records in\n0+2 records out\n4 bytes copied";
     assert!(output.stderr.starts_with(expected));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_reading_and_writing_with_direct_flag_from_and_to_files_with_irregular_size() {
+    use uucore::fs::sane_blksize::sane_blksize_from_path;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let min_direct_block_size = sane_blksize_from_path(at.plus(".").as_path()) as i64;
+
+    let p = |m: i64, o: i64| (min_direct_block_size * m + o).to_string();
+
+    ts.ccmd("truncate")
+        .args(&["-s", p(1, -1).as_str(), "short"])
+        .succeeds();
+    ts.ccmd("truncate")
+        .args(&["-s", p(16, 0).as_str(), "in"])
+        .succeeds();
+    ts.ccmd("truncate")
+        .args(&["-s", p(16, -1).as_str(), "m1"])
+        .succeeds();
+    ts.ccmd("truncate")
+        .args(&["-s", p(16, 1).as_str(), "p1"])
+        .succeeds();
+
+    ts.ucmd()
+        .arg(format!("bs={}", min_direct_block_size))
+        .args(&["if=in", "oflag=direct", "of=out"])
+        .succeeds();
+
+    for testfile in ["short", "m1", "p1"] {
+        at.remove("out");
+        ts.ucmd()
+            .arg(format!("if={testfile}"))
+            .arg(format!("bs={}", min_direct_block_size))
+            .args(&["iflag=direct", "oflag=direct", "of=out"])
+            .succeeds();
+    }
 }
 
 #[test]

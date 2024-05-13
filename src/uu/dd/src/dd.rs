@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput, SETFL
+// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput
+// spell-checker:ignore GETFL SETFL
 
 mod blocks;
 mod bufferedoutput;
@@ -23,11 +24,11 @@ use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
+use uucore::fs::FileExtSeekable;
 use uucore::io::OwnedFileDescriptorOrHandle;
 
 use std::cmp;
 use std::env;
-use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -47,6 +48,8 @@ use std::time::{Duration, Instant};
 
 use clap::{crate_version, Arg, Command};
 use gcd::Gcd;
+#[cfg(any(target_os = "android", target_os = "linux"))]
+use nix::fcntl::{fcntl, FcntlArg};
 #[cfg(target_os = "linux")]
 use nix::{
     errno::Errno,
@@ -187,7 +190,7 @@ impl Num {
 ///
 /// Use [`Source::stdin_as_file`] if available to enable more
 /// fine-grained access to reading from stdin.
-enum Source {
+enum SourceVariant {
     /// Input from stdin.
     #[cfg(not(unix))]
     Stdin(io::Stdin),
@@ -204,7 +207,42 @@ enum Source {
     Fifo(File),
 }
 
+struct Source {
+    variant: SourceVariant,
+}
+
 impl Source {
+    fn unset_direct(&mut self) -> io::Result<()> {
+        if let Some(f) = self.get_file_mut() {
+            unset_direct(f)?
+        }
+        Ok(())
+    }
+
+    fn get_file(&self) -> Option<&File> {
+        match &self.variant {
+            SourceVariant::File(f) => Some(f),
+            #[cfg(unix)]
+            SourceVariant::Fifo(f) => Some(f),
+            #[cfg(unix)]
+            SourceVariant::StdinFile(f) => Some(f),
+            #[cfg(not(unix))]
+            _ => None,
+        }
+    }
+
+    fn get_file_mut(&mut self) -> Option<&mut File> {
+        match &mut self.variant {
+            SourceVariant::File(f) => Some(f),
+            #[cfg(unix)]
+            SourceVariant::Fifo(f) => Some(f),
+            #[cfg(unix)]
+            SourceVariant::StdinFile(f) => Some(f),
+            #[cfg(not(unix))]
+            _ => None,
+        }
+    }
+
     /// Create a source from stdin using its raw file descriptor.
     ///
     /// This returns an instance of the `Source::StdinFile` variant,
@@ -216,23 +254,26 @@ impl Source {
     fn stdin_as_file() -> Self {
         let fd = io::stdin().as_raw_fd();
         let f = unsafe { File::from_raw_fd(fd) };
-        Self::StdinFile(f)
+        Self {
+            variant: SourceVariant::StdinFile(f),
+        }
     }
 
     /// The length of the data source in number of bytes.
     ///
     /// If it cannot be determined, then this function returns 0.
     fn len(&self) -> std::io::Result<i64> {
-        match self {
-            Self::File(f) => Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX)),
-            _ => Ok(0),
+        if let Some(f) = self.get_file() {
+            Ok(f.metadata()?.len().try_into().unwrap_or(i64::MAX))
+        } else {
+            Ok(0)
         }
     }
 
     fn skip(&mut self, n: u64) -> io::Result<u64> {
-        match self {
+        match &mut self.variant {
             #[cfg(not(unix))]
-            Self::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
+            SourceVariant::Stdin(stdin) => match io::copy(&mut stdin.take(n), &mut io::sink()) {
                 Ok(m) if m < n => {
                     show_error!("'standard input': cannot skip to specified offset");
                     Ok(m)
@@ -241,7 +282,7 @@ impl Source {
                 Err(e) => Err(e),
             },
             #[cfg(unix)]
-            Self::StdinFile(f) => {
+            SourceVariant::StdinFile(f) => {
                 if let Ok(Some(len)) = try_get_len_of_block_device(f) {
                     if len < n {
                         // GNU compatibility:
@@ -260,9 +301,9 @@ impl Source {
                     Err(e) => Err(e),
                 }
             }
-            Self::File(f) => f.seek(io::SeekFrom::Current(n.try_into().unwrap())),
+            SourceVariant::File(f) => f.seek(io::SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
-            Self::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
+            SourceVariant::Fifo(f) => io::copy(&mut f.take(n), &mut io::sink()),
         }
     }
 
@@ -274,26 +315,25 @@ impl Source {
     /// then this function returns an error.
     #[cfg(target_os = "linux")]
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
-        match self {
-            Self::File(f) => {
-                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_raw_fd(), offset, len, advice)
-            }
-            _ => Err(Errno::ESPIPE), // "Illegal seek"
+        if let Some(f) = self.get_file() {
+            let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
+            posix_fadvise(f.as_raw_fd(), offset, len, advice)
+        } else {
+            Err(Errno::ESPIPE) // "Illegal seek"
         }
     }
 }
 
 impl Read for Source {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            #[cfg(not(unix))]
-            Self::Stdin(stdin) => stdin.read(buf),
-            Self::File(f) => f.read(buf),
-            #[cfg(unix)]
-            Self::StdinFile(f) => f.read(buf),
-            #[cfg(unix)]
-            Self::Fifo(f) => f.read(buf),
+        if let Some(f) = self.get_file_mut() {
+            f.read(buf)
+        } else {
+            match self.variant {
+                #[cfg(not(unix))]
+                SourceVariant::Stdin(stdin) => stdin.read(buf),
+                _ => panic!("not implemented!"),
+            }
         }
     }
 }
@@ -337,7 +377,7 @@ impl<'a> Input<'a> {
         #[cfg(unix)]
         let mut src = Source::stdin_as_file();
         #[cfg(unix)]
-        if let Source::StdinFile(f) = &src {
+        if let SourceVariant::StdinFile(f) = &src.variant {
             // GNU compatibility:
             // this will check whether stdin points to a folder or not
             if f.metadata()?.is_file() && settings.iflags.directory {
@@ -366,7 +406,9 @@ impl<'a> Input<'a> {
                 .map_err_context(|| format!("failed to open {}", filename.quote()))?
         };
 
-        let mut src = Source::File(src);
+        let mut src = Source {
+            variant: SourceVariant::File(src),
+        };
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
@@ -380,7 +422,9 @@ impl<'a> Input<'a> {
         opts.read(true);
         #[cfg(any(target_os = "linux", target_os = "android"))]
         opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
-        let mut src = Source::Fifo(opts.open(filename)?);
+        let mut src = Source {
+            variant: SourceVariant::Fifo(opts.open(filename)?),
+        };
         if settings.skip > 0 {
             src.skip(settings.skip)?;
         }
@@ -428,8 +472,35 @@ impl<'a> Read for Input<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut base_idx = 0;
         let target_len = buf.len();
+        log::debug!("Read: @{}, size: {}", buf.as_ptr() as usize, buf.len());
         loop {
-            match self.src.read(&mut buf[base_idx..]) {
+            if self.settings.iflags.direct {
+                let remaining = target_len - base_idx;
+                if (remaining < self.settings.ibs)
+                    || ((buf.as_ptr() as usize % self.settings.ibs) != 0)
+                {
+                    // when previous read was interrupted (e.g. due to OS signal)
+                    // OR when previous read was short (e.g. due to End of File)
+                    // we need to do a irregular read.
+                    // we can do that by disabling direct read.
+                    // Thats also what GNU is doing.
+                    let result = self.src.unset_direct();
+                    log::debug!(
+                        "{:?} - unset_direct, @{} - remaining: {remaining}",
+                        result,
+                        (buf.as_ptr() as usize % self.settings.ibs)
+                    );
+                    result?
+                }
+            }
+
+            let dest = &mut buf[base_idx..];
+            log::debug!(
+                "Read - iter: @{}, size: {}",
+                dest.as_ptr() as usize,
+                dest.len()
+            );
+            match self.src.read(dest) {
                 Ok(0) => return Ok(base_idx),
                 Ok(rlen) if self.settings.iflags.fullblock => {
                     base_idx += rlen;
@@ -568,6 +639,13 @@ enum Dest {
 }
 
 impl Dest {
+    fn unset_direct(&mut self) -> io::Result<()> {
+        if let Self::File(f, _d) = self {
+            unset_direct(f)?
+        }
+        Ok(())
+    }
+
     fn fsync(&mut self) -> io::Result<()> {
         match self {
             Self::Stdout(stdout) => stdout.flush(),
@@ -665,6 +743,16 @@ impl Dest {
             _ => Ok(0),
         }
     }
+}
+
+fn unset_direct(_f: &mut File) -> io::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let mut mode = OFlag::from_bits_retain(fcntl(_f.as_raw_fd(), FcntlArg::F_GETFL)?);
+        mode.remove(OFlag::O_DIRECT);
+        nix::fcntl::fcntl(_f.as_raw_fd(), FcntlArg::F_SETFL(mode))?;
+    }
+    Ok(())
 }
 
 /// Decide whether the given buffer is all zeros.
@@ -880,7 +968,14 @@ impl<'a> Output<'a> {
         let mut writes_partial = 0;
         let mut bytes_total = 0;
 
-        for chunk in buf.chunks(self.settings.obs) {
+        let chunk_size = self.settings.obs;
+        for chunk in buf.chunks(chunk_size) {
+            if (self.settings.oflags.direct) && (chunk.len() < chunk_size) {
+                // in case of direct io, only buffers with chunk_size are accepted.
+                // thus, for writing a (last) buffer with irregular length, we need to switch off the direct io.
+                self.dst.unset_direct()?;
+            }
+
             let wlen = self.write_block(chunk)?;
             if wlen < self.settings.obs {
                 writes_partial += 1;
@@ -1006,7 +1101,7 @@ fn flush_caches_full_length(i: &Input, o: &Output) -> std::io::Result<()> {
 ///
 /// If there is a problem reading from the input or writing to
 /// this output.
-fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
+fn dd_copy(mut i: Input, o: Output) -> UResult<()> {
     // The read and write statistics.
     //
     // These objects are counters, initialized to zero. After each
@@ -1118,11 +1213,18 @@ fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(&i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
-        let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
+        let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)
+            .map_err_context(|| format!("reading, ls: {loop_bsize}, rbt: {}", rstat.bytes_total))?;
         if rstat_update.is_empty() {
             break;
         }
-        let wstat_update = o.write_blocks(&buf)?;
+        let wstat_update = o.write_blocks(&buf).map_err_context(|| {
+            format!(
+                "writing, ls: {}/{loop_bsize}, wbt: {}",
+                buf.len(),
+                wstat.bytes_total
+            )
+        })?;
 
         // Discard the system file cache for the read portion of
         // the input file.
@@ -1182,7 +1284,7 @@ fn finalize<T>(
     prog_tx: &mpsc::Sender<ProgUpdate>,
     output_thread: thread::JoinHandle<T>,
     truncate: bool,
-) -> std::io::Result<()> {
+) -> UResult<()> {
     // Flush the output in case a partial write has been buffered but
     // not yet written.
     let wstat_update = output.flush()?;
@@ -1335,20 +1437,6 @@ fn below_count_limit(count: &Option<Num>, rstat: &ReadStat) -> bool {
     }
 }
 
-/// Canonicalized file name of `/dev/stdout`.
-///
-/// For example, if this process were invoked from the command line as
-/// `dd`, then this function returns the [`OsString`] form of
-/// `"/dev/stdout"`. However, if this process were invoked as `dd >
-/// outfile`, then this function returns the canonicalized path to
-/// `outfile`, something like `"/path/to/outfile"`.
-fn stdout_canonicalized() -> OsString {
-    match Path::new("/dev/stdout").canonicalize() {
-        Ok(p) => p.into_os_string(),
-        Err(_) => OsString::from("/dev/stdout"),
-    }
-}
-
 /// Decide whether stdout is being redirected to a seekable file.
 ///
 /// For example, if this process were invoked from the command line as
@@ -1366,14 +1454,11 @@ fn stdout_canonicalized() -> OsString {
 ///
 /// then this function would return false.
 fn is_stdout_redirected_to_seekable_file() -> bool {
-    let s = stdout_canonicalized();
-    let p = Path::new(&s);
-    match File::open(p) {
-        Ok(mut f) => {
-            f.stream_position().is_ok() && f.seek(SeekFrom::End(0)).is_ok() && f.rewind().is_ok()
-        }
-        Err(_) => false,
-    }
+    let Ok(fx) = OwnedFileDescriptorOrHandle::from(std::io::stdout()) else {
+        return false;
+    };
+    let mut f = fx.into_file();
+    f.is_seekable()
 }
 
 /// Try to get the len if it is a block device
@@ -1426,7 +1511,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
     };
-    dd_copy(i, o).map_err_context(|| "IO error".to_string())
+    dd_copy(i, o)
 }
 
 pub fn uu_app() -> Command {

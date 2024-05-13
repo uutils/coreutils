@@ -42,6 +42,7 @@ use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, Instant};
 use std::{env, hint, mem, thread};
 use tempfile::{Builder, TempDir};
+use uucore::{UUTILS_LOG_FILE_ENV_NAME, UUTILS_LOG_LEVEL_ENV_NAME};
 
 static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
@@ -746,6 +747,16 @@ impl CmdResult {
         );
         self
     }
+
+    /// Print process output information for debugging purposes.
+    pub fn print_outputs(&self) {
+        println!("command exit status: {:?}", self.exit_status);
+        println!(
+            "child-stdout:\n{}\nchild-stderr:\n{}",
+            String::from_utf8_lossy(self.stdout()),
+            String::from_utf8_lossy(self.stderr()),
+        );
+    }
 }
 
 pub fn log_info<T: AsRef<str>, U: AsRef<str>>(msg: T, par: U) {
@@ -914,6 +925,20 @@ impl AtPath {
             .unwrap();
         f.write_all(contents.as_bytes())
             .unwrap_or_else(|e| panic!("Couldn't write(truncate) {name}: {e}"));
+    }
+
+    /// Create a file with non-zero content of specified size.
+    ///
+    /// Benefit: OS independent alternative to `dd if=/dev/[random|zero] count=... of=...`
+    pub fn create_filled_file(&self, size_in_bytes: u64, filename: &str) {
+        let mut file = self.make_file(filename);
+        for _ in 0..size_in_bytes / 10 {
+            file.write_all(&[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]).unwrap();
+        }
+        let remaining =
+            &([0, 1, 2, 3, 4, 5, 6, 7, 8, 9][..usize::try_from(size_in_bytes % 10).unwrap()]);
+        file.write_all(&remaining).unwrap();
+        file.flush().unwrap();
     }
 
     pub fn rename(&self, source: &str, target: &str) {
@@ -1158,7 +1183,52 @@ pub struct TestScenario {
     pub bin_path: PathBuf,
     pub util_name: String,
     pub fixtures: AtPath,
+    log_guard: Option<LogPrintGuard>,
     tmpd: Rc<TempDir>,
+}
+
+struct LogPrintGuard {
+    log_file: PathBuf,
+    log_level: log::LevelFilter,
+}
+
+// In the context of test execution, writing to std::io::stderr() is
+// apparently handled differently than writing using eprint!-macro
+// To still be able to use the std::io::copy, this PrintSink is created.
+struct PrintSink {}
+
+impl std::io::Write for PrintSink {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        eprint!("{}", String::from_utf8_lossy(buf));
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Drop for LogPrintGuard {
+    fn drop(&mut self) {
+        let Ok(f) = File::open(&self.log_file) else {
+            eprintln!("Failed to open log-file: {}", self.log_file.display());
+            return;
+        };
+        eprintln!("=============== Dump collected logs: ===============");
+
+        std::io::stderr().flush().unwrap();
+        let mut reader = std::io::BufReader::new(f);
+        let result = std::io::copy(&mut reader, &mut PrintSink {}).unwrap_or_else(|e| {
+            eprintln!(
+                "Failed to read contents of log-file: {}, Err: {:?}",
+                self.log_file.display(),
+                e
+            );
+            0
+        });
+        std::io::stderr().flush().unwrap();
+        eprintln!("=============== Dumped {result} bytes. =============");
+    }
 }
 
 impl TestScenario {
@@ -1172,6 +1242,7 @@ impl TestScenario {
             util_name: util_name.as_ref().into(),
             fixtures: AtPath::new(tmpd.as_ref().path()),
             tmpd,
+            log_guard: None,
         };
         let mut fixture_path_builder = env::current_dir().unwrap();
         fixture_path_builder.push(TESTS_DIR);
@@ -1185,10 +1256,36 @@ impl TestScenario {
         ts
     }
 
+    fn activate_uu_logs_on_command(&self, cmd: &mut UCommand) {
+        if let Some(guard) = &self.log_guard {
+            cmd.env(UUTILS_LOG_FILE_ENV_NAME, &guard.log_file);
+            cmd.env(UUTILS_LOG_LEVEL_ENV_NAME, &guard.log_level.as_str());
+        }
+    }
+
+    /// Provides the name of the filesystem at path, using the own uutils df util
+    #[cfg(all(unix, feature = "df"))]
+    pub fn get_filesystem_type(&self, path: &Path) -> String {
+        use regex::Regex;
+
+        let mut cmd = self.ccmd("df");
+        cmd.args(&["-PT"]).arg(path);
+        let output = cmd.succeeds();
+        let stdout_str = String::from_utf8_lossy(output.stdout());
+        let regex_str = r#"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+"#;
+        let regex = Regex::new(regex_str).unwrap();
+        let m = regex.captures(&stdout_str).unwrap();
+        let fstype = m["fstype"].to_owned();
+        println!("detected fstype: {}", fstype);
+        fstype
+    }
+
     /// Returns builder for invoking the target uutils binary. Paths given are
     /// treated relative to the environment's unique temporary test directory.
     pub fn ucmd(&self) -> UCommand {
-        UCommand::from_test_scenario(self)
+        let mut cmd = UCommand::from_test_scenario(self);
+        self.activate_uu_logs_on_command(&mut cmd);
+        cmd
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
@@ -1197,13 +1294,28 @@ impl TestScenario {
         let mut command = UCommand::new();
         command.bin_path(bin_path);
         command.temp_dir(self.tmpd.clone());
+        self.activate_uu_logs_on_command(&mut command);
         command
     }
 
     /// Returns builder for invoking any uutils command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn ccmd<S: AsRef<str>>(&self, util_name: S) -> UCommand {
-        UCommand::with_util(util_name, self.tmpd.clone())
+        let mut cmd = UCommand::with_util(util_name, self.tmpd.clone());
+        self.activate_uu_logs_on_command(&mut cmd);
+        cmd
+    }
+
+    pub fn enable_uu_logs(mut self, log_level: log::LevelFilter) -> Self {
+        self.log_guard = Some(LogPrintGuard {
+            log_file: self.fixtures.plus("uu_logs.txt"),
+            log_level: log_level,
+        });
+        self
+    }
+
+    pub fn enable_uu_logs_debug(self) -> Self {
+        self.enable_uu_logs(log::LevelFilter::Debug)
     }
 }
 
@@ -1249,6 +1361,7 @@ pub struct UCommand {
     #[cfg(unix)]
     limits: Vec<(rlimit::Resource, u64, u64)>,
     stderr_to_stdout: bool,
+    print_outputs: bool,
     timeout: Option<Duration>,
     #[cfg(unix)]
     terminal_simulation: Option<TerminalSimulation>,
@@ -1301,6 +1414,11 @@ impl UCommand {
         T: Into<PathBuf>,
     {
         self.bin_path = Some(bin_path.into());
+        self
+    }
+
+    pub fn request_print_outputs(&mut self) -> &mut Self {
+        self.print_outputs = true;
         self
     }
 
@@ -1724,6 +1842,8 @@ impl UCommand {
 
         let mut child = UChild::from(self, child, captured_stdout, captured_stderr, stdin_pty);
 
+        child.print_outputs = self.print_outputs;
+
         if let Some(input) = self.bytes_into_stdin.take() {
             child.pipe_in(input);
         }
@@ -2010,6 +2130,7 @@ pub struct UChild {
     stdin_pty: Option<File>,
     ignore_stdin_write_error: bool,
     stderr_to_stdout: bool,
+    print_outputs: bool,
     join_handle: Option<JoinHandle<io::Result<()>>>,
     timeout: Option<Duration>,
     tmpd: Option<Rc<TempDir>>, // drop last
@@ -2031,6 +2152,7 @@ impl UChild {
             captured_stderr,
             stdin_pty,
             ignore_stdin_write_error: ucommand.ignore_stdin_write_error,
+            print_outputs: false,
             stderr_to_stdout: ucommand.stderr_to_stdout,
             join_handle: None,
             timeout: ucommand.timeout,
@@ -2145,17 +2267,25 @@ impl UChild {
             self.tmpd.clone(),
         );
 
+        let print_outputs = self.print_outputs;
+
         #[allow(deprecated)]
         let output = self.wait_with_output()?;
 
-        Ok(CmdResult {
+        let result = CmdResult {
             bin_path,
             util_name,
             tmpd,
             exit_status: Some(output.status),
             stdout: output.stdout,
             stderr: output.stderr,
-        })
+        };
+
+        if print_outputs {
+            result.print_outputs();
+        }
+
+        Ok(result)
     }
 
     /// Wait for the child process to terminate and return an instance of [`Output`].

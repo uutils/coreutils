@@ -661,7 +661,7 @@ fn test_install_and_strip_with_program() {
         .ucmd()
         .arg("-s")
         .arg("--strip-program")
-        .arg("/usr/bin/strip")
+        .arg("strip")
         .arg(strip_source_file())
         .arg(STRIP_TARGET_FILE)
         .succeeds()
