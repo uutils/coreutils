@@ -447,7 +447,7 @@ struct Pager<'a> {
     upper_mark: usize,
     // The number of rows that fit on the screen
     content_rows: u16,
-    lines: Vec<String>,
+    lines: Vec<&'a str>,
     next_file: Option<&'a str>,
     line_count: usize,
     silent: bool,
@@ -456,7 +456,7 @@ struct Pager<'a> {
 }
 
 impl<'a> Pager<'a> {
-    fn new(rows: u16, lines: Vec<String>, next_file: Option<&'a str>, options: &Options) -> Self {
+    fn new(rows: u16, lines: Vec<&'a str>, next_file: Option<&'a str>, options: &Options) -> Self {
         let line_count = lines.len();
         Self {
             upper_mark: options.from_line,
@@ -608,7 +608,7 @@ impl<'a> Pager<'a> {
     }
 }
 
-fn search_pattern_in_file(lines: &[String], pattern: &Option<String>) -> Option<usize> {
+fn search_pattern_in_file(lines: &[&str], pattern: &Option<String>) -> Option<usize> {
     let pattern = pattern.clone().unwrap_or_default();
     if lines.is_empty() || pattern.is_empty() {
         return None;
@@ -630,8 +630,10 @@ fn paging_add_back_message(options: &Options, stdout: &mut std::io::Stdout) -> U
 }
 
 // Break the lines on the cols of the terminal
-fn break_buff(buff: &str, cols: usize) -> Vec<String> {
-    let mut lines = Vec::with_capacity(buff.lines().count());
+fn break_buff(buff: &str, cols: usize) -> Vec<&str> {
+    // We _could_ do a precise with_capacity here, but that would require scanning the
+    // whole buffer. Just guess a value instead.
+    let mut lines = Vec::with_capacity(2048);
 
     for l in buff.lines() {
         lines.append(&mut break_line(l, cols));
@@ -639,11 +641,11 @@ fn break_buff(buff: &str, cols: usize) -> Vec<String> {
     lines
 }
 
-fn break_line(line: &str, cols: usize) -> Vec<String> {
+fn break_line(line: &str, cols: usize) -> Vec<&str> {
     let width = UnicodeWidthStr::width(line);
     let mut lines = Vec::new();
     if width < cols {
-        lines.push(line.to_string());
+        lines.push(line);
         return lines;
     }
 
@@ -655,14 +657,14 @@ fn break_line(line: &str, cols: usize) -> Vec<String> {
         total_width += width;
 
         if total_width > cols {
-            lines.push(line[last_index..index].to_string());
+            lines.push(&line[last_index..index]);
             last_index = index;
             total_width = width;
         }
     }
 
     if last_index != line.len() {
-        lines.push(line[last_index..].to_string());
+        lines.push(&line[last_index..]);
     }
     lines
 }
@@ -727,29 +729,16 @@ mod tests {
 
     #[test]
     fn test_search_pattern_empty_pattern() {
-        let lines = vec![String::from("line1"), String::from("line2")];
+        let lines = vec!["line1", "line2"];
         let pattern = None;
         assert_eq!(None, search_pattern_in_file(&lines, &pattern));
     }
 
     #[test]
     fn test_search_pattern_found_pattern() {
-        let lines = vec![
-            String::from("line1"),
-            String::from("line2"),
-            String::from("pattern"),
-        ];
-        let lines2 = vec![
-            String::from("line1"),
-            String::from("line2"),
-            String::from("pattern"),
-            String::from("pattern2"),
-        ];
-        let lines3 = vec![
-            String::from("line1"),
-            String::from("line2"),
-            String::from("other_pattern"),
-        ];
+        let lines = vec!["line1", "line2", "pattern"];
+        let lines2 = vec!["line1", "line2", "pattern", "pattern2"];
+        let lines3 = vec!["line1", "line2", "other_pattern"];
         let pattern = Some(String::from("pattern"));
         assert_eq!(2, search_pattern_in_file(&lines, &pattern).unwrap());
         assert_eq!(2, search_pattern_in_file(&lines2, &pattern).unwrap());
@@ -758,11 +747,7 @@ mod tests {
 
     #[test]
     fn test_search_pattern_not_found_pattern() {
-        let lines = vec![
-            String::from("line1"),
-            String::from("line2"),
-            String::from("something"),
-        ];
+        let lines = vec!["line1", "line2", "something"];
         let pattern = Some(String::from("pattern"));
         assert_eq!(None, search_pattern_in_file(&lines, &pattern));
     }
