@@ -2951,6 +2951,41 @@ fn test_ls_quoting_and_color() {
 }
 
 #[test]
+fn test_ls_align_unquoted() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("elf two");
+    at.touch("foobar");
+    at.touch("CAPS");
+    at.touch("'quoted'");
+
+    // In TTY
+    scene
+        .ucmd()
+        .arg("--color")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("\"'quoted'\"   CAPS  'elf two'   foobar\r\n");
+    //                              ^      ^          ^
+    //                              space  no-space   space
+
+    // The same should happen with format columns/across
+    // and shell quoting style, except for the `\r` at the end.
+    for format in &["--format=column", "--format=across"] {
+        scene
+            .ucmd()
+            .arg("--color")
+            .arg(format)
+            .arg("--quoting-style=shell")
+            .succeeds()
+            .stdout_only("\"'quoted'\"   CAPS  'elf two'   foobar\n");
+        //                              ^      ^          ^
+        //                              space  no-space   space
+    }
+}
+
+#[test]
 fn test_ls_ignore_hide() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
