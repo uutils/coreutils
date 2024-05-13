@@ -2961,6 +2961,7 @@ fn test_ls_align_unquoted() {
     at.touch("'quoted'");
 
     // In TTY
+    #[cfg(unix)]
     scene
         .ucmd()
         .arg("--color")

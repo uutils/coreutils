@@ -2616,12 +2616,24 @@ fn display_grid(
         }
     } else {
         let names = if quoted {
+            // In case some names are quoted, GNU adds a space before each
+            // entry that does not start with a quote to make it prettier
+            // on multiline.
+            //
+            // Example:
+            // ```
+            // $ ls
+            // 'a\nb'   bar
+            //  foo     baz
+            // ^       ^
+            // These spaces is added
+            // ```
             names
                 .map(|n| {
-                    if n.starts_with('\'') {
-                        format!(" {n}")
-                    } else {
+                    if n.starts_with('\'') || n.starts_with('"') {
                         n
+                    } else {
+                        format!(" {n}")
                     }
                 })
                 .collect()
