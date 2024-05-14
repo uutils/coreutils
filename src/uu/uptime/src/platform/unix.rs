@@ -7,6 +7,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::os::unix::fs::FileTypeExt;
+use uucore::error::set_exit_code;
 use uucore::error::UError;
 use uucore::show_error;
 
@@ -24,18 +25,21 @@ quick_error! {
 #[derive(Debug)]
  pub enum UptimeError {
     // io::Error wrapper
-    IoErr(err: io::Error) {display("couldn't get boot time:\t{}",err)}
-    TargetIsDir(err: String){
-            display("couldn't get boot time:\t{}", err)
+    IoErr(err: io::Error) {
+        display("couldn't get boot time: {}",err)
+
+    }
+   TargetIsDir{
+            display("couldn't get boot time: Is a directory")
         }
-    TargetIsFifo(err: String){
-            display("couldn't get boot time:\t{}", err)
+    TargetIsFifo{
+            display("couldn't get boot time: Illegal seek")
         }
 
     ExtraOperandError(err: String){
             display("extra operand '{}'",err)
         }
-}
+   }
 }
 impl UError for UptimeError {
     fn code(&self) -> i32 {
@@ -57,8 +61,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if let Some(path) = arg_iter.next() {
         // Uptime doesn't attemp to calculate boot time if there is extra arguments.
         // Its a fatal error
-        let err = UptimeError::ExtraOperandError(path.to_owned().into_string().unwrap());
-        show_error!("{}", err)
+        show_error!(
+            "{}",
+            UptimeError::ExtraOperandError(path.to_owned().into_string().unwrap())
+        );
     }
     uptime_with_file(file_path)
 }
@@ -72,22 +78,19 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     let md_res = fs::metadata(file_path);
     if let Ok(md) = md_res {
         if md.is_dir() {
-            show_error!(
-                "{}",
-                UptimeError::TargetIsDir(String::from("Is a directory"))
-            );
+            show_error!("{}", UptimeError::TargetIsDir);
             non_fatal_error = true;
+            set_exit_code(1);
         }
         if md.file_type().is_fifo() {
-            show_error!(
-                "{}",
-                UptimeError::TargetIsFifo(String::from("Illegal seek"))
-            );
+            show_error!("{}", UptimeError::TargetIsFifo);
             non_fatal_error = true;
+            set_exit_code(1);
         }
-    } else {
+    } else if let Err(e) = md_res {
         non_fatal_error = true;
-        show_error!("{}", UptimeError::IoErr(md_res.err().unwrap()));
+        set_exit_code(1);
+        show_error!("{}", UptimeError::IoErr(e));
     }
 
     let (boot_time, user_count) = process_utmpx_from_file(file_path);
@@ -98,6 +101,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     } else {
         if !non_fatal_error {
             show_error!("couldn't get boot time");
+            set_exit_code(1);
         }
         print!("up ???? days ??:??,");
     }
