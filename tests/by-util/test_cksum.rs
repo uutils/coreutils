@@ -81,6 +81,21 @@ fn test_nonexisting_file() {
 }
 
 #[test]
+fn test_nonexisting_file_out() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        "f",
+        "MD5 (nonexistent) = e5773576fc75ff0f8eba14f61587ae28\n",
+    );
+
+    ucmd.arg("-c")
+        .arg("f")
+        .fails()
+        .stdout_contains("nonexistent: FAILED open or read")
+        .stderr_contains("cksum: nonexistent: No such file or directory");
+}
+
+#[test]
 fn test_one_nonexisting_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -905,7 +920,7 @@ fn test_cksum_check_failed() {
         .arg("CHECKSUM")
         .fails();
 
-    assert!(result.stderr_str().contains("Failed to open file: input"));
+    assert!(result.stderr_str().contains("input: No such file or directory"));
     assert!(result
         .stderr_str()
         .contains("2 lines are improperly formatted\n"));
@@ -917,7 +932,7 @@ fn test_cksum_check_failed() {
     // without strict
     let result = scene.ucmd().arg("--check").arg("CHECKSUM").fails();
 
-    assert!(result.stderr_str().contains("Failed to open file: input"));
+    assert!(result.stderr_str().contains("input: No such file or directory"));
     assert!(result
         .stderr_str()
         .contains("2 lines are improperly formatted\n"));
@@ -945,7 +960,7 @@ fn test_cksum_check_failed() {
         .fails();
     println!("result.stderr_str() {}", result.stderr_str());
     println!("result.stdout_str() {}", result.stdout_str());
-    assert!(result.stderr_str().contains("Failed to open file: input2"));
+    assert!(result.stderr_str().contains("input2: No such file or directory"));
     assert!(result
         .stderr_str()
         .contains("4 lines are improperly formatted\n"));

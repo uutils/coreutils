@@ -510,10 +510,9 @@ where
                     match File::open(filename_to_check) {
                         Ok(f) => Box::new(f),
                         Err(err) => {
-                            show!(err.map_err_context(|| format!(
-                                "Failed to open file: {}",
-                                filename_to_check
-                            )));
+                            // yes, we have both stderr and stdout here
+                            show!(err.map_err_context(|| filename_to_check.to_string()));
+                            println!("{}: FAILED open or read", filename_to_check);
                             failed_open_file += 1;
                             // we could not open the file but we want to continue
                             continue;
