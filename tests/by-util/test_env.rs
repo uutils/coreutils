@@ -735,6 +735,89 @@ fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
         .stderr_is("");
 }
 
+#[test]
+#[cfg(unix)]
+fn test_env_arg_ignore_signal_invalid_signals() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["--ignore-signal=banana"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: 'banana': invalid signal");
+    ts.ucmd()
+        .args(&["--ignore-signal=SIGbanana"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: 'SIGbanana': invalid signal");
+    ts.ucmd()
+        .args(&["--ignore-signal=exit"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: 'exit': invalid signal");
+    ts.ucmd()
+        .args(&["--ignore-signal=SIGexit"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: 'SIGexit': invalid signal");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_ignore_signal_special_signals() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["--ignore-signal=stop", "echo", "hello"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: failed to set signal action for signal 19: Invalid argument");
+    ts.ucmd()
+        .args(&["--ignore-signal=kill", "echo", "hello"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: failed to set signal action for signal 9: Invalid argument");
+    ts.ucmd()
+        .args(&["--ignore-signal=SToP", "echo", "hello"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: failed to set signal action for signal 19: Invalid argument");
+    ts.ucmd()
+        .args(&["--ignore-signal=SIGKILL", "echo", "hello"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: failed to set signal action for signal 9: Invalid argument");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_ignore_signal_valid_signals() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["--ignore-signal=int", "echo", "hello"])
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("hello");
+
+    ts.ucmd()
+        .args(&[
+            "--ignore-signal=sigint,int,usr1,sigusr1,SIGUSR1,USR1,USR2,usr2",
+            "echo",
+            "hello",
+        ])
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("hello");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_ignore_signal_empty() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["--ignore-signal=", "echo", "hello"])
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("hello");
+}
 #[cfg(test)]
 mod tests_split_iterator {
 
