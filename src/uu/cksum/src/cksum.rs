@@ -358,7 +358,7 @@ fn had_reset(args: &[String]) -> bool {
 }
 
 /// Calculates the length of the digest for the given algorithm.
-fn calculate_length(algo_name: &str, length: usize) -> UResult<Option<usize>> {
+fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
     match length {
         0 => Ok(None),
         n if n % 8 != 0 => {
@@ -374,21 +374,13 @@ fn calculate_length(algo_name: &str, length: usize) -> UResult<Option<usize>> {
             .into())
         }
         n => {
-            if algo_name == ALGORITHM_OPTIONS_BLAKE2B {
-                // Divide by 8, as our blake2b implementation expects bytes instead of bits.
-                if n == 512 {
-                    // When length is 512, it is blake2b's default.
-                    // So, don't show it
-                    Ok(None)
-                } else {
-                    Ok(Some(n / 8))
-                }
+            // Divide by 8, as our blake2b implementation expects bytes instead of bits.
+            if n == 512 {
+                // When length is 512, it is blake2b's default.
+                // So, don't show it
+                Ok(None)
             } else {
-                Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "--length is only supported with --algorithm=blake2b",
-                )
-                .into())
+                Ok(Some(n / 8))
             }
         }
     }
@@ -623,7 +615,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let input_length = matches.get_one::<usize>(options::LENGTH);
 
     let length = match input_length {
-        Some(length) => calculate_length(algo_name, *length)?,
+        Some(length) => {
+            if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "--length is only supported with --algorithm=blake2b",
+                )
+                .into());
+            } else {
+                calculate_blake2b_length(*length)?
+            }
+        }
         None => None,
     };
 
@@ -766,7 +768,7 @@ pub fn uu_app() -> Command {
 #[cfg(test)]
 mod tests {
     use super::had_reset;
-    use crate::calculate_length;
+    use crate::calculate_blake2b_length;
     use crate::prompt_asterisk;
 
     #[test]
@@ -836,17 +838,13 @@ mod tests {
 
     #[test]
     fn test_calculate_length() {
-        assert_eq!(
-            calculate_length(crate::ALGORITHM_OPTIONS_BLAKE2B, 256).unwrap(),
-            Some(32)
-        );
+        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
+        assert_eq!(calculate_blake2b_length(512).unwrap(), None);
+        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
+        calculate_blake2b_length(255).unwrap_err();
 
-        calculate_length(crate::ALGORITHM_OPTIONS_BLAKE2B, 255).unwrap_err();
+        calculate_blake2b_length(33).unwrap_err();
 
-        calculate_length(crate::ALGORITHM_OPTIONS_SHA256, 33).unwrap_err();
-
-        calculate_length(crate::ALGORITHM_OPTIONS_BLAKE2B, 513).unwrap_err();
-
-        calculate_length(crate::ALGORITHM_OPTIONS_SHA256, 256).unwrap_err();
+        calculate_blake2b_length(513).unwrap_err();
     }
 }

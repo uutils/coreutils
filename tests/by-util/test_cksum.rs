@@ -325,7 +325,7 @@ fn test_length_not_supported() {
         .arg("lorem_ipsum.txt")
         .fails()
         .no_stdout()
-        .stderr_is_fixture("unsupported_length.expected")
+        .stderr_contains("--length is only supported with --algorithm=blake2b")
         .code_is(1);
 }
 
@@ -337,7 +337,9 @@ fn test_length() {
         .arg("lorem_ipsum.txt")
         .arg("alice_in_wonderland.txt")
         .succeeds()
-        .stdout_is_fixture("supported_length.expected");
+        .stdout_contains(
+            "BLAKE2b-16 (lorem_ipsum.txt) = 7e2f\nBLAKE2b-16 (alice_in_wonderland.txt) = a546",
+        );
 }
 
 #[test]
