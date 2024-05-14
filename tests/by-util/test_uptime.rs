@@ -115,6 +115,9 @@ fn test_uptime_with_file_containing_multiple_valid_utmpx_record_with_partial_rec
         .unwrap();
 
     let re_users = Regex::new(r"\d user[s]?").unwrap();
+    // Regex matches for "up   00::00" ,"up 12 days  00::00", the time can be any valid time and
+    // the days can be more than 1 digit or not there. This will match even if the amount of whitespace is
+    // wrong between the days and the time.
     let re_uptime = Regex::new(r"up [(\d){1,} days]*  \d{1,2}:\d\d").unwrap();
     ts.ucmd()
         .arg(at.plus("log_copy"))
