@@ -920,7 +920,9 @@ fn test_cksum_check_failed() {
         .arg("CHECKSUM")
         .fails();
 
-    assert!(result.stderr_str().contains("input: No such file or directory"));
+    assert!(result
+        .stderr_str()
+        .contains("input: No such file or directory"));
     assert!(result
         .stderr_str()
         .contains("2 lines are improperly formatted\n"));
@@ -932,7 +934,9 @@ fn test_cksum_check_failed() {
     // without strict
     let result = scene.ucmd().arg("--check").arg("CHECKSUM").fails();
 
-    assert!(result.stderr_str().contains("input: No such file or directory"));
+    assert!(result
+        .stderr_str()
+        .contains("input: No such file or directory"));
     assert!(result
         .stderr_str()
         .contains("2 lines are improperly formatted\n"));
@@ -960,7 +964,9 @@ fn test_cksum_check_failed() {
         .fails();
     println!("result.stderr_str() {}", result.stderr_str());
     println!("result.stdout_str() {}", result.stdout_str());
-    assert!(result.stderr_str().contains("input2: No such file or directory"));
+    assert!(result
+        .stderr_str()
+        .contains("input2: No such file or directory"));
     assert!(result
         .stderr_str()
         .contains("4 lines are improperly formatted\n"));
@@ -1063,4 +1069,51 @@ fn test_cksum_garbage() {
         .arg("check-file")
         .fails()
         .stderr_contains("check-file: no properly formatted checksum lines found");
+}
+
+#[ignore = "Should fail on bits"]
+#[test]
+fn test_md5_bits() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        "f",
+        "MD5-65536 (README.md) = e5773576fc75ff0f8eba14f61587ae28\n",
+    );
+
+    ucmd.arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
+}
+
+#[ignore = "Should fail on bits"]
+#[test]
+fn test_blake2b_bits() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        "f",
+        "BLAKE2b-257 (README.md) = f9a984b70cf9a7549920864860fd1131c9fb6c0552def0b6dcce1d87b4ec4c5d\n"
+    );
+
+    ucmd.arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
+}
+
+#[ignore = "Different output"]
+#[test]
+fn test_blake2d_tested_with_sha1() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(
+        "f",
+        "BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n"
+    );
+
+    ucmd.arg("-a")
+        .arg("sha1")
+        .arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
 }
