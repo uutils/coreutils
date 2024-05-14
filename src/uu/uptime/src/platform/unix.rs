@@ -1,3 +1,10 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers
+
 use crate::options;
 use crate::uu_app;
 use chrono::{Local, TimeZone, Utc};
@@ -53,13 +60,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // Switches to default uptime behaviour if there is no argument
     if argument.is_none() {
-        return default_uptime(matches);
+        return default_uptime(&matches);
     }
     let mut arg_iter = argument.unwrap();
 
     let file_path = arg_iter.next().unwrap();
     if let Some(path) = arg_iter.next() {
-        // Uptime doesn't attemp to calculate boot time if there is extra arguments.
+        // Uptime doesn't attempt to calculate boot time if there is extra arguments.
         // Its a fatal error
         show_error!(
             "{}",
@@ -113,7 +120,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 }
 
 /// Default uptime behaviour i.e. when no file argument is given.
-fn default_uptime(matches: ArgMatches) -> UResult<()> {
+fn default_uptime(matches: &ArgMatches) -> UResult<()> {
     let (boot_time, user_count) = process_utmpx();
     let uptime = get_uptime(boot_time);
     if matches.get_flag(options::SINCE) {
@@ -215,8 +222,8 @@ fn process_utmpx() -> (Option<time_t>, usize) {
 fn print_nusers(nusers: usize) {
     match nusers.cmp(&1) {
         std::cmp::Ordering::Less => print!("  0 users,  "),
-        std::cmp::Ordering::Equal => print!(" 1 user,  "),
-        std::cmp::Ordering::Greater => print!(" {nusers} users,  "),
+        std::cmp::Ordering::Equal => print!("1 user,  "),
+        std::cmp::Ordering::Greater => print!("{nusers} users,  "),
     };
 }
 
@@ -231,7 +238,7 @@ fn get_uptime_from_boot_time(boot_time: time_t) -> i64 {
     #[cfg(target_pointer_width = "64")]
     let boottime: i64 = boot_time;
     #[cfg(not(target_pointer_width = "64"))]
-    let boottime: i64 = t.into();
+    let boottime: i64 = boot_time.into();
     now - boottime
 }
 
@@ -273,8 +280,8 @@ fn print_uptime(upsecs: i64) {
     match updays.cmp(&1) {
         std::cmp::Ordering::Equal => print!("up {updays:1} day, {uphours:2}:{upmins:02},  "),
         std::cmp::Ordering::Greater => {
-            print!("up  {updays:1} days, {uphours:2}:{upmins:02},  ");
+            print!("up {updays:1} days {uphours:2}:{upmins:02},  ");
         }
-        _ => print!("up  {uphours:2}:{upmins:02}, "),
+        _ => print!("up  {uphours:2}:{upmins:02},  "),
     };
 }
