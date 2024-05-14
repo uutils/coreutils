@@ -376,7 +376,13 @@ fn calculate_length(algo_name: &str, length: usize) -> UResult<Option<usize>> {
         n => {
             if algo_name == ALGORITHM_OPTIONS_BLAKE2B {
                 // Divide by 8, as our blake2b implementation expects bytes instead of bits.
-                Ok(Some(n / 8))
+                if n == 512 {
+                    // When length is 512, it is blake2b's default.
+                    // So, don't show it
+                    Ok(None)
+                } else {
+                    Ok(Some(n / 8))
+                }
             } else {
                 Err(io::Error::new(
                     io::ErrorKind::InvalidInput,

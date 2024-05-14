@@ -491,9 +491,6 @@ fn test_check_error_incorrect_format() {
 #[test]
 fn test_dev_null() {
     let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    at.touch("f");
 
     scene
         .ucmd()
@@ -503,6 +500,33 @@ fn test_dev_null() {
         .arg("/dev/null")
         .succeeds()
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e ");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_blake2b_512() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("blake2b")
+        .arg("-l512")
+        .arg("f")
+        .succeeds()
+        .stdout_contains("BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
+
+    // test also the read
+    at.write("checksum", "BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("checksum")
+        .succeeds()
+        .stdout_contains("f: OK");
 }
 
 #[test]
