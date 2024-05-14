@@ -533,6 +533,9 @@ where
                     failed_cksum += 1;
                 }
             } else {
+                if line.is_empty() {
+                    continue;
+                }
                 bad_format += 1;
             }
         }
