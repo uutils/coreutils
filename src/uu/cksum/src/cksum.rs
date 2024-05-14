@@ -15,6 +15,7 @@ use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
 use uucore::checksum::cksum_output;
+use uucore::display::Quotable;
 use uucore::error::set_exit_code;
 use uucore::{
     encoding,
@@ -419,8 +420,9 @@ where
 {
     // Regexp to handle the two input formats:
     // 1. <algo>[-<bits>] (<filename>) = <checksum>
+    //    algo must be uppercase or b (for blake2b)
     // 2. <checksum> [* ]<filename>
-    let regex_pattern = r"^(?P<algo>\w+)(-(?P<bits>\d+))?\s?\((?P<filename1>.*)\) = (?P<checksum1>[a-fA-F0-9]+)$|^(?P<checksum2>[a-fA-F0-9]+)\s[* ](?P<filename2>.*)";
+    let regex_pattern = r"^(?P<algo>[A-Z0-9b]+)(-(?P<bits>\d+))?\s?\((?P<filename1>.*)\) = (?P<checksum1>[a-fA-F0-9]+)$|^(?P<checksum2>[a-fA-F0-9]+)\s[* ](?P<filename2>.*)";
     let re = Regex::new(regex_pattern).unwrap();
 
     // if cksum has several input files, it will print the result for each file
@@ -474,7 +476,7 @@ where
                     .as_str();
 
                 // If the algo_name is provided, we use it, otherwise we try to detect it
-                let algo_details = if algo_based_format {
+                let (algo_name, length) = if algo_based_format {
                     // When the algo-based format is matched, extract details from regex captures
                     let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
                     let bits = caps
@@ -488,18 +490,18 @@ where
                     // Default case if no algorithm is specified and non-algo based format is matched
                     (String::new(), None)
                 };
-                if algo_based_format
-                    && algo_name_input.map_or(false, |input| algo_details.0 != input)
-                {
+
+                if algo_based_format && algo_name_input.map_or(false, |input| algo_name != input) {
                     bad_format += 1;
                     continue;
                 }
-                if algo_details.0.is_empty() {
+
+                if algo_name.is_empty() {
                     // we haven't been able to detect the algo name. No point to continue
                     properly_formatted = false;
                     continue;
                 }
-                let (_, mut algo, bits) = detect_algo(&algo_details.0, algo_details.1);
+                let (_, mut algo, bits) = detect_algo(&algo_name, length);
 
                 // manage the input file
                 let file_to_check: Box<dyn Read> = if filename_to_check == "-" {
@@ -538,9 +540,15 @@ where
         // not a single line correctly formatted found
         // return an error
         if !properly_formatted {
+            let filename = filename_input.to_string_lossy();
             uucore::show_error!(
                 "{}: no properly formatted checksum lines found",
-                filename_input.to_string_lossy()
+                if input_is_stdin {
+                    "standard input"
+                } else {
+                    &filename
+                }
+                .maybe_quote()
             );
             set_exit_code(1);
         }
@@ -586,6 +594,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .into());
     }
 
+    let input_length = matches.get_one::<usize>(options::LENGTH);
+
+    let length = match input_length {
+        Some(length) => {
+            if algo_name == ALGORITHM_OPTIONS_BLAKE2B {
+                calculate_blake2b_length(*length)?
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "--length is only supported with --algorithm=blake2b",
+                )
+                .into());
+            }
+        }
+        None => None,
+    };
+
     if check {
         let text_flag: bool = matches.get_flag(options::TEXT);
         let binary_flag: bool = matches.get_flag(options::BINARY);
@@ -611,23 +636,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             None => perform_checksum_validation(iter::once(OsStr::new("-")), strict, algo_option),
         };
     }
-
-    let input_length = matches.get_one::<usize>(options::LENGTH);
-
-    let length = match input_length {
-        Some(length) => {
-            if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "--length is only supported with --algorithm=blake2b",
-                )
-                .into());
-            } else {
-                calculate_blake2b_length(*length)?
-            }
-        }
-        None => None,
-    };
 
     let (tag, asterisk) = handle_tag_text_binary_flags(&matches)?;
 

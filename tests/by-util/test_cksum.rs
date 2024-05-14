@@ -316,6 +316,16 @@ fn test_length_with_wrong_algorithm() {
         .no_stdout()
         .stderr_contains("cksum: --length is only supported with --algorithm=blake2b")
         .code_is(1);
+
+    new_ucmd!()
+        .arg("--length=16")
+        .arg("--algorithm=md5")
+        .arg("-c")
+        .arg("foo.sums")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: --length is only supported with --algorithm=blake2b")
+        .code_is(1);
 }
 
 #[test]
@@ -726,21 +736,35 @@ fn test_check_algo_err() {
 }
 
 #[test]
+fn test_check_pipe() {
+    let scene = TestScenario::new(util_name!());
+
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("-")
+        .pipe_in("f")
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: 'standard input': no properly formatted checksum lines found")
+        .code_is(1);
+}
+
+#[test]
 fn test_cksum_check() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let commands = [
-        vec!["-a", "sha384"],
-        vec!["-a", "blake2b"],
-        vec!["-a", "blake2b", "-l", "384"],
-        vec!["-a", "sm3"],
-    ];
+
     at.touch("f");
-    at.touch("CHECKSUM");
-    for command in &commands {
-        let result = scene.ucmd().args(command).arg("f").succeeds();
-        at.append("CHECKSUM", result.stdout_str());
-    }
+    at.write("CHECKSUM", "\
+    SHA384 (f) = 38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b\n\
+    BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n\
+    BLAKE2b-384 (f) = b32811423377f52d7862286ee1a72ee540524380fda1724a6f25d7978c6fd3244a6caf0498812673c5e05ef583825100\n\
+    SM3 (f) = 1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b\n");
     scene
         .ucmd()
         .arg("--check")
@@ -773,6 +797,19 @@ fn test_cksum_check() {
         .fails()
         .stdout_contains("f: OK\nf: OK\nf: OK\nf: OK\n")
         .stderr_contains("line is improperly formatted");
+}
+
+#[test]
+fn test_cksum_check_case() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write(
+        "CHECKSUM",
+        "Sha1 (f) = da39a3ee5e6b4b0d3255bfef95601890afd80709\n",
+    );
+    scene.ucmd().arg("--check").arg("CHECKSUM").fails();
 }
 
 #[test]
