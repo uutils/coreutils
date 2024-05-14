@@ -402,6 +402,14 @@ fn test_invalid_date_string() {
 }
 
 #[test]
+fn test_date_set_check_valid_format() {
+    new_ucmd!()
+        .arg("-d")
+        .arg("2000-1-4")
+        .succeeds();
+}
+
+#[test]
 fn test_date_overflow() {
     new_ucmd!()
         .arg("-d68888888888888sms")

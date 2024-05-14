@@ -6,7 +6,7 @@
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 use chrono::format::{Item, StrftimeItems};
-use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
+use chrono::{DateTime, FixedOffset, Local, NaiveDate, Offset, TimeDelta, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
@@ -222,6 +222,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Iterate over all dates - whether it's a single date or a file.
         let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
             DateSource::Custom(ref input) => {
+
+                let input = NaiveDate::parse_from_str(input, "%Y-%m-%d")
+                    .expect(format!("invalid date {}", input).as_str())
+                    .format("%Y-%m-%d")
+                    .to_string();
+
                 let date = parse_date(input.clone());
                 let iter = std::iter::once(date);
                 Box::new(iter)
