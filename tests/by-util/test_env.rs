@@ -765,26 +765,40 @@ fn test_env_arg_ignore_signal_invalid_signals() {
 #[cfg(unix)]
 fn test_env_arg_ignore_signal_special_signals() {
     let ts = TestScenario::new(util_name!());
+    let signal_stop = nix::sys::signal::SIGSTOP;
+    let signal_kill = nix::sys::signal::SIGKILL;
     ts.ucmd()
         .args(&["--ignore-signal=stop", "echo", "hello"])
         .fails()
         .code_is(125)
-        .stderr_contains("env: failed to set signal action for signal 19: Invalid argument");
+        .stderr_contains(format!(
+            "env: failed to set signal action for signal {}: Invalid argument",
+            signal_stop as i32
+        ));
     ts.ucmd()
         .args(&["--ignore-signal=kill", "echo", "hello"])
         .fails()
         .code_is(125)
-        .stderr_contains("env: failed to set signal action for signal 9: Invalid argument");
+        .stderr_contains(format!(
+            "env: failed to set signal action for signal {}: Invalid argument",
+            signal_kill as i32
+        ));
     ts.ucmd()
         .args(&["--ignore-signal=SToP", "echo", "hello"])
         .fails()
         .code_is(125)
-        .stderr_contains("env: failed to set signal action for signal 19: Invalid argument");
+        .stderr_contains(format!(
+            "env: failed to set signal action for signal {}: Invalid argument",
+            signal_stop as i32
+        ));
     ts.ucmd()
         .args(&["--ignore-signal=SIGKILL", "echo", "hello"])
         .fails()
         .code_is(125)
-        .stderr_contains("env: failed to set signal action for signal 9: Invalid argument");
+        .stderr_contains(format!(
+            "env: failed to set signal action for signal {}: Invalid argument",
+            signal_kill as i32
+        ));
 }
 
 #[test]
