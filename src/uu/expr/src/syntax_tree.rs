@@ -139,7 +139,7 @@ impl StringOp {
             Self::Match => {
                 let left = left.eval()?.eval_as_string();
                 let right = right.eval()?.eval_as_string();
-                validate_regex(&right)?;
+                check_posix_regex_errors(&right)?;
                 let prefix = if right.starts_with('*') { r"^\" } else { "^" };
                 let re_string = format!("{prefix}{right}");
                 let re = Regex::with_options(
@@ -175,13 +175,20 @@ impl StringOp {
     }
 }
 
-/// Check errors with a supplied regular expression
+/// Check for errors in a supplied regular expression
 ///
 /// GNU coreutils shows messages for invalid regular expressions
 /// differently from the oniguruma library used by the regex crate.
 /// This method attempts to do these checks manually in one pass
 /// through the regular expression.
-fn validate_regex(pattern: &str) -> ExprResult<()> {
+///
+/// This method is not comprehensively checking all cases in which
+/// a regular expression could be invalid; any cases not caught will
+/// result in a [ExprError::InvalidRegexExpression] when passing the
+/// regular expression through the Oniguruma bindings. This method is
+/// intended to just identify a few situations for which GNU coreutils
+/// has specific error messages.
+fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
     let mut escaped_parens: u64 = 0;
     let mut escaped_braces: u64 = 0;
     let mut escaped = false;
@@ -578,7 +585,7 @@ mod test {
     use crate::ExprError;
     use crate::ExprError::InvalidContent;
 
-    use super::{validate_regex, AstNode, BinOp, NumericOp, RelationOp, StringOp};
+    use super::{check_posix_regex_errors, AstNode, BinOp, NumericOp, RelationOp, StringOp};
 
     impl From<&str> for AstNode {
         fn from(value: &str) -> Self {
@@ -730,23 +737,23 @@ mod test {
 
     #[test]
     fn validate_regex_valid() {
-        assert!(validate_regex(r"(a+b) \(a* b\)").is_ok());
+        assert!(check_posix_regex_errors(r"(a+b) \(a* b\)").is_ok());
     }
 
     #[test]
     fn validate_regex_simple_repeating_pattern() {
-        assert!(validate_regex(r"(a+b){4}").is_ok());
+        assert!(check_posix_regex_errors(r"(a+b){4}").is_ok());
     }
 
     #[test]
     fn validate_regex_missing_closing() {
         assert_eq!(
-            validate_regex(r"\(abc"),
+            check_posix_regex_errors(r"\(abc"),
             Err(ExprError::UnmatchedOpeningParenthesis)
         );
 
         assert_eq!(
-            validate_regex(r"\{1,2"),
+            check_posix_regex_errors(r"\{1,2"),
             Err(ExprError::UnmatchedOpeningBrace)
         );
     }
@@ -754,12 +761,12 @@ mod test {
     #[test]
     fn validate_regex_missing_opening() {
         assert_eq!(
-            validate_regex(r"abc\)"),
+            check_posix_regex_errors(r"abc\)"),
             Err(ExprError::UnmatchedClosingParenthesis)
         );
 
         assert_eq!(
-            validate_regex(r"abc\}"),
+            check_posix_regex_errors(r"abc\}"),
             Err(ExprError::UnmatchedClosingBrace)
         );
     }
@@ -767,7 +774,7 @@ mod test {
     #[test]
     fn validate_regex_empty_repeating_pattern() {
         assert_eq!(
-            validate_regex("ab\\{\\}"),
+            check_posix_regex_errors("ab\\{\\}"),
             Err(InvalidContent(r"\{\}".to_string()))
         )
     }
@@ -776,19 +783,19 @@ mod test {
     fn validate_regex_intervals_two_numbers() {
         assert_eq!(
             // out of order
-            validate_regex("ab\\{1,0\\}"),
+            check_posix_regex_errors("ab\\{1,0\\}"),
             Err(InvalidContent(r"\{\}".to_string()))
         );
         assert_eq!(
-            validate_regex("ab\\{1,a\\}"),
+            check_posix_regex_errors("ab\\{1,a\\}"),
             Err(InvalidContent(r"\{\}".to_string()))
         );
         assert_eq!(
-            validate_regex("ab\\{a,3\\}"),
+            check_posix_regex_errors("ab\\{a,3\\}"),
             Err(InvalidContent(r"\{\}".to_string()))
         );
         assert_eq!(
-            validate_regex("ab\\{a,b\\}"),
+            check_posix_regex_errors("ab\\{a,b\\}"),
             Err(InvalidContent(r"\{\}".to_string()))
         );
     }
