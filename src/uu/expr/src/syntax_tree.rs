@@ -193,7 +193,7 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
     let mut escaped_braces: u64 = 0;
     let mut escaped = false;
 
-    let mut repeating_pattern_text = String::with_capacity(13);
+    let mut repeating_pattern_text = String::new();
     let mut invalid_content_error = false;
 
     for c in pattern.chars() {
@@ -212,22 +212,27 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
                     .ok_or(ExprError::UnmatchedClosingBrace)?;
                 let mut repetition = repeating_pattern_text[..repeating_pattern_text.len() - 1]
                     .splitn(2, |x| x == ',');
-                match (repetition.next(), repetition.next()) {
-                    (None, None) => {
+                match (
+                    repetition
+                        .next()
+                        .expect("splitn always returns at least one string"),
+                    repetition.next(),
+                ) {
+                    ("", None) => {
                         // Empty repeating pattern
                         invalid_content_error = true;
                     }
-                    (Some(x), None) | (Some(x), Some("")) => {
+                    (x, None) | (x, Some("")) => {
                         if x.parse::<i16>().is_err() {
                             invalid_content_error = true;
                         }
                     }
-                    (None, Some(x)) | (Some(""), Some(x)) => {
+                    ("", Some(x)) => {
                         if x.parse::<i16>().is_err() {
                             invalid_content_error = true;
                         }
                     }
-                    (Some(f), Some(l)) => {
+                    (f, Some(l)) => {
                         if let (Ok(f), Ok(l)) = (f.parse::<i16>(), l.parse::<i16>()) {
                             invalid_content_error = invalid_content_error || f > l;
                         } else {
@@ -736,17 +741,17 @@ mod test {
     }
 
     #[test]
-    fn validate_regex_valid() {
+    fn check_regex_valid() {
         assert!(check_posix_regex_errors(r"(a+b) \(a* b\)").is_ok());
     }
 
     #[test]
-    fn validate_regex_simple_repeating_pattern() {
-        assert!(check_posix_regex_errors(r"(a+b){4}").is_ok());
+    fn check_regex_simple_repeating_pattern() {
+        assert!(check_posix_regex_errors(r"\(a+b\)\{4\}").is_ok());
     }
 
     #[test]
-    fn validate_regex_missing_closing() {
+    fn check_regex_missing_closing() {
         assert_eq!(
             check_posix_regex_errors(r"\(abc"),
             Err(ExprError::UnmatchedOpeningParenthesis)
@@ -759,7 +764,7 @@ mod test {
     }
 
     #[test]
-    fn validate_regex_missing_opening() {
+    fn check_regex_missing_opening() {
         assert_eq!(
             check_posix_regex_errors(r"abc\)"),
             Err(ExprError::UnmatchedClosingParenthesis)
@@ -772,7 +777,7 @@ mod test {
     }
 
     #[test]
-    fn validate_regex_empty_repeating_pattern() {
+    fn check_regex_empty_repeating_pattern() {
         assert_eq!(
             check_posix_regex_errors("ab\\{\\}"),
             Err(InvalidContent(r"\{\}".to_string()))
@@ -780,7 +785,7 @@ mod test {
     }
 
     #[test]
-    fn validate_regex_intervals_two_numbers() {
+    fn check_regex_intervals_two_numbers() {
         assert_eq!(
             // out of order
             check_posix_regex_errors("ab\\{1,0\\}"),
@@ -796,6 +801,14 @@ mod test {
         );
         assert_eq!(
             check_posix_regex_errors("ab\\{a,b\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        );
+        assert_eq!(
+            check_posix_regex_errors("ab\\{a,\\}"),
+            Err(InvalidContent(r"\{\}".to_string()))
+        );
+        assert_eq!(
+            check_posix_regex_errors("ab\\{,b\\}"),
             Err(InvalidContent(r"\{\}".to_string()))
         );
     }
