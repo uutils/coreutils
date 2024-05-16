@@ -1253,6 +1253,8 @@ pub struct UCommand {
     #[cfg(unix)]
     terminal_simulation: Option<TerminalSimulation>,
     tmpd: Option<Rc<TempDir>>, // drop last
+    #[cfg(unix)]
+    umask: Option<u16>,
 }
 
 impl UCommand {
@@ -1415,6 +1417,13 @@ impl UCommand {
         hard_limit: u64,
     ) -> &mut Self {
         self.limits.push((resource, soft_limit, hard_limit));
+        self
+    }
+
+    #[cfg(unix)]
+    /// The umask is a value that restricts the permissions of newly created files and directories.
+    pub fn umask(&mut self, umask: u16) -> &mut Self {
+        self.umask = Some(umask);
         self
     }
 
@@ -1705,6 +1714,19 @@ impl UCommand {
             // also, the closure doesn't access stdin, stdout and stderr.
             unsafe {
                 command.pre_exec(closure);
+            }
+        }
+
+        #[cfg(unix)]
+        if let Some(umask) = self.umask {
+            unsafe {
+                command.pre_exec(move || {
+                    // We need to allow useless conversions here because in some systems,
+                    // such as freebsd, include u16 constants in libc
+                    #[allow(clippy::useless_conversion)]
+                    libc::umask(umask.into());
+                    Ok(())
+                });
             }
         }
 
@@ -3871,5 +3893,22 @@ mod tests {
             .succeeds()
             .no_stderr()
             .stdout_is("8\n16\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_altering_umask() {
+        use uucore::mode::get_umask;
+        let p_umask = get_umask();
+        //make sure we are not testing against the same umask
+        let c_umask = if p_umask == 0o002 { 0o007 } else { 0o002 };
+        let expected = if p_umask == 0o002 { "0007\n" } else { "0002\n" };
+        let ts = TestScenario::new("util");
+        ts.cmd("sh")
+            .args(&["-c", "umask"])
+            .umask(c_umask)
+            .succeeds()
+            .stdout_is(expected);
+        std::assert_eq!(p_umask, get_umask()); // make sure parent umask didn't change
     }
 }
