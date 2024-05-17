@@ -289,7 +289,7 @@ half = "2.4.1"
 hostname = "0.4"
 indicatif = "0.17.8"
 itertools = "0.12.1"
-libc = "0.2.154"
+libc = "0.2.153"
 lscolors = { version = "0.16.0", default-features = false, features = [
   "gnu_legacy",
 ] }
