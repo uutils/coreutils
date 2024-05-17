@@ -1136,3 +1136,14 @@ fn test_blake2d_tested_with_sha1() {
         .fails()
         .stderr_contains("f: no properly formatted checksum lines found");
 }
+
+#[test]
+fn test_unknown_sha() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "SHA4 (README.md) = 00000000\n");
+
+    ucmd.arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
+}

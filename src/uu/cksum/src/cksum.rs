@@ -43,6 +43,20 @@ const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
 const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
 const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 
+const SUPPORTED_ALGO: [&str; 11] = [
+    ALGORITHM_OPTIONS_SYSV,
+    ALGORITHM_OPTIONS_BSD,
+    ALGORITHM_OPTIONS_CRC,
+    ALGORITHM_OPTIONS_MD5,
+    ALGORITHM_OPTIONS_SHA1,
+    ALGORITHM_OPTIONS_SHA224,
+    ALGORITHM_OPTIONS_SHA256,
+    ALGORITHM_OPTIONS_SHA384,
+    ALGORITHM_OPTIONS_SHA512,
+    ALGORITHM_OPTIONS_BLAKE2B,
+    ALGORITHM_OPTIONS_SM3,
+];
+
 #[derive(Debug)]
 enum CkSumError {
     RawMultipleFiles,
@@ -479,6 +493,11 @@ where
                 let (algo_name, length) = if algo_based_format {
                     // When the algo-based format is matched, extract details from regex captures
                     let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
+                    if !SUPPORTED_ALGO.contains(&algorithm.as_str()) {
+                        // Not supported algo, leave early
+                        properly_formatted = false;
+                        continue;
+                    }
                     let bits = caps
                         .name("bits")
                         .map(|m| m.as_str().parse::<usize>().unwrap() / 8);
@@ -688,19 +707,7 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .help("select the digest type to use. See DIGEST below")
                 .value_name("ALGORITHM")
-                .value_parser([
-                    ALGORITHM_OPTIONS_SYSV,
-                    ALGORITHM_OPTIONS_BSD,
-                    ALGORITHM_OPTIONS_CRC,
-                    ALGORITHM_OPTIONS_MD5,
-                    ALGORITHM_OPTIONS_SHA1,
-                    ALGORITHM_OPTIONS_SHA224,
-                    ALGORITHM_OPTIONS_SHA256,
-                    ALGORITHM_OPTIONS_SHA384,
-                    ALGORITHM_OPTIONS_SHA512,
-                    ALGORITHM_OPTIONS_BLAKE2B,
-                    ALGORITHM_OPTIONS_SM3,
-                ]),
+                .value_parser(SUPPORTED_ALGO),
         )
         .arg(
             Arg::new(options::UNTAGGED)
