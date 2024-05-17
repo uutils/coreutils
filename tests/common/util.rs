@@ -9,6 +9,8 @@
 #![allow(dead_code)]
 
 #[cfg(unix)]
+use libc::mode_t;
+#[cfg(unix)]
 use nix::pty::OpenptyResult;
 use pretty_assertions::assert_eq;
 #[cfg(unix)]
@@ -1254,7 +1256,7 @@ pub struct UCommand {
     terminal_simulation: Option<TerminalSimulation>,
     tmpd: Option<Rc<TempDir>>, // drop last
     #[cfg(unix)]
-    umask: Option<u16>,
+    umask: Option<mode_t>,
 }
 
 impl UCommand {
@@ -1422,7 +1424,7 @@ impl UCommand {
 
     #[cfg(unix)]
     /// The umask is a value that restricts the permissions of newly created files and directories.
-    pub fn umask(&mut self, umask: u16) -> &mut Self {
+    pub fn umask(&mut self, umask: mode_t) -> &mut Self {
         self.umask = Some(umask);
         self
     }
@@ -1721,10 +1723,7 @@ impl UCommand {
         if let Some(umask) = self.umask {
             unsafe {
                 command.pre_exec(move || {
-                    // We need to allow useless conversions here because in some systems,
-                    // such as freebsd, include u16 constants in libc
-                    #[allow(clippy::useless_conversion)]
-                    libc::umask(umask.into());
+                    libc::umask(umask);
                     Ok(())
                 });
             }
