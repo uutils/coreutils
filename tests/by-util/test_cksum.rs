@@ -1119,6 +1119,28 @@ fn test_blake2b_bits() {
         .stderr_contains("f: no properly formatted checksum lines found");
 }
 
+#[test]
+fn test_bsd_case() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("f", "bSD (README.md) = 0000\n");
+
+    scene
+        .ucmd()
+        .arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
+    at.write("f", "BsD (README.md) = 0000\n");
+
+    scene
+        .ucmd()
+        .arg("-c")
+        .arg("f")
+        .fails()
+        .stderr_contains("f: no properly formatted checksum lines found");
+}
+
 #[ignore = "Different output"]
 #[test]
 fn test_blake2d_tested_with_sha1() {
