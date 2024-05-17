@@ -498,10 +498,24 @@ where
                         properly_formatted = false;
                         continue;
                     }
-                    let bits = caps
-                        .name("bits")
-                        .map(|m| m.as_str().parse::<usize>().unwrap() / 8);
-                    (algorithm, bits)
+
+                    let bits = caps.name("bits").map_or(Some(None), |m| {
+                        let bits_value = m.as_str().parse::<usize>().unwrap();
+                        if bits_value % 8 == 0 {
+                            Some(Some(bits_value / 8))
+                        } else {
+                            properly_formatted = false;
+                            None // Return None to signal a parsing or divisibility issue
+                        }
+                    });
+
+                    if bits.is_none() {
+                        // If bits is None, we have a parsing or divisibility issue
+                        // Exit the loop outside of the closure
+                        continue;
+                    }
+
+                    (algorithm, bits.unwrap())
                 } else if let Some(a) = algo_name_input {
                     // When a specific algorithm name is input, use it and default bits to None
                     (a.to_lowercase(), None)

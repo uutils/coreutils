@@ -1105,7 +1105,6 @@ fn test_md5_bits() {
         .stderr_contains("f: no properly formatted checksum lines found");
 }
 
-#[ignore = "Should fail on bits"]
 #[test]
 fn test_blake2b_bits() {
     let (at, mut ucmd) = at_and_ucmd!();
