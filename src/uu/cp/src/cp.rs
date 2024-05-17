@@ -2114,7 +2114,6 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         #[cfg(not(any(
             target_os = "android",
             target_os = "macos",
-            target_os = "macos-12",
             target_os = "freebsd",
             target_os = "redox",
         )))]
@@ -2131,7 +2130,6 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         #[cfg(any(
             target_os = "android",
             target_os = "macos",
-            target_os = "macos-12",
             target_os = "freebsd",
             target_os = "redox",
         ))]
