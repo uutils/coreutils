@@ -59,7 +59,7 @@ struct Options {
 /// greater than 512.
 fn create_blake2b(matches: &ArgMatches) -> UResult<(&'static str, Box<dyn Digest>, usize)> {
     match matches.get_one::<usize>("length") {
-        Some(0) | None => Ok(("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512)),
+        Some(0) | None => Ok(("BLAKE2b", Box::new(Blake2b::new()) as Box<dyn Digest>, 512)),
         Some(length_in_bits) => {
             if *length_in_bits > 512 {
                 return Err(USimpleError::new(
@@ -71,7 +71,7 @@ fn create_blake2b(matches: &ArgMatches) -> UResult<(&'static str, Box<dyn Digest
             if length_in_bits % 8 == 0 {
                 let length_in_bytes = length_in_bits / 8;
                 Ok((
-                    "BLAKE2",
+                    "BLAKE2b",
                     Box::new(Blake2b::with_output_bytes(length_in_bytes)),
                     *length_in_bits,
                 ))
@@ -792,10 +792,15 @@ where
             .map_err_context(|| "failed to read input".to_string())?;
             let (escaped_filename, prefix) = escape_filename(filename);
             if options.tag {
-                println!(
-                    "{}{} ({}) = {}",
-                    prefix, options.algoname, escaped_filename, sum
-                );
+                if options.algoname == "BLAKE2b" && options.digest.output_bits() != 512 {
+                    // special case for BLAKE2b with non-default output length
+                    println!(
+                        "BLAKE2b-{} ({escaped_filename}) = {sum}",
+                        options.digest.output_bits()
+                    );
+                } else {
+                    println!("{prefix}{} ({escaped_filename}) = {sum}", options.algoname);
+                }
             } else if options.nonames {
                 println!("{sum}");
             } else if options.zero {

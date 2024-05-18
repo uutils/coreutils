@@ -244,6 +244,30 @@ fn test_invalid_b2sum_length_option_too_large() {
 }
 
 #[test]
+fn test_check_b2sum_tag_output() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=0")
+        .arg("--tag")
+        .arg("f")
+        .succeeds()
+        .stdout_only("BLAKE2b (f) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--length=128")
+        .arg("--tag")
+        .arg("f")
+        .succeeds()
+        .stdout_only("BLAKE2b-128 (f) = cae66941d9efbd404e4d88758ea67670\n");
+}
+
+#[test]
 fn test_check_file_not_found_warning() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
