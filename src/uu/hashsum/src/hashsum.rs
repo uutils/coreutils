@@ -805,9 +805,9 @@ where
                 println!("{sum}");
             } else if options.zero {
                 // with zero, we don't escape the filename
-                print!("{} {}{}\0", sum, binary_marker, filename.display());
+                print!("{sum} {binary_marker}{}\0", filename.display());
             } else {
-                println!("{}{} {}{}", prefix, sum, binary_marker, escaped_filename);
+                println!("{prefix}{sum} {binary_marker}{escaped_filename}");
             }
         }
         if bad_format > 0 && failed_cksum == 0 && correct_format == 0 && !options.status {
