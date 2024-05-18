@@ -3901,7 +3901,18 @@ mod tests {
         let p_umask = get_umask();
         // make sure we are not testing against the same umask
         let c_umask = if p_umask == 0o002 { 0o007 } else { 0o002 };
-        let expected = if p_umask == 0o002 { "0007\n" } else { "0002\n" };
+        let expected = if cfg!(target_os = "android") {
+            if p_umask == 0o002 {
+                "007\n"
+            } else {
+                "002\n"
+            }
+        } else if p_umask == 0o002 {
+            "0007\n"
+        } else {
+            "0002\n"
+        };
+
         let ts = TestScenario::new("util");
         ts.cmd("sh")
             .args(&["-c", "umask"])

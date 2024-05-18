@@ -337,6 +337,11 @@ fn test_chmod_recursive() {
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     at.mkdir("z");
+
+    // create expected permissions by removing read bits and write bits to the current perms
+    let a_perms_expected = (at.metadata("a").permissions().mode() & !0o444) | 0o222;
+    let z_perms_expected = (at.metadata("z").permissions().mode() & !0o444) | 0o222;
+
     make_file(&at.plus_as_string("a/a"), 0o100444);
     make_file(&at.plus_as_string("a/b/b"), 0o100444);
     make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
@@ -358,8 +363,8 @@ fn test_chmod_recursive() {
     assert_eq!(at.metadata("a/b/b").permissions().mode(), 0o100444);
     assert_eq!(at.metadata("a/b/c/c").permissions().mode(), 0o100444);
     println!("mode {:o}", at.metadata("a").permissions().mode());
-    assert_eq!(at.metadata("a").permissions().mode(), 0o40333);
-    assert_eq!(at.metadata("z").permissions().mode(), 0o40333);
+    assert_eq!(at.metadata("a").permissions().mode(), a_perms_expected);
+    assert_eq!(at.metadata("z").permissions().mode(), z_perms_expected);
 }
 
 #[test]

@@ -2542,15 +2542,15 @@ fn test_no_preserve_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
     set_permissions(at.plus("file"), PermissionsExt::from_mode(PERMS_ALL)).unwrap();
-    let umask = 0o022;
+    let umask: u16 = 0o022;
     ucmd.arg("file")
         .arg("dest")
-        .umask(umask)
+        .umask(umask as libc::mode_t)
         .succeeds()
         .no_stderr()
         .no_stdout();
     // remove sticky bit, setuid and setgid bit; apply umask
-    let expected_perms = PERMS_ALL & !0o7000 & !umask;
+    let expected_perms = PERMS_ALL & !0o7000 & !umask as u32;
     assert_eq!(
         at.plus("dest").metadata().unwrap().mode() & 0o7777,
         expected_perms

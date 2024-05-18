@@ -114,10 +114,7 @@ fn test_mkdir_parent_mode_check_existing_parent() {
 
     assert!(at.dir_exists("a"));
     // parent dirs that already exist do not get their permissions modified
-    assert_eq!(
-        at.metadata("a").permissions().mode() as mode_t,
-        parent_a_perms
-    );
+    assert_eq!(at.metadata("a").permissions().mode(), parent_a_perms);
     assert!(at.dir_exists("a/b"));
     assert_eq!(
         at.metadata("a/b").permissions().mode() as mode_t,
