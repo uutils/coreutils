@@ -327,7 +327,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        least somewhat better from a user's perspective.
     let matches = command.try_get_matches_from(args)?;
 
-    let (name, algo, bits) = detect_algo(&binary_name, &matches)?;
+    let (algoname, algo, bits) = detect_algo(&binary_name, &matches)?;
 
     let binary = if matches.get_flag("binary") {
         true
@@ -355,7 +355,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     }
 
     let opts = Options {
-        algoname: name,
+        algoname,
         digest: algo,
         output_bits: bits,
         binary,
