@@ -2494,6 +2494,7 @@ version = "0.0.26"
 dependencies = [
  "clap",
  "hex",
+ "regex",
  "uucore",
 ]
 
