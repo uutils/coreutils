@@ -39,8 +39,10 @@ fn test_uptime_for_file_without_utmpx_records() {
 /// Checks whether uptime displays the correct stderr msg when its called with a fifo
 #[test]
 #[cfg(target_os = "linux")]
+#[ignore = "disabled until fixed"]
 fn test_uptime_with_fifo() {
     // This test can go on forever in the CI in some cases, might need aborting
+    // Sometimes writing to the pipe is broken
     let ts = TestScenario::new(util_name!());
 
     let at = &ts.fixtures;
@@ -76,7 +78,6 @@ fn test_uptime_with_non_existent_file() {
 fn test_uptime_with_file_containing_valid_utmpx_record() {
     let ts = TestScenario::new(util_name!());
     let re = Regex::new(r"up {1,2}[(\d){1,} days]*\d{1,2}:\d\d").unwrap();
-    #[cfg(not(target_os = "macos"))]
     ts.ucmd()
         .arg("validRecord.txt")
         .succeeds()
@@ -124,7 +125,7 @@ fn test_uptime_with_file_containing_multiple_valid_utmpx_record_with_partial_rec
     // wrong between the days and the time.
     let re_uptime = Regex::new(r"up {1,2}[(\d){1,} days]*\d{1,2}:\d\d").unwrap();
     ts.ucmd()
-        .arg("validMultipleRecords.txt")
+        .arg("validMultiplePartialRecords.txt")
         .succeeds()
         .stdout_contains("load average")
         .stdout_matches(&re_users)

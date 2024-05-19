@@ -102,17 +102,22 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         set_exit_code(1);
         show_error!("{}", UptimeError::IoErr(e));
     }
+    if non_fatal_error {
+        print_time();
+        print!("up ???? days ??:??,");
+        print_nusers(0);
+        print_loadavg();
+        return Ok(());
+    }
 
     let (boot_time, user_count) = process_utmpx_from_file(file_path);
-    println!("Time is {:?}", boot_time);
     if let Some(time) = boot_time {
         let upsecs = get_uptime_from_boot_time(time);
         print_uptime(upsecs);
     } else {
-        if !non_fatal_error {
-            show_error!("couldn't get boot time");
-            set_exit_code(1);
-        }
+        show_error!("couldn't get boot time");
+        set_exit_code(1);
+
         print!("up ???? days ??:??,");
     }
 
