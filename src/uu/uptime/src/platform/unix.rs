@@ -72,10 +72,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             "{}",
             UptimeError::ExtraOperandError(path.to_owned().into_string().unwrap())
         );
+        set_exit_code(1);
+        return Ok(());
     }
     uptime_with_file(file_path)
 }
 
+#[cfg(unix)]
 fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     // Uptime will print loadavg and time to stderr unless we encounter an extra operand.
     let mut non_fatal_error = false;
@@ -101,7 +104,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     }
 
     let (boot_time, user_count) = process_utmpx_from_file(file_path);
-    print_time();
+    println!("Time is {:?}", boot_time);
     if let Some(time) = boot_time {
         let upsecs = get_uptime_from_boot_time(time);
         print_uptime(upsecs);

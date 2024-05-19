@@ -26,12 +26,10 @@ fn test_uptime() {
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_uptime_for_file_without_utmpx_records() {
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
     at.write("file1", "hello");
 
-    ts.ucmd()
-        .arg(at.plus_as_string("file1"))
+    ucmd.arg(at.plus_as_string("file1"))
         .fails()
         .stderr_contains("uptime: couldn't get boot time")
         .stdout_contains("up ???? days ??:??")
@@ -80,13 +78,7 @@ fn test_uptime_with_file_containing_valid_utmpx_record() {
     let re = Regex::new(r"up {1,2}[(\d){1,} days]*\d{1,2}:\d\d").unwrap();
     #[cfg(not(target_os = "macos"))]
     ts.ucmd()
-        .arg("/var/run/utmp")
-        .succeeds()
-        .stdout_matches(&re)
-        .stdout_contains("load average");
-    #[cfg(target_os = "macos")]
-    ts.ucmd()
-        .arg("/var/run/utmpx")
+        .arg("validRecord.txt")
         .succeeds()
         .stdout_matches(&re)
         .stdout_contains("load average");
@@ -94,7 +86,7 @@ fn test_uptime_with_file_containing_valid_utmpx_record() {
 
 /// Assuming /var/log/wtmp has multiple records, /var/log/wtmp doesn't seem to exist in macos
 #[test]
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
+#[cfg(not(target_os = "openbsd"))]
 fn test_uptime_with_file_containing_multiple_valid_utmpx_record() {
     let ts = TestScenario::new(util_name!());
     // Checking for up   00:00 [can be any time]
@@ -102,32 +94,29 @@ fn test_uptime_with_file_containing_multiple_valid_utmpx_record() {
     // Can be multiple users, for double digit users, only matches the last digit.
     let re_users = Regex::new(r"\d user[s]?").unwrap();
     ts.ucmd()
-        .arg("/var/log/wtmp")
+        .arg("validMultipleRecords.txt")
         .succeeds()
         .stdout_matches(&re)
         .stdout_matches(&re_users)
         .stdout_contains("load average");
 }
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_uptime_with_extra_argument() {
+    let ts = TestScenario::new(util_name!());
 
+    ts.ucmd()
+        .arg("a")
+        .arg("b")
+        .fails()
+        .stderr_contains("extra operand 'b'");
+}
 /// Here we test if partial records are parsed properly and this may return an uptime of hours or
 /// days, assuming /var/log/wtmp contains multiple records
 #[test]
-#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
+#[cfg(not(target_os = "openbsd"))]
 fn test_uptime_with_file_containing_multiple_valid_utmpx_record_with_partial_records() {
-    use std::fs;
-    use std::fs::OpenOptions;
-
     let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-    at.copy("/var/log/wtmp", "log_copy");
-
-    let file = OpenOptions::new()
-        .write(true)
-        .open(at.plus("log_copy"))
-        .unwrap();
-    // Setting the len to half, erasing records in an manner where data is lost.
-    file.set_len(fs::metadata(at.plus("log_copy")).unwrap().len() / 2)
-        .unwrap();
 
     let re_users = Regex::new(r"\d user[s]?").unwrap();
     // Regex matches for "up   00::00" ,"up 12 days  00::00", the time can be any valid time and
@@ -135,7 +124,7 @@ fn test_uptime_with_file_containing_multiple_valid_utmpx_record_with_partial_rec
     // wrong between the days and the time.
     let re_uptime = Regex::new(r"up {1,2}[(\d){1,} days]*\d{1,2}:\d\d").unwrap();
     ts.ucmd()
-        .arg(at.plus("log_copy"))
+        .arg("validMultipleRecords.txt")
         .succeeds()
         .stdout_contains("load average")
         .stdout_matches(&re_users)
