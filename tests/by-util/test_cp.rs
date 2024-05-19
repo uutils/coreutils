@@ -5307,3 +5307,138 @@ mod same_file {
         assert_eq!(at.read(FILE_NAME), CONTENTS,);
     }
 }
+
+// the following tests are for how the cp should behave when the source is a symlink
+// and link option is given
+#[cfg(all(unix, not(target_os = "android")))]
+mod link_deref {
+
+    use crate::common::util::{AtPath, TestScenario};
+    use std::os::unix::fs::MetadataExt;
+
+    const FILE: &str = "file";
+    const FILE_LINK: &str = "file_link";
+    const DIR: &str = "dir";
+    const DIR_LINK: &str = "dir_link";
+    const DANG_LINK: &str = "dang_link";
+    const DST: &str = "dst";
+
+    fn setup_link_deref_tests(source: &str, at: &AtPath) {
+        match source {
+            FILE_LINK => {
+                at.touch(FILE);
+                at.symlink_file(FILE, FILE_LINK);
+            }
+            DIR_LINK => {
+                at.mkdir(DIR);
+                at.symlink_dir(DIR, DIR_LINK);
+            }
+            DANG_LINK => at.symlink_file("nowhere", DANG_LINK),
+            _ => {}
+        }
+    }
+
+    // cp --link shouldn't deref source if -P is given
+    #[test]
+    fn test_cp_symlink_as_source_with_link_and_no_deref() {
+        for src in [FILE_LINK, DIR_LINK, DANG_LINK] {
+            for r in [false, true] {
+                let scene = TestScenario::new(util_name!());
+                let at = &scene.fixtures;
+                setup_link_deref_tests(src, at);
+                let mut args = vec!["--link", "-P", src, DST];
+                if r {
+                    args.push("-R");
+                };
+                scene.ucmd().args(&args).succeeds().no_stderr();
+                at.is_symlink(DST);
+                let src_ino = at.symlink_metadata(src).ino();
+                let dest_ino = at.symlink_metadata(DST).ino();
+                assert_eq!(src_ino, dest_ino);
+            }
+        }
+    }
+
+    // Dereferencing should fail for dangling symlink.
+    #[test]
+    fn test_cp_dang_link_as_source_with_link() {
+        for option in ["", "-L", "-H"] {
+            for r in [false, true] {
+                let scene = TestScenario::new(util_name!());
+                let at = &scene.fixtures;
+                setup_link_deref_tests(DANG_LINK, at);
+                let mut args = vec!["--link", DANG_LINK, DST];
+                if r {
+                    args.push("-R");
+                };
+                if !option.is_empty() {
+                    args.push(option);
+                }
+                scene
+                    .ucmd()
+                    .args(&args)
+                    .fails()
+                    .stderr_contains("No such file or directory");
+            }
+        }
+    }
+
+    // Dereferencing should fail for the 'dir_link' without -R.
+    #[test]
+    fn test_cp_dir_link_as_source_with_link() {
+        for option in ["", "-L", "-H"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            setup_link_deref_tests(DIR_LINK, at);
+            let mut args = vec!["--link", DIR_LINK, DST];
+            if !option.is_empty() {
+                args.push(option);
+            }
+            scene
+                .ucmd()
+                .args(&args)
+                .fails()
+                .stderr_contains("cp: -r not specified; omitting directory");
+        }
+    }
+
+    // cp --link -R 'dir_link' should create a new directory.
+    #[test]
+    fn test_cp_dir_link_as_source_with_link_and_r() {
+        for option in ["", "-L", "-H"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            setup_link_deref_tests(DIR_LINK, at);
+            let mut args = vec!["--link", "-R", DIR_LINK, DST];
+            if !option.is_empty() {
+                args.push(option);
+            }
+            scene.ucmd().args(&args).succeeds();
+            at.dir_exists(DST);
+        }
+    }
+
+    //cp --link 'file_link' should create a hard link to the target.
+    #[test]
+    fn test_cp_file_link_as_source_with_link() {
+        for option in ["", "-L", "-H"] {
+            for r in [false, true] {
+                let scene = TestScenario::new(util_name!());
+                let at = &scene.fixtures;
+                setup_link_deref_tests(FILE_LINK, at);
+                let mut args = vec!["--link", "-R", FILE_LINK, DST];
+                if !option.is_empty() {
+                    args.push(option);
+                }
+                if r {
+                    args.push("-R");
+                }
+                scene.ucmd().args(&args).succeeds();
+                at.file_exists(DST);
+                let src_ino = at.symlink_metadata(FILE).ino();
+                let dest_ino = at.symlink_metadata(DST).ino();
+                assert_eq!(src_ino, dest_ino);
+            }
+        }
+    }
+}
