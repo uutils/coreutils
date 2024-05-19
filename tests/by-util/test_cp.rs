@@ -1718,18 +1718,17 @@ fn test_cp_preserve_links_case_7() {
 #[test]
 #[cfg(unix)]
 fn test_cp_no_preserve_mode() {
-    use libc::umask;
     use uucore::fs as uufs;
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("a");
     at.set_mode("a", 0o731);
-    unsafe { umask(0o077) };
 
     ucmd.arg("-a")
         .arg("--no-preserve=mode")
         .arg("a")
         .arg("b")
+        .umask(0o077)
         .succeeds();
 
     assert!(at.file_exists("b"));
@@ -1737,8 +1736,6 @@ fn test_cp_no_preserve_mode() {
     let metadata_b = std::fs::metadata(at.subdir.join("b")).unwrap();
     let permission_b = uufs::display_permissions(&metadata_b, false);
     assert_eq!(permission_b, "rw-------".to_string());
-
-    unsafe { umask(0o022) };
 }
 
 #[test]
@@ -2535,8 +2532,6 @@ fn test_copy_symlink_force() {
 fn test_no_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
-    use uucore::mode::get_umask;
-
     const PERMS_ALL: u32 = if cfg!(target_os = "freebsd") {
         // Only the superuser can set the sticky bit on a file.
         0o6777
@@ -2547,14 +2542,15 @@ fn test_no_preserve_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
     set_permissions(at.plus("file"), PermissionsExt::from_mode(PERMS_ALL)).unwrap();
+    let umask: u16 = 0o022;
     ucmd.arg("file")
         .arg("dest")
+        .umask(umask as libc::mode_t)
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let umask = get_umask();
     // remove sticky bit, setuid and setgid bit; apply umask
-    let expected_perms = PERMS_ALL & !0o7000 & !umask;
+    let expected_perms = PERMS_ALL & !0o7000 & !umask as u32;
     assert_eq!(
         at.plus("dest").metadata().unwrap().mode() & 0o7777,
         expected_perms
