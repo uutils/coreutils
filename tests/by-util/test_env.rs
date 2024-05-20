@@ -4,11 +4,49 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD
 
-use crate::common::util::TestScenario;
+use crate::common::util::{TestScenario, UChild};
+#[cfg(unix)]
+use nix::sys::signal::Signal;
 use regex::Regex;
 use std::env;
 use std::path::Path;
+use std::process::Command;
 use tempfile::tempdir;
+
+#[cfg(unix)]
+struct Target {
+    child: UChild,
+}
+#[cfg(unix)]
+impl Target {
+    fn new(signals: Vec<&str>) -> Self {
+        let mut child = new_ucmd!()
+            .args(&[
+                format!("--ignore-signal={}", signals.join(",")).as_str(),
+                "sleep",
+                "1000",
+            ])
+            .run_no_wait();
+        child.delay(500);
+        Self { child }
+    }
+    fn send_signal(&mut self, signal: Signal) {
+        Command::new("kill")
+            .args(&[format!("-{}", signal as i32), format!("{}", self.child.id())])
+            .spawn()
+            .expect("failed to send signal");
+        self.child.delay(100);
+    }
+    fn is_alive(&mut self) -> bool {
+        self.child.is_alive()
+    }
+}
+#[cfg(unix)]
+impl Drop for Target {
+    fn drop(&mut self) {
+        self.child.kill();
+    }
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -804,22 +842,21 @@ fn test_env_arg_ignore_signal_special_signals() {
 #[test]
 #[cfg(unix)]
 fn test_env_arg_ignore_signal_valid_signals() {
-    let ts = TestScenario::new(util_name!());
-    ts.ucmd()
-        .args(&["--ignore-signal=int", "echo", "hello"])
-        .succeeds()
-        .no_stderr()
-        .stdout_contains("hello");
-
-    ts.ucmd()
-        .args(&[
-            "--ignore-signal=sigint,int,usr1,sigusr1,SIGUSR1,USR1,USR2,usr2",
-            "echo",
-            "hello",
-        ])
-        .succeeds()
-        .no_stderr()
-        .stdout_contains("hello");
+    {
+        let mut target = Target::new(vec!["int"]);
+        target.send_signal(Signal::SIGINT);
+        assert!(target.is_alive());
+    }
+    {
+        let mut target = Target::new(vec!["usr2"]);
+        target.send_signal(Signal::SIGUSR2);
+        assert!(target.is_alive());
+    }
+    {
+        let mut target = Target::new(vec!["int", "usr2"]);
+        target.send_signal(Signal::SIGUSR1);
+        assert!(!target.is_alive());
+    }
 }
 
 #[test]
