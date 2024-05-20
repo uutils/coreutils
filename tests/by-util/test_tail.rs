@@ -1110,13 +1110,11 @@ fn test_invalid_num() {
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of lines: '1024R'");
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of bytes: '1Y': Value too large for defined data type");
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
         .fails()
