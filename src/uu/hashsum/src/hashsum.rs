@@ -12,7 +12,6 @@ use clap::{Arg, ArgMatches, Command};
 use hex::encode;
 use regex::Captures;
 use regex::Regex;
-use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -20,6 +19,8 @@ use std::io::{self, stdin, BufRead, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::checksum::cksum_output;
+use uucore::display::Quotable;
 use uucore::error::USimpleError;
 use uucore::error::{set_exit_code, FromIo, UError, UResult};
 use uucore::sum::{
@@ -27,7 +28,6 @@ use uucore::sum::{
     Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
 };
 use uucore::util_name;
-use uucore::{display::Quotable, show_warning_caps};
 use uucore::{format_usage, help_about, help_usage};
 
 const NAME: &str = "hashsum";
@@ -835,35 +835,7 @@ where
     }
 
     if !options.status && !skip_summary {
-        match bad_format.cmp(&1) {
-            Ordering::Equal => {
-                show_warning_caps!("{} line is improperly formatted", bad_format);
-            }
-            Ordering::Greater => {
-                show_warning_caps!("{} lines are improperly formatted", bad_format);
-            }
-            Ordering::Less => {}
-        };
-
-        match failed_cksum.cmp(&1) {
-            Ordering::Equal => {
-                show_warning_caps!("{} computed checksum did NOT match", failed_cksum);
-            }
-            Ordering::Greater => {
-                show_warning_caps!("{} computed checksums did NOT match", failed_cksum);
-            }
-            Ordering::Less => {}
-        };
-
-        match failed_open_file.cmp(&1) {
-            Ordering::Equal => {
-                show_warning_caps!("{} listed file could not be read", failed_open_file);
-            }
-            Ordering::Greater => {
-                show_warning_caps!("{} listed files could not be read", failed_open_file);
-            }
-            Ordering::Less => {}
-        }
+        cksum_output(bad_format, failed_cksum, failed_open_file);
     }
 
     Ok(())

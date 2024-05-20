@@ -977,7 +977,9 @@ impl Options {
             dereference: !(matches.get_flag(options::NO_DEREFERENCE)
                 || matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS)
                 || matches.get_flag(options::ARCHIVE)
-                || recursive)
+                // cp normally follows the link only when not copying recursively or when
+                // --link (-l) is used
+                || (recursive && CopyMode::from_matches(matches)!= CopyMode::Link ))
                 || matches.get_flag(options::DEREFERENCE),
             one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
             parents: matches.get_flag(options::PARENTS),
@@ -2063,7 +2065,13 @@ fn copy_file(
         } else {
             fs::symlink_metadata(source)
         };
-        result.context(context)?
+        // this is just for gnu tests compatibility
+        result.map_err(|err| {
+            if err.to_string().contains("No such file or directory") {
+                return format!("cannot stat {}: No such file or directory", source.quote());
+            }
+            err.to_string()
+        })?
     };
 
     let dest_permissions = calculate_dest_permissions(dest, &source_metadata, options, context)?;

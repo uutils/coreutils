@@ -6,6 +6,8 @@
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
+#[cfg(feature = "checksum")]
+pub mod checksum;
 #[cfg(feature = "colors")]
 pub mod colors;
 #[cfg(feature = "encoding")]
