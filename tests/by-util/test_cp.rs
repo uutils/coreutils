@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -5436,5 +5436,69 @@ mod link_deref {
                 assert_eq!(src_ino, dest_ino);
             }
         }
+    }
+}
+
+// The cp command might create directories with excessively permissive permissions temporarily,
+// which could be problematic if we aim to preserve ownership or mode. For example, when
+// copying a directory, the destination directory could temporarily be setgid on some filesystems.
+// This temporary setgid status could grant access to other users who share the same group
+// ownership as the newly created directory.To mitigate this issue, when creating a directory we
+// disable these excessive permissions.
+#[test]
+#[cfg(unix)]
+fn test_dir_perm_race_with_preserve_mode_and_ownership() {
+    const SRC_DIR: &str = "src";
+    const DEST_DIR: &str = "dest";
+    const FIFO: &str = "src/fifo";
+    for attr in ["mode", "ownership"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir(SRC_DIR);
+        at.mkdir(DEST_DIR);
+        at.set_mode(SRC_DIR, 0o775);
+        at.set_mode(DEST_DIR, 0o2775);
+        at.mkfifo(FIFO);
+        let child = scene
+            .ucmd()
+            .args(&[
+                format!("--preserve={}", attr).as_str(),
+                "-R",
+                "--copy-contents",
+                "--parents",
+                SRC_DIR,
+                DEST_DIR,
+            ])
+            // make sure permissions weren't disabled because of umask.
+            .umask(0)
+            .run_no_wait();
+        // while cp wait for fifo we could check the dirs created by cp
+        let timeout = Duration::from_secs(10);
+        let start_time = std::time::Instant::now();
+        // wait for cp to create dirs
+        loop {
+            if start_time.elapsed() >= timeout {
+                panic!("timed out: cp took too long to create destination directory")
+            }
+            if at.dir_exists(&format!("{}/{}", DEST_DIR, SRC_DIR)) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let mode = at.metadata(&format!("{}/{}", DEST_DIR, SRC_DIR)).mode();
+        #[allow(clippy::unnecessary_cast)]
+        let mask = if attr == "mode" {
+            libc::S_IWGRP | libc::S_IWOTH
+        } else {
+            libc::S_IRWXG | libc::S_IRWXO
+        } as u32;
+        assert_eq!(
+            (mode & mask),
+            0,
+            "unwanted permissions are present - {}",
+            attr
+        );
+        at.write(FIFO, "done");
+        child.wait().unwrap().succeeded();
     }
 }
