@@ -66,7 +66,6 @@ fn test_stdbuf_invalid_mode_fails() {
             .fails()
             .code_is(125)
             .usage_error("invalid mode '1024R': Value too large for defined data type");
-        #[cfg(not(target_pointer_width = "128"))]
         new_ucmd!()
             .args(&[*option, "1Y", "head"])
             .fails()

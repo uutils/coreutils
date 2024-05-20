@@ -72,7 +72,6 @@ fn test_invalid_buffer_size() {
         .code_is(2)
         .stderr_only("sort: invalid suffix in --buffer-size argument '100f'\n");
 
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .arg("-n")
         .arg("-S")

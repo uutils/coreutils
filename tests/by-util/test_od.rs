@@ -860,7 +860,6 @@ fn test_od_invalid_bytes() {
                 "od: invalid suffix in {option} argument '{INVALID_SUFFIX}'\n"
             ));
 
-        #[cfg(not(target_pointer_width = "128"))]
         new_ucmd!()
             .arg(format!("{option}={BIG_SIZE}"))
             .arg("file")
