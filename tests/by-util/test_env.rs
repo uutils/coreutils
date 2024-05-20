@@ -32,7 +32,10 @@ impl Target {
     }
     fn send_signal(&mut self, signal: Signal) {
         Command::new("kill")
-            .args(&[format!("-{}", signal as i32), format!("{}", self.child.id())])
+            .args(&[
+                format!("-{}", signal as i32),
+                format!("{}", self.child.id()),
+            ])
             .spawn()
             .expect("failed to send signal");
         self.child.delay(100);
