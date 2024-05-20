@@ -304,12 +304,10 @@ fn test_head_invalid_num() {
         .stderr_is(
             "head: invalid number of lines: '1024R': Value too large for defined data type\n",
         );
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
         .fails()
         .stderr_is("head: invalid number of bytes: '1Y': Value too large for defined data type\n");
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
         .fails()
