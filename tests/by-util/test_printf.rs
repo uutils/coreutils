@@ -521,10 +521,7 @@ fn sub_any_specifiers_after_period() {
 
 #[test]
 fn unspecified_left_justify_is_1_width() {
-    new_ucmd!()
-        .args(&["%-o"]) //spell-checker:disable-line
-        .succeeds()
-        .stdout_only("0");
+    new_ucmd!().args(&["%-o"]).succeeds().stdout_only("0");
 }
 
 #[test]
@@ -538,7 +535,7 @@ fn sub_any_specifiers_after_second_param() {
 #[test]
 fn stop_after_additional_escape() {
     new_ucmd!()
-        .args(&["A%sC\\cD%sF", "B", "E"]) //spell-checker:disable-line
+        .args(&["A%sC\\cD%sF", "B", "E"])
         .succeeds()
         .stdout_only("ABC");
 }

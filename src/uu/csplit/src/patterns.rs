@@ -25,14 +25,14 @@ pub enum Pattern {
     SkipToMatch(Regex, i32, ExecutePattern),
 }
 
-impl ToString for Pattern {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for Pattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UpToLine(n, _) => n.to_string(),
-            Self::UpToMatch(regex, 0, _) => format!("/{}/", regex.as_str()),
-            Self::UpToMatch(regex, offset, _) => format!("/{}/{:+}", regex.as_str(), offset),
-            Self::SkipToMatch(regex, 0, _) => format!("%{}%", regex.as_str()),
-            Self::SkipToMatch(regex, offset, _) => format!("%{}%{:+}", regex.as_str(), offset),
+            Self::UpToLine(n, _) => write!(f, "{n}"),
+            Self::UpToMatch(regex, 0, _) => write!(f, "/{}/", regex.as_str()),
+            Self::UpToMatch(regex, offset, _) => write!(f, "/{}/{:+}", regex.as_str(), offset),
+            Self::SkipToMatch(regex, 0, _) => write!(f, "%{}%", regex.as_str()),
+            Self::SkipToMatch(regex, offset, _) => write!(f, "%{}%{:+}", regex.as_str(), offset),
         }
     }
 }

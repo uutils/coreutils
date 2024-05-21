@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore NOFILE
+// spell-checker:ignore NOFILE nonewline
 
 #[cfg(not(windows))]
 use crate::common::util::vec_of_size;
@@ -23,7 +23,6 @@ fn test_output_simple() {
 
 #[test]
 fn test_no_options() {
-    // spell-checker:disable-next-line
     for fixture in ["empty.txt", "alpha.txt", "nonewline.txt"] {
         // Give fixture through command line file argument
         new_ucmd!()
@@ -196,7 +195,6 @@ fn test_directory() {
 fn test_directory_and_file() {
     let s = TestScenario::new(util_name!());
     s.fixtures.mkdir("test_directory2");
-    // spell-checker:disable-next-line
     for fixture in ["empty.txt", "alpha.txt", "nonewline.txt"] {
         s.ucmd()
             .args(&["test_directory2", fixture])
@@ -219,7 +217,7 @@ fn test_three_directories_and_file_and_stdin() {
             "alpha.txt",
             "-",
             "file_which_does_not_exist.txt",
-            "nonewline.txt", // spell-checker:disable-line
+            "nonewline.txt",
             "test_directory3/test_directory5",
             "test_directory3/../test_directory3/test_directory5",
             "test_directory3",

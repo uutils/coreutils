@@ -15,9 +15,9 @@ edition = "2021"
 path = "src/ls.rs"
 
 [dependencies]
+ansi-width = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 chrono = { workspace = true }
-unicode-width = { workspace = true }
 number_prefix = { workspace = true }
 uutils_term_grid = { workspace = true }
 terminal_size = { workspace = true }
@@ -26,6 +26,7 @@ lscolors = { workspace = true }
 uucore = { workspace = true, features = [
   "colors",
   "entries",
+  "format",
   "fs",
   "fsxattr",
   "quoting-style",

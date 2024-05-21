@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn
+// spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
 use crate::common::util::TestScenario;
 
 #[test]
@@ -124,10 +124,10 @@ fn test_complement2() {
 #[test]
 fn test_complement3() {
     new_ucmd!()
-        .args(&["-c", "abcdefgh", "123"]) // spell-checker:disable-line
+        .args(&["-c", "abcdefgh", "123"])
         .pipe_in("the cat and the bat")
         .run()
-        .stdout_is("3he3ca33a3d33he3ba3"); // spell-checker:disable-line
+        .stdout_is("3he3ca33a3d33he3ba3");
 }
 
 #[test]
@@ -291,7 +291,7 @@ fn test_set1_shorter_than_set2() {
         .args(&["ab", "xyz"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde"); // spell-checker:disable-line
+        .stdout_is("xycde");
 }
 
 #[test]
@@ -301,7 +301,7 @@ fn test_truncate() {
         .args(&["-t", "abc", "xy"])
         .pipe_in("abcde")
         .succeeds()
-        .stdout_is("xycde"); // spell-checker:disable-line
+        .stdout_is("xycde");
 }
 
 #[test]
@@ -310,7 +310,7 @@ fn test_truncate_multi() {
         .args(&["-tt", "-t", "abc", "xy"])
         .pipe_in("abcde")
         .succeeds()
-        .stdout_is("xycde"); // spell-checker:disable-line
+        .stdout_is("xycde");
 }
 
 #[test]
@@ -319,7 +319,7 @@ fn test_truncate_with_set1_shorter_than_set2() {
         .args(&["-t", "ab", "xyz"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde"); // spell-checker:disable-line
+        .stdout_is("xycde");
 }
 
 #[test]
@@ -1312,4 +1312,55 @@ fn check_regression_class_blank() {
         .succeeds()
         .no_stderr()
         .stdout_only("a12b");
+}
+
+// Check regression found in https://github.com/uutils/coreutils/issues/6163
+#[test]
+fn check_regression_issue_6163_no_match() {
+    new_ucmd!()
+        .args(&["-c", "-t", "Y", "Z"])
+        .pipe_in("X\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("X\n");
+}
+
+#[test]
+fn check_regression_issue_6163_match() {
+    new_ucmd!()
+        .args(&["-c", "-t", "Y", "Z"])
+        .pipe_in("\0\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("Z\n");
+}
+
+#[test]
+fn check_ignore_truncate_when_deleting_and_squeezing() {
+    new_ucmd!()
+        .args(&["-dts", "asdf", "qwe"])
+        .pipe_in("asdfqqwweerr\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("qwerr\n");
+}
+
+#[test]
+fn check_ignore_truncate_when_deleting() {
+    new_ucmd!()
+        .args(&["-dt", "asdf"])
+        .pipe_in("asdfqwer\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("qwer\n");
+}
+
+#[test]
+fn check_ignore_truncate_when_squeezing() {
+    new_ucmd!()
+        .args(&["-ts", "asdf"])
+        .pipe_in("aassddffqwer\n")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("asdfqwer\n");
 }

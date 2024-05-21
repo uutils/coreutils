@@ -12,7 +12,6 @@ use clap::{Arg, ArgMatches, Command};
 use hex::encode;
 use regex::Captures;
 use regex::Regex;
-use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -20,13 +19,15 @@ use std::io::{self, stdin, BufRead, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::checksum::cksum_output;
+use uucore::display::Quotable;
 use uucore::error::USimpleError;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{set_exit_code, FromIo, UError, UResult};
 use uucore::sum::{
     Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224, Sha3_256,
     Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
 };
-use uucore::{display::Quotable, show_warning};
+use uucore::util_name;
 use uucore::{format_usage, help_about, help_usage};
 
 const NAME: &str = "hashsum";
@@ -46,6 +47,7 @@ struct Options {
     warn: bool,
     output_bits: usize,
     zero: bool,
+    ignore_missing: bool,
 }
 
 /// Creates a Blake2b hasher instance based on the specified length argument.
@@ -57,7 +59,7 @@ struct Options {
 /// greater than 512.
 fn create_blake2b(matches: &ArgMatches) -> UResult<(&'static str, Box<dyn Digest>, usize)> {
     match matches.get_one::<usize>("length") {
-        Some(0) | None => Ok(("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512)),
+        Some(0) | None => Ok(("BLAKE2b", Box::new(Blake2b::new()) as Box<dyn Digest>, 512)),
         Some(length_in_bits) => {
             if *length_in_bits > 512 {
                 return Err(USimpleError::new(
@@ -69,7 +71,7 @@ fn create_blake2b(matches: &ArgMatches) -> UResult<(&'static str, Box<dyn Digest
             if length_in_bits % 8 == 0 {
                 let length_in_bytes = length_in_bits / 8;
                 Ok((
-                    "BLAKE2",
+                    "BLAKE2b",
                     Box::new(Blake2b::with_output_bytes(length_in_bytes)),
                     *length_in_bits,
                 ))
@@ -325,7 +327,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        least somewhat better from a user's perspective.
     let matches = command.try_get_matches_from(args)?;
 
-    let (name, algo, bits) = detect_algo(&binary_name, &matches)?;
+    let (algoname, algo, bits) = detect_algo(&binary_name, &matches)?;
 
     let binary = if matches.get_flag("binary") {
         true
@@ -345,9 +347,15 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let strict = matches.get_flag("strict");
     let warn = matches.get_flag("warn") && !status;
     let zero = matches.get_flag("zero");
+    let ignore_missing = matches.get_flag("ignore-missing");
+
+    if ignore_missing && !check {
+        // --ignore-missing needs -c
+        return Err(HashsumError::IgnoreNotCheck.into());
+    }
 
     let opts = Options {
-        algoname: name,
+        algoname,
         digest: algo,
         output_bits: bits,
         binary,
@@ -359,6 +367,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         strict,
         warn,
         zero,
+        ignore_missing,
     };
 
     match matches.get_many::<OsString>("FILE") {
@@ -432,6 +441,12 @@ pub fn uu_app_common() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("ignore-missing")
+                .long("ignore-missing")
+                .help("don't fail or report status for missing files")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("warn")
                 .short('w')
                 .long("warn")
@@ -466,7 +481,8 @@ fn uu_app_opt_length(command: Command) -> Command {
             .long("length")
             .help("digest length in bits; must not exceed the max for the blake2 algorithm (512) and must be a multiple of 8")
             .value_name("BITS")
-            .value_parser(parse_bit_num),
+            .value_parser(parse_bit_num)
+            .overrides_with("length"),
     )
 }
 
@@ -563,7 +579,7 @@ fn uu_app(binary_name: &str) -> Command {
 #[derive(Debug)]
 enum HashsumError {
     InvalidRegex,
-    InvalidFormat,
+    IgnoreNotCheck,
 }
 
 impl Error for HashsumError {}
@@ -573,9 +589,53 @@ impl std::fmt::Display for HashsumError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::InvalidRegex => write!(f, "invalid regular expression"),
-            Self::InvalidFormat => Ok(()),
+            Self::IgnoreNotCheck => write!(
+                f,
+                "the --ignore-missing option is meaningful only when verifying checksums"
+            ),
         }
     }
+}
+
+/// Creates a Regex for parsing lines based on the given format.
+/// The default value of `gnu_re` created with this function has to be recreated
+/// after the initial line has been parsed, as this line dictates the format
+/// for the rest of them, and mixing of formats is disallowed.
+fn gnu_re_template(bytes_marker: &str, format_marker: &str) -> Result<Regex, HashsumError> {
+    Regex::new(&format!(
+        r"^(?P<digest>[a-fA-F0-9]{bytes_marker}) {format_marker}(?P<fileName>.*)"
+    ))
+    .map_err(|_| HashsumError::InvalidRegex)
+}
+
+fn handle_captures(
+    caps: &Captures,
+    bytes_marker: &str,
+    bsd_reversed: &mut Option<bool>,
+    gnu_re: &mut Regex,
+) -> Result<(String, String, bool), HashsumError> {
+    if bsd_reversed.is_none() {
+        let is_bsd_reversed = caps.name("binary").is_none();
+        let format_marker = if is_bsd_reversed {
+            ""
+        } else {
+            r"(?P<binary>[ \*])"
+        }
+        .to_string();
+
+        *bsd_reversed = Some(is_bsd_reversed);
+        *gnu_re = gnu_re_template(bytes_marker, &format_marker)?;
+    }
+
+    Ok((
+        caps.name("fileName").unwrap().as_str().to_string(),
+        caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
+        if *bsd_reversed == Some(false) {
+            caps.name("binary").unwrap().as_str() == "*"
+        } else {
+            false
+        },
+    ))
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -584,8 +644,10 @@ where
     I: Iterator<Item = &'a OsStr>,
 {
     let mut bad_format = 0;
+    let mut correct_format = 0;
     let mut failed_cksum = 0;
     let mut failed_open_file = 0;
+    let mut skip_summary = false;
     let binary_marker = if options.binary { "*" } else { " " };
     for filename in files {
         let filename = Path::new(filename);
@@ -617,69 +679,32 @@ where
             // BSD reversed mode format is similar to the default mode, but doesn’t use a character to distinguish binary and text modes.
             let mut bsd_reversed = None;
 
-            /// Creates a Regex for parsing lines based on the given format.
-            /// The default value of `gnu_re` created with this function has to be recreated
-            /// after the initial line has been parsed, as this line dictates the format
-            /// for the rest of them, and mixing of formats is disallowed.
-            fn gnu_re_template(
-                bytes_marker: &str,
-                format_marker: &str,
-            ) -> Result<Regex, HashsumError> {
-                Regex::new(&format!(
-                    r"^(?P<digest>[a-fA-F0-9]{bytes_marker}) {format_marker}(?P<fileName>.*)"
-                ))
-                .map_err(|_| HashsumError::InvalidRegex)
-            }
             let mut gnu_re = gnu_re_template(&bytes_marker, r"(?P<binary>[ \*])?")?;
             let bsd_re = Regex::new(&format!(
                 // it can start with \
-                r"^(|\\){algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
+                r"^(\\)?{algorithm}\s*\((?P<fileName>.*)\)\s*=\s*(?P<digest>[a-fA-F0-9]{digest_size})$",
                 algorithm = options.algoname,
                 digest_size = bytes_marker,
             ))
             .map_err(|_| HashsumError::InvalidRegex)?;
 
-            fn handle_captures(
-                caps: &Captures,
-                bytes_marker: &str,
-                bsd_reversed: &mut Option<bool>,
-                gnu_re: &mut Regex,
-            ) -> Result<(String, String, bool), HashsumError> {
-                if bsd_reversed.is_none() {
-                    let is_bsd_reversed = caps.name("binary").is_none();
-                    let format_marker = if is_bsd_reversed {
-                        ""
-                    } else {
-                        r"(?P<binary>[ \*])"
-                    }
-                    .to_string();
-
-                    *bsd_reversed = Some(is_bsd_reversed);
-                    *gnu_re = gnu_re_template(bytes_marker, &format_marker)?;
-                }
-
-                Ok((
-                    caps.name("fileName").unwrap().as_str().to_string(),
-                    caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
-                    if *bsd_reversed == Some(false) {
-                        caps.name("binary").unwrap().as_str() == "*"
-                    } else {
-                        false
-                    },
-                ))
-            }
-
             let buffer = file;
+            // iterate on the lines of the file
             for (i, maybe_line) in buffer.lines().enumerate() {
                 let line = match maybe_line {
                     Ok(l) => l,
                     Err(e) => return Err(e.map_err_context(|| "failed to read file".to_string())),
                 };
+                if line.is_empty() {
+                    // empty line, skip it
+                    continue;
+                }
                 let (ck_filename, sum, binary_check) = match gnu_re.captures(&line) {
                     Some(caps) => {
                         handle_captures(&caps, &bytes_marker, &mut bsd_reversed, &mut gnu_re)?
                     }
                     None => match bsd_re.captures(&line) {
+                        // if the GNU style parsing failed, try the BSD style
                         Some(caps) => (
                             caps.name("fileName").unwrap().as_str().to_string(),
                             caps.name("digest").unwrap().as_str().to_ascii_lowercase(),
@@ -688,11 +713,14 @@ where
                         None => {
                             bad_format += 1;
                             if options.strict {
-                                return Err(HashsumError::InvalidFormat.into());
+                                // if we use strict, the warning "lines are improperly formatted"
+                                // will trigger an exit code of 1
+                                set_exit_code(1);
                             }
                             if options.warn {
-                                show_warning!(
-                                    "{}: {}: improperly formatted {} checksum line",
+                                eprintln!(
+                                    "{}: {}: {}: improperly formatted {} checksum line",
+                                    util_name(),
                                     filename.maybe_quote(),
                                     i + 1,
                                     options.algoname
@@ -705,6 +733,12 @@ where
                 let (ck_filename_unescaped, prefix) = unescape_filename(&ck_filename);
                 let f = match File::open(ck_filename_unescaped) {
                     Err(_) => {
+                        if options.ignore_missing {
+                            // No need to show or return an error
+                            // except when the file doesn't have any successful checks
+                            continue;
+                        }
+
                         failed_open_file += 1;
                         println!(
                             "{}: {}: No such file or directory",
@@ -712,6 +746,7 @@ where
                             ck_filename
                         );
                         println!("{ck_filename}: FAILED open or read");
+                        set_exit_code(1);
                         continue;
                     }
                     Ok(file) => file,
@@ -735,6 +770,7 @@ where
                 // and display it using uucore::display::print_verbatim(). This is
                 // easier (and more important) on Unix than on Windows.
                 if sum == real_sum {
+                    correct_format += 1;
                     if !options.quiet {
                         println!("{prefix}{ck_filename}: OK");
                     }
@@ -743,6 +779,7 @@ where
                         println!("{prefix}{ck_filename}: FAILED");
                     }
                     failed_cksum += 1;
+                    set_exit_code(1);
                 }
             }
         } else {
@@ -755,36 +792,50 @@ where
             .map_err_context(|| "failed to read input".to_string())?;
             let (escaped_filename, prefix) = escape_filename(filename);
             if options.tag {
-                println!(
-                    "{}{} ({}) = {}",
-                    prefix, options.algoname, escaped_filename, sum
-                );
+                if options.algoname == "BLAKE2b" && options.digest.output_bits() != 512 {
+                    // special case for BLAKE2b with non-default output length
+                    println!(
+                        "BLAKE2b-{} ({escaped_filename}) = {sum}",
+                        options.digest.output_bits()
+                    );
+                } else {
+                    println!("{prefix}{} ({escaped_filename}) = {sum}", options.algoname);
+                }
             } else if options.nonames {
                 println!("{sum}");
             } else if options.zero {
                 // with zero, we don't escape the filename
-                print!("{} {}{}\0", sum, binary_marker, filename.display());
+                print!("{sum} {binary_marker}{}\0", filename.display());
             } else {
-                println!("{}{} {}{}", prefix, sum, binary_marker, escaped_filename);
+                println!("{prefix}{sum} {binary_marker}{escaped_filename}");
             }
+        }
+        if bad_format > 0 && failed_cksum == 0 && correct_format == 0 && !options.status {
+            // we have only bad format. we didn't have anything correct.
+            // GNU has a different error message for this (with the filename)
+            set_exit_code(1);
+            eprintln!(
+                "{}: {}: no properly formatted checksum lines found",
+                util_name(),
+                filename.maybe_quote(),
+            );
+            skip_summary = true;
+        }
+        if options.ignore_missing && correct_format == 0 {
+            // we have only bad format
+            // and we had ignore-missing
+            eprintln!(
+                "{}: {}: no file was verified",
+                util_name(),
+                filename.maybe_quote(),
+            );
+            skip_summary = true;
+            set_exit_code(1);
         }
     }
-    if !options.status {
-        match bad_format.cmp(&1) {
-            Ordering::Equal => show_warning!("{} line is improperly formatted", bad_format),
-            Ordering::Greater => show_warning!("{} lines are improperly formatted", bad_format),
-            Ordering::Less => {}
-        };
-        if failed_cksum > 0 {
-            show_warning!("{} computed checksum did NOT match", failed_cksum);
-        }
-        match failed_open_file.cmp(&1) {
-            Ordering::Equal => show_warning!("{} listed file could not be read", failed_open_file),
-            Ordering::Greater => {
-                show_warning!("{} listed files could not be read", failed_open_file);
-            }
-            Ordering::Less => {}
-        }
+
+    if !options.status && !skip_summary {
+        cksum_output(bad_format, failed_cksum, failed_open_file);
     }
 
     Ok(())

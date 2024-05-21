@@ -14,6 +14,7 @@ use std::num::IntErrorKind;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::posix::{posix_version, OBSOLETE};
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
 const ABOUT: &str = help_about!("uniq.md");
@@ -609,11 +610,11 @@ pub fn uu_app() -> Command {
             Arg::new(options::ALL_REPEATED)
                 .short('D')
                 .long(options::ALL_REPEATED)
-                .value_parser([
+                .value_parser(ShortcutValueParser::new([
                     "none",
                     "prepend",
                     "separate"
-                ])
+                ]))
                 .help("print all duplicate lines. Delimiting is done with blank lines. [default: none]")
                 .value_name("delimit-method")
                 .num_args(0..=1)
@@ -623,12 +624,12 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::GROUP)
                 .long(options::GROUP)
-                .value_parser([
+                .value_parser(ShortcutValueParser::new([
                     "separate",
                     "prepend",
                     "append",
                     "both",
-                ])
+                ]))
                 .help("show all items, separating groups with an empty line. [default: separate]")
                 .value_name("group-method")
                 .num_args(0..=1)

@@ -93,7 +93,7 @@ skip = [
   { name = "windows_x86_64_gnullvm", version = "0.48.0" },
   # windows-targets
   { name = "windows_x86_64_msvc", version = "0.48.0" },
-  # various crates
+  # data-encoding-macro-internal
   { name = "syn", version = "1.0.109" },
   # various crates
   { name = "bitflags", version = "1.3.2" },

@@ -19,6 +19,22 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_short_help_is_long_help() {
+    // I can't believe that this test is necessary.
+    let help_short = new_ucmd!()
+        .arg("-h")
+        .succeeds()
+        .no_stderr()
+        .stdout_str()
+        .to_owned();
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(help_short);
+}
+
+#[test]
 fn test_tee_processing_multiple_operands() {
     // POSIX says: "Processing of at least 13 file operands shall be supported."
 
@@ -312,6 +328,23 @@ mod linux_only {
     }
 
     #[test]
+    fn test_pipe_error_warn_nopipe_3_shortcut() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=warn-")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
     fn test_pipe_error_warn() {
         let (at, mut ucmd) = at_and_ucmd!();
 
@@ -353,6 +386,23 @@ mod linux_only {
 
         let proc = ucmd
             .arg("--output-error=exit-nopipe")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_error_exit_nopipe_shortcut() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=exit-nop")
             .arg(file_out_a)
             .set_stdout(make_broken_pipe());
 

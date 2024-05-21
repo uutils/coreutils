@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf
-// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGPIPE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX AIOCANCEL XRES RTMIN RTMAX
+// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX
 #[cfg(unix)]
 use nix::errno::Errno;
 #[cfg(unix)]
@@ -288,6 +288,55 @@ static ALL_SIGNALS: [&str; SIGNALS_SIZE] = [
     "INFO",
     "RTMIN",
     "RTMAX",
+];
+
+/*
+   The following signals are defined in AIX:
+
+   SIGHUP     hangup, generated when terminal disconnects
+   SIGINT     interrupt, generated from terminal special char
+   SIGQUIT    quit, generated from terminal special char
+   SIGILL     illegal instruction (not reset when caught)
+   SIGTRAP    trace trap (not reset when caught)
+   SIGABRT    abort process
+   SIGEMT     EMT instruction
+   SIGFPE     floating point exception
+   SIGKILL    kill (cannot be caught or ignored)
+   SIGBUS     bus error (specification exception)
+   SIGSEGV    segmentation violation
+   SIGSYS     bad argument to system call
+   SIGPIPE    write on a pipe with no one to read it
+   SIGALRM    alarm clock timeout
+   SIGTERM    software termination signal
+   SIGURG     urgent condition on I/O channel
+   SIGSTOP    stop (cannot be caught or ignored)
+   SIGTSTP    interactive stop
+   SIGCONT    continue (cannot be caught or ignored)
+   SIGCHLD    sent to parent on child stop or exit
+   SIGTTIN    background read attempted from control terminal
+   SIGTTOU    background write attempted to control terminal
+   SIGIO      I/O possible, or completed
+   SIGXCPU    cpu time limit exceeded (see setrlimit())
+   SIGXFSZ    file size limit exceeded (see setrlimit())
+   SIGMSG     input data is in the ring buffer
+   SIGWINCH   window size changed
+   SIGPWR     power-fail restart
+   SIGUSR1    user defined signal 1
+   SIGUSR2    user defined signal 2
+   SIGPROF    profiling time alarm (see setitimer)
+   SIGDANGER  system crash imminent; free up some page space
+   SIGVTALRM  virtual time alarm (see setitimer)
+   SIGMIGRATE migrate process
+   SIGPRE     programming exception
+   SIGVIRT    AIX virtual time alarm
+   SIGTALRM   per-thread alarm clock
+*/
+#[cfg(target_os = "aix")]
+pub static ALL_SIGNALS: [&str; 37] = [
+    "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV", "SYS",
+    "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO", "XCPU",
+    "XFSZ", "MSG", "WINCH", "PWR", "USR1", "USR2", "PROF", "DANGER", "VTALRM", "MIGRATE", "PRE",
+    "VIRT", "TALRM",
 ];
 
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {

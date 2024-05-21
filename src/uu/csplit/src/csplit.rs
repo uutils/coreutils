@@ -86,17 +86,13 @@ impl CsplitOptions {
 /// - [`CsplitError::MatchNotFound`] if no line matched a regular expression.
 /// - [`CsplitError::MatchNotFoundOnRepetition`], like previous but after applying the pattern
 ///   more than once.
-pub fn csplit<T>(
-    options: &CsplitOptions,
-    patterns: Vec<String>,
-    input: T,
-) -> Result<(), CsplitError>
+pub fn csplit<T>(options: &CsplitOptions, patterns: &[String], input: T) -> Result<(), CsplitError>
 where
     T: BufRead,
 {
     let mut input_iter = InputSplitter::new(input.lines().enumerate());
     let mut split_writer = SplitWriter::new(options);
-    let patterns: Vec<patterns::Pattern> = patterns::get_patterns(&patterns[..])?;
+    let patterns: Vec<patterns::Pattern> = patterns::get_patterns(patterns)?;
     let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
 
     // consume the rest, unless there was an error
@@ -568,7 +564,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = CsplitOptions::new(&matches);
     if file_name == "-" {
         let stdin = io::stdin();
-        Ok(csplit(&options, patterns, stdin.lock())?)
+        Ok(csplit(&options, &patterns, stdin.lock())?)
     } else {
         let file = File::open(file_name)
             .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
@@ -578,7 +574,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !file_metadata.is_file() {
             return Err(CsplitError::NotRegularFile(file_name.to_string()).into());
         }
-        Ok(csplit(&options, patterns, BufReader::new(file))?)
+        Ok(csplit(&options, &patterns, BufReader::new(file))?)
     }
 }
 

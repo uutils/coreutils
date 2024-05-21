@@ -41,14 +41,14 @@ fn test_base64() {
         .pipe_in("to>be?")
         .succeeds()
         .no_stderr()
-        .stdout_only("dG8+YmU/\n"); // spell-checker:disable-line
+        .stdout_only("dG8+YmU/\n");
 }
 
 #[test]
 fn test_base64_decode() {
     new_ucmd!()
         .args(&["--base64", "-d"])
-        .pipe_in("dG8+YmU/") // spell-checker:disable-line
+        .pipe_in("dG8+YmU/")
         .succeeds()
         .no_stderr()
         .stdout_only("to>be?");
@@ -61,14 +61,14 @@ fn test_base64url() {
         .pipe_in("to>be?")
         .succeeds()
         .no_stderr()
-        .stdout_only("dG8-YmU_\n"); // spell-checker:disable-line
+        .stdout_only("dG8-YmU_\n");
 }
 
 #[test]
 fn test_base64url_decode() {
     new_ucmd!()
         .args(&["--base64url", "-d"])
-        .pipe_in("dG8-YmU_") // spell-checker:disable-line
+        .pipe_in("dG8-YmU_")
         .succeeds()
         .no_stderr()
         .stdout_only("to>be?");

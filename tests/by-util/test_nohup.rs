@@ -45,7 +45,7 @@ fn test_nohup_with_pseudo_terminal_emulation_on_stdin_stdout_stderr_get_replaced
     let result = ts
         .ucmd()
         .terminal_simulation(true)
-        .args(&["sh", "is_atty.sh"])
+        .args(&["sh", "is_a_tty.sh"])
         .succeeds();
 
     assert_eq!(
@@ -58,6 +58,6 @@ fn test_nohup_with_pseudo_terminal_emulation_on_stdin_stdout_stderr_get_replaced
     // this proves that nohup was exchanging the stdio file descriptors
     assert_eq!(
         std::fs::read_to_string(ts.fixtures.plus_as_string("nohup.out")).unwrap(),
-        "stdin is not atty\nstdout is not atty\nstderr is not atty\n"
+        "stdin is not a tty\nstdout is not a tty\nstderr is not a tty\n"
     );
 }

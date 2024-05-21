@@ -217,10 +217,7 @@ impl Spec {
                 if *c == b'u' && flags.hash {
                     return Err(&start[..index]);
                 }
-                let prefix = match flags.hash {
-                    false => Prefix::No,
-                    true => Prefix::Yes,
-                };
+                let prefix = if flags.hash { Prefix::Yes } else { Prefix::No };
                 let variant = match c {
                     b'u' => UnsignedIntVariant::Decimal,
                     b'o' => UnsignedIntVariant::Octal(prefix),
@@ -245,13 +242,15 @@ impl Spec {
                     b'a' | b'A' => FloatVariant::Hexadecimal,
                     _ => unreachable!(),
                 },
-                force_decimal: match flags.hash {
-                    false => ForceDecimal::No,
-                    true => ForceDecimal::Yes,
+                force_decimal: if flags.hash {
+                    ForceDecimal::Yes
+                } else {
+                    ForceDecimal::No
                 },
-                case: match c.is_ascii_uppercase() {
-                    false => Case::Lowercase,
-                    true => Case::Uppercase,
+                case: if c.is_ascii_uppercase() {
+                    Case::Uppercase
+                } else {
+                    Case::Lowercase
                 },
                 alignment,
                 positive_sign,

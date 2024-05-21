@@ -111,36 +111,40 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let locked_stdout = stdout.lock();
     let mut buffered_stdout = BufWriter::new(locked_stdout);
 
+    // According to the man page: translating only happens if deleting or if a second set is given
+    let translating = !delete_flag && sets.len() > 1;
     let mut sets_iter = sets.iter().map(|c| c.as_str());
     let (set1, set2) = Sequence::solve_set_characters(
         sets_iter.next().unwrap_or_default().as_bytes(),
         sets_iter.next().unwrap_or_default().as_bytes(),
-        truncate_set1_flag,
+        complement_flag,
+        // if we are not translating then we don't truncate set1
+        truncate_set1_flag && translating,
     )?;
 
     // '*_op' are the operations that need to be applied, in order.
     if delete_flag {
         if squeeze_flag {
-            let delete_op = DeleteOperation::new(set1, complement_flag);
-            let squeeze_op = SqueezeOperation::new(set2, false);
+            let delete_op = DeleteOperation::new(set1);
+            let squeeze_op = SqueezeOperation::new(set2);
             let op = delete_op.chain(squeeze_op);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let op = DeleteOperation::new(set1, complement_flag);
+            let op = DeleteOperation::new(set1);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else if squeeze_flag {
         if sets_len < 2 {
-            let op = SqueezeOperation::new(set1, complement_flag);
+            let op = SqueezeOperation::new(set1);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let translate_op = TranslateOperation::new(set1, set2.clone(), complement_flag)?;
-            let squeeze_op = SqueezeOperation::new(set2, false);
+            let translate_op = TranslateOperation::new(set1, set2.clone())?;
+            let squeeze_op = SqueezeOperation::new(set2);
             let op = translate_op.chain(squeeze_op);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else {
-        let op = TranslateOperation::new(set1, set2, complement_flag)?;
+        let op = TranslateOperation::new(set1, set2)?;
         translate_input(&mut locked_stdin, &mut buffered_stdout, op);
     }
     Ok(())

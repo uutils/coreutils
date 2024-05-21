@@ -16,6 +16,7 @@ use std::io::IsTerminal;
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size_u64, ParseSizeError};
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_usage, show_warning};
 
 const ABOUT: &str = help_about!("tail.md");
@@ -494,7 +495,7 @@ pub fn uu_app() -> Command {
                 .default_missing_value("descriptor")
                 .num_args(0..=1)
                 .require_equals(true)
-                .value_parser(["descriptor", "name"])
+                .value_parser(ShortcutValueParser::new(["descriptor", "name"]))
                 .overrides_with(options::FOLLOW)
                 .help("Print the file as it grows"),
         )

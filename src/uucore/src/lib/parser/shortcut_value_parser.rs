@@ -66,7 +66,7 @@ impl TypedValueParser for ShortcutValueParser {
         let matched_values: Vec<_> = self
             .0
             .iter()
-            .filter(|x| x.get_name().starts_with(value))
+            .filter(|x| x.get_name_and_aliases().any(|name| name.starts_with(value)))
             .collect();
 
         match matched_values.len() {
@@ -101,7 +101,7 @@ where
 mod tests {
     use std::ffi::OsStr;
 
-    use clap::{builder::TypedValueParser, error::ErrorKind, Command};
+    use clap::{builder::PossibleValue, builder::TypedValueParser, error::ErrorKind, Command};
 
     use super::ShortcutValueParser;
 
@@ -165,5 +165,31 @@ mod tests {
 
         let result = parser.parse_ref(&cmd, None, OsStr::from_bytes(&[0xc3, 0x28]));
         assert_eq!(ErrorKind::InvalidUtf8, result.unwrap_err().kind());
+    }
+
+    #[test]
+    fn test_ambiguous_word_same_meaning() {
+        let cmd = Command::new("cmd");
+        let parser = ShortcutValueParser::new([
+            PossibleValue::new("atime").alias("access"),
+            "status".into(),
+        ]);
+        // Even though "a" is ambiguous (it might mean "atime" or "access"),
+        // the meaning is uniquely defined, therefore accept it.
+        let atime_values = [
+            // spell-checker:disable-next-line
+            "atime", "atim", "at", "a", "access", "acces", "acce", "acc", "ac",
+        ];
+        // spell-checker:disable-next-line
+        let status_values = ["status", "statu", "stat", "sta", "st", "st"];
+
+        for value in atime_values {
+            let result = parser.parse_ref(&cmd, None, OsStr::new(value));
+            assert_eq!("atime", result.unwrap());
+        }
+        for value in status_values {
+            let result = parser.parse_ref(&cmd, None, OsStr::new(value));
+            assert_eq!("status", result.unwrap());
+        }
     }
 }
