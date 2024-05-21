@@ -47,10 +47,11 @@ pub struct Options {
     /// If given, uses time from `source` but on given date
     pub date: Option<String>,
 
+    /// Whether to change access time only, modification time only, or both
     pub change_times: ChangeTimes,
 
-    /// When true, error when file doesn't exist and `--no-dereference` was passed
-    /// or the file couldn't be created
+    /// When true, error when file doesn't exist and either `--no-dereference`
+    /// was passed or the file couldn't be created
     pub strict: bool,
 }
 
@@ -61,11 +62,14 @@ pub enum InputFile {
     Stdout,
 }
 
-/// Whether to set access time, modification time, or both
+/// Whether to set access time only, modification time only, or both
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ChangeTimes {
+    /// Change only access time
     AtimeOnly,
+    /// Change only modification time
     MtimeOnly,
+    /// Change both access and modification times
     Both,
 }
 
@@ -291,6 +295,14 @@ pub fn uu_app() -> Command {
 /// Possible causes:
 /// - The user doesn't have permission to access the file
 /// - One of the directory components of the file path doesn't exist.
+///
+/// It will return an `Err` on the first error. However, for any of the files,
+/// if all of the following are true, it will print the error and continue touching
+/// the rest of the files.
+/// - `opts.strict` is `false`
+/// - The file doesn't already exist
+/// - `-c`/`--no-create` was passed (`opts.no_create`)
+/// - Either `-h`/`--no-dereference` was passed (`opts.no_deref`) or the file couldn't be created
 pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     let (atime, mtime) = match &opts.source {
         Source::Reference(reference) => {
@@ -338,7 +350,14 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     Ok(())
 }
 
-/// Touch a single file
+/// Create or update the timestamp for a single file.
+///
+/// # Arguments
+///
+/// - `path` - The path to the file to create/update timestamp for
+/// - `is_stdout` - Stdout is handled specially, see [`update_times`] for more info
+/// - `atime` - Access time to set for the file
+/// - `mtime` - Modification time to set for the file
 fn touch_file(
     path: &Path,
     is_stdout: bool,
@@ -401,6 +420,11 @@ fn touch_file(
 }
 
 /// Returns which of the times (access, modification) are to be changed.
+///
+/// Note that "-a" and "-m" may be passed together; this is not an xor.
+/// - If `-a` is passed but not `-m`, only access time is changed
+/// - If `-m` is passed but not `-a`, only modification time is changed
+/// - If neither or both are passed, both times are changed
 fn determine_atime_mtime_change(matches: &ArgMatches) -> ChangeTimes {
     // If `--time` is given, Some(true) if equivalent to `-a`, Some(false) if equivalent to `-m`
     // If `--time` not given, None
@@ -415,7 +439,6 @@ fn determine_atime_mtime_change(matches: &ArgMatches) -> ChangeTimes {
     let atime_only = matches.get_flag(options::ACCESS) || time_access_only.unwrap_or_default();
     let mtime_only = matches.get_flag(options::MODIFICATION) || !time_access_only.unwrap_or(true);
 
-    // Note that "-a" and "-m" may be passed together; this is not an xor.
     if atime_only && !mtime_only {
         ChangeTimes::AtimeOnly
     } else if mtime_only && !atime_only {
@@ -425,7 +448,11 @@ fn determine_atime_mtime_change(matches: &ArgMatches) -> ChangeTimes {
     }
 }
 
-// Updating file access and modification times based on user-specified options
+/// Updating file access and modification times based on user-specified options
+///
+/// If the file is not stdout (`!is_stdout`) and `-h`/`--no-dereference` was
+/// passed, then, if the given file is a symlink, its own times will be updated,
+/// rather than the file it points to.
 fn update_times(
     path: &Path,
     is_stdout: bool,
@@ -453,9 +480,6 @@ fn update_times(
     // sets the file access and modification times for a file or a symbolic link.
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
-    // If the filename is not "-", indicating a special case for touch -h -,
-    // the code checks if the NO_DEREF flag is set, which means the user wants to
-    // set the times for a symbolic link itself, rather than the file it points to.
     if opts.no_deref && !is_stdout {
         set_symlink_file_times(path, atime, mtime)
     } else {
@@ -464,9 +488,9 @@ fn update_times(
     .map_err_context(|| format!("setting times of {}", path.quote()))
 }
 
-// Get metadata of the provided path
-// If `follow` is `true`, the function will try to follow symlinks
-// If `follow` is `false` or the symlink is broken, the function will return metadata of the symlink itself
+/// Get metadata of the provided path
+/// If `follow` is `true`, the function will try to follow symlinks
+/// If `follow` is `false` or the symlink is broken, the function will return metadata of the symlink itself
 fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
     let metadata = if follow {
         fs::metadata(path).or_else(|_| fs::symlink_metadata(path))
