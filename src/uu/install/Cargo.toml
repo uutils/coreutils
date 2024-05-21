@@ -1,6 +1,6 @@
 [package]
 name = "uu_install"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["Ben Eills <ben@beneills.com>", "uutils developers"]
 license = "MIT"
 description = "install ~ (uutils) copy files from SOURCE to DESTINATION (with specified attributes)"

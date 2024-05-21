@@ -54,8 +54,6 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
-use once_cell::sync::Lazy;
-
 use crate::*; // import macros from `../../macros.rs`
 
 // In case the c_char array doesn't end with NULL
@@ -191,7 +189,8 @@ impl Utmpx {
         let ts_nanos: i128 = (1_000_000_000_i64 * self.inner.ut_tv.tv_sec as i64
             + 1_000_i64 * self.inner.ut_tv.tv_usec as i64)
             .into();
-        let local_offset = time::OffsetDateTime::now_local().unwrap().offset();
+        let local_offset =
+            time::OffsetDateTime::now_local().map_or_else(|_| time::UtcOffset::UTC, |v| v.offset());
         time::OffsetDateTime::from_unix_timestamp_nanos(ts_nanos)
             .unwrap()
             .to_offset(local_offset)

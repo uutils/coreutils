@@ -2,7 +2,7 @@
 
 [package]
 name = "uu_tac"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tac ~ (uutils) concatenate and display input lines in reverse order"

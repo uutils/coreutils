@@ -1,6 +1,6 @@
 [package]
 name = "uu_logname"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "logname ~ (uutils) display the login name of the current user"

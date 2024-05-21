@@ -1,6 +1,6 @@
 [package]
 name = "uu_mktemp"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "mktemp ~ (uutils) create and display a temporary file or directory from TEMPLATE"

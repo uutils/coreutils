@@ -60,7 +60,7 @@ pub enum PositiveSign {
     Space,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NumberAlignment {
     Left,
     RightSpace,
@@ -140,43 +140,25 @@ impl Formatter for UnsignedInt {
     fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
         let mut s = match self.variant {
             UnsignedIntVariant::Decimal => format!("{x}"),
-            UnsignedIntVariant::Octal(Prefix::No) => format!("{x:o}"),
-            UnsignedIntVariant::Octal(Prefix::Yes) => {
-                // The prefix that rust uses is `0o`, but GNU uses `0`.
-                // We also need to take into account that 0 should not be 00
-                // Since this is an unsigned int, we do not need to take the minus
-                // sign into account.
-                if x == 0 {
-                    format!("{x:o}")
-                } else {
-                    format!("0{x:o}")
-                }
-            }
-            UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::No) => {
+            UnsignedIntVariant::Octal(_) => format!("{x:o}"),
+            UnsignedIntVariant::Hexadecimal(Case::Lowercase, _) => {
                 format!("{x:x}")
             }
-            UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes) => {
-                if x == 0 {
-                    "0".to_string()
-                } else {
-                    format!("{x:#x}")
-                }
-            }
-            UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::No) => {
+            UnsignedIntVariant::Hexadecimal(Case::Uppercase, _) => {
                 format!("{x:X}")
-            }
-            UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes) => {
-                if x == 0 {
-                    "0".to_string()
-                } else {
-                    format!("{x:#X}")
-                }
             }
         };
 
-        if self.precision > s.len() {
-            s = format!("{:0width$}", s, width = self.precision);
-        }
+        // Zeroes do not get a prefix. An octal value does also not get a
+        // prefix if the padded value will not start with a zero.
+        let prefix = match (x, self.variant) {
+            (1.., UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes)) => "0x",
+            (1.., UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes)) => "0X",
+            (1.., UnsignedIntVariant::Octal(Prefix::Yes)) if s.len() >= self.precision => "0",
+            _ => "",
+        };
+
+        s = format!("{prefix}{s:0>width$}", width = self.precision);
 
         match self.alignment {
             NumberAlignment::Left => write!(writer, "{s:<width$}", width = self.width),
@@ -186,6 +168,24 @@ impl Formatter for UnsignedInt {
     }
 
     fn try_from_spec(s: Spec) -> Result<Self, FormatError> {
+        // A signed int spec might be mapped to an unsigned int spec if no sign is specified
+        let s = if let Spec::SignedInt {
+            width,
+            precision,
+            positive_sign: PositiveSign::None,
+            alignment,
+        } = s
+        {
+            Spec::UnsignedInt {
+                variant: UnsignedIntVariant::Decimal,
+                width,
+                precision,
+                alignment,
+            }
+        } else {
+            s
+        };
+
         let Spec::UnsignedInt {
             variant,
             width,

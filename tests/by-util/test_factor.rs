@@ -3,16 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (methods) hexdigest
+// spell-checker:ignore (methods) hexdigest funcs nprimes
 
 use crate::common::util::TestScenario;
 
 use std::time::{Duration, SystemTime};
 
-#[path = "../../src/uu/factor/sieve.rs"]
-mod sieve;
-
-use self::sieve::Sieve;
 use rand::distributions::{Distribution, Uniform};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 
@@ -28,6 +24,15 @@ fn test_invalid_arg() {
 fn test_valid_arg_exponents() {
     new_ucmd!().arg("-h").succeeds().code_is(0);
     new_ucmd!().arg("--exponents").succeeds().code_is(0);
+}
+
+#[test]
+fn test_repeated_exponents() {
+    new_ucmd!()
+        .args(&["-hh", "1234", "10240"])
+        .succeeds()
+        .stdout_only("1234: 2 617\n10240: 2^11 5\n")
+        .no_stderr();
 }
 
 #[test]
@@ -145,10 +150,8 @@ fn test_cli_args() {
 
 #[test]
 fn test_random() {
-    use conv::prelude::ValueFrom;
-
-    let log_num_primes = f64::value_from(NUM_PRIMES).unwrap().log2().ceil();
-    let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();
+    let log_num_primes = f64::from(u32::try_from(NUM_PRIMES).unwrap()).log2().ceil();
+    let primes = num_prime::nt_funcs::nprimes(NUM_PRIMES);
 
     let rng_seed = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -1261,4 +1264,54 @@ const PRIMES50: &[u64] = &[
 #[test]
 fn fails_on_directory() {
     new_ucmd!().pipe_in(".").fails();
+}
+
+#[test]
+fn succeeds_with_numbers_larger_than_u64() {
+    new_ucmd!()
+        .arg("158909489063877810457")
+        .succeeds()
+        .stdout_is("158909489063877810457: 3401347 3861211 12099721\n");
+    new_ucmd!()
+        .arg("222087527029934481871")
+        .succeeds()
+        .stdout_is("222087527029934481871: 15601 26449 111427 4830277\n");
+    new_ucmd!()
+        .arg("12847291069740315094892340035")
+        .succeeds()
+        .stdout_is(
+            "12847291069740315094892340035: \
+            5 4073 18899 522591721 63874247821\n",
+        );
+}
+
+#[test]
+fn succeeds_with_numbers_larger_than_u128() {
+    new_ucmd!()
+        .arg("-h")
+        .arg("340282366920938463463374607431768211456")
+        .succeeds()
+        .stdout_is("340282366920938463463374607431768211456: 2^128\n");
+    new_ucmd!()
+        .arg("+170141183460469231731687303715884105729")
+        .succeeds()
+        .stdout_is(
+            "170141183460469231731687303715884105729: \
+                 3 56713727820156410577229101238628035243\n",
+        );
+}
+
+#[test]
+fn succeeds_with_numbers_larger_than_u256() {
+    new_ucmd!()
+        .arg("-h")
+        .arg(
+            "115792089237316195423570985008687907853\
+            269984665640564039457584007913129639936",
+        )
+        .succeeds()
+        .stdout_is(
+            "115792089237316195423570985008687907853\
+                269984665640564039457584007913129639936: 2^256\n",
+        );
 }

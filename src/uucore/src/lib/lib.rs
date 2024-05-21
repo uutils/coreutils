@@ -22,9 +22,11 @@ pub use uucore_procs::*;
 // * cross-platform modules
 pub use crate::mods::display;
 pub use crate::mods::error;
+pub use crate::mods::io;
 pub use crate::mods::line_ending;
 pub use crate::mods::os;
 pub use crate::mods::panic;
+pub use crate::mods::posix;
 
 // * string parsing modules
 pub use crate::parser::parse_glob;
@@ -35,6 +37,8 @@ pub use crate::parser::shortcut_value_parser;
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
 pub use crate::features::backup_control;
+#[cfg(feature = "checksum")]
+pub use crate::features::checksum;
 #[cfg(feature = "colors")]
 pub use crate::features::colors;
 #[cfg(feature = "encoding")]

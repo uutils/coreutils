@@ -1,6 +1,6 @@
 [package]
 name = "uu_nl"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "nl ~ (uutils) display input with added line numbers"

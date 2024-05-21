@@ -1,6 +1,6 @@
 [package]
 name = "uu_users"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "users ~ (uutils) display names of currently logged-in users"

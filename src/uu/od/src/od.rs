@@ -43,6 +43,7 @@ use clap::{crate_version, parser::ValueSource, Arg, ArgMatches, Command};
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::parse_size::ParseSizeError;
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_warning};
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
@@ -287,7 +288,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::ENDIAN)
                 .long(options::ENDIAN)
                 .help("byte order to use for multi-byte formats")
-                .value_parser(["big", "little"])
+                .value_parser(ShortcutValueParser::new(["big", "little"]))
                 .value_name("big|little"),
         )
         .arg(

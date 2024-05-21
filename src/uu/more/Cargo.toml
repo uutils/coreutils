@@ -1,6 +1,6 @@
 [package]
 name = "uu_more"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "more ~ (uutils) input perusal filter"
@@ -23,6 +23,9 @@ unicode-segmentation = { workspace = true }
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
 nix = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+crossterm = { workspace = true, features = ["use-dev-tty"] }
 
 [[bin]]
 name = "more"

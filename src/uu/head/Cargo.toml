@@ -1,6 +1,6 @@
 [package]
 name = "uu_head"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "head ~ (uutils) display the first lines of input"
@@ -17,7 +17,7 @@ path = "src/head.rs"
 [dependencies]
 clap = { workspace = true }
 memchr = { workspace = true }
-uucore = { workspace = true, features = ["ringbuffer", "lines"] }
+uucore = { workspace = true, features = ["ringbuffer", "lines", "fs"] }
 
 [[bin]]
 name = "head"

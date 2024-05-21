@@ -124,6 +124,15 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_split_non_existing_file() {
+    new_ucmd!()
+        .arg("non-existing")
+        .fails()
+        .code_is(1)
+        .stderr_is("split: cannot open 'non-existing' for reading: No such file or directory\n");
+}
+
+#[test]
 fn test_split_default() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_default";
@@ -696,7 +705,6 @@ fn test_split_invalid_bytes_size() {
 
 #[test]
 fn test_split_overflow_bytes_size() {
-    #[cfg(not(target_pointer_width = "128"))]
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "test_split_overflow_bytes_size";
     RandomFile::new(&at, name).add_bytes(1000);
@@ -1068,6 +1076,7 @@ fn test_split_number_oversized_stdin() {
     new_ucmd!()
         .args(&["--number=3", "---io-blksize=600"])
         .pipe_in_fixture("sixhundredfiftyonebytes.txt")
+        .ignore_stdin_write_error()
         .fails()
         .stderr_only("split: -: cannot determine input size\n");
 }

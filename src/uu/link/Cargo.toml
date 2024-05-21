@@ -1,6 +1,6 @@
 [package]
 name = "uu_link"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "link ~ (uutils) create a hard (file system) link to FILE"

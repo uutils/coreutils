@@ -521,10 +521,7 @@ fn sub_any_specifiers_after_period() {
 
 #[test]
 fn unspecified_left_justify_is_1_width() {
-    new_ucmd!()
-        .args(&["%-o"]) //spell-checker:disable-line
-        .succeeds()
-        .stdout_only("0");
+    new_ucmd!().args(&["%-o"]).succeeds().stdout_only("0");
 }
 
 #[test]
@@ -538,7 +535,7 @@ fn sub_any_specifiers_after_second_param() {
 #[test]
 fn stop_after_additional_escape() {
     new_ucmd!()
-        .args(&["A%sC\\cD%sF", "B", "E"]) //spell-checker:disable-line
+        .args(&["A%sC\\cD%sF", "B", "E"])
         .succeeds()
         .stdout_only("ABC");
 }
@@ -668,15 +665,112 @@ fn sub_alternative_upper_hex() {
     new_ucmd!()
         .args(&["%#X", "42"])
         .succeeds()
-        .stdout_only("0x2A");
+        .stdout_only("0X2A");
 }
 
 #[test]
 fn char_as_byte() {
-    new_ucmd!().args(&["%c", "🙃"]).succeeds().stdout_only("ð");
+    new_ucmd!()
+        .args(&["%c", "🙃"])
+        .succeeds()
+        .no_stderr()
+        .stdout_is_bytes(b"\xf0");
 }
 
 #[test]
 fn no_infinite_loop() {
     new_ucmd!().args(&["a", "b"]).succeeds().stdout_only("a");
+}
+
+#[test]
+fn pad_octal_with_prefix() {
+    new_ucmd!()
+        .args(&[">%#15.6o<", "0"])
+        .succeeds()
+        .stdout_only(">         000000<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "01"])
+        .succeeds()
+        .stdout_only(">         000001<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "01234"])
+        .succeeds()
+        .stdout_only(">         001234<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "012345"])
+        .succeeds()
+        .stdout_only(">         012345<");
+
+    new_ucmd!()
+        .args(&[">%#15.6o<", "0123456"])
+        .succeeds()
+        .stdout_only(">        0123456<");
+}
+
+#[test]
+fn pad_unsigned_zeroes() {
+    for format in ["%.3u", "%.3x", "%.3X", "%.3o"] {
+        new_ucmd!()
+            .args(&[format, "0"])
+            .succeeds()
+            .stdout_only("000");
+    }
+}
+
+#[test]
+fn pad_unsigned_three() {
+    for (format, expected) in [
+        ("%.3u", "003"),
+        ("%.3x", "003"),
+        ("%.3X", "003"),
+        ("%.3o", "003"),
+        ("%#.3x", "0x003"),
+        ("%#.3X", "0X003"),
+        ("%#.3o", "003"),
+    ] {
+        new_ucmd!()
+            .args(&[format, "3"])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn pad_char() {
+    for (format, expected) in [("%3c", "  X"), ("%1c", "X"), ("%-1c", "X"), ("%-3c", "X  ")] {
+        new_ucmd!()
+            .args(&[format, "X"])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn pad_string() {
+    for (format, expected) in [
+        ("%8s", "  bottle"),
+        ("%-8s", "bottle  "),
+        ("%6s", "bottle"),
+        ("%-6s", "bottle"),
+    ] {
+        new_ucmd!()
+            .args(&[format, "bottle"])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn format_spec_zero_char_fails() {
+    // It is invalid to have the format spec '%0c'
+    new_ucmd!().args(&["%0c", "3"]).fails().code_is(1);
+}
+
+#[test]
+fn format_spec_zero_string_fails() {
+    // It is invalid to have the format spec '%0s'
+    new_ucmd!().args(&["%0s", "3"]).fails().code_is(1);
 }

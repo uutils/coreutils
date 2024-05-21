@@ -16,6 +16,8 @@ use crate::display::Quotable;
 /// The [`Parser::parse`] function performs the parse.
 #[derive(Default)]
 pub struct Parser<'parser> {
+    /// Whether to allow empty numeric strings.
+    pub no_empty_numeric: bool,
     /// Whether to treat the suffix "B" as meaning "bytes".
     pub capital_b_bytes: bool,
     /// Whether to treat "b" as a "byte count" instead of "block"
@@ -48,6 +50,10 @@ impl<'parser> Parser<'parser> {
         self
     }
 
+    pub fn with_allow_empty_numeric(&mut self, value: bool) -> &mut Self {
+        self.no_empty_numeric = value;
+        self
+    }
     /// Parse a size string into a number of bytes.
     ///
     /// A size string comprises an integer and an optional unit. The unit
@@ -160,7 +166,7 @@ impl<'parser> Parser<'parser> {
         // parse string into u128
         let number: u128 = match number_system {
             NumberSystem::Decimal => {
-                if numeric_string.is_empty() {
+                if numeric_string.is_empty() && !self.no_empty_numeric {
                     1
                 } else {
                     Self::parse_number(&numeric_string, 10, size)?
@@ -445,7 +451,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn overflow_x64() {
         assert!(parse_size_u64("10000000000000000000000").is_err());
         assert!(parse_size_u64("1000000000T").is_err());
@@ -476,7 +481,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn overflow_to_max_u64() {
         assert_eq!(Ok(1_099_511_627_776), parse_size_u64_max("1T"));
         assert_eq!(Ok(1_125_899_906_842_624), parse_size_u64_max("1P"));
@@ -488,7 +492,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn overflow_to_max_u128() {
         assert_eq!(
             Ok(12_379_400_392_853_802_748_991_242_240),

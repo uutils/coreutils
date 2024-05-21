@@ -1,6 +1,6 @@
 [package]
 name = "uu_id"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "id ~ (uutils) display user and group information for USER"

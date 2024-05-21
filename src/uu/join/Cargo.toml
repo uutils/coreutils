@@ -1,6 +1,6 @@
 [package]
 name = "uu_join"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "join ~ (uutils) merge lines from inputs with matching join fields"

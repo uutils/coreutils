@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (paths) sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist testdir testfile
+// spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
 #[cfg(not(windows))]
 use regex::Regex;
 
@@ -136,7 +136,6 @@ fn test_du_invalid_size() {
             .fails()
             .code_is(1)
             .stderr_only(format!("du: invalid --{s} argument 'x'\n"));
-        #[cfg(not(target_pointer_width = "128"))]
         ts.ucmd()
             .arg(format!("--{s}=1Y"))
             .arg("/tmp")
@@ -173,11 +172,15 @@ fn test_du_with_posixly_correct() {
 }
 
 #[test]
-fn test_du_basics_bad_name() {
+fn test_du_non_existing_files() {
     new_ucmd!()
-        .arg("bad_name")
+        .arg("non_existing_a")
+        .arg("non_existing_b")
         .fails()
-        .stderr_only("du: bad_name: No such file or directory\n");
+        .stderr_only(concat!(
+            "du: cannot access 'non_existing_a': No such file or directory\n",
+            "du: cannot access 'non_existing_b': No such file or directory\n"
+        ));
 }
 
 #[test]
@@ -539,6 +542,34 @@ fn test_du_h_flag_empty_file() {
         .stdout_only("0\tempty.txt\n");
 }
 
+#[test]
+fn test_du_h_precision() {
+    let test_cases = [
+        (133456345, "128M"),
+        (12 * 1024 * 1024, "12M"),
+        (8500, "8.4K"),
+    ];
+
+    for &(test_len, expected_output) in &test_cases {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let fpath = at.plus("test.txt");
+        std::fs::File::create(&fpath)
+            .expect("cannot create test file")
+            .set_len(test_len)
+            .expect("cannot truncate test len to size");
+        ucmd.arg("-h")
+            .arg("--apparent-size")
+            .arg(&fpath)
+            .succeeds()
+            .stdout_only(format!(
+                "{}\t{}\n",
+                expected_output,
+                &fpath.to_string_lossy()
+            ));
+    }
+}
+
 #[cfg(feature = "touch")]
 #[test]
 fn test_du_time() {
@@ -572,13 +603,15 @@ fn test_du_time() {
         .succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
 
-    let result = ts
-        .ucmd()
-        .env("TZ", "UTC")
-        .arg("--time=atime")
-        .arg("date_test")
-        .succeeds();
-    result.stdout_only("0\t2015-05-15 00:00\tdate_test\n");
+    for argument in ["--time=atime", "--time=atim", "--time=a"] {
+        let result = ts
+            .ucmd()
+            .env("TZ", "UTC")
+            .arg(argument)
+            .arg("date_test")
+            .succeeds();
+        result.stdout_only("0\t2015-05-15 00:00\tdate_test\n");
+    }
 
     let result = ts
         .ucmd()
@@ -1111,4 +1144,14 @@ fn test_du_files0_from_combined() {
     let stderr = result.stderr_str();
 
     assert!(stderr.contains("file operands cannot be combined with --files0-from"));
+}
+
+#[test]
+fn test_invalid_time_style() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .arg("-s")
+        .arg("--time-style=banana")
+        .succeeds()
+        .stdout_does_not_contain("du: invalid argument 'banana' for 'time style'");
 }

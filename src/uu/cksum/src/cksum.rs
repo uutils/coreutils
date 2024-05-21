@@ -5,16 +5,20 @@
 
 // spell-checker:ignore (ToDO) fname, algo
 use clap::{crate_version, value_parser, Arg, ArgAction, Command};
-use hex::decode;
-use hex::encode;
+use regex::Regex;
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs::File;
+use std::io::BufRead;
 use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
+use uucore::checksum::cksum_output;
+use uucore::display::Quotable;
+use uucore::error::set_exit_code;
 use uucore::{
+    encoding,
     error::{FromIo, UError, UResult, USimpleError},
     format_usage, help_about, help_section, help_usage, show,
     sum::{
@@ -39,9 +43,30 @@ const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
 const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
 const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 
+const SUPPORTED_ALGO: [&str; 11] = [
+    ALGORITHM_OPTIONS_SYSV,
+    ALGORITHM_OPTIONS_BSD,
+    ALGORITHM_OPTIONS_CRC,
+    ALGORITHM_OPTIONS_MD5,
+    ALGORITHM_OPTIONS_SHA1,
+    ALGORITHM_OPTIONS_SHA224,
+    ALGORITHM_OPTIONS_SHA256,
+    ALGORITHM_OPTIONS_SHA384,
+    ALGORITHM_OPTIONS_SHA512,
+    ALGORITHM_OPTIONS_BLAKE2B,
+    ALGORITHM_OPTIONS_SM3,
+];
+
 #[derive(Debug)]
 enum CkSumError {
     RawMultipleFiles,
+}
+
+#[derive(Debug, PartialEq)]
+enum OutputFormat {
+    Hexadecimal,
+    Raw,
+    Base64,
 }
 
 impl UError for CkSumError {
@@ -65,10 +90,10 @@ impl Display for CkSumError {
 }
 
 fn detect_algo(
-    program: &str,
+    algo: &str,
     length: Option<usize>,
 ) -> (&'static str, Box<dyn Digest + 'static>, usize) {
-    match program {
+    match algo {
         ALGORITHM_OPTIONS_SYSV => (
             ALGORITHM_OPTIONS_SYSV,
             Box::new(SYSV::new()) as Box<dyn Digest>,
@@ -136,9 +161,10 @@ struct Options {
     algo_name: &'static str,
     digest: Box<dyn Digest + 'static>,
     output_bits: usize,
-    untagged: bool,
+    tag: bool, // will cover the --untagged option
     length: Option<usize>,
-    raw: bool,
+    output_format: OutputFormat,
+    asterisk: bool, // if we display an asterisk or not (--binary/--text)
 }
 
 /// Calculate checksum
@@ -153,7 +179,7 @@ where
     I: Iterator<Item = &'a OsStr>,
 {
     let files: Vec<_> = files.collect();
-    if options.raw && files.len() > 1 {
+    if options.output_format == OutputFormat::Raw && files.len() > 1 {
         return Err(Box::new(CkSumError::RawMultipleFiles));
     }
 
@@ -162,6 +188,8 @@ where
         let stdin_buf;
         let file_buf;
         let not_file = filename == OsStr::new("-");
+
+        // Handle the file input
         let mut file = BufReader::new(if not_file {
             stdin_buf = stdin();
             Box::new(stdin_buf) as Box<dyn Read>
@@ -177,7 +205,8 @@ where
             };
             Box::new(file_buf) as Box<dyn Read>
         });
-        let (sum, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
+
+        let (sum_hex, sz) = digest_read(&mut options.digest, &mut file, options.output_bits)
             .map_err_context(|| "failed to read input".to_string())?;
         if filename.is_dir() {
             show!(USimpleError::new(
@@ -186,17 +215,26 @@ where
             ));
             continue;
         }
-        if options.raw {
-            let bytes = match options.algo_name {
-                ALGORITHM_OPTIONS_CRC => sum.parse::<u32>().unwrap().to_be_bytes().to_vec(),
-                ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => {
-                    sum.parse::<u16>().unwrap().to_be_bytes().to_vec()
-                }
-                _ => decode(sum).unwrap(),
-            };
-            stdout().write_all(&bytes)?;
-            return Ok(());
-        }
+        let sum = match options.output_format {
+            OutputFormat::Raw => {
+                let bytes = match options.algo_name {
+                    ALGORITHM_OPTIONS_CRC => sum_hex.parse::<u32>().unwrap().to_be_bytes().to_vec(),
+                    ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => {
+                        sum_hex.parse::<u16>().unwrap().to_be_bytes().to_vec()
+                    }
+                    _ => hex::decode(sum_hex).unwrap(),
+                };
+                // Cannot handle multiple files anyway, output immediately.
+                stdout().write_all(&bytes)?;
+                return Ok(());
+            }
+            OutputFormat::Hexadecimal => sum_hex,
+            OutputFormat::Base64 => match options.algo_name {
+                ALGORITHM_OPTIONS_CRC | ALGORITHM_OPTIONS_SYSV | ALGORITHM_OPTIONS_BSD => sum_hex,
+                _ => encoding::encode(encoding::Format::Base64, &hex::decode(sum_hex).unwrap())
+                    .unwrap(),
+            },
+        };
         // The BSD checksum output is 5 digit integer
         let bsd_width = 5;
         match (options.algo_name, not_file) {
@@ -224,7 +262,7 @@ where
             ),
             (ALGORITHM_OPTIONS_CRC, true) => println!("{sum} {sz}"),
             (ALGORITHM_OPTIONS_CRC, false) => println!("{sum} {sz} {}", filename.display()),
-            (ALGORITHM_OPTIONS_BLAKE2B, _) if !options.untagged => {
+            (ALGORITHM_OPTIONS_BLAKE2B, _) if options.tag => {
                 if let Some(length) = options.length {
                     // Multiply by 8 here, as we want to print the length in bits.
                     println!("BLAKE2b-{} ({}) = {sum}", length * 8, filename.display());
@@ -233,14 +271,15 @@ where
                 }
             }
             _ => {
-                if options.untagged {
-                    println!("{sum}  {}", filename.display());
-                } else {
+                if options.tag {
                     println!(
                         "{} ({}) = {sum}",
                         options.algo_name.to_ascii_uppercase(),
                         filename.display()
                     );
+                } else {
+                    let prefix = if options.asterisk { "*" } else { " " };
+                    println!("{sum} {prefix}{}", filename.display());
                 }
             }
         }
@@ -278,7 +317,7 @@ fn digest_read<T: Read>(
         // Assume it's SHAKE.  result_str() doesn't work with shake (as of 8/30/2016)
         let mut bytes = vec![0; (output_bits + 7) / 8];
         digest.hash_finalize(&mut bytes);
-        Ok((encode(bytes), output_size))
+        Ok((hex::encode(bytes), output_size))
     }
 }
 
@@ -286,69 +325,373 @@ mod options {
     pub const ALGORITHM: &str = "algorithm";
     pub const FILE: &str = "file";
     pub const UNTAGGED: &str = "untagged";
+    pub const TAG: &str = "tag";
     pub const LENGTH: &str = "length";
     pub const RAW: &str = "raw";
+    pub const BASE64: &str = "base64";
+    pub const CHECK: &str = "check";
+    pub const STRICT: &str = "strict";
+    pub const TEXT: &str = "text";
+    pub const BINARY: &str = "binary";
+}
+
+/// Determines whether to prompt an asterisk (*) in the output.
+///
+/// This function checks the `tag`, `binary`, and `had_reset` flags and returns a boolean
+/// indicating whether to prompt an asterisk (*) in the output.
+/// It relies on the overrides provided by clap (i.e., `--binary` overrides `--text` and vice versa).
+/// Same for `--tag` and `--untagged`.
+fn prompt_asterisk(tag: bool, binary: bool, had_reset: bool) -> bool {
+    if tag {
+        return false;
+    }
+    if had_reset {
+        return false;
+    }
+    binary
+}
+
+/**
+ * Determine if we had a reset.
+ * This is basically a hack to support the behavior of cksum
+ * when we have the following arguments:
+ * --binary --tag --untagged
+ * Don't do it with clap because if it struggling with the --overrides_with
+ * marking the value as set even if not present
+ */
+fn had_reset(args: &[String]) -> bool {
+    // Indices where "--binary" or "-b", "--tag", and "--untagged" are found
+    let binary_index = args.iter().position(|x| x == "--binary" || x == "-b");
+    let tag_index = args.iter().position(|x| x == "--tag");
+    let untagged_index = args.iter().position(|x| x == "--untagged");
+
+    // Check if all arguments are present and in the correct order
+    match (binary_index, tag_index, untagged_index) {
+        (Some(b), Some(t), Some(u)) => b < t && t < u,
+        _ => false,
+    }
+}
+
+/// Calculates the length of the digest for the given algorithm.
+fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
+    match length {
+        0 => Ok(None),
+        n if n % 8 != 0 => {
+            uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
+            Err(io::Error::new(io::ErrorKind::InvalidInput, "length is not a multiple of 8").into())
+        }
+        n if n > 512 => {
+            uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
+            )
+            .into())
+        }
+        n => {
+            // Divide by 8, as our blake2b implementation expects bytes instead of bits.
+            if n == 512 {
+                // When length is 512, it is blake2b's default.
+                // So, don't show it
+                Ok(None)
+            } else {
+                Ok(Some(n / 8))
+            }
+        }
+    }
+}
+
+/***
+ * cksum has a bunch of legacy behavior.
+ * We handle this in this function to make sure they are self contained
+ * and "easier" to understand
+ */
+fn handle_tag_text_binary_flags(matches: &clap::ArgMatches) -> UResult<(bool, bool)> {
+    let untagged: bool = matches.get_flag(options::UNTAGGED);
+    let tag: bool = matches.get_flag(options::TAG);
+    let tag: bool = tag || !untagged;
+
+    let binary_flag: bool = matches.get_flag(options::BINARY);
+
+    let args: Vec<String> = std::env::args().collect();
+    let had_reset = had_reset(&args);
+
+    let asterisk: bool = prompt_asterisk(tag, binary_flag, had_reset);
+
+    Ok((tag, asterisk))
+}
+
+/***
+ * Do the checksum validation (can be strict or not)
+*/
+fn perform_checksum_validation<'a, I>(
+    files: I,
+    strict: bool,
+    algo_name_input: Option<&str>,
+) -> UResult<()>
+where
+    I: Iterator<Item = &'a OsStr>,
+{
+    // Regexp to handle the two input formats:
+    // 1. <algo>[-<bits>] (<filename>) = <checksum>
+    //    algo must be uppercase or b (for blake2b)
+    // 2. <checksum> [* ]<filename>
+    let regex_pattern = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename1>.*)\) = (?P<checksum1>[a-fA-F0-9]+)$|^(?P<checksum2>[a-fA-F0-9]+)\s[* ](?P<filename2>.*)";
+    let re = Regex::new(regex_pattern).unwrap();
+
+    // if cksum has several input files, it will print the result for each file
+    for filename_input in files {
+        let mut bad_format = 0;
+        let mut failed_cksum = 0;
+        let mut failed_open_file = 0;
+        let mut properly_formatted = false;
+        let input_is_stdin = filename_input == OsStr::new("-");
+
+        let file: Box<dyn Read> = if input_is_stdin {
+            Box::new(stdin()) // Use stdin if "-" is specified
+        } else {
+            match File::open(filename_input) {
+                Ok(f) => Box::new(f),
+                Err(_) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!(
+                            "{}: No such file or directory",
+                            filename_input.to_string_lossy()
+                        ),
+                    )
+                    .into());
+                }
+            }
+        };
+        let reader = BufReader::new(file);
+
+        // for each line in the input, check if it is a valid checksum line
+        for line in reader.lines() {
+            let line = line.unwrap_or_else(|_| String::new());
+            if let Some(caps) = re.captures(&line) {
+                properly_formatted = true;
+
+                // Determine what kind of file input we had
+                // we need it for case "--check -a sm3 <file>" when <file> is
+                // <algo>[-<bits>] (<filename>) = <checksum>
+                let algo_based_format =
+                    caps.name("filename1").is_some() && caps.name("checksum1").is_some();
+
+                let filename_to_check = caps
+                    .name("filename1")
+                    .or(caps.name("filename2"))
+                    .unwrap()
+                    .as_str();
+                let expected_checksum = caps
+                    .name("checksum1")
+                    .or(caps.name("checksum2"))
+                    .unwrap()
+                    .as_str();
+
+                // If the algo_name is provided, we use it, otherwise we try to detect it
+                let (algo_name, length) = if algo_based_format {
+                    // When the algo-based format is matched, extract details from regex captures
+                    let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
+                    if !SUPPORTED_ALGO.contains(&algorithm.as_str()) {
+                        // Not supported algo, leave early
+                        properly_formatted = false;
+                        continue;
+                    }
+
+                    let bits = caps.name("bits").map_or(Some(None), |m| {
+                        let bits_value = m.as_str().parse::<usize>().unwrap();
+                        if bits_value % 8 == 0 {
+                            Some(Some(bits_value / 8))
+                        } else {
+                            properly_formatted = false;
+                            None // Return None to signal a parsing or divisibility issue
+                        }
+                    });
+
+                    if bits.is_none() {
+                        // If bits is None, we have a parsing or divisibility issue
+                        // Exit the loop outside of the closure
+                        continue;
+                    }
+
+                    (algorithm, bits.unwrap())
+                } else if let Some(a) = algo_name_input {
+                    // When a specific algorithm name is input, use it and default bits to None
+                    (a.to_lowercase(), None)
+                } else {
+                    // Default case if no algorithm is specified and non-algo based format is matched
+                    (String::new(), None)
+                };
+
+                if algo_based_format && algo_name_input.map_or(false, |input| algo_name != input) {
+                    bad_format += 1;
+                    continue;
+                }
+
+                if algo_name.is_empty() {
+                    // we haven't been able to detect the algo name. No point to continue
+                    properly_formatted = false;
+                    continue;
+                }
+                let (_, mut algo, bits) = detect_algo(&algo_name, length);
+
+                // manage the input file
+                let file_to_check: Box<dyn Read> = if filename_to_check == "-" {
+                    Box::new(stdin()) // Use stdin if "-" is specified in the checksum file
+                } else {
+                    match File::open(filename_to_check) {
+                        Ok(f) => Box::new(f),
+                        Err(err) => {
+                            // yes, we have both stderr and stdout here
+                            show!(err.map_err_context(|| filename_to_check.to_string()));
+                            println!("{}: FAILED open or read", filename_to_check);
+                            failed_open_file += 1;
+                            // we could not open the file but we want to continue
+                            continue;
+                        }
+                    }
+                };
+                let mut file_reader = BufReader::new(file_to_check);
+                // Read the file and calculate the checksum
+                let (calculated_checksum, _) =
+                    digest_read(&mut algo, &mut file_reader, bits).unwrap();
+
+                // Do the checksum validation
+                if expected_checksum == calculated_checksum {
+                    println!("{}: OK", filename_to_check);
+                } else {
+                    println!("{}: FAILED", filename_to_check);
+                    failed_cksum += 1;
+                }
+            } else {
+                if line.is_empty() {
+                    continue;
+                }
+                bad_format += 1;
+            }
+        }
+
+        // not a single line correctly formatted found
+        // return an error
+        if !properly_formatted {
+            let filename = filename_input.to_string_lossy();
+            uucore::show_error!(
+                "{}: no properly formatted checksum lines found",
+                if input_is_stdin {
+                    "standard input"
+                } else {
+                    &filename
+                }
+                .maybe_quote()
+            );
+            set_exit_code(1);
+        }
+        // strict means that we should have an exit code.
+        if strict && bad_format > 0 {
+            set_exit_code(1);
+        }
+
+        // if we have any failed checksum verification, we set an exit code
+        if failed_cksum > 0 || failed_open_file > 0 {
+            set_exit_code(1);
+        }
+
+        // if any incorrectly formatted line, show it
+        cksum_output(bad_format, failed_cksum, failed_open_file);
+    }
+    Ok(())
 }
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().try_get_matches_from(args)?;
 
+    let check = matches.get_flag(options::CHECK);
+
     let algo_name: &str = match matches.get_one::<String>(options::ALGORITHM) {
         Some(v) => v,
-        None => ALGORITHM_OPTIONS_CRC,
-    };
-
-    let input_length = matches.get_one::<usize>(options::LENGTH);
-    let length = if let Some(length) = input_length {
-        match length.to_owned() {
-            0 => None,
-            n if n % 8 != 0 => {
-                // GNU's implementation seem to use these quotation marks
-                // in their error messages, so we do the same.
-                uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "length is not a multiple of 8",
-                )
-                .into());
-            }
-            n if n > 512 => {
-                uucore::show_error!("invalid length: \u{2018}{length}\u{2019}");
-
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "maximum digest length for \u{2018}BLAKE2b\u{2019} is 512 bits",
-                )
-                .into());
-            }
-            n => {
-                if algo_name != ALGORITHM_OPTIONS_BLAKE2B {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "--length is only supported with --algorithm=blake2b",
-                    )
-                    .into());
-                }
-
-                // Divide by 8, as our blake2b implementation expects bytes
-                // instead of bits.
-                Some(n / 8)
+        None => {
+            if check {
+                // if we are doing a --check, we should not default to crc
+                ""
+            } else {
+                ALGORITHM_OPTIONS_CRC
             }
         }
-    } else {
-        None
     };
 
+    if ["bsd", "crc", "sysv"].contains(&algo_name) && check {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "--check is not supported with --algorithm={bsd,sysv,crc}",
+        )
+        .into());
+    }
+
+    let input_length = matches.get_one::<usize>(options::LENGTH);
+
+    let length = match input_length {
+        Some(length) => {
+            if algo_name == ALGORITHM_OPTIONS_BLAKE2B {
+                calculate_blake2b_length(*length)?
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "--length is only supported with --algorithm=blake2b",
+                )
+                .into());
+            }
+        }
+        None => None,
+    };
+
+    if check {
+        let text_flag: bool = matches.get_flag(options::TEXT);
+        let binary_flag: bool = matches.get_flag(options::BINARY);
+        let strict = matches.get_flag(options::STRICT);
+
+        if (binary_flag || text_flag) && check {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "the --binary and --text options are meaningless when verifying checksums",
+            )
+            .into());
+        }
+        // Determine the appropriate algorithm option to pass
+        let algo_option = if algo_name.is_empty() {
+            None
+        } else {
+            Some(algo_name)
+        };
+
+        // Execute the checksum validation based on the presence of files or the use of stdin
+        return match matches.get_many::<String>(options::FILE) {
+            Some(files) => perform_checksum_validation(files.map(OsStr::new), strict, algo_option),
+            None => perform_checksum_validation(iter::once(OsStr::new("-")), strict, algo_option),
+        };
+    }
+
+    let (tag, asterisk) = handle_tag_text_binary_flags(&matches)?;
+
     let (name, algo, bits) = detect_algo(algo_name, length);
+
+    let output_format = if matches.get_flag(options::RAW) {
+        OutputFormat::Raw
+    } else if matches.get_flag(options::BASE64) {
+        OutputFormat::Base64
+    } else {
+        OutputFormat::Hexadecimal
+    };
 
     let opts = Options {
         algo_name: name,
         digest: algo,
         output_bits: bits,
         length,
-        untagged: matches.get_flag(options::UNTAGGED),
-        raw: matches.get_flag(options::RAW),
+        tag,
+        output_format,
+        asterisk,
     };
 
     match matches.get_many::<String>(options::FILE) {
@@ -365,6 +708,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::FILE)
                 .hide(true)
@@ -377,39 +721,161 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .help("select the digest type to use. See DIGEST below")
                 .value_name("ALGORITHM")
-                .value_parser([
-                    ALGORITHM_OPTIONS_SYSV,
-                    ALGORITHM_OPTIONS_BSD,
-                    ALGORITHM_OPTIONS_CRC,
-                    ALGORITHM_OPTIONS_MD5,
-                    ALGORITHM_OPTIONS_SHA1,
-                    ALGORITHM_OPTIONS_SHA224,
-                    ALGORITHM_OPTIONS_SHA256,
-                    ALGORITHM_OPTIONS_SHA384,
-                    ALGORITHM_OPTIONS_SHA512,
-                    ALGORITHM_OPTIONS_BLAKE2B,
-                    ALGORITHM_OPTIONS_SM3,
-                ]),
+                .value_parser(SUPPORTED_ALGO),
         )
         .arg(
             Arg::new(options::UNTAGGED)
                 .long(options::UNTAGGED)
                 .help("create a reversed style checksum, without digest type")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TAG),
+        )
+        .arg(
+            Arg::new(options::TAG)
+                .long(options::TAG)
+                .help("create a BSD style checksum, undo --untagged (default)")
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::UNTAGGED),
         )
         .arg(
             Arg::new(options::LENGTH)
                 .long(options::LENGTH)
                 .value_parser(value_parser!(usize))
                 .short('l')
-                .help("digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8")
+                .help(
+                    "digest length in bits; must not exceed the max for the blake2 algorithm \
+                    and must be a multiple of 8",
+                )
                 .action(ArgAction::Set),
         )
         .arg(
             Arg::new(options::RAW)
-            .long(options::RAW)
-            .help("emit a raw binary digest, not hexadecimal")
-            .action(ArgAction::SetTrue),
+                .long(options::RAW)
+                .help("emit a raw binary digest, not hexadecimal")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::STRICT)
+                .long(options::STRICT)
+                .help("exit non-zero for improperly formatted checksum lines")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::CHECK)
+                .short('c')
+                .long(options::CHECK)
+                .help("read hashsums from the FILEs and check them")
+                .action(ArgAction::SetTrue)
+                .conflicts_with("tag"),
+        )
+        .arg(
+            Arg::new(options::BASE64)
+                .long(options::BASE64)
+                .help("emit a base64 digest, not hexadecimal")
+                .action(ArgAction::SetTrue)
+                // Even though this could easily just override an earlier '--raw',
+                // GNU cksum does not permit these flags to be combined:
+                .conflicts_with(options::RAW),
+        )
+        .arg(
+            Arg::new(options::TEXT)
+                .long(options::TEXT)
+                .short('t')
+                .hide(true)
+                .overrides_with(options::BINARY)
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::BINARY)
+                .long(options::BINARY)
+                .short('b')
+                .hide(true)
+                .overrides_with(options::TEXT)
+                .action(ArgAction::SetTrue),
         )
         .after_help(AFTER_HELP)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::had_reset;
+    use crate::calculate_blake2b_length;
+    use crate::prompt_asterisk;
+
+    #[test]
+    fn test_had_reset() {
+        let args = ["--binary", "--tag", "--untagged"]
+            .iter()
+            .map(|&s| s.to_string())
+            .collect::<Vec<String>>();
+        assert!(had_reset(&args));
+
+        let args = ["-b", "--tag", "--untagged"]
+            .iter()
+            .map(|&s| s.to_string())
+            .collect::<Vec<String>>();
+        assert!(had_reset(&args));
+
+        let args = ["-b", "--binary", "--tag", "--untagged"]
+            .iter()
+            .map(|&s| s.to_string())
+            .collect::<Vec<String>>();
+        assert!(had_reset(&args));
+
+        let args = ["--untagged", "--tag", "--binary"]
+            .iter()
+            .map(|&s| s.to_string())
+            .collect::<Vec<String>>();
+        assert!(!had_reset(&args));
+
+        let args = ["--untagged", "--tag", "-b"]
+            .iter()
+            .map(|&s| s.to_string())
+            .collect::<Vec<String>>();
+        assert!(!had_reset(&args));
+
+        let args = ["--binary", "--tag"]
+            .iter()
+            .map(|&s| s.to_string())
+            .collect::<Vec<String>>();
+        assert!(!had_reset(&args));
+
+        let args = ["--tag", "--untagged"]
+            .iter()
+            .map(|&s| s.to_string())
+            .collect::<Vec<String>>();
+        assert!(!had_reset(&args));
+
+        let args = ["--text", "--untagged"]
+            .iter()
+            .map(|&s| s.to_string())
+            .collect::<Vec<String>>();
+        assert!(!had_reset(&args));
+
+        let args = ["--binary", "--untagged"]
+            .iter()
+            .map(|&s| s.to_string())
+            .collect::<Vec<String>>();
+        assert!(!had_reset(&args));
+    }
+
+    #[test]
+    fn test_prompt_asterisk() {
+        assert!(!prompt_asterisk(true, false, false));
+        assert!(!prompt_asterisk(false, false, true));
+        assert!(prompt_asterisk(false, true, false));
+        assert!(!prompt_asterisk(false, false, false));
+    }
+
+    #[test]
+    fn test_calculate_length() {
+        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
+        assert_eq!(calculate_blake2b_length(512).unwrap(), None);
+        assert_eq!(calculate_blake2b_length(256).unwrap(), Some(32));
+        calculate_blake2b_length(255).unwrap_err();
+
+        calculate_blake2b_length(33).unwrap_err();
+
+        calculate_blake2b_length(513).unwrap_err();
+    }
 }

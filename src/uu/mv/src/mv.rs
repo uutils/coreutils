@@ -27,7 +27,7 @@ use uucore::fs::{
     are_hardlinks_or_one_way_symlink_to_same_file, are_hardlinks_to_same_file,
     path_ends_with_terminator,
 };
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
 use uucore::update_control;
 
@@ -634,7 +634,7 @@ fn rename_with_fallback(
                     None
                 };
 
-            #[cfg(all(unix, not(target_os = "macos")))]
+            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
             let xattrs =
                 fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| std::collections::HashMap::new());
 
@@ -648,7 +648,7 @@ fn rename_with_fallback(
                 move_dir(from, to, &options)
             };
 
-            #[cfg(all(unix, not(target_os = "macos")))]
+            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
             fsxattr::apply_xattrs(to, xattrs).unwrap();
 
             if let Err(err) = result {
@@ -661,11 +661,11 @@ fn rename_with_fallback(
                 };
             }
         } else {
-            #[cfg(all(unix, not(target_os = "macos")))]
+            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
             fs::copy(from, to)
                 .and_then(|_| fsxattr::copy_xattrs(&from, &to))
                 .and_then(|_| fs::remove_file(from))?;
-            #[cfg(any(target_os = "macos", not(unix)))]
+            #[cfg(any(target_os = "macos", target_os = "redox", not(unix)))]
             fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
         }
     }

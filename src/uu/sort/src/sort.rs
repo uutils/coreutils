@@ -43,6 +43,7 @@ use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 use uucore::parse_size::{ParseSizeError, Parser};
+use uucore::shortcut_value_parser::ShortcutValueParser;
 use uucore::version_cmp::version_cmp;
 use uucore::{format_usage, help_about, help_section, help_usage};
 
@@ -251,6 +252,9 @@ impl Output {
         let file = if let Some(name) = name {
             // This is different from `File::create()` because we don't truncate the output yet.
             // This allows using the output file as an input file.
+            // clippy::suspicious_open_options supported only for Rust >= 1.77.0
+            // Rust version = 1.76 on OpenBSD stable/7.5
+            #[cfg_attr(not(target_os = "openbsd"), allow(clippy::suspicious_open_options))]
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)
@@ -1296,14 +1300,14 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::modes::SORT)
                 .long(options::modes::SORT)
-                .value_parser([
+                .value_parser(ShortcutValueParser::new([
                     "general-numeric",
                     "human-numeric",
                     "month",
                     "numeric",
                     "version",
                     "random",
-                ])
+                ]))
                 .conflicts_with_all(options::modes::ALL_SORT_MODES),
         )
         .arg(make_sort_mode_arg(
@@ -1362,11 +1366,11 @@ pub fn uu_app() -> Command {
                 .long(options::check::CHECK)
                 .require_equals(true)
                 .num_args(0..)
-                .value_parser([
+                .value_parser(ShortcutValueParser::new([
                     options::check::SILENT,
                     options::check::QUIET,
                     options::check::DIAGNOSE_FIRST,
-                ])
+                ]))
                 .conflicts_with(options::OUTPUT)
                 .help("check for sorted input; do not sort"),
         )
@@ -1983,7 +1987,6 @@ mod tests {
         // SizeTooBig
         let invalid_input = ["500E", "1Y"];
         for input in &invalid_input {
-            #[cfg(not(target_pointer_width = "128"))]
             assert!(GlobalSettings::parse_byte_count(input).is_err());
         }
 

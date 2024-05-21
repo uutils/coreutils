@@ -1,6 +1,6 @@
 [package]
 name = "uu_nohup"
-version = "0.0.24"
+version = "0.0.26"
 authors = ["uutils developers"]
 license = "MIT"
 description = "nohup ~ (uutils) run COMMAND, ignoring hangup signals"

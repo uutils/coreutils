@@ -10,14 +10,13 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File, Metadata, OpenOptions, Permissions};
 use std::io;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf, StripPrefixError};
-use std::string::ToString;
 
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
 use filetime::FileTime;
@@ -30,16 +29,17 @@ use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, UClapError, UError, UResult, UUsageError};
 use uucore::fs::{
-    are_hardlinks_to_same_file, canonicalize, is_symlink_loop, path_ends_with_terminator,
-    paths_refer_to_same_file, FileInformation, MissingHandling, ResolveMode,
+    are_hardlinks_to_same_file, canonicalize, get_filename, is_symlink_loop,
+    path_ends_with_terminator, paths_refer_to_same_file, FileInformation, MissingHandling,
+    ResolveMode,
 };
 use uucore::{backup_control, update_control};
 // These are exposed for projects (e.g. nushell) that want to create an `Options` value, which
 // requires these enum.
 pub use uucore::{backup_control::BackupMode, update_control::UpdateMode};
 use uucore::{
-    format_usage, help_about, help_section, help_usage, prompt_yes, show_error, show_warning,
-    util_name,
+    format_usage, help_about, help_section, help_usage, prompt_yes,
+    shortcut_value_parser::ShortcutValueParser, show_error, show_warning, util_name,
 };
 
 use crate::copydir::copy_directory;
@@ -397,22 +397,14 @@ static PRESERVABLE_ATTRIBUTES: &[&str] = &[
     "ownership",
     "timestamps",
     "context",
-    "link",
     "links",
     "xattr",
     "all",
 ];
 
 #[cfg(not(unix))]
-static PRESERVABLE_ATTRIBUTES: &[&str] = &[
-    "mode",
-    "timestamps",
-    "context",
-    "link",
-    "links",
-    "xattr",
-    "all",
-];
+static PRESERVABLE_ATTRIBUTES: &[&str] =
+    &["mode", "timestamps", "context", "links", "xattr", "all"];
 
 pub fn uu_app() -> Command {
     const MODE_ARGS: &[&str] = &[
@@ -476,8 +468,8 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::RECURSIVE)
-                .short('r')
-                .visible_short_alias('R')
+                .short('R')
+                .visible_short_alias('r')
                 .long(options::RECURSIVE)
                 // --archive sets this option
                 .help("copy directories recursively")
@@ -544,7 +536,7 @@ pub fn uu_app() -> Command {
                 .overrides_with_all(MODE_ARGS)
                 .require_equals(true)
                 .default_missing_value("always")
-                .value_parser(["auto", "always", "never"])
+                .value_parser(ShortcutValueParser::new(["auto", "always", "never"]))
                 .num_args(0..=1)
                 .help("control clone/CoW copies. See below"),
         )
@@ -560,9 +552,7 @@ pub fn uu_app() -> Command {
                 .long(options::PRESERVE)
                 .action(ArgAction::Append)
                 .use_value_delimiter(true)
-                .value_parser(clap::builder::PossibleValuesParser::new(
-                    PRESERVABLE_ATTRIBUTES,
-                ))
+                .value_parser(ShortcutValueParser::new(PRESERVABLE_ATTRIBUTES))
                 .num_args(0..)
                 .require_equals(true)
                 .value_name("ATTR_LIST")
@@ -656,7 +646,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::SPARSE)
                 .long(options::SPARSE)
                 .value_name("WHEN")
-                .value_parser(["never", "auto", "always"])
+                .value_parser(ShortcutValueParser::new(["never", "auto", "always"]))
                 .help("control creation of sparse files. See below"),
         )
         // TODO: implement the following args
@@ -781,7 +771,11 @@ impl CopyMode {
         {
             Self::Update
         } else if matches.get_flag(options::ATTRIBUTES_ONLY) {
-            Self::AttrOnly
+            if matches.get_flag(options::REMOVE_DESTINATION) {
+                Self::Copy
+            } else {
+                Self::AttrOnly
+            }
         } else {
             Self::Copy
         }
@@ -983,7 +977,9 @@ impl Options {
             dereference: !(matches.get_flag(options::NO_DEREFERENCE)
                 || matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS)
                 || matches.get_flag(options::ARCHIVE)
-                || recursive)
+                // cp normally follows the link only when not copying recursively or when
+                // --link (-l) is used
+                || (recursive && CopyMode::from_matches(matches)!= CopyMode::Link ))
                 || matches.get_flag(options::DEREFERENCE),
             one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
             parents: matches.get_flag(options::PARENTS),
@@ -1062,10 +1058,13 @@ impl Options {
     #[cfg(unix)]
     fn preserve_mode(&self) -> (bool, bool) {
         match self.attributes.mode {
-            Preserve::No { explicit } => match explicit {
-                true => (false, true),
-                false => (false, false),
-            },
+            Preserve::No { explicit } => {
+                if explicit {
+                    (false, true)
+                } else {
+                    (false, false)
+                }
+            }
             Preserve::Yes { .. } => (true, false),
         }
     }
@@ -1123,6 +1122,9 @@ fn parse_path_args(
     };
 
     if options.strip_trailing_slashes {
+        // clippy::assigning_clones added with Rust 1.78
+        // Rust version = 1.76 on OpenBSD stable/7.5
+        #[cfg_attr(not(target_os = "openbsd"), allow(clippy::assigning_clones))]
         for source in &mut paths {
             *source = source.components().as_path().to_owned();
         }
@@ -1220,12 +1222,14 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 target_type,
                 options,
                 &mut symlinked_files,
+                &copied_destinations,
                 &mut copied_files,
             ) {
                 show_error_if_needed(&error);
                 non_fatal_errors = true;
+            } else {
+                copied_destinations.insert(dest.clone());
             }
-            copied_destinations.insert(dest.clone());
         }
         seen_sources.insert(source);
     }
@@ -1271,7 +1275,7 @@ fn construct_dest_path(
         TargetType::File => target.to_path_buf(),
     })
 }
-
+#[allow(clippy::too_many_arguments)]
 fn copy_source(
     progress_bar: &Option<ProgressBar>,
     source: &Path,
@@ -1279,6 +1283,7 @@ fn copy_source(
     target_type: TargetType,
     options: &Options,
     symlinked_files: &mut HashSet<FileInformation>,
+    copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
@@ -1290,6 +1295,7 @@ fn copy_source(
             target,
             options,
             symlinked_files,
+            copied_destinations,
             copied_files,
             true,
         )
@@ -1302,6 +1308,7 @@ fn copy_source(
             dest.as_path(),
             options,
             symlinked_files,
+            copied_destinations,
             copied_files,
             true,
         );
@@ -1472,16 +1479,23 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    context: &str,
     symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
     #[cfg(not(windows))]
     {
-        std::os::unix::fs::symlink(source, dest).context(context)?;
+        std::os::unix::fs::symlink(source, dest).context(format!(
+            "cannot create symlink {} to {}",
+            get_filename(dest).unwrap_or("invalid file name").quote(),
+            get_filename(source).unwrap_or("invalid file name").quote()
+        ))?;
     }
     #[cfg(windows)]
     {
-        std::os::windows::fs::symlink_file(source, dest).context(context)?;
+        std::os::windows::fs::symlink_file(source, dest).context(format!(
+            "cannot create symlink {} to {}",
+            get_filename(dest).unwrap_or("invalid file name").quote(),
+            get_filename(source).unwrap_or("invalid file name").quote()
+        ))?;
     }
     if let Ok(file_info) = FileInformation::from_path(dest, false) {
         symlinked_files.insert(file_info);
@@ -1493,10 +1507,11 @@ fn context_for(src: &Path, dest: &Path) -> String {
     format!("{} -> {}", src.quote(), dest.quote())
 }
 
-/// Implements a simple backup copy for the destination file.
+/// Implements a simple backup copy for the destination file .
+/// if is_dest_symlink flag is set to true dest will be renamed to backup_path
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
-fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
-    if dest.is_symlink() {
+fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<PathBuf> {
+    if is_dest_symlink {
         fs::rename(dest, backup_path)?;
     } else {
         fs::copy(dest, backup_path)?;
@@ -1517,11 +1532,38 @@ fn is_forbidden_to_copy_to_same_file(
 ) -> bool {
     // TODO To match the behavior of GNU cp, we also need to check
     // that the file is a regular file.
+    let source_is_symlink = source.is_symlink();
+    let dest_is_symlink = dest.is_symlink();
+    // only disable dereference if both source and dest is symlink and dereference flag is disabled
     let dereference_to_compare =
-        options.dereference(source_in_command_line) || !source.is_symlink();
-    paths_refer_to_same_file(source, dest, dereference_to_compare)
-        && !(options.force() && options.backup != BackupMode::NoBackup)
-        && !(dest.is_symlink() && options.backup != BackupMode::NoBackup)
+        options.dereference(source_in_command_line) || (!source_is_symlink || !dest_is_symlink);
+    if !paths_refer_to_same_file(source, dest, dereference_to_compare) {
+        return false;
+    }
+    if options.backup != BackupMode::NoBackup {
+        if options.force() && !source_is_symlink {
+            return false;
+        }
+        if source_is_symlink && !options.dereference {
+            return false;
+        }
+        if dest_is_symlink {
+            return false;
+        }
+        if !dest_is_symlink && !source_is_symlink && dest != source {
+            return false;
+        }
+    }
+    if options.copy_mode == CopyMode::Link {
+        return false;
+    }
+    if options.copy_mode == CopyMode::SymLink && dest_is_symlink {
+        return false;
+    }
+    if dest_is_symlink && source_is_symlink && !options.dereference {
+        return false;
+    }
+    true
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
@@ -1530,6 +1572,7 @@ fn handle_existing_dest(
     dest: &Path,
     options: &Options,
     source_in_command_line: bool,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
 ) -> CopyResult<()> {
     // Disallow copying a file to itself, unless `--force` and
     // `--backup` are both specified.
@@ -1537,8 +1580,11 @@ fn handle_existing_dest(
         return Err(format!("{} and {} are the same file", source.quote(), dest.quote()).into());
     }
 
-    options.overwrite.verify(dest)?;
+    if options.update != UpdateMode::ReplaceIfOlder {
+        options.overwrite.verify(dest)?;
+    }
 
+    let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
         if paths_refer_to_same_file(source, &backup_path, true) {
@@ -1549,13 +1595,16 @@ fn handle_existing_dest(
             )
             .into());
         } else {
-            backup_dest(dest, &backup_path)?;
+            is_dest_removed = dest.is_symlink();
+            backup_dest(dest, &backup_path, is_dest_removed)?;
         }
     }
     match options.overwrite {
         // FIXME: print that the file was removed if --verbose is enabled
         OverwriteMode::Clobber(ClobberMode::Force) => {
-            if is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly() {
+            if !is_dest_removed
+                && (is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly())
+            {
                 fs::remove_file(dest)?;
             }
         }
@@ -1576,7 +1625,19 @@ fn handle_existing_dest(
             // `dest/src/f` and `dest/src/f` has the contents of
             // `src/f`, we delete the existing file to allow the hard
             // linking.
-            if options.preserve_hard_links() {
+
+            if options.preserve_hard_links()
+            // only try to remove dest file only if the current source
+            // is hardlink to a file that is already copied
+                && copied_files.contains_key(
+                    &FileInformation::from_path(
+                        source,
+                        options.dereference(source_in_command_line),
+                    )
+                    .context(format!("cannot stat {}", source.quote()))?,
+                )
+                && !is_dest_removed
+            {
                 fs::remove_file(dest)?;
             }
         }
@@ -1636,153 +1697,59 @@ fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a
     result
 }
 
-/// Copy the a file from `source` to `dest`. `source` will be dereferenced if
-/// `options.dereference` is set to true. `dest` will be dereferenced only if
-/// the source was not a symlink.
-///
-/// Behavior when copying to existing files is contingent on the
-/// `options.overwrite` mode. If a file is skipped, the return type
-/// should be `Error:Skipped`
-///
-/// The original permissions of `source` will be copied to `dest`
-/// after a successful copy.
-#[allow(clippy::cognitive_complexity)]
-fn copy_file(
+fn print_verbose_output(
+    parents: bool,
     progress_bar: &Option<ProgressBar>,
     source: &Path,
     dest: &Path,
+) {
+    if let Some(pb) = progress_bar {
+        // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
+        pb.suspend(|| {
+            print_paths(parents, source, dest);
+        });
+    } else {
+        print_paths(parents, source, dest);
+    }
+}
+
+fn print_paths(parents: bool, source: &Path, dest: &Path) {
+    if parents {
+        // For example, if copying file `a/b/c` and its parents
+        // to directory `d/`, then print
+        //
+        //     a -> d/a
+        //     a/b -> d/a/b
+        //
+        for (x, y) in aligned_ancestors(source, dest) {
+            println!("{} -> {}", x.display(), y.display());
+        }
+    }
+
+    println!("{}", context_for(source, dest));
+}
+
+/// Handles the copy mode for a file copy operation.
+///
+/// This function determines how to copy a file based on the provided options.
+/// It supports different copy modes, including hard linking, copying, symbolic linking, updating, and attribute-only copying.
+/// It also handles file backups, overwriting, and dereferencing based on the provided options.
+///
+/// # Returns
+///
+/// * `Ok(())` - The file was copied successfully.
+/// * `Err(CopyError)` - An error occurred while copying the file.
+fn handle_copy_mode(
+    source: &Path,
+    dest: &Path,
     options: &Options,
+    context: &str,
+    source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
-    copied_files: &mut HashMap<FileInformation, PathBuf>,
     source_in_command_line: bool,
 ) -> CopyResult<()> {
-    if (options.update == UpdateMode::ReplaceIfOlder || options.update == UpdateMode::ReplaceNone)
-        && options.overwrite == OverwriteMode::Interactive(ClobberMode::Standard)
-    {
-        // `cp -i --update old new` when `new` exists doesn't copy anything
-        // and exit with 0
-        return Ok(());
-    }
-
-    // Fail if dest is a dangling symlink or a symlink this program created previously
-    if dest.is_symlink() {
-        if FileInformation::from_path(dest, false)
-            .map(|info| symlinked_files.contains(&info))
-            .unwrap_or(false)
-        {
-            return Err(Error::Error(format!(
-                "will not copy '{}' through just-created symlink '{}'",
-                source.display(),
-                dest.display()
-            )));
-        }
-        let copy_contents = options.dereference(source_in_command_line) || !source.is_symlink();
-        if copy_contents
-            && !dest.exists()
-            && !matches!(
-                options.overwrite,
-                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-            )
-            && !is_symlink_loop(dest)
-            && std::env::var_os("POSIXLY_CORRECT").is_none()
-        {
-            return Err(Error::Error(format!(
-                "not writing through dangling symlink '{}'",
-                dest.display()
-            )));
-        }
-        if paths_refer_to_same_file(source, dest, true)
-            && matches!(
-                options.overwrite,
-                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-            )
-        {
-            fs::remove_file(dest)?;
-        }
-    }
-
-    if are_hardlinks_to_same_file(source, dest)
-        && matches!(
-            options.overwrite,
-            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
-        )
-    {
-        fs::remove_file(dest)?;
-    }
-
-    if file_or_link_exists(dest) {
-        if are_hardlinks_to_same_file(source, dest)
-            && !options.force()
-            && options.backup == BackupMode::NoBackup
-            && source != dest
-            || (source == dest && options.copy_mode == CopyMode::Link)
-        {
-            return Ok(());
-        }
-        handle_existing_dest(source, dest, options, source_in_command_line)?;
-    }
-
-    if options.preserve_hard_links() {
-        // if we encounter a matching device/inode pair in the source tree
-        // we can arrange to create a hard link between the corresponding names
-        // in the destination tree.
-        if let Some(new_source) = copied_files.get(
-            &FileInformation::from_path(source, options.dereference(source_in_command_line))
-                .context(format!("cannot stat {}", source.quote()))?,
-        ) {
-            std::fs::hard_link(new_source, dest)?;
-            return Ok(());
-        };
-    }
-
-    if options.verbose {
-        if let Some(pb) = progress_bar {
-            // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
-            pb.suspend(|| {
-                if options.parents {
-                    // For example, if copying file `a/b/c` and its parents
-                    // to directory `d/`, then print
-                    //
-                    //     a -> d/a
-                    //     a/b -> d/a/b
-                    //
-                    for (x, y) in aligned_ancestors(source, dest) {
-                        println!("{} -> {}", x.display(), y.display());
-                    }
-                }
-
-                println!("{}", context_for(source, dest));
-            });
-        } else {
-            if options.parents {
-                // For example, if copying file `a/b/c` and its parents
-                // to directory `d/`, then print
-                //
-                //     a -> d/a
-                //     a/b -> d/a/b
-                //
-                for (x, y) in aligned_ancestors(source, dest) {
-                    println!("{} -> {}", x.display(), y.display());
-                }
-            }
-
-            println!("{}", context_for(source, dest));
-        }
-    }
-
-    // Calculate the context upfront before canonicalizing the path
-    let context = context_for(source, dest);
-    let context = context.as_str();
-
-    let source_metadata = {
-        let result = if options.dereference(source_in_command_line) {
-            fs::metadata(source)
-        } else {
-            fs::symlink_metadata(source)
-        };
-        result.context(context)?
-    };
     let source_file_type = source_metadata.file_type();
+
     let source_is_symlink = source_file_type.is_symlink();
 
     #[cfg(unix)]
@@ -1790,31 +1757,13 @@ fn copy_file(
     #[cfg(not(unix))]
     let source_is_fifo = false;
 
-    let dest_permissions = if dest.exists() {
-        dest.symlink_metadata().context(context)?.permissions()
-    } else {
-        #[allow(unused_mut)]
-        let mut permissions = source_metadata.permissions();
-        #[cfg(unix)]
-        {
-            let mut mode = handle_no_preserve_mode(options, permissions.mode());
-
-            // apply umask
-            use uucore::mode::get_umask;
-            mode &= !get_umask();
-
-            permissions.set_mode(mode);
-        }
-        permissions
-    };
-
     match options.copy_mode {
         CopyMode::Link => {
             if dest.exists() {
                 let backup_path =
                     backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
                 if let Some(backup_path) = backup_path {
-                    backup_dest(dest, &backup_path)?;
+                    backup_dest(dest, &backup_path, dest.is_symlink())?;
                     fs::remove_file(dest)?;
                 }
                 if options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
@@ -1828,7 +1777,11 @@ fn copy_file(
             } else {
                 fs::hard_link(source, dest)
             }
-            .context(context)?;
+            .context(format!(
+                "cannot create hard link {} to {}",
+                get_filename(dest).unwrap_or("invalid file name").quote(),
+                get_filename(source).unwrap_or("invalid file name").quote()
+            ))?;
         }
         CopyMode::Copy => {
             copy_helper(
@@ -1845,7 +1798,7 @@ fn copy_file(
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
                 fs::remove_file(dest)?;
             }
-            symlink_file(source, dest, context, symlinked_files)?;
+            symlink_file(source, dest, symlinked_files)?;
         }
         CopyMode::Update => {
             if dest.exists() {
@@ -1876,6 +1829,8 @@ fn copy_file(
                         if src_time <= dest_time {
                             return Ok(());
                         } else {
+                            options.overwrite.verify(dest)?;
+
                             copy_helper(
                                 source,
                                 dest,
@@ -1910,8 +1865,229 @@ fn copy_file(
         }
     };
 
+    Ok(())
+}
+
+/// Calculates the permissions for the destination file in a copy operation.
+///
+/// If the destination file already exists, its current permissions are returned.
+/// If the destination file does not exist, the source file's permissions are used,
+/// with the `no-preserve` option and the umask taken into account on Unix platforms.
+/// # Returns
+///
+/// * `Ok(Permissions)` - The calculated permissions for the destination file.
+/// * `Err(CopyError)` - An error occurred while getting the metadata of the destination file.
+/// Allow unused variables for Windows (on options)
+#[allow(unused_variables)]
+fn calculate_dest_permissions(
+    dest: &Path,
+    source_metadata: &Metadata,
+    options: &Options,
+    context: &str,
+) -> CopyResult<Permissions> {
+    if dest.exists() {
+        Ok(dest.symlink_metadata().context(context)?.permissions())
+    } else {
+        #[cfg(unix)]
+        {
+            let mut permissions = source_metadata.permissions();
+            let mode = handle_no_preserve_mode(options, permissions.mode());
+
+            // Apply umask
+            use uucore::mode::get_umask;
+            let mode = mode & !get_umask();
+            permissions.set_mode(mode);
+            Ok(permissions)
+        }
+        #[cfg(not(unix))]
+        {
+            let permissions = source_metadata.permissions();
+            Ok(permissions)
+        }
+    }
+}
+
+/// Copy the a file from `source` to `dest`. `source` will be dereferenced if
+/// `options.dereference` is set to true. `dest` will be dereferenced only if
+/// the source was not a symlink.
+///
+/// Behavior when copying to existing files is contingent on the
+/// `options.overwrite` mode. If a file is skipped, the return type
+/// should be `Error:Skipped`
+///
+/// The original permissions of `source` will be copied to `dest`
+/// after a successful copy.
+#[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
+fn copy_file(
+    progress_bar: &Option<ProgressBar>,
+    source: &Path,
+    dest: &Path,
+    options: &Options,
+    symlinked_files: &mut HashSet<FileInformation>,
+    copied_destinations: &HashSet<PathBuf>,
+    copied_files: &mut HashMap<FileInformation, PathBuf>,
+    source_in_command_line: bool,
+) -> CopyResult<()> {
+    let source_is_symlink = source.is_symlink();
+    let dest_is_symlink = dest.is_symlink();
+    // Fail if dest is a dangling symlink or a symlink this program created previously
+    if dest_is_symlink {
+        if FileInformation::from_path(dest, false)
+            .map(|info| symlinked_files.contains(&info))
+            .unwrap_or(false)
+        {
+            return Err(Error::Error(format!(
+                "will not copy '{}' through just-created symlink '{}'",
+                source.display(),
+                dest.display()
+            )));
+        }
+        // Fail if cp tries to copy two sources of the same name into a single symlink
+        // Example: "cp file1 dir1/file1 tmp" where "tmp" is a directory containing a symlink "file1" pointing to a file named "foo".
+        // foo will contain the contents of "file1" and "dir1/file1" will not be copied over to "tmp/file1"
+        if copied_destinations.contains(dest) {
+            return Err(Error::Error(format!(
+                "will not copy '{}' through just-created symlink '{}'",
+                source.display(),
+                dest.display()
+            )));
+        }
+
+        let copy_contents = options.dereference(source_in_command_line) || !source_is_symlink;
+        if copy_contents
+            && !dest.exists()
+            && !matches!(
+                options.overwrite,
+                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+            )
+            && !is_symlink_loop(dest)
+            && std::env::var_os("POSIXLY_CORRECT").is_none()
+        {
+            return Err(Error::Error(format!(
+                "not writing through dangling symlink '{}'",
+                dest.display()
+            )));
+        }
+        if paths_refer_to_same_file(source, dest, true)
+            && matches!(
+                options.overwrite,
+                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+            )
+        {
+            fs::remove_file(dest)?;
+        }
+    }
+
+    if are_hardlinks_to_same_file(source, dest)
+        && source != dest
+        && matches!(
+            options.overwrite,
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+        )
+    {
+        fs::remove_file(dest)?;
+    }
+
+    if file_or_link_exists(dest)
+        && (!options.attributes_only
+            || matches!(
+                options.overwrite,
+                OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+            ))
+    {
+        if paths_refer_to_same_file(source, dest, true) && options.copy_mode == CopyMode::Link {
+            if source_is_symlink {
+                if !dest_is_symlink {
+                    return Ok(());
+                }
+                if !options.dereference {
+                    return Ok(());
+                }
+            } else if options.backup != BackupMode::NoBackup && !dest_is_symlink {
+                if source == dest {
+                    if !options.force() {
+                        return Ok(());
+                    }
+                } else {
+                    return Ok(());
+                }
+            }
+        }
+        handle_existing_dest(source, dest, options, source_in_command_line, copied_files)?;
+        if are_hardlinks_to_same_file(source, dest) {
+            if options.copy_mode == CopyMode::Copy && options.backup != BackupMode::NoBackup {
+                return Ok(());
+            }
+            if options.copy_mode == CopyMode::Link && (!source_is_symlink || !dest_is_symlink) {
+                return Ok(());
+            }
+        }
+    }
+
+    if options.attributes_only
+        && source_is_symlink
+        && !matches!(
+            options.overwrite,
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+        )
+    {
+        return Err(format!(
+            "cannot change attribute {}: Source file is a non regular file",
+            dest.quote()
+        )
+        .into());
+    }
+
+    if options.preserve_hard_links() {
+        // if we encounter a matching device/inode pair in the source tree
+        // we can arrange to create a hard link between the corresponding names
+        // in the destination tree.
+        if let Some(new_source) = copied_files.get(
+            &FileInformation::from_path(source, options.dereference(source_in_command_line))
+                .context(format!("cannot stat {}", source.quote()))?,
+        ) {
+            std::fs::hard_link(new_source, dest)?;
+            return Ok(());
+        };
+    }
+
+    if options.verbose {
+        print_verbose_output(options.parents, progress_bar, source, dest);
+    }
+
+    // Calculate the context upfront before canonicalizing the path
+    let context = context_for(source, dest);
+    let context = context.as_str();
+
+    let source_metadata = {
+        let result = if options.dereference(source_in_command_line) {
+            fs::metadata(source)
+        } else {
+            fs::symlink_metadata(source)
+        };
+        // this is just for gnu tests compatibility
+        result.map_err(|err| {
+            if err.to_string().contains("No such file or directory") {
+                return format!("cannot stat {}: No such file or directory", source.quote());
+            }
+            err.to_string()
+        })?
+    };
+
+    let dest_permissions = calculate_dest_permissions(dest, &source_metadata, options, context)?;
+
+    handle_copy_mode(
+        source,
+        dest,
+        options,
+        context,
+        &source_metadata,
+        symlinked_files,
+        source_in_command_line,
+    )?;
+
     // TODO: implement something similar to gnu's lchown
-    if !dest.is_symlink() {
+    if !dest_is_symlink {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.
@@ -1946,23 +2122,22 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         #[cfg(not(any(
             target_os = "android",
             target_os = "macos",
-            target_os = "macos-12",
             target_os = "freebsd",
             target_os = "redox",
         )))]
         {
             const MODE_RW_UGO: u32 = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
             const S_IRWXUGO: u32 = S_IRWXU | S_IRWXG | S_IRWXO;
-            match is_explicit_no_preserve_mode {
-                true => return MODE_RW_UGO,
-                false => return org_mode & S_IRWXUGO,
+            if is_explicit_no_preserve_mode {
+                return MODE_RW_UGO;
+            } else {
+                return org_mode & S_IRWXUGO;
             };
         }
 
         #[cfg(any(
             target_os = "android",
             target_os = "macos",
-            target_os = "macos-12",
             target_os = "freebsd",
             target_os = "redox",
         ))]
@@ -1970,9 +2145,10 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
             const MODE_RW_UGO: u32 =
                 (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
             const S_IRWXUGO: u32 = (S_IRWXU | S_IRWXG | S_IRWXO) as u32;
-            match is_explicit_no_preserve_mode {
-                true => return MODE_RW_UGO,
-                false => return org_mode & S_IRWXUGO,
+            if is_explicit_no_preserve_mode {
+                return MODE_RW_UGO;
+            } else {
+                return org_mode & S_IRWXUGO;
             };
         }
     }
@@ -2058,7 +2234,7 @@ fn copy_link(
     if dest.is_symlink() || dest.is_file() {
         fs::remove_file(dest)?;
     }
-    symlink_file(&link, dest, &context_for(&link, dest), symlinked_files)
+    symlink_file(&link, dest, symlinked_files)
 }
 
 /// Generate an error message if `target` is not the correct `target_type`
