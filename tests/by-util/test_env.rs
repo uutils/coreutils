@@ -19,7 +19,7 @@ struct Target {
 }
 #[cfg(unix)]
 impl Target {
-    fn new(signals: Vec<&str>) -> Self {
+    fn new(signals: &[&str]) -> Self {
         let mut child = new_ucmd!()
             .args(&[
                 format!("--ignore-signal={}", signals.join(",")).as_str(),
@@ -846,17 +846,17 @@ fn test_env_arg_ignore_signal_special_signals() {
 #[cfg(unix)]
 fn test_env_arg_ignore_signal_valid_signals() {
     {
-        let mut target = Target::new(vec!["int"]);
+        let mut target = Target::new(&["int"]);
         target.send_signal(Signal::SIGINT);
         assert!(target.is_alive());
     }
     {
-        let mut target = Target::new(vec!["usr2"]);
+        let mut target = Target::new(&["usr2"]);
         target.send_signal(Signal::SIGUSR2);
         assert!(target.is_alive());
     }
     {
-        let mut target = Target::new(vec!["int", "usr2"]);
+        let mut target = Target::new(&["int", "usr2"]);
         target.send_signal(Signal::SIGUSR1);
         assert!(!target.is_alive());
     }
