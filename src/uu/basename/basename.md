@@ -1,7 +1,7 @@
 # basename
 
 ```
-basename NAME [SUFFIX]
+basename [-z] NAME [SUFFIX]
 basename OPTION... NAME...
 ```
 

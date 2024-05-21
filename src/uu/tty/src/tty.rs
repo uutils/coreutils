@@ -9,7 +9,6 @@
 
 use clap::{crate_version, Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
-use std::os::unix::io::AsRawFd;
 use uucore::error::{set_exit_code, UResult};
 use uucore::{format_usage, help_about, help_usage};
 
@@ -37,8 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut stdout = std::io::stdout();
 
-    // Get the ttyname via nix
-    let name = nix::unistd::ttyname(std::io::stdin().as_raw_fd());
+    let name = nix::unistd::ttyname(std::io::stdin());
 
     let write_result = match name {
         Ok(name) => writeln!(stdout, "{}", name.display()),

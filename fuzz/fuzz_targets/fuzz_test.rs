@@ -18,6 +18,7 @@ use crate::fuzz_common::{
     compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd,
 };
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(PartialEq, Debug, Clone)]
 enum ArgType {
     STRING,

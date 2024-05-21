@@ -53,12 +53,14 @@ const ENCODINGS: &[(&str, Format, &str)] = &[
 pub fn uu_app() -> Command {
     let mut command = base_common::base_app(ABOUT, USAGE);
     for encoding in ENCODINGS {
-        command = command.arg(
-            Arg::new(encoding.0)
-                .long(encoding.0)
-                .help(encoding.2)
-                .action(ArgAction::SetTrue),
-        );
+        let raw_arg = Arg::new(encoding.0)
+            .long(encoding.0)
+            .help(encoding.2)
+            .action(ArgAction::SetTrue);
+        let overriding_arg = ENCODINGS
+            .iter()
+            .fold(raw_arg, |arg, enc| arg.overrides_with(enc.0));
+        command = command.arg(overriding_arg);
     }
     command
 }

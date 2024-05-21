@@ -2,7 +2,7 @@
 
 ```
 runcon [CONTEXT COMMAND [ARG...]]
-runcon [-c] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] COMMAND [ARG...]";
+runcon [-c] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] COMMAND [ARG...]
 ```
 
 Run command with specified security context under SELinux enabled systems.

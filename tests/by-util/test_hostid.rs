@@ -10,3 +10,12 @@ fn test_normal() {
     let re = Regex::new(r"^[0-9a-f]{8}").unwrap();
     new_ucmd!().succeeds().stdout_matches(&re);
 }
+
+#[test]
+fn test_invalid_flag() {
+    new_ucmd!()
+        .arg("--invalid-argument")
+        .fails()
+        .no_stdout()
+        .code_is(1);
+}

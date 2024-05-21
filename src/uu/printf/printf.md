@@ -4,6 +4,8 @@
 
 ```
 printf FORMATSTRING [ARGUMENT]...
+printf FORMAT [ARGUMENT]...
+printf OPTION
 ```
 
 Print output based off of the format string and proceeding arguments.

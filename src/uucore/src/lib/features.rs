@@ -6,6 +6,8 @@
 
 #[cfg(feature = "backup-control")]
 pub mod backup_control;
+#[cfg(feature = "checksum")]
+pub mod checksum;
 #[cfg(feature = "colors")]
 pub mod colors;
 #[cfg(feature = "encoding")]
@@ -46,6 +48,8 @@ pub mod pipes;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
 
+#[cfg(all(unix, not(target_os = "macos"), feature = "fsxattr"))]
+pub mod fsxattr;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
 pub mod signals;
 #[cfg(all(

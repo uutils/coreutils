@@ -10,7 +10,7 @@ use std::io::{Cursor, Error, ErrorKind, Read, Result};
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// use std::io::{Cursor, Read};
 ///
 /// struct CountIo {}

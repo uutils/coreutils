@@ -11,11 +11,12 @@ use std::fmt;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
 use std::num::IntErrorKind;
+use std::path::Path;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::{crash_if_err, format_usage, help_about, help_usage};
+use uucore::{crash_if_err, format_usage, help_about, help_usage, show};
 
 const USAGE: &str = help_usage!("unexpand.md");
 const ABOUT: &str = help_about!("unexpand.md");
@@ -105,8 +106,8 @@ impl Options {
             && !matches.get_flag(options::FIRST_ONLY);
         let uflag = !matches.get_flag(options::NO_UTF8);
 
-        let files = match matches.get_one::<String>(options::FILE) {
-            Some(v) => vec![v.to_string()],
+        let files = match matches.get_many::<String>(options::FILE) {
+            Some(v) => v.cloned().collect(),
             None => vec!["-".to_owned()],
         };
 
@@ -211,7 +212,13 @@ pub fn uu_app() -> Command {
 
 fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let file_buf;
-    if path == "-" {
+    let filename = Path::new(path);
+    if filename.is_dir() {
+        Err(Box::new(USimpleError {
+            code: 1,
+            message: format!("{}: Is a directory", filename.display()),
+        }))
+    } else if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
         file_buf = File::open(path).map_err_context(|| path.to_string())?;
@@ -401,7 +408,8 @@ fn unexpand(options: &Options) -> UResult<()> {
         let mut fh = match open(file) {
             Ok(reader) => reader,
             Err(err) => {
-                return Err(USimpleError::new(1, err.to_string()));
+                show!(err);
+                continue;
             }
         };
 

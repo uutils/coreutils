@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) INFTY MULT accum breakwords linebreak linebreaking linebreaks linelen maxlength minlength nchars ostream overlen parasplit plass posn powf punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen
 
 use std::io::{BufWriter, Stdout, Write};
-use std::{cmp, i64, mem};
+use std::{cmp, mem};
 
 use crate::parasplit::{ParaWords, Paragraph, WordInfo};
 use crate::FmtOptions;
@@ -238,8 +238,8 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
     let mut active_breaks = vec![0];
     let mut next_active_breaks = vec![];
 
-    let stretch = (args.opts.width - args.opts.goal) as isize;
-    let minlength = args.opts.goal - stretch as usize;
+    let stretch = args.opts.width - args.opts.goal;
+    let minlength = args.opts.goal.max(stretch + 1) - stretch;
     let mut new_linebreaks = vec![];
     let mut is_sentence_start = false;
     let mut least_demerits = 0;
@@ -300,7 +300,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
                         compute_demerits(
                             args.opts.goal as isize - tlen as isize,
                             stretch,
-                            w.word_nchars as isize,
+                            w.word_nchars,
                             active.prev_rat,
                         )
                     };
@@ -393,7 +393,7 @@ const DR_MULT: f32 = 600.0;
 // DL_MULT is penalty multiplier for short words at end of line
 const DL_MULT: f32 = 300.0;
 
-fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32) -> (i64, f32) {
+fn compute_demerits(delta_len: isize, stretch: usize, wlen: usize, prev_rat: f32) -> (i64, f32) {
     // how much stretch are we using?
     let ratio = if delta_len == 0 {
         0.0f32
@@ -419,7 +419,7 @@ fn compute_demerits(delta_len: isize, stretch: isize, wlen: isize, prev_rat: f32
     };
 
     // we penalize lines that have very different ratios from previous lines
-    let bad_delta_r = (DR_MULT * (((ratio - prev_rat) / 2.0).powi(3)).abs()) as i64;
+    let bad_delta_r = (DR_MULT * ((ratio - prev_rat) / 2.0).powi(3).abs()) as i64;
 
     let demerits = i64::pow(1 + bad_linelen + bad_wordlen + bad_delta_r, 2);
 
@@ -440,8 +440,8 @@ fn restart_active_breaks<'a>(
     } else {
         // choose the lesser evil: breaking too early, or breaking too late
         let wlen = w.word_nchars + args.compute_width(w, active.length, active.fresh);
-        let underlen = (min - active.length) as isize;
-        let overlen = ((wlen + slen + active.length) - args.opts.width) as isize;
+        let underlen = min as isize - active.length as isize;
+        let overlen = (wlen + slen + active.length) as isize - args.opts.width as isize;
         if overlen > underlen {
             // break early, put this word on the next line
             (true, args.indent_len + w.word_nchars)

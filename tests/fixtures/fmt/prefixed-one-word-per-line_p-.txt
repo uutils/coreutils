@@ -1,0 +1,11 @@
+- this is a file with one word per line
+
+=1this
+=1is
+=1a
+=2file
+=2with
+=2one
+=3word
+=3per
+=3line

@@ -575,7 +575,7 @@ fn test_skip_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%5%-10"])
         .fails()
-        .stdout_is("141\n")
+        .stdout_is("")
         .stderr_is("csplit: '%5%-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
@@ -586,14 +586,13 @@ fn test_skip_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%5%-10", "-k"])
         .fails()
-        .stdout_is("141\n")
+        .stdout_is("")
         .stderr_is("csplit: '%5%-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
         .count();
-    assert_eq!(count, 1);
-    assert_eq!(at.read("xx00"), generate(1, 51));
+    assert_eq!(count, 0);
 }
 
 #[test]
@@ -1225,13 +1224,12 @@ fn test_corner_case4() {
     assert_eq!(at.read("xx02"), generate(26, 51));
 }
 
-// NOTE: differs from gnu's output: the empty split is not written
 #[test]
 fn test_up_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/5/-10"])
         .fails()
-        .stdout_is("0\n141\n")
+        .stdout_is("0\n")
         .stderr_is("csplit: '/5/-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
@@ -1242,26 +1240,24 @@ fn test_up_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/5/-10", "-k"])
         .fails()
-        .stdout_is("0\n141\n")
+        .stdout_is("0\n")
         .stderr_is("csplit: '/5/-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
         .count();
-    assert_eq!(count, 2);
+    assert_eq!(count, 1);
     assert_eq!(at.read("xx00"), "");
-    assert_eq!(at.read("xx01"), generate(1, 51));
 }
 
 // the offset is out of range because of the first pattern
-// NOTE: output different than gnu's: the empty split is written but the rest of the input file is not
 #[test]
 fn test_line_num_range_with_up_to_match1() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/12/-5"])
         .fails()
         .stderr_is("csplit: '/12/-5': line number out of range\n")
-        .stdout_is("18\n0\n123\n");
+        .stdout_is("18\n0\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -1272,26 +1268,24 @@ fn test_line_num_range_with_up_to_match1() {
     ucmd.args(&["numbers50.txt", "10", "/12/-5", "-k"])
         .fails()
         .stderr_is("csplit: '/12/-5': line number out of range\n")
-        .stdout_is("18\n0\n123\n");
+        .stdout_is("18\n0\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
         .count();
-    assert_eq!(count, 3);
+    assert_eq!(count, 2);
     assert_eq!(at.read("xx00"), generate(1, 10));
     assert_eq!(at.read("xx01"), "");
-    assert_eq!(at.read("xx02"), generate(10, 51));
 }
 
 // the offset is out of range because more lines are needed than physically available
-// NOTE: output different than gnu's: the empty split is not written but the rest of the input file is
 #[test]
 fn test_line_num_range_with_up_to_match2() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/12/-15"])
         .fails()
         .stderr_is("csplit: '/12/-15': line number out of range\n")
-        .stdout_is("18\n0\n123\n");
+        .stdout_is("18\n0\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -1302,15 +1296,14 @@ fn test_line_num_range_with_up_to_match2() {
     ucmd.args(&["numbers50.txt", "10", "/12/-15", "-k"])
         .fails()
         .stderr_is("csplit: '/12/-15': line number out of range\n")
-        .stdout_is("18\n0\n123\n");
+        .stdout_is("18\n0\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
         .count();
-    assert_eq!(count, 3);
+    assert_eq!(count, 2);
     assert_eq!(at.read("xx00"), generate(1, 10));
     assert_eq!(at.read("xx01"), "");
-    assert_eq!(at.read("xx02"), generate(10, 51));
 }
 
 // NOTE: output different than gnu's: the pattern /10/ is matched but should not
@@ -1341,4 +1334,74 @@ fn test_line_num_range_with_up_to_match3() {
     assert_eq!(at.read("xx00"), generate(1, 10));
     assert_eq!(at.read("xx01"), "");
     assert_eq!(at.read("xx02"), generate(10, 51));
+}
+
+#[test]
+fn precision_format() {
+    for f in ["%#6.3x", "%0#6.3x"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        ucmd.args(&["numbers50.txt", "10", "--suffix-format", f])
+            .succeeds()
+            .stdout_only("18\n123\n");
+
+        let count = glob(&at.plus_as_string("xx*"))
+            .expect("there should be splits created")
+            .count();
+        assert_eq!(count, 2);
+        assert_eq!(at.read("xx   000"), generate(1, 10));
+        assert_eq!(at.read("xx 0x001"), generate(10, 51));
+    }
+}
+
+#[test]
+fn zero_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("in");
+    ucmd.args(&["in", "0"])
+        .fails()
+        .stderr_contains("0: line number must be greater");
+}
+
+#[test]
+fn no_such_file() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["in", "0"])
+        .fails()
+        .stderr_contains("cannot access 'in': No such file or directory");
+}
+
+#[test]
+fn repeat_everything() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "numbers50.txt",
+        "--suppress-matched",
+        "--suppress-matched",
+        "-kzsn", // spell-checker:disable-line
+        "2",
+        "-szkn3", // spell-checker:disable-line
+        "-b",
+        "%03d",
+        "-b%03x",
+        "-f",
+        "xxy_",
+        "-fxxz_", // spell-checker:disable-line
+        "/13/",
+        "9",
+        "{5}",
+    ])
+    .fails()
+    .no_stdout()
+    .code_is(1)
+    .stderr_only("csplit: '9': line number out of range on repetition 5\n");
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be some splits created")
+        .count();
+    assert_eq!(count, 6);
+    assert_eq!(at.read("xxz_000"), generate(1, 12 + 1));
+    assert_eq!(at.read("xxz_001"), generate(14, 17 + 1)); // FIXME: GNU starts at 15
+    assert_eq!(at.read("xxz_002"), generate(19, 26 + 1));
+    assert_eq!(at.read("xxz_003"), generate(28, 35 + 1));
+    assert_eq!(at.read("xxz_004"), generate(37, 44 + 1));
+    assert_eq!(at.read("xxz_005"), generate(46, 50 + 1));
 }

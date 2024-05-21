@@ -11,10 +11,21 @@ import json
 import sys
 
 base = "../gnu/tests/"
-urllib.request.urlretrieve(
-    "https://raw.githubusercontent.com/uutils/coreutils-tracking/main/gnu-full-result.json",
-    "result.json",
-)
+
+# Try to download the file, use local copy if download fails
+result_json = "result.json"
+try:
+    urllib.request.urlretrieve(
+        "https://raw.githubusercontent.com/uutils/coreutils-tracking/main/gnu-full-result.json",
+        result_json
+    )
+except Exception as e:
+    print(f"Failed to download the file: {e}")
+    if not os.path.exists(result_json):
+        print(f"Local file '{result_json}' not found. Exiting.")
+        sys.exit(1)
+    else:
+        print(f"Using local file '{result_json}'.")
 
 types = ("/*/*.sh", "/*/*.pl", "/*/*.xpl")
 
@@ -33,9 +44,20 @@ def show_list(l):
     tests = list(filter(lambda k: "factor" not in k, l))
 
     for f in reversed(tests):
-        print("%s: %s" % (f, os.stat(f).st_size))
+        if contains_require_root(f):
+            print("%s: %s / require_root" % (f, os.stat(f).st_size))
+        else:
+            print("%s: %s" % (f, os.stat(f).st_size))
     print("")
     print("%s tests remaining" % len(tests))
+
+
+def contains_require_root(file_path):
+    try:
+        with open(file_path, "r") as file:
+            return "require_root_" in file.read()
+    except IOError:
+        return False
 
 
 with open("result.json", "r") as json_file:

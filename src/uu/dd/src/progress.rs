@@ -11,8 +11,12 @@
 //! updater that runs in its own thread.
 use std::io::Write;
 use std::sync::mpsc;
+#[cfg(target_os = "linux")]
+use std::thread::JoinHandle;
 use std::time::Duration;
 
+#[cfg(target_os = "linux")]
+use signal_hook::iterator::Handle;
 use uucore::{
     error::UResult,
     format::num_format::{FloatVariant, Formatter},
@@ -20,18 +24,12 @@ use uucore::{
 
 use crate::numbers::{to_magnitude_and_suffix, SuffixType};
 
-// On Linux, we register a signal handler that prints progress updates.
-#[cfg(target_os = "linux")]
-use signal_hook::consts::signal;
-#[cfg(target_os = "linux")]
-use std::{
-    env,
-    error::Error,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-};
+#[derive(PartialEq, Eq)]
+pub(crate) enum ProgUpdateType {
+    Periodic,
+    Signal,
+    Final,
+}
 
 /// Summary statistics for read and write progress of dd for a given duration.
 pub(crate) struct ProgUpdate {
@@ -53,7 +51,7 @@ pub(crate) struct ProgUpdate {
     /// The status of the write.
     ///
     /// True if the write is completed, false if still in-progress.
-    pub(crate) complete: bool,
+    pub(crate) update_type: ProgUpdateType,
 }
 
 impl ProgUpdate {
@@ -62,13 +60,13 @@ impl ProgUpdate {
         read_stat: ReadStat,
         write_stat: WriteStat,
         duration: Duration,
-        complete: bool,
+        update_type: ProgUpdateType,
     ) -> Self {
         Self {
             read_stat,
             write_stat,
             duration,
-            complete,
+            update_type,
         }
     }
 
@@ -433,7 +431,7 @@ pub(crate) fn gen_prog_updater(
         let mut progress_printed = false;
         while let Ok(update) = rx.recv() {
             // Print the final read/write statistics.
-            if update.complete {
+            if update.update_type == ProgUpdateType::Final {
                 update.print_final_stats(print_level, progress_printed);
                 return;
             }
@@ -441,6 +439,49 @@ pub(crate) fn gen_prog_updater(
                 update.reprint_prog_line();
                 progress_printed = true;
             }
+        }
+    }
+}
+
+/// signal handler listens for SIGUSR1 signal and runs provided closure.
+#[cfg(target_os = "linux")]
+pub(crate) struct SignalHandler {
+    handle: Handle,
+    thread: Option<JoinHandle<()>>,
+}
+
+#[cfg(target_os = "linux")]
+impl SignalHandler {
+    pub(crate) fn install_signal_handler(
+        f: Box<dyn Send + Sync + Fn()>,
+    ) -> Result<Self, std::io::Error> {
+        use signal_hook::consts::signal::*;
+        use signal_hook::iterator::Signals;
+
+        let mut signals = Signals::new([SIGUSR1])?;
+        let handle = signals.handle();
+        let thread = std::thread::spawn(move || {
+            for signal in &mut signals {
+                match signal {
+                    SIGUSR1 => (*f)(),
+                    _ => unreachable!(),
+                }
+            }
+        });
+
+        Ok(Self {
+            handle,
+            thread: Some(thread),
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for SignalHandler {
+    fn drop(&mut self) {
+        self.handle.close();
+        if let Some(thread) = std::mem::take(&mut self.thread) {
+            thread.join().unwrap();
         }
     }
 }
@@ -459,50 +500,31 @@ pub(crate) fn gen_prog_updater(
     rx: mpsc::Receiver<ProgUpdate>,
     print_level: Option<StatusLevel>,
 ) -> impl Fn() {
-    // TODO: SIGINFO: Trigger progress line reprint. BSD-style Linux only.
-    const SIGUSR1_USIZE: usize = signal::SIGUSR1 as usize;
-    fn posixly_correct() -> bool {
-        env::var("POSIXLY_CORRECT").is_ok()
-    }
-    fn register_linux_signal_handler(sigval: Arc<AtomicUsize>) -> Result<(), Box<dyn Error>> {
-        if !posixly_correct() {
-            signal_hook::flag::register_usize(signal::SIGUSR1, sigval, SIGUSR1_USIZE)?;
-        }
-
-        Ok(())
-    }
     // --------------------------------------------------------------
     move || {
-        let sigval = Arc::new(AtomicUsize::new(0));
-
-        register_linux_signal_handler(sigval.clone()).unwrap_or_else(|e| {
-            if Some(StatusLevel::None) != print_level {
-                eprintln!("Internal dd Warning: Unable to register signal handler \n\t{e}");
-            }
-        });
-
         // Holds the state of whether we have printed the current progress.
         // This is needed so that we know whether or not to print a newline
         // character before outputting non-progress data.
         let mut progress_printed = false;
         while let Ok(update) = rx.recv() {
-            // Print the final read/write statistics.
-            if update.complete {
-                update.print_final_stats(print_level, progress_printed);
-                return;
-            }
-            // (Re)print status line if progress is requested.
-            if Some(StatusLevel::Progress) == print_level && !update.complete {
-                update.reprint_prog_line();
-                progress_printed = true;
-            }
-            // Handle signals and set the signal to un-seen.
-            // This will print a maximum of 1 time per second, even though it
-            // should be printing on every SIGUSR1.
-            if let SIGUSR1_USIZE = sigval.swap(0, Ordering::Relaxed) {
-                update.print_transfer_stats(progress_printed);
-                // Reset the progress printed, since print_transfer_stats always prints a newline.
-                progress_printed = false;
+            match update.update_type {
+                ProgUpdateType::Final => {
+                    // Print the final read/write statistics.
+                    update.print_final_stats(print_level, progress_printed);
+                    return;
+                }
+                ProgUpdateType::Periodic => {
+                    // (Re)print status line if progress is requested.
+                    if Some(StatusLevel::Progress) == print_level {
+                        update.reprint_prog_line();
+                        progress_printed = true;
+                    }
+                }
+                ProgUpdateType::Signal => {
+                    update.print_transfer_stats(progress_printed);
+                    // Reset the progress printed, since print_transfer_stats always prints a newline.
+                    progress_printed = false;
+                }
             }
         }
     }
@@ -524,7 +546,7 @@ mod tests {
                 ..Default::default()
             },
             duration: Duration::new(1, 0), // one second
-            complete: false,
+            update_type: super::ProgUpdateType::Periodic,
         }
     }
 
@@ -533,7 +555,7 @@ mod tests {
             read_stat: ReadStat::default(),
             write_stat: WriteStat::default(),
             duration,
-            complete: false,
+            update_type: super::ProgUpdateType::Periodic,
         }
     }
 
@@ -558,12 +580,12 @@ mod tests {
         let read_stat = ReadStat::new(1, 2, 3, 4);
         let write_stat = WriteStat::new(4, 5, 6);
         let duration = Duration::new(789, 0);
-        let complete = false;
+        let update_type = super::ProgUpdateType::Periodic;
         let prog_update = ProgUpdate {
             read_stat,
             write_stat,
             duration,
-            complete,
+            update_type,
         };
 
         let mut cursor = Cursor::new(vec![]);
@@ -580,7 +602,7 @@ mod tests {
             read_stat: ReadStat::default(),
             write_stat: WriteStat::default(),
             duration: Duration::new(1, 0), // one second
-            complete: false,
+            update_type: super::ProgUpdateType::Periodic,
         };
 
         let mut cursor = Cursor::new(vec![]);
@@ -636,7 +658,7 @@ mod tests {
             read_stat: ReadStat::default(),
             write_stat: WriteStat::default(),
             duration: Duration::new(1, 0), // one second
-            complete: false,
+            update_type: super::ProgUpdateType::Periodic,
         };
         let mut cursor = Cursor::new(vec![]);
         prog_update
@@ -657,7 +679,7 @@ mod tests {
             read_stat: ReadStat::default(),
             write_stat: WriteStat::default(),
             duration: Duration::new(1, 0), // one second
-            complete: false,
+            update_type: super::ProgUpdateType::Periodic,
         };
         let mut cursor = Cursor::new(vec![]);
         let rewrite = true;

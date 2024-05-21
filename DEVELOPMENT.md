@@ -1,4 +1,4 @@
-<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains -->
+<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic reimplementing toybox RUNTEST CARGOFLAGS nextest prereq autopoint gettext texinfo automake findutils shellenv libexec gnubin toolchains gsed -->
 
 # Setting up your local development environment
 
@@ -240,6 +240,12 @@ DEBUG=1 bash util/run-gnu-test.sh tests/misc/sm3sum.pl
 ***Tip:*** First time you run `bash util/build-gnu.sh` command, it will provide instructions on how to checkout GNU coreutils repository at the correct release tag. Please follow those instructions and when done, run `bash util/build-gnu.sh` command again.
 
 Note that GNU test suite relies on individual utilities (not the multicall binary).
+
+On FreeBSD, you need to install packages for GNU coreutils and sed (used in shell scripts instead of system commands):
+
+```shell
+pkg install coreutils gsed
+```
 
 ## Code coverage report
 

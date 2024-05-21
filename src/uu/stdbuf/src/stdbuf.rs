@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tempdir dyld dylib dragonflybsd optgrps libstdbuf
+// spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
 
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use std::fs::File;
@@ -64,7 +64,7 @@ struct ProgramOptionsError(String);
     target_os = "android",
     target_os = "freebsd",
     target_os = "netbsd",
-    target_os = "dragonflybsd"
+    target_os = "dragonfly"
 ))]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {
     Ok(("LD_PRELOAD", "so"))
@@ -80,7 +80,7 @@ fn preload_strings() -> UResult<(&'static str, &'static str)> {
     target_os = "android",
     target_os = "freebsd",
     target_os = "netbsd",
-    target_os = "dragonflybsd",
+    target_os = "dragonfly",
     target_vendor = "apple"
 )))]
 fn preload_strings() -> UResult<(&'static str, &'static str)> {

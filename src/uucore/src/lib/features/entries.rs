@@ -124,7 +124,7 @@ pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
     Ok(sort_groups(groups, egid))
 }
 
-#[cfg(all(unix, feature = "process"))]
+#[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
 fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
     if let Some(index) = groups.iter().position(|&x| x == egid) {
         groups[..=index].rotate_right(1);

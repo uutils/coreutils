@@ -12,4 +12,4 @@ pub static FF: u8 = 0xC;
 pub static CR: u8 = 0xD;
 pub static SPACE: u8 = 0x20;
 pub static SPACES: &[u8] = &[HT, LF, VT, FF, CR, SPACE];
-pub static BLANK: &[u8] = &[SPACE, HT];
+pub static BLANK: &[u8] = &[HT, SPACE];

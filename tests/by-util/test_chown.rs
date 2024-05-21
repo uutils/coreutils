@@ -471,7 +471,7 @@ fn test_chown_fail_id() {
 #[test]
 fn test_chown_only_user_id_nonexistent_user() {
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = &ts.fixtures;
     at.touch("f");
     if let Ok(result) = run_ucmd_as_root(&ts, &["12345", "f"]) {
         result.success().no_stdout().no_stderr();
@@ -537,7 +537,7 @@ fn test_chown_only_group_id() {
 #[test]
 fn test_chown_only_group_id_nonexistent_group() {
     let ts = TestScenario::new(util_name!());
-    let at = ts.fixtures.clone();
+    let at = &ts.fixtures;
     at.touch("f");
     if let Ok(result) = run_ucmd_as_root(&ts, &[":12345", "f"]) {
         result.success().no_stdout().no_stderr();

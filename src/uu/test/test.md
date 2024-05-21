@@ -2,10 +2,11 @@
 
 ```
 test EXPRESSION
-test
+[
 [ EXPRESSION ]
 [ ]
 [ OPTION
+]
 ```
 
 Check file types and compare values.

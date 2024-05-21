@@ -294,6 +294,7 @@ fn test_date_for_no_permission_file() {
     use std::os::unix::fs::PermissionsExt;
     let file = std::fs::OpenOptions::new()
         .create(true)
+        .truncate(true)
         .write(true)
         .open(at.plus(FILE))
         .unwrap();
@@ -407,4 +408,39 @@ fn test_date_overflow() {
         .fails()
         .no_stdout()
         .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_date_parse_from_format() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    const FILE: &str = "file-with-dates";
+
+    at.write(
+        FILE,
+        "2023-03-27 08:30:00\n\
+         2023-04-01 12:00:00\n\
+         2023-04-15 18:30:00",
+    );
+    ucmd.arg("-f")
+        .arg(at.plus(FILE))
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds();
+}
+
+#[test]
+fn test_date_from_stdin() {
+    new_ucmd!()
+        .arg("-f")
+        .arg("-")
+        .pipe_in(
+            "2023-03-27 08:30:00\n\
+             2023-04-01 12:00:00\n\
+             2023-04-15 18:30:00\n",
+        )
+        .succeeds()
+        .stdout_is(
+            "Mon Mar 27 08:30:00 2023\n\
+             Sat Apr  1 12:00:00 2023\n\
+             Sat Apr 15 18:30:00 2023\n",
+        );
 }

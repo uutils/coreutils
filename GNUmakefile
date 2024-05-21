@@ -147,6 +147,7 @@ UNIX_PROGS := \
 	nohup \
 	pathchk \
 	pinky \
+	sleep \
 	stat \
 	stdbuf \
 	timeout \
@@ -221,6 +222,7 @@ TEST_PROGS  := \
 	rmdir \
 	runcon \
 	seq \
+	sleep \
 	sort \
 	split \
 	stat \

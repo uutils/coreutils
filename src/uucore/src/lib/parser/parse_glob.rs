@@ -18,7 +18,11 @@ fn fix_negation(glob: &str) -> String {
     while i + 3 < chars.len() {
         if chars[i] == '[' && chars[i + 1] == '^' {
             match chars[i + 3..].iter().position(|x| *x == ']') {
-                None => (),
+                None => {
+                    // if closing square bracket not found, stop looking for it
+                    // again
+                    break;
+                }
                 Some(j) => {
                     chars[i + 1] = '!';
                     i += j + 4;
@@ -90,6 +94,11 @@ mod tests {
         assert_eq!(fix_negation("[[]] [^a]"), "[[]] [!a]");
         assert_eq!(fix_negation("[[] [^a]"), "[[] [!a]");
         assert_eq!(fix_negation("[]] [^a]"), "[]] [!a]");
+
+        // test that we don't look for closing square brackets unnecessarily
+        // Verifies issue #5584
+        let chars = "^[".repeat(174571);
+        assert_eq!(fix_negation(chars.as_str()), chars);
     }
 
     #[test]

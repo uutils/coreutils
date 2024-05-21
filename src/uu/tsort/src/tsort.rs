@@ -5,7 +5,7 @@
 use clap::{crate_version, Arg, Command};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read};
+use std::io::{stdin, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -32,35 +32,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         stdin_buf = stdin();
         &mut stdin_buf as &mut dyn Read
     } else {
-        file_buf = File::open(Path::new(&input)).map_err_context(|| input.to_string())?;
+        let path = Path::new(&input);
+        if path.is_dir() {
+            return Err(USimpleError::new(
+                1,
+                format!("{}: read error: Is a directory", input),
+            ));
+        }
+        file_buf = File::open(path).map_err_context(|| input.to_string())?;
         &mut file_buf as &mut dyn Read
     });
 
+    let mut input_buffer = String::new();
+    reader.read_to_string(&mut input_buffer)?;
     let mut g = Graph::new();
-    loop {
-        let mut line = String::new();
-        match reader.read_line(&mut line) {
-            Ok(_) => {
-                let tokens: Vec<String> = line.split_whitespace().map(|s| s.to_owned()).collect();
-                if tokens.is_empty() {
-                    break;
-                }
-                for ab in tokens.chunks(2) {
-                    match ab.len() {
-                        2 => g.add_edge(&ab[0], &ab[1]),
-                        _ => {
-                            return Err(USimpleError::new(
-                                1,
-                                format!(
-                                    "{}: input contains an odd number of tokens",
-                                    input.maybe_quote()
-                                ),
-                            ))
-                        }
-                    }
+
+    for line in input_buffer.lines() {
+        let tokens: Vec<_> = line.split_whitespace().collect();
+        if tokens.is_empty() {
+            break;
+        }
+        for ab in tokens.chunks(2) {
+            match ab.len() {
+                2 => g.add_edge(ab[0], ab[1]),
+                _ => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!(
+                            "{}: input contains an odd number of tokens",
+                            input.maybe_quote()
+                        ),
+                    ))
                 }
             }
-            _ => break,
         }
     }
 
@@ -97,13 +101,13 @@ pub fn uu_app() -> Command {
 // We use String as a representation of node here
 // but using integer may improve performance.
 #[derive(Default)]
-struct Graph {
-    in_edges: BTreeMap<String, BTreeSet<String>>,
-    out_edges: BTreeMap<String, Vec<String>>,
-    result: Vec<String>,
+struct Graph<'input> {
+    in_edges: BTreeMap<&'input str, BTreeSet<&'input str>>,
+    out_edges: BTreeMap<&'input str, Vec<&'input str>>,
+    result: Vec<&'input str>,
 }
 
-impl Graph {
+impl<'input> Graph<'input> {
     fn new() -> Self {
         Self::default()
     }
@@ -116,12 +120,12 @@ impl Graph {
         self.in_edges[to].contains(from)
     }
 
-    fn init_node(&mut self, n: &str) {
-        self.in_edges.insert(n.to_string(), BTreeSet::new());
-        self.out_edges.insert(n.to_string(), vec![]);
+    fn init_node(&mut self, n: &'input str) {
+        self.in_edges.insert(n, BTreeSet::new());
+        self.out_edges.insert(n, vec![]);
     }
 
-    fn add_edge(&mut self, from: &str, to: &str) {
+    fn add_edge(&mut self, from: &'input str, to: &'input str) {
         if !self.has_node(to) {
             self.init_node(to);
         }
@@ -131,8 +135,8 @@ impl Graph {
         }
 
         if from != to && !self.has_edge(from, to) {
-            self.in_edges.get_mut(to).unwrap().insert(from.to_string());
-            self.out_edges.get_mut(from).unwrap().push(to.to_string());
+            self.in_edges.get_mut(to).unwrap().insert(from);
+            self.out_edges.get_mut(from).unwrap().push(to);
         }
     }
 
@@ -142,14 +146,14 @@ impl Graph {
         let mut start_nodes = vec![];
         for (n, edges) in &self.in_edges {
             if edges.is_empty() {
-                start_nodes.push(n.clone());
+                start_nodes.push(*n);
             }
         }
 
         while !start_nodes.is_empty() {
             let n = start_nodes.remove(0);
 
-            self.result.push(n.clone());
+            self.result.push(n);
 
             let n_out_edges = self.out_edges.get_mut(&n).unwrap();
             #[allow(clippy::explicit_iter_loop)]
@@ -159,7 +163,7 @@ impl Graph {
 
                 // If m doesn't have other in-coming edges add it to start_nodes
                 if m_in_edges.is_empty() {
-                    start_nodes.push(m.clone());
+                    start_nodes.push(m);
                 }
             }
             n_out_edges.clear();

@@ -56,7 +56,6 @@
 
 // spell-checker:ignore uioerror rustdoc
 
-use clap;
 use std::{
     error::Error,
     fmt::{Display, Formatter},

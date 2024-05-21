@@ -53,11 +53,7 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
                 .unwrap_or(haystack.len()),
         );
 
-        let (field, rest) = field.split_at(
-            field
-                .find(|c: char| c.is_whitespace())
-                .unwrap_or(field.len()),
-        );
+        let (field, rest) = field.split_at(field.find(char::is_whitespace).unwrap_or(field.len()));
 
         self.s = if rest.is_empty() { None } else { Some(rest) };
 
@@ -107,7 +103,7 @@ fn parse_implicit_precision(s: &str) -> usize {
     match s.split_once('.') {
         Some((_, decimal_part)) => decimal_part
             .chars()
-            .take_while(|c| c.is_ascii_digit())
+            .take_while(char::is_ascii_digit)
             .count(),
         None => 0,
     }

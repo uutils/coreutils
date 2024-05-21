@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # spell-checker:ignore xpass XPASS testsuite
 set -e
 

@@ -2,7 +2,7 @@
 
 ```
 nohup COMMAND [ARG]...
-nohup FLAG
+nohup OPTION
 ```
 
 Run COMMAND ignoring hangup signals.

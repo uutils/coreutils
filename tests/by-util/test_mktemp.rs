@@ -21,8 +21,8 @@ static TEST_TEMPLATE2: &str = "temp";
 static TEST_TEMPLATE3: &str = "tempX";
 static TEST_TEMPLATE4: &str = "tempXX";
 static TEST_TEMPLATE5: &str = "tempXXX";
-static TEST_TEMPLATE6: &str = "tempXXXlate"; // spell-checker:disable-line
-static TEST_TEMPLATE7: &str = "XXXtemplate"; // spell-checker:disable-line
+static TEST_TEMPLATE6: &str = "tempXXXlate";
+static TEST_TEMPLATE7: &str = "XXXtemplate";
 #[cfg(unix)]
 static TEST_TEMPLATE8: &str = "tempXXXl/ate";
 #[cfg(windows)]
@@ -629,7 +629,7 @@ fn test_too_few_xs_suffix() {
     new_ucmd!()
         .args(&["--suffix=X", "aXX"])
         .fails()
-        .stderr_only("mktemp: too few X's in template 'aXXX'\n");
+        .stderr_only("mktemp: too few X's in template 'aXX'\n");
 }
 
 #[test]
@@ -637,7 +637,7 @@ fn test_too_few_xs_suffix_directory() {
     new_ucmd!()
         .args(&["-d", "--suffix=X", "aXX"])
         .fails()
-        .stderr_only("mktemp: too few X's in template 'aXXX'\n");
+        .stderr_only("mktemp: too few X's in template 'aXX'\n");
 }
 
 #[test]

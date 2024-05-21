@@ -23,6 +23,26 @@ fn test_encode() {
 }
 
 #[test]
+fn test_encode_repeat_flags_later_wrap_10() {
+    let input = "Hello, World!\n";
+    new_ucmd!()
+        .args(&["-ii", "-w17", "-w10"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("JBSWY3DPFQ\nQFO33SNRSC\nCCQ=\n"); // spell-checker:disable-line
+}
+
+#[test]
+fn test_encode_repeat_flags_later_wrap_17() {
+    let input = "Hello, World!\n";
+    new_ucmd!()
+        .args(&["-ii", "-w10", "-w17"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("JBSWY3DPFQQFO33SN\nRSCCCQ=\n"); // spell-checker:disable-line
+}
+
+#[test]
 fn test_base32_encode_file() {
     new_ucmd!()
         .arg("input-simple.txt")
@@ -40,6 +60,16 @@ fn test_decode() {
             .succeeds()
             .stdout_only("Hello, World!");
     }
+}
+
+#[test]
+fn test_decode_repeat_flags() {
+    let input = "JBSWY3DPFQQFO33SNRSCC===\n"; // spell-checker:disable-line
+    new_ucmd!()
+        .args(&["-didiw80", "--wrap=17", "--wrap", "8"]) // spell-checker:disable-line
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("Hello, World!");
 }
 
 #[test]

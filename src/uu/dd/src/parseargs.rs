@@ -275,7 +275,7 @@ impl Parser {
 
     fn parse_n(val: &str) -> Result<Num, ParseError> {
         let n = parse_bytes_with_opt_multiplier(val)?;
-        Ok(if val.ends_with('B') {
+        Ok(if val.contains('B') {
             Num::Bytes(n)
         } else {
             Num::Blocks(n)
@@ -490,6 +490,8 @@ fn parse_bytes_only(s: &str) -> Result<u64, ParseError> {
 /// 512. You can also use standard block size suffixes like `'k'` for
 /// 1024.
 ///
+/// If the number would be too large, return [`std::u64::MAX`] instead.
+///
 /// # Errors
 ///
 /// If a number cannot be parsed or if the multiplication would cause
@@ -507,16 +509,15 @@ fn parse_bytes_only(s: &str) -> Result<u64, ParseError> {
 fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
     let parser = SizeParser {
         capital_b_bytes: true,
+        no_empty_numeric: true,
         ..Default::default()
     };
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
         (None, None, None) => match parser.parse_u64(s) {
             Ok(n) => (n, 1),
+            Err(ParseSizeError::SizeTooBig(_)) => (u64::MAX, 1),
             Err(ParseSizeError::InvalidSuffix(_) | ParseSizeError::ParseFailure(_)) => {
                 return Err(ParseError::InvalidNumber(full.to_string()))
-            }
-            Err(ParseSizeError::SizeTooBig(_)) => {
-                return Err(ParseError::MultiplierStringOverflow(full.to_string()))
             }
         },
         (Some(i), None, None) => (parse_bytes_only(&s[..i])?, 1),
@@ -630,22 +631,42 @@ fn conversion_mode(
 #[cfg(test)]
 mod tests {
 
-    use crate::parseargs::parse_bytes_with_opt_multiplier;
+    use crate::parseargs::{parse_bytes_with_opt_multiplier, Parser};
+    use crate::Num;
+    use std::matches;
+    const BIG: &str = "9999999999999999999999999999999999999999999999999999999999999";
 
     #[test]
-    fn test_parse_bytes_with_opt_multiplier() {
+    fn test_parse_bytes_with_opt_multiplier_invalid() {
+        assert!(parse_bytes_with_opt_multiplier("123asdf").is_err());
+    }
+
+    #[test]
+    fn test_parse_bytes_with_opt_multiplier_without_x() {
         assert_eq!(parse_bytes_with_opt_multiplier("123").unwrap(), 123);
         assert_eq!(parse_bytes_with_opt_multiplier("123c").unwrap(), 123); // 123 * 1
         assert_eq!(parse_bytes_with_opt_multiplier("123w").unwrap(), 123 * 2);
         assert_eq!(parse_bytes_with_opt_multiplier("123b").unwrap(), 123 * 512);
-        assert_eq!(parse_bytes_with_opt_multiplier("123x3").unwrap(), 123 * 3);
         assert_eq!(parse_bytes_with_opt_multiplier("123k").unwrap(), 123 * 1024);
-        assert_eq!(parse_bytes_with_opt_multiplier("1x2x3").unwrap(), 6); // 1 * 2 * 3
+        assert_eq!(parse_bytes_with_opt_multiplier(BIG).unwrap(), u64::MAX);
+    }
 
+    #[test]
+    fn test_parse_bytes_with_opt_multiplier_with_x() {
+        assert_eq!(parse_bytes_with_opt_multiplier("123x3").unwrap(), 123 * 3);
+        assert_eq!(parse_bytes_with_opt_multiplier("1x2x3").unwrap(), 6); // 1 * 2 * 3
         assert_eq!(
             parse_bytes_with_opt_multiplier("1wx2cx3w").unwrap(),
             2 * 2 * (3 * 2) // (1 * 2) * (2 * 1) * (3 * 2)
         );
-        assert!(parse_bytes_with_opt_multiplier("123asdf").is_err());
+    }
+    #[test]
+    fn test_parse_n() {
+        for arg in ["1x8x4", "1c", "123b", "123w"] {
+            assert!(matches!(Parser::parse_n(arg), Ok(Num::Blocks(_))));
+        }
+        for arg in ["1Bx8x4", "2Bx8", "2Bx8B", "2x8B"] {
+            assert!(matches!(Parser::parse_n(arg), Ok(Num::Bytes(_))));
+        }
     }
 }

@@ -38,8 +38,6 @@ pub struct OutputInfo {
 
     /// The number of bytes in a block. (This is the size of the largest datatype in `spaced_formatters`.)
     pub byte_size_block: usize,
-    /// The width of a block in human readable format. (The size of the largest format.)
-    pub print_width_block: usize,
     /// All formats.
     spaced_formatters: Vec<SpacedFormatterItemInfo>,
     /// determines if duplicate output lines should be printed, or
@@ -78,7 +76,6 @@ impl OutputInfo {
             byte_size_line: line_bytes,
             print_width_line,
             byte_size_block,
-            print_width_block,
             spaced_formatters,
             output_duplicates,
         }

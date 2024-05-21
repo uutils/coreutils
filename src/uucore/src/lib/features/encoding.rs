@@ -6,11 +6,9 @@
 // spell-checker:ignore (strings) ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUV
 // spell-checker:ignore (encodings) lsbf msbf hexupper
 
-use data_encoding::{self, BASE32, BASE64};
-
 use std::io::{self, Read, Write};
 
-use data_encoding::{Encoding, BASE32HEX, BASE64URL, HEXUPPER};
+use data_encoding::{Encoding, BASE32, BASE32HEX, BASE64, BASE64URL, HEXUPPER};
 use data_encoding_macro::new_encoding;
 #[cfg(feature = "thiserror")]
 use thiserror::Error;
@@ -25,8 +23,10 @@ pub enum DecodeError {
     Io(#[from] io::Error),
 }
 
+#[derive(Debug)]
 pub enum EncodeError {
     Z85InputLenNotMultipleOf4,
+    InvalidInput,
 }
 
 pub type DecodeResult = Result<Vec<u8>, DecodeError>;
@@ -148,8 +148,10 @@ impl<R: Read> Data<R> {
 
     pub fn encode(&mut self) -> Result<String, EncodeError> {
         let mut buf: Vec<u8> = vec![];
-        self.input.read_to_end(&mut buf).unwrap();
-        encode(self.format, buf.as_slice())
+        match self.input.read_to_end(&mut buf) {
+            Ok(_) => encode(self.format, buf.as_slice()),
+            Err(_) => Err(EncodeError::InvalidInput),
+        }
     }
 }
 

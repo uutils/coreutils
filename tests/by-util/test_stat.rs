@@ -338,3 +338,10 @@ fn test_stdin_redirect() {
         .stdout_contains("File: -")
         .succeeded();
 }
+
+#[test]
+fn test_without_argument() {
+    new_ucmd!()
+        .fails()
+        .stderr_contains("missing operand\nTry 'stat --help' for more information.");
+}

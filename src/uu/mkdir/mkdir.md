@@ -3,7 +3,7 @@
 <!-- spell-checker:ignore ugoa -->
 
 ```
-mkdir [OPTION]... [USER]
+mkdir [OPTION]... DIRECTORY...
 ```
 
 Create the given DIRECTORY(ies) if they do not exist

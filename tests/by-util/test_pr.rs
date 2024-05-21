@@ -5,13 +5,10 @@
 // spell-checker:ignore (ToDO) Sdivide
 
 use crate::common::util::{TestScenario, UCommand};
+use chrono::{DateTime, Duration, Utc};
 use std::fs::metadata;
-use time::macros::format_description;
-use time::Duration;
-use time::OffsetDateTime;
 
-const DATE_TIME_FORMAT: &[time::format_description::FormatItem] =
-    format_description!("[month repr:short] [day] [hour]:[minute] [year]");
+const DATE_TIME_FORMAT: &str = "%b %d %H:%M %Y";
 
 fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
     let tmp_dir_path = ucmd.get_full_fixture_path(path);
@@ -20,31 +17,39 @@ fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
         .map(|i| {
             i.modified()
                 .map(|x| {
-                    let date_time: OffsetDateTime = x.into();
-                    date_time.format(&DATE_TIME_FORMAT).unwrap()
+                    let date_time: DateTime<Utc> = x.into();
+                    date_time.format(DATE_TIME_FORMAT).to_string()
                 })
                 .unwrap_or_default()
         })
         .unwrap_or_default()
 }
 
-fn all_minutes(from: OffsetDateTime, to: OffsetDateTime) -> Vec<String> {
-    let to = to + Duration::minutes(1);
-    // const FORMAT: &str = "%b %d %H:%M %Y";
+fn all_minutes(from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<String> {
+    let to = to + Duration::try_minutes(1).unwrap();
     let mut vec = vec![];
     let mut current = from;
     while current < to {
-        vec.push(current.format(&DATE_TIME_FORMAT).unwrap());
-        current += Duration::minutes(1);
+        vec.push(current.format(DATE_TIME_FORMAT).to_string());
+        current += Duration::try_minutes(1).unwrap();
     }
     vec
 }
 
-fn valid_last_modified_template_vars(from: OffsetDateTime) -> Vec<Vec<(String, String)>> {
-    all_minutes(from, OffsetDateTime::now_utc())
+fn valid_last_modified_template_vars(from: DateTime<Utc>) -> Vec<Vec<(String, String)>> {
+    all_minutes(from, Utc::now())
         .into_iter()
         .map(|time| vec![("{last_modified_time}".to_string(), time)])
         .collect()
+}
+
+#[test]
+fn test_invalid_flag() {
+    new_ucmd!()
+        .arg("--invalid-argument")
+        .fails()
+        .no_stdout()
+        .code_is(1);
 }
 
 #[test]
@@ -257,7 +262,7 @@ fn test_with_suppress_error_option() {
 fn test_with_stdin() {
     let expected_file_path = "stdin.log.expected";
     let mut scenario = new_ucmd!();
-    let start = OffsetDateTime::now_utc();
+    let start = Utc::now();
     scenario
         .pipe_in_fixture("stdin.log")
         .args(&["--pages=1:2", "-n", "-"])
@@ -320,7 +325,7 @@ fn test_with_mpr() {
     let expected_test_file_path = "mpr.log.expected";
     let expected_test_file_path1 = "mpr1.log.expected";
     let expected_test_file_path2 = "mpr2.log.expected";
-    let start = OffsetDateTime::now_utc();
+    let start = Utc::now();
     new_ucmd!()
         .args(&["--pages=1:2", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
@@ -329,7 +334,7 @@ fn test_with_mpr() {
             &valid_last_modified_template_vars(start),
         );
 
-    let start = OffsetDateTime::now_utc();
+    let start = Utc::now();
     new_ucmd!()
         .args(&["--pages=2:4", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
@@ -338,7 +343,7 @@ fn test_with_mpr() {
             &valid_last_modified_template_vars(start),
         );
 
-    let start = OffsetDateTime::now_utc();
+    let start = Utc::now();
     new_ucmd!()
         .args(&[
             "--pages=1:2",
@@ -413,7 +418,7 @@ fn test_with_pr_core_utils_tests() {
         let mut scenario = new_ucmd!();
         let input_file_path = input_file.first().unwrap();
         let test_file_path = expected_file.first().unwrap();
-        let value = file_last_modified_time(&scenario, test_file_path);
+        let value = file_last_modified_time(&scenario, input_file_path);
         let mut arguments: Vec<&str> = flags
             .split(' ')
             .filter(|i| i.trim() != "")
@@ -445,7 +450,7 @@ fn test_with_join_lines_option() {
     let test_file_2 = "test.log";
     let expected_file_path = "joined.log.expected";
     let mut scenario = new_ucmd!();
-    let start = OffsetDateTime::now_utc();
+    let start = Utc::now();
     scenario
         .args(&["+1:2", "-J", "-m", test_file_1, test_file_2])
         .run()

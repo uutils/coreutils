@@ -236,8 +236,13 @@ impl Params {
         let (i, j) = match find_last_contiguous_block_of_xs(&options.template) {
             None => {
                 let s = match options.suffix {
+                    // If a suffix is specified, the error message includes the template without the suffix.
+                    Some(_) => options
+                        .template
+                        .chars()
+                        .take(options.template.len())
+                        .collect::<String>(),
                     None => options.template,
-                    Some(s) => format!("{}{}", options.template, s),
                 };
                 return Err(MkTempError::TooFewXs(s));
             }

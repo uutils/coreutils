@@ -182,6 +182,14 @@ macro_rules! show_warning(
     })
 );
 
+#[macro_export]
+macro_rules! show_warning_caps(
+    ($($args:tt)+) => ({
+        eprint!("{}: WARNING: ", $crate::util_name());
+        eprintln!($($args)+);
+    })
+);
+
 /// Display an error and [`std::process::exit`]
 ///
 /// Displays the provided error message using [`show_error!`], then invokes

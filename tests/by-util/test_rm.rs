@@ -227,6 +227,19 @@ fn test_rm_directory_without_flag() {
 }
 
 #[test]
+#[cfg(windows)]
+// https://github.com/uutils/coreutils/issues/3200
+fn test_rm_directory_with_trailing_backslash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "dir";
+
+    at.mkdir(dir);
+
+    ucmd.arg(".\\dir\\").arg("-rf").succeeds();
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
 fn test_rm_verbose() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_rm_verbose_file_a";

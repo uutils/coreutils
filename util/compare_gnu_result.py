@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#!/usr/bin/env python3
 
 """
 Compare the current results to the last results gathered from the main branch to highlight

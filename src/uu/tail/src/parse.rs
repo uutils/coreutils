@@ -32,7 +32,7 @@ pub enum ParseError {
     InvalidEncoding,
 }
 /// Parses obsolete syntax
-/// tail -\[NUM\]\[bcl\]\[f\] and tail +\[NUM\]\[bcl\]\[f\] // spell-checker:disable-line
+/// tail -\[NUM\]\[bcl\]\[f\] and tail +\[NUM\]\[bcl\]\[f\]
 pub fn parse_obsolete(src: &OsString) -> Option<Result<ObsoleteArgs, ParseError>> {
     let mut rest = match src.to_str() {
         Some(src) => src,

@@ -353,7 +353,7 @@ fn test_relative() {
     new_ucmd!()
         .args(&["-sm", "--relative-base=/", "--relative-to=/", "/", "/usr"])
         .succeeds()
-        .stdout_is(".\nusr\n"); // spell-checker:disable-line
+        .stdout_is(".\nusr\n");
 
     let result = new_ucmd!()
         .args(&["-sm", "--relative-base=/usr", "/tmp", "/usr"])
@@ -366,7 +366,7 @@ fn test_relative() {
     new_ucmd!()
         .args(&["-sm", "--relative-base=/", "/", "/usr"])
         .succeeds()
-        .stdout_is(".\nusr\n"); // spell-checker:disable-line
+        .stdout_is(".\nusr\n");
 }
 
 #[test]

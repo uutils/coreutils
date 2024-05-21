@@ -29,6 +29,7 @@ use uucore::{
     error::{FromIo, UError, UResult},
     format_usage, help_about, help_usage,
     quoting_style::{escape_name, QuotingStyle},
+    shortcut_value_parser::ShortcutValueParser,
     show,
 };
 
@@ -190,7 +191,7 @@ impl<'a> Inputs<'a> {
 
         // The 1-based index of each yielded item must be tracked for error reporting.
         let mut with_idx = base.enumerate().map(|(i, v)| (i + 1, v));
-        let files0_from_path = settings.files0_from.as_ref().map(|p| p.as_borrowed());
+        let files0_from_path = settings.files0_from.as_ref().map(Input::as_borrowed);
 
         let iter = iter::from_fn(move || {
             let (idx, next) = with_idx.next()?;
@@ -439,7 +440,9 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::TOTAL)
                 .long(options::TOTAL)
-                .value_parser(["auto", "always", "only", "never"])
+                .value_parser(ShortcutValueParser::new([
+                    "auto", "always", "only", "never",
+                ]))
                 .value_name("WHEN")
                 .hide_possible_values(true)
                 .help(concat!(
@@ -526,11 +529,11 @@ fn word_count_from_reader<T: WordCountable>(
         (_, false, false, true, true) => {
             word_count_from_reader_specialized::<_, false, false, true, true>(reader)
         }
-        // show_chars, show_words
+        // show_lines, show_words
         (_, false, true, false, true) => {
             word_count_from_reader_specialized::<_, false, true, false, true>(reader)
         }
-        // show_chars, show_lines
+        // show_lines, show_max_line_length
         (_, false, true, true, false) => {
             word_count_from_reader_specialized::<_, false, true, true, false>(reader)
         }
@@ -565,7 +568,64 @@ fn word_count_from_reader<T: WordCountable>(
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
+fn process_chunk<
+    const SHOW_CHARS: bool,
+    const SHOW_LINES: bool,
+    const SHOW_MAX_LINE_LENGTH: bool,
+    const SHOW_WORDS: bool,
+>(
+    total: &mut WordCount,
+    text: &str,
+    current_len: &mut usize,
+    in_word: &mut bool,
+) {
+    for ch in text.chars() {
+        if SHOW_WORDS {
+            if ch.is_whitespace() {
+                *in_word = false;
+            } else if !(*in_word) {
+                // This also counts control characters! (As of GNU coreutils 9.5)
+                *in_word = true;
+                total.words += 1;
+            }
+        }
+        if SHOW_MAX_LINE_LENGTH {
+            match ch {
+                '\n' | '\r' | '\x0c' => {
+                    total.max_line_length = max(*current_len, total.max_line_length);
+                    *current_len = 0;
+                }
+                '\t' => {
+                    *current_len -= *current_len % 8;
+                    *current_len += 8;
+                }
+                _ => {
+                    *current_len += ch.width().unwrap_or(0);
+                }
+            }
+        }
+        if SHOW_LINES && ch == '\n' {
+            total.lines += 1;
+        }
+        if SHOW_CHARS {
+            total.chars += 1;
+        }
+    }
+    total.bytes += text.len();
+
+    total.max_line_length = max(*current_len, total.max_line_length);
+}
+
+fn handle_error(error: BufReadDecoderError<'_>, total: &mut WordCount) -> Option<io::Error> {
+    match error {
+        BufReadDecoderError::InvalidByteSequence(bytes) => {
+            total.bytes += bytes.len();
+        }
+        BufReadDecoderError::Io(e) => return Some(e),
+    }
+    None
+}
+
 fn word_count_from_reader_specialized<
     T: WordCountable,
     const SHOW_CHARS: bool,
@@ -579,57 +639,23 @@ fn word_count_from_reader_specialized<
     let mut reader = BufReadDecoder::new(reader.buffered());
     let mut in_word = false;
     let mut current_len = 0;
-
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
-                for ch in text.chars() {
-                    if SHOW_WORDS {
-                        if ch.is_whitespace() {
-                            in_word = false;
-                        } else if ch.is_ascii_control() {
-                            // These count as characters but do not affect the word state
-                        } else if !in_word {
-                            in_word = true;
-                            total.words += 1;
-                        }
-                    }
-                    if SHOW_MAX_LINE_LENGTH {
-                        match ch {
-                            '\n' | '\r' | '\x0c' => {
-                                total.max_line_length = max(current_len, total.max_line_length);
-                                current_len = 0;
-                            }
-                            '\t' => {
-                                current_len -= current_len % 8;
-                                current_len += 8;
-                            }
-                            _ => {
-                                current_len += ch.width().unwrap_or(0);
-                            }
-                        }
-                    }
-                    if SHOW_LINES && ch == '\n' {
-                        total.lines += 1;
-                    }
-                    if SHOW_CHARS {
-                        total.chars += 1;
-                    }
+                process_chunk::<SHOW_CHARS, SHOW_LINES, SHOW_MAX_LINE_LENGTH, SHOW_WORDS>(
+                    &mut total,
+                    text,
+                    &mut current_len,
+                    &mut in_word,
+                );
+            }
+            Err(e) => {
+                if let Some(e) = handle_error(e, &mut total) {
+                    return (total, Some(e));
                 }
-                total.bytes += text.len();
-            }
-            Err(BufReadDecoderError::InvalidByteSequence(bytes)) => {
-                // GNU wc treats invalid data as neither word nor char nor whitespace,
-                // so no other counters are affected
-                total.bytes += bytes.len();
-            }
-            Err(BufReadDecoderError::Io(e)) => {
-                return (total, Some(e));
             }
         }
     }
-
-    total.max_line_length = max(current_len, total.max_line_length);
 
     (total, None)
 }

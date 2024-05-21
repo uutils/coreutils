@@ -148,7 +148,6 @@ fn find_stdout() -> UResult<File> {
     };
 
     match OpenOptions::new()
-        .write(true)
         .create(true)
         .append(true)
         .open(Path::new(NOHUP_OUT))
@@ -168,12 +167,7 @@ fn find_stdout() -> UResult<File> {
             let mut homeout = PathBuf::from(home);
             homeout.push(NOHUP_OUT);
             let homeout_str = homeout.to_str().unwrap();
-            match OpenOptions::new()
-                .write(true)
-                .create(true)
-                .append(true)
-                .open(&homeout)
-            {
+            match OpenOptions::new().create(true).append(true).open(&homeout) {
                 Ok(t) => {
                     show_error!(
                         "ignoring input and appending output to {}",

@@ -1,0 +1,21 @@
+diff --git a/tests/factor/factor.pl b/tests/factor/factor.pl
+index 6e612e418..f19c06ca0 100755
+--- a/tests/factor/factor.pl
++++ b/tests/factor/factor.pl
+@@ -61,12 +61,13 @@ my @Tests =
+       # Map newer glibc diagnostic to expected.
+       # Also map OpenBSD 5.1's "unknown option" to expected "invalid option".
+       {ERR_SUBST => q!s/'1'/1/;s/unknown/invalid/!},
+-      {ERR => "$prog: invalid option -- 1\n"
+-       . "Try '$prog --help' for more information.\n"},
++      {ERR => "error: unexpected argument '-1' found\n\n"
++        . "  tip: to pass '-1' as a value, use '-- -1'\n\n"
++        . "Usage: factor [OPTION]... [NUMBER]...\n"},
+       {EXIT => 1}],
+      ['cont', 'a 4',
+       {OUT => "4: 2 2\n"},
+-      {ERR => "$prog: 'a' is not a valid positive integer\n"},
++      {ERR => "$prog: warning: a: invalid digit found in string\n"},
+       {EXIT => 1}],
+      ['bug-2012-a', '465658903', {OUT => '15259 30517'}],
+      ['bug-2012-b', '2242724851', {OUT => '33487 66973'}],

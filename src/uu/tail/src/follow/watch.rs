@@ -45,6 +45,9 @@ impl WatcherRx {
             Tested for notify::InotifyWatcher and for notify::PollWatcher.
             */
             if let Some(parent) = path.parent() {
+                // clippy::assigning_clones added with Rust 1.78
+                // Rust version = 1.76 on OpenBSD stable/7.5
+                #[cfg_attr(not(target_os = "openbsd"), allow(clippy::assigning_clones))]
                 if parent.is_dir() {
                     path = parent.to_owned();
                 } else {

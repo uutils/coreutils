@@ -14,6 +14,10 @@ use uucore::{format_usage, help_about, help_usage};
 
 mod error;
 mod extendedbigdecimal;
+// public to allow fuzzing
+#[cfg(fuzzing)]
+pub mod number;
+#[cfg(not(fuzzing))]
 mod number;
 mod numberparse;
 use crate::error::SeqError;

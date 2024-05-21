@@ -42,6 +42,7 @@ fileio
 filesystem
 filesystems
 flamegraph
+fsxattr
 fullblock
 getfacl
 gibi
@@ -133,6 +134,7 @@ urand
 whitespace
 wordlist
 wordlists
+xattrs
 
 # * abbreviations
 consts

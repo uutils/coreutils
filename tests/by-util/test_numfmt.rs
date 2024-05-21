@@ -550,10 +550,14 @@ fn test_delimiter_with_padding_and_fields() {
 fn test_round() {
     for (method, exp) in [
         ("from-zero", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
+        ("from-zer", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
+        ("f", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
         ("towards-zero", ["9.0K", "-9.0K", "9.0K", "-9.0K"]),
         ("up", ["9.1K", "-9.0K", "9.1K", "-9.0K"]),
         ("down", ["9.0K", "-9.1K", "9.0K", "-9.1K"]),
         ("nearest", ["9.0K", "-9.0K", "9.1K", "-9.1K"]),
+        ("near", ["9.0K", "-9.0K", "9.1K", "-9.1K"]),
+        ("n", ["9.0K", "-9.0K", "9.1K", "-9.1K"]),
     ] {
         new_ucmd!()
             .args(&[
@@ -666,7 +670,12 @@ fn test_invalid_stdin_number_returns_status_2() {
 
 #[test]
 fn test_invalid_stdin_number_in_middle_of_input() {
-    new_ucmd!().pipe_in("100\nhello\n200").fails().code_is(2);
+    new_ucmd!()
+        .pipe_in("100\nhello\n200")
+        .ignore_stdin_write_error()
+        .fails()
+        .stdout_is("100\n")
+        .code_is(2);
 }
 
 #[test]

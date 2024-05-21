@@ -63,6 +63,9 @@ pub fn help_about(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
     let text: String = uuhelp_parser::parse_about(&read_help(&filename));
+    if text.is_empty() {
+        panic!("About text not found! Make sure the markdown format is correct");
+    }
     TokenTree::Literal(Literal::string(&text)).into()
 }
 
@@ -77,6 +80,9 @@ pub fn help_usage(input: TokenStream) -> TokenStream {
     let input: Vec<TokenTree> = input.into_iter().collect();
     let filename = get_argument(&input, 0, "filename");
     let text: String = uuhelp_parser::parse_usage(&read_help(&filename));
+    if text.is_empty() {
+        panic!("Usage text not found! Make sure the markdown format is correct");
+    }
     TokenTree::Literal(Literal::string(&text)).into()
 }
 

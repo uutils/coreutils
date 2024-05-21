@@ -1,15 +1,25 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # spell-checker:ignore (abbrevs/acronyms) HTML gcno llvm
 # spell-checker:ignore (jargon) toolchain
 # spell-checker:ignore (rust) Ccodegen Cinline Coverflow Cpanic RUSTC RUSTDOCFLAGS RUSTFLAGS RUSTUP Zpanic
-# spell-checker:ignore (shell) OSID esac
-# spell-checker:ignore (utils) genhtml grcov lcov readlink sccache shellcheck uutils
+# spell-checker:ignore (shell) OSID OSTYPE esac
+# spell-checker:ignore (utils) genhtml grcov lcov greadlink readlink sccache shellcheck uutils
 
 FEATURES_OPTION="--features feat_os_unix"
 
+# Use GNU coreutils for readlink on *BSD
+case "$OSTYPE" in
+    *bsd*)
+        READLINK="greadlink"
+        ;;
+    *)
+        READLINK="readlink"
+        ;;
+esac
+
 ME="${0}"
-ME_dir="$(dirname -- "$(readlink -fm -- "${ME}")")"
+ME_dir="$(dirname -- "$("${READLINK}" -fm -- "${ME}")")"
 REPO_main_dir="$(dirname -- "${ME_dir}")"
 
 cd "${REPO_main_dir}" &&

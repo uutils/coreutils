@@ -94,6 +94,18 @@ fn test_preserve_status() {
 }
 
 #[test]
+fn test_preserve_status_even_when_send_signal() {
+    // When sending CONT signal, process doesn't get killed or stopped.
+    // So, expected result is success and code 0.
+    new_ucmd!()
+        .args(&["-s", "CONT", "--preserve-status", ".1", "sleep", "5"])
+        .succeeds()
+        .code_is(0)
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
 fn test_dont_overflow() {
     new_ucmd!()
         .args(&["9223372036854775808d", "sleep", "0"])
@@ -151,10 +163,10 @@ fn test_kill_subprocess() {
             "10",
             "sh",
             "-c",
-            "sh -c \"trap 'echo xyz' TERM; sleep 30\"",
+            "trap 'echo inside_trap' TERM; sleep 30",
         ])
         .fails()
         .code_is(124)
-        .stdout_contains("xyz")
+        .stdout_contains("inside_trap")
         .stderr_contains("Terminated");
 }
