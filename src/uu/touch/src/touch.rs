@@ -326,7 +326,7 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             InputFile::Stdout => (Cow::Owned(pathbuf_from_stdout()?), true),
             InputFile::Path(path) => (Cow::Borrowed(path), false),
         };
-        touch_helper(&path, is_stdout, opts, atime, mtime).map_err(|e| {
+        touch_file(&path, is_stdout, opts, atime, mtime).map_err(|e| {
             TouchError::TouchFileError {
                 path: path.into_owned(),
                 index: ind,
@@ -338,7 +338,8 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     Ok(())
 }
 
-fn touch_helper(
+/// Touch a single file
+fn touch_file(
     path: &Path,
     is_stdout: bool,
     opts: &Options,
