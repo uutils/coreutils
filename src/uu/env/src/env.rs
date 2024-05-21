@@ -435,6 +435,7 @@ impl EnvAppData {
 
         apply_specified_env_vars(&opts);
 
+        #[cfg(unix)]
         apply_ignore_signal(&opts)?;
 
         if opts.program.is_empty() {
@@ -575,6 +576,7 @@ fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
         ignore_signal: vec![],
     };
 
+    #[cfg(unix)]
     if let Some(iter) = matches.get_many::<OsString>("ignore-signal") {
         for opt in iter {
             parse_signal_opt(&mut opts, opt)?;
