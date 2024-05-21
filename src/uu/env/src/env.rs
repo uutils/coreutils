@@ -36,6 +36,7 @@ use std::process::{self};
 use uucore::display::Quotable;
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
+#[cfg(unix)]
 use uucore::signals::signal_by_name_or_value;
 use uucore::{format_usage, help_about, help_section, help_usage, show_warning};
 
@@ -93,6 +94,7 @@ fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> 
     }
 }
 
+#[cfg(unix)]
 fn parse_signal_value(signal_name: &str) -> UResult<usize> {
     let signal_name_upcase = signal_name.to_uppercase();
     let optional_signal_value = signal_by_name_or_value(&signal_name_upcase);
@@ -109,12 +111,13 @@ fn parse_signal_value(signal_name: &str) -> UResult<usize> {
     }
 }
 
+#[cfg(unix)]
 fn parse_signal_opt<'a>(opts: &mut Options<'a>, opt: &'a OsStr) -> UResult<()> {
     if opt.is_empty() {
         return Ok(());
     }
     let signals: Vec<&'a OsStr> = opt
-        .as_encoded_bytes()
+        .as_bytes()
         .split(|&b| b == b',')
         .map(OsStr::from_bytes)
         .collect();
@@ -676,6 +679,7 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
     }
 }
 
+#[cfg(unix)]
 fn apply_ignore_signal(opts: &Options<'_>) -> UResult<()> {
     for &sig_value in &opts.ignore_signal {
         let sig: Signal = (sig_value as i32)
@@ -687,6 +691,7 @@ fn apply_ignore_signal(opts: &Options<'_>) -> UResult<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 fn ignore_signal(sig: Signal) -> UResult<()> {
     // SAFETY: This is safe because we write the handler for each signal only once, and therefore "the current handler is the default", as the documentation requires it.
     let result = unsafe { signal(sig, SigIgn) };
