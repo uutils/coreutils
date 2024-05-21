@@ -540,7 +540,7 @@ fn test_write_fast_fallthrough_uses_flush() {
     new_ucmd!()
         .args(&[PROC_INIT_CMDLINE, "alpha.txt"])
         .succeeds()
-        .stdout_only("/sbin/init\0abcde\nfghij\nklmno\npqrst\nuvwxyz\n");
+        .stdout_only("/sbin/init\0abcde\nfghij\nklmno\npqrst\nuvwxyz\n"); // spell-checker:disable-line
 }
 
 #[test]
