@@ -55,6 +55,7 @@ struct Options<'a> {
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
     program: Vec<&'a OsStr>,
     argv0: Option<&'a OsStr>,
+    #[cfg(unix)]
     ignore_signal: Vec<usize>,
 }
 
@@ -573,6 +574,7 @@ fn make_options(matches: &clap::ArgMatches) -> UResult<Options<'_>> {
         sets: vec![],
         program: vec![],
         argv0,
+        #[cfg(unix)]
         ignore_signal: vec![],
     };
 
