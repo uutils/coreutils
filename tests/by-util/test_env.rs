@@ -4,12 +4,15 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD
 
-use crate::common::util::{TestScenario, UChild};
+use crate::common::util::TestScenario;
+#[cfg(unix)]
+use crate::common::util::UChild;
 #[cfg(unix)]
 use nix::sys::signal::Signal;
 use regex::Regex;
 use std::env;
 use std::path::Path;
+#[cfg(unix)]
 use std::process::Command;
 use tempfile::tempdir;
 
