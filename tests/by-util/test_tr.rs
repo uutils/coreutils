@@ -1364,3 +1364,8 @@ fn check_ignore_truncate_when_squeezing() {
         .no_stderr()
         .stdout_only("asdfqwer\n");
 }
+
+#[test]
+fn check_disallow_blank_in_set2_when_translating() {
+    new_ucmd!().args(&["-t", "1234", "[:blank:]"]).fails();
+}
