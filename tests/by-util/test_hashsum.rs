@@ -669,6 +669,22 @@ fn test_check_status_code() {
 }
 
 #[test]
+fn test_sha1_with_md5sum_should_fail() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write("f.sha1", "SHA1 (f) = d41d8cd98f00b204e9800998ecf8427e\n");
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg(at.subdir.join("f.sha1"))
+        .fails()
+        .stderr_contains("f.sha1: no properly formatted checksum lines found")
+        .stderr_does_not_contain("WARNING: 1 line is improperly formatted");
+}
+
+#[test]
 fn test_check_no_backslash_no_space() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

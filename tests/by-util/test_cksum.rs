@@ -1057,15 +1057,21 @@ fn test_cksum_mixed() {
         let result = scene.ucmd().args(command).arg("f").succeeds();
         at.append("CHECKSUM", result.stdout_str());
     }
-    scene
+    println!("Content of CHECKSUM:\n{}", at.read("CHECKSUM"));
+    let result = scene
         .ucmd()
         .arg("--check")
         .arg("-a")
         .arg("sm3")
         .arg("CHECKSUM")
-        .succeeds()
-        .stdout_contains("f: OK")
-        .stderr_contains("3 lines are improperly formatted");
+        .succeeds();
+
+    println!("result.stderr_str() {}", result.stderr_str());
+    println!("result.stdout_str() {}", result.stdout_str());
+    assert!(result.stdout_str().contains("f: OK"));
+    assert!(result
+        .stderr_str()
+        .contains("3 lines are improperly formatted"));
 }
 
 #[test]

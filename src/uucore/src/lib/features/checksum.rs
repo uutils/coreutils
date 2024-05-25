@@ -378,6 +378,16 @@ where
                 let (algo_name, length) = if algo_based_format {
                     // When the algo-based format is matched, extract details from regex captures
                     let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
+
+                    // check if we are called with XXXsum (example: md5sum) but we detected a different algo parsing the file
+                    // (for example SHA1 (f) = d...)
+                    // Also handle the case cksum -s sm3 but the file contains other formats
+                    if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
+                        bad_format += 1;
+                        properly_formatted = false;
+                        continue;
+                    }
+
                     if !SUPPORTED_ALGO.contains(&algorithm.as_str()) {
                         // Not supported algo, leave early
                         properly_formatted = false;
@@ -507,6 +517,7 @@ where
                 .maybe_quote()
             );
             set_exit_code(1);
+            return Ok(());
         }
 
         if ignore_missing && correct_format == 0 {
