@@ -491,14 +491,13 @@ tempfile = { workspace = true }
 time = { workspace = true, features = ["local-offset"] }
 unindent = "0.2.3"
 uucore = { workspace = true, features = [
-support_files_in_uptime
   "mode",
   "entries",
   "process",
   "signals",
   "utmpx",
 ] }
-
+serde = { version = "1.0.202", features = ["derive"] }
 walkdir = { workspace = true }
 bincode = { version = "1.3.3" }
 serde-big-array = "0.5.1"
