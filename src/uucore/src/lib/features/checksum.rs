@@ -299,6 +299,17 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
     }
 }
 
+// Regexp to handle the three input formats:
+// 1. <algo>[-<bits>] (<filename>) = <checksum>
+//    algo must be uppercase or b (for blake2b)
+// 2. <checksum> [* ]<filename>
+// 3. <checksum> [*]<filename> (only one space)
+const ALGO_BASED_REGEX: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>.*)\)\s*=\s*(?P<checksum>[a-fA-F0-9]+)$";
+const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>.*)$";
+
+// In this case, we ignore the *
+const SINGLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s(?P<binary>\*?)(?P<filename>.*)$";
+
 /***
  * Do the checksum validation (can be strict or not)
 */
@@ -317,12 +328,9 @@ pub fn perform_checksum_validation<'a, I>(
 where
     I: Iterator<Item = &'a OsStr>,
 {
-    // Regexp to handle the two input formats:
-    // 1. <algo>[-<bits>] (<filename>) = <checksum>
-    //    algo must be uppercase or b (for blake2b)
-    // 2. <checksum> [* ]<filename>
-    let regex_pattern = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename1>.*)\)\s*=\s*(?P<checksum1>[a-fA-F0-9]+)$|^(?P<checksum2>[a-fA-F0-9]+)\s[* ](?P<filename2>.*)";
-    let re = Regex::new(regex_pattern).unwrap();
+    let algo_based_regex = Regex::new(ALGO_BASED_REGEX).unwrap();
+    let double_space_regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
+    let single_space_regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
 
     // if cksum has several input files, it will print the result for each file
     for filename_input in files {
@@ -350,30 +358,37 @@ where
                 }
             }
         };
-        let reader = BufReader::new(file);
+        let mut reader = BufReader::new(file);
+
+        let mut first_line = String::new();
+        reader.read_line(&mut first_line)?;
+
+        // Determine which regular expression to use based on the first line
+        let first_line_trim = first_line.trim();
+        let (chosen_regex, algo_based_format) = if algo_based_regex.is_match(first_line_trim) {
+            (&algo_based_regex, true)
+        } else if double_space_regex.is_match(first_line_trim) {
+            // If the first line contains a double space, use the double space regex
+            (&double_space_regex, false)
+        } else {
+            // It is probably rare but sometimes the checksum file may contain a single space
+            (&single_space_regex, false)
+        };
+
+        // Push the first line back to the reader
+        let first_line_reader = io::Cursor::new(first_line);
+        let chain_reader = first_line_reader.chain(reader);
+        let reader = BufReader::new(chain_reader);
 
         // for each line in the input, check if it is a valid checksum line
         for (i, line) in reader.lines().enumerate() {
             let line = line.unwrap_or_else(|_| String::new());
-            if let Some(caps) = re.captures(&line) {
+            if let Some(caps) = chosen_regex.captures(&line) {
                 properly_formatted = true;
 
-                // Determine what kind of file input we had
-                // we need it for case "--check -a sm3 <file>" when <file> is
-                // <algo>[-<bits>] (<filename>) = <checksum>
-                let algo_based_format =
-                    caps.name("filename1").is_some() && caps.name("checksum1").is_some();
+                let filename_to_check = caps.name("filename").unwrap().as_str();
 
-                let filename_to_check = caps
-                    .name("filename1")
-                    .or(caps.name("filename2"))
-                    .unwrap()
-                    .as_str();
-                let expected_checksum = caps
-                    .name("checksum1")
-                    .or(caps.name("checksum2"))
-                    .unwrap()
-                    .as_str();
+                let expected_checksum = caps.name("checksum").unwrap().as_str();
 
                 // If the algo_name is provided, we use it, otherwise we try to detect it
                 let (algo_name, length) = if algo_based_format {
@@ -432,7 +447,7 @@ where
                 }
                 let mut algo = detect_algo(&algo_name, length)?;
 
-                let (filename_to_check_unescaped, prefix) = unescape_filename(filename_to_check);
+                let (filename_to_check_unescaped, prefix) = unescape_filename(&filename_to_check);
 
                 // manage the input file
                 let file_to_check: Box<dyn Read> = if filename_to_check == "-" {
@@ -472,7 +487,7 @@ where
 
                 // Do the checksum validation
                 if expected_checksum == calculated_checksum {
-                    if !quiet {
+                    if !quiet && !status {
                         println!("{prefix}{filename_to_check}: OK");
                     }
                     correct_format += 1;
@@ -510,15 +525,17 @@ where
         // return an error
         if !properly_formatted {
             let filename = filename_input.to_string_lossy();
-            show_error!(
-                "{}: no properly formatted checksum lines found",
-                if input_is_stdin {
-                    "standard input"
-                } else {
-                    &filename
-                }
-                .maybe_quote()
-            );
+            if !status {
+                show_error!(
+                    "{}: no properly formatted checksum lines found",
+                    if input_is_stdin {
+                        "standard input"
+                    } else {
+                        &filename
+                    }
+                    .maybe_quote()
+                );
+            }
             set_exit_code(1);
             return Ok(());
         }
@@ -757,5 +774,116 @@ mod tests {
         assert_eq!(detect_algo("sha3_512", Some(512)).unwrap().name, "SHA3_512");
 
         assert!(detect_algo("sha3_512", None).is_err());
+    }
+
+    #[test]
+    fn test_algo_based_regex() {
+        let algo_based_regex = Regex::new(ALGO_BASED_REGEX).unwrap();
+        let test_cases = vec![
+            ("SHA256 (example.txt) = d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Some(("SHA256", None, "example.txt", "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"))),
+            ("BLAKE2b-512 (file) = abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef", Some(("BLAKE2b", Some("512"), "file", "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef"))),
+            (" MD5 (test) = 9e107d9d372bb6826bd81d3542a419d6", Some(("MD5", None, "test", "9e107d9d372bb6826bd81d3542a419d6"))),
+            ("SHA-1 (anotherfile) = a9993e364706816aba3e25717850c26c9cd0d89d", Some(("SHA", Some("1"), "anotherfile", "a9993e364706816aba3e25717850c26c9cd0d89d"))),
+        ];
+
+        for (input, expected) in test_cases {
+            let captures = algo_based_regex.captures(input);
+            match expected {
+                Some((algo, bits, filename, checksum)) => {
+                    assert!(captures.is_some());
+                    let captures = captures.unwrap();
+                    assert_eq!(captures.name("algo").unwrap().as_str(), algo);
+                    assert_eq!(captures.name("bits").map(|m| m.as_str()), bits);
+                    assert_eq!(captures.name("filename").unwrap().as_str(), filename);
+                    assert_eq!(captures.name("checksum").unwrap().as_str(), checksum);
+                }
+                None => {
+                    assert!(captures.is_none());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_double_space_regex() {
+        let double_space_regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
+
+        let test_cases = vec![
+            (
+                "60b725f10c9c85c70d97880dfe8191b3  a",
+                Some(("60b725f10c9c85c70d97880dfe8191b3", "a")),
+            ),
+            (
+                "bf35d7536c785cf06730d5a40301eba2   b",
+                Some(("bf35d7536c785cf06730d5a40301eba2", " b")),
+            ),
+            (
+                "f5b61709718c1ecf8db1aea8547d4698  *c",
+                Some(("f5b61709718c1ecf8db1aea8547d4698", "*c")),
+            ),
+            (
+                "b064a020db8018f18ff5ae367d01b212  dd",
+                Some(("b064a020db8018f18ff5ae367d01b212", "dd")),
+            ),
+            (
+                "b064a020db8018f18ff5ae367d01b212   ",
+                Some(("b064a020db8018f18ff5ae367d01b212", " ")),
+            ),
+            ("invalidchecksum  test", None),
+        ];
+
+        for (input, expected) in test_cases {
+            let captures = double_space_regex.captures(input);
+            match expected {
+                Some((checksum, filename)) => {
+                    assert!(captures.is_some());
+                    let captures = captures.unwrap();
+                    assert_eq!(captures.name("checksum").unwrap().as_str(), checksum);
+                    assert_eq!(captures.name("filename").unwrap().as_str(), filename);
+                }
+                None => {
+                    assert!(captures.is_none());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_single_space_regex() {
+        let single_space_regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
+        let test_cases = vec![
+            (
+                "60b725f10c9c85c70d97880dfe8191b3 a",
+                Some(("60b725f10c9c85c70d97880dfe8191b3", "a")),
+            ),
+            (
+                "bf35d7536c785cf06730d5a40301eba2 b",
+                Some(("bf35d7536c785cf06730d5a40301eba2", "b")),
+            ),
+            (
+                "f5b61709718c1ecf8db1aea8547d4698 *c",
+                Some(("f5b61709718c1ecf8db1aea8547d4698", "c")),
+            ),
+            (
+                "b064a020db8018f18ff5ae367d01b212 dd",
+                Some(("b064a020db8018f18ff5ae367d01b212", "dd")),
+            ),
+            ("invalidchecksum test", None),
+        ];
+
+        for (input, expected) in test_cases {
+            let captures = single_space_regex.captures(input);
+            match expected {
+                Some((checksum, filename)) => {
+                    assert!(captures.is_some());
+                    let captures = captures.unwrap();
+                    assert_eq!(captures.name("checksum").unwrap().as_str(), checksum);
+                    assert_eq!(captures.name("filename").unwrap().as_str(), filename);
+                }
+                None => {
+                    assert!(captures.is_none());
+                }
+            }
+        }
     }
 }

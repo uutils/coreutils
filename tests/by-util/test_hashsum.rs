@@ -365,26 +365,28 @@ fn test_check_md5sum() {
     }
 }
 
+// GNU also supports one line sep
 #[test]
-fn test_check_md5sum_not_enough_space() {
+fn test_check_md5sum_only_one_space() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    for f in ["a", "b"] {
+    for f in ["a", " b", "c"] {
         at.write(f, &format!("{f}\n"));
     }
     at.write(
         "check.md5sum",
         "60b725f10c9c85c70d97880dfe8191b3 a\n\
-             bf35d7536c785cf06730d5a40301eba2 b\n",
+        bf35d7536c785cf06730d5a40301eba2  b\n\
+        2cd6ee2c70b0bde53fbe6cac3c8b8bb1 *c\n",
     );
     scene
-            .ccmd("md5sum")
-            .arg("--strict")
-            .arg("-c")
-            .arg("check.md5sum")
-            .fails()
-            .stderr_only("md5sum: check.md5sum: no properly formatted checksum lines found\nmd5sum: WARNING: 2 lines are improperly formatted\n");
+        .ccmd("md5sum")
+        .arg("--strict")
+        .arg("-c")
+        .arg("check.md5sum")
+        .succeeds()
+        .stdout_only("a: OK\n b: OK\nc: OK\n");
 }
 
 #[test]
@@ -682,6 +684,87 @@ fn test_sha1_with_md5sum_should_fail() {
         .fails()
         .stderr_contains("f.sha1: no properly formatted checksum lines found")
         .stderr_does_not_contain("WARNING: 1 line is improperly formatted");
+}
+
+#[test]
+fn test_check_one_two_space_star() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("empty");
+
+    // with one space, the "*" is removed
+    at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427e *empty\n");
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .succeeds()
+        .stdout_is("empty: OK\n");
+
+    // with two spaces, the "*" is not removed
+    at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427e  *empty\n");
+    // First should fail as *empty doesn't exit
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .fails()
+        .stdout_is("*empty: FAILED open or read\n");
+
+    at.touch("*empty");
+    // Should pass as we have the file
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .succeeds()
+        .stdout_is("*empty: OK\n");
+}
+
+#[test]
+fn test_check_one_two_space_star_start_without_star() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("empty");
+    at.touch("f");
+
+    // with one space, the "*" is removed
+    at.write(
+        "in.md5",
+        "d41d8cd98f00b204e9800998ecf8427e f\nd41d8cd98f00b204e9800998ecf8427e *empty\n",
+    );
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .succeeds()
+        .stdout_is("f: OK\nempty: OK\n");
+
+    // with two spaces, the "*" is not removed
+    at.write(
+        "in.md5",
+        "d41d8cd98f00b204e9800998ecf8427e  f\nd41d8cd98f00b204e9800998ecf8427e  *empty\n",
+    );
+    // First should fail as *empty doesn't exit
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .fails()
+        .stdout_is("f: OK\n*empty: FAILED open or read\n");
+
+    at.touch("*empty");
+    // Should pass as we have the file
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .succeeds()
+        .stdout_is("f: OK\n*empty: OK\n");
 }
 
 #[test]
