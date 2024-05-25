@@ -91,6 +91,7 @@ pub static UTILITY_IS_SECOND_ARG: AtomicBool = AtomicBool::new(false);
 #[macro_export]
 macro_rules! show(
     ($err:expr) => ({
+        #[allow(unused_imports)]
         use $crate::error::UError;
         let e = $err;
         $crate::error::set_exit_code(e.code());

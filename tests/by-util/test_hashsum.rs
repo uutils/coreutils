@@ -50,6 +50,9 @@ macro_rules! test_digest {
         #[test]
         fn test_check() {
             let ts = TestScenario::new("hashsum");
+            println!("File content='{}'", ts.fixtures.read("input.txt"));
+            println!("Check file='{}'", ts.fixtures.read(CHECK_FILE));
+
             ts.ucmd()
                 .args(&[DIGEST_ARG, BITS_ARG, "--check", CHECK_FILE])
                 .succeeds()
@@ -268,6 +271,30 @@ fn test_check_b2sum_tag_output() {
 }
 
 #[test]
+fn test_check_b2sum_verify() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "a\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--tag")
+        .arg("a")
+        .succeeds()
+        .stdout_only("BLAKE2b (a) = bedfbb90d858c2d67b7ee8f7523be3d3b54004ef9e4f02f2ad79a1d05bfdfe49b81e3c92ebf99b504102b6bf003fa342587f5b3124c205f55204e8c4b4ce7d7c\n");
+
+    scene
+        .ccmd("b2sum")
+        .arg("--tag")
+        .arg("-l")
+        .arg("128")
+        .arg("a")
+        .succeeds()
+        .stdout_only("BLAKE2b-128 (a) = b93e0fc7bb21633c08bba07c5e71dc00\n");
+}
+
+#[test]
 fn test_check_file_not_found_warning() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -283,8 +310,8 @@ fn test_check_file_not_found_warning() {
         .arg("-c")
         .arg(at.subdir.join("testf.sha1"))
         .fails()
-        .stdout_is("sha1sum: testf: No such file or directory\ntestf: FAILED open or read\n")
-        .stderr_is("sha1sum: WARNING: 1 listed file could not be read\n");
+        .stdout_is("testf: FAILED open or read\n")
+        .stderr_is("sha1sum: testf: No such file or directory\nsha1sum: WARNING: 1 listed file could not be read\n");
 }
 
 // Asterisk `*` is a reserved paths character on win32, nor the path can end with a whitespace.
@@ -339,6 +366,29 @@ fn test_check_md5sum() {
 }
 
 #[test]
+fn test_check_md5sum_not_enough_space() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    for f in &["a", " b"] {
+        at.write(f, &format!("{f}\n"));
+    }
+    at.write(
+        "check.md5sum",
+        "60b725f10c9c85c70d97880dfe8191b3 a\n\
+             bf35d7536c785cf06730d5a40301eba2 b\n",
+    );
+    scene
+            .ccmd("md5sum")
+            .arg("--strict")
+            .arg("-c")
+            .arg("check.md5sum")
+            .fails()
+            .stdout_is("")
+            .stderr_is("md5sum: check.md5sum: no properly formatted checksum lines found\nmd5sum: WARNING: 2 lines are improperly formatted\n");
+}
+
+#[test]
 fn test_check_md5sum_reverse_bsd() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -350,11 +400,11 @@ fn test_check_md5sum_reverse_bsd() {
         }
         at.write(
             "check.md5sum",
-            "60b725f10c9c85c70d97880dfe8191b3 a\n\
-             bf35d7536c785cf06730d5a40301eba2  b\n\
-             f5b61709718c1ecf8db1aea8547d4698 *c\n\
-             b064a020db8018f18ff5ae367d01b212 dd\n\
-             d784fa8b6d98d27699781bd9a7cf19f0  ",
+            "60b725f10c9c85c70d97880dfe8191b3  a\n\
+             bf35d7536c785cf06730d5a40301eba2   b\n\
+             f5b61709718c1ecf8db1aea8547d4698  *c\n\
+             b064a020db8018f18ff5ae367d01b212  dd\n\
+             d784fa8b6d98d27699781bd9a7cf19f0   ",
         );
         scene
             .ccmd("md5sum")
@@ -372,9 +422,9 @@ fn test_check_md5sum_reverse_bsd() {
         }
         at.write(
             "check.md5sum",
-            "60b725f10c9c85c70d97880dfe8191b3 a\n\
-             bf35d7536c785cf06730d5a40301eba2  b\n\
-             b064a020db8018f18ff5ae367d01b212 dd",
+            "60b725f10c9c85c70d97880dfe8191b3  a\n\
+             bf35d7536c785cf06730d5a40301eba2   b\n\
+             b064a020db8018f18ff5ae367d01b212  dd",
         );
         scene
             .ccmd("md5sum")
@@ -648,4 +698,19 @@ fn test_check_check_ignore_no_file() {
         .arg(at.subdir.join("in.md5"))
         .fails()
         .stderr_contains("in.md5: no file was verified");
+}
+
+#[test]
+fn test_check_directory_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d");
+    at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427f  d\n");
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .fails()
+        .stderr_contains("md5sum: d: Is a directory\n");
 }
