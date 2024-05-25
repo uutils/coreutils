@@ -159,7 +159,7 @@ fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
     cmd.args(&["-PT"]).arg(path);
     let output = cmd.succeeds();
     let stdout_str = String::from_utf8_lossy(output.stdout());
-    println!("output of stat call ({:?}):\n{}", cmd, stdout_str);
+    println!("output of stat call ({cmd:?}):\n{stdout_str}");
     let regex_str = r#"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+"#;
     let regex = Regex::new(regex_str).unwrap();
     let m = regex.captures(&stdout_str).unwrap();
@@ -2243,7 +2243,7 @@ fn test_ls_color() {
         .arg("-w=15")
         .arg("-C")
         .succeeds();
-    let expected = format!("{}  test-color\x0ab  {}", a_with_colors, z_with_colors);
+    let expected = format!("{a_with_colors}  test-color\x0ab  {z_with_colors}");
     assert_eq!(
         result.stdout_str().escape_default().to_string(),
         expected.escape_default().to_string()
@@ -3888,7 +3888,7 @@ fn test_device_number() {
     let blk_dev_meta = metadata(blk_dev_path.as_path()).unwrap();
     let blk_dev_number = blk_dev_meta.rdev() as dev_t;
     let (major, minor) = unsafe { (major(blk_dev_number), minor(blk_dev_number)) };
-    let major_minor_str = format!("{}, {}", major, minor);
+    let major_minor_str = format!("{major}, {minor}");
 
     let scene = TestScenario::new(util_name!());
     scene
@@ -4000,7 +4000,7 @@ fn test_ls_dired_recursive_multiple() {
         .skip(1)
         .map(|s| s.parse().unwrap())
         .collect();
-    println!("Parsed byte positions: {:?}", positions);
+    println!("Parsed byte positions: {positions:?}");
     assert_eq!(positions.len() % 2, 0); // Ensure there's an even number of positions
 
     let filenames: Vec<String> = positions
@@ -4017,7 +4017,7 @@ fn test_ls_dired_recursive_multiple() {
         })
         .collect();
 
-    println!("Extracted filenames: {:?}", filenames);
+    println!("Extracted filenames: {filenames:?}");
     assert_eq!(filenames, vec!["d1", "d2", "f1", "file-long", "a", "c2"]);
 }
 
@@ -4087,7 +4087,7 @@ fn test_ls_dired_complex() {
     }
 
     let output = result.stdout_str().to_string();
-    println!("Output:\n{}", output);
+    println!("Output:\n{output}");
 
     let dired_line = output
         .lines()

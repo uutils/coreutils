@@ -245,7 +245,7 @@ fn test_is_directory() {
 
     ucmd.arg(dir_name)
         .fails()
-        .stderr_contains(format!("unexpand: {}: Is a directory", dir_name));
+        .stderr_contains(format!("unexpand: {dir_name}: Is a directory"));
 }
 
 #[test]
