@@ -12,7 +12,6 @@ use clap::{Arg, ArgMatches, Command};
 use hex::encode;
 use regex::Captures;
 use regex::Regex;
-use std::cmp::Ordering;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -20,6 +19,8 @@ use std::io::{self, stdin, BufRead, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::checksum::cksum_output;
+use uucore::display::Quotable;
 use uucore::error::USimpleError;
 use uucore::error::{set_exit_code, FromIo, UError, UResult};
 use uucore::sum::{
@@ -27,7 +28,6 @@ use uucore::sum::{
     Sha3_384, Sha3_512, Sha512, Shake128, Shake256,
 };
 use uucore::util_name;
-use uucore::{display::Quotable, show_warning_caps};
 use uucore::{format_usage, help_about, help_usage};
 
 const NAME: &str = "hashsum";
@@ -59,7 +59,7 @@ struct Options {
 /// greater than 512.
 fn create_blake2b(matches: &ArgMatches) -> UResult<(&'static str, Box<dyn Digest>, usize)> {
     match matches.get_one::<usize>("length") {
-        Some(0) | None => Ok(("BLAKE2", Box::new(Blake2b::new()) as Box<dyn Digest>, 512)),
+        Some(0) | None => Ok(("BLAKE2b", Box::new(Blake2b::new()) as Box<dyn Digest>, 512)),
         Some(length_in_bits) => {
             if *length_in_bits > 512 {
                 return Err(USimpleError::new(
@@ -71,7 +71,7 @@ fn create_blake2b(matches: &ArgMatches) -> UResult<(&'static str, Box<dyn Digest
             if length_in_bits % 8 == 0 {
                 let length_in_bytes = length_in_bits / 8;
                 Ok((
-                    "BLAKE2",
+                    "BLAKE2b",
                     Box::new(Blake2b::with_output_bytes(length_in_bytes)),
                     *length_in_bits,
                 ))
@@ -327,7 +327,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     //        least somewhat better from a user's perspective.
     let matches = command.try_get_matches_from(args)?;
 
-    let (name, algo, bits) = detect_algo(&binary_name, &matches)?;
+    let (algoname, algo, bits) = detect_algo(&binary_name, &matches)?;
 
     let binary = if matches.get_flag("binary") {
         true
@@ -355,7 +355,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     }
 
     let opts = Options {
-        algoname: name,
+        algoname,
         digest: algo,
         output_bits: bits,
         binary,
@@ -792,17 +792,22 @@ where
             .map_err_context(|| "failed to read input".to_string())?;
             let (escaped_filename, prefix) = escape_filename(filename);
             if options.tag {
-                println!(
-                    "{}{} ({}) = {}",
-                    prefix, options.algoname, escaped_filename, sum
-                );
+                if options.algoname == "BLAKE2b" && options.digest.output_bits() != 512 {
+                    // special case for BLAKE2b with non-default output length
+                    println!(
+                        "BLAKE2b-{} ({escaped_filename}) = {sum}",
+                        options.digest.output_bits()
+                    );
+                } else {
+                    println!("{prefix}{} ({escaped_filename}) = {sum}", options.algoname);
+                }
             } else if options.nonames {
                 println!("{sum}");
             } else if options.zero {
                 // with zero, we don't escape the filename
-                print!("{} {}{}\0", sum, binary_marker, filename.display());
+                print!("{sum} {binary_marker}{}\0", filename.display());
             } else {
-                println!("{}{} {}{}", prefix, sum, binary_marker, escaped_filename);
+                println!("{prefix}{sum} {binary_marker}{escaped_filename}");
             }
         }
         if bad_format > 0 && failed_cksum == 0 && correct_format == 0 && !options.status {
@@ -830,35 +835,7 @@ where
     }
 
     if !options.status && !skip_summary {
-        match bad_format.cmp(&1) {
-            Ordering::Equal => {
-                show_warning_caps!("{} line is improperly formatted", bad_format);
-            }
-            Ordering::Greater => {
-                show_warning_caps!("{} lines are improperly formatted", bad_format);
-            }
-            Ordering::Less => {}
-        };
-
-        match failed_cksum.cmp(&1) {
-            Ordering::Equal => {
-                show_warning_caps!("{} computed checksum did NOT match", failed_cksum);
-            }
-            Ordering::Greater => {
-                show_warning_caps!("{} computed checksums did NOT match", failed_cksum);
-            }
-            Ordering::Less => {}
-        };
-
-        match failed_open_file.cmp(&1) {
-            Ordering::Equal => {
-                show_warning_caps!("{} listed file could not be read", failed_open_file);
-            }
-            Ordering::Greater => {
-                show_warning_caps!("{} listed files could not be read", failed_open_file);
-            }
-            Ordering::Less => {}
-        }
+        cksum_output(bad_format, failed_cksum, failed_open_file);
     }
 
     Ok(())

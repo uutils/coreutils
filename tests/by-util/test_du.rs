@@ -136,7 +136,6 @@ fn test_du_invalid_size() {
             .fails()
             .code_is(1)
             .stderr_only(format!("du: invalid --{s} argument 'x'\n"));
-        #[cfg(not(target_pointer_width = "128"))]
         ts.ucmd()
             .arg(format!("--{s}=1Y"))
             .arg("/tmp")

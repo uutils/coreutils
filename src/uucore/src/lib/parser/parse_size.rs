@@ -451,7 +451,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn overflow_x64() {
         assert!(parse_size_u64("10000000000000000000000").is_err());
         assert!(parse_size_u64("1000000000T").is_err());
@@ -482,7 +481,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn overflow_to_max_u64() {
         assert_eq!(Ok(1_099_511_627_776), parse_size_u64_max("1T"));
         assert_eq!(Ok(1_125_899_906_842_624), parse_size_u64_max("1P"));
@@ -494,7 +492,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_pointer_width = "128"))]
     fn overflow_to_max_u128() {
         assert_eq!(
             Ok(12_379_400_392_853_802_748_991_242_240),

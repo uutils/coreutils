@@ -1110,13 +1110,11 @@ fn test_invalid_num() {
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of lines: '1024R'");
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
         .fails()
         .stderr_str()
         .starts_with("tail: invalid number of bytes: '1Y': Value too large for defined data type");
-    #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
         .fails()
@@ -3525,7 +3523,7 @@ fn test_when_argument_file_is_a_symlink_to_directory_then_error() {
 // TODO: make this work on windows
 #[test]
 #[cfg(unix)]
-#[cfg(disabled_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_when_argument_file_is_a_faulty_symlink_then_error() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -3557,7 +3555,7 @@ fn test_when_argument_file_is_a_faulty_symlink_then_error() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(disabled_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     use std::os::unix::net;
 
@@ -3599,7 +3597,7 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     let result = file.write_all(random_string.as_bytes());
     assert!(result.is_ok());
 
-    let expected_stdout = vec![format!("==> {} <==", path), random_string].join("\n");
+    let expected_stdout = [format!("==> {} <==", path), random_string].join("\n");
     ts.ucmd()
         .args(&["-c", "+0", path, socket])
         .fails()
@@ -3616,7 +3614,7 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
 }
 
 #[test]
-#[cfg(disabled_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3718,7 +3716,7 @@ fn test_when_argument_files_are_simple_combinations_of_stdin_and_regular_file() 
 }
 
 #[test]
-#[cfg(disabled_until_fixed)]
+#[ignore = "disabled until fixed"]
 fn test_when_argument_files_are_triple_combinations_of_fifo_pipe_and_regular_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

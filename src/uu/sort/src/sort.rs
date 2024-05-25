@@ -1987,7 +1987,6 @@ mod tests {
         // SizeTooBig
         let invalid_input = ["500E", "1Y"];
         for input in &invalid_input {
-            #[cfg(not(target_pointer_width = "128"))]
             assert!(GlobalSettings::parse_byte_count(input).is_err());
         }
 

@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -1376,6 +1376,44 @@ fn test_ls_long_symlink_color() {
     }
 }
 
+/// This test is for "ls -l --color=auto|--color=always"
+/// We use "--color=always" as the colors are the same regardless of the color option being "auto" or "always"
+/// tests whether the specific color of the target and the dangling_symlink are equal and checks
+/// whether checks whether ls outputs the correct path for the symlink and the file it points to and applies the color code to it.
+#[test]
+fn test_ls_long_dangling_symlink_color() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("dir1");
+    at.symlink_dir("foo", "dir1/dangling_symlink");
+    let result = ts
+        .ucmd()
+        .arg("-l")
+        .arg("--color=always")
+        .arg("dir1/dangling_symlink")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    // stdout contains output like in the below sequence. We match for the color i.e. 01;36
+    // \x1b[0m\x1b[01;36mdir1/dangling_symlink\x1b[0m -> \x1b[01;36mfoo\x1b[0m
+    let color_regex = Regex::new(r"(\d\d;)\d\dm").unwrap();
+    // colors_vec[0] contains the symlink color and style and colors_vec[1] contains the color and style of the file the
+    // symlink points to.
+    let colors_vec: Vec<_> = color_regex
+        .find_iter(stdout)
+        .map(|color| color.as_str())
+        .collect();
+
+    assert_eq!(colors_vec[0], colors_vec[1]);
+    // constructs the string of file path with the color code
+    let symlink_color_name = colors_vec[0].to_owned() + "dir1/dangling_symlink\x1b";
+    let target_color_name = colors_vec[1].to_owned() + at.plus_as_string("foo\x1b").as_str();
+
+    assert!(stdout.contains(&symlink_color_name));
+    assert!(stdout.contains(&target_color_name));
+}
+
 #[test]
 fn test_ls_long_total_size() {
     let scene = TestScenario::new(util_name!());
@@ -2648,16 +2686,24 @@ fn test_ls_quoting_style() {
     {
         at.touch("one\ntwo");
         at.touch("one\\two");
-        // Default is literal, when stdout is not a TTY.
-        // Otherwise, it is shell-escape
+
+        // Default is literal, when stdout is not a TTY...
         scene
             .ucmd()
             .arg("--hide-control-chars")
             .arg("one\ntwo")
             .succeeds()
             .stdout_only("one?two\n");
-        // TODO: TTY-expected output, find a way to check this as well
-        // .stdout_only("'one'$'\\n''two'\n");
+
+        // ... Otherwise, it is shell-escape
+        #[cfg(unix)]
+        scene
+            .ucmd()
+            .arg("--hide-control-chars")
+            .arg("one\ntwo")
+            .terminal_simulation(true)
+            .succeeds()
+            .stdout_only("'one'$'\\n''two'\r\n");
 
         for (arg, correct) in [
             ("--quoting-style=literal", "one?two"),
@@ -2748,13 +2794,21 @@ fn test_ls_quoting_style() {
         }
     }
 
+    // No-TTY
     scene
         .ucmd()
         .arg("one two")
         .succeeds()
         .stdout_only("one two\n");
-    // TODO: TTY-expected output
-    // .stdout_only("'one two'\n");
+
+    // TTY
+    #[cfg(unix)]
+    scene
+        .ucmd()
+        .arg("one two")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("'one two'\r\n");
 
     for (arg, correct) in [
         ("--quoting-style=literal", "one two"),
@@ -2876,14 +2930,60 @@ fn test_ls_quoting_and_color() {
     let at = &scene.fixtures;
 
     at.touch("one two");
+
+    // No-TTY
     scene
         .ucmd()
         .arg("--color")
         .arg("one two")
         .succeeds()
         .stdout_only("one two\n");
-    // TODO: TTY-expected output
-    // .stdout_only("'one two'\n");
+
+    // TTY
+    #[cfg(unix)]
+    scene
+        .ucmd()
+        .arg("--color")
+        .arg("one two")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("'one two'\r\n");
+}
+
+#[test]
+fn test_ls_align_unquoted() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("elf two");
+    at.touch("foobar");
+    at.touch("CAPS");
+    at.touch("'quoted'");
+
+    // In TTY
+    #[cfg(unix)]
+    scene
+        .ucmd()
+        .arg("--color")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only("\"'quoted'\"   CAPS  'elf two'   foobar\r\n");
+    //                              ^      ^          ^
+    //                              space  no-space   space
+
+    // The same should happen with format columns/across
+    // and shell quoting style, except for the `\r` at the end.
+    for format in &["--format=column", "--format=across"] {
+        scene
+            .ucmd()
+            .arg("--color")
+            .arg(format)
+            .arg("--quoting-style=shell")
+            .succeeds()
+            .stdout_only("\"'quoted'\"   CAPS  'elf two'   foobar\n");
+        //                              ^      ^          ^
+        //                              space  no-space   space
+    }
 }
 
 #[test]

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR procfs outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG
 use crate::common::util::TestScenario;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -1507,7 +1507,7 @@ fn test_cp_preserve_invalid_rejected() {
 
 #[test]
 #[cfg(target_os = "android")]
-#[cfg(disabled_until_fixed)] // FIXME: the test looks to .succeed on android
+#[ignore = "disabled until fixed"] // FIXME: the test looks to .succeed on android
 fn test_cp_preserve_xattr_fails_on_android() {
     // Because of the SELinux extended attributes used on Android, trying to copy extended
     // attributes has to fail in this case, since we specify `--preserve=xattr` and this puts it
@@ -1718,18 +1718,17 @@ fn test_cp_preserve_links_case_7() {
 #[test]
 #[cfg(unix)]
 fn test_cp_no_preserve_mode() {
-    use libc::umask;
     use uucore::fs as uufs;
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("a");
     at.set_mode("a", 0o731);
-    unsafe { umask(0o077) };
 
     ucmd.arg("-a")
         .arg("--no-preserve=mode")
         .arg("a")
         .arg("b")
+        .umask(0o077)
         .succeeds();
 
     assert!(at.file_exists("b"));
@@ -1737,8 +1736,6 @@ fn test_cp_no_preserve_mode() {
     let metadata_b = std::fs::metadata(at.subdir.join("b")).unwrap();
     let permission_b = uufs::display_permissions(&metadata_b, false);
     assert_eq!(permission_b, "rw-------".to_string());
-
-    unsafe { umask(0o022) };
 }
 
 #[test]
@@ -2535,8 +2532,6 @@ fn test_copy_symlink_force() {
 fn test_no_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
-    use uucore::mode::get_umask;
-
     const PERMS_ALL: u32 = if cfg!(target_os = "freebsd") {
         // Only the superuser can set the sticky bit on a file.
         0o6777
@@ -2547,14 +2542,15 @@ fn test_no_preserve_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
     set_permissions(at.plus("file"), PermissionsExt::from_mode(PERMS_ALL)).unwrap();
+    let umask: u16 = 0o022;
     ucmd.arg("file")
         .arg("dest")
+        .umask(umask as libc::mode_t)
         .succeeds()
         .no_stderr()
         .no_stdout();
-    let umask = get_umask();
     // remove sticky bit, setuid and setgid bit; apply umask
-    let expected_perms = PERMS_ALL & !0o7000 & !umask;
+    let expected_perms = PERMS_ALL & !0o7000 & !umask as u32;
     assert_eq!(
         at.plus("dest").metadata().unwrap().mode() & 0o7777,
         expected_perms
@@ -5305,5 +5301,204 @@ mod same_file {
         assert_eq!(hardlink_to_symlink, at.resolve_link(SYMLINK_NAME));
         assert_eq!(FILE_NAME, at.resolve_link(hardlink_to_symlink));
         assert_eq!(at.read(FILE_NAME), CONTENTS,);
+    }
+}
+
+// the following tests are for how the cp should behave when the source is a symlink
+// and link option is given
+#[cfg(all(unix, not(target_os = "android")))]
+mod link_deref {
+
+    use crate::common::util::{AtPath, TestScenario};
+    use std::os::unix::fs::MetadataExt;
+
+    const FILE: &str = "file";
+    const FILE_LINK: &str = "file_link";
+    const DIR: &str = "dir";
+    const DIR_LINK: &str = "dir_link";
+    const DANG_LINK: &str = "dang_link";
+    const DST: &str = "dst";
+
+    fn setup_link_deref_tests(source: &str, at: &AtPath) {
+        match source {
+            FILE_LINK => {
+                at.touch(FILE);
+                at.symlink_file(FILE, FILE_LINK);
+            }
+            DIR_LINK => {
+                at.mkdir(DIR);
+                at.symlink_dir(DIR, DIR_LINK);
+            }
+            DANG_LINK => at.symlink_file("nowhere", DANG_LINK),
+            _ => {}
+        }
+    }
+
+    // cp --link shouldn't deref source if -P is given
+    #[test]
+    fn test_cp_symlink_as_source_with_link_and_no_deref() {
+        for src in [FILE_LINK, DIR_LINK, DANG_LINK] {
+            for r in [false, true] {
+                let scene = TestScenario::new(util_name!());
+                let at = &scene.fixtures;
+                setup_link_deref_tests(src, at);
+                let mut args = vec!["--link", "-P", src, DST];
+                if r {
+                    args.push("-R");
+                };
+                scene.ucmd().args(&args).succeeds().no_stderr();
+                at.is_symlink(DST);
+                let src_ino = at.symlink_metadata(src).ino();
+                let dest_ino = at.symlink_metadata(DST).ino();
+                assert_eq!(src_ino, dest_ino);
+            }
+        }
+    }
+
+    // Dereferencing should fail for dangling symlink.
+    #[test]
+    fn test_cp_dang_link_as_source_with_link() {
+        for option in ["", "-L", "-H"] {
+            for r in [false, true] {
+                let scene = TestScenario::new(util_name!());
+                let at = &scene.fixtures;
+                setup_link_deref_tests(DANG_LINK, at);
+                let mut args = vec!["--link", DANG_LINK, DST];
+                if r {
+                    args.push("-R");
+                };
+                if !option.is_empty() {
+                    args.push(option);
+                }
+                scene
+                    .ucmd()
+                    .args(&args)
+                    .fails()
+                    .stderr_contains("No such file or directory");
+            }
+        }
+    }
+
+    // Dereferencing should fail for the 'dir_link' without -R.
+    #[test]
+    fn test_cp_dir_link_as_source_with_link() {
+        for option in ["", "-L", "-H"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            setup_link_deref_tests(DIR_LINK, at);
+            let mut args = vec!["--link", DIR_LINK, DST];
+            if !option.is_empty() {
+                args.push(option);
+            }
+            scene
+                .ucmd()
+                .args(&args)
+                .fails()
+                .stderr_contains("cp: -r not specified; omitting directory");
+        }
+    }
+
+    // cp --link -R 'dir_link' should create a new directory.
+    #[test]
+    fn test_cp_dir_link_as_source_with_link_and_r() {
+        for option in ["", "-L", "-H"] {
+            let scene = TestScenario::new(util_name!());
+            let at = &scene.fixtures;
+            setup_link_deref_tests(DIR_LINK, at);
+            let mut args = vec!["--link", "-R", DIR_LINK, DST];
+            if !option.is_empty() {
+                args.push(option);
+            }
+            scene.ucmd().args(&args).succeeds();
+            at.dir_exists(DST);
+        }
+    }
+
+    //cp --link 'file_link' should create a hard link to the target.
+    #[test]
+    fn test_cp_file_link_as_source_with_link() {
+        for option in ["", "-L", "-H"] {
+            for r in [false, true] {
+                let scene = TestScenario::new(util_name!());
+                let at = &scene.fixtures;
+                setup_link_deref_tests(FILE_LINK, at);
+                let mut args = vec!["--link", "-R", FILE_LINK, DST];
+                if !option.is_empty() {
+                    args.push(option);
+                }
+                if r {
+                    args.push("-R");
+                }
+                scene.ucmd().args(&args).succeeds();
+                at.file_exists(DST);
+                let src_ino = at.symlink_metadata(FILE).ino();
+                let dest_ino = at.symlink_metadata(DST).ino();
+                assert_eq!(src_ino, dest_ino);
+            }
+        }
+    }
+}
+
+// The cp command might create directories with excessively permissive permissions temporarily,
+// which could be problematic if we aim to preserve ownership or mode. For example, when
+// copying a directory, the destination directory could temporarily be setgid on some filesystems.
+// This temporary setgid status could grant access to other users who share the same group
+// ownership as the newly created directory.To mitigate this issue, when creating a directory we
+// disable these excessive permissions.
+#[test]
+#[cfg(unix)]
+fn test_dir_perm_race_with_preserve_mode_and_ownership() {
+    const SRC_DIR: &str = "src";
+    const DEST_DIR: &str = "dest";
+    const FIFO: &str = "src/fifo";
+    for attr in ["mode", "ownership"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir(SRC_DIR);
+        at.mkdir(DEST_DIR);
+        at.set_mode(SRC_DIR, 0o775);
+        at.set_mode(DEST_DIR, 0o2775);
+        at.mkfifo(FIFO);
+        let child = scene
+            .ucmd()
+            .args(&[
+                format!("--preserve={}", attr).as_str(),
+                "-R",
+                "--copy-contents",
+                "--parents",
+                SRC_DIR,
+                DEST_DIR,
+            ])
+            // make sure permissions weren't disabled because of umask.
+            .umask(0)
+            .run_no_wait();
+        // while cp wait for fifo we could check the dirs created by cp
+        let timeout = Duration::from_secs(10);
+        let start_time = std::time::Instant::now();
+        // wait for cp to create dirs
+        loop {
+            if start_time.elapsed() >= timeout {
+                panic!("timed out: cp took too long to create destination directory")
+            }
+            if at.dir_exists(&format!("{}/{}", DEST_DIR, SRC_DIR)) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let mode = at.metadata(&format!("{}/{}", DEST_DIR, SRC_DIR)).mode();
+        #[allow(clippy::unnecessary_cast)]
+        let mask = if attr == "mode" {
+            libc::S_IWGRP | libc::S_IWOTH
+        } else {
+            libc::S_IRWXG | libc::S_IRWXO
+        } as u32;
+        assert_eq!(
+            (mode & mask),
+            0,
+            "unwanted permissions are present - {}",
+            attr
+        );
+        at.write(FIFO, "done");
+        child.wait().unwrap().succeeded();
     }
 }
