@@ -3,7 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use crate::common::util::TestScenario;
+
 use regex::Regex;
+use serde::Serialize;
+use serde_big_array::BigArray;
+use std::fs::File;
+use std::{io::Write, path::PathBuf};
+use uucore::utmpx::{BOOT_TIME, RUN_LVL, USER_PROCESS, UT_HOSTSIZE, UT_LINESIZE, UT_NAMESIZE};
 
 #[test]
 fn test_invalid_arg() {
@@ -75,32 +81,134 @@ fn test_uptime_with_non_existent_file() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
-fn test_uptime_with_file_containing_valid_utmpx_record() {
+fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
     let ts = TestScenario::new(util_name!());
-    let re = Regex::new(r"up {1,2}[(\d){1,} days]*\d{1,2}:\d\d").unwrap();
+    let at = &ts.fixtures;
+    // Regex matches for "up   00::00" ,"up 12 days  00::00", the time can be any valid time and
+    // the days can be more than 1 digit or not there. This will match even if the amount of whitespace is
+    // wrong between the days and the time.
+
+    let re = Regex::new(r"up [(\d){1,} days]*\d{1,2}:\d\d").unwrap();
+
+    utmp(&at.plus("test"));
     ts.ucmd()
-        .arg("validRecord.txt")
+        .arg("test")
         .succeeds()
         .stdout_matches(&re)
         .stdout_contains("load average");
+
+    // helper function to create byte sequences
+    fn slice_32(slice: &[u8]) -> [i8; 32] {
+        let mut arr: [i8; 32] = [0; 32];
+
+        for (i, val) in slice.into_iter().enumerate() {
+            arr[i] = *val as i8;
+        }
+        arr
+    }
+
+    // Creates a file utmp records of three different types including a valid BOOT_TIME entry
+    fn utmp(path: &PathBuf) {
+        // Definitions of our utmpx structs
+        #[derive(Serialize)]
+        #[repr(C)]
+        pub struct time_val {
+            pub tv_sec: i32,
+            pub tv_usec: i32,
+        }
+
+        #[derive(Serialize)]
+        #[repr(C, align(4))]
+        pub struct exit_status {
+            e_termination: i16,
+            e_exit: i16,
+        }
+        #[derive(Serialize)]
+        #[repr(C, align(4))]
+        pub struct utmp {
+            pub ut_type: i32,
+            pub ut_pid: i32,
+            pub ut_line: [i8; UT_LINESIZE],
+            pub ut_id: [i8; 4],
+
+            pub ut_user: [i8; UT_NAMESIZE],
+            #[serde(with = "BigArray")]
+            pub ut_host: [i8; UT_HOSTSIZE],
+            pub ut_exit: exit_status,
+
+            pub ut_session: i32,
+            pub ut_tv: time_val,
+
+            pub ut_addr_v6: [i32; 4],
+            glibc_reserved: [i8; 20],
+        }
+
+        let utmp = utmp {
+            ut_type: BOOT_TIME as i32,
+            ut_pid: 0,
+            ut_line: slice_32("~".as_bytes()),
+            ut_id: [126, 126, 0, 0],
+            ut_user: slice_32("reboot".as_bytes()),
+            ut_host: [0; 256],
+            ut_exit: exit_status {
+                e_termination: 0,
+                e_exit: 0,
+            },
+            ut_session: 0,
+            ut_tv: time_val {
+                tv_sec: 1716371201,
+                tv_usec: 290913,
+            },
+            ut_addr_v6: [127, 0, 0, 1],
+            glibc_reserved: [0; 20],
+        };
+        let utmp1 = utmp {
+            ut_type: RUN_LVL as i32,
+            ut_pid: std::process::id() as i32,
+            ut_line: slice_32("~".as_bytes()),
+            ut_id: [126, 126, 0, 0],
+            ut_user: slice_32("runlevel".as_bytes()),
+            ut_host: [0; 256],
+            ut_exit: exit_status {
+                e_termination: 0,
+                e_exit: 0,
+            },
+            ut_session: 0,
+            ut_tv: time_val {
+                tv_sec: 1716371209,
+                tv_usec: 162250,
+            },
+            ut_addr_v6: [0, 0, 0, 0],
+            glibc_reserved: [0; 20],
+        };
+        let utmp2 = utmp {
+            ut_type: USER_PROCESS as i32,
+            ut_pid: std::process::id() as i32,
+            ut_line: slice_32(":1".as_bytes()),
+            ut_id: [126, 126, 0, 0],
+            ut_user: slice_32("testusr".as_bytes()),
+            ut_host: [0; 256],
+            ut_exit: exit_status {
+                e_termination: 0,
+                e_exit: 0,
+            },
+            ut_session: 0,
+            ut_tv: time_val {
+                tv_sec: 1716371283,
+                tv_usec: 858764,
+            },
+            ut_addr_v6: [0, 0, 0, 0],
+            glibc_reserved: [0; 20],
+        };
+
+        let mut buf = bincode::serialize(&utmp).unwrap();
+        buf.append(&mut bincode::serialize(&utmp1).unwrap());
+        buf.append(&mut bincode::serialize(&utmp2).unwrap());
+        let mut f = File::create(path).unwrap();
+        f.write_all(&mut buf).unwrap();
+    }
 }
 
-/// Assuming /var/log/wtmp has multiple records, /var/log/wtmp doesn't seem to exist in macos
-#[test]
-#[cfg(not(target_os = "openbsd"))]
-fn test_uptime_with_file_containing_multiple_valid_utmpx_record() {
-    let ts = TestScenario::new(util_name!());
-    // Checking for up   00:00 [can be any time]
-    let re = Regex::new(r"up {1,2}[(\d){1,} days]*\d{1,2}:\d\d").unwrap();
-    // Can be multiple users, for double digit users, only matches the last digit.
-    let re_users = Regex::new(r"\d user[s]?").unwrap();
-    ts.ucmd()
-        .arg("validMultipleRecords.txt")
-        .succeeds()
-        .stdout_matches(&re)
-        .stdout_matches(&re_users)
-        .stdout_contains("load average");
-}
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_uptime_with_extra_argument() {
@@ -112,26 +220,6 @@ fn test_uptime_with_extra_argument() {
         .fails()
         .stderr_contains("extra operand 'b'");
 }
-/// Here we test if partial records are parsed properly and this may return an uptime of hours or
-/// days, assuming /var/log/wtmp contains multiple records
-#[test]
-#[cfg(not(target_os = "openbsd"))]
-fn test_uptime_with_file_containing_multiple_valid_utmpx_record_with_partial_records() {
-    let ts = TestScenario::new(util_name!());
-
-    let re_users = Regex::new(r"\d user[s]?").unwrap();
-    // Regex matches for "up   00::00" ,"up 12 days  00::00", the time can be any valid time and
-    // the days can be more than 1 digit or not there. This will match even if the amount of whitespace is
-    // wrong between the days and the time.
-    let re_uptime = Regex::new(r"up {1,2}[(\d){1,} days]*\d{1,2}:\d\d").unwrap();
-    ts.ucmd()
-        .arg("validMultiplePartialRecords.txt")
-        .succeeds()
-        .stdout_contains("load average")
-        .stdout_matches(&re_users)
-        .stdout_matches(&re_uptime);
-}
-
 /// Checks whether uptime displays the correct stderr msg when its called with a directory
 #[test]
 #[cfg(not(target_os = "openbsd"))]

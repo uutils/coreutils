@@ -109,7 +109,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         print_loadavg();
         return Ok(());
     }
-
+    print_time();
     let (boot_time, user_count) = process_utmpx_from_file(file_path);
     if let Some(time) = boot_time {
         let upsecs = get_uptime_from_boot_time(time);
@@ -211,6 +211,13 @@ fn process_utmpx_from_file(file: &OsString) -> (Option<time_t>, usize) {
         match line.record_type() {
             USER_PROCESS => nusers += 1,
             BOOT_TIME => {
+                // Macos "getutxent" initializes all fields of the struct to 0, if it can't find any
+                // utmpx record from the file.
+                #[cfg(target_os = "macos")]
+                if line.into_inner().ut_tv.tv_sec == 0 {
+                    continue;
+                }
+
                 let dt = line.login_time();
                 if dt.unix_timestamp() > 0 {
                     boot_time = Some(dt.unix_timestamp() as time_t);
