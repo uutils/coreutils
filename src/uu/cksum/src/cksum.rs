@@ -182,6 +182,7 @@ mod options {
     pub const STATUS: &str = "status";
     pub const WARN: &str = "warn";
     pub const IGNORE_MISSING: &str = "ignore-missing";
+    pub const QUIET: &str = "quiet";
 }
 
 /// Determines whether to prompt an asterisk (*) in the output.
@@ -282,7 +283,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let strict = matches.get_flag(options::STRICT);
         let status = matches.get_flag(options::STATUS);
         let warn = matches.get_flag(options::WARN);
-        let ignore_missing = matches.get_flag(options::IGNORE_MISSING);
+        let ignore_missing: bool = matches.get_flag(options::IGNORE_MISSING);
+        let quiet: bool = matches.get_flag(options::QUIET);
 
         if (binary_flag || text_flag) && check {
             return Err(ChecksumError::BinaryTextConflict.into());
@@ -307,6 +309,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             warn,
             binary_flag,
             ignore_missing,
+            quiet,
             algo_option,
             length,
         );
@@ -445,6 +448,13 @@ pub fn uu_app() -> Command {
                 .short('s')
                 .long("status")
                 .help("don't output anything, status code shows success")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(options::QUIET)
+                .short('q')
+                .long(options::QUIET)
+                .help("don't print OK for each successfully verified file")
                 .action(ArgAction::SetTrue),
         )
         .arg(

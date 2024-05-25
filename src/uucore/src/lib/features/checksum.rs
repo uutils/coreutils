@@ -310,6 +310,7 @@ pub fn perform_checksum_validation<'a, I>(
     warn: bool,
     binary: bool,
     ignore_missing: bool,
+    quiet: bool,
     algo_name_input: Option<&str>,
     length_input: Option<usize>,
 ) -> UResult<()>
@@ -471,7 +472,9 @@ where
 
                 // Do the checksum validation
                 if expected_checksum == calculated_checksum {
-                    println!("{prefix}{filename_to_check}: OK");
+                    if !quiet {
+                        println!("{prefix}{filename_to_check}: OK");
+                    }
                     correct_format += 1;
                 } else {
                     if !status {

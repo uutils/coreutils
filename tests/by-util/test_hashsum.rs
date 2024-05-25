@@ -729,3 +729,31 @@ fn test_check_directory_error() {
         .fails()
         .stderr_contains("md5sum: d: Is a directory\n");
 }
+
+#[test]
+fn test_check_quiet() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427e  f\n");
+    scene
+        .ccmd("md5sum")
+        .arg("--quiet")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .succeeds()
+        .stderr_is("")
+        .stdout_is("");
+
+    // incorrect md5
+    at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427f  f\n");
+    scene
+        .ccmd("md5sum")
+        .arg("--quiet")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .fails()
+        .stdout_contains("f: FAILED")
+        .stderr_contains("WARNING: 1 computed checksum did NOT match");
+}

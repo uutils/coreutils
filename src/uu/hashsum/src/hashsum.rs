@@ -220,7 +220,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         .unwrap_or(None)
         .unwrap_or(&false);
     let status = matches.get_flag("status");
-    //let quiet = matches.get_flag("quiet") || status;
+    let quiet = matches.get_flag("quiet") || status;
     //let strict = matches.get_flag("strict");
     let warn = matches.get_flag("warn") && !status;
     let zero: bool = matches.get_flag("zero");
@@ -277,6 +277,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             warn,
             binary_flag,
             ignore_missing,
+            quiet,
             algo_option,
             Some(algo.bits),
         );
@@ -303,6 +304,7 @@ mod options {
     pub const BINARY: &str = "binary";
     pub const STATUS: &str = "status";
     pub const WARN: &str = "warn";
+    pub const QUIET: &str = "quiet";
 }
 
 pub fn uu_app_common() -> Command {
@@ -351,9 +353,9 @@ pub fn uu_app_common() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("quiet")
+            Arg::new(options::QUIET)
                 .short('q')
-                .long("quiet")
+                .long(options::QUIET)
                 .help("don't print OK for each successfully verified file")
                 .action(ArgAction::SetTrue),
         )
