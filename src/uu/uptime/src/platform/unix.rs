@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers
+// spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname
 
 use crate::options;
 use crate::uu_app;
@@ -102,6 +102,25 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         set_exit_code(1);
         show_error!("{}", UptimeError::IoErr(e));
     }
+    // uptmxname() returns an -1 , when filename doesn't end with 'x' or its too long.
+    // Reference: `<https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/utmpxname.3.html>`
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let bytes = file_path.as_os_str().as_bytes();
+
+        if bytes[bytes.len() - 1] != b'x' {
+            show_error!("couldn't get boot time");
+            print_time();
+            print!("up ???? days ??:??,");
+            print_nusers(0);
+            print_loadavg();
+            set_exit_code(1);
+            return Ok(());
+        }
+    }
+
     if non_fatal_error {
         print_time();
         print!("up ???? days ??:??,");
@@ -109,6 +128,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         print_loadavg();
         return Ok(());
     }
+
     print_time();
     let (boot_time, user_count) = process_utmpx_from_file(file_path);
     if let Some(time) = boot_time {
@@ -212,14 +232,6 @@ fn process_utmpx_from_file(file: &OsString) -> (Option<time_t>, usize) {
             USER_PROCESS => nusers += 1,
             BOOT_TIME => {
                 let dt = line.login_time();
-                // Macos "getutxent" initializes all fields of the struct to 0, if it can't find any
-                // utmpx record from the file.
-
-                #[cfg(target_os = "macos")]
-                if line.into_inner().ut_tv.tv_sec == 0 {
-                    continue;
-                }
-
                 if dt.unix_timestamp() > 0 {
                     boot_time = Some(dt.unix_timestamp() as time_t);
                 }

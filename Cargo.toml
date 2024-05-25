@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime fundu gethostid kqueue libselinux mangen memmap procfs uuhelp
+# spell-checker:ignore (libs) bigdecimal datetime serde bincode fundu gethostid kqueue libselinux mangen memmap procfs uuhelp
 
 [package]
 name = "coreutils"
@@ -497,10 +497,7 @@ uucore = { workspace = true, features = [
   "signals",
   "utmpx",
 ] }
-serde = { version = "1.0.202", features = ["derive"] }
 walkdir = { workspace = true }
-bincode = { version = "1.3.3" }
-serde-big-array = "0.5.1"
 hex-literal = "0.4.1"
 rstest = { workspace = true }
 
@@ -512,6 +509,9 @@ nix = { workspace = true, features = ["process", "signal", "user", "term"] }
 rlimit = "0.10.1"
 rand_pcg = "0.3.1"
 xattr = { workspace = true }
+serde = { version = "1.0.202", features = ["derive"] }
+bincode = { version = "1.3.3" }
+serde-big-array = "0.5.1"
 
 [build-dependencies]
 phf_codegen = { workspace = true }
