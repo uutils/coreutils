@@ -561,8 +561,7 @@ fn test_blake2b_512() {
         .arg("--check")
         .arg("checksum")
         .succeeds()
-        .stdout_contains("")
-        .stderr_contains("");
+        .no_output();
 }
 
 #[test]

@@ -5,21 +5,19 @@
 
 // spell-checker:ignore (ToDO) fname, algo
 use clap::{crate_version, value_parser, Arg, ArgAction, Command};
-use std::error::Error;
 use std::ffi::OsStr;
-use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufReader, Read, Write};
 use std::iter;
 use std::path::Path;
 use uucore::checksum::{
     calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
-    ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
+    ChecksumError, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
     ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGO,
 };
 use uucore::{
     encoding,
-    error::{FromIo, UError, UResult, USimpleError},
+    error::{FromIo, UResult, USimpleError},
     format_usage, help_about, help_section, help_usage, show,
     sum::{div_ceil, Digest},
 };
@@ -28,36 +26,11 @@ const USAGE: &str = help_usage!("cksum.md");
 const ABOUT: &str = help_about!("cksum.md");
 const AFTER_HELP: &str = help_section!("after help", "cksum.md");
 
-#[derive(Debug)]
-enum CkSumError {
-    RawMultipleFiles,
-}
-
 #[derive(Debug, PartialEq)]
 enum OutputFormat {
     Hexadecimal,
     Raw,
     Base64,
-}
-
-impl UError for CkSumError {
-    fn code(&self) -> i32 {
-        match self {
-            Self::RawMultipleFiles => 1,
-        }
-    }
-}
-
-impl Error for CkSumError {}
-
-impl Display for CkSumError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::RawMultipleFiles => {
-                write!(f, "the --raw option is not supported with multiple files")
-            }
-        }
-    }
 }
 
 struct Options {
@@ -83,7 +56,7 @@ where
 {
     let files: Vec<_> = files.collect();
     if options.output_format == OutputFormat::Raw && files.len() > 1 {
-        return Err(Box::new(CkSumError::RawMultipleFiles));
+        return Err(Box::new(ChecksumError::RawMultipleFiles));
     }
 
     for filename in files {
@@ -287,11 +260,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if ["bsd", "crc", "sysv"].contains(&algo_name) && check {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "--check is not supported with --algorithm={bsd,sysv,crc}",
-        )
-        .into());
+        return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
     }
 
     let input_length = matches.get_one::<usize>(options::LENGTH);
@@ -301,11 +270,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if algo_name == ALGORITHM_OPTIONS_BLAKE2B {
                 calculate_blake2b_length(*length)?
             } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "--length is only supported with --algorithm=blake2b",
-                )
-                .into());
+                return Err(ChecksumError::LengthOnlyForBlake2b.into());
             }
         }
         None => None,
@@ -320,11 +285,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let ignore_missing = matches.get_flag(options::IGNORE_MISSING);
 
         if (binary_flag || text_flag) && check {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "the --binary and --text options are meaningless when verifying checksums",
-            )
-            .into());
+            return Err(ChecksumError::BinaryTextConflict.into());
         }
         // Determine the appropriate algorithm option to pass
         let algo_option = if algo_name.is_empty() {

@@ -10,10 +10,9 @@ use clap::crate_version;
 use clap::value_parser;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command};
-use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::{self, stdin, BufReader, Read};
+use std::io::{stdin, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
@@ -23,10 +22,10 @@ use uucore::checksum::detect_algo;
 use uucore::checksum::digest_reader;
 use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
+use uucore::checksum::ChecksumError;
 use uucore::checksum::HashAlgorithm;
 use uucore::checksum::ALGORITHM_OPTIONS_BLAKE2B;
-use uucore::error::USimpleError;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo, UResult};
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 use uucore::{format_usage, help_about, help_usage};
 
@@ -67,10 +66,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
 
     let mut set_or_err = |new_alg: HashAlgorithm| -> UResult<()> {
         if alg.is_some() {
-            return Err(USimpleError::new(
-                1,
-                "You cannot combine multiple hash algorithms!",
-            ));
+            return Err(ChecksumError::CombineMultipleAlgorithms.into());
         }
         alg = Some(new_alg);
         Ok(())
@@ -139,7 +135,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 create_fn: Box::new(|| Box::new(Shake128::new())),
                 bits: *bits,
             })?,
-            None => return Err(USimpleError::new(1, "--bits required for SHAKE128")),
+            None => return Err(ChecksumError::BitsRequiredForShake128.into()),
         };
     }
     if matches.get_flag("shake256") {
@@ -149,15 +145,12 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
                 create_fn: Box::new(|| Box::new(Shake256::new())),
                 bits: *bits,
             })?,
-            None => return Err(USimpleError::new(1, "--bits required for SHAKE256")),
+            None => return Err(ChecksumError::BitsRequiredForShake256.into()),
         };
     }
 
     if alg.is_none() {
-        return Err(USimpleError::new(
-            1,
-            "Needs an algorithm to hash with.\nUse --help for more information.",
-        ));
+        return Err(ChecksumError::NeedAlgoToHash.into());
     }
 
     Ok(alg.unwrap())
@@ -201,11 +194,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             if binary_name == ALGORITHM_OPTIONS_BLAKE2B || binary_name == "b2sum" {
                 calculate_blake2b_length(*length)?
             } else {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "--length is only supported with --algorithm=blake2b",
-                )
-                .into());
+                return Err(ChecksumError::LengthOnlyForBlake2b.into());
             }
         }
         None => None,
@@ -239,7 +228,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
 
     if ignore_missing && !check {
         // --ignore-missing needs -c
-        return Err(HashsumError::IgnoreNotCheck.into());
+        return Err(ChecksumError::IgnoreNotCheck.into());
     }
 
     let opts = Options {
@@ -264,11 +253,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         let strict = matches.get_flag("strict");
 
         if (binary_flag || text_flag) && check {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "the --binary and --text options are meaningless when verifying checksums",
-            )
-            .into());
+            return Err(ChecksumError::BinaryTextConflict.into());
         }
         // Determine the appropriate algorithm option to pass
         let algo_option = if algo.name.is_empty() {
@@ -521,27 +506,6 @@ fn uu_app(binary_name: &str) -> (Command, bool) {
         "b3sum" => (uu_app_b3sum(), false),
         // We're probably just being called as `hashsum`, so give them everything.
         _ => (uu_app_custom(), true),
-    }
-}
-
-#[derive(Debug)]
-enum HashsumError {
-    //InvalidRegex,
-    IgnoreNotCheck,
-}
-
-impl Error for HashsumError {}
-impl UError for HashsumError {}
-
-impl std::fmt::Display for HashsumError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            //Self::InvalidRegex => write!(f, "invalid regular expression"),
-            Self::IgnoreNotCheck => write!(
-                f,
-                "the --ignore-missing option is meaningful only when verifying checksums"
-            ),
-        }
     }
 }
 

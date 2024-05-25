@@ -6,14 +6,16 @@
 use os_display::Quotable;
 use regex::Regex;
 use std::{
+    error::Error,
     ffi::OsStr,
+    fmt::Display,
     fs::File,
     io::{self, BufReader, Read},
     path::Path,
 };
 
 use crate::{
-    error::{set_exit_code, FromIo, UResult, USimpleError},
+    error::{set_exit_code, FromIo, UError, UResult, USimpleError},
     show, show_error, show_warning_caps,
     sum::{
         Blake2b, Blake3, Digest, DigestWriter, Md5, Sha1, Sha224, Sha256, Sha384, Sha3_224,
@@ -65,6 +67,74 @@ pub struct HashAlgorithm {
     pub bits: usize,
 }
 
+#[derive(Debug)]
+pub enum ChecksumError {
+    RawMultipleFiles,
+    IgnoreNotCheck,
+    InvalidOutputSizeForSha3,
+    BitsRequiredForSha3,
+    BitsRequiredForShake128,
+    BitsRequiredForShake256,
+    UnknownAlgorithm,
+    InvalidLength,
+    LengthOnlyForBlake2b,
+    BinaryTextConflict,
+    AlgorithmNotSupportedWithCheck,
+    CombineMultipleAlgorithms,
+    NeedAlgoToHash,
+}
+
+impl Error for ChecksumError {}
+
+impl UError for ChecksumError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
+
+impl Display for ChecksumError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RawMultipleFiles => {
+                write!(f, "the --raw option is not supported with multiple files")
+            }
+            Self::IgnoreNotCheck => write!(
+                f,
+                "the --ignore-missing option is meaningful only when verifying checksums"
+            ),
+            Self::InvalidOutputSizeForSha3 => write!(
+                f,
+                "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
+            ),
+            Self::BitsRequiredForSha3 => write!(f, "--bits required for SHA3"),
+            Self::BitsRequiredForShake128 => write!(f, "--bits required for SHAKE128"),
+            Self::BitsRequiredForShake256 => write!(f, "--bits required for SHAKE256"),
+            Self::UnknownAlgorithm => {
+                write!(f, "unknown algorithm: clap should have prevented this case")
+            }
+            Self::InvalidLength => write!(f, "length is not a multiple of 8"),
+            Self::LengthOnlyForBlake2b => {
+                write!(f, "--length is only supported with --algorithm=blake2b")
+            }
+            Self::BinaryTextConflict => write!(
+                f,
+                "the --binary and --text options are meaningless when verifying checksums"
+            ),
+            Self::AlgorithmNotSupportedWithCheck => write!(
+                f,
+                "--check is not supported with --algorithm={{bsd,sysv,crc}}"
+            ),
+            Self::CombineMultipleAlgorithms => {
+                write!(f, "You cannot combine multiple hash algorithms!")
+            }
+            Self::NeedAlgoToHash => write!(
+                f,
+                "Needs an algorithm to hash with.\nUse --help for more information."
+            ),
+        }
+    }
+}
+
 /// Creates a SHA3 hasher instance based on the specified bits argument.
 ///
 /// # Returns
@@ -95,11 +165,8 @@ pub fn create_sha3(bits: Option<usize>) -> UResult<HashAlgorithm> {
             bits: 512,
         }),
 
-        Some(_) => Err(USimpleError::new(
-            1,
-            "Invalid output size for SHA3 (expected 224, 256, 384, or 512)",
-        )),
-        None => Err(USimpleError::new(1, "--bits required for SHA3")),
+        Some(_) => Err(ChecksumError::InvalidOutputSizeForSha3.into()),
+        None => Err(ChecksumError::BitsRequiredForSha3.into()),
     }
 }
 
@@ -228,10 +295,7 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
         //ALGORITHM_OPTIONS_SHA3 | "sha3" => (
         alg if alg.starts_with("sha3") => create_sha3(length),
 
-        _ => Err(USimpleError::new(
-            1,
-            "unknown algorithm: clap should have prevented this case",
-        )),
+        _ => Err(ChecksumError::UnknownAlgorithm.into()),
     }
 }
 

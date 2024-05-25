@@ -370,7 +370,7 @@ fn test_check_md5sum_not_enough_space() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    for f in &["a", " b"] {
+    for f in ["a", "b"] {
         at.write(f, &format!("{f}\n"));
     }
     at.write(
@@ -384,8 +384,7 @@ fn test_check_md5sum_not_enough_space() {
             .arg("-c")
             .arg("check.md5sum")
             .fails()
-            .stdout_is("")
-            .stderr_is("md5sum: check.md5sum: no properly formatted checksum lines found\nmd5sum: WARNING: 2 lines are improperly formatted\n");
+            .stderr_only("md5sum: check.md5sum: no properly formatted checksum lines found\nmd5sum: WARNING: 2 lines are improperly formatted\n");
 }
 
 #[test]
