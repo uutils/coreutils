@@ -36,7 +36,7 @@ fn test_uptime() {
     // Don't check for users as it doesn't show in some CI
 }
 
-/// Checks for files without utmpx for which boot time cannot be calculated
+/// Checks for files without utmpx records for which boot time cannot be calculated
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_uptime_for_file_without_utmpx_records() {
@@ -172,7 +172,7 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
             glibc_reserved: [0; 20],
         };
         let utmp1 = Utmp {
-            ut_type: RUN_LVL as i32,
+            ut_type: RUN_LVL,
             ut_pid: std::process::id() as i32,
             ut_line: slice_32("~".as_bytes()),
             ut_id: [126, 126, 0, 0],
@@ -191,7 +191,7 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
             glibc_reserved: [0; 20],
         };
         let utmp2 = Utmp {
-            ut_type: USER_PROCESS as i32,
+            ut_type: USER_PROCESS,
             ut_pid: std::process::id() as i32,
             ut_line: slice_32(":1".as_bytes()),
             ut_id: [126, 126, 0, 0],

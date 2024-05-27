@@ -102,7 +102,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         set_exit_code(1);
         show_error!("{}", UptimeError::IoErr(e));
     }
-    // uptmxname() returns an -1 , when filename doesn't end with 'x' or its too long.
+    // utmpxname() returns an -1 , when filename doesn't end with 'x' or its too long.
     // Reference: `<https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/utmpxname.3.html>`
 
     #[cfg(target_os = "macos")]
