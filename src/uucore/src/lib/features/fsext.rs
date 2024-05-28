@@ -899,6 +899,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x0187 => "autofs".into(),
         0x4246_5331 => "befs".into(),
         0x6264_6576 => "bdevfs".into(),
+        0xCA451A4E => "bcachefs".into(),
         0x1BAD_FACE => "bfs".into(),
         0xCAFE_4A11 => "bpf_fs".into(),
         0x4249_4E4D => "binfmt_misc".into(),
