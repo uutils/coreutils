@@ -310,8 +310,22 @@ const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>
 // In this case, we ignore the *
 const SINGLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s(?P<filename>\*?.*)$";
 
+fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
+    if input_is_stdin {
+        "standard input"
+    } else {
+        filename.to_str().unwrap()
+    }
+    .maybe_quote()
+    .to_string()
+}
+
 /// Determines the appropriate regular expression to use based on the provided lines.
-fn determine_regex(filename: &OsStr, lines: &[String]) -> UResult<(Regex, bool)> {
+fn determine_regex(
+    filename: &OsStr,
+    input_is_stdin: bool,
+    lines: &[String],
+) -> UResult<(Regex, bool)> {
     let algo_based_regex = Regex::new(ALGO_BASED_REGEX).unwrap();
     let double_space_regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
     let single_space_regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
@@ -331,7 +345,7 @@ fn determine_regex(filename: &OsStr, lines: &[String]) -> UResult<(Regex, bool)>
         io::ErrorKind::InvalidData,
         format!(
             "{}: no properly formatted checksum lines found",
-            filename.maybe_quote()
+            get_filename_for_output(filename, input_is_stdin)
         ),
     )
     .into())
@@ -384,14 +398,14 @@ where
 
         let reader = BufReader::new(file);
         let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
-        let (chosen_regex, algo_based_format) = determine_regex(filename_input, &lines)?;
+        let (chosen_regex, algo_based_format) =
+            determine_regex(filename_input, input_is_stdin, &lines)?;
 
         // Process each line
         for (i, line) in lines.iter().enumerate() {
             if let Some(caps) = chosen_regex.captures(&line) {
                 properly_formatted = true;
 
-                // Get the filename to check and remove the leading asterisk if present
                 let mut filename_to_check = caps.name("filename").unwrap().as_str();
                 if filename_to_check.starts_with('*')
                     && i == 0
@@ -537,16 +551,10 @@ where
         // not a single line correctly formatted found
         // return an error
         if !properly_formatted {
-            let filename = filename_input.to_string_lossy();
             if !status {
                 show_error!(
                     "{}: no properly formatted checksum lines found",
-                    if input_is_stdin {
-                        "standard input"
-                    } else {
-                        &filename
-                    }
-                    .maybe_quote()
+                    get_filename_for_output(filename_input, input_is_stdin)
                 );
             }
             set_exit_code(1);
@@ -906,7 +914,7 @@ mod tests {
         // Test algo-based regex
         let lines_algo_based =
             vec!["MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e".to_string()];
-        let result = determine_regex(filename, &lines_algo_based);
+        let result = determine_regex(filename, false, &lines_algo_based);
         assert!(result.is_ok());
         let (regex, algo_based) = result.unwrap();
         assert!(algo_based);
@@ -914,7 +922,7 @@ mod tests {
 
         // Test double-space regex
         let lines_double_space = vec!["d41d8cd98f00b204e9800998ecf8427e  example.txt".to_string()];
-        let result = determine_regex(filename, &lines_double_space);
+        let result = determine_regex(filename, false, &lines_double_space);
         assert!(result.is_ok());
         let (regex, algo_based) = result.unwrap();
         assert!(!algo_based);
@@ -922,7 +930,7 @@ mod tests {
 
         // Test single-space regex
         let lines_single_space = vec!["d41d8cd98f00b204e9800998ecf8427e example.txt".to_string()];
-        let result = determine_regex(filename, &lines_single_space);
+        let result = determine_regex(filename, false, &lines_single_space);
         assert!(result.is_ok());
         let (regex, algo_based) = result.unwrap();
         assert!(!algo_based);
@@ -933,7 +941,7 @@ mod tests {
             "ERR".to_string(),
             "d41d8cd98f00b204e9800998ecf8427e  example.txt".to_string(),
         ];
-        let result = determine_regex(filename, &lines_double_space);
+        let result = determine_regex(filename, false, &lines_double_space);
         assert!(result.is_ok());
         let (regex, algo_based) = result.unwrap();
         assert!(!algo_based);
@@ -942,7 +950,7 @@ mod tests {
 
         // Test invalid checksum line
         let lines_invalid = vec!["invalid checksum line".to_string()];
-        let result = determine_regex(filename, &lines_invalid);
+        let result = determine_regex(filename, false, &lines_invalid);
         assert!(result.is_err());
     }
 }
