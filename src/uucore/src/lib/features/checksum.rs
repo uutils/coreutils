@@ -310,6 +310,32 @@ const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>
 // In this case, we ignore the *
 const SINGLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s(?P<binary>\*?)(?P<filename>.*)$";
 
+/// Determines the appropriate regular expression to use based on the provided lines.
+fn determine_regex(filename: &OsStr, lines: &[String]) -> UResult<(Regex, bool)> {
+    let algo_based_regex = Regex::new(ALGO_BASED_REGEX).unwrap();
+    let double_space_regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
+    let single_space_regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
+
+    for line in lines {
+        let line_trim = line.trim();
+        if algo_based_regex.is_match(line_trim) {
+            return Ok((algo_based_regex, true));
+        } else if double_space_regex.is_match(line_trim) {
+            return Ok((double_space_regex, false));
+        } else if single_space_regex.is_match(line_trim) {
+            return Ok((single_space_regex, false));
+        }
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!(
+            "{}: no properly formatted checksum lines found",
+            filename.maybe_quote()
+        ),
+    )
+    .into())
+}
 /***
  * Do the checksum validation (can be strict or not)
 */
@@ -328,10 +354,6 @@ pub fn perform_checksum_validation<'a, I>(
 where
     I: Iterator<Item = &'a OsStr>,
 {
-    let algo_based_regex = Regex::new(ALGO_BASED_REGEX).unwrap();
-    let double_space_regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
-    let single_space_regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
-
     // if cksum has several input files, it will print the result for each file
     for filename_input in files {
         let mut bad_format = 0;
@@ -358,31 +380,13 @@ where
                 }
             }
         };
-        let mut reader = BufReader::new(file);
 
-        let mut first_line = String::new();
-        reader.read_line(&mut first_line)?;
+        let reader = BufReader::new(file);
+        let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
+        let (chosen_regex, algo_based_format) = determine_regex(filename_input, &lines)?;
 
-        // Determine which regular expression to use based on the first line
-        let first_line_trim = first_line.trim();
-        let (chosen_regex, algo_based_format) = if algo_based_regex.is_match(first_line_trim) {
-            (&algo_based_regex, true)
-        } else if double_space_regex.is_match(first_line_trim) {
-            // If the first line contains a double space, use the double space regex
-            (&double_space_regex, false)
-        } else {
-            // It is probably rare but sometimes the checksum file may contain a single space
-            (&single_space_regex, false)
-        };
-
-        // Push the first line back to the reader
-        let first_line_reader = io::Cursor::new(first_line);
-        let chain_reader = first_line_reader.chain(reader);
-        let reader = BufReader::new(chain_reader);
-
-        // for each line in the input, check if it is a valid checksum line
-        for (i, line) in reader.lines().enumerate() {
-            let line = line.unwrap_or_else(|_| String::new());
+        // Process each line
+        for (i, line) in lines.iter().enumerate() {
             if let Some(caps) = chosen_regex.captures(&line) {
                 properly_formatted = true;
 
@@ -885,5 +889,51 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_determine_regex() {
+        let filename = std::ffi::OsStr::new("test.txt");
+        // Test algo-based regex
+        let lines_algo_based =
+            vec!["MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e".to_string()];
+        let result = determine_regex(filename, &lines_algo_based);
+        assert!(result.is_ok());
+        let (regex, algo_based) = result.unwrap();
+        assert!(algo_based);
+        assert!(regex.is_match(&lines_algo_based[0]));
+
+        // Test double-space regex
+        let lines_double_space = vec!["d41d8cd98f00b204e9800998ecf8427e  example.txt".to_string()];
+        let result = determine_regex(filename, &lines_double_space);
+        assert!(result.is_ok());
+        let (regex, algo_based) = result.unwrap();
+        assert!(!algo_based);
+        assert!(regex.is_match(&lines_double_space[0]));
+
+        // Test single-space regex
+        let lines_single_space = vec!["d41d8cd98f00b204e9800998ecf8427e example.txt".to_string()];
+        let result = determine_regex(filename, &lines_single_space);
+        assert!(result.is_ok());
+        let (regex, algo_based) = result.unwrap();
+        assert!(!algo_based);
+        assert!(regex.is_match(&lines_single_space[0]));
+
+        // Test double-space regex start with invalid
+        let lines_double_space = vec![
+            "ERR".to_string(),
+            "d41d8cd98f00b204e9800998ecf8427e  example.txt".to_string(),
+        ];
+        let result = determine_regex(filename, &lines_double_space);
+        assert!(result.is_ok());
+        let (regex, algo_based) = result.unwrap();
+        assert!(!algo_based);
+        assert!(!regex.is_match(&lines_double_space[0]));
+        assert!(regex.is_match(&lines_double_space[1]));
+
+        // Test invalid checksum line
+        let lines_invalid = vec!["invalid checksum line".to_string()];
+        let result = determine_regex(filename, &lines_invalid);
+        assert!(result.is_err());
     }
 }

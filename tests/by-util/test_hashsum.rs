@@ -724,47 +724,43 @@ fn test_check_one_two_space_star() {
 }
 
 #[test]
-fn test_check_one_two_space_star_start_without_star() {
+fn test_check_space_star_or_not() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.touch("empty");
-    at.touch("f");
+    at.touch("a");
+    at.touch("*c");
 
     // with one space, the "*" is removed
     at.write(
         "in.md5",
-        "d41d8cd98f00b204e9800998ecf8427e f\nd41d8cd98f00b204e9800998ecf8427e *empty\n",
+        "d41d8cd98f00b204e9800998ecf8427e *c\n
+        d41d8cd98f00b204e9800998ecf8427e a\n",
     );
 
     scene
         .ccmd("md5sum")
         .arg("--check")
         .arg(at.subdir.join("in.md5"))
-        .succeeds()
-        .stdout_is("f: OK\nempty: OK\n");
+        .fails()
+        .stdout_contains("c: FAILED")
+        .stdout_does_not_contain("a: FAILED")
+        .stderr_contains("WARNING: 1 line is improperly formatted");
 
-    // with two spaces, the "*" is not removed
     at.write(
         "in.md5",
-        "d41d8cd98f00b204e9800998ecf8427e  f\nd41d8cd98f00b204e9800998ecf8427e  *empty\n",
+        "d41d8cd98f00b204e9800998ecf8427e a\n
+            d41d8cd98f00b204e9800998ecf8427e *c\n",
     );
+
     // First should fail as *empty doesn't exit
     scene
         .ccmd("md5sum")
         .arg("--check")
         .arg(at.subdir.join("in.md5"))
         .fails()
-        .stdout_is("f: OK\n*empty: FAILED open or read\n");
-
-    at.touch("*empty");
-    // Should pass as we have the file
-    scene
-        .ccmd("md5sum")
-        .arg("--check")
-        .arg(at.subdir.join("in.md5"))
-        .succeeds()
-        .stdout_is("f: OK\n*empty: OK\n");
+        .stdout_contains("a: FAILED")
+        .stdout_contains("*c: FAILED");
 }
 
 #[test]
@@ -780,6 +776,38 @@ fn test_check_no_backslash_no_space() {
         .arg(at.subdir.join("in.md5"))
         .succeeds()
         .stdout_is("f: OK\n");
+}
+
+#[test]
+fn test_incomplete_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write("in.md5", "MD5 (\n");
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .fails()
+        .stderr_contains("no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_start_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write("in.md5", "ERR\nd41d8cd98f00b204e9800998ecf8427e  f\n");
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg("--strict")
+        .arg(at.subdir.join("in.md5"))
+        .fails()
+        .stdout_is("f: OK\n")
+        .stderr_contains("WARNING: 1 line is improperly formatted");
 }
 
 #[test]
