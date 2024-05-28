@@ -378,7 +378,7 @@ fn test_check_md5sum_only_one_space() {
         "check.md5sum",
         "60b725f10c9c85c70d97880dfe8191b3 a\n\
         bf35d7536c785cf06730d5a40301eba2  b\n\
-        2cd6ee2c70b0bde53fbe6cac3c8b8bb1 *c\n",
+        2cd6ee2c70b0bde53fbe6cac3c8b8bb1 c\n",
     );
     scene
         .ccmd("md5sum")
@@ -758,9 +758,9 @@ fn test_check_space_star_or_not() {
         .ccmd("md5sum")
         .arg("--check")
         .arg(at.subdir.join("in.md5"))
-        .fails()
-        .stdout_contains("a: FAILED")
-        .stdout_contains("*c: FAILED");
+        .succeeds()
+        .stdout_contains("a: OK")
+        .stderr_contains("WARNING: 1 line is improperly formatted");
 }
 
 #[test]
@@ -867,4 +867,20 @@ fn test_check_quiet() {
         .fails()
         .stdout_contains("f: FAILED")
         .stderr_contains("WARNING: 1 computed checksum did NOT match");
+}
+
+#[test]
+fn test_star_to_start() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427e */dev/null\n");
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg(at.subdir.join("in.md5"))
+        .succeeds()
+        .stderr_is("")
+        .stdout_is("/dev/null: OK\n");
 }

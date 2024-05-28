@@ -308,7 +308,7 @@ const ALGO_BASED_REGEX: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<b
 const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>.*)$";
 
 // In this case, we ignore the *
-const SINGLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s(?P<binary>\*?)(?P<filename>.*)$";
+const SINGLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s(?P<filename>\*?.*)$";
 
 /// Determines the appropriate regular expression to use based on the provided lines.
 fn determine_regex(filename: &OsStr, lines: &[String]) -> UResult<(Regex, bool)> {
@@ -336,6 +336,7 @@ fn determine_regex(filename: &OsStr, lines: &[String]) -> UResult<(Regex, bool)>
     )
     .into())
 }
+
 /***
  * Do the checksum validation (can be strict or not)
 */
@@ -390,7 +391,15 @@ where
             if let Some(caps) = chosen_regex.captures(&line) {
                 properly_formatted = true;
 
-                let filename_to_check = caps.name("filename").unwrap().as_str();
+                // Get the filename to check and remove the leading asterisk if present
+                let mut filename_to_check = caps.name("filename").unwrap().as_str();
+                if filename_to_check.starts_with('*')
+                    && i == 0
+                    && chosen_regex.as_str() == SINGLE_SPACE_REGEX
+                {
+                    // Remove the leading asterisk if present - only for the first line
+                    filename_to_check = &filename_to_check[1..];
+                }
 
                 let expected_checksum = caps.name("checksum").unwrap().as_str();
 
@@ -866,7 +875,7 @@ mod tests {
             ),
             (
                 "f5b61709718c1ecf8db1aea8547d4698 *c",
-                Some(("f5b61709718c1ecf8db1aea8547d4698", "c")),
+                Some(("f5b61709718c1ecf8db1aea8547d4698", "*c")),
             ),
             (
                 "b064a020db8018f18ff5ae367d01b212 dd",
