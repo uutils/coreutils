@@ -82,6 +82,7 @@ pub enum ChecksumError {
     AlgorithmNotSupportedWithCheck,
     CombineMultipleAlgorithms,
     NeedAlgoToHash,
+    NoProperlyFormattedChecksumLinesFound(String),
 }
 
 impl Error for ChecksumError {}
@@ -131,6 +132,13 @@ impl Display for ChecksumError {
                 f,
                 "Needs an algorithm to hash with.\nUse --help for more information."
             ),
+            Self::NoProperlyFormattedChecksumLinesFound(filename) => {
+                write!(
+                    f,
+                    "{}: no properly formatted checksum lines found",
+                    filename
+                )
+            }
         }
     }
 }
@@ -341,14 +349,13 @@ fn determine_regex(
         }
     }
 
-    Err(io::Error::new(
-        io::ErrorKind::InvalidData,
-        format!(
-            "{}: no properly formatted checksum lines found",
-            get_filename_for_output(filename, input_is_stdin)
-        ),
+    Err(
+        ChecksumError::NoProperlyFormattedChecksumLinesFound(get_filename_for_output(
+            filename,
+            input_is_stdin,
+        ))
+        .into(),
     )
-    .into())
 }
 
 /***
@@ -552,12 +559,13 @@ where
         // return an error
         if !properly_formatted {
             if !status {
-                show_error!(
-                    "{}: no properly formatted checksum lines found",
-                    get_filename_for_output(filename_input, input_is_stdin)
-                );
+                return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound(
+                    get_filename_for_output(filename_input, input_is_stdin),
+                )
+                .into());
             }
             set_exit_code(1);
+
             return Ok(());
         }
 
