@@ -362,6 +362,7 @@ fn determine_regex(
  * Do the checksum validation (can be strict or not)
 */
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::cognitive_complexity)]
 pub fn perform_checksum_validation<'a, I>(
     files: I,
     strict: bool,
@@ -410,7 +411,7 @@ where
 
         // Process each line
         for (i, line) in lines.iter().enumerate() {
-            if let Some(caps) = chosen_regex.captures(&line) {
+            if let Some(caps) = chosen_regex.captures(line) {
                 properly_formatted = true;
 
                 let mut filename_to_check = caps.name("filename").unwrap().as_str();
@@ -481,7 +482,7 @@ where
                 }
                 let mut algo = detect_algo(&algo_name, length)?;
 
-                let (filename_to_check_unescaped, prefix) = unescape_filename(&filename_to_check);
+                let (filename_to_check_unescaped, prefix) = unescape_filename(filename_to_check);
 
                 // manage the input file
                 let file_to_check: Box<dyn Read> = if filename_to_check == "-" {
