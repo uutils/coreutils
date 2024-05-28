@@ -38,7 +38,9 @@ fn test_uptime() {
 
 /// Checks for files without utmpx records for which boot time cannot be calculated
 #[test]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
+// Disabled for freebsd, since it doesn't use the utmpxname() sys call to change the default utmpx
+// file that is accessed using getutxent()
 fn test_uptime_for_file_without_utmpx_records() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("file1", "hello");
@@ -76,8 +78,10 @@ fn test_uptime_with_fifo() {
 }
 
 #[test]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 fn test_uptime_with_non_existent_file() {
+    // Disabled for freebsd, since it doesn't use the utmpxname() sys call to change the default utmpx
+    // file that is accessed using getutxent()
     let ts = TestScenario::new(util_name!());
 
     ts.ucmd()
@@ -88,9 +92,12 @@ fn test_uptime_with_non_existent_file() {
 }
 
 // TODO create a similar test for macos
+// This will pass
 #[test]
 #[cfg(not(any(target_os = "openbsd", target_os = "macos")))]
 fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
+    // This test will pass for freebsd but we currently don't support changing the utmpx file for
+    // freebsd.
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     // Regex matches for "up   00::00" ,"up 12 days  00::00", the time can be any valid time and
