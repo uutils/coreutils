@@ -835,7 +835,6 @@ impl Attributes {
 
     /// Set the field to Preserve::NO { explicit: true } if the corresponding field
     /// in other is set to Preserve::Yes { .. }.
-        Self {
     pub fn diff(self, other: &Self) -> Self {
         fn update_preserve_field(current: Preserve, other: Preserve) -> Preserve {
             if matches!(other, Preserve::Yes { .. }) {
@@ -844,7 +843,6 @@ impl Attributes {
                 current
             }
         }
-
         Self {
             #[cfg(unix)]
             ownership: update_preserve_field(self.ownership, other.ownership),
@@ -2426,6 +2424,22 @@ mod tests {
                 context: Preserve::Yes { required: true },
                 xattr: Preserve::Yes { required: true },
                 ..Attributes::ALL
+            }
+        );
+        assert_eq!(
+            Attributes::NONE.diff(&Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }),
+            Attributes {
+                #[cfg(unix)]
+                ownership: Preserve::No { explicit: true },
+                mode: Preserve::No { explicit: true },
+                timestamps: Preserve::No { explicit: true },
+                context: Preserve::No { explicit: true },
+                links: Preserve::No { explicit: true },
+                xattr: Preserve::No { explicit: true }
             }
         );
     }
