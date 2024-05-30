@@ -835,39 +835,24 @@ impl Attributes {
 
     /// Set the field to Preserve::NO { explicit: true } if the corresponding field
     /// in other is set to Preserve::Yes { .. }.
+        Self {
     pub fn diff(self, other: &Self) -> Self {
+        fn update_preserve_field(current: Preserve, other: Preserve) -> Preserve {
+            if matches!(other, Preserve::Yes { .. }) {
+                Preserve::No { explicit: true }
+            } else {
+                current
+            }
+        }
+
         Self {
             #[cfg(unix)]
-            ownership: if matches!(other.ownership, Preserve::Yes { .. }) {
-                Preserve::No { explicit: true }
-            } else {
-                self.ownership
-            },
-            mode: if matches!(other.mode, Preserve::Yes { .. }) {
-                Preserve::No { explicit: true }
-            } else {
-                self.mode
-            },
-            timestamps: if matches!(other.timestamps, Preserve::Yes { .. }) {
-                Preserve::No { explicit: true }
-            } else {
-                self.timestamps
-            },
-            context: if matches!(other.context, Preserve::Yes { .. }) {
-                Preserve::No { explicit: true }
-            } else {
-                self.context
-            },
-            links: if matches!(other.links, Preserve::Yes { .. }) {
-                Preserve::No { explicit: true }
-            } else {
-                self.links
-            },
-            xattr: if matches!(other.xattr, Preserve::Yes { .. }) {
-                Preserve::No { explicit: true }
-            } else {
-                self.xattr
-            },
+            ownership: update_preserve_field(self.ownership, other.ownership),
+            mode: update_preserve_field(self.mode, other.mode),
+            timestamps: update_preserve_field(self.timestamps, other.timestamps),
+            context: update_preserve_field(self.context, other.context),
+            links: update_preserve_field(self.links, other.links),
+            xattr: update_preserve_field(self.xattr, other.xattr),
         }
     }
 
