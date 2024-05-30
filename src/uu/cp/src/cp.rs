@@ -169,7 +169,7 @@ pub enum CopyMode {
 /// For full compatibility with GNU, these options should also combine. We
 /// currently only do a best effort imitation of that behavior, because it is
 /// difficult to achieve in clap, especially with `--no-preserve`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Attributes {
     #[cfg(unix)]
     pub ownership: Preserve,
@@ -2390,7 +2390,7 @@ fn disk_usage_directory(p: &Path) -> io::Result<u64> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{aligned_ancestors, localize_to_target};
+    use crate::{aligned_ancestors, localize_to_target, Attributes, Preserve};
     use std::path::Path;
 
     #[test]
@@ -2411,5 +2411,37 @@ mod tests {
             (Path::new("a/b"), Path::new("d/a/b")),
         ];
         assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_diff_attrs() {
+        assert_eq!(
+            Attributes::ALL.diff(&Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }),
+            Attributes {
+                #[cfg(unix)]
+                ownership: Preserve::No { explicit: true },
+                mode: Preserve::No { explicit: true },
+                timestamps: Preserve::No { explicit: true },
+                context: Preserve::No { explicit: true },
+                links: Preserve::No { explicit: true },
+                xattr: Preserve::No { explicit: true }
+            }
+        );
+        assert_eq!(
+            Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }
+            .diff(&Attributes::NONE),
+            Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }
+        );
     }
 }
