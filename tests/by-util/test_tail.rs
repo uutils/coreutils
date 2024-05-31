@@ -4307,18 +4307,14 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
     at.append(path_name, more_data);
 
     let expected_stdout = format!(
-        "==> {0} <==\n\
-        {1}\n\
-        ==> {2} <==\n\
-        {1}\n\
-        ==> {0} <==\n\
-        {3}\n\
-        ==> {2} <==\n\
-        {3}",
-        path_name, // 0
-        file_data, // 1
-        link_name, // 2
-        more_data, // 3
+        "==> {path_name} <==\n\
+        {file_data}\n\
+        ==> {link_name} <==\n\
+        {file_data}\n\
+        ==> {path_name} <==\n\
+        {more_data}\n\
+        ==> {link_name} <==\n\
+        {more_data}"
     );
 
     child.make_assertion_with_delay(500).is_alive();
@@ -4345,18 +4341,14 @@ fn test_follow_when_file_and_symlink_are_pointing_to_same_file_and_append_data()
     at.append(path_name, more_data);
 
     let expected_stdout = format!(
-        "==> {0} <==\n\
-        {1}\n\
-        ==> {2} <==\n\
-        {1}\n\
-        ==> {0} <==\n\
-        {3}\n\
-        ==> {2} <==\n\
-        {3}",
-        link_name, // 0
-        file_data, // 1
-        path_name, // 2
-        more_data, // 3
+        "==> {link_name} <==\n\
+        {file_data}\n\
+        ==> {path_name} <==\n\
+        {file_data}\n\
+        ==> {link_name} <==\n\
+        {more_data}\n\
+        ==> {path_name} <==\n\
+        {more_data}"
     );
 
     child.make_assertion_with_delay(500).is_alive();
@@ -4375,9 +4367,8 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
     let dirname = "dir";
     at.mkdir(dirname);
     let expected_stderr = format!(
-        "tail: error reading '{0}': Is a directory\n\
-         tail: {0}: cannot follow end of this type of file\n",
-        dirname
+        "tail: error reading '{dirname}': Is a directory\n\
+         tail: {dirname}: cannot follow end of this type of file\n"
     );
     let mut child = scene.ucmd().args(&["-F", "--retry", "dir"]).run_no_wait();
 

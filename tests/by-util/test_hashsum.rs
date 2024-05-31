@@ -472,7 +472,7 @@ fn test_with_escape_filename() {
     at.touch(filename);
     let result = scene.ccmd("md5sum").arg("--text").arg(filename).succeeds();
     let stdout = result.stdout_str();
-    println!("stdout {}", stdout);
+    println!("stdout {stdout}");
     assert!(stdout.starts_with('\\'));
     assert!(stdout.trim().ends_with("a\\nb"));
 }
@@ -492,7 +492,7 @@ fn test_with_escape_filename_zero_text() {
         .arg(filename)
         .succeeds();
     let stdout = result.stdout_str();
-    println!("stdout {}", stdout);
+    println!("stdout {stdout}");
     assert!(!stdout.starts_with('\\'));
     assert!(stdout.contains("a\nb"));
 }
@@ -526,7 +526,7 @@ fn test_check_with_escape_filename() {
     at.touch(filename);
     let result = scene.ccmd("md5sum").arg("--tag").arg(filename).succeeds();
     let stdout = result.stdout_str();
-    println!("stdout {}", stdout);
+    println!("stdout {stdout}");
     assert!(stdout.starts_with("\\MD5"));
     assert!(stdout.contains("a\\nb"));
     at.write("check.md5", stdout);
