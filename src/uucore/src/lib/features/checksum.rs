@@ -2,6 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+// spell-checker:ignore anotherfile invalidchecksum
 
 use os_display::Quotable;
 use regex::Regex;
@@ -811,6 +812,7 @@ mod tests {
         let algo_based_regex = Regex::new(ALGO_BASED_REGEX).unwrap();
         let test_cases = vec![
             ("SHA256 (example.txt) = d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2", Some(("SHA256", None, "example.txt", "d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2d2"))),
+            // cspell:disable-next-line
             ("BLAKE2b-512 (file) = abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef", Some(("BLAKE2b", Some("512"), "file", "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef"))),
             (" MD5 (test) = 9e107d9d372bb6826bd81d3542a419d6", Some(("MD5", None, "test", "9e107d9d372bb6826bd81d3542a419d6"))),
             ("SHA-1 (anotherfile) = a9993e364706816aba3e25717850c26c9cd0d89d", Some(("SHA", Some("1"), "anotherfile", "a9993e364706816aba3e25717850c26c9cd0d89d"))),
