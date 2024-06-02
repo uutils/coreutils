@@ -687,6 +687,7 @@ pub fn escape_filename(filename: &Path) -> (String, &'static str) {
     let prefix = if escaped == original { "" } else { "\\" };
     (escaped, prefix)
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

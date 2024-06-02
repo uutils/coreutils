@@ -687,6 +687,8 @@ fn test_sha1_with_md5sum_should_fail() {
 }
 
 #[test]
+// Disabled on Windows because of the "*"
+#[cfg(not(windows))]
 fn test_check_one_two_space_star() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -724,6 +726,8 @@ fn test_check_one_two_space_star() {
 }
 
 #[test]
+// Disabled on Windows because of the "*"
+#[cfg(not(windows))]
 fn test_check_space_star_or_not() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -833,12 +837,21 @@ fn test_check_directory_error() {
 
     at.mkdir("d");
     at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427f  d\n");
+    let err_msg: &str;
+    #[cfg(not(windows))]
+    {
+        err_msg = "md5sum: d: Is a directory\n";
+    }
+    #[cfg(windows)]
+    {
+        err_msg = "md5sum: d: Permission denied\n";
+    }
     scene
         .ccmd("md5sum")
         .arg("--check")
         .arg(at.subdir.join("in.md5"))
         .fails()
-        .stderr_contains("md5sum: d: Is a directory\n");
+        .stderr_contains(err_msg);
 }
 
 #[test]
@@ -854,8 +867,7 @@ fn test_check_quiet() {
         .arg("--check")
         .arg(at.subdir.join("in.md5"))
         .succeeds()
-        .stderr_is("")
-        .stdout_is("");
+        .no_output();
 
     // incorrect md5
     at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427f  f\n");
@@ -875,11 +887,28 @@ fn test_star_to_start() {
     let at = &scene.fixtures;
 
     at.touch("f");
-    at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427e */dev/null\n");
+    at.write("in.md5", "d41d8cd98f00b204e9800998ecf8427e *f\n");
     scene
         .ccmd("md5sum")
         .arg("--check")
         .arg(at.subdir.join("in.md5"))
+        .succeeds()
+        .stdout_only("f: OK\n");
+}
+
+#[test]
+fn test_b2sum_128() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("f");
+    at.write("in.b2sum", "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce  /dev/null\n");
+    scene
+        .ccmd("b2sum")
+        .arg("--check")
+        .arg("-l")
+        .arg("128")
+        .arg(at.subdir.join("in.b2sum"))
         .succeeds()
         .stderr_is("")
         .stdout_is("/dev/null: OK\n");

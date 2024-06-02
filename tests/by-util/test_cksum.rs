@@ -1192,8 +1192,17 @@ fn test_check_directory_error() {
         "f",
         "BLAKE2b (d) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n"
     );
+    let err_msg: &str;
+    #[cfg(not(windows))]
+    {
+        err_msg = "cksum: d: Is a directory\n";
+    }
+    #[cfg(windows)]
+    {
+        err_msg = "cksum: d: Permission denied\n";
+    }
     ucmd.arg("--check")
         .arg(at.subdir.join("f"))
         .fails()
-        .stderr_contains("cksum: d: Is a directory\n");
+        .stderr_contains(err_msg);
 }
