@@ -935,9 +935,9 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: unix, toolchain: nightly }
-          - { os: macos-latest   , features: macos, toolchain: nightly }
-          - { os: windows-latest , features: windows, toolchain: nightly-x86_64-pc-windows-gnu }
+          - { os: ubuntu-latest  , features: unix, toolchain: stable }
+          - { os: macos-latest   , features: macos, toolchain: stable }
+          - { os: windows-latest , features: windows, toolchain: stable }
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master
