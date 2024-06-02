@@ -44,7 +44,7 @@ pub const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 pub const ALGORITHM_OPTIONS_SHAKE128: &str = "shake128";
 pub const ALGORITHM_OPTIONS_SHAKE256: &str = "shake256";
 
-pub const SUPPORTED_ALGO: [&str; 15] = [
+pub const SUPPORTED_ALGORITHMS: [&str; 15] = [
     ALGORITHM_OPTIONS_SYSV,
     ALGORITHM_OPTIONS_BSD,
     ALGORITHM_OPTIONS_CRC,
@@ -82,7 +82,7 @@ pub enum ChecksumError {
     BinaryTextConflict,
     AlgorithmNotSupportedWithCheck,
     CombineMultipleAlgorithms,
-    NeedAlgoToHash,
+    NeedAlgorithmToHash,
     NoProperlyFormattedChecksumLinesFound(String),
 }
 
@@ -129,7 +129,7 @@ impl Display for ChecksumError {
             Self::CombineMultipleAlgorithms => {
                 write!(f, "You cannot combine multiple hash algorithms!")
             }
-            Self::NeedAlgoToHash => write!(
+            Self::NeedAlgorithmToHash => write!(
                 f,
                 "Needs an algorithm to hash with.\nUse --help for more information."
             ),
@@ -302,7 +302,7 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
             })
         }
         //ALGORITHM_OPTIONS_SHA3 | "sha3" => (
-        alg if alg.starts_with("sha3") => create_sha3(length),
+        _ if algo.starts_with("sha3") => create_sha3(length),
 
         _ => Err(ChecksumError::UnknownAlgorithm.into()),
     }
@@ -407,10 +407,9 @@ where
 
         let reader = BufReader::new(file);
         let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
-        let (chosen_regex, algo_based_format) =
+        let (chosen_regex, is_algo_based_format) =
             determine_regex(filename_input, input_is_stdin, &lines)?;
 
-        // Process each line
         for (i, line) in lines.iter().enumerate() {
             if let Some(caps) = chosen_regex.captures(line) {
                 properly_formatted = true;
@@ -427,7 +426,7 @@ where
                 let expected_checksum = caps.name("checksum").unwrap().as_str();
 
                 // If the algo_name is provided, we use it, otherwise we try to detect it
-                let (algo_name, length) = if algo_based_format {
+                let (algo_name, length) = if is_algo_based_format {
                     // When the algo-based format is matched, extract details from regex captures
                     let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
 
@@ -440,7 +439,7 @@ where
                         continue;
                     }
 
-                    if !SUPPORTED_ALGO.contains(&algorithm.as_str()) {
+                    if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
                         // Not supported algo, leave early
                         properly_formatted = false;
                         continue;
@@ -452,7 +451,7 @@ where
                             Some(Some(bits_value / 8))
                         } else {
                             properly_formatted = false;
-                            None // Return None to signal a parsing or divisibility issue
+                            None // Return None to signal a divisibility issue
                         }
                     });
 
@@ -464,14 +463,15 @@ where
 
                     (algorithm, bits.unwrap())
                 } else if let Some(a) = algo_name_input {
-                    // When a specific algorithm name is input, use it and default bits to None
+                    // When a specific algorithm name is input, use it and use the provided bits
                     (a.to_lowercase(), length_input)
                 } else {
                     // Default case if no algorithm is specified and non-algo based format is matched
                     (String::new(), None)
                 };
 
-                if algo_based_format && algo_name_input.map_or(false, |input| algo_name != input) {
+                if is_algo_based_format && algo_name_input.map_or(false, |input| algo_name != input)
+                {
                     bad_format += 1;
                     continue;
                 }
@@ -579,7 +579,6 @@ where
                 util_name(),
                 filename_input.maybe_quote(),
             );
-            //skip_summary = true;
             set_exit_code(1);
         }
 
@@ -640,7 +639,7 @@ pub fn digest_reader<T: Read>(
     }
 }
 
-/// Calculates the length of the digest for the given algorithm.
+/// Calculates the length of the digest.
 pub fn calculate_blake2b_length(length: usize) -> UResult<Option<usize>> {
     match length {
         0 => Ok(None),

@@ -13,7 +13,7 @@ use std::path::Path;
 use uucore::checksum::{
     calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
     ChecksumError, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
-    ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGO,
+    ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
 };
 use uucore::{
     encoding,
@@ -278,15 +278,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if check {
-        let text_flag: bool = matches.get_flag(options::TEXT);
-        let binary_flag: bool = matches.get_flag(options::BINARY);
+        let text_flag = matches.get_flag(options::TEXT);
+        let binary_flag = matches.get_flag(options::BINARY);
         let strict = matches.get_flag(options::STRICT);
         let status = matches.get_flag(options::STATUS);
         let warn = matches.get_flag(options::WARN);
-        let ignore_missing: bool = matches.get_flag(options::IGNORE_MISSING);
-        let quiet: bool = matches.get_flag(options::QUIET);
+        let ignore_missing = matches.get_flag(options::IGNORE_MISSING);
+        let quiet = matches.get_flag(options::QUIET);
 
-        if (binary_flag || text_flag) && check {
+        if binary_flag || text_flag {
             return Err(ChecksumError::BinaryTextConflict.into());
         }
         // Determine the appropriate algorithm option to pass
@@ -364,7 +364,7 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .help("select the digest type to use. See DIGEST below")
                 .value_name("ALGORITHM")
-                .value_parser(SUPPORTED_ALGO),
+                .value_parser(SUPPORTED_ALGORITHMS),
         )
         .arg(
             Arg::new(options::UNTAGGED)
@@ -445,14 +445,12 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::STATUS)
-                .short('s')
                 .long("status")
                 .help("don't output anything, status code shows success")
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::QUIET)
-                .short('q')
                 .long(options::QUIET)
                 .help("don't print OK for each successfully verified file")
                 .action(ArgAction::SetTrue),

@@ -24,7 +24,6 @@ use uucore::checksum::escape_filename;
 use uucore::checksum::perform_checksum_validation;
 use uucore::checksum::ChecksumError;
 use uucore::checksum::HashAlgorithm;
-use uucore::checksum::ALGORITHM_OPTIONS_BLAKE2B;
 use uucore::error::{FromIo, UResult};
 use uucore::sum::{Digest, Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 use uucore::{format_usage, help_about, help_usage};
@@ -150,7 +149,7 @@ fn create_algorithm_from_flags(matches: &ArgMatches) -> UResult<HashAlgorithm> {
     }
 
     if alg.is_none() {
-        return Err(ChecksumError::NeedAlgoToHash.into());
+        return Err(ChecksumError::NeedAlgorithmToHash.into());
     }
 
     Ok(alg.unwrap())
@@ -190,13 +189,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
 
     let length = match input_length {
-        Some(length) => {
-            if binary_name == ALGORITHM_OPTIONS_BLAKE2B || binary_name == "b2sum" {
-                calculate_blake2b_length(*length)?
-            } else {
-                return Err(ChecksumError::LengthOnlyForBlake2b.into());
-            }
-        }
+        Some(length) => calculate_blake2b_length(*length)?,
         None => None,
     };
 
@@ -223,7 +216,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let quiet = matches.get_flag("quiet") || status;
     //let strict = matches.get_flag("strict");
     let warn = matches.get_flag("warn") && !status;
-    let zero: bool = matches.get_flag("zero");
+    let zero = matches.get_flag("zero");
     let ignore_missing = matches.get_flag("ignore-missing");
 
     if ignore_missing && !check {
@@ -248,19 +241,13 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     };
 
     if check {
-        let text_flag: bool = matches.get_flag("text");
-        let binary_flag: bool = matches.get_flag("binary");
+        let text_flag = matches.get_flag("text");
+        let binary_flag = matches.get_flag("binary");
         let strict = matches.get_flag("strict");
 
-        if (binary_flag || text_flag) && check {
+        if binary_flag || text_flag {
             return Err(ChecksumError::BinaryTextConflict.into());
         }
-        // Determine the appropriate algorithm option to pass
-        let algo_option = if algo.name.is_empty() {
-            None
-        } else {
-            Some(algo.name)
-        };
 
         // Execute the checksum validation based on the presence of files or the use of stdin
         // Determine the source of input: a list of files or stdin.
@@ -278,7 +265,7 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
             binary_flag,
             ignore_missing,
             quiet,
-            algo_option,
+            Some(algo.name),
             Some(algo.bits),
         );
     }
