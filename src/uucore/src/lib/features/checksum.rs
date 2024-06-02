@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore anotherfile invalidchecksum
 
+use data_encoding::BASE64;
 use os_display::Quotable;
 use regex::Regex;
 use std::{
@@ -24,6 +25,7 @@ use crate::{
     },
     util_name,
 };
+use quick_error::quick_error;
 use std::io::stdin;
 use std::io::BufRead;
 
@@ -314,6 +316,8 @@ pub fn detect_algo(algo: &str, length: Option<usize>) -> UResult<HashAlgorithm> 
 // 2. <checksum> [* ]<filename>
 // 3. <checksum> [*]<filename> (only one space)
 const ALGO_BASED_REGEX: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>.*)\)\s*=\s*(?P<checksum>[a-fA-F0-9]+)$";
+const ALGO_BASED_REGEX_BASE64: &str = r"^\s*\\?(?P<algo>(?:[A-Z0-9]+|BLAKE2b))(?:-(?P<bits>\d+))?\s?\((?P<filename>.*)\)\s*=\s*(?P<checksum>[A-Za-z0-9+/]+={0,2})$";
+
 const DOUBLE_SPACE_REGEX: &str = r"^(?P<checksum>[a-fA-F0-9]+)\s{2}(?P<filename>.*)$";
 
 // In this case, we ignore the *
@@ -338,6 +342,7 @@ fn determine_regex(
     let algo_based_regex = Regex::new(ALGO_BASED_REGEX).unwrap();
     let double_space_regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
     let single_space_regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
+    let algo_based_regex_base64 = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
 
     for line in lines {
         let line_trim = line.trim();
@@ -347,6 +352,8 @@ fn determine_regex(
             return Ok((double_space_regex, false));
         } else if single_space_regex.is_match(line_trim) {
             return Ok((single_space_regex, false));
+        } else if algo_based_regex_base64.is_match(line_trim) {
+            return Ok((algo_based_regex_base64, true));
         }
     }
 
@@ -357,6 +364,40 @@ fn determine_regex(
         ))
         .into(),
     )
+}
+
+// Function to convert bytes to a hexadecimal string
+fn bytes_to_hex(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect::<Vec<String>>()
+        .join("")
+}
+
+// Function to get the expected checksum
+
+fn get_expected_checksum(
+    filename: &str,
+    caps: &regex::Captures,
+    chosen_regex: &Regex,
+) -> UResult<String> {
+    if chosen_regex.as_str() == ALGO_BASED_REGEX_BASE64 {
+        let ck = caps.name("checksum").unwrap().as_str();
+        match BASE64.decode(ck.as_bytes()) {
+            Ok(decoded_bytes) => {
+                match std::str::from_utf8(&decoded_bytes) {
+                    Ok(decoded_str) => Ok(decoded_str.to_string()),
+                    Err(_) => Ok(bytes_to_hex(&decoded_bytes)), // Handle as raw bytes if not valid UTF-8
+                }
+            }
+            Err(_) => Err(Box::new(
+                ChecksumError::NoProperlyFormattedChecksumLinesFound((&filename).to_string()),
+            )),
+        }
+    } else {
+        Ok(caps.name("checksum").unwrap().as_str().to_string())
+    }
 }
 
 /***
@@ -423,7 +464,8 @@ where
                     filename_to_check = &filename_to_check[1..];
                 }
 
-                let expected_checksum = caps.name("checksum").unwrap().as_str();
+                let expected_checksum =
+                    get_expected_checksum(&filename_to_check, &caps, &chosen_regex)?;
 
                 // If the algo_name is provided, we use it, otherwise we try to detect it
                 let (algo_name, length) = if is_algo_based_format {
@@ -962,6 +1004,33 @@ mod tests {
         // Test invalid checksum line
         let lines_invalid = vec!["invalid checksum line".to_string()];
         let result = determine_regex(filename, false, &lines_invalid);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_expected_checksum() {
+        let re = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
+        let caps = re
+            .captures("SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=")
+            .unwrap();
+
+        let result = get_expected_checksum("filename", &caps, &re);
+
+        assert_eq!(
+            result.unwrap(),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    #[test]
+    fn test_get_expected_checksum_invalid() {
+        let re = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
+        let caps = re
+            .captures("SHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU")
+            .unwrap();
+
+        let result = get_expected_checksum("filename", &caps, &re);
+
         assert!(result.is_err());
     }
 }
