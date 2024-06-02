@@ -54,8 +54,7 @@ fn test_uptime_for_file_without_utmpx_records() {
 
 /// Checks whether uptime displays the correct stderr msg when its called with a fifo
 #[test]
-#[cfg(target_os = "linux")]
-#[ignore = "disabled until fixed"]
+#[cfg(all(unix, feature = "cp"))]
 fn test_uptime_with_fifo() {
     // This test can go on forever in the CI in some cases, might need aborting
     // Sometimes writing to the pipe is broken
@@ -64,17 +63,22 @@ fn test_uptime_with_fifo() {
     let at = &ts.fixtures;
     at.mkfifo("fifo1");
 
-    let child = ts.ucmd().arg("fifo1").run_no_wait();
+    at.write("a", "hello");
+    // Creating a child process to write to the fifo
+    let mut child = ts
+        .ccmd("cp")
+        .arg(at.plus_as_string("a"))
+        .arg(at.plus_as_string("fifo1"))
+        .run_no_wait();
 
-    let _ = std::fs::write(at.plus("fifo1"), vec![0; 10]);
-
-    child
-        .wait()
-        .unwrap()
-        .failure()
+    ts.ucmd()
+        .arg("fifo1")
+        .fails()
         .stderr_contains("uptime: couldn't get boot time: Illegal seek")
         .stdout_contains("up ???? days ??:??")
         .stdout_contains("load average");
+
+    child.kill();
 }
 
 #[test]
