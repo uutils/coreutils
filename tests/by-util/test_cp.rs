@@ -5574,7 +5574,7 @@ fn test_preserve_attrs_overriding_2() {
     }
 }
 
- /// Test the behavior of preserving permissions when copying through a symlink
+/// Test the behavior of preserving permissions when copying through a symlink
 #[test]
 fn test_cp_symlink_permissions() {
     let scene = TestScenario::new(util_name!());
@@ -5595,7 +5595,7 @@ fn test_cp_symlink_permissions() {
     );
 }
 
- /// Test the behavior of preserving permissions of parents when copying through a symlink
+/// Test the behavior of preserving permissions of parents when copying through a symlink
 #[test]
 fn test_cp_parents_symlink_permissions_file() {
     let scene = TestScenario::new(util_name!());
@@ -5617,8 +5617,8 @@ fn test_cp_parents_symlink_permissions_file() {
     );
 }
 
- /// Test the behavior of preserving permissions of parents when copying through
- /// a symlink when source is a dir.
+/// Test the behavior of preserving permissions of parents when copying through
+/// a symlink when source is a dir.
 #[test]
 fn test_cp_parents_symlink_permissions_dir() {
     let scene = TestScenario::new(util_name!());
@@ -5637,4 +5637,21 @@ fn test_cp_parents_symlink_permissions_dir() {
         src_dir_metadata.permissions().mode(),
         dest_dir_metadata.permissions().mode()
     );
+}
+
+/// Test the behavior of copying a file to a destination with parents using absolute paths.
+#[test]
+fn test_cp_parents_absolute_path() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("a/b");
+    at.touch("a/b/f");
+    at.mkdir("dest");
+    let src = format!("{}/a/b/f", at.root_dir_resolved());
+    scene
+        .ucmd()
+        .args(&["--parents", src.as_str(), "dest"])
+        .succeeds();
+    let res = format!("dest{}/a/b/f", at.root_dir_resolved());
+    at.file_exists(res);
 }

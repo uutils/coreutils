@@ -1459,7 +1459,7 @@ pub(crate) fn copy_attributes(
                 groups_only: false,
                 level: VerbosityLevel::Silent,
             },
-        ); 
+        );
         Ok(())
     })?;
 
@@ -2165,14 +2165,13 @@ fn copy_file(
         // the user does not have permission to write to the file.
         fs::set_permissions(dest, dest_permissions).ok();
     }
-    
-    if options.dereference(source_in_command_line){
-        copy_attributes(&source.canonicalize()?, dest, &options.attributes)?;
-    }else {
-        copy_attributes(source, dest, &options.attributes)?;
 
+    if options.dereference(source_in_command_line) {
+        copy_attributes(&source.canonicalize()?, dest, &options.attributes)?;
+    } else {
+        copy_attributes(source, dest, &options.attributes)?;
     }
-    
+
     copied_files.insert(
         FileInformation::from_path(source, options.dereference(source_in_command_line))?,
         dest.to_path_buf(),
