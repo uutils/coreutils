@@ -358,6 +358,24 @@ fn get_expected_checksum(
     }
 }
 
+fn get_input_file(filename_input: &OsStr, input_is_stdin: bool) -> UResult<Box<dyn Read>> {
+    if input_is_stdin {
+        Ok(Box::new(stdin())) // Use stdin if "-" is specified
+    } else {
+        match File::open(filename_input) {
+            Ok(f) => Ok(Box::new(f)),
+            Err(_) => Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "{}: No such file or directory",
+                    filename_input.to_string_lossy()
+                ),
+            )
+            .into()),
+        }
+    }
+}
+
 /***
  * Do the checksum validation (can be strict or not)
 */
@@ -386,23 +404,7 @@ where
         let mut properly_formatted = false;
         let input_is_stdin = filename_input == OsStr::new("-");
 
-        let file: Box<dyn Read> = if input_is_stdin {
-            Box::new(stdin()) // Use stdin if "-" is specified
-        } else {
-            match File::open(filename_input) {
-                Ok(f) => Box::new(f),
-                Err(_) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!(
-                            "{}: No such file or directory",
-                            filename_input.to_string_lossy()
-                        ),
-                    )
-                    .into());
-                }
-            }
-        };
+        let file: Box<dyn Read> = get_input_file(filename_input, input_is_stdin)?;
 
         let reader = BufReader::new(file);
         let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
