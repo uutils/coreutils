@@ -68,6 +68,14 @@ pub struct HashAlgorithm {
     pub bits: usize,
 }
 
+struct ChecksumResult {
+    pub bad_format: i32,
+    pub failed_cksum: i32,
+    pub failed_open_file: i32,
+    pub correct_format: i32,
+    pub properly_formatted: bool,
+}
+
 #[derive(Debug, Error)]
 pub enum ChecksumError {
     #[error("the --raw option is not supported with multiple files")]
@@ -142,31 +150,25 @@ pub fn create_sha3(bits: Option<usize>) -> UResult<HashAlgorithm> {
 }
 
 #[allow(clippy::comparison_chain)]
-pub fn cksum_output(
-    bad_format: i32,
-    failed_cksum: i32,
-    failed_open_file: i32,
-    ignore_missing: bool,
-    status: bool,
-) {
-    if bad_format == 1 {
-        show_warning_caps!("{} line is improperly formatted", bad_format);
-    } else if bad_format > 1 {
-        show_warning_caps!("{} lines are improperly formatted", bad_format);
+fn cksum_output(res: &ChecksumResult, ignore_missing: bool, status: bool) {
+    if res.bad_format == 1 {
+        show_warning_caps!("{} line is improperly formatted", res.bad_format);
+    } else if res.bad_format > 1 {
+        show_warning_caps!("{} lines are improperly formatted", res.bad_format);
     }
 
     if !status {
-        if failed_cksum == 1 {
-            show_warning_caps!("{} computed checksum did NOT match", failed_cksum);
-        } else if failed_cksum > 1 {
-            show_warning_caps!("{} computed checksums did NOT match", failed_cksum);
+        if res.failed_cksum == 1 {
+            show_warning_caps!("{} computed checksum did NOT match", res.failed_cksum);
+        } else if res.failed_cksum > 1 {
+            show_warning_caps!("{} computed checksums did NOT match", res.failed_cksum);
         }
     }
     if !ignore_missing {
-        if failed_open_file == 1 {
-            show_warning_caps!("{} listed file could not be read", failed_open_file);
-        } else if failed_open_file > 1 {
-            show_warning_caps!("{} listed files could not be read", failed_open_file);
+        if res.failed_open_file == 1 {
+            show_warning_caps!("{} listed file could not be read", res.failed_open_file);
+        } else if res.failed_open_file > 1 {
+            show_warning_caps!("{} listed files could not be read", res.failed_open_file);
         }
     }
 }
@@ -397,11 +399,13 @@ where
 {
     // if cksum has several input files, it will print the result for each file
     for filename_input in files {
-        let mut bad_format = 0;
-        let mut failed_cksum = 0;
-        let mut failed_open_file = 0;
-        let mut correct_format = 0;
-        let mut properly_formatted = false;
+        let mut res = ChecksumResult {
+            bad_format: 0,
+            failed_cksum: 0,
+            failed_open_file: 0,
+            correct_format: 0,
+            properly_formatted: false,
+        };
         let input_is_stdin = filename_input == OsStr::new("-");
 
         let file: Box<dyn Read> = get_input_file(filename_input, input_is_stdin)?;
@@ -413,7 +417,7 @@ where
 
         for (i, line) in lines.iter().enumerate() {
             if let Some(caps) = chosen_regex.captures(line) {
-                properly_formatted = true;
+                res.properly_formatted = true;
 
                 let mut filename_to_check = caps.name("filename").unwrap().as_str();
                 if filename_to_check.starts_with('*')
@@ -436,14 +440,14 @@ where
                     // (for example SHA1 (f) = d...)
                     // Also handle the case cksum -s sm3 but the file contains other formats
                     if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
-                        bad_format += 1;
-                        properly_formatted = false;
+                        res.bad_format += 1;
+                        res.properly_formatted = false;
                         continue;
                     }
 
                     if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
                         // Not supported algo, leave early
-                        properly_formatted = false;
+                        res.properly_formatted = false;
                         continue;
                     }
 
@@ -452,7 +456,7 @@ where
                         if bits_value % 8 == 0 {
                             Some(Some(bits_value / 8))
                         } else {
-                            properly_formatted = false;
+                            res.properly_formatted = false;
                             None // Return None to signal a divisibility issue
                         }
                     });
@@ -474,13 +478,13 @@ where
 
                 if is_algo_based_format && algo_name_input.map_or(false, |input| algo_name != input)
                 {
-                    bad_format += 1;
+                    res.bad_format += 1;
                     continue;
                 }
 
                 if algo_name.is_empty() {
                     // we haven't been able to detect the algo name. No point to continue
-                    properly_formatted = false;
+                    res.properly_formatted = false;
                     continue;
                 }
                 let mut algo = detect_algo(&algo_name, length)?;
@@ -508,7 +512,7 @@ where
                                 show!(err.map_err_context(|| filename_to_check.to_string()));
                                 println!("{}: FAILED open or read", filename_to_check);
                             }
-                            failed_open_file += 1;
+                            res.failed_open_file += 1;
                             // we could not open the file but we want to continue
 
                             continue;
@@ -528,12 +532,12 @@ where
                     if !quiet && !status {
                         println!("{prefix}{filename_to_check}: OK");
                     }
-                    correct_format += 1;
+                    res.correct_format += 1;
                 } else {
                     if !status {
                         println!("{prefix}{filename_to_check}: FAILED");
                     }
-                    failed_cksum += 1;
+                    res.failed_cksum += 1;
                 }
             } else {
                 if line.is_empty() {
@@ -555,13 +559,13 @@ where
                     );
                 }
 
-                bad_format += 1;
+                res.bad_format += 1;
             }
         }
 
         // not a single line correctly formatted found
         // return an error
-        if !properly_formatted {
+        if !res.properly_formatted {
             if !status {
                 return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
                     filename: get_filename_for_output(filename_input, input_is_stdin),
@@ -573,7 +577,7 @@ where
             return Ok(());
         }
 
-        if ignore_missing && correct_format == 0 {
+        if ignore_missing && res.correct_format == 0 {
             // we have only bad format
             // and we had ignore-missing
             eprintln!(
@@ -585,24 +589,18 @@ where
         }
 
         // strict means that we should have an exit code.
-        if strict && bad_format > 0 {
+        if strict && res.bad_format > 0 {
             set_exit_code(1);
         }
 
         // if we have any failed checksum verification, we set an exit code
         // except if we have ignore_missing
-        if (failed_cksum > 0 || failed_open_file > 0) && !ignore_missing {
+        if (res.failed_cksum > 0 || res.failed_open_file > 0) && !ignore_missing {
             set_exit_code(1);
         }
 
         // if any incorrectly formatted line, show it
-        cksum_output(
-            bad_format,
-            failed_cksum,
-            failed_open_file,
-            ignore_missing,
-            status,
-        );
+        cksum_output(&res, ignore_missing, status);
     }
     Ok(())
 }
