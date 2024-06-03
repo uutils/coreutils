@@ -1332,7 +1332,7 @@ fn construct_dest_path(
     Ok(match target_type {
         TargetType::Directory => {
             let root = if options.parents {
-                Path::new("")
+                    Path::new("")
             } else {
                 source_path.parent().unwrap_or(source_path)
             };
@@ -1380,7 +1380,8 @@ fn copy_source(
         );
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
-                copy_attributes(x, y, &options.attributes)?;
+                let src = x.canonicalize()?;
+                copy_attributes(&src, y, &options.attributes)?;
             }
         }
         res
@@ -2162,9 +2163,14 @@ fn copy_file(
         // the user does not have permission to write to the file.
         fs::set_permissions(dest, dest_permissions).ok();
     }
+    
+    if options.dereference(source_in_command_line){
+        copy_attributes(&source.canonicalize()?, dest, &options.attributes)?;
+    }else {
+        copy_attributes(source, dest, &options.attributes)?;
 
-    copy_attributes(source, dest, &options.attributes)?;
-
+    }
+    
     copied_files.insert(
         FileInformation::from_path(source, options.dereference(source_in_command_line))?,
         dest.to_path_buf(),
