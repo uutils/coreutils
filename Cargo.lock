@@ -2950,6 +2950,7 @@ name = "uu_numfmt"
 version = "0.0.26"
 dependencies = [
  "clap",
+ "quick-error",
  "uucore",
 ]
 
