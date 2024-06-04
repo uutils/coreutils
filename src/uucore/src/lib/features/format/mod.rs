@@ -38,10 +38,10 @@ pub mod num_parser;
 mod spec;
 
 pub use argument::*;
+use quick_error::quick_error;
 use spec::Spec;
 use std::{
-    error::Error,
-    fmt::Display,
+    io,
     io::{stdout, Write},
     ops::ControlFlow,
 };
@@ -53,52 +53,35 @@ use self::{
     num_format::Formatter,
 };
 
-#[derive(Debug)]
-pub enum FormatError {
-    SpecError(Vec<u8>),
-    IoError(std::io::Error),
-    NoMoreArguments,
-    InvalidArgument(FormatArgument),
-    TooManySpecs(Vec<u8>),
-    NeedAtLeastOneSpec(Vec<u8>),
-    WrongSpecType,
-}
-
-impl Error for FormatError {}
-impl UError for FormatError {}
-
-impl From<std::io::Error> for FormatError {
-    fn from(value: std::io::Error) -> Self {
-        Self::IoError(value)
-    }
-}
-
-impl Display for FormatError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::SpecError(s) => write!(
-                f,
-                "%{}: invalid conversion specification",
-                String::from_utf8_lossy(s)
-            ),
-            Self::TooManySpecs(s) => write!(
-                f,
-                "format '{}' has too many % directives",
-                String::from_utf8_lossy(s)
-            ),
-            Self::NeedAtLeastOneSpec(s) => write!(
-                f,
-                "format '{}' has no % directive",
-                String::from_utf8_lossy(s)
-            ),
-            // TODO: Error message below needs some work
-            Self::WrongSpecType => write!(f, "wrong % directive type was given"),
-            Self::IoError(_) => write!(f, "io error"),
-            Self::NoMoreArguments => write!(f, "no more arguments"),
-            Self::InvalidArgument(_) => write!(f, "invalid argument"),
+quick_error! {
+    #[derive(Debug)]
+    pub enum FormatError {
+        SpecError(s: Vec<u8>) {
+            display("%{}: invalid conversion specification", String::from_utf8_lossy(s))
+        }
+        IoError(err: io::Error) {
+            from()
+            display("io error: {}", err)
+        }
+        NoMoreArguments {
+            display("no more arguments")
+        }
+        InvalidArgument(arg: FormatArgument) {
+            display("invalid argument: {:?}", arg)
+        }
+        TooManySpecs(s: Vec<u8>) {
+            display("format '{}' has too many % directives", String::from_utf8_lossy(s))
+        }
+        NeedAtLeastOneSpec(s: Vec<u8>) {
+            display("format '{}' has no % directive", String::from_utf8_lossy(s))
+        }
+        WrongSpecType {
+            display("wrong % directive type was given")
         }
     }
 }
+
+impl UError for FormatError {}
 
 /// A single item to format
 pub enum FormatItem<C: FormatChar> {

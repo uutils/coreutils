@@ -52,6 +52,7 @@ blake2b_simd = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
+quick-error = { workspace = true , optional = true }
 
 [target.'cfg(unix)'.dependencies]
 walkdir = { workspace = true, optional = true }
@@ -83,7 +84,7 @@ fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys"]
 fsxattr = ["xattr"]
 lines = []
-format = ["itertools", "quoting-style"]
+format = ["itertools", "quoting-style", "quick-error"]
 mode = ["libc"]
 perms = ["libc", "walkdir"]
 pipes = []
