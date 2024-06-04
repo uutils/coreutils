@@ -396,6 +396,7 @@ fn get_file_to_check(
     }
 }
 
+/// Returns a reader to the list of checksums
 fn get_input_file(filename_input: &OsStr, input_is_stdin: bool) -> UResult<Box<dyn Read>> {
     if input_is_stdin {
         Ok(Box::new(stdin())) // Use stdin if "-" is specified
