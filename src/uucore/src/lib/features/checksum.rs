@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore anotherfile invalidchecksum
+// spell-checker:ignore anotherfile invalidchecksum regexes
 
 use data_encoding::BASE64;
 use os_display::Quotable;
@@ -301,21 +301,19 @@ fn determine_regex(
     input_is_stdin: bool,
     lines: &[String],
 ) -> UResult<(Regex, bool)> {
-    let algo_based_regex = Regex::new(ALGO_BASED_REGEX).unwrap();
-    let double_space_regex = Regex::new(DOUBLE_SPACE_REGEX).unwrap();
-    let single_space_regex = Regex::new(SINGLE_SPACE_REGEX).unwrap();
-    let algo_based_regex_base64 = Regex::new(ALGO_BASED_REGEX_BASE64).unwrap();
+    let regexes = [
+        (Regex::new(ALGO_BASED_REGEX).unwrap(), true),
+        (Regex::new(DOUBLE_SPACE_REGEX).unwrap(), false),
+        (Regex::new(SINGLE_SPACE_REGEX).unwrap(), false),
+        (Regex::new(ALGO_BASED_REGEX_BASE64).unwrap(), true),
+    ];
 
     for line in lines {
         let line_trim = line.trim();
-        if algo_based_regex.is_match(line_trim) {
-            return Ok((algo_based_regex, true));
-        } else if double_space_regex.is_match(line_trim) {
-            return Ok((double_space_regex, false));
-        } else if single_space_regex.is_match(line_trim) {
-            return Ok((single_space_regex, false));
-        } else if algo_based_regex_base64.is_match(line_trim) {
-            return Ok((algo_based_regex_base64, true));
+        for (regex, is_algo_based) in &regexes {
+            if regex.is_match(line_trim) {
+                return Ok((regex.clone(), *is_algo_based));
+            }
         }
     }
     Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
