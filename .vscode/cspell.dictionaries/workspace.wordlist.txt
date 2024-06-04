@@ -336,3 +336,6 @@ uutils
 
 # * function names
 getcwd
+
+# * other
+algs

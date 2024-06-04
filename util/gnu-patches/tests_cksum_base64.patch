@@ -1,0 +1,15 @@
+diff --git a/tests/cksum/cksum-base64.pl b/tests/cksum/cksum-base64.pl
+index a037a1628..c6d87d447 100755
+--- a/tests/cksum/cksum-base64.pl
++++ b/tests/cksum/cksum-base64.pl
+@@ -91,8 +91,8 @@ my $prog = 'cksum';
+ my $fail = run_tests ($program_name, $prog, \@Tests, $save_temps, $verbose);
+ 
+ # Ensure hash names from cksum --help match those in @pairs above.
+-my $help_algs = join ' ', map { m{^  ([[:alpha:]]\S+)} }
+-  grep { m{^  ([[:alpha:]]\S+)} } split ('\n', `cksum --help`);
++my $help_algs = join ' ', map { m{^\s*-\s*([[:alpha:]]\S+):} ? $1 : () }
++   grep { m{^\s*-\s*([[:alpha:]]\S+):} } split ('\n', `cksum --help`);
+ my $test_algs = join ' ', map {$_->[0]} @pairs;
+ $help_algs eq $test_algs or die "$help_algs not equal to\n$test_algs";
+ 
