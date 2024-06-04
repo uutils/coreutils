@@ -8,11 +8,11 @@
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::{memchr3_iter, memchr_iter};
+use quick_error::quick_error;
 use std::cmp::Ordering;
-use std::error::Error;
 use std::ffi::OsString;
-use std::fmt::Display;
 use std::fs::File;
+use std::io;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Split, Stdin, Write};
 use std::num::IntErrorKind;
 #[cfg(unix)]
@@ -25,32 +25,22 @@ use uucore::{crash_if_err, format_usage, help_about, help_usage};
 const ABOUT: &str = help_about!("join.md");
 const USAGE: &str = help_usage!("join.md");
 
-#[derive(Debug)]
-enum JoinError {
-    IOError(std::io::Error),
-    UnorderedInput(String),
+quick_error! {
+    #[derive(Debug)]
+    pub enum JoinError {
+        IOError(err: io::Error) {
+            from()
+            display("io error: {}", err)
+        }
+        UnorderedInput(e: String) {
+            display("{}", e)
+        }
+    }
 }
 
 impl UError for JoinError {
     fn code(&self) -> i32 {
         1
-    }
-}
-
-impl Error for JoinError {}
-
-impl Display for JoinError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::IOError(e) => write!(f, "io error: {e}"),
-            Self::UnorderedInput(e) => f.write_str(e),
-        }
-    }
-}
-
-impl From<std::io::Error> for JoinError {
-    fn from(error: std::io::Error) -> Self {
-        Self::IOError(error)
     }
 }
 

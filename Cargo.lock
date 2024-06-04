@@ -2792,6 +2792,7 @@ version = "0.0.26"
 dependencies = [
  "clap",
  "memchr",
+ "quick-error",
  "uucore",
 ]
 
