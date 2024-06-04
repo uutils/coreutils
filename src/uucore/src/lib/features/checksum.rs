@@ -414,11 +414,63 @@ fn get_input_file(filename_input: &OsStr, input_is_stdin: bool) -> UResult<Box<d
     }
 }
 
+/// Extracts the algorithm name and length from the regex captures if the algo-based format is matched.
+fn get_algo_name_and_length(
+    caps: &regex::Captures,
+    is_algo_based_format: bool,
+    algo_name_input: Option<&str>,
+    length_input: Option<usize>,
+    res: &mut ChecksumResult,
+) -> (String, Option<usize>) {
+    if is_algo_based_format {
+        // When the algo-based format is matched, extract details from regex captures
+        let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
+
+        // check if we are called with XXXsum (example: md5sum) but we detected a different algo parsing the file
+        // (for example SHA1 (f) = d...)
+        // Also handle the case cksum -s sm3 but the file contains other formats
+        if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
+            res.bad_format += 1;
+            res.properly_formatted = false;
+            return (String::new(), None);
+        }
+
+        if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
+            // Not supported algo, leave early
+            res.properly_formatted = false;
+            return (String::new(), None);
+        }
+
+        let bits = caps.name("bits").map_or(Some(None), |m| {
+            let bits_value = m.as_str().parse::<usize>().unwrap();
+            if bits_value % 8 == 0 {
+                Some(Some(bits_value / 8))
+            } else {
+                res.properly_formatted = false;
+                None // Return None to signal a divisibility issue
+            }
+        });
+
+        if bits.is_none() {
+            // If bits is None, we have a parsing or divisibility issue
+            // Exit the loop outside of the closure
+            return (String::new(), None);
+        }
+
+        (algorithm, bits.unwrap())
+    } else if let Some(a) = algo_name_input {
+        // When a specific algorithm name is input, use it and use the provided bits
+        (a.to_lowercase(), length_input)
+    } else {
+        // Default case if no algorithm is specified and non-algo based format is matched
+        (String::new(), None)
+    }
+}
+
 /***
  * Do the checksum validation (can be strict or not)
 */
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::cognitive_complexity)]
 pub fn perform_checksum_validation<'a, I>(
     files: I,
     strict: bool,
@@ -465,58 +517,17 @@ where
                 }
 
                 let expected_checksum =
-                    get_expected_checksum(&filename_to_check, &caps, &chosen_regex)?;
+                    get_expected_checksum(filename_to_check, &caps, &chosen_regex)?;
 
                 // If the algo_name is provided, we use it, otherwise we try to detect it
-                let (algo_name, length) = if is_algo_based_format {
-                    // When the algo-based format is matched, extract details from regex captures
-                    let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
 
-                    // check if we are called with XXXsum (example: md5sum) but we detected a different algo parsing the file
-                    // (for example SHA1 (f) = d...)
-                    // Also handle the case cksum -s sm3 but the file contains other formats
-                    if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
-                        res.bad_format += 1;
-                        res.properly_formatted = false;
-                        continue;
-                    }
-
-                    if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
-                        // Not supported algo, leave early
-                        res.properly_formatted = false;
-                        continue;
-                    }
-
-                    let bits = caps.name("bits").map_or(Some(None), |m| {
-                        let bits_value = m.as_str().parse::<usize>().unwrap();
-                        if bits_value % 8 == 0 {
-                            Some(Some(bits_value / 8))
-                        } else {
-                            res.properly_formatted = false;
-                            None // Return None to signal a divisibility issue
-                        }
-                    });
-
-                    if bits.is_none() {
-                        // If bits is None, we have a parsing or divisibility issue
-                        // Exit the loop outside of the closure
-                        continue;
-                    }
-
-                    (algorithm, bits.unwrap())
-                } else if let Some(a) = algo_name_input {
-                    // When a specific algorithm name is input, use it and use the provided bits
-                    (a.to_lowercase(), length_input)
-                } else {
-                    // Default case if no algorithm is specified and non-algo based format is matched
-                    (String::new(), None)
-                };
-
-                if is_algo_based_format && algo_name_input.map_or(false, |input| algo_name != input)
-                {
-                    res.bad_format += 1;
-                    continue;
-                }
+                let (algo_name, length) = get_algo_name_and_length(
+                    &caps,
+                    is_algo_based_format,
+                    algo_name_input,
+                    length_input,
+                    &mut res,
+                );
 
                 if algo_name.is_empty() {
                     // we haven't been able to detect the algo name. No point to continue
