@@ -8,9 +8,7 @@ use data_encoding::BASE64;
 use os_display::Quotable;
 use regex::Regex;
 use std::{
-    error::Error,
     ffi::OsStr,
-    fmt::Display,
     fs::File,
     io::{self, BufReader, Read},
     path::Path,
@@ -70,79 +68,57 @@ pub struct HashAlgorithm {
     pub bits: usize,
 }
 
-#[derive(Debug)]
-pub enum ChecksumError {
-    RawMultipleFiles,
-    IgnoreNotCheck,
-    InvalidOutputSizeForSha3,
-    BitsRequiredForSha3,
-    BitsRequiredForShake128,
-    BitsRequiredForShake256,
-    UnknownAlgorithm,
-    InvalidLength,
-    LengthOnlyForBlake2b,
-    BinaryTextConflict,
-    AlgorithmNotSupportedWithCheck,
-    CombineMultipleAlgorithms,
-    NeedAlgorithmToHash,
-    NoProperlyFormattedChecksumLinesFound(String),
+quick_error! {
+    #[derive(Debug)]
+    pub enum ChecksumError {
+        RawMultipleFiles {
+            display("the --raw option is not supported with multiple files")
+        }
+        IgnoreNotCheck {
+            display("the --ignore-missing option is meaningful only when verifying checksums")
+        }
+        InvalidOutputSizeForSha3 {
+            display("Invalid output size for SHA3 (expected 224, 256, 384, or 512)")
+        }
+        BitsRequiredForSha3 {
+            display("--bits required for SHA3")
+        }
+        BitsRequiredForShake128 {
+            display("--bits required for SHAKE128")
+        }
+        BitsRequiredForShake256 {
+            display("--bits required for SHAKE256")
+        }
+        UnknownAlgorithm {
+            display("unknown algorithm: clap should have prevented this case")
+        }
+        InvalidLength {
+            display("length is not a multiple of 8")
+        }
+        LengthOnlyForBlake2b {
+            display("--length is only supported with --algorithm=blake2b")
+        }
+        BinaryTextConflict {
+            display("the --binary and --text options are meaningless when verifying checksums")
+        }
+        AlgorithmNotSupportedWithCheck {
+            display("--check is not supported with --algorithm={{bsd,sysv,crc}}")
+        }
+        CombineMultipleAlgorithms {
+            display("You cannot combine multiple hash algorithms!")
+        }
+        NeedAlgorithmToHash {
+            display("Needs an algorithm to hash with.\nUse --help for more information.")
+        }
+        NoProperlyFormattedChecksumLinesFound(filename: String) {
+            display("{filename}: no properly formatted checksum lines found")
+        }
+    }
 }
-
-impl Error for ChecksumError {}
 
 impl UError for ChecksumError {
     fn code(&self) -> i32 {
         1
-    }
-}
-
-impl Display for ChecksumError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::RawMultipleFiles => {
-                write!(f, "the --raw option is not supported with multiple files")
-            }
-            Self::IgnoreNotCheck => write!(
-                f,
-                "the --ignore-missing option is meaningful only when verifying checksums"
-            ),
-            Self::InvalidOutputSizeForSha3 => write!(
-                f,
-                "Invalid output size for SHA3 (expected 224, 256, 384, or 512)"
-            ),
-            Self::BitsRequiredForSha3 => write!(f, "--bits required for SHA3"),
-            Self::BitsRequiredForShake128 => write!(f, "--bits required for SHAKE128"),
-            Self::BitsRequiredForShake256 => write!(f, "--bits required for SHAKE256"),
-            Self::UnknownAlgorithm => {
-                write!(f, "unknown algorithm: clap should have prevented this case")
-            }
-            Self::InvalidLength => write!(f, "length is not a multiple of 8"),
-            Self::LengthOnlyForBlake2b => {
-                write!(f, "--length is only supported with --algorithm=blake2b")
-            }
-            Self::BinaryTextConflict => write!(
-                f,
-                "the --binary and --text options are meaningless when verifying checksums"
-            ),
-            Self::AlgorithmNotSupportedWithCheck => write!(
-                f,
-                "--check is not supported with --algorithm={{bsd,sysv,crc}}"
-            ),
-            Self::CombineMultipleAlgorithms => {
-                write!(f, "You cannot combine multiple hash algorithms!")
-            }
-            Self::NeedAlgorithmToHash => write!(
-                f,
-                "Needs an algorithm to hash with.\nUse --help for more information."
-            ),
-            Self::NoProperlyFormattedChecksumLinesFound(filename) => {
-                write!(
-                    f,
-                    "{}: no properly formatted checksum lines found",
-                    filename
-                )
-            }
-        }
     }
 }
 
