@@ -1332,7 +1332,7 @@ fn construct_dest_path(
     Ok(match target_type {
         TargetType::Directory => {
             let root = if options.parents {
-                if source_path.has_root() {
+                if source_path.has_root() && cfg!(unix) {
                     Path::new("/")
                 } else {
                     Path::new("")
@@ -1384,8 +1384,9 @@ fn copy_source(
         );
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
-                let src = x.canonicalize()?;
-                copy_attributes(&src, y, &options.attributes)?;
+                if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
+                    copy_attributes(&src, y, &options.attributes)?;
+                }
             }
         }
         res
@@ -2167,7 +2168,9 @@ fn copy_file(
     }
 
     if options.dereference(source_in_command_line) {
-        copy_attributes(&source.canonicalize()?, dest, &options.attributes)?;
+        if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
+            copy_attributes(&src, dest, &options.attributes)?;
+        }
     } else {
         copy_attributes(source, dest, &options.attributes)?;
     }

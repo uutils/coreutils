@@ -5576,6 +5576,7 @@ fn test_preserve_attrs_overriding_2() {
 
 /// Test the behavior of preserving permissions when copying through a symlink
 #[test]
+#[cfg(unix)]
 fn test_cp_symlink_permissions() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5597,6 +5598,7 @@ fn test_cp_symlink_permissions() {
 
 /// Test the behavior of preserving permissions of parents when copying through a symlink
 #[test]
+#[cfg(unix)]
 fn test_cp_parents_symlink_permissions_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5620,6 +5622,7 @@ fn test_cp_parents_symlink_permissions_file() {
 /// Test the behavior of preserving permissions of parents when copying through
 /// a symlink when source is a dir.
 #[test]
+#[cfg(unix)]
 fn test_cp_parents_symlink_permissions_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5640,6 +5643,7 @@ fn test_cp_parents_symlink_permissions_dir() {
 }
 
 /// Test the behavior of copying a file to a destination with parents using absolute paths.
+#[cfg(unix)]
 #[test]
 fn test_cp_parents_absolute_path() {
     let scene = TestScenario::new(util_name!());

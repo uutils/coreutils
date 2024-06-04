@@ -431,8 +431,9 @@ pub(crate) fn copy_directory(
         let dest = target.join(root.file_name().unwrap());
         copy_attributes(root, dest.as_path(), &options.attributes)?;
         for (x, y) in aligned_ancestors(root, dest.as_path()) {
-            let src = x.canonicalize()?;
-            copy_attributes(&src, y, &options.attributes)?;
+            if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
+                copy_attributes(&src, y, &options.attributes)?;
+            }
         }
     } else {
         copy_attributes(root, target, &options.attributes)?;
