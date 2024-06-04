@@ -554,6 +554,14 @@ fn test_blake2b_512() {
         .arg("checksum")
         .succeeds()
         .stdout_contains("f: OK");
+
+    scene
+        .ucmd()
+        .arg("--status")
+        .arg("--check")
+        .arg("checksum")
+        .succeeds()
+        .no_output();
 }
 
 #[test]
@@ -1049,15 +1057,21 @@ fn test_cksum_mixed() {
         let result = scene.ucmd().args(command).arg("f").succeeds();
         at.append("CHECKSUM", result.stdout_str());
     }
-    scene
+    println!("Content of CHECKSUM:\n{}", at.read("CHECKSUM"));
+    let result = scene
         .ucmd()
         .arg("--check")
         .arg("-a")
         .arg("sm3")
         .arg("CHECKSUM")
-        .succeeds()
-        .stdout_contains("f: OK")
-        .stderr_contains("3 lines are improperly formatted");
+        .succeeds();
+
+    println!("result.stderr_str() {}", result.stderr_str());
+    println!("result.stdout_str() {}", result.stdout_str());
+    assert!(result.stdout_str().contains("f: OK"));
+    assert!(result
+        .stderr_str()
+        .contains("3 lines are improperly formatted"));
 }
 
 #[test]
@@ -1167,4 +1181,23 @@ fn test_unknown_sha() {
         .arg("f")
         .fails()
         .stderr_contains("f: no properly formatted checksum lines found");
+}
+
+#[test]
+fn test_check_directory_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("d");
+    at.write(
+        "f",
+        "BLAKE2b (d) = 786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce\n"
+    );
+    #[cfg(not(windows))]
+    let err_msg = "cksum: d: Is a directory\n";
+    #[cfg(windows)]
+    let err_msg = "cksum: d: Permission denied\n";
+    ucmd.arg("--check")
+        .arg(at.subdir.join("f"))
+        .fails()
+        .stderr_contains(err_msg);
 }
