@@ -10,10 +10,10 @@ mod mode;
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
-use std::error::Error;
-use std::fmt::{Debug, Display};
+use quick_error::quick_error;
 use std::fs;
 use std::fs::File;
+use std::io;
 use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::prelude::OsStrExt;
@@ -22,12 +22,12 @@ use std::process;
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UIoError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 use uucore::process::{getegid, geteuid};
-use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err, uio_error};
+use uucore::{format_usage, help_about, help_usage, show, show_error, show_if_err};
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -49,23 +49,55 @@ pub struct Behavior {
     target_dir: Option<String>,
 }
 
-#[derive(Debug)]
-enum InstallError {
-    Unimplemented(String),
-    DirNeedsArg(),
-    CreateDirFailed(PathBuf, std::io::Error),
-    ChmodFailed(PathBuf),
-    ChownFailed(PathBuf, String),
-    InvalidTarget(PathBuf),
-    TargetDirIsntDir(PathBuf),
-    BackupFailed(PathBuf, PathBuf, std::io::Error),
-    InstallFailed(PathBuf, PathBuf, std::io::Error),
-    StripProgramFailed(String),
-    MetadataFailed(std::io::Error),
-    InvalidUser(String),
-    InvalidGroup(String),
-    OmittingDirectory(PathBuf),
-    NotADirectory(PathBuf),
+quick_error! {
+    #[derive(Debug)]
+    pub enum InstallError {
+        Unimplemented(opt: String) {
+            display("Unimplemented feature: {}", opt)
+        }
+        DirNeedsArg {
+            display("{} with -d requires at least one argument.", uucore::util_name())
+        }
+        CreateDirFailed(dir: PathBuf, err: io::Error) {
+            display("failed to create {}: {}", dir.quote(), err)
+        }
+        ChmodFailed(file: PathBuf) {
+            display("failed to chmod {}", file.quote())
+        }
+        ChownFailed(file: PathBuf, msg: String) {
+            display("failed to chown {}: {}", file.quote(), msg)
+        }
+        InvalidTarget(target: PathBuf) {
+            display("invalid target {}: No such file or directory", target.quote())
+        }
+        TargetDirIsntDir(target: PathBuf) {
+            display("target {} is not a directory", target.quote())
+        }
+        BackupFailed(from: PathBuf, to: PathBuf, err: io::Error) {
+            display("cannot backup {} to {}: {}", from.quote(), to.quote(), err)
+        }
+        InstallFailed(from: PathBuf, to: PathBuf, err: io::Error) {
+            display("cannot install {} to {}: {}", from.quote(), to.quote(), err)
+        }
+        StripProgramFailed(msg: String) {
+            display("strip program failed: {}", msg)
+        }
+        MetadataFailed(err: io::Error) {
+            display("{}", err)
+        }
+        InvalidUser(user: String) {
+            display("invalid user: {}", user.quote())
+        }
+        InvalidGroup(group: String) {
+            display("invalid group: {}", group.quote())
+        }
+        OmittingDirectory(dir: PathBuf) {
+            display("omitting directory {}", dir.quote())
+        }
+        NotADirectory(dir: PathBuf) {
+            display("failed to access {}: Not a directory", dir.quote())
+        }
+    }
 }
 
 impl UError for InstallError {
@@ -80,53 +112,6 @@ impl UError for InstallError {
         false
     }
 }
-
-impl Error for InstallError {}
-
-impl Display for InstallError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Unimplemented(opt) => write!(f, "Unimplemented feature: {opt}"),
-            Self::DirNeedsArg() => {
-                write!(
-                    f,
-                    "{} with -d requires at least one argument.",
-                    uucore::util_name()
-                )
-            }
-            Self::CreateDirFailed(dir, e) => {
-                Display::fmt(&uio_error!(e, "failed to create {}", dir.quote()), f)
-            }
-            Self::ChmodFailed(file) => write!(f, "failed to chmod {}", file.quote()),
-            Self::ChownFailed(file, msg) => write!(f, "failed to chown {}: {}", file.quote(), msg),
-            Self::InvalidTarget(target) => write!(
-                f,
-                "invalid target {}: No such file or directory",
-                target.quote()
-            ),
-            Self::TargetDirIsntDir(target) => {
-                write!(f, "target {} is not a directory", target.quote())
-            }
-            Self::BackupFailed(from, to, e) => Display::fmt(
-                &uio_error!(e, "cannot backup {} to {}", from.quote(), to.quote()),
-                f,
-            ),
-            Self::InstallFailed(from, to, e) => Display::fmt(
-                &uio_error!(e, "cannot install {} to {}", from.quote(), to.quote()),
-                f,
-            ),
-            Self::StripProgramFailed(msg) => write!(f, "strip program failed: {msg}"),
-            Self::MetadataFailed(e) => Display::fmt(&uio_error!(e, ""), f),
-            Self::InvalidUser(user) => write!(f, "invalid user: {}", user.quote()),
-            Self::InvalidGroup(group) => write!(f, "invalid group: {}", group.quote()),
-            Self::OmittingDirectory(dir) => write!(f, "omitting directory {}", dir.quote()),
-            Self::NotADirectory(dir) => {
-                write!(f, "failed to access {}: Not a directory", dir.quote())
-            }
-        }
-    }
-}
-
 #[derive(Clone, Eq, PartialEq)]
 pub enum MainFunction {
     /// Create directories
@@ -453,7 +438,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 ///
 fn directory(paths: &[String], b: &Behavior) -> UResult<()> {
     if paths.is_empty() {
-        Err(InstallError::DirNeedsArg().into())
+        Err(InstallError::DirNeedsArg.into())
     } else {
         for path in paths.iter().map(Path::new) {
             // if the path already exist, don't try to create it again

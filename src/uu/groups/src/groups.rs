@@ -12,7 +12,6 @@
 
 // spell-checker:ignore (ToDO) passwd
 
-
 use quick_error::quick_error;
 use uucore::{
     display::Quotable,

@@ -2784,6 +2784,7 @@ dependencies = [
  "file_diff",
  "filetime",
  "libc",
+ "quick-error",
  "uucore",
 ]
 

@@ -19,6 +19,7 @@ clap = { workspace = true }
 filetime = { workspace = true }
 file_diff = { workspace = true }
 libc = { workspace = true }
+quick-error = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
   "fs",
