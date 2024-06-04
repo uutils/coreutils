@@ -18,6 +18,7 @@ path = "src/unexpand.rs"
 clap = { workspace = true }
 unicode-width = { workspace = true }
 uucore = { workspace = true }
+quick-error = { workspace = true }
 
 [[bin]]
 name = "unexpand"
