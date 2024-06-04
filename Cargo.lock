@@ -2881,6 +2881,7 @@ name = "uu_mktemp"
 version = "0.0.26"
 dependencies = [
  "clap",
+ "quick-error",
  "rand",
  "tempfile",
  "uucore",
