@@ -2906,6 +2906,7 @@ dependencies = [
  "clap",
  "fs_extra",
  "indicatif",
+ "quick-error",
  "uucore",
 ]
 
