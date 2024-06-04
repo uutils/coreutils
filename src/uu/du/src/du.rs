@@ -6,10 +6,9 @@
 use chrono::{DateTime, Local};
 use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, ArgMatches, Command};
 use glob::Pattern;
+use quick_error::quick_error;
 use std::collections::HashSet;
 use std::env;
-use std::error::Error;
-use std::fmt::Display;
 #[cfg(not(windows))]
 use std::fs::Metadata;
 use std::fs::{self, File};
@@ -395,47 +394,27 @@ fn du(
     Ok(my_stat)
 }
 
-#[derive(Debug)]
-enum DuError {
-    InvalidMaxDepthArg(String),
-    SummarizeDepthConflict(String),
-    InvalidTimeStyleArg(String),
-    InvalidTimeArg,
-    InvalidGlob(String),
-}
-
-impl Display for DuError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidMaxDepthArg(s) => write!(f, "invalid maximum depth {}", s.quote()),
-            Self::SummarizeDepthConflict(s) => {
-                write!(
-                    f,
-                    "summarizing conflicts with --max-depth={}",
-                    s.maybe_quote()
-                )
-            }
-            Self::InvalidTimeStyleArg(s) => write!(
-                f,
-                "invalid argument {} for 'time style'
-Valid arguments are:
-- 'full-iso'
-- 'long-iso'
-- 'iso'
-Try '{} --help' for more information.",
-                s.quote(),
-                uucore::execution_phrase()
-            ),
-            Self::InvalidTimeArg => write!(
-                f,
-                "'birth' and 'creation' arguments for --time are not supported on this platform.",
-            ),
-            Self::InvalidGlob(s) => write!(f, "Invalid exclude syntax: {s}"),
+quick_error! {
+    #[derive(Debug)]
+    pub enum DuError {
+        InvalidMaxDepthArg(s: String) {
+            display("invalid maximum depth {}", s.quote())
+        }
+        SummarizeDepthConflict(s: String) {
+            display("summarizing conflicts with --max-depth={}", s.maybe_quote())
+        }
+        InvalidTimeStyleArg(s: String) {
+            display("invalid argument {} for 'time style'\nValid arguments are:\n- 'full-iso'\n- 'long-iso'\n- 'iso'\nTry '{} --help' for more information.",
+                    s.quote(), uucore::execution_phrase())
+        }
+        InvalidTimeArg {
+            display("'birth' and 'creation' arguments for --time are not supported on this platform.")
+        }
+        InvalidGlob(s: String) {
+            display("Invalid exclude syntax: {}", s)
         }
     }
 }
-
-impl Error for DuError {}
 
 impl UError for DuError {
     fn code(&self) -> i32 {

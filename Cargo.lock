@@ -2636,6 +2636,7 @@ dependencies = [
  "chrono",
  "clap",
  "glob",
+ "quick-error",
  "uucore",
  "windows-sys 0.48.0",
 ]
