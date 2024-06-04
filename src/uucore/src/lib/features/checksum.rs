@@ -360,6 +360,42 @@ fn get_expected_checksum(
     }
 }
 
+/// Returns a reader that reads from the specified file, or from stdin if `input_is_stdin` is true.
+fn get_file_to_check(
+    filename_to_check: &str,
+    filename_to_check_unescaped: &str,
+    ignore_missing: bool,
+    res: &mut ChecksumResult,
+) -> Option<Box<dyn Read>> {
+    if filename_to_check == "-" {
+        Some(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
+    } else {
+        match File::open(filename_to_check_unescaped) {
+            Ok(f) => {
+                if f.metadata().ok()?.is_dir() {
+                    show!(USimpleError::new(
+                        1,
+                        format!("{}: Is a directory", filename_to_check_unescaped)
+                    ));
+                    None
+                } else {
+                    Some(Box::new(f))
+                }
+            }
+            Err(err) => {
+                if !ignore_missing {
+                    // yes, we have both stderr and stdout here
+                    show!(err.map_err_context(|| filename_to_check.to_string()));
+                    println!("{}: FAILED open or read", filename_to_check);
+                }
+                res.failed_open_file += 1;
+                // we could not open the file but we want to continue
+                None
+            }
+        }
+    }
+}
+
 fn get_input_file(filename_input: &OsStr, input_is_stdin: bool) -> UResult<Box<dyn Read>> {
     if input_is_stdin {
         Ok(Box::new(stdin())) // Use stdin if "-" is specified
@@ -492,32 +528,15 @@ where
                 let (filename_to_check_unescaped, prefix) = unescape_filename(filename_to_check);
 
                 // manage the input file
-                let file_to_check: Box<dyn Read> = if filename_to_check == "-" {
-                    Box::new(stdin()) // Use stdin if "-" is specified in the checksum file
-                } else {
-                    match File::open(&filename_to_check_unescaped) {
-                        Ok(f) => {
-                            if f.metadata()?.is_dir() {
-                                show!(USimpleError::new(
-                                    1,
-                                    format!("{}: Is a directory", filename_to_check_unescaped)
-                                ));
-                                continue;
-                            }
-                            Box::new(f)
-                        }
-                        Err(err) => {
-                            if !ignore_missing {
-                                // yes, we have both stderr and stdout here
-                                show!(err.map_err_context(|| filename_to_check.to_string()));
-                                println!("{}: FAILED open or read", filename_to_check);
-                            }
-                            res.failed_open_file += 1;
-                            // we could not open the file but we want to continue
 
-                            continue;
-                        }
-                    }
+                let file_to_check = match get_file_to_check(
+                    filename_to_check,
+                    &filename_to_check_unescaped,
+                    ignore_missing,
+                    &mut res,
+                ) {
+                    Some(file) => file,
+                    None => continue,
                 };
 
                 let mut file_reader = BufReader::new(file_to_check);
