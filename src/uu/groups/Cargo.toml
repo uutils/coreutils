@@ -17,6 +17,7 @@ path = "src/groups.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }
+quick-error = { workspace = true }
 
 [[bin]]
 name = "groups"
