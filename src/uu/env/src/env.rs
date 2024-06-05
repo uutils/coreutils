@@ -384,7 +384,6 @@ impl EnvAppData {
     ) -> Result<(Vec<OsString>, clap::ArgMatches), Box<dyn UError>> {
         let original_args: Vec<OsString> = original_args.collect();
         let args = self.process_all_string_arguments(&original_args)?;
-        println!("args: {:?}", args);
         let app = uu_app();
         let matches = app
             .try_get_matches_from(args)
@@ -409,20 +408,6 @@ impl EnvAppData {
 
     fn run_env(&mut self, original_args: impl uucore::Args) -> UResult<()> {
         let (original_args, matches) = self.parse_arguments(original_args)?;
-        println!("matches: {:?}", matches);
-
-        // clap automatically removes '=' from the beginning of the argument, so we need to check for it
-        for arg in &original_args {
-            let arg = arg.to_string_lossy();
-            let prefix = "-u=";
-            if arg.starts_with(prefix) {
-                let invalid_arg = &arg[(prefix.len() - 1)..];
-                return Err(UUsageError::new(
-                    125,
-                    format!("cannot unset '{}': Invalid argument", invalid_arg),
-                ));
-            }
-        }
 
         self.do_debug_printing = self.do_debug_printing || (0 != matches.get_count("debug"));
         self.do_input_debug_printing = self
