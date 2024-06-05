@@ -33,6 +33,7 @@ pub enum BadSequence {
     CharRepeatInSet1,
     InvalidRepeatCount(String),
     EmptySet2WhenNotTruncatingSet1,
+    ClassExceptLowerUpperInSet2,
 }
 
 impl Display for BadSequence {
@@ -54,6 +55,9 @@ impl Display for BadSequence {
             Self::EmptySet2WhenNotTruncatingSet1 => {
                 write!(f, "when not truncating set1, string2 must be non-empty")
             }
+            Self::ClassExceptLowerUpperInSet2 => {
+                write!(f, "when translating, the only character classes that may appear in set2 are 'upper' and 'lower'")
+            }
         }
     }
 }
@@ -62,11 +66,7 @@ impl Error for BadSequence {}
 impl UError for BadSequence {}
 
 #[derive(Debug, Clone, Copy)]
-pub enum Sequence {
-    Char(u8),
-    CharRange(u8, u8),
-    CharStar(u8),
-    CharRepeat(u8, usize),
+pub enum Class {
     Alnum,
     Alpha,
     Blank,
@@ -81,6 +81,15 @@ pub enum Sequence {
     Xdigit,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Sequence {
+    Char(u8),
+    CharRange(u8, u8),
+    CharStar(u8),
+    CharRepeat(u8, usize),
+    Class(Class),
+}
+
 impl Sequence {
     pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
         match self {
@@ -88,37 +97,39 @@ impl Sequence {
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
-            Self::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
-            Self::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
-            Self::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
-            Self::Control => Box::new((0..=31).chain(std::iter::once(127))),
-            Self::Digit => Box::new(b'0'..=b'9'),
-            Self::Graph => Box::new(
-                (48..=57) // digit
-                    .chain(65..=90) // uppercase
-                    .chain(97..=122) // lowercase
-                    // punctuations
-                    .chain(33..=47)
-                    .chain(58..=64)
-                    .chain(91..=96)
-                    .chain(123..=126)
-                    .chain(std::iter::once(32)), // space
-            ),
-            Self::Lower => Box::new(b'a'..=b'z'),
-            Self::Print => Box::new(
-                (48..=57) // digit
-                    .chain(65..=90) // uppercase
-                    .chain(97..=122) // lowercase
-                    // punctuations
-                    .chain(33..=47)
-                    .chain(58..=64)
-                    .chain(91..=96)
-                    .chain(123..=126),
-            ),
-            Self::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
-            Self::Space => Box::new(unicode_table::SPACES.iter().cloned()),
-            Self::Upper => Box::new(b'A'..=b'Z'),
-            Self::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
+            Self::Class(class) => match class {
+                Class::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
+                Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
+                Class::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
+                Class::Control => Box::new((0..=31).chain(std::iter::once(127))),
+                Class::Digit => Box::new(b'0'..=b'9'),
+                Class::Graph => Box::new(
+                    (48..=57) // digit
+                        .chain(65..=90) // uppercase
+                        .chain(97..=122) // lowercase
+                        // punctuations
+                        .chain(33..=47)
+                        .chain(58..=64)
+                        .chain(91..=96)
+                        .chain(123..=126)
+                        .chain(std::iter::once(32)), // space
+                ),
+                Class::Lower => Box::new(b'a'..=b'z'),
+                Class::Print => Box::new(
+                    (48..=57) // digit
+                        .chain(65..=90) // uppercase
+                        .chain(97..=122) // lowercase
+                        // punctuations
+                        .chain(33..=47)
+                        .chain(58..=64)
+                        .chain(91..=96)
+                        .chain(123..=126),
+                ),
+                Class::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
+                Class::Space => Box::new(unicode_table::SPACES.iter().cloned()),
+                Class::Upper => Box::new(b'A'..=b'Z'),
+                Class::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
+            },
         }
     }
 
@@ -128,13 +139,23 @@ impl Sequence {
         set2_str: &[u8],
         complement_flag: bool,
         truncate_set1_flag: bool,
+        translating: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
         let set1 = Self::from_str(set1_str)?;
-
         let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
         let set1_star_count = set1.iter().filter(is_char_star).count();
         if set1_star_count == 0 {
             let set2 = Self::from_str(set2_str)?;
+
+            if translating
+                && set2.iter().any(|&x| {
+                    matches!(x, Self::Class(_))
+                        && !matches!(x, Self::Class(Class::Upper) | Self::Class(Class::Lower))
+                })
+            {
+                return Err(BadSequence::ClassExceptLowerUpperInSet2);
+            }
+
             let set2_star_count = set2.iter().filter(is_char_star).count();
             if set2_star_count < 2 {
                 let char_star = set2.iter().find_map(|s| match s {
@@ -305,18 +326,18 @@ impl Sequence {
             alt((
                 map(
                     alt((
-                        value(Self::Alnum, tag("alnum")),
-                        value(Self::Alpha, tag("alpha")),
-                        value(Self::Blank, tag("blank")),
-                        value(Self::Control, tag("cntrl")),
-                        value(Self::Digit, tag("digit")),
-                        value(Self::Graph, tag("graph")),
-                        value(Self::Lower, tag("lower")),
-                        value(Self::Print, tag("print")),
-                        value(Self::Punct, tag("punct")),
-                        value(Self::Space, tag("space")),
-                        value(Self::Upper, tag("upper")),
-                        value(Self::Xdigit, tag("xdigit")),
+                        value(Self::Class(Class::Alnum), tag("alnum")),
+                        value(Self::Class(Class::Alpha), tag("alpha")),
+                        value(Self::Class(Class::Blank), tag("blank")),
+                        value(Self::Class(Class::Control), tag("cntrl")),
+                        value(Self::Class(Class::Digit), tag("digit")),
+                        value(Self::Class(Class::Graph), tag("graph")),
+                        value(Self::Class(Class::Lower), tag("lower")),
+                        value(Self::Class(Class::Print), tag("print")),
+                        value(Self::Class(Class::Punct), tag("punct")),
+                        value(Self::Class(Class::Space), tag("space")),
+                        value(Self::Class(Class::Upper), tag("upper")),
+                        value(Self::Class(Class::Xdigit), tag("xdigit")),
                     )),
                     Ok,
                 ),

@@ -446,7 +446,7 @@ fn test_files_from_pseudo_filesystem() {
         let actual = at.read("/sys/kernel/profiling").len();
         assert_eq!(
             result.stdout_str(),
-            format!("{} /sys/kernel/profiling\n", actual)
+            format!("{actual} /sys/kernel/profiling\n")
         );
     }
 }

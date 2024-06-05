@@ -5502,3 +5502,74 @@ fn test_dir_perm_race_with_preserve_mode_and_ownership() {
         child.wait().unwrap().succeeded();
     }
 }
+
+#[test]
+// when -d and -a are overridden with --preserve or --no-preserve make sure that it only
+// overrides attributes not other flags like -r or --no_deref implied in -a and -d.
+fn test_preserve_attrs_overriding_1() {
+    const FILE: &str = "file";
+    const SYMLINK: &str = "symlink";
+    const DEST: &str = "dest";
+    for f in ["-d", "-a"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.make_file(FILE);
+        at.symlink_file(FILE, SYMLINK);
+        scene
+            .ucmd()
+            .args(&[f, "--no-preserve=all", SYMLINK, DEST])
+            .succeeds();
+        at.symlink_exists(DEST);
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_preserve_attrs_overriding_2() {
+    const FILE1: &str = "file1";
+    const FILE2: &str = "file2";
+    const FOLDER: &str = "folder";
+    const DEST: &str = "dest";
+    for mut args in [
+        // All of the following to args should tell cp to preserve mode and
+        // timestamp, but not the link.
+        vec!["-r", "--preserve=mode,link,timestamp", "--no-preserve=link"],
+        vec![
+            "-r",
+            "--preserve=mode",
+            "--preserve=link",
+            "--preserve=timestamp",
+            "--no-preserve=link",
+        ],
+        vec![
+            "-r",
+            "--preserve=mode,link",
+            "--no-preserve=link",
+            "--preserve=timestamp",
+        ],
+        vec!["-a", "--no-preserve=link"],
+        vec!["-r", "--preserve", "--no-preserve=link"],
+    ] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.mkdir(FOLDER);
+        at.make_file(&format!("{}/{}", FOLDER, FILE1));
+        at.set_mode(&format!("{}/{}", FOLDER, FILE1), 0o775);
+        at.hard_link(
+            &format!("{}/{}", FOLDER, FILE1),
+            &format!("{}/{}", FOLDER, FILE2),
+        );
+        args.append(&mut vec![FOLDER, DEST]);
+        let src_file1_metadata = at.metadata(&format!("{}/{}", FOLDER, FILE1));
+        scene.ucmd().args(&args).succeeds();
+        at.dir_exists(DEST);
+        let dest_file1_metadata = at.metadata(&format!("{}/{}", DEST, FILE1));
+        let dest_file2_metadata = at.metadata(&format!("{}/{}", DEST, FILE2));
+        assert_eq!(
+            src_file1_metadata.modified().unwrap(),
+            dest_file1_metadata.modified().unwrap()
+        );
+        assert_eq!(src_file1_metadata.mode(), dest_file1_metadata.mode());
+        assert_ne!(dest_file1_metadata.ino(), dest_file2_metadata.ino());
+    }
+}

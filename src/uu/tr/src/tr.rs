@@ -120,6 +120,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         complement_flag,
         // if we are not translating then we don't truncate set1
         truncate_set1_flag && translating,
+        translating,
     )?;
 
     // '*_op' are the operations that need to be applied, in order.

@@ -114,15 +114,10 @@ fn util_invalid_name_help() {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stderr, b"");
     let output_str = String::from_utf8(output.stdout).unwrap();
-    assert!(
-        output_str.contains("(multi-call binary)"),
-        "{:?}",
-        output_str
-    );
+    assert!(output_str.contains("(multi-call binary)"), "{output_str:?}");
     assert!(
         output_str.contains("Usage: invalid_name [function "),
-        "{:?}",
-        output_str
+        "{output_str:?}"
     );
 }
 
@@ -155,15 +150,10 @@ fn util_non_utf8_name_help() {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stderr, b"");
     let output_str = String::from_utf8(output.stdout).unwrap();
-    assert!(
-        output_str.contains("(multi-call binary)"),
-        "{:?}",
-        output_str
-    );
+    assert!(output_str.contains("(multi-call binary)"), "{output_str:?}");
     assert!(
         output_str.contains("Usage: <unknown binary name> [function "),
-        "{:?}",
-        output_str
+        "{output_str:?}"
     );
 }
 
@@ -217,8 +207,7 @@ fn util_completion() {
     let output_str = String::from_utf8(output.stdout).unwrap();
     assert!(
         output_str.contains("using namespace System.Management.Automation"),
-        "{:?}",
-        output_str
+        "{output_str:?}"
     );
 }
 
@@ -243,5 +232,5 @@ fn util_manpage() {
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(output.stderr, b"");
     let output_str = String::from_utf8(output.stdout).unwrap();
-    assert!(output_str.contains("\n.TH true 1 "), "{:?}", output_str);
+    assert!(output_str.contains("\n.TH true 1 "), "{output_str:?}");
 }

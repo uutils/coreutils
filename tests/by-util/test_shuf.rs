@@ -93,7 +93,7 @@ fn test_very_large_range() {
     let num_samples = 10;
     let result = new_ucmd!()
         .arg("-n")
-        .arg(&num_samples.to_string())
+        .arg(num_samples.to_string())
         .arg("-i0-1234567890")
         .succeeds();
     result.no_stderr();
@@ -117,7 +117,7 @@ fn test_very_large_range_offset() {
     let num_samples = 10;
     let result = new_ucmd!()
         .arg("-n")
-        .arg(&num_samples.to_string())
+        .arg(num_samples.to_string())
         .arg("-i1234567890-2147483647")
         .succeeds();
     result.no_stderr();
@@ -140,7 +140,7 @@ fn test_very_large_range_offset() {
 
 #[test]
 fn test_range_repeat_no_overflow_1_max() {
-    let upper_bound = std::usize::MAX;
+    let upper_bound = usize::MAX;
     let result = new_ucmd!()
         .arg("-rn1")
         .arg(&format!("-i1-{upper_bound}"))
@@ -255,7 +255,7 @@ fn test_range_repeat() {
     let result = new_ucmd!()
         .arg("-r")
         .arg("-n")
-        .arg(&num_samples.to_string())
+        .arg(num_samples.to_string())
         .arg("-i12-34")
         .succeeds();
     result.no_stderr();
@@ -472,9 +472,9 @@ fn test_head_count_multi_big_then_small() {
 
     let result = new_ucmd!()
         .arg("-n")
-        .arg(&(repeat_limit + 1).to_string())
+        .arg((repeat_limit + 1).to_string())
         .arg("-n")
-        .arg(&repeat_limit.to_string())
+        .arg(repeat_limit.to_string())
         .pipe_in(input.as_bytes())
         .succeeds();
     result.no_stderr();
@@ -505,9 +505,9 @@ fn test_head_count_multi_small_then_big() {
 
     let result = new_ucmd!()
         .arg("-n")
-        .arg(&repeat_limit.to_string())
+        .arg(repeat_limit.to_string())
         .arg("-n")
-        .arg(&(repeat_limit + 1).to_string())
+        .arg((repeat_limit + 1).to_string())
         .pipe_in(input.as_bytes())
         .succeeds();
     result.no_stderr();

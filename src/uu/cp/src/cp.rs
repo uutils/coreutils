@@ -7,7 +7,6 @@
 use quick_error::quick_error;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::fs::{self, File, Metadata, OpenOptions, Permissions};
@@ -170,7 +169,7 @@ pub enum CopyMode {
 /// For full compatibility with GNU, these options should also combine. We
 /// currently only do a best effort imitation of that behavior, because it is
 /// difficult to achieve in clap, especially with `--no-preserve`.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Attributes {
     #[cfg(unix)]
     pub ownership: Preserve,
@@ -406,6 +405,11 @@ static PRESERVABLE_ATTRIBUTES: &[&str] = &[
 static PRESERVABLE_ATTRIBUTES: &[&str] =
     &["mode", "timestamps", "context", "links", "xattr", "all"];
 
+const PRESERVE_DEFAULT_VALUES: &str = if cfg!(unix) {
+    "mode,ownership,timestamp"
+} else {
+    "mode,timestamp"
+};
 pub fn uu_app() -> Command {
     const MODE_ARGS: &[&str] = &[
         options::LINK,
@@ -556,11 +560,7 @@ pub fn uu_app() -> Command {
                 .num_args(0..)
                 .require_equals(true)
                 .value_name("ATTR_LIST")
-                .overrides_with_all([
-                    options::ARCHIVE,
-                    options::PRESERVE_DEFAULT_ATTRIBUTES,
-                    options::NO_PRESERVE,
-                ])
+                .default_missing_value(PRESERVE_DEFAULT_VALUES)
                 // -d sets this option
                 // --archive sets this option
                 .help(
@@ -572,19 +572,18 @@ pub fn uu_app() -> Command {
             Arg::new(options::PRESERVE_DEFAULT_ATTRIBUTES)
                 .short('p')
                 .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
-                .overrides_with_all([options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
                 .help("same as --preserve=mode,ownership(unix only),timestamps")
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_PRESERVE)
                 .long(options::NO_PRESERVE)
+                .action(ArgAction::Append)
+                .use_value_delimiter(true)
+                .value_parser(ShortcutValueParser::new(PRESERVABLE_ATTRIBUTES))
+                .num_args(0..)
+                .require_equals(true)
                 .value_name("ATTR_LIST")
-                .overrides_with_all([
-                    options::PRESERVE_DEFAULT_ATTRIBUTES,
-                    options::PRESERVE,
-                    options::ARCHIVE,
-                ])
                 .help("don't preserve the specified attributes"),
         )
         .arg(
@@ -621,11 +620,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::ARCHIVE)
                 .short('a')
                 .long(options::ARCHIVE)
-                .overrides_with_all([
-                    options::PRESERVE_DEFAULT_ATTRIBUTES,
-                    options::PRESERVE,
-                    options::NO_PRESERVE,
-                ])
                 .help("Same as -dR --preserve=all")
                 .action(ArgAction::SetTrue),
         )
@@ -839,6 +833,27 @@ impl Attributes {
         }
     }
 
+    /// Set the field to Preserve::NO { explicit: true } if the corresponding field
+    /// in other is set to Preserve::Yes { .. }.
+    pub fn diff(self, other: &Self) -> Self {
+        fn update_preserve_field(current: Preserve, other: Preserve) -> Preserve {
+            if matches!(other, Preserve::Yes { .. }) {
+                Preserve::No { explicit: true }
+            } else {
+                current
+            }
+        }
+        Self {
+            #[cfg(unix)]
+            ownership: update_preserve_field(self.ownership, other.ownership),
+            mode: update_preserve_field(self.mode, other.mode),
+            timestamps: update_preserve_field(self.timestamps, other.timestamps),
+            context: update_preserve_field(self.context, other.context),
+            links: update_preserve_field(self.links, other.links),
+            xattr: update_preserve_field(self.xattr, other.xattr),
+        }
+    }
+
     pub fn parse_iter<T>(values: impl Iterator<Item = T>) -> Result<Self, Error>
     where
         T: AsRef<str>,
@@ -926,34 +941,85 @@ impl Options {
             }
         };
 
-        // Parse attributes to preserve
-        let mut attributes =
-            if let Some(attribute_strs) = matches.get_many::<String>(options::PRESERVE) {
-                if attribute_strs.len() == 0 {
-                    Attributes::DEFAULT
-                } else {
-                    Attributes::parse_iter(attribute_strs)?
+        // cp follows POSIX conventions for overriding options such as "-a",
+        // "-d", "--preserve", and "--no-preserve". We can use clap's
+        // override-all behavior to achieve this, but there's a challenge: when
+        // clap overrides an argument, it removes all traces of it from the
+        // match. This poses a problem because flags like "-a" expand to "-dR
+        // --preserve=all", and we only want to override the "--preserve=all"
+        // part. Additionally, we need to handle multiple occurrences of the
+        // same flags. To address this, we create an overriding order from the
+        // matches here.
+        let mut overriding_order: Vec<(usize, &str, Vec<&String>)> = vec![];
+        // We iterate through each overriding option, adding each occurrence of
+        // the option along with its value and index as a tuple, and push it to
+        // `overriding_order`.
+        for option in [
+            options::PRESERVE,
+            options::NO_PRESERVE,
+            options::ARCHIVE,
+            options::PRESERVE_DEFAULT_ATTRIBUTES,
+            options::NO_DEREFERENCE_PRESERVE_LINKS,
+        ] {
+            if let (Ok(Some(val)), Some(index)) = (
+                matches.try_get_one::<bool>(option),
+                // even though it says in the doc that `index_of` would give us
+                // the first index of the argument, when it comes to flag it
+                // gives us the last index where the flag appeared (probably
+                // because it overrides itself). Since it is a flag and it would
+                // have same value across the occurrences we just need the last
+                // index.
+                matches.index_of(option),
+            ) {
+                if *val {
+                    overriding_order.push((index, option, vec![]));
                 }
-            } else if matches.get_flag(options::ARCHIVE) {
-                // --archive is used. Same as --preserve=all
-                Attributes::ALL
-            } else if matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS) {
-                Attributes::LINKS
-            } else if matches.get_flag(options::PRESERVE_DEFAULT_ATTRIBUTES) {
-                Attributes::DEFAULT
-            } else {
-                Attributes::NONE
-            };
+            } else if let (Some(occurrences), Some(mut indices)) = (
+                matches.get_occurrences::<String>(option),
+                matches.indices_of(option),
+            ) {
+                occurrences.for_each(|val| {
+                    if let Some(index) = indices.next() {
+                        let val = val.collect::<Vec<&String>>();
+                        // As mentioned in the documentation of the indices_of
+                        // function, it provides the indices of the individual
+                        // values. Therefore, to get the index of the first
+                        // value of the next occurrence in the next iteration,
+                        // we need to advance the indices iterator by the length
+                        // of the current occurrence's values.
+                        for _ in 1..val.len() {
+                            indices.next();
+                        }
+                        overriding_order.push((index, option, val));
+                    }
+                });
+            }
+        }
+        overriding_order.sort_by(|a, b| a.0.cmp(&b.0));
 
-        // handling no-preserve options and adjusting the attributes
-        if let Some(attribute_strs) = matches.get_many::<String>(options::NO_PRESERVE) {
-            if attribute_strs.len() > 0 {
-                let no_preserve_attributes = Attributes::parse_iter(attribute_strs)?;
-                if matches!(no_preserve_attributes.links, Preserve::Yes { .. }) {
-                    attributes.links = Preserve::No { explicit: true };
-                } else if matches!(no_preserve_attributes.mode, Preserve::Yes { .. }) {
-                    attributes.mode = Preserve::No { explicit: true };
+        let mut attributes = Attributes::NONE;
+
+        // Iterate through the `overriding_order` and adjust the attributes accordingly.
+        for (_, option, val) in overriding_order {
+            match option {
+                options::ARCHIVE => {
+                    attributes = Attributes::ALL;
                 }
+                options::PRESERVE_DEFAULT_ATTRIBUTES => {
+                    attributes = attributes.union(&Attributes::DEFAULT);
+                }
+                options::NO_DEREFERENCE_PRESERVE_LINKS => {
+                    attributes = attributes.union(&Attributes::LINKS);
+                }
+                options::PRESERVE => {
+                    attributes = attributes.union(&Attributes::parse_iter(val.into_iter())?);
+                }
+                options::NO_PRESERVE => {
+                    if !val.is_empty() {
+                        attributes = attributes.diff(&Attributes::parse_iter(val.into_iter())?);
+                    }
+                }
+                _ => (),
             }
         }
 
@@ -2307,7 +2373,7 @@ fn disk_usage_directory(p: &Path) -> io::Result<u64> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{aligned_ancestors, localize_to_target};
+    use crate::{aligned_ancestors, localize_to_target, Attributes, Preserve};
     use std::path::Path;
 
     #[test]
@@ -2328,5 +2394,53 @@ mod tests {
             (Path::new("a/b"), Path::new("d/a/b")),
         ];
         assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_diff_attrs() {
+        assert_eq!(
+            Attributes::ALL.diff(&Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }),
+            Attributes {
+                #[cfg(unix)]
+                ownership: Preserve::No { explicit: true },
+                mode: Preserve::No { explicit: true },
+                timestamps: Preserve::No { explicit: true },
+                context: Preserve::No { explicit: true },
+                links: Preserve::No { explicit: true },
+                xattr: Preserve::No { explicit: true }
+            }
+        );
+        assert_eq!(
+            Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }
+            .diff(&Attributes::NONE),
+            Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }
+        );
+        assert_eq!(
+            Attributes::NONE.diff(&Attributes {
+                context: Preserve::Yes { required: true },
+                xattr: Preserve::Yes { required: true },
+                ..Attributes::ALL
+            }),
+            Attributes {
+                #[cfg(unix)]
+                ownership: Preserve::No { explicit: true },
+                mode: Preserve::No { explicit: true },
+                timestamps: Preserve::No { explicit: true },
+                context: Preserve::No { explicit: true },
+                links: Preserve::No { explicit: true },
+                xattr: Preserve::No { explicit: true }
+            }
+        );
     }
 }
