@@ -667,6 +667,18 @@ fn test_env_with_gnu_reference_unset_invalid_variables() {
         .no_stdout()
         .stderr_contains("env: cannot unset '=o': Invalid argument\n");
 
+    ts.ucmd()
+        .args(&["--unset=2EKt"]) // works with long option
+        .succeeds()
+        .stdout_contains("A=0d")
+        .stdout_contains("CZj=lYr");
+
+    ts.ucmd()
+        .args(&["-0", "--unset=o", "6=C"]) // works with long option
+        .succeeds()
+        .stdout_contains("A=0d")
+        .stdout_contains("CZj=lYr");
+
     // env -i -0 -u=kQ4dALb1 A=0d CZj=lYr
     // Output: A=0dCZj=lYr 
     ts.ucmd()
