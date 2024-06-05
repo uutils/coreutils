@@ -680,14 +680,14 @@ fn test_env_with_gnu_reference_unset_invalid_variables() {
         .stdout_contains("CZj=lYr");
 
     // env -i -0 -u=kQ4dALb1 A=0d CZj=lYr
-    // Output: A=0dCZj=lYr 
+    // Output: A=0dCZj=lYr
     ts.ucmd()
         .args(&["-i", "-0", "-u=kQ4dALb1", "A=0d", "CZj=lYr"])
         .succeeds()
         .stdout_is("A=0dCZj=lYr\n")
         .stderr_is("");
 
-    // env -- -u=kQ4dALb1 A=0d  CZj=lYr    
+    // env -- -u=kQ4dALb1 A=0d  CZj=lYr
     // prints all environment variables
     ts.ucmd()
         .args(&["--", "-u=kQ4dALb1", "A=0d", "CZj=lYr"])
@@ -696,7 +696,7 @@ fn test_env_with_gnu_reference_unset_invalid_variables() {
         .stdout_contains("CZj=lYr")
         .stderr_is("");
 
-    // env D=ddsa - A=0d CZj=lYr  
+    // env D=ddsa - A=0d CZj=lYr
     // env: ‘-’: No such file or directory
     ts.ucmd()
         .args(&["D=ddsa", "-", "A=0d", "CZj=lYr"])
@@ -705,8 +705,8 @@ fn test_env_with_gnu_reference_unset_invalid_variables() {
         .no_stdout()
         .stderr_contains("env: '-': No such file or directory\n");
 
-    // env -u=kQ4dALb1 - A=0d CZj=lYr 
-    // Output:  
+    // env -u=kQ4dALb1 - A=0d CZj=lYr
+    // Output:
     // A=0d
     // CZj=lYr
     ts.ucmd()
@@ -725,6 +725,24 @@ fn test_env_with_gnu_reference_unset_invalid_variables() {
         .stdout_contains("A=0d")
         .stdout_contains("CZj=lYr")
         .stderr_is("");
+
+    // env echo gotcha -u=hello
+    // Output: gotcha -u=hello
+    ts.ucmd()
+        .args(&["echo", "gotcha", "-u=hello"])
+        .succeeds()
+        .stdout_contains("gotcha -u=hello")
+        .stderr_is("");
+
+    // env -vu=hello
+    // unset:    =hello
+    // env: cannot unset ‘=hello’: Invalid argument
+    ts.ucmd()
+        .args(&["-vu=hello"])
+        .fails()
+        .code_is(125)
+        .no_stdout()
+        .stderr_contains("env: cannot unset '=hello': Invalid argument\n");
 }
 
 #[test]
