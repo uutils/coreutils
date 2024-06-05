@@ -666,6 +666,53 @@ fn test_env_with_gnu_reference_unset_invalid_variables() {
         .code_is(125)
         .no_stdout()
         .stderr_contains("env: cannot unset '=o': Invalid argument\n");
+
+    // env -i -0 -u=kQ4dALb1 A=0d CZj=lYr
+    // Output: A=0dCZj=lYr 
+    ts.ucmd()
+        .args(&["-i", "-0", "-u=kQ4dALb1", "A=0d", "CZj=lYr"])
+        .succeeds()
+        .stdout_is("A=0dCZj=lYr\n")
+        .stderr_is("");
+
+    // env -- -u=kQ4dALb1 A=0d  CZj=lYr    
+    // prints all environment variables
+    ts.ucmd()
+        .args(&["--", "-u=kQ4dALb1", "A=0d", "CZj=lYr"])
+        .succeeds()
+        .stdout_contains("A=0d")
+        .stdout_contains("CZj=lYr")
+        .stderr_is("");
+
+    // env D=ddsa - A=0d CZj=lYr  
+    // env: ‘-’: No such file or directory
+    ts.ucmd()
+        .args(&["D=ddsa", "-", "A=0d", "CZj=lYr"])
+        .fails()
+        .code_is(127)
+        .no_stdout()
+        .stderr_contains("env: '-': No such file or directory\n");
+
+    // env -u=kQ4dALb1 - A=0d CZj=lYr 
+    // Output:  
+    // A=0d
+    // CZj=lYr
+    ts.ucmd()
+        .args(&["-u=kQ4dALb1", "-", "A=0d", "CZj=lYr"])
+        .succeeds()
+        .stdout_contains("A=0d")
+        .stdout_contains("CZj=lYr")
+        .stderr_is("");
+
+    // env -i -u=kQ4dALb1  A=0d CZj=lYr
+    // Output: A=0d
+    // CZj=lYr
+    ts.ucmd()
+        .args(&["-i", "-u=kQ4dALb1", "A=0d", "CZj=lYr"])
+        .succeeds()
+        .stdout_contains("A=0d")
+        .stdout_contains("CZj=lYr")
+        .stderr_is("");
 }
 
 #[test]
