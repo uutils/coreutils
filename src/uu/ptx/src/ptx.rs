@@ -223,7 +223,7 @@ fn get_config(matches: &clap::ArgMatches) -> UResult<Config> {
     if matches.get_flag(options::TRADITIONAL) {
         config.gnu_ext = false;
         config.format = OutFormat::Roff;
-        config.context_regex = "[^ \t\n]+".to_owned();
+        "[^ \t\n]+".clone_into(&mut config.context_regex);
     } else {
         return Err(PtxError::NotImplemented("GNU extensions").into());
     }

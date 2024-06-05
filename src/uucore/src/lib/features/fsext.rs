@@ -5,13 +5,13 @@
 
 //! Set of functions to manage file systems
 
-// spell-checker:ignore DATETIME getmntinfo subsecond (arch) bitrig ; (fs) cifs smbfs
+// spell-checker:ignore DATETIME getmntinfo subsecond (fs) cifs smbfs
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 static MOUNT_OPT_BIND: &str = "bind";
 #[cfg(windows)]
 const MAX_PATH: usize = 266;
@@ -83,8 +83,8 @@ use std::time::UNIX_EPOCH;
 ))]
 pub use libc::statfs as StatFs;
 #[cfg(any(
+    target_os = "aix",
     target_os = "netbsd",
-    target_os = "bitrig",
     target_os = "dragonfly",
     target_os = "illumos",
     target_os = "solaris",
@@ -101,8 +101,8 @@ pub use libc::statvfs as StatFs;
 ))]
 pub use libc::statfs as statfs_fn;
 #[cfg(any(
+    target_os = "aix",
     target_os = "netbsd",
-    target_os = "bitrig",
     target_os = "illumos",
     target_os = "solaris",
     target_os = "dragonfly",
@@ -304,7 +304,7 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:disable
     match fs_type {
@@ -323,14 +323,14 @@ fn is_dummy_filesystem(fs_type: &str, mount_option: &str) -> bool {
     // spell-checker:enable
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn is_remote_filesystem(dev_name: &str, fs_type: &str) -> bool {
     dev_name.find(':').is_some()
         || (dev_name.starts_with("//") && fs_type == "smbfs" || fs_type == "cifs")
         || dev_name == "-hosts"
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 fn mount_dev_id(mount_dir: &str) -> String {
     use std::os::unix::fs::MetadataExt;
 
@@ -357,7 +357,7 @@ use libc::c_int;
 ))]
 extern "C" {
     #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
-    #[link_name = "getmntinfo$INODE64"] // spell-checker:disable-line
+    #[link_name = "getmntinfo$INODE64"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
     #[cfg(any(
@@ -365,14 +365,14 @@ extern "C" {
         target_os = "openbsd",
         all(target_vendor = "apple", target_arch = "aarch64")
     ))]
-    #[link_name = "getmntinfo"] // spell-checker:disable-line
+    #[link_name = "getmntinfo"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
     // Rust on FreeBSD uses 11.x ABI for filesystem metadata syscalls.
     // Call the right version of the symbol for getmntinfo() result to
     // match libc StatFS layout.
     #[cfg(target_os = "freebsd")]
-    #[link_name = "getmntinfo@FBSD_1.0"] // spell-checker:disable-line
+    #[link_name = "getmntinfo@FBSD_1.0"]
     fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 }
 
@@ -472,7 +472,12 @@ pub fn read_fs_list() -> Result<Vec<MountInfo>, std::io::Error> {
         }
         Ok(mounts)
     }
-    #[cfg(any(target_os = "redox", target_os = "illumos", target_os = "solaris"))]
+    #[cfg(any(
+        target_os = "aix",
+        target_os = "redox",
+        target_os = "illumos",
+        target_os = "solaris"
+    ))]
     {
         // No method to read mounts, yet
         Ok(Vec::new())
@@ -633,8 +638,10 @@ impl FsMeta for StatFs {
         #[cfg(all(
             not(target_env = "musl"),
             not(target_vendor = "apple"),
+            not(target_os = "aix"),
             not(target_os = "android"),
             not(target_os = "freebsd"),
+            not(target_os = "netbsd"),
             not(target_os = "openbsd"),
             not(target_os = "illumos"),
             not(target_os = "solaris"),
@@ -646,6 +653,7 @@ impl FsMeta for StatFs {
         #[cfg(all(
             not(target_env = "musl"),
             not(target_os = "freebsd"),
+            not(target_os = "netbsd"),
             not(target_os = "redox"),
             any(
                 target_arch = "s390x",
@@ -658,7 +666,9 @@ impl FsMeta for StatFs {
         return self.f_bsize.into();
         #[cfg(any(
             target_env = "musl",
+            target_os = "aix",
             target_os = "freebsd",
+            target_os = "netbsd",
             target_os = "illumos",
             target_os = "solaris",
             target_os = "redox",
@@ -889,6 +899,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x0187 => "autofs".into(),
         0x4246_5331 => "befs".into(),
         0x6264_6576 => "bdevfs".into(),
+        0xCA451A4E => "bcachefs".into(),
         0x1BAD_FACE => "bfs".into(),
         0xCAFE_4A11 => "bpf_fs".into(),
         0x4249_4E4D => "binfmt_misc".into(),

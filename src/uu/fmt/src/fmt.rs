@@ -87,10 +87,24 @@ impl FmtOptions {
             .get_one::<String>(options::SKIP_PREFIX)
             .map(String::from);
 
-        let width_opt = extract_width(matches);
-        let goal_opt = matches.get_one::<usize>(options::GOAL);
+        let width_opt = extract_width(matches)?;
+        let goal_opt_str = matches.get_one::<String>(options::GOAL);
+        let goal_opt = if let Some(goal_str) = goal_opt_str {
+            match goal_str.parse::<usize>() {
+                Ok(goal) => Some(goal),
+                Err(_) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("invalid goal: {}", goal_str.quote()),
+                    ));
+                }
+            }
+        } else {
+            None
+        };
+
         let (width, goal) = match (width_opt, goal_opt) {
-            (Some(w), Some(&g)) => {
+            (Some(w), Some(g)) => {
                 if g > w {
                     return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
                 }
@@ -101,7 +115,7 @@ impl FmtOptions {
                 let g = (w * DEFAULT_GOAL_TO_WIDTH_RATIO / 100).max(if w == 0 { 0 } else { 1 });
                 (w, g)
             }
-            (None, Some(&g)) => {
+            (None, Some(g)) => {
                 if g > DEFAULT_WIDTH {
                     return Err(USimpleError::new(1, "GOAL cannot be greater than WIDTH."));
                 }
@@ -243,22 +257,29 @@ fn extract_files(matches: &ArgMatches) -> UResult<Vec<String>> {
     }
 }
 
-fn extract_width(matches: &ArgMatches) -> Option<usize> {
-    let width_opt = matches.get_one::<usize>(options::WIDTH);
-    if let Some(width) = width_opt {
-        return Some(*width);
+fn extract_width(matches: &ArgMatches) -> UResult<Option<usize>> {
+    let width_opt = matches.get_one::<String>(options::WIDTH);
+    if let Some(width_str) = width_opt {
+        if let Ok(width) = width_str.parse::<usize>() {
+            return Ok(Some(width));
+        } else {
+            return Err(USimpleError::new(
+                1,
+                format!("invalid width: {}", width_str.quote()),
+            ));
+        }
     }
 
     if let Some(1) = matches.index_of(options::FILES_OR_WIDTH) {
         let width_arg = matches.get_one::<String>(options::FILES_OR_WIDTH).unwrap();
         if let Some(num) = width_arg.strip_prefix('-') {
-            num.parse::<usize>().ok()
+            Ok(num.parse::<usize>().ok())
         } else {
             // will be treated as a file name
-            None
+            Ok(None)
         }
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -305,6 +326,7 @@ pub fn uu_app() -> Command {
         .about(ABOUT)
         .override_usage(format_usage(USAGE))
         .infer_long_args(true)
+        .args_override_self(true)
         .arg(
             Arg::new(options::CROWN_MARGIN)
                 .short('c')
@@ -405,16 +427,16 @@ pub fn uu_app() -> Command {
                 .short('w')
                 .long("width")
                 .help("Fill output lines up to a maximum of WIDTH columns, default 75. This can be specified as a negative number in the first argument.")
-                .value_name("WIDTH")
-                .value_parser(clap::value_parser!(usize)),
+                // We must accept invalid values if they are overridden later. This is not supported by clap, so accept all strings instead.
+                .value_name("WIDTH"),
         )
         .arg(
             Arg::new(options::GOAL)
                 .short('g')
                 .long("goal")
                 .help("Goal width, default of 93% of WIDTH. Must be less than or equal to WIDTH.")
-                .value_name("GOAL")
-                .value_parser(clap::value_parser!(usize)),
+                // We must accept invalid values if they are overridden later. This is not supported by clap, so accept all strings instead.
+                .value_name("GOAL"),
         )
         .arg(
             Arg::new(options::QUICK)
@@ -448,62 +470,54 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error;
-
     use crate::uu_app;
     use crate::{extract_files, extract_width};
 
     #[test]
-    fn parse_negative_width() -> Result<(), Box<dyn Error>> {
-        let matches = uu_app().try_get_matches_from(vec!["fmt", "-3", "some-file"])?;
+    fn parse_negative_width() {
+        let matches = uu_app()
+            .try_get_matches_from(vec!["fmt", "-3", "some-file"])
+            .unwrap();
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
-
-        assert_eq!(extract_width(&matches), Some(3));
-
-        Ok(())
+        assert_eq!(extract_width(&matches).ok(), Some(Some(3)));
     }
 
     #[test]
-    fn parse_width_as_arg() -> Result<(), Box<dyn Error>> {
-        let matches = uu_app().try_get_matches_from(vec!["fmt", "-w3", "some-file"])?;
+    fn parse_width_as_arg() {
+        let matches = uu_app()
+            .try_get_matches_from(vec!["fmt", "-w3", "some-file"])
+            .unwrap();
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
-
-        assert_eq!(extract_width(&matches), Some(3));
-
-        Ok(())
+        assert_eq!(extract_width(&matches).ok(), Some(Some(3)));
     }
 
     #[test]
-    fn parse_no_args() -> Result<(), Box<dyn Error>> {
-        let matches = uu_app().try_get_matches_from(vec!["fmt"])?;
+    fn parse_no_args() {
+        let matches = uu_app().try_get_matches_from(vec!["fmt"]).unwrap();
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["-"]);
-
-        assert_eq!(extract_width(&matches), None);
-
-        Ok(())
+        assert_eq!(extract_width(&matches).ok(), Some(None));
     }
 
     #[test]
-    fn parse_just_file_name() -> Result<(), Box<dyn Error>> {
-        let matches = uu_app().try_get_matches_from(vec!["fmt", "some-file"])?;
+    fn parse_just_file_name() {
+        let matches = uu_app()
+            .try_get_matches_from(vec!["fmt", "some-file"])
+            .unwrap();
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
-
-        assert_eq!(extract_width(&matches), None);
-
-        Ok(())
+        assert_eq!(extract_width(&matches).ok(), Some(None));
     }
 
     #[test]
-    fn parse_with_both_widths_positional_first() -> Result<(), Box<dyn Error>> {
-        let matches = uu_app().try_get_matches_from(vec!["fmt", "-10", "-w3", "some-file"])?;
+    fn parse_with_both_widths_positional_first() {
+        let matches = uu_app()
+            .try_get_matches_from(vec!["fmt", "-10", "-w3", "some-file"])
+            .unwrap();
 
         assert_eq!(extract_files(&matches).unwrap(), vec!["some-file"]);
-
-        assert_eq!(extract_width(&matches), Some(3));
-        Ok(())
+        assert_eq!(extract_width(&matches).ok(), Some(Some(3)));
     }
 }

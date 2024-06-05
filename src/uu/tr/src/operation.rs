@@ -19,6 +19,7 @@ use std::{
     error::Error,
     fmt::{Debug, Display},
     io::{BufRead, Write},
+    ops::Not,
 };
 use uucore::error::UError;
 
@@ -32,6 +33,7 @@ pub enum BadSequence {
     CharRepeatInSet1,
     InvalidRepeatCount(String),
     EmptySet2WhenNotTruncatingSet1,
+    ClassExceptLowerUpperInSet2,
 }
 
 impl Display for BadSequence {
@@ -53,6 +55,9 @@ impl Display for BadSequence {
             Self::EmptySet2WhenNotTruncatingSet1 => {
                 write!(f, "when not truncating set1, string2 must be non-empty")
             }
+            Self::ClassExceptLowerUpperInSet2 => {
+                write!(f, "when translating, the only character classes that may appear in set2 are 'upper' and 'lower'")
+            }
         }
     }
 }
@@ -61,11 +66,7 @@ impl Error for BadSequence {}
 impl UError for BadSequence {}
 
 #[derive(Debug, Clone, Copy)]
-pub enum Sequence {
-    Char(u8),
-    CharRange(u8, u8),
-    CharStar(u8),
-    CharRepeat(u8, usize),
+pub enum Class {
     Alnum,
     Alpha,
     Blank,
@@ -80,6 +81,15 @@ pub enum Sequence {
     Xdigit,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Sequence {
+    Char(u8),
+    CharRange(u8, u8),
+    CharStar(u8),
+    CharRepeat(u8, usize),
+    Class(Class),
+}
+
 impl Sequence {
     pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
         match self {
@@ -87,37 +97,39 @@ impl Sequence {
             Self::CharRange(l, r) => Box::new(*l..=*r),
             Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
-            Self::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
-            Self::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
-            Self::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
-            Self::Control => Box::new((0..=31).chain(std::iter::once(127))),
-            Self::Digit => Box::new(b'0'..=b'9'),
-            Self::Graph => Box::new(
-                (48..=57) // digit
-                    .chain(65..=90) // uppercase
-                    .chain(97..=122) // lowercase
-                    // punctuations
-                    .chain(33..=47)
-                    .chain(58..=64)
-                    .chain(91..=96)
-                    .chain(123..=126)
-                    .chain(std::iter::once(32)), // space
-            ),
-            Self::Lower => Box::new(b'a'..=b'z'),
-            Self::Print => Box::new(
-                (48..=57) // digit
-                    .chain(65..=90) // uppercase
-                    .chain(97..=122) // lowercase
-                    // punctuations
-                    .chain(33..=47)
-                    .chain(58..=64)
-                    .chain(91..=96)
-                    .chain(123..=126),
-            ),
-            Self::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
-            Self::Space => Box::new(unicode_table::SPACES.iter().cloned()),
-            Self::Upper => Box::new(b'A'..=b'Z'),
-            Self::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
+            Self::Class(class) => match class {
+                Class::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
+                Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
+                Class::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
+                Class::Control => Box::new((0..=31).chain(std::iter::once(127))),
+                Class::Digit => Box::new(b'0'..=b'9'),
+                Class::Graph => Box::new(
+                    (48..=57) // digit
+                        .chain(65..=90) // uppercase
+                        .chain(97..=122) // lowercase
+                        // punctuations
+                        .chain(33..=47)
+                        .chain(58..=64)
+                        .chain(91..=96)
+                        .chain(123..=126)
+                        .chain(std::iter::once(32)), // space
+                ),
+                Class::Lower => Box::new(b'a'..=b'z'),
+                Class::Print => Box::new(
+                    (48..=57) // digit
+                        .chain(65..=90) // uppercase
+                        .chain(97..=122) // lowercase
+                        // punctuations
+                        .chain(33..=47)
+                        .chain(58..=64)
+                        .chain(91..=96)
+                        .chain(123..=126),
+                ),
+                Class::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
+                Class::Space => Box::new(unicode_table::SPACES.iter().cloned()),
+                Class::Upper => Box::new(b'A'..=b'Z'),
+                Class::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
+            },
         }
     }
 
@@ -125,14 +137,25 @@ impl Sequence {
     pub fn solve_set_characters(
         set1_str: &[u8],
         set2_str: &[u8],
+        complement_flag: bool,
         truncate_set1_flag: bool,
+        translating: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
         let set1 = Self::from_str(set1_str)?;
-
         let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
         let set1_star_count = set1.iter().filter(is_char_star).count();
         if set1_star_count == 0 {
             let set2 = Self::from_str(set2_str)?;
+
+            if translating
+                && set2.iter().any(|&x| {
+                    matches!(x, Self::Class(_))
+                        && !matches!(x, Self::Class(Class::Upper) | Self::Class(Class::Lower))
+                })
+            {
+                return Err(BadSequence::ClassExceptLowerUpperInSet2);
+            }
+
             let set2_star_count = set2.iter().filter(is_char_star).count();
             if set2_star_count < 2 {
                 let char_star = set2.iter().find_map(|s| match s {
@@ -189,6 +212,9 @@ impl Sequence {
                     },
                 };
                 let mut set1_solved: Vec<_> = set1.iter().flat_map(Self::flatten).collect();
+                if complement_flag {
+                    set1_solved = (0..=u8::MAX).filter(|x| !set1_solved.contains(x)).collect();
+                }
                 if truncate_set1_flag {
                     set1_solved.truncate(set2_solved.len());
                 }
@@ -300,18 +326,18 @@ impl Sequence {
             alt((
                 map(
                     alt((
-                        value(Self::Alnum, tag("alnum")),
-                        value(Self::Alpha, tag("alpha")),
-                        value(Self::Blank, tag("blank")),
-                        value(Self::Control, tag("cntrl")),
-                        value(Self::Digit, tag("digit")),
-                        value(Self::Graph, tag("graph")),
-                        value(Self::Lower, tag("lower")),
-                        value(Self::Print, tag("print")),
-                        value(Self::Punct, tag("punct")),
-                        value(Self::Space, tag("space")),
-                        value(Self::Upper, tag("upper")),
-                        value(Self::Xdigit, tag("xdigit")),
+                        value(Self::Class(Class::Alnum), tag("alnum")),
+                        value(Self::Class(Class::Alpha), tag("alpha")),
+                        value(Self::Class(Class::Blank), tag("blank")),
+                        value(Self::Class(Class::Control), tag("cntrl")),
+                        value(Self::Class(Class::Digit), tag("digit")),
+                        value(Self::Class(Class::Graph), tag("graph")),
+                        value(Self::Class(Class::Lower), tag("lower")),
+                        value(Self::Class(Class::Print), tag("print")),
+                        value(Self::Class(Class::Punct), tag("punct")),
+                        value(Self::Class(Class::Space), tag("space")),
+                        value(Self::Class(Class::Upper), tag("upper")),
+                        value(Self::Class(Class::Xdigit), tag("xdigit")),
                     )),
                     Ok,
                 ),
@@ -369,56 +395,28 @@ impl<A: SymbolTranslator, B: SymbolTranslator> SymbolTranslator for ChainedSymbo
 #[derive(Debug)]
 pub struct DeleteOperation {
     set: Vec<u8>,
-    complement_flag: bool,
 }
 
 impl DeleteOperation {
-    pub fn new(set: Vec<u8>, complement_flag: bool) -> Self {
-        Self {
-            set,
-            complement_flag,
-        }
+    pub fn new(set: Vec<u8>) -> Self {
+        Self { set }
     }
 }
 
 impl SymbolTranslator for DeleteOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        let found = self.set.iter().any(|sequence| *sequence == current);
-        if self.complement_flag == found {
-            Some(current)
-        } else {
-            None
-        }
-    }
-}
-
-pub struct TranslateOperationComplement {
-    iter: u8,
-    set2_iter: usize,
-    set1: Vec<u8>,
-    set2: Vec<u8>,
-    translation_map: HashMap<u8, u8>,
-}
-
-impl TranslateOperationComplement {
-    fn new(set1: Vec<u8>, set2: Vec<u8>) -> Self {
-        Self {
-            iter: 0,
-            set2_iter: 0,
-            set1,
-            set2,
-            translation_map: HashMap::new(),
-        }
+        // keep if not present in the set
+        self.set.contains(&current).not().then_some(current)
     }
 }
 
 #[derive(Debug)]
-pub struct TranslateOperationStandard {
+pub struct TranslateOperation {
     translation_map: HashMap<u8, u8>,
 }
 
-impl TranslateOperationStandard {
-    fn new(set1: Vec<u8>, set2: Vec<u8>) -> Result<Self, BadSequence> {
+impl TranslateOperation {
+    pub fn new(set1: Vec<u8>, set2: Vec<u8>) -> Result<Self, BadSequence> {
         if let Some(fallback) = set2.last().copied() {
             Ok(Self {
                 translation_map: set1
@@ -436,86 +434,27 @@ impl TranslateOperationStandard {
     }
 }
 
-pub enum TranslateOperation {
-    Standard(TranslateOperationStandard),
-    Complement(TranslateOperationComplement),
-}
-
-impl TranslateOperation {
-    fn next_complement_char(iter: u8, ignore_list: &[u8]) -> (u8, u8) {
-        (iter..)
-            .filter(|c| !ignore_list.iter().any(|s| s == c))
-            .map(|c| (c + 1, c))
-            .next()
-            .expect("exhausted all possible characters")
-    }
-}
-
-impl TranslateOperation {
-    pub fn new(set1: Vec<u8>, set2: Vec<u8>, complement: bool) -> Result<Self, BadSequence> {
-        if complement {
-            Ok(Self::Complement(TranslateOperationComplement::new(
-                set1, set2,
-            )))
-        } else {
-            Ok(Self::Standard(TranslateOperationStandard::new(set1, set2)?))
-        }
-    }
-}
-
 impl SymbolTranslator for TranslateOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        match self {
-            Self::Standard(TranslateOperationStandard { translation_map }) => Some(
-                translation_map
-                    .iter()
-                    .find_map(|(l, r)| if l.eq(&current) { Some(*r) } else { None })
-                    .unwrap_or(current),
-            ),
-            Self::Complement(TranslateOperationComplement {
-                iter,
-                set2_iter,
-                set1,
-                set2,
-                translation_map,
-            }) => {
-                // First, try to see if current char is already mapped
-                // If so, return the mapped char
-                // Else, pop from set2
-                // If we popped something, map the next complement character to this value
-                // If set2 is empty, we just map the current char directly to fallback --- to avoid looping unnecessarily
-                if let Some(c) = set1.iter().find(|c| c.eq(&&current)) {
-                    Some(*c)
-                } else {
-                    while translation_map.get(&current).is_none() {
-                        if let Some(value) = set2.get(*set2_iter) {
-                            let (next_iter, next_key) = Self::next_complement_char(*iter, &*set1);
-                            *iter = next_iter;
-                            *set2_iter = set2_iter.saturating_add(1);
-                            translation_map.insert(next_key, *value);
-                        } else {
-                            translation_map.insert(current, *set2.last().unwrap());
-                        }
-                    }
-                    Some(*translation_map.get(&current).unwrap())
-                }
-            }
-        }
+        Some(
+            self.translation_map
+                .get(&current)
+                .copied()
+                .unwrap_or(current),
+        )
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct SqueezeOperation {
     set1: HashSet<u8>,
-    complement: bool,
     previous: Option<u8>,
 }
 
 impl SqueezeOperation {
-    pub fn new(set1: Vec<u8>, complement: bool) -> Self {
+    pub fn new(set1: Vec<u8>) -> Self {
         Self {
             set1: set1.into_iter().collect(),
-            complement,
             previous: None,
         }
     }
@@ -523,35 +462,16 @@ impl SqueezeOperation {
 
 impl SymbolTranslator for SqueezeOperation {
     fn translate(&mut self, current: u8) -> Option<u8> {
-        if self.complement {
-            let next = if self.set1.contains(&current) {
-                Some(current)
-            } else {
-                match self.previous {
-                    Some(v) => {
-                        if v.eq(&current) {
-                            None
-                        } else {
-                            Some(current)
-                        }
-                    }
-                    None => Some(current),
-                }
-            };
-            self.previous = Some(current);
-            next
+        let next = if self.set1.contains(&current) {
+            match self.previous {
+                Some(v) if v == current => None,
+                _ => Some(current),
+            }
         } else {
-            let next = if self.set1.contains(&current) {
-                match self.previous {
-                    Some(v) if v == current => None,
-                    _ => Some(current),
-                }
-            } else {
-                Some(current)
-            };
-            self.previous = Some(current);
-            next
-        }
+            Some(current)
+        };
+        self.previous = Some(current);
+        next
     }
 }
 

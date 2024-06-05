@@ -354,8 +354,13 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
         }
     } else if matches.get_flag(arguments::OPT_BACKUP_NO_ARG) {
         // the short form of this option, -b does not accept any argument.
-        // Using -b is equivalent to using --backup=existing.
-        Ok(BackupMode::ExistingBackup)
+        // if VERSION_CONTROL is not set then using -b is equivalent to
+        // using --backup=existing.
+        if let Ok(method) = env::var("VERSION_CONTROL") {
+            match_method(&method, "$VERSION_CONTROL")
+        } else {
+            Ok(BackupMode::ExistingBackup)
+        }
     } else {
         // No option was present at all
         Ok(BackupMode::NoBackup)
@@ -578,16 +583,16 @@ mod tests {
         assert_eq!(result, BackupMode::SimpleBackup);
     }
 
-    // -b ignores the "VERSION_CONTROL" environment variable
+    // -b doesn't ignores the "VERSION_CONTROL" environment variable
     #[test]
-    fn test_backup_mode_short_only_ignore_env() {
+    fn test_backup_mode_short_does_not_ignore_env() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        env::set_var(ENV_VERSION_CONTROL, "none");
+        env::set_var(ENV_VERSION_CONTROL, "numbered");
         let matches = make_app().get_matches_from(vec!["command", "-b"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
-        assert_eq!(result, BackupMode::ExistingBackup);
+        assert_eq!(result, BackupMode::NumberedBackup);
         env::remove_var(ENV_VERSION_CONTROL);
     }
 

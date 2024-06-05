@@ -145,6 +145,21 @@ fn test_stdin_all_repeated() {
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("sorted-all-repeated.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=none"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=non"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=n"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated.expected");
 }
 
 #[test]
@@ -167,12 +182,32 @@ fn test_stdin_all_repeated_separate() {
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("sorted-all-repeated-separate.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=separat"]) // spell-checker:disable-line
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated-separate.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=s"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated-separate.expected");
 }
 
 #[test]
 fn test_stdin_all_repeated_prepend() {
     new_ucmd!()
         .args(&["--all-repeated=prepend"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated-prepend.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=prepen"]) // spell-checker:disable-line
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("sorted-all-repeated-prepend.expected");
+    new_ucmd!()
+        .args(&["--all-repeated=p"])
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("sorted-all-repeated-prepend.expected");
@@ -253,12 +288,22 @@ fn test_group_prepend() {
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("group-prepend.expected");
+    new_ucmd!()
+        .args(&["--group=p"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-prepend.expected");
 }
 
 #[test]
 fn test_group_append() {
     new_ucmd!()
         .args(&["--group=append"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-append.expected");
+    new_ucmd!()
+        .args(&["--group=a"])
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("group-append.expected");
@@ -271,12 +316,27 @@ fn test_group_both() {
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("group-both.expected");
+    new_ucmd!()
+        .args(&["--group=bot"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-both.expected");
+    new_ucmd!()
+        .args(&["--group=b"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-both.expected");
 }
 
 #[test]
 fn test_group_separate() {
     new_ucmd!()
         .args(&["--group=separate"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group.expected");
+    new_ucmd!()
+        .args(&["--group=s"])
         .pipe_in_fixture(INPUT)
         .run()
         .stdout_is_fixture("group.expected");

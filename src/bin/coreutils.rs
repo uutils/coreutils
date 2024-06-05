@@ -90,13 +90,20 @@ fn main() {
             None => not_found(&util_os),
         };
 
-        if util == "completion" {
-            gen_completions(args, &utils);
-        }
-
-        if util == "manpage" {
-            gen_manpage(args, &utils);
-        }
+        match util {
+            "completion" => gen_completions(args, &utils),
+            "manpage" => gen_manpage(args, &utils),
+            "--list" => {
+                let mut utils: Vec<_> = utils.keys().collect();
+                utils.sort();
+                for util in utils {
+                    println!("{util}");
+                }
+                process::exit(0);
+            }
+            // Not a special command: fallthrough to calling a util
+            _ => {}
+        };
 
         match utils.get(util) {
             Some(&(uumain, _)) => {

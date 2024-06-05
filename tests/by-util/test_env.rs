@@ -4,13 +4,55 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD
 
-#[cfg(target_os = "linux")]
-use crate::common::util::expected_result;
 use crate::common::util::TestScenario;
-use ::env::native_int_str::{Convert, NCvt};
+#[cfg(unix)]
+use crate::common::util::UChild;
+#[cfg(unix)]
+use nix::sys::signal::Signal;
+use regex::Regex;
 use std::env;
 use std::path::Path;
+#[cfg(unix)]
+use std::process::Command;
 use tempfile::tempdir;
+
+#[cfg(unix)]
+struct Target {
+    child: UChild,
+}
+#[cfg(unix)]
+impl Target {
+    fn new(signals: &[&str]) -> Self {
+        let mut child = new_ucmd!()
+            .args(&[
+                format!("--ignore-signal={}", signals.join(",")).as_str(),
+                "sleep",
+                "1000",
+            ])
+            .run_no_wait();
+        child.delay(500);
+        Self { child }
+    }
+    fn send_signal(&mut self, signal: Signal) {
+        Command::new("kill")
+            .args(&[
+                format!("-{}", signal as i32),
+                format!("{}", self.child.id()),
+            ])
+            .spawn()
+            .expect("failed to send signal");
+        self.child.delay(100);
+    }
+    fn is_alive(&mut self) -> bool {
+        self.child.is_alive()
+    }
+}
+#[cfg(unix)]
+impl Drop for Target {
+    fn drop(&mut self) {
+        self.child.kill();
+    }
+}
 
 #[test]
 fn test_invalid_arg() {
@@ -53,6 +95,99 @@ fn test_if_windows_batch_files_can_be_executed() {
     let result = new_ucmd!().arg("./runBat.bat").succeeds();
 
     assert!(result.stdout_str().contains("Hello Windows World!"));
+}
+
+#[test]
+fn test_debug_1() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .arg("-v")
+        .arg(&ts.bin_path)
+        .args(&["echo", "hello"])
+        .succeeds();
+    result.stderr_matches(
+        &Regex::new(concat!(
+            r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
+            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
+            r"   arg\[1\]= 'echo'\n",
+            r"   arg\[2\]= 'hello'"
+        ))
+        .unwrap(),
+    );
+}
+
+#[test]
+fn test_debug_2() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .arg("-vv")
+        .arg(ts.bin_path)
+        .args(&["echo", "hello2"])
+        .succeeds();
+    result.stderr_matches(
+        &Regex::new(concat!(
+            r"input args:\n",
+            r"arg\[0\]: 'env'\n",
+            r"arg\[1\]: '-vv'\n",
+            r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+            r"arg\[3\]: 'echo'\n",
+            r"arg\[4\]: 'hello2'\n",
+            r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
+            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+            r"   arg\[1\]= 'echo'\n",
+            r"   arg\[2\]= 'hello2'"
+        ))
+        .unwrap(),
+    );
+}
+
+#[test]
+fn test_debug1_part_of_string_arg() {
+    let ts = TestScenario::new(util_name!());
+
+    let result = ts
+        .ucmd()
+        .arg("-vS FOO=BAR")
+        .arg(ts.bin_path)
+        .args(&["echo", "hello1"])
+        .succeeds();
+    result.stderr_matches(
+        &Regex::new(concat!(
+            r"executing: [^\n]+(\/|\\)coreutils(\.exe)?\n",
+            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(\.exe)?'\n",
+            r"   arg\[1\]= 'echo'\n",
+            r"   arg\[2\]= 'hello1'"
+        ))
+        .unwrap(),
+    );
+}
+
+#[test]
+fn test_debug2_part_of_string_arg() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .arg("-vvS FOO=BAR")
+        .arg(ts.bin_path)
+        .args(&["echo", "hello2"])
+        .succeeds();
+    result.stderr_matches(
+        &Regex::new(concat!(
+            r"input args:\n",
+            r"arg\[0\]: 'env'\n",
+            r"arg\[1\]: '-vvS FOO=BAR'\n",
+            r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+            r"arg\[3\]: 'echo'\n",
+            r"arg\[4\]: 'hello2'\n",
+            r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
+            r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
+            r"   arg\[1\]= 'echo'\n",
+            r"   arg\[2\]= 'hello2'"
+        ))
+        .unwrap(),
+    );
 }
 
 #[test]
@@ -345,10 +480,15 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
 
     let out = scene
         .ucmd()
-        .args(&["-vS printf x%sx\\n A \t B \x0B\x0C\r\n"])
+        .args(&["-vvS printf x%sx\\n A \t B \x0B\x0C\r\n"])
         .succeeds();
     assert_eq!(out.stdout_str(), "xAx\nxBx\n");
-    assert_eq!(out.stderr_str(), "input args:\narg[0]: 'env'\narg[1]: $'-vS printf x%sx\\\\n A \\t B \\x0B\\x0C\\r\\n'\nexecutable: 'printf'\narg[0]: $'x%sx\\n'\narg[1]: 'A'\narg[2]: 'B'\n");
+    assert_eq!(
+        out.stderr_str(),
+        "input args:\narg[0]: 'env'\narg[1]: $\
+        '-vvS printf x%sx\\\\n A \\t B \\x0B\\x0C\\r\\n'\nexecuting: printf\
+        \n   arg[0]= 'printf'\n   arg[1]= $'x%sx\\n'\n   arg[2]= 'A'\n   arg[3]= 'B'\n"
+    );
 }
 
 // FixMe: This test fails on MACOS:
@@ -375,160 +515,104 @@ fn test_gnu_e20() {
 }
 
 #[test]
-fn test_split_string_misc() {
-    use ::env::native_int_str::NCvt;
-    use ::env::parse_args_from_str;
-
-    assert_eq!(
-        NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
-        parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c "echo \$A\$FOO""#)).unwrap(),
-    );
-    assert_eq!(
-        NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
-        parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#)).unwrap()
-    );
-    assert_eq!(
-        NCvt::convert(vec!["A=B", "FOO=AR", "sh", "-c", "echo $A$FOO"]),
-        parse_args_from_str(&NCvt::convert(r#"A=B FOO=AR  sh -c 'echo $A$FOO'"#)).unwrap()
-    );
-
-    assert_eq!(
-        NCvt::convert(vec!["-i", "A=B ' C"]),
-        parse_args_from_str(&NCvt::convert(r#"-i A='B \' C'"#)).unwrap()
-    );
-}
-
-#[test]
-fn test_split_string_environment_vars_test() {
-    std::env::set_var("FOO", "BAR");
-    assert_eq!(
-        NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
-        ::env::parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))
-            .unwrap(),
-    );
-}
-
-#[macro_export]
-macro_rules! compare_with_gnu {
-    ( $ts:expr, $args:expr ) => {{
-        println!("==========================================================================");
-        let result = $ts.ucmd().args($args).run();
-
-        #[cfg(target_os = "linux")]
-        {
-            let reference = expected_result(&$ts, $args);
-            if let Ok(reference) = reference {
-                let success = result.code() == reference.code()
-                    && result.stdout_str() == reference.stdout_str()
-                    && result.stderr_str() == reference.stderr_str();
-                if !success {
-                    println!("reference.code: {}", reference.code());
-                    println!("   result.code: {}", result.code());
-                    println!("reference.cout: {}", reference.stdout_str());
-                    println!("   result.cout: {}", result.stdout_str());
-                    println!("reference.cerr: {}", reference.stderr_str_lossy());
-                    println!("   result.cerr: {}", result.stderr_str_lossy());
-                }
-                assert_eq!(result.code(), reference.code());
-                assert_eq!(result.stdout_str(), reference.stdout_str());
-                assert_eq!(result.stderr_str(), reference.stderr_str());
-            } else {
-                println!(
-                    "gnu reference test skipped. Reason: {:?}",
-                    reference.unwrap_err()
-                );
-            }
-        }
-
-        result
-    }};
-}
-
-#[test]
 #[allow(clippy::cognitive_complexity)] // Ignore clippy lint of too long function sign
-fn test_env_with_gnu_reference_parsing_errors() {
+fn test_env_parsing_errors() {
     let ts = TestScenario::new(util_name!());
 
-    compare_with_gnu!(ts, &["-S\\|echo hallo"]) // no quotes, invalid escape sequence |
-        .failure()
+    ts.ucmd()
+        .arg("-S\\|echo hallo") // no quotes, invalid escape sequence |
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\|' in -S\n");
 
-    compare_with_gnu!(ts, &["-S\\a"]) // no quotes, invalid escape sequence a
-        .failure()
+    ts.ucmd()
+        .arg("-S\\a") // no quotes, invalid escape sequence a
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
-    compare_with_gnu!(ts, &["-S\"\\a\""]) // double quotes, invalid escape sequence a
-        .failure()
+    ts.ucmd()
+        .arg("-S\"\\a\"") // double quotes, invalid escape sequence a
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S"\a""#]) // same as before, just using r#""#
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S"\a""#) // same as before, just using r#""#
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
-    compare_with_gnu!(ts, &["-S'\\a'"]) // single quotes, invalid escape sequence a
-        .failure()
+    ts.ucmd()
+        .arg("-S'\\a'") // single quotes, invalid escape sequence a
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S\|\&\;"#]) // no quotes, invalid escape sequence |
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S\|\&\;"#) // no quotes, invalid escape sequence |
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\|' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S\<\&\;"#]) // no quotes, invalid escape sequence <
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S\<\&\;"#) // no quotes, invalid escape sequence <
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\<' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S\>\&\;"#]) // no quotes, invalid escape sequence >
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S\>\&\;"#) // no quotes, invalid escape sequence >
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\>' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S\`\&\;"#]) // no quotes, invalid escape sequence `
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S\`\&\;"#) // no quotes, invalid escape sequence `
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S"\`\&\;""#]) // double quotes, invalid escape sequence `
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S"\`\&\;""#) // double quotes, invalid escape sequence `
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S'\`\&\;'"#]) // single quotes, invalid escape sequence `
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S'\`\&\;'"#) // single quotes, invalid escape sequence `
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S\`"#]) // ` escaped without quotes
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S\`"#) // ` escaped without quotes
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S"\`""#]) // ` escaped in double quotes
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S"\`""#) // ` escaped in double quotes
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
-    compare_with_gnu!(ts, &[r#"-S'\`'"#]) // ` escaped in single quotes
-        .failure()
+    ts.ucmd()
+        .arg(r#"-S'\`'"#) // ` escaped in single quotes
+        .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
@@ -542,7 +626,7 @@ fn test_env_with_gnu_reference_parsing_errors() {
 }
 
 #[test]
-fn test_env_with_gnu_reference_empty_executable_single_quotes() {
+fn test_env_with_empty_executable_single_quotes() {
     let ts = TestScenario::new(util_name!());
 
     ts.ucmd()
@@ -554,11 +638,12 @@ fn test_env_with_gnu_reference_empty_executable_single_quotes() {
 }
 
 #[test]
-fn test_env_with_gnu_reference_empty_executable_double_quotes() {
+fn test_env_with_empty_executable_double_quotes() {
     let ts = TestScenario::new(util_name!());
 
-    compare_with_gnu!(ts, &["-S\"\""]) // empty double quotes, considered as program name
-        .failure()
+    ts.ucmd()
+        .args(&["-S\"\""]) // empty double quotes, considered as program name
+        .fails()
         .code_is(127)
         .no_stdout()
         .stderr_is("env: '': No such file or directory\n");
@@ -583,6 +668,232 @@ fn test_env_with_gnu_reference_unset_invalid_variables() {
         .stderr_contains("env: cannot unset '=o': Invalid argument\n");
 }
 
+#[test]
+#[cfg(unix)]
+fn test_env_overwrite_arg0() {
+    let ts = TestScenario::new(util_name!());
+
+    let bin = ts.bin_path.clone();
+
+    ts.ucmd()
+        .args(&["--argv0", "echo"])
+        .arg(&bin)
+        .args(&["-n", "hello", "world!"])
+        .succeeds()
+        .stdout_is("hello world!")
+        .stderr_is("");
+
+    ts.ucmd()
+        .args(&["-a", "dirname"])
+        .arg(bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb\n")
+        .stderr_is("");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_argv0_overwrite() {
+    let ts = TestScenario::new(util_name!());
+
+    let bin = &ts.bin_path;
+
+    // overwrite --argv0 by --argv0
+    ts.ucmd()
+        .args(&["--argv0", "dirname"])
+        .args(&["--argv0", "echo"])
+        .arg(bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // overwrite -a by -a
+    ts.ucmd()
+        .args(&["-a", "dirname"])
+        .args(&["-a", "echo"])
+        .arg(bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // overwrite --argv0 by -a
+    ts.ucmd()
+        .args(&["--argv0", "dirname"])
+        .args(&["-a", "echo"])
+        .arg(bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // overwrite -a by --argv0
+    ts.ucmd()
+        .args(&["-a", "dirname"])
+        .args(&["--argv0", "echo"])
+        .arg(bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
+    let ts = TestScenario::new(util_name!());
+
+    let bin = &ts.bin_path;
+
+    // string arg following normal
+    ts.ucmd()
+        .args(&["-S--argv0 dirname"])
+        .args(&["--argv0", "echo"])
+        .arg(bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // normal following string arg
+    ts.ucmd()
+        .args(&["-a", "dirname"])
+        .args(&["-S-a echo"])
+        .arg(bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // one large string arg
+    ts.ucmd()
+        .args(&["-S--argv0 dirname -a echo"])
+        .arg(bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // two string args
+    ts.ucmd()
+        .args(&["-S-a dirname"])
+        .args(&["-S--argv0 echo"])
+        .arg(bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+
+    // three args: normal, string, normal
+    ts.ucmd()
+        .args(&["-a", "sleep"])
+        .args(&["-S-a dirname"])
+        .args(&["-a", "echo"])
+        .arg(bin)
+        .args(&["aa/bb/cc"])
+        .succeeds()
+        .stdout_is("aa/bb/cc\n")
+        .stderr_is("");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_ignore_signal_invalid_signals() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["--ignore-signal=banana"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: 'banana': invalid signal");
+    ts.ucmd()
+        .args(&["--ignore-signal=SIGbanana"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: 'SIGbanana': invalid signal");
+    ts.ucmd()
+        .args(&["--ignore-signal=exit"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: 'exit': invalid signal");
+    ts.ucmd()
+        .args(&["--ignore-signal=SIGexit"])
+        .fails()
+        .code_is(125)
+        .stderr_contains("env: 'SIGexit': invalid signal");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_ignore_signal_special_signals() {
+    let ts = TestScenario::new(util_name!());
+    let signal_stop = nix::sys::signal::SIGSTOP;
+    let signal_kill = nix::sys::signal::SIGKILL;
+    ts.ucmd()
+        .args(&["--ignore-signal=stop", "echo", "hello"])
+        .fails()
+        .code_is(125)
+        .stderr_contains(format!(
+            "env: failed to set signal action for signal {}: Invalid argument",
+            signal_stop as i32
+        ));
+    ts.ucmd()
+        .args(&["--ignore-signal=kill", "echo", "hello"])
+        .fails()
+        .code_is(125)
+        .stderr_contains(format!(
+            "env: failed to set signal action for signal {}: Invalid argument",
+            signal_kill as i32
+        ));
+    ts.ucmd()
+        .args(&["--ignore-signal=SToP", "echo", "hello"])
+        .fails()
+        .code_is(125)
+        .stderr_contains(format!(
+            "env: failed to set signal action for signal {}: Invalid argument",
+            signal_stop as i32
+        ));
+    ts.ucmd()
+        .args(&["--ignore-signal=SIGKILL", "echo", "hello"])
+        .fails()
+        .code_is(125)
+        .stderr_contains(format!(
+            "env: failed to set signal action for signal {}: Invalid argument",
+            signal_kill as i32
+        ));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_ignore_signal_valid_signals() {
+    {
+        let mut target = Target::new(&["int"]);
+        target.send_signal(Signal::SIGINT);
+        assert!(target.is_alive());
+    }
+    {
+        let mut target = Target::new(&["usr2"]);
+        target.send_signal(Signal::SIGUSR2);
+        assert!(target.is_alive());
+    }
+    {
+        let mut target = Target::new(&["int", "usr2"]);
+        target.send_signal(Signal::SIGUSR1);
+        assert!(!target.is_alive());
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_env_arg_ignore_signal_empty() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["--ignore-signal=", "echo", "hello"])
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("hello");
+}
 #[cfg(test)]
 mod tests_split_iterator {
 
@@ -706,8 +1017,8 @@ mod tests_split_iterator {
 
     use std::ffi::OsString;
 
-    use ::env::parse_error::ParseError;
     use env::native_int_str::{from_native_int_representation_owned, Convert, NCvt};
+    use env::parse_error::ParseError;
 
     fn split(input: &str) -> Result<Vec<OsString>, ParseError> {
         ::env::split_iterator::split(&NCvt::convert(input)).map(|vec| {

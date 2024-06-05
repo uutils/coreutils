@@ -20,8 +20,8 @@ crate-type = [
 ] # XXX: note: the rlib is just to prevent Cargo from spitting out a warning
 
 [dependencies]
-cpp = "0.5"
+cpp = "0.5.9"
 libc = { workspace = true }
 
 [build-dependencies]
-cpp_build = "0.5"
+cpp_build = "0.5.9"

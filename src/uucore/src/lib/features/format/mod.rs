@@ -32,6 +32,7 @@
 
 mod argument;
 mod escape;
+pub mod human;
 pub mod num_format;
 pub mod num_parser;
 mod spec;

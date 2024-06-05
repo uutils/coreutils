@@ -221,7 +221,7 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r sed -Ei
 # we should not regress our project just to match what GNU is going.
 # So, do some changes on the fly
 
-patch -N -r - -d "$path_GNU" -p 1 -i "`realpath \"$path_UUTILS/util/gnu-patches/tests_env_env-S.pl.patch\"`" || true
+eval cat "$path_UUTILS/util/gnu-patches/*.patch" | patch -N -r - -d "$path_GNU" -p 1 -i - || true
 
 sed -i -e "s|rm: cannot remove 'e/slink'|rm: cannot remove 'e'|g" tests/rm/fail-eacces.sh
 
@@ -279,14 +279,11 @@ sed -i "s|\$PACKAGE_VERSION|[0-9]*|g" tests/rm/fail-2eperm.sh tests/mv/sticky-to
 # with the option -/ is used, clap is returning a better error than GNU's. Adjust the GNU test
 sed -i -e "s~  grep \" '\*/'\*\" err || framework_failure_~  grep \" '*-/'*\" err || framework_failure_~" tests/misc/usage_vs_getopt.sh
 sed -i -e "s~  sed -n \"1s/'\\\/'/'OPT'/p\" < err >> pat || framework_failure_~  sed -n \"1s/'-\\\/'/'OPT'/p\" < err >> pat || framework_failure_~" tests/misc/usage_vs_getopt.sh
-# Ignore some binaries (not built)
-# And change the default error code to 2
-# see issue #3331 (clap limitation).
-# Upstream returns 1 for most of the program. We do for cp, truncate & pr
-# So, keep it as it
-sed -i -e "s/rcexp=1$/rcexp=2\n  case \"\$prg\" in chcon|runcon) return;; esac/" -e "s/rcexp=125 ;;/rcexp=2 ;;\ncp|truncate|pr) rcexp=1;;/" tests/misc/usage_vs_getopt.sh
+# Ignore runcon, it needs some extra attention
+# For all other tools, we want drop-in compatibility, and that includes the exit code.
+sed -i -e "s/rcexp=1$/rcexp=1\n  case \"\$prg\" in runcon|stdbuf) return;; esac/" tests/misc/usage_vs_getopt.sh
 # GNU has option=[SUFFIX], clap is <SUFFIX>
-sed -i -e "s/cat opts/sed -i -e \"s| <.\*>$||g\" opts/" tests/misc/usage_vs_getopt.sh
+sed -i -e "s/cat opts/sed -i -e \"s| <.\*$||g\" opts/" tests/misc/usage_vs_getopt.sh
 # for some reasons, some stuff are duplicated, strip that
 sed -i -e "s/provoked error./provoked error\ncat pat |sort -u > pat/" tests/misc/usage_vs_getopt.sh
 
@@ -337,12 +334,12 @@ ls: invalid --time-style argument 'XX'\nPossible values are: [\"full-iso\", \"lo
 # "hostid BEFORE --help AFTER " same for this
 sed -i -e "s/env \$prog \$BEFORE \$opt > out2/env \$prog \$BEFORE \$opt > out2 #/" -e "s/env \$prog \$BEFORE \$opt AFTER > out3/env \$prog \$BEFORE \$opt AFTER > out3 #/" -e "s/compare exp out2/compare exp out2 #/" -e "s/compare exp out3/compare exp out3 #/" tests/help/help-version-getopt.sh
 
-# The case doesn't really matter here
-sed -i -e "s|WARNING: 1 line is improperly formatted|warning: 1 line is improperly formatted|" tests/cksum/md5sum-bsd.sh
-
 # Add debug info + we have less syscall then GNU's. Adjust our check.
 # Use GNU sed for /c command
 "${SED}" -i -e '/test \$n_stat1 = \$n_stat2 \\/c\
 echo "n_stat1 = \$n_stat1"\n\
 echo "n_stat2 = \$n_stat2"\n\
 test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
+
+# no need to replicate this output with hashsum
+sed -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl

@@ -386,13 +386,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let opt_args = recreate_arguments(&args);
 
     let mut command = uu_app();
-    let matches = match command.try_get_matches_from_mut(opt_args) {
-        Ok(m) => m,
-        Err(e) => {
-            e.print()?;
-            return Ok(());
-        }
-    };
+    let matches = command.try_get_matches_from_mut(opt_args)?;
 
     let mut files = matches
         .get_many::<String>(options::FILES)
