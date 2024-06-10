@@ -1369,3 +1369,8 @@ fn check_ignore_truncate_when_squeezing() {
 fn check_disallow_blank_in_set2_when_translating() {
     new_ucmd!().args(&["-t", "1234", "[:blank:]"]).fails();
 }
+
+#[test]
+fn check_class_in_set2_must_be_matched_in_set1() {
+    new_ucmd!().args(&["-t", "1[:upper:]", "[:upper:]"]).fails();
+}

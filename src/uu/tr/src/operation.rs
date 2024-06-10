@@ -34,6 +34,7 @@ pub enum BadSequence {
     InvalidRepeatCount(String),
     EmptySet2WhenNotTruncatingSet1,
     ClassExceptLowerUpperInSet2,
+    ClassInSet2NotMatchedBySet1,
 }
 
 impl Display for BadSequence {
@@ -57,6 +58,9 @@ impl Display for BadSequence {
             }
             Self::ClassExceptLowerUpperInSet2 => {
                 write!(f, "when translating, the only character classes that may appear in set2 are 'upper' and 'lower'")
+            }
+            Self::ClassInSet2NotMatchedBySet1 => {
+                write!(f, "when translating, every 'upper'/'lower' in set2 must be matched by a 'upper'/'lower' in the same position in set1")
             }
         }
     }
@@ -91,18 +95,22 @@ pub enum Sequence {
 }
 
 impl Sequence {
-    pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
+    pub fn flatten_non_lower_upper(&self) -> Box<dyn Iterator<Item = Self>> {
         match self {
-            Self::Char(c) => Box::new(std::iter::once(*c)),
-            Self::CharRange(l, r) => Box::new(*l..=*r),
-            Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
-            Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
+            Self::Char(c) => Box::new(std::iter::once(*c).map(Self::Char)),
+            Self::CharRange(l, r) => Box::new((*l..=*r).map(Self::Char)),
+            Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n).map(Self::Char)),
             Self::Class(class) => match class {
-                Class::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
-                Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
-                Class::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
-                Class::Control => Box::new((0..=31).chain(std::iter::once(127))),
-                Class::Digit => Box::new(b'0'..=b'9'),
+                Class::Alnum => Box::new(
+                    (b'0'..=b'9')
+                        .chain(b'A'..=b'Z')
+                        .chain(b'a'..=b'z')
+                        .map(Self::Char),
+                ),
+                Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z').map(Self::Char)),
+                Class::Blank => Box::new(unicode_table::BLANK.iter().cloned().map(Self::Char)),
+                Class::Control => Box::new((0..=31).chain(std::iter::once(127)).map(Self::Char)),
+                Class::Digit => Box::new((b'0'..=b'9').map(Self::Char)),
                 Class::Graph => Box::new(
                     (48..=57) // digit
                         .chain(65..=90) // uppercase
@@ -112,9 +120,9 @@ impl Sequence {
                         .chain(58..=64)
                         .chain(91..=96)
                         .chain(123..=126)
-                        .chain(std::iter::once(32)), // space
+                        .chain(std::iter::once(32))
+                        .map(Self::Char), // space
                 ),
-                Class::Lower => Box::new(b'a'..=b'z'),
                 Class::Print => Box::new(
                     (48..=57) // digit
                         .chain(65..=90) // uppercase
@@ -123,13 +131,37 @@ impl Sequence {
                         .chain(33..=47)
                         .chain(58..=64)
                         .chain(91..=96)
-                        .chain(123..=126),
+                        .chain(123..=126)
+                        .map(Self::Char),
                 ),
-                Class::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
-                Class::Space => Box::new(unicode_table::SPACES.iter().cloned()),
-                Class::Upper => Box::new(b'A'..=b'Z'),
-                Class::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
+                Class::Punct => Box::new(
+                    (33..=47)
+                        .chain(58..=64)
+                        .chain(91..=96)
+                        .chain(123..=126)
+                        .map(Self::Char),
+                ),
+                Class::Space => Box::new(unicode_table::SPACES.iter().cloned().map(Self::Char)),
+                Class::Xdigit => Box::new(
+                    (b'0'..=b'9')
+                        .chain(b'A'..=b'F')
+                        .chain(b'a'..=b'f')
+                        .map(Self::Char),
+                ),
+                s => Box::new(std::iter::once(Self::Class(*s))),
             },
+            s => Box::new(std::iter::once(*s)),
+        }
+    }
+
+    pub fn flatten_all(&self) -> Box<dyn Iterator<Item = Self>> {
+        match self {
+            Self::Class(class) => match class {
+                Class::Lower => Box::new((b'a'..=b'z').map(Self::Char)),
+                Class::Upper => Box::new((b'A'..=b'Z').map(Self::Char)),
+                s => Self::Class(*s).flatten_non_lower_upper(),
+            },
+            s => s.flatten_non_lower_upper(),
         }
     }
 
@@ -141,90 +173,97 @@ impl Sequence {
         truncate_set1_flag: bool,
         translating: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
-        let set1 = Self::from_str(set1_str)?;
         let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
-        let set1_star_count = set1.iter().filter(is_char_star).count();
-        if set1_star_count == 0 {
-            let set2 = Self::from_str(set2_str)?;
-
-            if translating
-                && set2.iter().any(|&x| {
-                    matches!(x, Self::Class(_))
-                        && !matches!(x, Self::Class(Class::Upper) | Self::Class(Class::Lower))
-                })
-            {
-                return Err(BadSequence::ClassExceptLowerUpperInSet2);
+        let to_u8 = |s: Self| -> Option<u8> {
+            match s {
+                Self::Char(c) => Some(c),
+                _ => None,
             }
+        };
 
-            let set2_star_count = set2.iter().filter(is_char_star).count();
-            if set2_star_count < 2 {
-                let char_star = set2.iter().find_map(|s| match s {
-                    Self::CharStar(c) => Some(c),
-                    _ => None,
-                });
-                let mut partition = set2.as_slice().split(|s| matches!(s, Self::CharStar(_)));
-                let set1_len = set1.iter().flat_map(Self::flatten).count();
-                let set2_len = set2
-                    .iter()
-                    .filter_map(|s| match s {
-                        Self::CharStar(_) => None,
-                        r => Some(r),
-                    })
-                    .flat_map(Self::flatten)
-                    .count();
-                let star_compensate_len = set1_len.saturating_sub(set2_len);
-                let (left, right) = (partition.next(), partition.next());
-                let set2_solved: Vec<_> = match (left, right) {
-                    (None, None) => match char_star {
-                        Some(c) => std::iter::repeat(*c).take(star_compensate_len).collect(),
-                        None => std::iter::empty().collect(),
-                    },
-                    (None, Some(set2_b)) => {
-                        if let Some(c) = char_star {
-                            std::iter::repeat(*c)
-                                .take(star_compensate_len)
-                                .chain(set2_b.iter().flat_map(Self::flatten))
-                                .collect()
-                        } else {
-                            set2_b.iter().flat_map(Self::flatten).collect()
-                        }
-                    }
-                    (Some(set2_a), None) => match char_star {
-                        Some(c) => set2_a
-                            .iter()
-                            .flat_map(Self::flatten)
-                            .chain(std::iter::repeat(*c).take(star_compensate_len))
-                            .collect(),
-                        None => set2_a.iter().flat_map(Self::flatten).collect(),
-                    },
-                    (Some(set2_a), Some(set2_b)) => match char_star {
-                        Some(c) => set2_a
-                            .iter()
-                            .flat_map(Self::flatten)
-                            .chain(std::iter::repeat(*c).take(star_compensate_len))
-                            .chain(set2_b.iter().flat_map(Self::flatten))
-                            .collect(),
-                        None => set2_a
-                            .iter()
-                            .chain(set2_b.iter())
-                            .flat_map(Self::flatten)
-                            .collect(),
-                    },
-                };
-                let mut set1_solved: Vec<_> = set1.iter().flat_map(Self::flatten).collect();
-                if complement_flag {
-                    set1_solved = (0..=u8::MAX).filter(|x| !set1_solved.contains(x)).collect();
-                }
-                if truncate_set1_flag {
-                    set1_solved.truncate(set2_solved.len());
-                }
-                Ok((set1_solved, set2_solved))
-            } else {
-                Err(BadSequence::MultipleCharRepeatInSet2)
-            }
-        } else {
-            Err(BadSequence::CharRepeatInSet1)
+        let set1 = Self::from_str(set1_str)?;
+        if set1.iter().filter(is_char_star).count() != 0 {
+            return Err(BadSequence::CharRepeatInSet1);
         }
+
+        let mut set2 = Self::from_str(set2_str)?;
+        if set2.iter().filter(is_char_star).count() > 1 {
+            return Err(BadSequence::MultipleCharRepeatInSet2);
+        }
+
+        if translating
+            && set2.iter().any(|&x| {
+                matches!(x, Self::Class(_))
+                    && !matches!(x, Self::Class(Class::Upper) | Self::Class(Class::Lower))
+            })
+        {
+            return Err(BadSequence::ClassExceptLowerUpperInSet2);
+        }
+
+        let mut set1_solved: Vec<u8> = set1
+            .iter()
+            .flat_map(Self::flatten_all)
+            .filter_map(to_u8)
+            .collect();
+        if complement_flag {
+            set1_solved = (0..=u8::MAX).filter(|x| !set1_solved.contains(x)).collect();
+        }
+        let set1_len = set1_solved.len();
+
+        let set2_len = set2
+            .iter()
+            .filter_map(|s| match s {
+                Self::CharStar(_) => None,
+                r => Some(r),
+            })
+            .flat_map(Self::flatten_all)
+            .count();
+
+        let star_compensate_len = set1_len.saturating_sub(set2_len);
+
+        //Replace CharStar with CharRepeat
+        set2 = set2
+            .iter()
+            .filter_map(|s| match s {
+                Self::CharStar(0) => None,
+                Self::CharStar(c) => Some(Self::CharRepeat(*c, star_compensate_len)),
+                r => Some(*r),
+            })
+            .collect();
+
+        //Flatten everything but upper/lower into Char
+        let set1_flattened: Vec<_> = set1
+            .iter()
+            .flat_map(Self::flatten_non_lower_upper)
+            .collect();
+        set2 = set2
+            .iter()
+            .flat_map(Self::flatten_non_lower_upper)
+            .collect();
+
+        if set2
+            .iter()
+            .zip(
+                set1_flattened
+                    .iter()
+                    .chain(std::iter::repeat(&Self::Char(0))),
+            )
+            .any(|x| matches!(x.0, Self::Class(_)) && !matches!(x.1, Self::Class(_)))
+        {
+            return Err(BadSequence::ClassInSet2NotMatchedBySet1);
+        }
+
+        let set2_solved: Vec<_> = set2
+            .iter()
+            .flat_map(Self::flatten_all)
+            .filter_map(to_u8)
+            .collect();
+
+        //Truncation is done dead last. It has no influence on the other conversion steps
+        if truncate_set1_flag {
+            set1_solved.truncate(set2_solved.len());
+        }
+        Ok((set1_solved, set2_solved))
     }
 }
 
