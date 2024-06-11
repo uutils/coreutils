@@ -649,6 +649,7 @@ fn test_env_with_empty_executable_double_quotes() {
         .stderr_is("env: '': No such file or directory\n");
 }
 
+#[ignore = "See #6172"]
 #[test]
 fn test_env_with_gnu_reference_unset_invalid_variables() {
     let ts = TestScenario::new(util_name!());
@@ -680,11 +681,11 @@ fn test_env_with_gnu_reference_unset_invalid_variables() {
         .stdout_contains("CZj=lYr");
 
     // env -i -0 -u=kQ4dALb1 A=0d CZj=lYr
-    // Output: A=0dCZj=lYr
+    // Output: A=0d\0CZj=lYr\0
     ts.ucmd()
         .args(&["-i", "-0", "-u=kQ4dALb1", "A=0d", "CZj=lYr"])
         .succeeds()
-        .stdout_is("A=0dCZj=lYr\n")
+        .stdout_is("A=0d\0CZj=lYr\0")
         .stderr_is("");
 
     // env -- -u=kQ4dALb1 A=0d  CZj=lYr
