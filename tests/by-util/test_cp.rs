@@ -5573,3 +5573,31 @@ fn test_preserve_attrs_overriding_2() {
         assert_ne!(dest_file1_metadata.ino(), dest_file2_metadata.ino());
     }
 }
+
+#[test]
+fn test_symlink_to_subdir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+    at.mkdir("dir");
+
+    ucmd.args(&["--symbolic", "file", "dir"])
+        .fails()
+        .no_stdout()
+        .stderr_is("cp: dir/file: can make relative symbolic links only in current directory\n");
+
+    assert!(at.dir_exists("dir"));
+    assert!(!at.file_exists("dir/file"));
+}
+
+#[test]
+fn test_symlink_from_subdir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("dir");
+    at.touch("dir/file");
+
+    ucmd.args(&["--symbolic", "dir/file", "."]).succeeds();
+
+    assert!(at.symlink_exists("file"));
+}

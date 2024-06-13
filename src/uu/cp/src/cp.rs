@@ -7,6 +7,7 @@
 use quick_error::quick_error;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
+use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::fs::{self, File, Metadata, OpenOptions, Permissions};
@@ -1863,6 +1864,22 @@ fn handle_copy_mode(
         CopyMode::SymLink => {
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
                 fs::remove_file(dest)?;
+            }
+            if source.is_relative() {
+                let current_dir = env::current_dir()?;
+                let abs_dest =
+                    canonicalize(dest, MissingHandling::Missing, ResolveMode::Physical).unwrap();
+                if let Some(parent) = abs_dest.parent() {
+                    if parent != current_dir {
+                        {
+                            return Err(format!(
+                                "{}: can make relative symbolic links only in current directory",
+                                dest.maybe_quote()
+                            )
+                            .into());
+                        }
+                    }
+                }
             }
             symlink_file(source, dest, symlinked_files)?;
         }
