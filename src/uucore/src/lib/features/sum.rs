@@ -391,7 +391,7 @@ pub struct DigestWriter<'a> {
 }
 
 impl<'a> DigestWriter<'a> {
-    pub fn new(digest: &'a mut Box<dyn Digest>, binary: bool) -> DigestWriter {
+    pub fn new(digest: &'a mut Box<dyn Digest>, binary: bool) -> Self {
         let was_last_character_carriage_return = false;
         DigestWriter {
             digest,
