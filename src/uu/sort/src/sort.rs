@@ -1728,8 +1728,8 @@ fn general_f64_parse(a: &str) -> GeneralF64ParseResult {
     // TODO: Once our minimum supported Rust version is 1.53 or above, we should add tests for those cases.
     match a.parse::<f64>() {
         Ok(a) if a.is_nan() => GeneralF64ParseResult::NaN,
-        Ok(a) if a == std::f64::NEG_INFINITY => GeneralF64ParseResult::NegInfinity,
-        Ok(a) if a == std::f64::INFINITY => GeneralF64ParseResult::Infinity,
+        Ok(a) if a == f64::NEG_INFINITY => GeneralF64ParseResult::NegInfinity,
+        Ok(a) if a == f64::INFINITY => GeneralF64ParseResult::Infinity,
         Ok(a) => GeneralF64ParseResult::Number(a),
         Err(_) => GeneralF64ParseResult::Invalid,
     }

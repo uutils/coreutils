@@ -321,14 +321,10 @@ struct NonrepeatingIterator<'a> {
 }
 
 impl<'a> NonrepeatingIterator<'a> {
-    fn new(
-        range: RangeInclusive<usize>,
-        rng: &'a mut WrappedRng,
-        amount: usize,
-    ) -> NonrepeatingIterator {
+    fn new(range: RangeInclusive<usize>, rng: &'a mut WrappedRng, amount: usize) -> Self {
         let capped_amount = if range.start() > range.end() {
             0
-        } else if *range.start() == 0 && *range.end() == std::usize::MAX {
+        } else if *range.start() == 0 && *range.end() == usize::MAX {
             amount
         } else {
             amount.min(range.end() - range.start() + 1)
@@ -482,7 +478,7 @@ fn parse_range(input_range: &str) -> Result<RangeInclusive<usize>, String> {
 }
 
 fn parse_head_count(headcounts: Vec<String>) -> Result<usize, String> {
-    let mut result = std::usize::MAX;
+    let mut result = usize::MAX;
     for count in headcounts {
         match count.parse::<usize>() {
             Ok(pv) => result = std::cmp::min(result, pv),

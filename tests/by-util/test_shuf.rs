@@ -158,7 +158,7 @@ fn test_range_repeat_no_overflow_1_max() {
 
 #[test]
 fn test_range_repeat_no_overflow_0_max_minus_1() {
-    let upper_bound = std::usize::MAX - 1;
+    let upper_bound = usize::MAX - 1;
     let result = new_ucmd!()
         .arg("-rn1")
         .arg(&format!("-i0-{upper_bound}"))
@@ -176,7 +176,7 @@ fn test_range_repeat_no_overflow_0_max_minus_1() {
 
 #[test]
 fn test_range_permute_no_overflow_1_max() {
-    let upper_bound = std::usize::MAX;
+    let upper_bound = usize::MAX;
     let result = new_ucmd!()
         .arg("-n1")
         .arg(&format!("-i1-{upper_bound}"))
@@ -194,7 +194,7 @@ fn test_range_permute_no_overflow_1_max() {
 
 #[test]
 fn test_range_permute_no_overflow_0_max_minus_1() {
-    let upper_bound = std::usize::MAX - 1;
+    let upper_bound = usize::MAX - 1;
     let result = new_ucmd!()
         .arg("-n1")
         .arg(&format!("-i0-{upper_bound}"))
@@ -215,7 +215,7 @@ fn test_range_permute_no_overflow_0_max() {
     // NOTE: This is different from GNU shuf!
     // GNU shuf accepts -i0-MAX-1 and -i1-MAX, but not -i0-MAX.
     // This feels like a bug in GNU shuf.
-    let upper_bound = std::usize::MAX;
+    let upper_bound = usize::MAX;
     let result = new_ucmd!()
         .arg("-n1")
         .arg(&format!("-i0-{upper_bound}"))
