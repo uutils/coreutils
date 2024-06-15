@@ -265,10 +265,14 @@ impl Sequence {
             .flat_map(Self::flatten_all)
             .filter_map(to_u8)
             .collect();
+
+        // Calculate the set of unique characters in set2
         let mut set2_uniques = set2_solved.clone();
         set2_uniques.sort();
         set2_uniques.dedup();
 
+        //If the complement flag is used in translate mode, only one unique character may appear in
+        //set2. Validate this with the set of uniques in set2 that we just generated.
         if set1.iter().any(|x| matches!(x, Self::Class(_)))
             && translating
             && complement_flag
