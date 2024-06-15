@@ -36,6 +36,7 @@ pub enum BadSequence {
     ClassExceptLowerUpperInSet2,
     ClassInSet2NotMatchedBySet1,
     Set1LongerSet2EndsInClass,
+    ComplementMoreThanOneUniqueInSet2,
 }
 
 impl Display for BadSequence {
@@ -65,6 +66,9 @@ impl Display for BadSequence {
             }
             Self::Set1LongerSet2EndsInClass => {
                 write!(f, "when translating with string1 longer than string2,\nthe latter string must not end with a character class")
+            }
+            Self::ComplementMoreThanOneUniqueInSet2 => {
+                write!(f, "when translating with complemented character classes,\nstring2 must map all characters in the domain to one")
             }
         }
     }
@@ -224,7 +228,6 @@ impl Sequence {
             .count();
 
         let star_compensate_len = set1_len.saturating_sub(set2_len);
-
         //Replace CharStar with CharRepeat
         set2 = set2
             .iter()
@@ -262,6 +265,17 @@ impl Sequence {
             .flat_map(Self::flatten_all)
             .filter_map(to_u8)
             .collect();
+        let mut set2_uniques = set2_solved.clone();
+        set2_uniques.sort();
+        set2_uniques.dedup();
+
+        if set1.iter().any(|x| matches!(x, Self::Class(_)))
+            && translating
+            && complement_flag
+            && set2_uniques.len() > 1
+        {
+            return Err(BadSequence::ComplementMoreThanOneUniqueInSet2);
+        }
 
         if set2_solved.len() < set1_solved.len()
             && !truncate_set1_flag
