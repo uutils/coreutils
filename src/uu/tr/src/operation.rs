@@ -35,6 +35,7 @@ pub enum BadSequence {
     EmptySet2WhenNotTruncatingSet1,
     ClassExceptLowerUpperInSet2,
     ClassInSet2NotMatchedBySet1,
+    Set1LongerSet2EndsInClass,
 }
 
 impl Display for BadSequence {
@@ -61,6 +62,9 @@ impl Display for BadSequence {
             }
             Self::ClassInSet2NotMatchedBySet1 => {
                 write!(f, "when translating, every 'upper'/'lower' in set2 must be matched by a 'upper'/'lower' in the same position in set1")
+            }
+            Self::Set1LongerSet2EndsInClass => {
+                write!(f, "when translating with string1 longer than string2,\nthe latter string must not end with a character class")
             }
         }
     }
@@ -259,6 +263,15 @@ impl Sequence {
             .filter_map(to_u8)
             .collect();
 
+        if set2_solved.len() < set1_solved.len()
+            && !truncate_set1_flag
+            && matches!(
+                set2.last().copied(),
+                Some(Self::Class(Class::Upper)) | Some(Self::Class(Class::Lower))
+            )
+        {
+            return Err(BadSequence::Set1LongerSet2EndsInClass);
+        }
         //Truncation is done dead last. It has no influence on the other conversion steps
         if truncate_set1_flag {
             set1_solved.truncate(set2_solved.len());

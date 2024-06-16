@@ -1374,3 +1374,15 @@ fn check_disallow_blank_in_set2_when_translating() {
 fn check_class_in_set2_must_be_matched_in_set1() {
     new_ucmd!().args(&["-t", "1[:upper:]", "[:upper:]"]).fails();
 }
+
+#[test]
+fn check_set1_longer_set2_ends_in_class() {
+    new_ucmd!().args(&["[:lower:]a", "[:upper:]"]).fails();
+}
+
+#[test]
+fn check_set1_longer_set2_ends_in_class_with_trunc() {
+    new_ucmd!()
+        .args(&["-t", "[:lower:]a", "[:upper:]"])
+        .succeeds();
+}
