@@ -531,17 +531,17 @@ mod test_number_set_decision {
 
     #[test]
     fn test_stay_positive_large_remaining_first() {
-        assert_eq!(false, number_set_should_list_remaining(0, std::usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(0, usize::MAX));
     }
 
     #[test]
     fn test_stay_positive_large_remaining_second() {
-        assert_eq!(false, number_set_should_list_remaining(1, std::usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(1, usize::MAX));
     }
 
     #[test]
     fn test_stay_positive_large_remaining_tenth() {
-        assert_eq!(false, number_set_should_list_remaining(9, std::usize::MAX));
+        assert_eq!(false, number_set_should_list_remaining(9, usize::MAX));
     }
 
     #[test]
@@ -585,17 +585,14 @@ mod test_number_set_decision {
     // Ensure that we are overflow-free:
     #[test]
     fn test_no_crash_exceed_max_size1() {
-        assert_eq!(
-            false,
-            number_set_should_list_remaining(12345, std::usize::MAX)
-        );
+        assert_eq!(false, number_set_should_list_remaining(12345, usize::MAX));
     }
 
     #[test]
     fn test_no_crash_exceed_max_size2() {
         assert_eq!(
             true,
-            number_set_should_list_remaining(std::usize::MAX - 1, std::usize::MAX)
+            number_set_should_list_remaining(usize::MAX - 1, usize::MAX)
         );
     }
 
@@ -603,7 +600,7 @@ mod test_number_set_decision {
     fn test_no_crash_exceed_max_size3() {
         assert_eq!(
             true,
-            number_set_should_list_remaining(std::usize::MAX, std::usize::MAX)
+            number_set_should_list_remaining(usize::MAX, usize::MAX)
         );
     }
 }
