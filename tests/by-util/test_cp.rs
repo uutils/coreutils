@@ -5573,3 +5573,89 @@ fn test_preserve_attrs_overriding_2() {
         assert_ne!(dest_file1_metadata.ino(), dest_file2_metadata.ino());
     }
 }
+
+/// Test the behavior of preserving permissions when copying through a symlink
+#[test]
+#[cfg(unix)]
+fn test_cp_symlink_permissions() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.set_mode("a", 0o700);
+    at.symlink_file("a", "symlink");
+    at.mkdir("dest");
+    scene
+        .ucmd()
+        .args(&["--preserve", "symlink", "dest"])
+        .succeeds();
+    let dest_dir_metadata = at.metadata("dest/symlink");
+    let src_dir_metadata = at.metadata("a");
+    assert_eq!(
+        src_dir_metadata.permissions().mode(),
+        dest_dir_metadata.permissions().mode()
+    );
+}
+
+/// Test the behavior of preserving permissions of parents when copying through a symlink
+#[test]
+#[cfg(unix)]
+fn test_cp_parents_symlink_permissions_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a");
+    at.touch("a/file");
+    at.set_mode("a", 0o700);
+    at.symlink_dir("a", "symlink");
+    at.mkdir("dest");
+    scene
+        .ucmd()
+        .args(&["--parents", "-a", "symlink/file", "dest"])
+        .succeeds();
+    let dest_dir_metadata = at.metadata("dest/symlink");
+    let src_dir_metadata = at.metadata("a");
+    assert_eq!(
+        src_dir_metadata.permissions().mode(),
+        dest_dir_metadata.permissions().mode()
+    );
+}
+
+/// Test the behavior of preserving permissions of parents when copying through
+/// a symlink when source is a dir.
+#[test]
+#[cfg(unix)]
+fn test_cp_parents_symlink_permissions_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("a/b");
+    at.set_mode("a", 0o755); // Set mode for the actual directory
+    at.symlink_dir("a", "symlink");
+    at.mkdir("dest");
+    scene
+        .ucmd()
+        .args(&["--parents", "-a", "symlink/b", "dest"])
+        .succeeds();
+    let dest_dir_metadata = at.metadata("dest/symlink");
+    let src_dir_metadata = at.metadata("a");
+    assert_eq!(
+        src_dir_metadata.permissions().mode(),
+        dest_dir_metadata.permissions().mode()
+    );
+}
+
+/// Test the behavior of copying a file to a destination with parents using absolute paths.
+#[cfg(unix)]
+#[test]
+fn test_cp_parents_absolute_path() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("a/b");
+    at.touch("a/b/f");
+    at.mkdir("dest");
+    let src = format!("{}/a/b/f", at.root_dir_resolved());
+    scene
+        .ucmd()
+        .args(&["--parents", src.as_str(), "dest"])
+        .succeeds();
+    let res = format!("dest{}/a/b/f", at.root_dir_resolved());
+    at.file_exists(res);
+}
