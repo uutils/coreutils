@@ -68,12 +68,11 @@ pub struct HashAlgorithm {
     pub bits: usize,
 }
 
+#[derive(Default)]
 struct ChecksumResult {
     pub bad_format: i32,
     pub failed_cksum: i32,
     pub failed_open_file: i32,
-    pub correct_format: i32,
-    pub properly_formatted: bool,
 }
 
 #[derive(Debug, Error)]
@@ -322,7 +321,7 @@ fn determine_regex(
     .into())
 }
 
-// Function to convert bytes to a hexadecimal string
+// Converts bytes to a hexadecimal string
 fn bytes_to_hex(bytes: &[u8]) -> String {
     bytes
         .iter()
@@ -330,8 +329,6 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
         .collect::<Vec<String>>()
         .join("")
 }
-
-// Function to get the expected checksum
 
 fn get_expected_checksum(
     filename: &str,
@@ -358,22 +355,21 @@ fn get_expected_checksum(
     }
 }
 
-/// Returns a reader that reads from the specified file, or from stdin if `input_is_stdin` is true.
+/// Returns a reader that reads from the specified file, or from stdin if `filename_to_check` is "-".
 fn get_file_to_check(
-    filename_to_check: &str,
-    filename_to_check_unescaped: &str,
+    filename: &str,
     ignore_missing: bool,
     res: &mut ChecksumResult,
 ) -> Option<Box<dyn Read>> {
-    if filename_to_check == "-" {
+    if filename == "-" {
         Some(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
-        match File::open(filename_to_check_unescaped) {
+        match File::open(filename) {
             Ok(f) => {
                 if f.metadata().ok()?.is_dir() {
                     show!(USimpleError::new(
                         1,
-                        format!("{}: Is a directory", filename_to_check_unescaped)
+                        format!("{}: Is a directory", filename)
                     ));
                     None
                 } else {
@@ -383,8 +379,8 @@ fn get_file_to_check(
             Err(err) => {
                 if !ignore_missing {
                     // yes, we have both stderr and stdout here
-                    show!(err.map_err_context(|| filename_to_check.to_string()));
-                    println!("{}: FAILED open or read", filename_to_check);
+                    show!(err.map_err_context(|| filename.to_string()));
+                    println!("{}: FAILED open or read", filename);
                 }
                 res.failed_open_file += 1;
                 // we could not open the file but we want to continue
@@ -395,75 +391,69 @@ fn get_file_to_check(
 }
 
 /// Returns a reader to the list of checksums
-fn get_input_file(filename_input: &OsStr, input_is_stdin: bool) -> UResult<Box<dyn Read>> {
-    if input_is_stdin {
-        Ok(Box::new(stdin())) // Use stdin if "-" is specified
-    } else {
-        match File::open(filename_input) {
-            Ok(f) => Ok(Box::new(f)),
-            Err(_) => Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!(
-                    "{}: No such file or directory",
-                    filename_input.to_string_lossy()
-                ),
-            )
-            .into()),
+fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
+    match File::open(filename) {
+        Ok(f) => {
+            if f.metadata()?.is_dir() {
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("{}: Is a directory", filename.to_string_lossy()),
+                )
+                .into())
+            } else {
+                Ok(Box::new(f))
+            }
         }
+        Err(_) => Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!("{}: No such file or directory", filename.to_string_lossy()),
+        )
+        .into()),
     }
 }
 
 /// Extracts the algorithm name and length from the regex captures if the algo-based format is matched.
-fn get_algo_name_and_length(
+fn identify_algo_name_and_length(
     caps: &regex::Captures,
-    is_algo_based_format: bool,
     algo_name_input: Option<&str>,
-    length_input: Option<usize>,
     res: &mut ChecksumResult,
+    properly_formatted: &mut bool,
 ) -> (String, Option<usize>) {
-    if is_algo_based_format {
-        // When the algo-based format is matched, extract details from regex captures
-        let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
+    // When the algo-based format is matched, extract details from regex captures
+    let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
 
-        // check if we are called with XXXsum (example: md5sum) but we detected a different algo parsing the file
-        // (for example SHA1 (f) = d...)
-        // Also handle the case cksum -s sm3 but the file contains other formats
-        if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
-            res.bad_format += 1;
-            res.properly_formatted = false;
-            return (String::new(), None);
-        }
-
-        if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
-            // Not supported algo, leave early
-            res.properly_formatted = false;
-            return (String::new(), None);
-        }
-
-        let bits = caps.name("bits").map_or(Some(None), |m| {
-            let bits_value = m.as_str().parse::<usize>().unwrap();
-            if bits_value % 8 == 0 {
-                Some(Some(bits_value / 8))
-            } else {
-                res.properly_formatted = false;
-                None // Return None to signal a divisibility issue
-            }
-        });
-
-        if bits.is_none() {
-            // If bits is None, we have a parsing or divisibility issue
-            // Exit the loop outside of the closure
-            return (String::new(), None);
-        }
-
-        (algorithm, bits.unwrap())
-    } else if let Some(a) = algo_name_input {
-        // When a specific algorithm name is input, use it and use the provided bits
-        (a.to_lowercase(), length_input)
-    } else {
-        // Default case if no algorithm is specified and non-algo based format is matched
-        (String::new(), None)
+    // check if we are called with XXXsum (example: md5sum) but we detected a different algo parsing the file
+    // (for example SHA1 (f) = d...)
+    // Also handle the case cksum -s sm3 but the file contains other formats
+    if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
+        res.bad_format += 1;
+        *properly_formatted = false;
+        return (String::new(), None);
     }
+
+    if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
+        // Not supported algo, leave early
+        *properly_formatted = false;
+        return (String::new(), None);
+    }
+
+    let bits = caps.name("bits").map_or(Some(None), |m| {
+        let bits_value = m.as_str().parse::<usize>().unwrap();
+        if bits_value % 8 == 0 {
+            Some(Some(bits_value / 8))
+        } else {
+            *properly_formatted = false;
+            None // Return None to signal a divisibility issue
+        }
+    });
+
+    if bits.is_none() {
+        // If bits is None, we have a parsing or divisibility issue
+        // Exit the loop outside of the closure
+        return (String::new(), None);
+    }
+
+    (algorithm, bits.unwrap())
 }
 
 /***
@@ -486,16 +476,17 @@ where
 {
     // if cksum has several input files, it will print the result for each file
     for filename_input in files {
-        let mut res = ChecksumResult {
-            bad_format: 0,
-            failed_cksum: 0,
-            failed_open_file: 0,
-            correct_format: 0,
-            properly_formatted: false,
-        };
+        let mut correct_format = 0;
+        let mut properly_formatted = false;
+        let mut res = ChecksumResult::default();
         let input_is_stdin = filename_input == OsStr::new("-");
 
-        let file: Box<dyn Read> = get_input_file(filename_input, input_is_stdin)?;
+        let file: Box<dyn Read> = if input_is_stdin {
+            // Use stdin if "-" is specified
+            Box::new(stdin())
+        } else {
+            get_input_file(filename_input)?
+        };
 
         let reader = BufReader::new(file);
         let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
@@ -504,7 +495,7 @@ where
 
         for (i, line) in lines.iter().enumerate() {
             if let Some(caps) = chosen_regex.captures(line) {
-                res.properly_formatted = true;
+                properly_formatted = true;
 
                 let mut filename_to_check = caps.name("filename").unwrap().as_str();
                 if filename_to_check.starts_with('*')
@@ -520,17 +511,24 @@ where
 
                 // If the algo_name is provided, we use it, otherwise we try to detect it
 
-                let (algo_name, length) = get_algo_name_and_length(
-                    &caps,
-                    is_algo_based_format,
-                    algo_name_input,
-                    length_input,
-                    &mut res,
-                );
+                let (algo_name, length) = if is_algo_based_format {
+                    identify_algo_name_and_length(
+                        &caps,
+                        algo_name_input,
+                        &mut res,
+                        &mut properly_formatted,
+                    )
+                } else if let Some(a) = algo_name_input {
+                    // When a specific algorithm name is input, use it and use the provided bits
+                    (a.to_lowercase(), length_input)
+                } else {
+                    // Default case if no algorithm is specified and non-algo based format is matched
+                    (String::new(), None)
+                };
 
                 if algo_name.is_empty() {
                     // we haven't been able to detect the algo name. No point to continue
-                    res.properly_formatted = false;
+                    properly_formatted = false;
                     continue;
                 }
                 let mut algo = detect_algo(&algo_name, length)?;
@@ -538,17 +536,12 @@ where
                 let (filename_to_check_unescaped, prefix) = unescape_filename(filename_to_check);
 
                 // manage the input file
-
-                let file_to_check = match get_file_to_check(
-                    filename_to_check,
-                    &filename_to_check_unescaped,
-                    ignore_missing,
-                    &mut res,
-                ) {
-                    Some(file) => file,
-                    None => continue,
-                };
-
+                let file_to_check =
+                    match get_file_to_check(&filename_to_check_unescaped, ignore_missing, &mut res)
+                    {
+                        Some(file) => file,
+                        None => continue,
+                    };
                 let mut file_reader = BufReader::new(file_to_check);
                 // Read the file and calculate the checksum
                 let create_fn = &mut algo.create_fn;
@@ -561,7 +554,7 @@ where
                     if !quiet && !status {
                         println!("{prefix}{filename_to_check}: OK");
                     }
-                    res.correct_format += 1;
+                    correct_format += 1;
                 } else {
                     if !status {
                         println!("{prefix}{filename_to_check}: FAILED");
@@ -594,7 +587,7 @@ where
 
         // not a single line correctly formatted found
         // return an error
-        if !res.properly_formatted {
+        if !properly_formatted {
             if !status {
                 return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
                     filename: get_filename_for_output(filename_input, input_is_stdin),
@@ -606,7 +599,7 @@ where
             return Ok(());
         }
 
-        if ignore_missing && res.correct_format == 0 {
+        if ignore_missing && correct_format == 0 {
             // we have only bad format
             // and we had ignore-missing
             eprintln!(
