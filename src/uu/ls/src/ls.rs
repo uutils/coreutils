@@ -10,7 +10,7 @@ use clap::{
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
-use lscolors::{LsColors, Style};
+use lscolors::{Indicator, LsColors, Style};
 
 use ansi_width::ansi_width;
 use std::{cell::OnceCell, num::IntErrorKind};
@@ -2072,6 +2072,15 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     sort_entries(&mut files, config, &mut out);
     sort_entries(&mut dirs, config, &mut out);
 
+    if let Some(c) = &config.color {
+        // ls will try to write a reset before anything is written if normal
+        // color is given
+        if c.style_for_indicator(Indicator::Normal).is_some() {
+            let to_write = style_manager.reset(false);
+            write!(out, "{}", to_write)?;
+        }
+    }
+
     display_items(&files, config, &mut out, &mut dired, &mut style_manager)?;
 
     for (pos, path_data) in dirs.iter().enumerate() {
@@ -2521,6 +2530,14 @@ fn display_items(
 
         let padding = calculate_padding_collection(items, config, out);
 
+        // we need to apply normal color to non filename output
+        if let Some(color) = &config.color {
+            if let Some(sty) = color.style_for_indicator(Indicator::Normal) {
+                let style_code = style_manager.get_style_code(sty);
+                write!(out, "{}", style_code).unwrap();
+            }
+        }
+
         let mut names_vec = Vec::new();
         for i in items {
             let more_info = display_additional_leading_info(i, &padding, config, out)?;
@@ -2695,6 +2712,14 @@ fn display_item_long(
     quoted: bool,
 ) -> UResult<()> {
     let mut output_display: String = String::new();
+
+    // apply normal color to non filename outputs
+    if let Some(color) = &config.color {
+        if let Some(sty) = color.style_for_indicator(Indicator::Normal) {
+            let style_code = style_manager.get_style_code(sty);
+            write!(output_display, "{}", style_code).unwrap();
+        }
+    }
     if config.dired {
         output_display += "  ";
     }
@@ -3296,33 +3321,88 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
 /// This because we need to check the previous value in case we don't need
 /// the reset
 struct StyleManager {
+    /// last style that is applied, if `None` that means reset is applied.
     current_style: Option<Style>,
+    /// `true` if the initial reset is applied
+    initial_reset_is_done: bool,
 }
 
 impl StyleManager {
     fn new() -> Self {
         Self {
+            initial_reset_is_done: false,
             current_style: None,
         }
     }
 
-    fn apply_style(&mut self, new_style: &Style, name: &str) -> String {
-        if let Some(current) = &self.current_style {
-            if *current == *new_style {
-                // Current style is the same as new style, apply without reset.
-                let mut style = new_style.to_nu_ansi_term_style();
-                style.prefix_with_reset = false;
-                return style.paint(name).to_string();
+    fn apply_style(
+        &mut self,
+        new_style: &Style,
+        name: &str,
+        ls_colors: &LsColors,
+        zeroed: bool,
+    ) -> String {
+        let mut style_code = String::new();
+        let mut force_suffix_reset: bool = false;
+        // if reset is done we need to apply normal style before applying new style
+        if self.is_reset() {
+            if let Some(norm_sty) = ls_colors.style_for_indicator(Indicator::Normal) {
+                style_code.push_str(&self.get_style_code(norm_sty));
             }
         }
+        // we only need to apply a new style if it's not the same as the current
+        // style for example if normal is the current style and a file with
+        // normal style is to be printed we could skip printing new color
+        // codes
+        if !self.is_current_style(new_style) {
+            style_code.push_str(&self.reset(false));
+            style_code.push_str(&self.get_style_code(new_style));
+        }
+        // lscolors might be set to zero value if it's set to zero value that
+        // means it should clear all style attributes including normal,so in the
+        // following code if it's not reset it means that it's running normal,
+        // then if zeroed is passed we should reset
+        else if !self.is_reset() && zeroed {
+            style_code.push_str(&self.reset(false));
+            // even though this is an unnecessary reset for gnu compatibility we allow it here
+            force_suffix_reset = true;
+        }
+        format!("{}{}{}", style_code, name, self.reset(force_suffix_reset))
+    }
 
-        // We are getting a new style, we need to reset it
-        self.current_style = Some(new_style.clone());
-        new_style
-            .to_nu_ansi_term_style()
-            .reset_before_style()
-            .paint(name)
-            .to_string()
+    /// Resets the current style and returns the default ANSI reset code to
+    /// reset all text formatting attributes. If `force` is true, the reset is
+    /// done even if the reset has been applied before.
+    fn reset(&mut self, force: bool) -> String {
+        // todo:
+        // We need to use style from `Indicator::Reset` but as of now ls colors
+        // uses a fallback mechanism and because of that if `Indicator::Reset`
+        // is not specified it would fallback to `Indicator::Normal` which seems
+        // to be non compatible with gnu
+        if self.current_style.is_some() | !self.initial_reset_is_done | force {
+            self.initial_reset_is_done = true;
+            self.current_style = None;
+            return "\x1b[0m".to_string();
+        }
+        String::new()
+    }
+
+    fn get_style_code(&mut self, new_style: &Style) -> String {
+        self.current_style = Some(*new_style);
+        let mut nu_a_style = new_style.to_nu_ansi_term_style();
+        nu_a_style.prefix_with_reset = false;
+        let mut ret = nu_a_style.paint("").to_string();
+        // remove the suffix reset
+        ret.truncate(ret.len() - 4);
+        ret
+    }
+
+    fn is_current_style(&mut self, new_style: &Style) -> bool {
+        matches!(&self.current_style,Some(style) if style == new_style )
+    }
+
+    fn is_reset(&mut self) -> bool {
+        self.current_style.is_none()
     }
 }
 
@@ -3333,8 +3413,10 @@ fn apply_style_based_on_metadata(
     style_manager: &mut StyleManager,
     name: &str,
 ) -> String {
-    match ls_colors.style_for_path_with_metadata(&path.p_buf, md_option) {
-        Some(style) => style_manager.apply_style(style, name),
+    let path_indicator = ls_colors.indicator_for_path_with_metadata(&path.p_buf, md_option);
+    let is_zeroed = ls_colors.zeroed_indicators.contains(&path_indicator);
+    match ls_colors.style_for_indicator(path_indicator) {
+        Some(style) => style_manager.apply_style(style, name, ls_colors, is_zeroed),
         None => name.to_owned(),
     }
 }
@@ -3355,8 +3437,10 @@ fn color_name(
         // If we need to dereference (follow) a symlink, we will need to get the metadata
         if let Some(de) = &path.de {
             // There is a DirEntry, we don't need to get the metadata for the color
-            return match ls_colors.style_for(de) {
-                Some(style) => style_manager.apply_style(style, &name),
+            let de_indicator = ls_colors.indicator_for(de);
+            let is_zeroed = ls_colors.zeroed_indicators.contains(&de_indicator);
+            return match ls_colors.style_for_indicator(de_indicator) {
+                Some(style) => style_manager.apply_style(style, &name, ls_colors, is_zeroed),
                 None => name,
             };
         }

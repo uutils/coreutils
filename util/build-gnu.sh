@@ -343,3 +343,11 @@ test \$n_stat1 -ge \$n_stat2 \\' tests/ls/stat-free-color.sh
 
 # no need to replicate this output with hashsum
 sed -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5sum.pl
+
+# Our ls command always outputs ANSI color codes prepended with a zero. However,
+# in the case of GNU, it seems inconsistent. Nevertheless, it looks like it
+# doesn't matter whether we prepend a zero or not.
+sed -i -E '65,79{s/\^\[\[([1-9]m)/^[[0\1/g;  s/\^\[\[m/^[[0m/g}' tests/ls/color-norm.sh
+# It says in the test itself that having more than one reset is a bug, so we
+# don't need to replicate that behavior.
+sed -i -E '73,75{s/(\^\[\[0m)+/\^\[\[0m/g}' tests/ls/color-norm.sh
