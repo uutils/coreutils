@@ -3443,7 +3443,6 @@ dependencies = [
  "number_prefix",
  "once_cell",
  "os_display",
- "quick-error",
  "regex",
  "sha1",
  "sha2",

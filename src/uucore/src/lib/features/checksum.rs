@@ -23,9 +23,9 @@ use crate::{
     },
     util_name,
 };
-use quick_error::quick_error;
 use std::io::stdin;
 use std::io::BufRead;
+use thiserror::Error;
 
 pub const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
 pub const ALGORITHM_OPTIONS_BSD: &str = "bsd";
@@ -68,52 +68,36 @@ pub struct HashAlgorithm {
     pub bits: usize,
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum ChecksumError {
-        RawMultipleFiles {
-            display("the --raw option is not supported with multiple files")
-        }
-        IgnoreNotCheck {
-            display("the --ignore-missing option is meaningful only when verifying checksums")
-        }
-        InvalidOutputSizeForSha3 {
-            display("Invalid output size for SHA3 (expected 224, 256, 384, or 512)")
-        }
-        BitsRequiredForSha3 {
-            display("--bits required for SHA3")
-        }
-        BitsRequiredForShake128 {
-            display("--bits required for SHAKE128")
-        }
-        BitsRequiredForShake256 {
-            display("--bits required for SHAKE256")
-        }
-        UnknownAlgorithm {
-            display("unknown algorithm: clap should have prevented this case")
-        }
-        InvalidLength {
-            display("length is not a multiple of 8")
-        }
-        LengthOnlyForBlake2b {
-            display("--length is only supported with --algorithm=blake2b")
-        }
-        BinaryTextConflict {
-            display("the --binary and --text options are meaningless when verifying checksums")
-        }
-        AlgorithmNotSupportedWithCheck {
-            display("--check is not supported with --algorithm={{bsd,sysv,crc}}")
-        }
-        CombineMultipleAlgorithms {
-            display("You cannot combine multiple hash algorithms!")
-        }
-        NeedAlgorithmToHash {
-            display("Needs an algorithm to hash with.\nUse --help for more information.")
-        }
-        NoProperlyFormattedChecksumLinesFound(filename: String) {
-            display("{filename}: no properly formatted checksum lines found")
-        }
-    }
+#[derive(Debug, Error)]
+pub enum ChecksumError {
+    #[error("the --raw option is not supported with multiple files")]
+    RawMultipleFiles,
+    #[error("the --ignore-missing option is meaningful only when verifying checksums")]
+    IgnoreNotCheck,
+    #[error("Invalid output size for SHA3 (expected 224, 256, 384, or 512)")]
+    InvalidOutputSizeForSha3,
+    #[error("--bits required for SHA3")]
+    BitsRequiredForSha3,
+    #[error("--bits required for SHAKE128")]
+    BitsRequiredForShake128,
+    #[error("--bits required for SHAKE256")]
+    BitsRequiredForShake256,
+    #[error("unknown algorithm: clap should have prevented this case")]
+    UnknownAlgorithm,
+    #[error("length is not a multiple of 8")]
+    InvalidLength,
+    #[error("--length is only supported with --algorithm=blake2b")]
+    LengthOnlyForBlake2b,
+    #[error("the --binary and --text options are meaningless when verifying checksums")]
+    BinaryTextConflict,
+    #[error("--check is not supported with --algorithm={{bsd,sysv,crc}}")]
+    AlgorithmNotSupportedWithCheck,
+    #[error("You cannot combine multiple hash algorithms!")]
+    CombineMultipleAlgorithms,
+    #[error("Needs an algorithm to hash with.\nUse --help for more information.")]
+    NeedAlgorithmToHash,
+    #[error("{filename}: no properly formatted checksum lines found")]
+    NoProperlyFormattedChecksumLinesFound { filename: String },
 }
 
 impl UError for ChecksumError {
@@ -332,14 +316,10 @@ fn determine_regex(
             return Ok((algo_based_regex_base64, true));
         }
     }
-
-    Err(
-        ChecksumError::NoProperlyFormattedChecksumLinesFound(get_filename_for_output(
-            filename,
-            input_is_stdin,
-        ))
-        .into(),
-    )
+    Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
+        filename: get_filename_for_output(filename, input_is_stdin),
+    }
+    .into())
 }
 
 // Function to convert bytes to a hexadecimal string
@@ -368,7 +348,9 @@ fn get_expected_checksum(
                 }
             }
             Err(_) => Err(Box::new(
-                ChecksumError::NoProperlyFormattedChecksumLinesFound((&filename).to_string()),
+                ChecksumError::NoProperlyFormattedChecksumLinesFound {
+                    filename: (&filename).to_string(),
+                },
             )),
         }
     } else {
@@ -579,9 +561,9 @@ where
         // return an error
         if !properly_formatted {
             if !status {
-                return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound(
-                    get_filename_for_output(filename_input, input_is_stdin),
-                )
+                return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
+                    filename: get_filename_for_output(filename_input, input_is_stdin),
+                }
                 .into());
             }
             set_exit_code(1);
