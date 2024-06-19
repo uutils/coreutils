@@ -357,7 +357,7 @@ impl ProcessInformation {
         Ok(Rc::clone(&result))
     }
 
-    /// Fetch start time from [ProcessInformation::cached_stat]
+    /// Fetch start time from cached stat
     ///
     /// - [The /proc Filesystem: Table 1-4](https://docs.kernel.org/filesystems/proc.html#id10)
     pub fn start_time(&mut self) -> Result<u64, io::Error> {
@@ -379,7 +379,7 @@ impl ProcessInformation {
         Ok(time)
     }
 
-    /// Fetch start time from [ProcessInformation::cached_stat]
+    /// Fetch start time from cached stat
     ///
     /// - [The /proc Filesystem: Table 1-4](https://docs.kernel.org/filesystems/proc.html#id10)
     pub fn run_state(&mut self) -> Result<RunState, io::Error> {
