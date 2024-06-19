@@ -508,6 +508,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_run_state_conversion() {
         assert_eq!(RunState::try_from("R").unwrap(), RunState::Running);
         assert_eq!(RunState::try_from("R").unwrap(), RunState::Running);
@@ -535,6 +536,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_walk_pid() {
         let current_pid = current_pid();
 
@@ -544,6 +546,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_pid_entry() {
         let current_pid = current_pid();
 
