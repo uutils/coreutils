@@ -3415,7 +3415,14 @@ fn apply_style_based_on_metadata(
 ) -> String {
     let path_indicator = ls_colors.indicator_for_path_with_metadata(&path.p_buf, md_option);
     let is_zeroed = ls_colors.zeroed_indicators.contains(&path_indicator);
-    match ls_colors.style_for_indicator(path_indicator) {
+    let style = if path_indicator == Indicator::RegularFile {
+        ls_colors
+            .style_for_str(&name)
+            .or_else(|| ls_colors.style_for_indicator(path_indicator))
+    } else {
+        ls_colors.style_for_indicator(path_indicator)
+    };
+    match style {
         Some(style) => style_manager.apply_style(style, name, ls_colors, is_zeroed),
         None => name.to_owned(),
     }
@@ -3439,7 +3446,14 @@ fn color_name(
             // There is a DirEntry, we don't need to get the metadata for the color
             let de_indicator = ls_colors.indicator_for(de);
             let is_zeroed = ls_colors.zeroed_indicators.contains(&de_indicator);
-            return match ls_colors.style_for_indicator(de_indicator) {
+            let style = if de_indicator == Indicator::RegularFile {
+                ls_colors
+                    .style_for_str(&name)
+                    .or_else(|| ls_colors.style_for_indicator(de_indicator))
+            } else {
+                ls_colors.style_for_indicator(de_indicator)
+            };
+            return match style {
                 Some(style) => style_manager.apply_style(style, &name, ls_colors, is_zeroed),
                 None => name,
             };

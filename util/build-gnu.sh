@@ -351,3 +351,8 @@ sed -i -E '65,79{s/\^\[\[([1-9]m)/^[[0\1/g;  s/\^\[\[m/^[[0m/g}' tests/ls/color-
 # It says in the test itself that having more than one reset is a bug, so we
 # don't need to replicate that behavior.
 sed -i -E '73,75{s/(\^\[\[0m)+/\^\[\[0m/g}' tests/ls/color-norm.sh
+
+# GNU's ls seems to output color codes in the order given in the environment
+# variable, but our ls seems to output them in a predefined order. Nevertheless,
+# the order doesn't matter, so it's okay.
+sed -i  '25s/44;37/37;44/' tests/ls/multihardlink.sh
