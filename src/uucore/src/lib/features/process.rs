@@ -321,7 +321,7 @@ impl ProcessInformation {
             pid,
             cmdline,
             inner_status: fs::read_to_string(dir_append(value.clone(), "status".into()))?,
-            inner_stat: fs::read_to_string(dir_append(value.clone(), "stat".into()))?,
+            inner_stat: fs::read_to_string(dir_append(value, "stat".into()))?,
             ..Default::default()
         })
     }
