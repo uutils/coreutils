@@ -585,10 +585,7 @@ mod test_number_set_decision {
     // Ensure that we are overflow-free:
     #[test]
     fn test_no_crash_exceed_max_size1() {
-        assert_eq!(
-            false,
-            number_set_should_list_remaining(12345, usize::MAX)
-        );
+        assert_eq!(false, number_set_should_list_remaining(12345, usize::MAX));
     }
 
     #[test]
