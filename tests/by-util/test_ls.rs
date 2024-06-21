@@ -3942,6 +3942,34 @@ fn test_ls_dired_implies_long() {
 }
 
 #[test]
+fn test_ls_dired_hyperlink() {
+    // we will have link but not the DIRED output
+    // note that the order matters
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/a");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("--hyperlink")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains("file://")
+        .stdout_does_not_contain("//DIRED//");
+    // dired is passed after hyperlink
+    // so we will have DIRED output
+    scene
+        .ucmd()
+        .arg("--hyperlink")
+        .arg("--dired")
+        .arg("-R")
+        .succeeds()
+        .stdout_does_not_contain("file://")
+        .stdout_contains("//DIRED//");
+}
+
+#[test]
 fn test_ls_dired_and_zero_are_incompatible() {
     let scene = TestScenario::new(util_name!());
 
