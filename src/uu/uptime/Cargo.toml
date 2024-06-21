@@ -18,7 +18,7 @@ path = "src/uptime.rs"
 chrono = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true, features = ["libc", "utmpx"] }
-thiserror = {workspace = true}
+thiserror = { workspace = true }
 
 [[bin]]
 name = "uptime"
