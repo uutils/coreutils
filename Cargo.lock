@@ -3345,7 +3345,7 @@ version = "0.0.26"
 dependencies = [
  "chrono",
  "clap",
- "quick-error",
+ "thiserror",
  "uucore",
 ]
 

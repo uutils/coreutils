@@ -9,11 +9,11 @@ use crate::options;
 use crate::uu_app;
 use chrono::{Local, TimeZone, Utc};
 use clap::ArgMatches;
-use quick_error::quick_error;
 use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::os::unix::fs::FileTypeExt;
+use thiserror::Error;
 use uucore::error::set_exit_code;
 use uucore::error::UError;
 use uucore::show_error;
@@ -28,25 +28,19 @@ use uucore::libc::getloadavg;
 extern "C" {
     fn GetTickCount() -> uucore::libc::uint32_t;
 }
-quick_error! {
-#[derive(Debug)]
- pub enum UptimeError {
+#[derive(Debug, Error)]
+pub enum UptimeError {
     // io::Error wrapper
-    IoErr(err: io::Error) {
-        display("couldn't get boot time: {}",err)
+    #[error("couldn't get boot time: {0}")]
+    IoErr(#[from] io::Error),
 
-    }
-   TargetIsDir{
-            display("couldn't get boot time: Is a directory")
-        }
-    TargetIsFifo{
-            display("couldn't get boot time: Illegal seek")
-        }
+    #[error("couldn't get boot time: Is a directory")]
+    TargetIsDir,
 
-    ExtraOperandError(err: String){
-            display("extra operand '{}'",err)
-        }
-   }
+    #[error("couldn't get boot time: Illegal seek")]
+    TargetIsFifo,
+    #[error("extra operand '{0}'")]
+    ExtraOperandError(String),
 }
 impl UError for UptimeError {
     fn code(&self) -> i32 {
