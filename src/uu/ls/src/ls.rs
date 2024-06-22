@@ -10,7 +10,7 @@ use clap::{
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
-use lscolors::{Indicator, LsColors, Style};
+use lscolors::LsColors;
 
 use ansi_width::ansi_width;
 use std::{cell::OnceCell, num::IntErrorKind};
@@ -68,6 +68,8 @@ use uucore::{
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 mod dired;
 use dired::{is_dired_arg_present, DiredOutput};
+mod colors;
+use colors::{color_name, StyleManager};
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
@@ -2038,7 +2040,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut dirs = Vec::<PathData>::new();
     let mut out = BufWriter::new(stdout());
     let mut dired = DiredOutput::default();
-    let mut style_manager = StyleManager::new();
+    let mut style_manager = config.color.as_ref().map(StyleManager::new);
     let initial_locs_len = locs.len();
 
     for loc in locs {
@@ -2072,11 +2074,11 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     sort_entries(&mut files, config, &mut out);
     sort_entries(&mut dirs, config, &mut out);
 
-    if let Some(c) = &config.color {
+    if let Some(style_manager) = style_manager.as_mut() {
         // ls will try to write a reset before anything is written if normal
         // color is given
-        if c.style_for_indicator(Indicator::Normal).is_some() {
-            let to_write = style_manager.reset(false);
+        if style_manager.get_normal_style().is_some() {
+            let to_write = style_manager.reset(true);
             write!(out, "{}", to_write)?;
         }
     }
@@ -2254,7 +2256,7 @@ fn enter_directory(
     out: &mut BufWriter<Stdout>,
     listed_ancestors: &mut HashSet<FileInformation>,
     dired: &mut DiredOutput,
-    style_manager: &mut StyleManager,
+    style_manager: &mut Option<StyleManager>,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
@@ -2478,7 +2480,7 @@ fn display_items(
     config: &Config,
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
-    style_manager: &mut StyleManager,
+    style_manager: &mut Option<StyleManager>,
 ) -> UResult<()> {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
@@ -2531,11 +2533,8 @@ fn display_items(
         let padding = calculate_padding_collection(items, config, out);
 
         // we need to apply normal color to non filename output
-        if let Some(color) = &config.color {
-            if let Some(sty) = color.style_for_indicator(Indicator::Normal) {
-                let style_code = style_manager.get_style_code(sty);
-                write!(out, "{}", style_code).unwrap();
-            }
+        if let Some(style_manager) = style_manager {
+            write!(out, "{}", style_manager.apply_normal())?;
         }
 
         let mut names_vec = Vec::new();
@@ -2708,17 +2707,14 @@ fn display_item_long(
     config: &Config,
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
-    style_manager: &mut StyleManager,
+    style_manager: &mut Option<StyleManager>,
     quoted: bool,
 ) -> UResult<()> {
     let mut output_display: String = String::new();
 
     // apply normal color to non filename outputs
-    if let Some(color) = &config.color {
-        if let Some(sty) = color.style_for_indicator(Indicator::Normal) {
-            let style_code = style_manager.get_style_code(sty);
-            write!(output_display, "{}", style_code).unwrap();
-        }
+    if let Some(style_manager) = style_manager {
+        write!(output_display, "{}", style_manager.apply_normal()).unwrap();
     }
     if config.dired {
         output_display += "  ";
@@ -3171,7 +3167,7 @@ fn display_item_name(
     prefix_context: Option<usize>,
     more_info: String,
     out: &mut BufWriter<Stdout>,
-    style_manager: &mut StyleManager,
+    style_manager: &mut Option<StyleManager>,
 ) -> String {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
@@ -3180,8 +3176,8 @@ fn display_item_name(
         name = create_hyperlink(&name, path);
     }
 
-    if let Some(ls_colors) = &config.color {
-        name = color_name(name, path, ls_colors, style_manager, out, None);
+    if let Some(style_manager) = style_manager {
+        name = color_name(&name, path, style_manager, out, None);
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -3227,7 +3223,7 @@ fn display_item_name(
                 // We might as well color the symlink output after the arrow.
                 // This makes extra system calls, but provides important information that
                 // people run `ls -l --color` are very interested in.
-                if let Some(ls_colors) = &config.color {
+                if let Some(style_manager) = style_manager {
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
                     let mut absolute_target = target.clone();
@@ -3253,9 +3249,8 @@ fn display_item_name(
                         name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
                     } else {
                         name.push_str(&color_name(
-                            escape_name(target.as_os_str(), &config.quoting_style),
+                            &escape_name(target.as_os_str(), &config.quoting_style),
                             path,
-                            ls_colors,
                             style_manager,
                             out,
                             Some(&target_data),
@@ -3315,165 +3310,6 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
 
     // \x1b = ESC, \x07 = BEL
     format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07")
-}
-
-/// We need this struct to be able to store the previous style.
-/// This because we need to check the previous value in case we don't need
-/// the reset
-struct StyleManager {
-    /// last style that is applied, if `None` that means reset is applied.
-    current_style: Option<Style>,
-    /// `true` if the initial reset is applied
-    initial_reset_is_done: bool,
-}
-
-impl StyleManager {
-    fn new() -> Self {
-        Self {
-            initial_reset_is_done: false,
-            current_style: None,
-        }
-    }
-
-    fn apply_style(
-        &mut self,
-        new_style: &Style,
-        name: &str,
-        ls_colors: &LsColors,
-        zeroed: bool,
-    ) -> String {
-        let mut style_code = String::new();
-        let mut force_suffix_reset: bool = false;
-        // if reset is done we need to apply normal style before applying new style
-        if self.is_reset() {
-            if let Some(norm_sty) = ls_colors.style_for_indicator(Indicator::Normal) {
-                style_code.push_str(&self.get_style_code(norm_sty));
-            }
-        }
-        // we only need to apply a new style if it's not the same as the current
-        // style for example if normal is the current style and a file with
-        // normal style is to be printed we could skip printing new color
-        // codes
-        if !self.is_current_style(new_style) {
-            style_code.push_str(&self.reset(false));
-            style_code.push_str(&self.get_style_code(new_style));
-        }
-        // lscolors might be set to zero value if it's set to zero value that
-        // means it should clear all style attributes including normal,so in the
-        // following code if it's not reset it means that it's running normal,
-        // then if zeroed is passed we should reset
-        else if !self.is_reset() && zeroed {
-            style_code.push_str(&self.reset(false));
-            // even though this is an unnecessary reset for gnu compatibility we allow it here
-            force_suffix_reset = true;
-        }
-        format!("{}{}{}", style_code, name, self.reset(force_suffix_reset))
-    }
-
-    /// Resets the current style and returns the default ANSI reset code to
-    /// reset all text formatting attributes. If `force` is true, the reset is
-    /// done even if the reset has been applied before.
-    fn reset(&mut self, force: bool) -> String {
-        // todo:
-        // We need to use style from `Indicator::Reset` but as of now ls colors
-        // uses a fallback mechanism and because of that if `Indicator::Reset`
-        // is not specified it would fallback to `Indicator::Normal` which seems
-        // to be non compatible with gnu
-        if self.current_style.is_some() | !self.initial_reset_is_done | force {
-            self.initial_reset_is_done = true;
-            self.current_style = None;
-            return "\x1b[0m".to_string();
-        }
-        String::new()
-    }
-
-    fn get_style_code(&mut self, new_style: &Style) -> String {
-        self.current_style = Some(*new_style);
-        let mut nu_a_style = new_style.to_nu_ansi_term_style();
-        nu_a_style.prefix_with_reset = false;
-        let mut ret = nu_a_style.paint("").to_string();
-        // remove the suffix reset
-        ret.truncate(ret.len() - 4);
-        ret
-    }
-
-    fn is_current_style(&mut self, new_style: &Style) -> bool {
-        matches!(&self.current_style,Some(style) if style == new_style )
-    }
-
-    fn is_reset(&mut self) -> bool {
-        self.current_style.is_none()
-    }
-}
-
-fn apply_style_based_on_metadata(
-    path: &PathData,
-    md_option: Option<&Metadata>,
-    ls_colors: &LsColors,
-    style_manager: &mut StyleManager,
-    name: &str,
-) -> String {
-    let path_indicator = ls_colors.indicator_for_path_with_metadata(&path.p_buf, md_option);
-    let is_zeroed = ls_colors.zeroed_indicators.contains(&path_indicator);
-    let style = if path_indicator == Indicator::RegularFile {
-        ls_colors
-            .style_for_str(&name)
-            .or_else(|| ls_colors.style_for_indicator(path_indicator))
-    } else {
-        ls_colors.style_for_indicator(path_indicator)
-    };
-    match style {
-        Some(style) => style_manager.apply_style(style, name, ls_colors, is_zeroed),
-        None => name.to_owned(),
-    }
-}
-
-/// Colors the provided name based on the style determined for the given path
-/// This function is quite long because it tries to leverage DirEntry to avoid
-/// unnecessary calls to stat()
-/// and manages the symlink errors
-fn color_name(
-    name: String,
-    path: &PathData,
-    ls_colors: &LsColors,
-    style_manager: &mut StyleManager,
-    out: &mut BufWriter<Stdout>,
-    target_symlink: Option<&PathData>,
-) -> String {
-    if !path.must_dereference {
-        // If we need to dereference (follow) a symlink, we will need to get the metadata
-        if let Some(de) = &path.de {
-            // There is a DirEntry, we don't need to get the metadata for the color
-            let de_indicator = ls_colors.indicator_for(de);
-            let is_zeroed = ls_colors.zeroed_indicators.contains(&de_indicator);
-            let style = if de_indicator == Indicator::RegularFile {
-                ls_colors
-                    .style_for_str(&name)
-                    .or_else(|| ls_colors.style_for_indicator(de_indicator))
-            } else {
-                ls_colors.style_for_indicator(de_indicator)
-            };
-            return match style {
-                Some(style) => style_manager.apply_style(style, &name, ls_colors, is_zeroed),
-                None => name,
-            };
-        }
-    }
-
-    if let Some(target) = target_symlink {
-        // use the optional target_symlink
-        // Use fn get_metadata_with_deref_opt instead of get_metadata() here because ls
-        // should not exit with an err, if we are unable to obtain the target_metadata
-        let md_res = get_metadata_with_deref_opt(target.p_buf.as_path(), path.must_dereference);
-        let md = md_res.or(path.p_buf.symlink_metadata());
-        apply_style_based_on_metadata(path, md.ok().as_ref(), ls_colors, style_manager, &name)
-    } else {
-        let md_option = path.get_metadata(out);
-        let symlink_metadata = path.p_buf.symlink_metadata().ok();
-        let md = md_option.or(symlink_metadata.as_ref());
-
-        apply_style_based_on_metadata(path, md, ls_colors, style_manager, &name)
-    }
 }
 
 #[cfg(not(unix))]
