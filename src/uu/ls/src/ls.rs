@@ -1083,7 +1083,7 @@ impl Config {
             // --dired implies --format=long
             format = Format::Long;
         }
-        if dired && format == Format::Long && options.get_flag(options::ZERO) {
+        if dired && options.get_flag(options::ZERO) {
             return Err(Box::new(LsError::DiredAndZeroAreIncompatible));
         }
 
@@ -1211,6 +1211,7 @@ pub fn uu_app() -> Command {
                     options::format::LONG,
                     options::format::ACROSS,
                     options::format::COLUMNS,
+                    options::DIRED,
                 ]),
         )
         .arg(
@@ -1303,7 +1304,8 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .default_missing_value("always")
                 .default_value("never")
-                .value_name("WHEN").overrides_with(options::DIRED),
+                .value_name("WHEN")
+                .overrides_with(options::DIRED),
         )
         // The next four arguments do not override with the other format
         // options, see the comment in Config::from for the reason.

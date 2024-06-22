@@ -3970,6 +3970,28 @@ fn test_ls_dired_hyperlink() {
 }
 
 #[test]
+fn test_ls_dired_order_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/a");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("--format=vertical")
+        .arg("-R")
+        .succeeds()
+        .stdout_does_not_contain("//DIRED//");
+    scene
+        .ucmd()
+        .arg("--format=vertical")
+        .arg("--dired")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains("//DIRED//");
+}
+
+#[test]
 fn test_ls_dired_and_zero_are_incompatible() {
     let scene = TestScenario::new(util_name!());
 
