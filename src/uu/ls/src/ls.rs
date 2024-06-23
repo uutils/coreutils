@@ -67,7 +67,7 @@ use uucore::{
 };
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 mod dired;
-use dired::DiredOutput;
+use dired::{is_dired_arg_present, DiredOutput};
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
@@ -1079,8 +1079,10 @@ impl Config {
         };
 
         let dired = options.get_flag(options::DIRED);
-        if dired {
+        if dired || is_dired_arg_present() {
             // --dired implies --format=long
+            // if we have --dired --hyperlink, we don't show dired but we still want to see the
+            // long format
             format = Format::Long;
         }
         if dired && options.get_flag(options::ZERO) {
