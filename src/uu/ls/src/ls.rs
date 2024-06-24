@@ -67,7 +67,7 @@ use uucore::{
 };
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 mod dired;
-use dired::DiredOutput;
+use dired::{is_dired_arg_present, DiredOutput};
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
@@ -174,7 +174,6 @@ enum LsError {
     IOError(std::io::Error),
     IOErrorContext(std::io::Error, PathBuf, bool),
     BlockSizeParseError(String),
-    ConflictingArgumentDired,
     DiredAndZeroAreIncompatible,
     AlreadyListedError(PathBuf),
     TimeStyleParseError(String, Vec<String>),
@@ -188,7 +187,6 @@ impl UError for LsError {
             Self::IOErrorContext(_, _, false) => 1,
             Self::IOErrorContext(_, _, true) => 2,
             Self::BlockSizeParseError(_) => 2,
-            Self::ConflictingArgumentDired => 1,
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_, _) => 2,
@@ -203,9 +201,6 @@ impl Display for LsError {
         match self {
             Self::BlockSizeParseError(s) => {
                 write!(f, "invalid --block-size argument {}", s.quote())
-            }
-            Self::ConflictingArgumentDired => {
-                write!(f, "--dired requires --format=long")
             }
             Self::DiredAndZeroAreIncompatible => {
                 write!(f, "--dired and --zero are incompatible")
@@ -1084,10 +1079,13 @@ impl Config {
         };
 
         let dired = options.get_flag(options::DIRED);
-        if dired && format != Format::Long {
-            return Err(Box::new(LsError::ConflictingArgumentDired));
+        if dired || is_dired_arg_present() {
+            // --dired implies --format=long
+            // if we have --dired --hyperlink, we don't show dired but we still want to see the
+            // long format
+            format = Format::Long;
         }
-        if dired && format == Format::Long && options.get_flag(options::ZERO) {
+        if dired && options.get_flag(options::ZERO) {
             return Err(Box::new(LsError::DiredAndZeroAreIncompatible));
         }
 
@@ -1215,6 +1213,7 @@ pub fn uu_app() -> Command {
                     options::format::LONG,
                     options::format::ACROSS,
                     options::format::COLUMNS,
+                    options::DIRED,
                 ]),
         )
         .arg(
@@ -1291,7 +1290,8 @@ pub fn uu_app() -> Command {
                 .long(options::DIRED)
                 .short('D')
                 .help("generate output designed for Emacs' dired (Directory Editor) mode")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::HYPERLINK),
         )
         .arg(
             Arg::new(options::HYPERLINK)
@@ -1306,7 +1306,8 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .default_missing_value("always")
                 .default_value("never")
-                .value_name("WHEN"),
+                .value_name("WHEN")
+                .overrides_with(options::DIRED),
         )
         // The next four arguments do not override with the other format
         // options, see the comment in Config::from for the reason.
@@ -2022,7 +2023,7 @@ impl PathData {
 }
 
 fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Config) {
-    if config.hyperlink {
+    if config.hyperlink && !config.dired {
         let name = escape_name(&path_data.display_name, &config.quoting_style);
         let hyperlink = create_hyperlink(&name, path_data);
         write!(out, "{}:", hyperlink).unwrap();
@@ -2127,7 +2128,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             &mut style_manager,
         )?;
     }
-    if config.dired {
+    if config.dired && !config.hyperlink {
         dired::print_dired_output(config, &dired, &mut out)?;
     }
     Ok(())

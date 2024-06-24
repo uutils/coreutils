@@ -3929,15 +3929,68 @@ fn test_ls_perm_io_errors() {
 }
 
 #[test]
-fn test_ls_dired_incompatible() {
+fn test_ls_dired_implies_long() {
     let scene = TestScenario::new(util_name!());
 
     scene
         .ucmd()
         .arg("--dired")
-        .fails()
-        .code_is(1)
-        .stderr_contains("--dired requires --format=long");
+        .succeeds()
+        .stdout_does_not_contain("//DIRED//")
+        .stdout_contains("  total 0")
+        .stdout_contains("//DIRED-OPTIONS// --quoting-style");
+}
+
+#[test]
+fn test_ls_dired_hyperlink() {
+    // we will have link but not the DIRED output
+    // note that the order matters
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/a");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("--hyperlink")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains("file://")
+        .stdout_contains("-rw") // we should have the long output
+        // even if dired isn't actually run
+        .stdout_does_not_contain("//DIRED//");
+    // dired is passed after hyperlink
+    // so we will have DIRED output
+    scene
+        .ucmd()
+        .arg("--hyperlink")
+        .arg("--dired")
+        .arg("-R")
+        .succeeds()
+        .stdout_does_not_contain("file://")
+        .stdout_contains("//DIRED//");
+}
+
+#[test]
+fn test_ls_dired_order_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/a");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("--format=vertical")
+        .arg("-R")
+        .succeeds()
+        .stdout_does_not_contain("//DIRED//");
+    scene
+        .ucmd()
+        .arg("--format=vertical")
+        .arg("--dired")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains("//DIRED//");
 }
 
 #[test]
