@@ -71,7 +71,8 @@ mod platform {
     use std::fs::OpenOptions;
     use std::os::windows::prelude::*;
     use std::path::Path;
-    use uucore::crash;
+    use uucore::error::{UResult, USimpleError};
+    use uucore::show;
     use uucore::wide::{FromWide, ToWide};
     use windows_sys::Win32::Foundation::{
         GetLastError, ERROR_NO_MORE_FILES, HANDLE, INVALID_HANDLE_VALUE, MAX_PATH,
@@ -88,24 +89,31 @@ mod platform {
             match OpenOptions::new().write(true).open(sliced_name) {
                 Ok(file) => {
                     if FlushFileBuffers(file.as_raw_handle() as HANDLE) == 0 {
-                        crash!(GetLastError() as i32, "failed to flush file buffer");
+                        show!(USimpleError::new(
+                            GetLastError() as i32,
+                            "failed to flush file buffer"
+                        ));
                     }
                 }
-                Err(e) => crash!(
+                Err(e) => show!(USimpleError::new(
                     e.raw_os_error().unwrap_or(1),
                     "failed to create volume handle"
-                ),
+                )),
             }
         }
     }
 
-    unsafe fn find_first_volume() -> (String, HANDLE) {
+    unsafe fn find_first_volume() -> UResult<(String, HANDLE)> {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
         let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
         if handle == INVALID_HANDLE_VALUE {
-            crash!(GetLastError() as i32, "failed to find first volume");
+            show!(USimpleError::new(
+                GetLastError() as i32,
+                "failed to find first volume"
+            ));
+            Err(String::from("INVALID_HANDLE"))
         }
-        (String::from_wide_null(&name), handle)
+        Ok(String::from_wide_null(&name), handle)
     }
 
     unsafe fn find_all_volumes() -> Vec<String> {
@@ -119,7 +127,7 @@ mod platform {
                         FindVolumeClose(next_volume_handle);
                         return volumes;
                     }
-                    err => crash!(err as i32, "failed to find next volume"),
+                    err => show!(USimpleError::new(err as i32, "failed to find next volume")),
                 }
             } else {
                 volumes.push(String::from_wide_null(&name));
