@@ -4673,3 +4673,133 @@ fn test_acl_display() {
         .succeeds()
         .stdout_contains("+");
 }
+
+// Make sure that "ls --color" correctly applies color "normal" to text and
+// files. Specifically, it should use the NORMAL setting to format non-file name
+// output and file names that don't have a designated color (unless the FILE
+// setting is also configured).
+#[cfg(unix)]
+#[test]
+fn test_ls_color_norm() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("exe");
+    at.set_mode("exe", 0o755);
+    at.touch("no_color");
+    at.set_mode("no_color", 0o444);
+    let colors = "no=7:ex=01;32";
+    let strip = |input: &str| {
+        let re = Regex::new(r"-r.*norm").unwrap();
+        re.replace_all(input, "norm").to_string()
+    };
+
+    //  Uncolored file names should inherit NORMAL attributes.
+    let expected = "\x1b[0m\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n\x1b[07mnorm no_color\x1b[0m"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("exe")
+        .arg("no_color")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    let expected = "\x1b[0m\x1b[07m\x1b[0m\x1b[01;32mexe\x1b[0m  \x1b[07mno_color\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-xU")
+        .arg("--color")
+        .arg("exe")
+        .arg("no_color")
+        .succeeds()
+        .stdout_contains(expected);
+
+    let expected =
+        "\x1b[0m\x1b[07mnorm no_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    let expected = "\x1b[0m\x1b[07mno_color\x1b[0m  \x1b[07m\x1b[0m\x1b[01;32mexe\x1b[0m"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-xU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_contains(expected);
+
+    //  NORMAL does not override FILE
+    let expected = "\x1b[0m\x1b[07mnorm \x1b[0m\x1b[01mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", format!("{}:fi=1", colors))
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    // uncolored ordinary files that do _not_ inherit from NORMAL.
+    let expected =
+        "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", format!("{}:fi=", colors))
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    let expected =
+        "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", format!("{}:fi=0", colors))
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    //  commas (-m), indicator chars (-F) and the "total" line, do not currently
+    //  use NORMAL attributes
+    let expected = "\x1b[0m\x1b[07mno_color\x1b[0m, \x1b[07m\x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-mU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_contains(expected);
+}
