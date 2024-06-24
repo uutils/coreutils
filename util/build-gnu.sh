@@ -347,12 +347,12 @@ sed -i -e  "s|Try 'md5sum --help' for more information.\\\n||" tests/cksum/md5su
 # Our ls command always outputs ANSI color codes prepended with a zero. However,
 # in the case of GNU, it seems inconsistent. Nevertheless, it looks like it
 # doesn't matter whether we prepend a zero or not.
-sed -i -E '65,79{s/\^\[\[([1-9]m)/^[[0\1/g;  s/\^\[\[m/^[[0m/g}' tests/ls/color-norm.sh
+sed -i -E 's/\^\[\[([1-9]m)/^[[0\1/g;  s/\^\[\[m/^[[0m/g' tests/ls/color-norm.sh
 # It says in the test itself that having more than one reset is a bug, so we
 # don't need to replicate that behavior.
-sed -i -E '73,75{s/(\^\[\[0m)+/\^\[\[0m/g}' tests/ls/color-norm.sh
+sed -i -E 's/(\^\[\[0m)+/\^\[\[0m/g' tests/ls/color-norm.sh
 
 # GNU's ls seems to output color codes in the order given in the environment
 # variable, but our ls seems to output them in a predefined order. Nevertheless,
 # the order doesn't matter, so it's okay.
-sed -i  '25s/44;37/37;44/' tests/ls/multihardlink.sh
+sed -i  's/44;37/37;44/' tests/ls/multihardlink.sh
