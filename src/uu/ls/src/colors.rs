@@ -31,35 +31,32 @@ impl<'a> StyleManager<'a> {
     pub(crate) fn apply_style(&mut self, new_style: Option<&Style>, name: &str) -> String {
         let mut style_code = String::new();
         let mut force_suffix_reset: bool = false;
+
         // if reset is done we need to apply normal style before applying new style
         if self.is_reset() {
             if let Some(norm_sty) = self.get_normal_style().copied() {
                 style_code.push_str(&self.get_style_code(&norm_sty));
             }
         }
-        // we only need to apply a new style if it's not the same as the current
-        // style for example if normal is the current style and a file with
-        // normal style is to be printed we could skip printing new color
-        // codes
+
         if let Some(new_style) = new_style {
+            // we only need to apply a new style if it's not the same as the current
+            // style for example if normal is the current style and a file with
+            // normal style is to be printed we could skip printing new color
+            // codes
             if !self.is_current_style(new_style) {
                 style_code.push_str(&self.reset(!self.initial_reset_is_done));
                 style_code.push_str(&self.get_style_code(new_style));
             }
         }
-        // lscolors might be set to zero value if it's set to zero value that
-        // means it should clear all style attributes including normal,so in the
-        // following code if it's not reset it means that it's running normal,
-        // then if zeroed is passed we should reset
-        else if !self.is_reset() {
-            if let Some(norm) = self.get_normal_style().copied() {
-                if self.is_current_style(&norm) {
-                    style_code.push_str(&self.reset(false));
-                    // even though this is an unnecessary reset for gnu compatibility we allow it here
-                    force_suffix_reset = true;
-                }
-            }
+        // if new style is None and current style is Normal we should reset it
+        else if matches!(self.get_normal_style().copied(), Some(norm_style) if self.is_current_style(&norm_style))
+        {
+            style_code.push_str(&self.reset(false));
+            // even though this is an unnecessary reset for gnu compatibility we allow it here
+            force_suffix_reset = true;
         }
+
         format!("{}{}{}", style_code, name, self.reset(force_suffix_reset))
     }
 
