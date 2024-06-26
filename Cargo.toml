@@ -30,6 +30,7 @@ windows = ["feat_os_windows"]
 ## project-specific feature shortcodes
 nightly = []
 test_unimplemented = []
+expensive_tests = []
 # * only build `uudoc` when `--feature uudoc` is activated
 uudoc = ["zip", "dep:uuhelp_parser"]
 ## features
