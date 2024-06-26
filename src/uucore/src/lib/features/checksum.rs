@@ -502,7 +502,6 @@ where
                     get_expected_checksum(filename_to_check, &caps, &chosen_regex)?;
 
                 // If the algo_name is provided, we use it, otherwise we try to detect it
-
                 let (algo_name, length) = if is_algo_based_format {
                     identify_algo_name_and_length(
                         &caps,
@@ -513,7 +512,15 @@ where
                     .unwrap_or((String::new(), None))
                 } else if let Some(a) = algo_name_input {
                     // When a specific algorithm name is input, use it and use the provided bits
-                    (a.to_lowercase(), length_input)
+                    // except when dealing with blake2b, where we will detect the length
+                    if algo_name_input == Some(ALGORITHM_OPTIONS_BLAKE2B) {
+                        // division by 2 converts the length of the Blake2b checksum from hexadecimal
+                        // characters to bytes, as each byte is represented by two hexadecimal characters.
+                        let length = Some(expected_checksum.len() / 2);
+                        (ALGORITHM_OPTIONS_BLAKE2B.to_string(), length)
+                    } else {
+                        (a.to_lowercase(), length_input)
+                    }
                 } else {
                     // Default case if no algorithm is specified and non-algo based format is matched
                     (String::new(), None)
