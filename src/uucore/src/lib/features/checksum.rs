@@ -418,7 +418,7 @@ fn identify_algo_name_and_length(
     algo_name_input: Option<&str>,
     res: &mut ChecksumResult,
     properly_formatted: &mut bool,
-) -> (String, Option<usize>) {
+) -> Option<(String, Option<usize>)> {
     // When the algo-based format is matched, extract details from regex captures
     let algorithm = caps.name("algo").map_or("", |m| m.as_str()).to_lowercase();
 
@@ -428,13 +428,13 @@ fn identify_algo_name_and_length(
     if algo_name_input.is_some() && algo_name_input != Some(&algorithm) {
         res.bad_format += 1;
         *properly_formatted = false;
-        return (String::new(), None);
+        return None;
     }
 
     if !SUPPORTED_ALGORITHMS.contains(&algorithm.as_str()) {
         // Not supported algo, leave early
         *properly_formatted = false;
-        return (String::new(), None);
+        return None;
     }
 
     let bits = caps.name("bits").map_or(Some(None), |m| {
@@ -445,15 +445,9 @@ fn identify_algo_name_and_length(
             *properly_formatted = false;
             None // Return None to signal a divisibility issue
         }
-    });
+    })?;
 
-    if bits.is_none() {
-        // If bits is None, we have a parsing or divisibility issue
-        // Exit the loop outside of the closure
-        return (String::new(), None);
-    }
-
-    (algorithm, bits.unwrap())
+    Some((algorithm, bits))
 }
 
 /***
@@ -518,6 +512,7 @@ where
                         &mut res,
                         &mut properly_formatted,
                     )
+                    .unwrap_or((String::new(), None))
                 } else if let Some(a) = algo_name_input {
                     // When a specific algorithm name is input, use it and use the provided bits
                     (a.to_lowercase(), length_input)
