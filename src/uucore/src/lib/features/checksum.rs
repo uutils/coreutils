@@ -295,11 +295,7 @@ fn get_filename_for_output(filename: &OsStr, input_is_stdin: bool) -> String {
 }
 
 /// Determines the appropriate regular expression to use based on the provided lines.
-fn determine_regex(
-    filename: &OsStr,
-    input_is_stdin: bool,
-    lines: &[String],
-) -> UResult<(Regex, bool)> {
+fn determine_regex(lines: &[String]) -> Option<(Regex, bool)> {
     let regexes = [
         (Regex::new(ALGO_BASED_REGEX).unwrap(), true),
         (Regex::new(DOUBLE_SPACE_REGEX).unwrap(), false),
@@ -311,14 +307,12 @@ fn determine_regex(
         let line_trim = line.trim();
         for (regex, is_algo_based) in &regexes {
             if regex.is_match(line_trim) {
-                return Ok((regex.clone(), *is_algo_based));
+                return Some((regex.clone(), *is_algo_based));
             }
         }
     }
-    Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
-        filename: get_filename_for_output(filename, input_is_stdin),
-    }
-    .into())
+
+    None
 }
 
 // Converts bytes to a hexadecimal string
@@ -484,8 +478,12 @@ where
 
         let reader = BufReader::new(file);
         let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
-        let (chosen_regex, is_algo_based_format) =
-            determine_regex(filename_input, input_is_stdin, &lines)?;
+        let Some((chosen_regex, is_algo_based_format)) = determine_regex(&lines) else {
+            return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
+                filename: get_filename_for_output(filename_input, input_is_stdin),
+            }
+            .into());
+        };
 
         for (i, line) in lines.iter().enumerate() {
             if let Some(caps) = chosen_regex.captures(line) {
@@ -938,29 +936,22 @@ mod tests {
 
     #[test]
     fn test_determine_regex() {
-        let filename = std::ffi::OsStr::new("test.txt");
         // Test algo-based regex
         let lines_algo_based =
             vec!["MD5 (example.txt) = d41d8cd98f00b204e9800998ecf8427e".to_string()];
-        let result = determine_regex(filename, false, &lines_algo_based);
-        assert!(result.is_ok());
-        let (regex, algo_based) = result.unwrap();
+        let (regex, algo_based) = determine_regex(&lines_algo_based).unwrap();
         assert!(algo_based);
         assert!(regex.is_match(&lines_algo_based[0]));
 
         // Test double-space regex
         let lines_double_space = vec!["d41d8cd98f00b204e9800998ecf8427e  example.txt".to_string()];
-        let result = determine_regex(filename, false, &lines_double_space);
-        assert!(result.is_ok());
-        let (regex, algo_based) = result.unwrap();
+        let (regex, algo_based) = determine_regex(&lines_double_space).unwrap();
         assert!(!algo_based);
         assert!(regex.is_match(&lines_double_space[0]));
 
         // Test single-space regex
         let lines_single_space = vec!["d41d8cd98f00b204e9800998ecf8427e example.txt".to_string()];
-        let result = determine_regex(filename, false, &lines_single_space);
-        assert!(result.is_ok());
-        let (regex, algo_based) = result.unwrap();
+        let (regex, algo_based) = determine_regex(&lines_single_space).unwrap();
         assert!(!algo_based);
         assert!(regex.is_match(&lines_single_space[0]));
 
@@ -969,17 +960,14 @@ mod tests {
             "ERR".to_string(),
             "d41d8cd98f00b204e9800998ecf8427e  example.txt".to_string(),
         ];
-        let result = determine_regex(filename, false, &lines_double_space);
-        assert!(result.is_ok());
-        let (regex, algo_based) = result.unwrap();
+        let (regex, algo_based) = determine_regex(&lines_double_space).unwrap();
         assert!(!algo_based);
         assert!(!regex.is_match(&lines_double_space[0]));
         assert!(regex.is_match(&lines_double_space[1]));
 
         // Test invalid checksum line
         let lines_invalid = vec!["invalid checksum line".to_string()];
-        let result = determine_regex(filename, false, &lines_invalid);
-        assert!(result.is_err());
+        assert!(determine_regex(&lines_invalid).is_none());
     }
 
     #[test]
