@@ -1201,3 +1201,23 @@ fn test_check_directory_error() {
         .fails()
         .stderr_contains(err_msg);
 }
+
+#[test]
+fn test_check_base64_hashes() {
+    let hashes =
+        "MD5 (empty) = 1B2M2Y8AsgTpgAmY7PhCfg==\nSHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\nBLAKE2b (empty) = eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==\n"
+    ;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("empty");
+    at.write("check", hashes);
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg(at.subdir.join("check"))
+        .succeeds()
+        .stdout_is("empty: OK\nempty: OK\nempty: OK\n");
+}
