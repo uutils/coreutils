@@ -548,3 +548,8 @@ inherits = "release"
 opt-level = "z"
 panic = "abort"
 strip = true
+
+[lints.clippy]
+all = "deny"
+cargo = "warn"
+pedantic = "deny"
