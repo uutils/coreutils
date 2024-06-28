@@ -28,7 +28,12 @@ impl<'a> StyleManager<'a> {
         }
     }
 
-    pub(crate) fn apply_style(&mut self, new_style: Option<&Style>, name: &str) -> String {
+    pub(crate) fn apply_style(
+        &mut self,
+        new_style: Option<&Style>,
+        name: &str,
+        wrap: bool,
+    ) -> String {
         let mut style_code = String::new();
         let mut force_suffix_reset: bool = false;
 
@@ -57,7 +62,20 @@ impl<'a> StyleManager<'a> {
             force_suffix_reset = true;
         }
 
-        format!("{}{}{}", style_code, name, self.reset(force_suffix_reset))
+        // we need this clear to eol code in some terminals, for instance if the
+        // text is in the last row of the terminal meaning the terminal need to
+        // scroll up in order to print new text in this situation if the clear
+        // to eol code is not present the background of the text would stretch
+        // till the end of line
+        let clear_to_eol = if wrap { "\x1b[K" } else { "" };
+
+        format!(
+            "{}{}{}{}",
+            style_code,
+            name,
+            self.reset(force_suffix_reset),
+            clear_to_eol
+        )
     }
 
     /// Resets the current style and returns the default ANSI reset code to
@@ -110,20 +128,22 @@ impl<'a> StyleManager<'a> {
         path: &PathData,
         md_option: Option<&Metadata>,
         name: &str,
+        wrap: bool,
     ) -> String {
         let style = self
             .colors
             .style_for_path_with_metadata(&path.p_buf, md_option);
-        self.apply_style(style, name)
+        self.apply_style(style, name, wrap)
     }
 
     pub(crate) fn apply_style_based_on_dir_entry(
         &mut self,
         dir_entry: &DirEntry,
         name: &str,
+        wrap: bool,
     ) -> String {
         let style = self.colors.style_for(dir_entry);
-        self.apply_style(style, name)
+        self.apply_style(style, name, wrap)
     }
 }
 
@@ -137,12 +157,13 @@ pub(crate) fn color_name(
     style_manager: &mut StyleManager,
     out: &mut BufWriter<Stdout>,
     target_symlink: Option<&PathData>,
+    wrap: bool,
 ) -> String {
     if !path.must_dereference {
         // If we need to dereference (follow) a symlink, we will need to get the metadata
         if let Some(de) = &path.de {
             // There is a DirEntry, we don't need to get the metadata for the color
-            return style_manager.apply_style_based_on_dir_entry(de, name);
+            return style_manager.apply_style_based_on_dir_entry(de, name, wrap);
         }
     }
 
@@ -152,11 +173,11 @@ pub(crate) fn color_name(
         // should not exit with an err, if we are unable to obtain the target_metadata
         let md_res = get_metadata_with_deref_opt(&target.p_buf, path.must_dereference);
         let md = md_res.or(path.p_buf.symlink_metadata());
-        style_manager.apply_style_based_on_metadata(path, md.ok().as_ref(), name)
+        style_manager.apply_style_based_on_metadata(path, md.ok().as_ref(), name, wrap)
     } else {
         let md_option = path.get_metadata(out);
         let symlink_metadata = path.p_buf.symlink_metadata().ok();
         let md = md_option.or(symlink_metadata.as_ref());
-        style_manager.apply_style_based_on_metadata(path, md, name)
+        style_manager.apply_style_based_on_metadata(path, md, name, wrap)
     }
 }

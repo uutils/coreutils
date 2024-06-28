@@ -4803,3 +4803,26 @@ fn test_ls_color_norm() {
         .succeeds()
         .stdout_contains(expected);
 }
+
+#[test]
+fn test_ls_color_clear_to_eol() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    // we create file with a long name
+    at.touch("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo");
+    let result = scene
+        .ucmd()
+        .env("TERM", "xterm")
+        // set the columns to something small so that the text would wrap around
+        .env("COLUMNS", "80")
+        // set the background to green and text to red
+        .env("LS_COLORS", "*.foo=0;31;42")
+        .env("TIME_STYLE", "+T")
+        .arg("-og")
+        .arg("--color")
+        .arg("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo")
+        .succeeds();
+    // check that the wrapped name contains clear to end of line code
+    // cspell:disable-next-line
+    result.stdout_contains("\x1b[0m\x1b[31;42mzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo\x1b[0m\x1b[K");
+}

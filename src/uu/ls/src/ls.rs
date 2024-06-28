@@ -929,19 +929,19 @@ impl Config {
 
         let width = match options.get_one::<String>(options::WIDTH) {
             Some(x) => parse_width(x)?,
-            None => match terminal_size::terminal_size() {
-                Some((width, _)) => width.0,
-                None => match std::env::var_os("COLUMNS") {
-                    Some(columns) => match columns.to_str().and_then(|s| s.parse().ok()) {
-                        Some(columns) => columns,
-                        None => {
-                            show_error!(
-                                "ignoring invalid width in environment variable COLUMNS: {}",
-                                columns.quote()
-                            );
-                            DEFAULT_TERM_WIDTH
-                        }
-                    },
+            None => match std::env::var_os("COLUMNS") {
+                Some(columns) => match columns.to_str().and_then(|s| s.parse().ok()) {
+                    Some(columns) => columns,
+                    None => {
+                        show_error!(
+                            "ignoring invalid width in environment variable COLUMNS: {}",
+                            columns.quote()
+                        );
+                        DEFAULT_TERM_WIDTH
+                    }
+                },
+                None => match terminal_size::terminal_size() {
+                    Some((width, _)) => width.0,
                     None => DEFAULT_TERM_WIDTH,
                 },
             },
@@ -2540,7 +2540,13 @@ fn display_items(
         let mut names_vec = Vec::new();
         for i in items {
             let more_info = display_additional_leading_info(i, &padding, config, out)?;
-            let cell = display_item_name(i, config, prefix_context, more_info, out, style_manager);
+            // it's okay to set current column to zero which is used to decide
+            // whether text will wrap or not, because when format is grid or
+            // column ls will try to place the item name in a new line if it
+            // wraps.
+            let cell =
+                display_item_name(i, config, prefix_context, more_info, out, style_manager, 0);
+
             names_vec.push(cell);
         }
 
@@ -2817,7 +2823,15 @@ fn display_item_long(
 
         write!(output_display, " {} ", display_date(md, config)).unwrap();
 
-        let item_name = display_item_name(item, config, None, String::new(), out, style_manager);
+        let item_name = display_item_name(
+            item,
+            config,
+            None,
+            String::new(),
+            out,
+            style_manager,
+            ansi_width(&output_display),
+        );
 
         let displayed_item = if quoted && !item_name.starts_with('\'') {
             format!(" {}", item_name)
@@ -2906,8 +2920,15 @@ fn display_item_long(
             write!(output_display, " {}", pad_right("?", padding.uname)).unwrap();
         }
 
-        let displayed_item =
-            display_item_name(item, config, None, String::new(), out, style_manager);
+        let displayed_item = display_item_name(
+            item,
+            config,
+            None,
+            String::new(),
+            out,
+            style_manager,
+            ansi_width(&output_display),
+        );
         let date_len = 12;
 
         write!(
@@ -3168,16 +3189,20 @@ fn display_item_name(
     more_info: String,
     out: &mut BufWriter<Stdout>,
     style_manager: &mut Option<StyleManager>,
+    current_column: usize,
 ) -> String {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
+
+    let is_wrap =
+        |namelen: usize| config.width != 0 && current_column + namelen > config.width.into();
 
     if config.hyperlink {
         name = create_hyperlink(&name, path);
     }
 
     if let Some(style_manager) = style_manager {
-        name = color_name(&name, path, style_manager, out, None);
+        name = color_name(&name, path, style_manager, out, None, is_wrap(name.len()));
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -3254,6 +3279,7 @@ fn display_item_name(
                             style_manager,
                             out,
                             Some(&target_data),
+                            is_wrap(name.len()),
                         ));
                     }
                 } else {
