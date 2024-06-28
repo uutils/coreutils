@@ -142,6 +142,16 @@ fn test_date_utc() {
 }
 
 #[test]
+fn test_date_utc_issue_6495() {
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("@0")
+        .succeeds()
+        .stdout_is("Thu Jan  1 00:00:00 1970\n");
+}
+
+#[test]
 fn test_date_format_y() {
     let scene = TestScenario::new(util_name!());
 
