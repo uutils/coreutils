@@ -21,6 +21,9 @@ edition = "2021"
 
 build = "build.rs"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 default = ["feat_common_core"]
 ## OS feature shortcodes
