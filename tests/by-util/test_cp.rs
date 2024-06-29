@@ -609,6 +609,36 @@ fn test_cp_arg_link_with_same_file() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_cp_verbose_preserved_link_to_dir() {
+    use std::os::linux::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "file";
+    let hardlink = "hardlink";
+    let dir = "dir";
+    let dst_file = "dir/file";
+    let dst_hardlink = "dir/hardlink";
+
+    at.touch(file);
+    at.hard_link(file, hardlink);
+    at.mkdir(dir);
+
+    ucmd.args(&["-d", "--verbose", file, hardlink, dir])
+        .succeeds()
+        .stdout_is("'file' -> 'dir/file'\n'hardlink' -> 'dir/hardlink'\n");
+
+    assert!(at.file_exists(dst_file));
+    assert!(at.file_exists(dst_hardlink));
+    assert_eq!(at.metadata(dst_file).st_nlink(), 2);
+    assert_eq!(at.metadata(dst_hardlink).st_nlink(), 2);
+    assert_eq!(
+        at.metadata(dst_file).st_ino(),
+        at.metadata(dst_hardlink).st_ino()
+    );
+}
+
+#[test]
 fn test_cp_arg_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
