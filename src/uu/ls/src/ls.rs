@@ -753,20 +753,51 @@ fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
     }
 }
 
-fn parse_width(s: &str) -> Result<u16, LsError> {
-    let radix = if s.starts_with('0') && s.len() > 1 {
-        8
-    } else {
-        10
+/// Parses the width value from either the command line arguments or the environment variables.
+fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
+    let parse_width_from_args = |s: &str| -> Result<u16, LsError> {
+        let radix = if s.starts_with('0') && s.len() > 1 {
+            8
+        } else {
+            10
+        };
+        match u16::from_str_radix(s, radix) {
+            Ok(x) => Ok(x),
+            Err(e) => match e.kind() {
+                IntErrorKind::PosOverflow => Ok(u16::MAX),
+                _ => Err(LsError::InvalidLineWidth(s.into())),
+            },
+        }
     };
-    match u16::from_str_radix(s, radix) {
-        Ok(x) => Ok(x),
-        Err(e) => match e.kind() {
-            IntErrorKind::PosOverflow => Ok(u16::MAX),
-            _ => Err(LsError::InvalidLineWidth(s.into())),
+
+    let parse_width_from_env =
+        |columns: OsString| match columns.to_str().and_then(|s| s.parse().ok()) {
+            Some(columns) => columns,
+            None => {
+                show_error!(
+                    "ignoring invalid width in environment variable COLUMNS: {}",
+                    columns.quote()
+                );
+                DEFAULT_TERM_WIDTH
+            }
+        };
+
+    let calculate_term_size = || match terminal_size::terminal_size() {
+        Some((width, _)) => width.0,
+        None => DEFAULT_TERM_WIDTH,
+    };
+
+    let ret = match width_match {
+        Some(x) => parse_width_from_args(x)?,
+        None => match std::env::var_os("COLUMNS") {
+            Some(columns) => parse_width_from_env(columns),
+            None => calculate_term_size(),
         },
-    }
+    };
+
+    Ok(ret)
 }
+
 impl Config {
     #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
@@ -926,26 +957,7 @@ impl Config {
                 numeric_uid_gid,
             }
         };
-
-        let width = match options.get_one::<String>(options::WIDTH) {
-            Some(x) => parse_width(x)?,
-            None => match std::env::var_os("COLUMNS") {
-                Some(columns) => match columns.to_str().and_then(|s| s.parse().ok()) {
-                    Some(columns) => columns,
-                    None => {
-                        show_error!(
-                            "ignoring invalid width in environment variable COLUMNS: {}",
-                            columns.quote()
-                        );
-                        DEFAULT_TERM_WIDTH
-                    }
-                },
-                None => match terminal_size::terminal_size() {
-                    Some((width, _)) => width.0,
-                    None => DEFAULT_TERM_WIDTH,
-                },
-            },
-        };
+        let width = parse_width(options.get_one::<String>(options::WIDTH))?;
 
         #[allow(clippy::needless_bool)]
         let mut show_control = if options.get_flag(options::HIDE_CONTROL_CHARS) {
