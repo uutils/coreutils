@@ -356,3 +356,13 @@ sed -i -E 's/(\^\[\[0m)+/\^\[\[0m/g' tests/ls/color-norm.sh
 # variable, but our ls seems to output them in a predefined order. Nevertheless,
 # the order doesn't matter, so it's okay.
 sed -i  's/44;37/37;44/' tests/ls/multihardlink.sh
+
+# Just like mentioned in the previous patch, GNU's ls output color codes in the
+# same way it is specified in the environment variable, but our ls emits them
+# differently. In this case, the color code is set to 0;31;42, and our ls would
+# ignore the 0; part. This would have been a bug if we output color codes
+# individually, for example, ^[[31^[[42 instead of ^[[31;42, but we don't do
+# that anywhere in our implementation, and it looks like GNU's ls also doesn't
+# do that. So, it's okay to ignore the zero.
+sed -i  "s/color_code='0;31;42'/color_code='31;42'/" tests/ls/color-clear-to-eol.sh
+
