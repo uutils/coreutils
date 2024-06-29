@@ -59,7 +59,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             files[0]
         };
-        let entries = parse_from_path(&filename).unwrap_or(Vec::new());
+        let entries = parse_from_path(filename).unwrap_or(Vec::new());
         users = Vec::new();
         for entry in entries {
             if let UtmpEntry::UTMP {
