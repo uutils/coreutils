@@ -70,11 +70,8 @@ impl<'a> StyleManager<'a> {
         let clear_to_eol = if wrap { "\x1b[K" } else { "" };
 
         format!(
-            "{}{}{}{}",
-            style_code,
-            name,
+            "{style_code}{name}{}{clear_to_eol}",
             self.reset(force_suffix_reset),
-            clear_to_eol
         )
     }
 
