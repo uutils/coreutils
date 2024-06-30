@@ -22,6 +22,9 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["libc", "utmpx"] }
 thiserror = { workspace = true }
 
+[target.'cfg(target_os = "openbsd")'.dependencies]
+utmp-classic = { workspace = true }
+
 [[bin]]
 name = "uptime"
 path = "src/main.rs"
