@@ -198,6 +198,8 @@ extern "C" {
     target_os = "freebsd",
     target_os = "openbsd"
 ))]
+/// # Safety
+/// This function is unsafe because it dereferences a raw pointer.
 unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int {
     std::ptr::null()
 }
