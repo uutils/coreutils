@@ -10,6 +10,8 @@ keywords = ["coreutils", "uutils", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2021"
 
+readme.workspace = true
+
 [lib]
 path = "src/chcon.rs"
 
