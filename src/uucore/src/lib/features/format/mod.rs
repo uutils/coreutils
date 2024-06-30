@@ -92,11 +92,7 @@ impl Display for FormatError {
                 "format '{}' has no % directive",
                 String::from_utf8_lossy(s)
             ),
-            Self::InvalidPrecision(precision) => write!(
-                f,
-                "invalid precision: '{}'",
-                precision
-            ),
+            Self::InvalidPrecision(precision) => write!(f, "invalid precision: '{}'", precision),
             // TODO: Error message below needs some work
             Self::WrongSpecType => write!(f, "wrong % directive type was given"),
             Self::IoError(_) => write!(f, "io error"),
