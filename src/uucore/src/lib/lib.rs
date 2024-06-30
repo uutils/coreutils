@@ -181,6 +181,10 @@ pub fn execution_phrase() -> &'static str {
     &EXECUTION_PHRASE
 }
 
+/// Args contains arguments passed to the utility.
+/// It is a trait that extends `Iterator<Item = OsString>`.
+/// It provides utility functions to collect the arguments into a `Vec<String>`.
+/// The collected `Vec<String>` can be lossy or ignore invalid encoding.
 pub trait Args: Iterator<Item = OsString> + Sized {
     /// Collects the iterator into a `Vec<String>`, lossily converting the `OsString`s to `Strings`.
     fn collect_lossy(self) -> Vec<String> {
