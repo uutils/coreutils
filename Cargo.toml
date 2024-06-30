@@ -550,6 +550,10 @@ panic = "abort"
 strip = true
 
 [lints.clippy]
+multiple_crate_versions = { level = "allow", priority = 1 }
+cargo_common_metadata = { level = "allow", priority = 1 }
+uninlined_format_args = { level = "allow", priority = 1 }
+missing_panics_doc = { level = "allow", priority = 1 }
 all = "deny"
 cargo = "warn"
 pedantic = "deny"
