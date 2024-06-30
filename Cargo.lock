@@ -3406,6 +3406,7 @@ dependencies = [
  "chrono",
  "clap",
  "thiserror",
+ "utmp-classic",
  "uucore",
 ]
 
