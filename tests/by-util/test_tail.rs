@@ -6,8 +6,13 @@
 // spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile file siette ocho nueve diez MULT
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (jargon) tailable untailable datasame runneradmin tmpi
+#![allow(
+    clippy::unicode_not_nfc,
+    clippy::cast_lossless,
+    clippy::cast_possible_truncation
+)]
 
-use crate::common::random::{AlphanumericNewline, RandomString};
+use crate::common::random::{AlphanumericNewline, RandomizedString};
 #[cfg(unix)]
 use crate::common::util::expected_result;
 #[cfg(not(windows))]
@@ -192,12 +197,12 @@ fn test_nc_0_wo_follow() {
 #[test]
 #[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_nc_0_wo_follow2() {
+    use std::os::unix::fs::PermissionsExt;
     // verify that -[nc]0 without -f, exit without reading
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    use std::os::unix::fs::PermissionsExt;
     at.make_file("unreadable")
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
@@ -220,10 +225,11 @@ fn test_nc_0_wo_follow2() {
 #[test]
 #[cfg(unix)]
 fn test_permission_denied() {
+    use std::os::unix::fs::PermissionsExt;
+
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    use std::os::unix::fs::PermissionsExt;
     at.make_file("unreadable")
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
@@ -240,13 +246,14 @@ fn test_permission_denied() {
 #[test]
 #[cfg(unix)]
 fn test_permission_denied_multiple() {
+    use std::os::unix::fs::PermissionsExt;
+
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
     at.touch("file1");
     at.touch("file2");
 
-    use std::os::unix::fs::PermissionsExt;
     at.make_file("unreadable")
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
@@ -2804,7 +2811,7 @@ fn test_pipe_when_lines_option_given_multibyte_utf8_characters() {
 #[test]
 fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size_no_newline_at_eof() {
     let total_lines = 1;
-    let random_string = RandomString::generate_with_delimiter(
+    let random_string = RandomizedString::generate_with_delimiter(
         Alphanumeric,
         b'\n',
         total_lines,
@@ -2834,7 +2841,7 @@ fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size_no_newli
 #[test]
 fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size() {
     let total_lines = 100;
-    let random_string = RandomString::generate_with_delimiter(
+    let random_string = RandomizedString::generate_with_delimiter(
         Alphanumeric,
         b'\n',
         total_lines,
@@ -2894,7 +2901,7 @@ fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size() {
 #[test]
 fn test_pipe_when_lines_option_given_input_size_is_one_byte_greater_than_buffer_size() {
     let total_lines = 100;
-    let random_string = RandomString::generate_with_delimiter(
+    let random_string = RandomizedString::generate_with_delimiter(
         Alphanumeric,
         b'\n',
         total_lines,
@@ -2942,7 +2949,7 @@ fn test_pipe_when_lines_option_given_input_size_is_one_byte_greater_than_buffer_
 #[cfg(not(target_os = "windows"))]
 fn test_pipe_when_lines_option_given_input_size_has_multiple_size_of_buffer_size() {
     let total_lines = 100;
-    let random_string = RandomString::generate_with_delimiter(
+    let random_string = RandomizedString::generate_with_delimiter(
         Alphanumeric,
         b'\n',
         total_lines,
@@ -3134,7 +3141,7 @@ fn test_pipe_when_bytes_option_given_multibyte_utf8_characters() {
 
 #[test]
 fn test_pipe_when_bytes_option_given_input_size_is_equal_to_buffer_size() {
-    let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE);
+    let random_string = RandomizedString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE);
     let random_string = random_string.as_str();
 
     new_ucmd!()
@@ -3193,7 +3200,7 @@ fn test_pipe_when_bytes_option_given_input_size_is_equal_to_buffer_size() {
 
 #[test]
 fn test_pipe_when_bytes_option_given_input_size_is_one_byte_greater_than_buffer_size() {
-    let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE + 1);
+    let random_string = RandomizedString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE + 1);
     let random_string = random_string.as_str();
 
     new_ucmd!()
@@ -3248,7 +3255,7 @@ fn test_pipe_when_bytes_option_given_input_size_is_one_byte_greater_than_buffer_
 #[test]
 #[cfg(not(target_os = "windows"))]
 fn test_pipe_when_bytes_option_given_input_size_has_multiple_size_of_buffer_size() {
-    let random_string = RandomString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE * 3);
+    let random_string = RandomizedString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE * 3);
     let random_string = random_string.as_str();
 
     new_ucmd!()
@@ -3364,7 +3371,7 @@ fn test_seek_bytes_forward_outside_file() {
 #[cfg(all(not(target_os = "android"), not(target_os = "windows")))] // FIXME:
 #[test]
 fn test_args_when_presume_input_pipe_given_input_is_pipe() {
-    let random_string = RandomString::generate(AlphanumericNewline, 1000);
+    let random_string = RandomizedString::generate(AlphanumericNewline, 1000);
     let random_string = random_string.as_str();
 
     new_ucmd!()
@@ -3400,7 +3407,7 @@ fn test_args_when_presume_input_pipe_given_input_is_pipe() {
 
 #[test]
 fn test_args_when_presume_input_pipe_given_input_is_file() {
-    let random_string = RandomString::generate(AlphanumericNewline, 1000);
+    let random_string = RandomizedString::generate(AlphanumericNewline, 1000);
     let random_string = random_string.as_str();
 
     let ts = TestScenario::new(util_name!());
@@ -3481,7 +3488,7 @@ fn test_when_argument_file_is_a_symlink() {
         .no_stdout()
         .no_stderr();
 
-    let random_string = RandomString::generate(AlphanumericNewline, 100);
+    let random_string = RandomizedString::generate(AlphanumericNewline, 100);
     let result = file.write_all(random_string.as_bytes());
     assert!(result.is_ok());
 
@@ -3593,7 +3600,7 @@ fn test_when_argument_file_is_non_existent_unix_socket_address_then_error() {
     let path = "file";
     let mut file = at.make_file(path);
 
-    let random_string = RandomString::generate(AlphanumericNewline, 100);
+    let random_string = RandomizedString::generate(AlphanumericNewline, 100);
     let result = file.write_all(random_string.as_bytes());
     assert!(result.is_ok());
 

@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+#![allow(clippy::borrow_as_ptr)]
+
 use crate::common::util::TestScenario;
 use regex::Regex;
 #[cfg(target_os = "linux")]

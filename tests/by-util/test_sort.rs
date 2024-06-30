@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) ints
+#![allow(clippy::cast_possible_wrap)]
 
 use std::time::Duration;
 
