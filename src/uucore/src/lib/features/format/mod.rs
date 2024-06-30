@@ -62,6 +62,7 @@ pub enum FormatError {
     TooManySpecs(Vec<u8>),
     NeedAtLeastOneSpec(Vec<u8>),
     WrongSpecType,
+    InvalidPrecision(String),
 }
 
 impl Error for FormatError {}
@@ -90,6 +91,11 @@ impl Display for FormatError {
                 f,
                 "format '{}' has no % directive",
                 String::from_utf8_lossy(s)
+            ),
+            Self::InvalidPrecision(precision) => write!(
+                f,
+                "invalid precision: '{}'",
+                precision
             ),
             // TODO: Error message below needs some work
             Self::WrongSpecType => write!(f, "wrong % directive type was given"),
