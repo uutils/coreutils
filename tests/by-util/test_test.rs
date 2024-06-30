@@ -677,9 +677,6 @@ fn test_file_not_owned_by_euid() {
 #[test]
 #[cfg(not(windows))]
 fn test_file_owned_by_egid() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
     // On some platforms (mostly the BSDs) the test fixture files copied to the
     // /tmp directory will have a different gid than the current egid (due to
     // the sticky bit set on the /tmp directory). Fix this before running the
@@ -688,15 +685,17 @@ fn test_file_owned_by_egid() {
     use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::MetadataExt;
     use uucore::process::getegid;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
     let metadata = at.metadata("regular_file");
     let file_gid = metadata.gid();
     let user_gid = getegid();
 
     if user_gid != file_gid {
-        let file_uid = metadata.uid();
+        let file_metadata_uid = metadata.uid();
         let path = CString::new(at.plus("regular_file").as_os_str().as_bytes()).expect("bad path");
-        let r = unsafe { libc::chown(path.as_ptr(), file_uid, user_gid) };
+        let r = unsafe { libc::chown(path.as_ptr(), file_metadata_uid, user_gid) };
         assert_ne!(r, -1);
     }
 

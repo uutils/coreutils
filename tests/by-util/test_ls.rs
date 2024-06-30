@@ -3,6 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
+#![allow(
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::cast_possible_truncation
+)]
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -160,7 +165,7 @@ fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
     let output = cmd.succeeds();
     let stdout_str = String::from_utf8_lossy(output.stdout());
     println!("output of stat call ({cmd:?}):\n{stdout_str}");
-    let regex_str = r#"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+"#;
+    let regex_str = r"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+";
     let regex = Regex::new(regex_str).unwrap();
     let m = regex.captures(&stdout_str).unwrap();
     let fstype = m["fstype"].to_owned();
@@ -1150,6 +1155,7 @@ fn test_ls_long_padding_of_size_column_with_multiple_files() {
 #[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
 #[test]
 #[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
+#[allow(clippy::items_after_statements)]
 fn test_ls_long_symlink_color() {
     // If you break this test after breaking mkdir, touch, or ln, do not be alarmed!
     // This test is made for ls, but it attempts to run those utils in the process.
@@ -1378,7 +1384,7 @@ fn test_ls_long_symlink_color() {
 
 /// This test is for "ls -l --color=auto|--color=always"
 /// We use "--color=always" as the colors are the same regardless of the color option being "auto" or "always"
-/// tests whether the specific color of the target and the dangling_symlink are equal and checks
+/// tests whether the specific color of the target and the `dangling_symlink` are equal and checks
 /// whether checks whether ls outputs the correct path for the symlink and the file it points to and applies the color code to it.
 #[test]
 fn test_ls_long_dangling_symlink_color() {

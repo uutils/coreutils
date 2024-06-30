@@ -7,6 +7,11 @@
 //spell-checker: ignore (linux) winsize xpixel ypixel setrlimit FSIZE
 
 #![allow(dead_code)]
+#![allow(
+    clippy::too_many_lines,
+    clippy::should_panic_without_expect,
+    clippy::missing_errors_doc
+)]
 
 #[cfg(unix)]
 use libc::mode_t;
@@ -793,7 +798,7 @@ pub fn compare_xattrs<P: AsRef<std::path::Path>>(path1: P, path2: P) -> bool {
                 attrs.sort();
                 attrs
             })
-            .unwrap_or_else(|_| Vec::new())
+            .unwrap_or_default()
     };
 
     get_sorted_xattrs(path1) == get_sorted_xattrs(path2)
@@ -1491,7 +1496,6 @@ impl UCommand {
 
     #[cfg(unix)]
     fn spawn_reader_thread(
-        &self,
         captured_output: Option<CapturedOutput>,
         pty_fd_master: OwnedFd,
         name: String,
@@ -1678,7 +1682,7 @@ impl UCommand {
                     slave: po_slave,
                     master: po_master,
                 } = nix::pty::openpty(&terminal_size, None).unwrap();
-                captured_stdout = self.spawn_reader_thread(
+                captured_stdout = Self::spawn_reader_thread(
                     captured_stdout,
                     po_master,
                     "stdout_reader".to_string(),
@@ -1691,7 +1695,7 @@ impl UCommand {
                     slave: pe_slave,
                     master: pe_master,
                 } = nix::pty::openpty(&terminal_size, None).unwrap();
-                captured_stderr = self.spawn_reader_thread(
+                captured_stderr = Self::spawn_reader_thread(
                     captured_stderr,
                     pe_master,
                     "stderr_reader".to_string(),

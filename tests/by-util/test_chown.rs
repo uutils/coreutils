@@ -29,9 +29,8 @@ fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
         if is_ci() && result.stderr_str().contains(needle) {
             println!("test skipped:");
             return true;
-        } else {
-            result.success();
         }
+        result.success();
     }
     false
 }

@@ -160,9 +160,7 @@ fn test_symlinks() {
             ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
         }
     }
-    if !tested {
-        panic!("No symlink found to test in this environment");
-    }
+    assert!(tested, "No symlink found to test in this environment");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]

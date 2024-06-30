@@ -200,15 +200,15 @@ TERM {term_pattern}
             .no_stderr();
     }
 
-    let expectation_if_match = r#"
+    let expectation_if_match = r"
 LS_COLORS='*.term_matching=00;38;5;61:';
 export LS_COLORS
-"#
+"
     .trim_start();
-    let expectation_if_no_match = r#"
+    let expectation_if_no_match = r"
 LS_COLORS='';
 export LS_COLORS
-"#
+"
     .trim_start();
 
     // sanity checks
