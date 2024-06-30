@@ -788,7 +788,7 @@ fn invalid_precision_fails() {
 fn float_invalid_precision_fails() {
     // It is invalid to have length of output string greater than i32::MAX
     new_ucmd!()
-        .args(&["%.*f", "9999999999", "0"])
+        .args(&["%.*f", "2147483648", "0"])
         .fails()
-        .stderr_is("printf: invalid precision: '9999999999'\n");
+        .stderr_is("printf: invalid precision: '2147483648'\n");
 }
