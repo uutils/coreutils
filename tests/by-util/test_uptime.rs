@@ -7,16 +7,16 @@
 
 use crate::common::util::TestScenario;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
 use bincode::serialize;
 use regex::Regex;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
 use serde::Serialize;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
 use serde_big_array::BigArray;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
 use std::fs::File;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "openbsd")))]
 use std::{io::Write, path::PathBuf};
 
 #[test]
@@ -25,7 +25,6 @@ fn test_invalid_arg() {
 }
 
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_uptime() {
     TestScenario::new(util_name!())
         .ucmd()
@@ -82,7 +81,7 @@ fn test_uptime_with_fifo() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
+#[cfg(not(target_os = "freebsd"))]
 fn test_uptime_with_non_existent_file() {
     // Disabled for freebsd, since it doesn't use the utmpxname() sys call to change the default utmpx
     // file that is accessed using getutxent()
@@ -230,7 +229,6 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
 }
 
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_uptime_with_extra_argument() {
     let ts = TestScenario::new(util_name!());
 
@@ -242,7 +240,6 @@ fn test_uptime_with_extra_argument() {
 }
 /// Checks whether uptime displays the correct stderr msg when its called with a directory
 #[test]
-#[cfg(not(target_os = "openbsd"))]
 fn test_uptime_with_dir() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -256,7 +253,15 @@ fn test_uptime_with_dir() {
 }
 
 #[test]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(target_os = "openbsd")]
+fn test_uptime_check_users_openbsd() {
+    new_ucmd!()
+        .args(&["openbsd_utmp"])
+        .run()
+        .stdout_contains("4 users");
+}
+
+#[test]
 fn test_uptime_since() {
     let re = Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}").unwrap();
 
