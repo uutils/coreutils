@@ -103,22 +103,18 @@ pub enum Sequence {
 }
 
 impl Sequence {
-    pub fn flatten_non_lower_upper(&self) -> Box<dyn Iterator<Item = Self>> {
+    pub fn flatten(&self) -> Box<dyn Iterator<Item = u8>> {
         match self {
-            Self::Char(c) => Box::new(std::iter::once(*c).map(Self::Char)),
-            Self::CharRange(l, r) => Box::new((*l..=*r).map(Self::Char)),
-            Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n).map(Self::Char)),
+            Self::Char(c) => Box::new(std::iter::once(*c)),
+            Self::CharRange(l, r) => Box::new(*l..=*r),
+            Self::CharStar(c) => Box::new(std::iter::repeat(*c)),
+            Self::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
             Self::Class(class) => match class {
-                Class::Alnum => Box::new(
-                    (b'0'..=b'9')
-                        .chain(b'A'..=b'Z')
-                        .chain(b'a'..=b'z')
-                        .map(Self::Char),
-                ),
-                Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z').map(Self::Char)),
-                Class::Blank => Box::new(unicode_table::BLANK.iter().cloned().map(Self::Char)),
-                Class::Control => Box::new((0..=31).chain(std::iter::once(127)).map(Self::Char)),
-                Class::Digit => Box::new((b'0'..=b'9').map(Self::Char)),
+                Class::Alnum => Box::new((b'0'..=b'9').chain(b'A'..=b'Z').chain(b'a'..=b'z')),
+                Class::Alpha => Box::new((b'A'..=b'Z').chain(b'a'..=b'z')),
+                Class::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
+                Class::Control => Box::new((0..=31).chain(std::iter::once(127))),
+                Class::Digit => Box::new(b'0'..=b'9'),
                 Class::Graph => Box::new(
                     (48..=57) // digit
                         .chain(65..=90) // uppercase
@@ -128,8 +124,7 @@ impl Sequence {
                         .chain(58..=64)
                         .chain(91..=96)
                         .chain(123..=126)
-                        .chain(std::iter::once(32))
-                        .map(Self::Char), // space
+                        .chain(std::iter::once(32)), // space
                 ),
                 Class::Print => Box::new(
                     (48..=57) // digit
@@ -139,37 +134,14 @@ impl Sequence {
                         .chain(33..=47)
                         .chain(58..=64)
                         .chain(91..=96)
-                        .chain(123..=126)
-                        .map(Self::Char),
+                        .chain(123..=126),
                 ),
-                Class::Punct => Box::new(
-                    (33..=47)
-                        .chain(58..=64)
-                        .chain(91..=96)
-                        .chain(123..=126)
-                        .map(Self::Char),
-                ),
-                Class::Space => Box::new(unicode_table::SPACES.iter().cloned().map(Self::Char)),
-                Class::Xdigit => Box::new(
-                    (b'0'..=b'9')
-                        .chain(b'A'..=b'F')
-                        .chain(b'a'..=b'f')
-                        .map(Self::Char),
-                ),
-                s => Box::new(std::iter::once(Self::Class(*s))),
+                Class::Punct => Box::new((33..=47).chain(58..=64).chain(91..=96).chain(123..=126)),
+                Class::Space => Box::new(unicode_table::SPACES.iter().cloned()),
+                Class::Xdigit => Box::new((b'0'..=b'9').chain(b'A'..=b'F').chain(b'a'..=b'f')),
+                Class::Lower => Box::new(b'a'..=b'z'),
+                Class::Upper => Box::new(b'A'..=b'Z'),
             },
-            s => Box::new(std::iter::once(*s)),
-        }
-    }
-
-    pub fn flatten_all(&self) -> Box<dyn Iterator<Item = Self>> {
-        match self {
-            Self::Class(class) => match class {
-                Class::Lower => Box::new((b'a'..=b'z').map(Self::Char)),
-                Class::Upper => Box::new((b'A'..=b'Z').map(Self::Char)),
-                s => Self::Class(*s).flatten_non_lower_upper(),
-            },
-            s => s.flatten_non_lower_upper(),
         }
     }
 
@@ -182,12 +154,6 @@ impl Sequence {
         translating: bool,
     ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
         let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
-        let to_u8 = |s: Self| -> Option<u8> {
-            match s {
-                Self::Char(c) => Some(c),
-                _ => None,
-            }
-        };
 
         let set1 = Self::from_str(set1_str)?;
         if set1.iter().filter(is_char_star).count() != 0 {
@@ -208,11 +174,7 @@ impl Sequence {
             return Err(BadSequence::ClassExceptLowerUpperInSet2);
         }
 
-        let mut set1_solved: Vec<u8> = set1
-            .iter()
-            .flat_map(Self::flatten_all)
-            .filter_map(to_u8)
-            .collect();
+        let mut set1_solved: Vec<u8> = set1.iter().flat_map(Self::flatten).collect();
         if complement_flag {
             set1_solved = (0..=u8::MAX).filter(|x| !set1_solved.contains(x)).collect();
         }
@@ -224,7 +186,7 @@ impl Sequence {
                 Self::CharStar(_) => None,
                 r => Some(r),
             })
-            .flat_map(Self::flatten_all)
+            .flat_map(Self::flatten)
             .count();
 
         let star_compensate_len = set1_len.saturating_sub(set2_len);
@@ -238,33 +200,38 @@ impl Sequence {
             })
             .collect();
 
-        //Flatten everything but upper/lower into Char
-        let set1_flattened: Vec<_> = set1
-            .iter()
-            .flat_map(Self::flatten_non_lower_upper)
-            .collect();
-        set2 = set2
-            .iter()
-            .flat_map(Self::flatten_non_lower_upper)
-            .collect();
+        // For every upper/lower in set2, there must be an upper/lower in set1 at the same position. The position is calculated by expanding everything before the upper/lower in both sets
+        for (set2_pos, set2_item) in set2.iter().enumerate() {
+            if matches!(set2_item, Self::Class(_)) {
+                let mut set2_part_solved_len = 0;
+                if set2_pos >= 1 {
+                    set2_part_solved_len =
+                        set2.iter().take(set2_pos).flat_map(Self::flatten).count();
+                }
 
-        if set2
-            .iter()
-            .zip(
-                set1_flattened
-                    .iter()
-                    .chain(std::iter::repeat(&Self::Char(0))),
-            )
-            .any(|x| matches!(x.0, Self::Class(_)) && !matches!(x.1, Self::Class(_)))
-        {
-            return Err(BadSequence::ClassInSet2NotMatchedBySet1);
+                let mut class_matches = false;
+                for (set1_pos, set1_item) in set1.iter().enumerate() {
+                    if matches!(set1_item, Self::Class(_)) {
+                        let mut set1_part_solved_len = 0;
+                        if set1_pos >= 1 {
+                            set1_part_solved_len =
+                                set1.iter().take(set1_pos).flat_map(Self::flatten).count();
+                        }
+
+                        if set1_part_solved_len == set2_part_solved_len {
+                            class_matches = true;
+                            break;
+                        }
+                    }
+                }
+
+                if !class_matches {
+                    return Err(BadSequence::ClassInSet2NotMatchedBySet1);
+                }
+            }
         }
 
-        let set2_solved: Vec<_> = set2
-            .iter()
-            .flat_map(Self::flatten_all)
-            .filter_map(to_u8)
-            .collect();
+        let set2_solved: Vec<_> = set2.iter().flat_map(Self::flatten).collect();
 
         // Calculate the set of unique characters in set2
         let mut set2_uniques = set2_solved.clone();
