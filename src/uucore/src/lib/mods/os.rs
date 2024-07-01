@@ -2,11 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-/// Test if the program is running under WSL
-// ref: <https://github.com/microsoft/WSL/issues/4555> @@ <https://archive.is/dP0bz>
-
 // spell-checker:ignore (path) osrelease
 
+//! Test if the program is running under WSL
+//! ref: <https://github.com/microsoft/WSL/issues/4555> @@ <https://archive.is/dP0bz>
+
+/// Test if the program is running under WSL version 1
 pub fn is_wsl_1() -> bool {
     #[cfg(target_os = "linux")]
     {
@@ -23,6 +24,7 @@ pub fn is_wsl_1() -> bool {
     false
 }
 
+/// Test if the program is running under WSL version 2
 pub fn is_wsl_2() -> bool {
     #[cfg(target_os = "linux")]
     {

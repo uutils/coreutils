@@ -310,11 +310,17 @@ pub fn parse_size_u128_max(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse_u128_max(size)
 }
 
+/// Error type for parse_size
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseSizeError {
-    InvalidSuffix(String), // Suffix
-    ParseFailure(String),  // Syntax
-    SizeTooBig(String),    // Overflow
+    /// Suffix
+    InvalidSuffix(String),
+
+    /// Syntax
+    ParseFailure(String),
+
+    /// Overflow
+    SizeTooBig(String),
 }
 
 impl Error for ParseSizeError {

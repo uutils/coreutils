@@ -183,6 +183,7 @@ macro_rules! show_warning(
     })
 );
 
+/// Print a warning message to stderr, prepending the utility name.
 #[macro_export]
 macro_rules! show_warning_caps(
     ($($args:tt)+) => ({

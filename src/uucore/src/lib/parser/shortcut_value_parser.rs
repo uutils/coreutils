@@ -8,6 +8,7 @@ use clap::{
     error::{ContextKind, ContextValue, ErrorKind},
 };
 
+/// A parser that accepts shortcuts for values.
 #[derive(Clone)]
 pub struct ShortcutValueParser(Vec<PossibleValue>);
 
@@ -17,6 +18,7 @@ pub struct ShortcutValueParser(Vec<PossibleValue>);
 /// Whereas `PossibleValuesParser` only accepts exact matches, `ShortcutValueParser` also accepts
 /// shortcuts as long as they are unambiguous.
 impl ShortcutValueParser {
+    /// Create a new `ShortcutValueParser` from a list of `PossibleValue`.
     pub fn new(values: impl Into<Self>) -> Self {
         values.into()
     }
