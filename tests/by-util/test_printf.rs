@@ -792,3 +792,111 @@ fn float_invalid_precision_fails() {
         .fails()
         .stderr_is("printf: invalid precision: '2147483648'\n");
 }
+
+// The following padding-tests test for the cases in which flags in ['0', ' '] are given.
+// For integer, only try to pad when no precision is given, while
+// for float, always try to pad
+#[test]
+fn space_padding_with_space_test() {
+    //  Check if printf gives an extra space in the beginning
+    new_ucmd!()
+        .args(&["% 3d", "1"])
+        .succeeds()
+        .stdout_only("  1");
+}
+
+#[test]
+fn zero_padding_with_space_test() {
+    new_ucmd!()
+        .args(&["% 03d", "1"])
+        .succeeds()
+        .stdout_only(" 01");
+}
+
+#[test]
+fn zero_padding_with_plus_test() {
+    new_ucmd!()
+        .args(&["%+04d", "1"])
+        .succeeds()
+        .stdout_only("+001");
+}
+
+#[test]
+fn negative_zero_padding_test() {
+    new_ucmd!()
+        .args(&["%03d", "-1"])
+        .succeeds()
+        .stdout_only("-01");
+}
+
+#[test]
+fn negative_zero_padding_with_space_test() {
+    new_ucmd!()
+        .args(&["% 03d", "-1"])
+        .succeeds()
+        .stdout_only("-01");
+}
+
+#[test]
+fn float_with_zero_precision_should_pad() {
+    new_ucmd!()
+        .args(&["%03.0f", "-1"])
+        .succeeds()
+        .stdout_only("-01");
+}
+
+#[test]
+fn precision_check() {
+    new_ucmd!()
+        .args(&["%.3d", "1"])
+        .succeeds()
+        .stdout_only("001");
+}
+
+#[test]
+fn space_padding_with_precision() {
+    new_ucmd!()
+        .args(&["%4.3d", "1"])
+        .succeeds()
+        .stdout_only(" 001");
+}
+
+#[test]
+fn float_zero_padding_with_precision() {
+    new_ucmd!()
+        .args(&["%04.1f", "1"])
+        .succeeds()
+        .stdout_only("01.0");
+}
+
+#[test]
+fn float_space_padding_with_precision() {
+    new_ucmd!()
+        .args(&["%4.1f", "1"])
+        .succeeds()
+        .stdout_only(" 1.0");
+}
+
+#[test]
+fn negative_float_zero_padding_with_precision() {
+    new_ucmd!()
+        .args(&["%05.1f", "-1"])
+        .succeeds()
+        .stdout_only("-01.0");
+}
+
+#[test]
+fn float_default_precision_space_padding() {
+    new_ucmd!()
+        .args(&["%10f", "1"])
+        .succeeds()
+        .stdout_only("  1.000000");
+}
+
+#[test]
+fn float_default_precision_zero_padding() {
+    new_ucmd!()
+        .args(&["%010f", "1"])
+        .succeeds()
+        .stdout_only("001.000000");
+}
