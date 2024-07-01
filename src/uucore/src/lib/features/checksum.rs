@@ -473,16 +473,26 @@ where
             // Use stdin if "-" is specified
             Box::new(stdin())
         } else {
-            get_input_file(filename_input)?
+            match get_input_file(filename_input) {
+                Ok(f) => f,
+                Err(e) => {
+                    // Could not read the file, show the error and continue to the next file
+                    show_error!("{e}");
+                    set_exit_code(1);
+                    continue;
+                }
+            }
         };
 
         let reader = BufReader::new(file);
         let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
         let Some((chosen_regex, is_algo_based_format)) = determine_regex(&lines) else {
-            return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
+            let e = ChecksumError::NoProperlyFormattedChecksumLinesFound {
                 filename: get_filename_for_output(filename_input, input_is_stdin),
-            }
-            .into());
+            };
+            show_error!("{e}");
+            set_exit_code(1);
+            continue;
         };
 
         for (i, line) in lines.iter().enumerate() {
@@ -624,6 +634,7 @@ where
         // if any incorrectly formatted line, show it
         cksum_output(&res, ignore_missing, status);
     }
+
     Ok(())
 }
 
