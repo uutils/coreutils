@@ -6,8 +6,7 @@
 // spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use std::error::Error;
-use std::fmt;
+use quick_error::quick_error;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
 use std::num::IntErrorKind;
@@ -23,29 +22,25 @@ const ABOUT: &str = help_about!("unexpand.md");
 
 const DEFAULT_TABSTOP: usize = 8;
 
-#[derive(Debug)]
-enum ParseError {
-    InvalidCharacter(String),
-    TabSizeCannotBeZero,
-    TabSizeTooLarge,
-    TabSizesMustBeAscending,
-}
-
-impl Error for ParseError {}
-impl UError for ParseError {}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidCharacter(s) => {
-                write!(f, "tab size contains invalid character(s): {}", s.quote())
-            }
-            Self::TabSizeCannotBeZero => write!(f, "tab size cannot be 0"),
-            Self::TabSizeTooLarge => write!(f, "tab stop value is too large"),
-            Self::TabSizesMustBeAscending => write!(f, "tab sizes must be ascending"),
+quick_error! {
+    #[derive(Debug)]
+    pub enum ParseError {
+        InvalidCharacter(s: String) {
+            display("tab size contains invalid character(s): {}", s.quote())
+        }
+        TabSizeCannotBeZero {
+            display("tab size cannot be 0")
+        }
+        TabSizeTooLarge {
+            display("tab stop value is too large")
+        }
+        TabSizesMustBeAscending {
+            display("tab sizes must be ascending")
         }
     }
 }
+
+impl UError for ParseError {}
 
 fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
     let words = s.split(',');

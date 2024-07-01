@@ -2,53 +2,44 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use std::error::Error;
-use std::fmt::{Display, Formatter, Result};
+use quick_error::quick_error;
 
 use uucore::error::UError;
 
-#[derive(Debug)]
-pub enum MvError {
-    NoSuchFile(String),
-    CannotStatNotADirectory(String),
-    SameFile(String, String),
-    SelfSubdirectory(String),
-    SelfTargetSubdirectory(String, String),
-    DirectoryToNonDirectory(String),
-    NonDirectoryToDirectory(String, String),
-    NotADirectory(String),
-    TargetNotADirectory(String),
-    FailedToAccessNotADirectory(String),
-}
-
-impl Error for MvError {}
-impl UError for MvError {}
-impl Display for MvError {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        match self {
-            Self::NoSuchFile(s) => write!(f, "cannot stat {s}: No such file or directory"),
-            Self::CannotStatNotADirectory(s) => write!(f, "cannot stat {s}: Not a directory"),
-            Self::SameFile(s, t) => write!(f, "{s} and {t} are the same file"),
-            Self::SelfSubdirectory(s) => write!(
-                f,
-                "cannot move '{s}' to a subdirectory of itself, '{s}/{s}'"
-            ),
-            Self::SelfTargetSubdirectory(s, t) => write!(
-                f,
-                "cannot move '{s}' to a subdirectory of itself, '{t}/{s}'"
-            ),
-            Self::DirectoryToNonDirectory(t) => {
-                write!(f, "cannot overwrite directory {t} with non-directory")
-            }
-            Self::NonDirectoryToDirectory(s, t) => {
-                write!(f, "cannot overwrite non-directory {t} with directory {s}")
-            }
-            Self::NotADirectory(t) => write!(f, "target {t}: Not a directory"),
-            Self::TargetNotADirectory(t) => write!(f, "target directory {t}: Not a directory"),
-
-            Self::FailedToAccessNotADirectory(t) => {
-                write!(f, "failed to access {t}: Not a directory")
-            }
+quick_error! {
+    #[derive(Debug)]
+    pub enum MvError {
+        NoSuchFile(s: String) {
+            display("cannot stat {}: No such file or directory", s)
+        }
+        CannotStatNotADirectory(s: String) {
+            display("cannot stat {}: Not a directory", s)
+        }
+        SameFile(s: String, t: String) {
+            display("{} and {} are the same file", s, t)
+        }
+        SelfSubdirectory(s: String) {
+            display("cannot move '{}' to a subdirectory of itself, '{}/{}'", s, s, s)
+        }
+        SelfTargetSubdirectory(s: String, t: String) {
+            display("cannot move '{}' to a subdirectory of itself, '{}/{}'", s, t, s)
+        }
+        DirectoryToNonDirectory(t: String) {
+            display("cannot overwrite directory {} with non-directory", t)
+        }
+        NonDirectoryToDirectory(s: String, t: String) {
+            display("cannot overwrite non-directory {} with directory {}", t, s)
+        }
+        NotADirectory(t: String) {
+            display("target {}: Not a directory", t)
+        }
+        TargetNotADirectory(t: String) {
+            display("target directory {}: Not a directory", t)
+        }
+        FailedToAccessNotADirectory(t: String) {
+            display("failed to access {}: Not a directory", t)
         }
     }
 }
+
+impl UError for MvError {}

@@ -6,14 +6,13 @@
 // spell-checker:ignore (paths) GPGHome findxs
 
 use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use quick_error::quick_error;
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::{format_usage, help_about, help_usage};
 
 use std::env;
-use std::error::Error;
 use std::ffi::OsStr;
-use std::fmt::Display;
 use std::io::ErrorKind;
 use std::iter;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
@@ -46,68 +45,39 @@ const TMPDIR_ENV_VAR: &str = "TMPDIR";
 #[cfg(windows)]
 const TMPDIR_ENV_VAR: &str = "TMP";
 
-#[derive(Debug)]
-enum MkTempError {
-    PersistError(PathBuf),
-    MustEndInX(String),
-    TooFewXs(String),
-
-    /// The template prefix contains a path separator (e.g. `"a/bXXX"`).
-    PrefixContainsDirSeparator(String),
-
-    /// The template suffix contains a path separator (e.g. `"XXXa/b"`).
-    SuffixContainsDirSeparator(String),
-    InvalidTemplate(String),
-    TooManyTemplates,
-
-    /// When a specified temporary directory could not be found.
-    NotFound(String, String),
+quick_error! {
+    #[derive(Debug)]
+    pub enum MkTempError {
+        PersistError(p: PathBuf) {
+            display("could not persist file {}", p.quote())
+        }
+        MustEndInX(s: String) {
+            display("with --suffix, template {} must end in X", s.quote())
+        }
+        TooFewXs(s: String) {
+            display("too few X's in template {}", s.quote())
+        }
+        PrefixContainsDirSeparator(s: String) {
+            display("invalid template, {}, contains directory separator", s.quote())
+        }
+        SuffixContainsDirSeparator(s: String) {
+            display("invalid suffix {}, contains directory separator", s.quote())
+        }
+        InvalidTemplate(s: String) {
+            display("invalid template, {}; with --tmpdir, it may not be absolute", s.quote())
+        }
+        TooManyTemplates {
+            display("too many templates")
+        }
+        NotFound(template_type: String, s: String) {
+            display("failed to create {} via template {}: No such file or directory", template_type, s.quote())
+        }
+    }
 }
 
 impl UError for MkTempError {
     fn usage(&self) -> bool {
         matches!(self, Self::TooManyTemplates)
-    }
-}
-
-impl Error for MkTempError {}
-
-impl Display for MkTempError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use MkTempError::*;
-        match self {
-            PersistError(p) => write!(f, "could not persist file {}", p.quote()),
-            MustEndInX(s) => write!(f, "with --suffix, template {} must end in X", s.quote()),
-            TooFewXs(s) => write!(f, "too few X's in template {}", s.quote()),
-            PrefixContainsDirSeparator(s) => {
-                write!(
-                    f,
-                    "invalid template, {}, contains directory separator",
-                    s.quote()
-                )
-            }
-            SuffixContainsDirSeparator(s) => {
-                write!(
-                    f,
-                    "invalid suffix {}, contains directory separator",
-                    s.quote()
-                )
-            }
-            InvalidTemplate(s) => write!(
-                f,
-                "invalid template, {}; with --tmpdir, it may not be absolute",
-                s.quote()
-            ),
-            TooManyTemplates => {
-                write!(f, "too many templates")
-            }
-            NotFound(template_type, s) => write!(
-                f,
-                "failed to create {} via template {}: No such file or directory",
-                template_type,
-                s.quote()
-            ),
-        }
     }
 }
 

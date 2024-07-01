@@ -2690,6 +2690,7 @@ dependencies = [
  "chrono",
  "clap",
  "glob",
+ "quick-error",
  "uucore",
  "windows-sys 0.48.0",
 ]
@@ -2777,6 +2778,7 @@ name = "uu_groups"
 version = "0.0.27"
 dependencies = [
  "clap",
+ "quick-error",
  "uucore",
 ]
 
@@ -2836,6 +2838,7 @@ dependencies = [
  "file_diff",
  "filetime",
  "libc",
+ "quick-error",
  "uucore",
 ]
 
@@ -2845,6 +2848,7 @@ version = "0.0.27"
 dependencies = [
  "clap",
  "memchr",
+ "quick-error",
  "uucore",
 ]
 
@@ -2931,6 +2935,7 @@ name = "uu_mktemp"
 version = "0.0.27"
 dependencies = [
  "clap",
+ "quick-error",
  "rand",
  "tempfile",
  "uucore",
@@ -2955,6 +2960,7 @@ dependencies = [
  "clap",
  "fs_extra",
  "indicatif",
+ "quick-error",
  "uucore",
 ]
 
@@ -3000,6 +3006,7 @@ name = "uu_numfmt"
 version = "0.0.27"
 dependencies = [
  "clap",
+ "quick-error",
  "uucore",
 ]
 
@@ -3379,6 +3386,7 @@ name = "uu_unexpand"
 version = "0.0.27"
 dependencies = [
  "clap",
+ "quick-error",
  "unicode-width",
  "uucore",
 ]
@@ -3491,6 +3499,7 @@ dependencies = [
  "number_prefix",
  "once_cell",
  "os_display",
+ "quick-error",
  "regex",
  "sha1",
  "sha2",
