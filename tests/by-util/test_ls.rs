@@ -4595,6 +4595,36 @@ fn test_ls_hyperlink_dirs() {
 }
 
 #[test]
+fn test_ls_hyperlink_recursive_dirs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("example");
+    at.mkdir("example/a");
+
+    let result = scene
+        .ucmd()
+        .arg("--hyperlink")
+        .arg("--recursive")
+        .arg("example")
+        .succeeds();
+
+    let mut lines = result.stdout_str().lines();
+    assert!(&lines
+        .next()
+        .unwrap()
+        .ends_with("/example\u{7}example\u{1b}]8;;\u{7}:"));
+    assert!(&lines
+        .next()
+        .unwrap()
+        .ends_with("/example/a\u{7}a\u{1b}]8;;\u{7}"));
+    assert!(&lines.next().unwrap().is_empty());
+    assert!(&lines
+        .next()
+        .unwrap()
+        .ends_with("/example/a\u{7}example/a\u{1b}]8;;\u{7}:"));
+}
+
+#[test]
 fn test_ls_color_do_not_reset() {
     let scene: TestScenario = TestScenario::new(util_name!());
     let at = &scene.fixtures;

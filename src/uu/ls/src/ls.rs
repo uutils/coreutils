@@ -2038,7 +2038,7 @@ impl PathData {
 
 fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Config) {
     if config.hyperlink && !config.dired {
-        let name = escape_name(&path_data.display_name, &config.quoting_style);
+        let name = escape_name(path_data.p_buf.as_os_str(), &config.quoting_style);
         let hyperlink = create_hyperlink(&name, path_data);
         write!(out, "{}:", hyperlink).unwrap();
     } else {
