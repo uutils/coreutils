@@ -1376,6 +1376,13 @@ fn check_class_in_set2_must_be_matched_in_set1() {
 }
 
 #[test]
+fn check_class_in_set2_must_be_matched_in_set1_right_length_check() {
+    new_ucmd!()
+        .args(&["-t", "a-z[:upper:]", "abcdefghijklmnopqrstuvwxyz[:upper:]"])
+        .succeeds();
+}
+
+#[test]
 fn check_set1_longer_set2_ends_in_class() {
     new_ucmd!().args(&["[:lower:]a", "[:upper:]"]).fails();
 }
