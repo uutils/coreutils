@@ -29,8 +29,8 @@ pub fn main() {
             #[allow(clippy::match_same_arms)]
             match krate.as_ref() {
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" => continue, // common/standard feature names
-                "nightly" | "test_unimplemented" => continue, // crate-local custom features
-                "uudoc" => continue,                          // is not a utility
+                "nightly" | "test_unimplemented" | "expensive_tests" => continue, // crate-local custom features
+                "uudoc" => continue, // is not a utility
                 "test" => continue, // over-ridden with 'uu_test' to avoid collision with rust core crate 'test'
                 s if s.starts_with(FEATURE_PREFIX) => continue, // crate feature sets
                 _ => {}             // util feature name
