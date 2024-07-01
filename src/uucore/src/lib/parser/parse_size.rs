@@ -2,8 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
 // spell-checker:ignore (ToDO) hdsf ghead gtail ACDBK hexdigit
+
+//! Parser for sizes in SI or IEC units (multiples of 1000 or 1024 bytes).
 
 use std::error::Error;
 use std::fmt;
@@ -35,21 +36,25 @@ enum NumberSystem {
 }
 
 impl<'parser> Parser<'parser> {
+    /// Change allow_list of the parser - whitelist for the suffix
     pub fn with_allow_list(&mut self, allow_list: &'parser [&str]) -> &mut Self {
         self.allow_list = Some(allow_list);
         self
     }
 
+    /// Change default_unit of the parser - when no suffix is provided
     pub fn with_default_unit(&mut self, default_unit: &'parser str) -> &mut Self {
         self.default_unit = Some(default_unit);
         self
     }
 
+    /// Change b_byte_count of the parser - to treat "b" as a "byte count" instead of "block"
     pub fn with_b_byte_count(&mut self, value: bool) -> &mut Self {
         self.b_byte_count = value;
         self
     }
 
+    /// Change no_empty_numeric of the parser - to allow empty numeric strings
     pub fn with_allow_empty_numeric(&mut self, value: bool) -> &mut Self {
         self.no_empty_numeric = value;
         self
@@ -293,6 +298,7 @@ pub fn parse_size_u64(size: &str) -> Result<u64, ParseSizeError> {
     Parser::default().parse_u64(size)
 }
 
+/// Same as `parse_size_u64()` - deprecated
 #[deprecated = "Please use parse_size_u64(size: &str) -> Result<u64, ParseSizeError> OR parse_size_u128(size: &str) -> Result<u128, ParseSizeError> instead."]
 pub fn parse_size(size: &str) -> Result<u64, ParseSizeError> {
     parse_size_u64(size)
@@ -310,11 +316,17 @@ pub fn parse_size_u128_max(size: &str) -> Result<u128, ParseSizeError> {
     Parser::default().parse_u128_max(size)
 }
 
+/// Error type for parse_size
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseSizeError {
-    InvalidSuffix(String), // Suffix
-    ParseFailure(String),  // Syntax
-    SizeTooBig(String),    // Overflow
+    /// Suffix
+    InvalidSuffix(String),
+
+    /// Syntax
+    ParseFailure(String),
+
+    /// Overflow
+    SizeTooBig(String),
 }
 
 impl Error for ParseSizeError {

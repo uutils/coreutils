@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// TODO fix broken links
-#![allow(rustdoc::broken_intra_doc_links)]
 //! Macros for the uucore utilities.
 //!
 //! This module bundles all macros used across the uucore utilities. These
@@ -183,6 +181,7 @@ macro_rules! show_warning(
     })
 );
 
+/// Print a warning message to stderr, prepending the utility name.
 #[macro_export]
 macro_rules! show_warning_caps(
     ($($args:tt)+) => ({

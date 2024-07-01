@@ -3,11 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore abcdefgh abef
+
+//! A parser that accepts shortcuts for values.
+//! `ShortcutValueParser` is similar to clap's `PossibleValuesParser`
+
 use clap::{
     builder::{PossibleValue, TypedValueParser},
     error::{ContextKind, ContextValue, ErrorKind},
 };
 
+/// A parser that accepts shortcuts for values.
 #[derive(Clone)]
 pub struct ShortcutValueParser(Vec<PossibleValue>);
 
@@ -17,6 +22,7 @@ pub struct ShortcutValueParser(Vec<PossibleValue>);
 /// Whereas `PossibleValuesParser` only accepts exact matches, `ShortcutValueParser` also accepts
 /// shortcuts as long as they are unambiguous.
 impl ShortcutValueParser {
+    /// Create a new `ShortcutValueParser` from a list of `PossibleValue`.
     pub fn new(values: impl Into<Self>) -> Self {
         values.into()
     }

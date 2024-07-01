@@ -2,8 +2,6 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// TODO fix broken links
-#![allow(rustdoc::broken_intra_doc_links)]
 //! All utils return exit with an exit code. Usually, the following scheme is used:
 //! * `0`: succeeded
 //! * `1`: minor problems
@@ -287,11 +285,15 @@ where
 /// ```
 #[derive(Debug)]
 pub struct USimpleError {
+    /// Exit code of the error.
     pub code: i32,
+
+    /// Error message.
     pub message: String,
 }
 
 impl USimpleError {
+    /// Create a new `USimpleError` with a given exit code and message.
     #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
         Box::new(Self {
@@ -315,14 +317,19 @@ impl UError for USimpleError {
     }
 }
 
+/// Wrapper type around [`std::io::Error`].
 #[derive(Debug)]
 pub struct UUsageError {
+    /// Exit code of the error.
     pub code: i32,
+
+    /// Error message.
     pub message: String,
 }
 
 impl UUsageError {
     #[allow(clippy::new_ret_no_self)]
+    /// Create a new `UUsageError` with a given exit code and message.
     pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
         Box::new(Self {
             code,
@@ -383,6 +390,7 @@ pub struct UIoError {
 
 impl UIoError {
     #[allow(clippy::new_ret_no_self)]
+    /// Create a new `UIoError` with a given exit code and message.
     pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
         Box::new(Self {
             context: Some(context.into()),
@@ -459,6 +467,7 @@ pub fn strip_errno(err: &std::io::Error) -> String {
 /// Enables the conversion from [`std::io::Error`] to [`UError`] and from [`std::io::Result`] to
 /// [`UResult`].
 pub trait FromIo<T> {
+    /// Map the error context of an [`std::io::Error`] or [`std::io::Result`] to a custom error
     fn map_err_context(self, context: impl FnOnce() -> String) -> T;
 }
 
@@ -642,6 +651,7 @@ pub struct ExitCode(pub i32);
 
 impl ExitCode {
     #[allow(clippy::new_ret_no_self)]
+    /// Create a new `ExitCode` with a given exit code.
     pub fn new(code: i32) -> Box<dyn UError> {
         Box::new(Self(code))
     }
@@ -694,6 +704,7 @@ pub struct ClapErrorWrapper {
 
 /// Extension trait for `clap::Error` to adjust the exit code.
 pub trait UClapError<T> {
+    /// Set the exit code for the program if `uumain` returns `Ok(())`.
     fn with_exit_code(self, code: i32) -> T;
 }
 

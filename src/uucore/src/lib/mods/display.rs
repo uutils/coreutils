@@ -2,27 +2,28 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-/// Utilities for printing paths, with special attention paid to special
-/// characters and invalid unicode.
-///
-/// For displaying paths in informational messages use `Quotable::quote`. This
-/// will wrap quotes around the filename and add the necessary escapes to make
-/// it copy/paste-able into a shell.
-///
-/// For writing raw paths to stdout when the output should not be quoted or escaped,
-/// use `println_verbatim`. This will preserve invalid unicode.
-///
-/// # Examples
-/// ```
-/// use std::path::Path;
-/// use uucore::display::{Quotable, println_verbatim};
-///
-/// let path = Path::new("foo/bar.baz");
-///
-/// println!("Found file {}", path.quote()); // Prints "Found file 'foo/bar.baz'"
-/// println_verbatim(path)?; // Prints "foo/bar.baz"
-/// # Ok::<(), std::io::Error>(())
-/// ```
+//! Utilities for printing paths, with special attention paid to special
+//! characters and invalid unicode.
+//!
+//! For displaying paths in informational messages use `Quotable::quote`. This
+//! will wrap quotes around the filename and add the necessary escapes to make
+//! it copy/paste-able into a shell.
+//!
+//! For writing raw paths to stdout when the output should not be quoted or escaped,
+//! use `println_verbatim`. This will preserve invalid unicode.
+//!
+//! # Examples
+//! ```rust
+//! use std::path::Path;
+//! use uucore::display::{Quotable, println_verbatim};
+//!
+//! let path = Path::new("foo/bar.baz");
+//!
+//! println!("Found file {}", path.quote()); // Prints "Found file 'foo/bar.baz'"
+//! println_verbatim(path)?; // Prints "foo/bar.baz"
+//! # Ok::<(), std::io::Error>(())
+//! ```
+
 use std::ffi::OsStr;
 use std::io::{self, Write as IoWrite};
 
