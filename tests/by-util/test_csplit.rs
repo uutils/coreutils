@@ -468,6 +468,43 @@ fn test_up_to_match_offset_option_suppress_matched() {
 }
 
 #[test]
+fn test_line_number_after_match_suppressed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "--suppress-matched", "/10/", "9"])
+        .succeeds()
+        .stdout_only("18\n0\n117\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 3);
+    assert_eq!(at.read("xx00"), generate(1, 10));
+    assert_eq!(at.read("xx01"), "");
+
+    // The 9 has suppressed line 11
+    assert_eq!(at.read("xx02"), generate(12, 51));
+}
+
+#[test]
+fn test_same_number_suppressed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "--suppress-matched", "5", "5", "5"])
+        .succeeds()
+        .stdout_only("8\n0\n0\n127\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 3);
+    assert_eq!(at.read("xx00"), generate(1, 5));
+    assert_eq!(at.read("xx01"), "");
+    assert_eq!(at.read("xx02"), "");
+
+    // The fives suppress lines 5, 6 and 7.
+    assert_eq!(at.read("xx02"), generate(8, 51));
+}
+
+#[test]
 fn test_up_to_match_negative_offset_option_suppress_matched() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "--suppress-matched", "/10/-4"])
