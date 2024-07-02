@@ -556,6 +556,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_pid_entry() {
         let current_pid = current_pid();
 
