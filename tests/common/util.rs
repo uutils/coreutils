@@ -3193,8 +3193,6 @@ mod tests {
     #[cfg(feature = "sleep")]
     #[cfg(unix)]
     #[rstest]
-    #[case::signal_full_name_lower_case("sigkill")]
-    #[case::signal_short_name_lower_case("kill")]
     #[case::signal_only_part_of_name("IGKILL")] // spell-checker: disable-line
     #[case::signal_just_sig("SIG")]
     #[case::signal_value_too_high("100")]
@@ -3205,6 +3203,17 @@ mod tests {
         child.kill();
         let result = child.wait().unwrap();
         result.signal_name_is(signal_name);
+    }
+
+    #[test]
+    #[cfg(feature = "sleep")]
+    #[cfg(unix)]
+    fn test_cmd_result_signal_name_is_accepts_lowercase() {
+        let mut child = TestScenario::new("sleep").ucmd().arg("60").run_no_wait();
+        child.kill();
+        let result = child.wait().unwrap();
+        result.signal_name_is("sigkill");
+        result.signal_name_is("kill");
     }
 
     #[test]
