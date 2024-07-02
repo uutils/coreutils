@@ -327,11 +327,11 @@ impl ProcessInformation {
         })
     }
 
-    pub fn inner_status(&self) -> &str {
+    pub fn proc_status(&self) -> &str {
         &self.inner_status
     }
 
-    pub fn inner_stat(&self) -> &str {
+    pub fn proc_stat(&self) -> &str {
         &self.inner_stat
     }
 
