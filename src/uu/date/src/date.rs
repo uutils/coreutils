@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
+// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getresgettime
 
 use chrono::format::{Item, StrftimeItems};
 use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
@@ -11,9 +11,12 @@ use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
-use libc::{clock_settime, timespec, CLOCK_REALTIME};
+use libc::clock_settime;
+#[cfg(all(unix))]
+use libc::{timespec, CLOCK_MONOTONIC, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::os::raw::c_long;
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
@@ -38,6 +41,7 @@ const OPT_DATE: &str = "date";
 const OPT_FORMAT: &str = "format";
 const OPT_FILE: &str = "file";
 const OPT_DEBUG: &str = "debug";
+const OPT_RESOLUTION: &str = "resolution";
 const OPT_ISO_8601: &str = "iso-8601";
 const OPT_RFC_EMAIL: &str = "rfc-email";
 const OPT_RFC_3339: &str = "rfc-3339";
@@ -101,6 +105,75 @@ enum Iso8601Format {
     Minutes,
     Seconds,
     Ns,
+}
+
+// Enum for system clock resolution
+enum TimeResolution {}
+const RESOLUTION_DIVISOR: f32 = 1_000_000_000.0;
+
+impl TimeResolution {
+    fn generate() -> f32 {
+        // Getting time from system
+        let time = std::time::SystemTime::now();
+
+        let duration = time
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+
+        let secs: u64 = duration.as_secs();
+        let nsecs: u32 = duration.subsec_nanos();
+
+        let mut ts: timespec = timespec {
+            tv_sec: secs as c_long,
+            tv_nsec: nsecs as c_long,
+        };
+
+        let resolution: f32 = match Self::clock_type(&mut ts) {
+            Some(CLOCK_REALTIME) => {
+                let mut res_ts = ts;
+                unsafe { libc::clock_getres(CLOCK_REALTIME, &mut res_ts) };
+                let resolution_secs: f32 =
+                    res_ts.tv_sec as f32 + res_ts.tv_nsec as f32 / RESOLUTION_DIVISOR;
+                resolution_secs
+            }
+            Some(CLOCK_MONOTONIC) => {
+                let mut res_ts: timespec = ts;
+                unsafe { libc::clock_getres(CLOCK_MONOTONIC, &mut res_ts) };
+                let resolution_secs: f32 =
+                    res_ts.tv_sec as f32 + res_ts.tv_nsec as f32 / RESOLUTION_DIVISOR;
+                resolution_secs
+            }
+            _ => {
+                // We 'create' a resolution here based on how many digits we get for resolution_secs
+                let resolution_secs: f32 = ts.tv_nsec as f32 / RESOLUTION_DIVISOR;
+                let resolution_string: &String = &format!("{}", resolution_secs);
+                // We take 3 numbers off to add the '0.' for the decimal and add '1' to the end.
+                let resolution_length: u8 = (resolution_string.len() - 3).try_into().unwrap_or(1);
+                let mut resolution_final: String = String::new();
+                resolution_final.push_str("0.");
+                let mut i: u8 = 0;
+                while i <= resolution_length {
+                    resolution_final.push('0');
+                    i += 1;
+                }
+                resolution_final.push('1');
+
+                resolution_final.parse::<f32>().unwrap_or(0.1)
+            }
+        };
+
+        resolution
+    }
+
+    fn clock_type(ts: &mut timespec) -> Option<i32> {
+        if unsafe { libc::clock_gettime(CLOCK_REALTIME, &mut *ts) } == 0 {
+            Some(CLOCK_REALTIME)
+        } else if unsafe { libc::clock_gettime(CLOCK_MONOTONIC, &mut *ts) } == 0 {
+            Some(CLOCK_MONOTONIC)
+        } else {
+            None
+        }
+    }
 }
 
 impl<'a> From<&'a str> for Iso8601Format {
@@ -181,6 +254,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         DateSource::Now
     };
+
+    if matches.get_flag(OPT_RESOLUTION) {
+        println!("{}", TimeResolution::generate());
+        return Ok(());
+    }
 
     let set_to = match matches.get_one::<String>(OPT_SET).map(parse_date) {
         None => None,
@@ -327,6 +405,13 @@ pub fn uu_app() -> Command {
                 .value_name("DATEFILE")
                 .value_hint(clap::ValueHint::FilePath)
                 .help("like --date; once for each line of DATEFILE"),
+        )
+        .arg(
+            Arg::new(OPT_RESOLUTION)
+                .long(OPT_RESOLUTION)
+                .value_name("RESOLUTION")
+                .help("output the available resolution of timestamps")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(OPT_ISO_8601)
