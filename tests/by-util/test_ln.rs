@@ -550,6 +550,67 @@ fn test_symlink_no_deref_dir() {
 }
 
 #[test]
+fn test_symlink_no_deref_file_in_destination_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file1 = "foo";
+    let file2 = "bar";
+
+    let dest = "baz";
+
+    let link1 = "baz/foo";
+    let link2 = "baz/bar";
+
+    at.touch(file1);
+    at.touch(file2);
+    at.mkdir(dest);
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+    assert!(at.dir_exists(dest));
+
+    // -n and -f should work alone
+    scene
+        .ucmd()
+        .args(&["-sn", file1, dest])
+        .succeeds()
+        .no_stderr();
+    assert!(at.is_symlink(link1));
+    assert_eq!(at.resolve_link(link1), file1);
+
+    scene
+        .ucmd()
+        .args(&["-sf", file1, dest])
+        .succeeds()
+        .no_stderr();
+    assert!(at.is_symlink(link1));
+    assert_eq!(at.resolve_link(link1), file1);
+
+    // -n alone should fail if destination exists already (it should now)
+    scene.ucmd().args(&["-sn", file1, dest]).fails();
+
+    // -nf should also work
+    scene
+        .ucmd()
+        .args(&["-snf", file1, dest])
+        .succeeds()
+        .no_stderr();
+    assert!(at.is_symlink(link1));
+    assert_eq!(at.resolve_link(link1), file1);
+
+    scene
+        .ucmd()
+        .args(&["-snf", file1, file2, dest])
+        .succeeds()
+        .no_stderr();
+    assert!(at.is_symlink(link1));
+    assert_eq!(at.resolve_link(link1), file1);
+    assert!(at.is_symlink(link2));
+    assert_eq!(at.resolve_link(link2), file2);
+}
+
+#[test]
 fn test_symlink_no_deref_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
