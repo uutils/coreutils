@@ -4598,30 +4598,43 @@ fn test_ls_hyperlink_dirs() {
 fn test_ls_hyperlink_recursive_dirs() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    at.mkdir("example");
-    at.mkdir("example/a");
+    let path = at.root_dir_resolved();
+    let separator = std::path::MAIN_SEPARATOR_STR;
+
+    let dir_a = "a";
+    let dir_b = "b";
+    at.mkdir(dir_a);
+    at.mkdir(format!("{dir_a}/{dir_b}"));
 
     let result = scene
         .ucmd()
         .arg("--hyperlink")
         .arg("--recursive")
-        .arg("example")
+        .arg(dir_a)
         .succeeds();
 
+    macro_rules! assert_hyperlink {
+        ($line:expr, $expected:expr) => {
+            assert!(matches!($line, Some(l) if l.starts_with("\x1b]8;;file://") && l.ends_with($expected)));
+        };
+    }
+
     let mut lines = result.stdout_str().lines();
-    assert!(&lines
-        .next()
-        .unwrap()
-        .ends_with("/example\u{7}example\u{1b}]8;;\u{7}:"));
-    assert!(&lines
-        .next()
-        .unwrap()
-        .ends_with("/example/a\u{7}a\u{1b}]8;;\u{7}"));
-    assert!(&lines.next().unwrap().is_empty());
-    assert!(&lines
-        .next()
-        .unwrap()
-        .ends_with("/example/a\u{7}example/a\u{1b}]8;;\u{7}:"));
+    assert_hyperlink!(
+        lines.next(),
+        &format!("{path}{separator}{dir_a}\x07{dir_a}\x1b]8;;\x07:")
+    );
+    assert_hyperlink!(
+        lines.next(),
+        &format!("{path}{separator}{dir_a}{separator}{dir_b}\x07{dir_b}\x1b]8;;\x07")
+    );
+    assert!(matches!(lines.next(), Some(l) if l.is_empty()));
+    assert_hyperlink!(
+        lines.next(),
+        &format!(
+            "{path}{separator}{dir_a}{separator}{dir_b}\x07{dir_a}{separator}{dir_b}\x1b]8;;\x07:"
+        )
+    );
 }
 
 #[test]
