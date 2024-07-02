@@ -152,13 +152,22 @@ fn get_argument(input: &[TokenTree], index: usize, name: &str) -> String {
 fn read_help(filename: &str) -> String {
     let mut content = String::new();
 
-    let mut path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let parent_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+
+    let mut path = PathBuf::from(parent_path.clone());
     path.push(filename);
 
-    File::open(path)
-        .unwrap()
-        .read_to_string(&mut content)
-        .unwrap();
+    let mut file_state = File::open(&path);
+    if let Err(ref _err_file) = file_state {
+        let name = path.as_path().file_stem().unwrap();
+        let path = parent_path.join("src").join("uu").join(name).join(filename);
+        file_state = File::open(&path);
+        if let Err(err_file) = file_state {
+            panic!("Error opening file ({:?}): {:?}", path, err_file);
+        }
+    }
+
+    file_state.unwrap().read_to_string(&mut content).unwrap();
 
     content
 }
