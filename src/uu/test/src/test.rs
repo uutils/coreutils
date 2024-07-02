@@ -17,7 +17,7 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "redox")))]
 use uucore::process::{getegid, geteuid};
 use uucore::{format_usage, help_about, help_section};
 
