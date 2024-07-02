@@ -3184,6 +3184,7 @@ dependencies = [
  "memchr",
  "rand",
  "rayon",
+ "rlimit",
  "self_cell",
  "tempfile",
  "unicode-width",

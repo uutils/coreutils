@@ -26,6 +26,7 @@ use std::{
 
 use compare::Compare;
 use itertools::Itertools;
+use rlimit::{setrlimit, Resource};
 use uucore::error::UResult;
 
 use crate::{
@@ -42,6 +43,9 @@ fn replace_output_file_in_input_files(
     output: Option<&str>,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
+    // Increase the limit
+    setrlimit(Resource::NOFILE, 16, 16).unwrap();
+
     let mut copy: Option<PathBuf> = None;
     if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
         for file in files {
