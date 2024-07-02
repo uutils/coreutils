@@ -4259,7 +4259,6 @@ fn test_ls_subdired_complex() {
     assert_eq!(dirnames, vec!["dir1", "dir1\\c2", "dir1\\d"]);
 }
 
-#[ignore = "issue #5396"]
 #[test]
 fn test_ls_cf_output_should_be_delimited_by_tab() {
     let (at, mut ucmd) = at_and_ucmd!();

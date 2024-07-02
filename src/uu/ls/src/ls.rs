@@ -2650,7 +2650,7 @@ fn display_grid(
             writeln!(out)?;
         }
     } else {
-        let names = if quoted {
+        let names: Vec<String> = if quoted {
             // In case some names are quoted, GNU adds a space before each
             // entry that does not start with a quote to make it prettier
             // on multiline.
@@ -2675,12 +2675,21 @@ fn display_grid(
         } else {
             names.collect()
         };
+
+        // Determine whether to use tabs for separation based on whether any entry ends with '/'.
+        // If any entry ends with '/', it indicates that the -F flag is likely used to classify directories.
+        let use_tabs = names.iter().any(|name| name.ends_with('/'));
+
+        let filling = if use_tabs {
+            Filling::Text("\t".to_string())
+        } else {
+            Filling::Spaces(2)
+        };
+
         let grid = Grid::new(
             names,
             GridOptions {
-                // TODO: To match gnu/tests/ls/stat-dtype.sh
-                // we might want to have Filling::Text("\t".to_string());
-                filling: Filling::Spaces(2),
+                filling,
                 direction,
                 width: width as usize,
             },
