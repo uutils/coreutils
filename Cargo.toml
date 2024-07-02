@@ -2,6 +2,7 @@
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
 # spell-checker:ignore (libs) bigdecimal datetime serde bincode fundu gethostid kqueue libselinux mangen memmap procfs uuhelp
+# spell-checker:ignore cfgs
 
 [package]
 name = "coreutils"
@@ -528,6 +529,11 @@ serde-big-array = "0.5.1"
 
 [build-dependencies]
 phf_codegen = { workspace = true }
+
+# Allow "fuzzing" as a "cfg" condition name
+# https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
 
 [[bin]]
 name = "coreutils"
