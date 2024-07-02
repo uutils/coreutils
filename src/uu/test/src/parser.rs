@@ -8,9 +8,9 @@
 use std::ffi::{OsStr, OsString};
 use std::iter::Peekable;
 
-use super::error::{ParseError, ParseResult};
-
 use uucore::display::Quotable;
+
+use super::error::{ParseError, ParseResult};
 
 /// Represents one of the binary comparison operators for strings, integers, or files
 #[derive(Debug, PartialEq, Eq)]
@@ -437,4 +437,22 @@ pub fn parse(args: Vec<OsString>) -> ParseResult<Vec<Symbol>> {
     let mut p = Parser::new(args);
     p.parse()?;
     Ok(p.stack)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::error::ParseError::UnaryOperatorExpected;
+    use crate::eval;
+    use crate::parser::parse;
+
+    #[test]
+    fn unary_expected() {
+        let result = parse(vec!["-o".into(), "arg".into()]).map(|mut x| eval(&mut x));
+
+        if let Ok(Err(UnaryOperatorExpected(s))) = result {
+            assert_eq!(s, "'-o'".to_string());
+        } else {
+            panic!("expected unary operator expected error, not {result:?}")
+        }
+    }
 }
