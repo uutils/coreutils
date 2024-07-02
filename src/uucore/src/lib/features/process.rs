@@ -480,6 +480,7 @@ pub fn walk_process() -> impl Iterator<Item = ProcessInformation> {
 }
 
 #[cfg(test)]
+#[cfg(target_os = "linux")]
 mod tests {
 
     use super::*;
