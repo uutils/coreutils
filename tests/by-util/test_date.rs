@@ -413,6 +413,21 @@ fn test_invalid_date_string() {
 }
 
 #[test]
+fn test_date_set_check_valid_format() {
+    new_ucmd!()
+        .arg("-d")
+        .arg("2000-1-1")
+        .succeeds()
+        .stdout_contains("Sat Jan  1 00:00:00 2000");
+
+    new_ucmd!()
+        .arg("-d")
+        .arg("2000-1-4")
+        .succeeds()
+        .stdout_contains("Tue Jan  4 00:00:00 2000");
+}
+
+#[test]
 fn test_date_overflow() {
     new_ucmd!()
         .arg("-d68888888888888sms")
