@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore (words) splitted FFFD
+// spell-checker:ignore (words) FFFD
 #![forbid(unsafe_code)]
 
 use std::{borrow::Cow, ffi::OsStr};
@@ -27,7 +27,7 @@ pub enum ErrorType {
 
 /// Provides a valid char or a invalid sequence of bytes.
 ///
-/// Invalid byte sequences can't be splitted in any meaningful way.
+/// Invalid byte sequences can't be split in any meaningful way.
 /// Thus, they need to be consumed as one piece.
 pub enum Chunk<'a> {
     InvalidEncoding(&'a NativeIntStr),

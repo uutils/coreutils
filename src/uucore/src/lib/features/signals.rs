@@ -5,6 +5,11 @@
 
 // spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf
 // spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX
+
+//! This module provides a way to handle signals in a platform-independent way.
+//! It provides a way to convert signal names to their corresponding values and vice versa.
+//! It also provides a way to ignore the SIGINT signal and enable pipe errors.
+
 #[cfg(unix)]
 use nix::errno::Errno;
 #[cfg(unix)]
@@ -12,6 +17,7 @@ use nix::sys::signal::{
     signal, SigHandler::SigDfl, SigHandler::SigIgn, Signal::SIGINT, Signal::SIGPIPE,
 };
 
+/// The default signal value.
 pub static DEFAULT_SIGNAL: usize = 15;
 
 /*
@@ -27,6 +33,7 @@ Linux Programmer's Manual
 
 */
 
+/// The list of all signals.
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "redox"))]
 pub static ALL_SIGNALS: [&str; 32] = [
     "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE", "KILL", "USR1", "SEGV",
@@ -339,6 +346,7 @@ pub static ALL_SIGNALS: [&str; 37] = [
     "VIRT", "TALRM",
 ];
 
+/// Returns the signal number for a given signal name or value.
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     if let Ok(value) = signal_name_or_value.parse() {
         if is_signal(value) {
@@ -352,20 +360,25 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     ALL_SIGNALS.iter().position(|&s| s == signal_name)
 }
 
+/// Returns true if the given number is a valid signal number.
 pub fn is_signal(num: usize) -> bool {
     num < ALL_SIGNALS.len()
 }
 
+/// Returns the signal name for a given signal value.
 pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
     ALL_SIGNALS.get(signal_value).copied()
 }
 
+/// Returns the default signal value.
 #[cfg(unix)]
 pub fn enable_pipe_errors() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigDfl), so we can safely ignore it.
     // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
     unsafe { signal(SIGPIPE, SigDfl) }.map(|_| ())
 }
+
+/// Ignores the SIGINT signal.
 #[cfg(unix)]
 pub fn ignore_interrupts() -> Result<(), Errno> {
     // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
