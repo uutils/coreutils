@@ -3369,7 +3369,6 @@ fn display_inode(metadata: &Metadata) -> String {
 
 // This returns the SELinux security context as UTF8 `String`.
 // In the long term this should be changed to `OsStr`, see discussions at #2621/#2656
-#[allow(unused_variables)]
 fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
     let substitute_string = "?".to_string();
     // If we must dereference, ensure that the symlink is actually valid even if the system
@@ -3383,7 +3382,7 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
                 show!(LsError::IOErrorContext(err, p_buf.to_path_buf(), false));
                 return substitute_string;
             }
-            Ok(md) => (),
+            Ok(_md) => (),
         }
     }
     if config.selinux_supported {
