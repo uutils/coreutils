@@ -462,6 +462,8 @@ pub fn perform_checksum_validation<'a, I>(
 where
     I: Iterator<Item = &'a OsStr>,
 {
+    let mut encountered_errors = false;
+
     // if cksum has several input files, it will print the result for each file
     for filename_input in files {
         let mut correct_format = 0;
@@ -473,16 +475,26 @@ where
             // Use stdin if "-" is specified
             Box::new(stdin())
         } else {
-            get_input_file(filename_input)?
+            match get_input_file(filename_input) {
+                Ok(f) => f,
+                Err(e) => {
+                    // Could not read the file, show the error and continue to the next file
+                    show_error!("{e}");
+                    encountered_errors = true;
+                    continue;
+                }
+            }
         };
 
         let reader = BufReader::new(file);
         let lines: Vec<String> = reader.lines().collect::<Result<_, _>>()?;
         let Some((chosen_regex, is_algo_based_format)) = determine_regex(&lines) else {
-            return Err(ChecksumError::NoProperlyFormattedChecksumLinesFound {
+            let e = ChecksumError::NoProperlyFormattedChecksumLinesFound {
                 filename: get_filename_for_output(filename_input, input_is_stdin),
-            }
-            .into());
+            };
+            show_error!("{e}");
+            encountered_errors = true;
+            continue;
         };
 
         for (i, line) in lines.iter().enumerate() {
@@ -624,7 +636,12 @@ where
         // if any incorrectly formatted line, show it
         cksum_output(&res, ignore_missing, status);
     }
-    Ok(())
+    if encountered_errors {
+        // Just return a simple empty error, we already displayed the error
+        Err(USimpleError::new(1, ""))
+    } else {
+        Ok(())
+    }
 }
 
 pub fn digest_reader<T: Read>(
