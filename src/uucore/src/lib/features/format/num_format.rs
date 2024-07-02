@@ -78,20 +78,36 @@ impl Formatter for SignedInt {
     type Input = i64;
 
     fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        if x >= 0 {
+        let mut s = if self.precision > 0 {
+            format!("{x:0>width$}", width = self.precision)
+        } else {
+            x.to_string()
+        };
+
+        let flag = if x >= 0 {
             match self.positive_sign {
-                PositiveSign::None => Ok(()),
-                PositiveSign::Plus => write!(writer, "+"),
-                PositiveSign::Space => write!(writer, " "),
-            }?;
-        }
+                PositiveSign::None => String::new(),
+                PositiveSign::Plus => String::from("+"),
+                PositiveSign::Space => String::from(" "),
+            }
+        } else {
+            s = s[1..].to_string();
+            String::from("-")
+        };
 
-        let s = format!("{:0width$}", x, width = self.precision);
-
+        let remaining_width = if self.width >= flag.len() {
+            self.width - flag.len()
+        } else {
+            0
+        };
         match self.alignment {
-            NumberAlignment::Left => write!(writer, "{s:<width$}", width = self.width),
-            NumberAlignment::RightSpace => write!(writer, "{s:>width$}", width = self.width),
-            NumberAlignment::RightZero => write!(writer, "{s:0>width$}", width = self.width),
+            NumberAlignment::Left => write!(writer, "{flag}{s:<width$}", width = remaining_width),
+            NumberAlignment::RightSpace => {
+                write!(writer, "{flag}{s:>width$}", width = remaining_width)
+            }
+            NumberAlignment::RightZero => {
+                write!(writer, "{flag}{s:0>width$}", width = remaining_width)
+            }
         }
     }
 
@@ -245,15 +261,7 @@ impl Formatter for Float {
     type Input = f64;
 
     fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        if x.is_sign_positive() {
-            match self.positive_sign {
-                PositiveSign::None => Ok(()),
-                PositiveSign::Plus => write!(writer, "+"),
-                PositiveSign::Space => write!(writer, " "),
-            }?;
-        }
-
-        let s = if x.is_finite() {
+        let mut s = if x.is_finite() {
             match self.variant {
                 FloatVariant::Decimal => {
                     format_float_decimal(x, self.precision, self.force_decimal)
@@ -272,10 +280,30 @@ impl Formatter for Float {
             format_float_non_finite(x, self.case)
         };
 
+        let flag = if x >= 0. {
+            match self.positive_sign {
+                PositiveSign::None => String::new(),
+                PositiveSign::Plus => String::from("+"),
+                PositiveSign::Space => String::from(" "),
+            }
+        } else {
+            s = s[1..].to_string();
+            String::from("-")
+        };
+
+        let remaining_width = if self.width >= flag.len() {
+            self.width - flag.len()
+        } else {
+            0
+        };
         match self.alignment {
-            NumberAlignment::Left => write!(writer, "{s:<width$}", width = self.width),
-            NumberAlignment::RightSpace => write!(writer, "{s:>width$}", width = self.width),
-            NumberAlignment::RightZero => write!(writer, "{s:0>width$}", width = self.width),
+            NumberAlignment::Left => write!(writer, "{flag}{s:<width$}", width = remaining_width),
+            NumberAlignment::RightSpace => {
+                write!(writer, "{flag}{s:>width$}", width = remaining_width)
+            }
+            NumberAlignment::RightZero => {
+                write!(writer, "{flag}{s:0>width$}", width = remaining_width)
+            }
         }
     }
 
