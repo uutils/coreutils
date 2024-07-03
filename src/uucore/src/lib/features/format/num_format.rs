@@ -5,6 +5,7 @@
 
 //! Utilities for formatting numbers in various formats
 
+use std::cmp::min;
 use std::io::Write;
 
 use super::{
@@ -78,28 +79,18 @@ impl Formatter for SignedInt {
     type Input = i64;
 
     fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        let mut s = if self.precision > 0 {
-            format!("{x:0>width$}", width = self.precision)
+        let s = if self.precision > 0 {
+            format!("{:0>width$}", x.abs(), width = self.precision)
         } else {
-            x.to_string()
+            x.abs().to_string()
         };
 
-        let flag = if x >= 0 {
-            match self.positive_sign {
-                PositiveSign::None => String::new(),
-                PositiveSign::Plus => String::from("+"),
-                PositiveSign::Space => String::from(" "),
-            }
-        } else {
-            s = s[1..].to_string();
-            String::from("-")
-        };
+        let flag = get_flag(self.positive_sign, &x);
 
-        let remaining_width = if self.width >= flag.len() {
-            self.width - flag.len()
-        } else {
-            0
-        };
+        // Take length of `flag`, which could be 0 or 1, into consideration when padding
+        // by storing remaining_width indicating the actual width needed.
+        // Using min() because self.width could be 0, 0usize - 1usize should be avoided
+        let remaining_width = self.width - min(self.width, flag.len());
         match self.alignment {
             NumberAlignment::Left => write!(writer, "{flag}{s:<width$}", width = remaining_width),
             NumberAlignment::RightSpace => {
@@ -280,16 +271,11 @@ impl Formatter for Float {
             format_float_non_finite(x, self.case)
         };
 
-        let flag = if x >= 0. {
-            match self.positive_sign {
-                PositiveSign::None => String::new(),
-                PositiveSign::Plus => String::from("+"),
-                PositiveSign::Space => String::from(" "),
-            }
-        } else {
-            s = s[1..].to_string();
-            String::from("-")
-        };
+        // The format function will parse `x` together with its flag char,
+        // which should be placed in `flag`. So drop it here
+        s = if x < 0. { s[1..].to_string() } else { s };
+
+        let flag = get_flag(self.positive_sign, &x);
 
         let remaining_width = if self.width >= flag.len() {
             self.width - flag.len()
@@ -351,6 +337,18 @@ impl Formatter for Float {
             alignment,
             precision,
         })
+    }
+}
+
+fn get_flag<T: PartialOrd + Default>(sign: PositiveSign, x: &T) -> String {
+    if *x >= T::default() {
+        match sign {
+            PositiveSign::None => String::new(),
+            PositiveSign::Plus => String::from("+"),
+            PositiveSign::Space => String::from(" "),
+        }
+    } else {
+        String::from("-")
     }
 }
 
