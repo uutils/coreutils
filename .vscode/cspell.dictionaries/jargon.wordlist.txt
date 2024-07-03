@@ -74,6 +74,7 @@ microbenchmarks
 microbenchmarking
 multibyte
 multicall
+nmerge
 noatime
 nocache
 nocreat
