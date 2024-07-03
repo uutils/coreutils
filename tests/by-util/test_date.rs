@@ -390,6 +390,14 @@ fn test_date_string_human() {
         "5 hours ago",
         "30 minutes ago",
         "10 seconds",
+        "last day",
+        "last week",
+        "last month",
+        "last year",
+        "next day",
+        "next week",
+        "next month",
+        "next year",
     ];
     let re = Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}\n$").unwrap();
     for date_format in date_formats {
