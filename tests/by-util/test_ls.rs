@@ -2993,6 +2993,35 @@ fn test_ls_align_unquoted() {
 }
 
 #[test]
+fn test_ls_align_unquoted_multiline() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("one");
+    at.touch("two");
+    at.touch("three_long");
+    at.touch("four_long");
+    at.touch("five");
+    at.touch("s ix");
+    at.touch("s even");
+    at.touch("eight_long_long");
+    at.touch("nine");
+    at.touch("ten");
+
+    // In TTY
+    #[cfg(unix)]
+    scene
+        .ucmd()
+        .arg("--color")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only(concat!(
+            " eight_long_long   four_long   one      's ix'   three_long\r\n",
+            " five              nine       's even'   ten     two\r\n"
+        ));
+}
+
+#[test]
 fn test_ls_ignore_hide() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
