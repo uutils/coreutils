@@ -4059,6 +4059,42 @@ fn test_ls_dired_recursive() {
 }
 
 #[test]
+fn test_ls_dired_outputs_parent_offset() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.mkdir("dir/a");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("dir")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains("//DIRED//");
+}
+
+#[test]
+fn test_ls_dired_outputs_same_date_time_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.mkdir("dir/a");
+    let binding = scene.ucmd().arg("-l").arg("dir").run();
+    let long_output_str = binding.stdout_str();
+    let split_lines: Vec<&str> = long_output_str.split('\n').collect();
+    // the second line should contain the long output which includes date
+    let list_line = split_lines.get(1).unwrap();
+    // should be same as the dired output
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("dir")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains(list_line);
+}
+
+#[test]
 fn test_ls_dired_recursive_multiple() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

@@ -971,7 +971,8 @@ impl Config {
         let mut quoting_style = extract_quoting_style(options, show_control);
         let indicator_style = extract_indicator_style(options);
         // Only parse the value to "--time-style" if it will become relevant.
-        let time_style = if format == Format::Long {
+        let dired = options.get_flag(options::DIRED);
+        let time_style = if format == Format::Long || dired {
             parse_time_style(options)?
         } else {
             TimeStyle::Iso
@@ -1092,7 +1093,6 @@ impl Config {
             None
         };
 
-        let dired = options.get_flag(options::DIRED);
         if dired || is_dired_arg_present() {
             // --dired implies --format=long
             // if we have --dired --hyperlink, we don't show dired but we still want to see the
