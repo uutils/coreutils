@@ -348,6 +348,4 @@ mod tests {
         );
         assert_eq!(dired.padding, 0);
     }
-
-
 }
