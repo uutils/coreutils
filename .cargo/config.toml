@@ -11,3 +11,5 @@ rustflags = [
     "-Wclippy::if_not_else",
 ]
 
+[unstable]
+build-std = ["profiler_builtins"]
