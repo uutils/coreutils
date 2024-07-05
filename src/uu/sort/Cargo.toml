@@ -31,6 +31,9 @@ tempfile = { workspace = true }
 unicode-width = { workspace = true }
 uucore = { workspace = true, features = ["fs", "version-cmp"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { workspace = true }
+
 [[bin]]
 name = "sort"
 path = "src/main.rs"

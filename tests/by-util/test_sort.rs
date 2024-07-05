@@ -1037,6 +1037,38 @@ fn test_merge_batches() {
 }
 
 #[test]
+fn test_batch_size_invalid() {
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg("--batch-size=0")
+        .fails()
+        .code_is(2)
+        .stderr_contains("sort: invalid --batch-size argument '0'")
+        .stderr_contains("sort: minimum --batch-size argument is '2'");
+}
+
+#[test]
+fn test_batch_size_too_large() {
+    let large_batch_size = "18446744073709551616";
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg(format!("--batch-size={}", large_batch_size))
+        .fails()
+        .code_is(2)
+        .stderr_contains(format!(
+            "--batch-size argument '{}' too large",
+            large_batch_size
+        ));
+    #[cfg(target_os = "linux")]
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg(format!("--batch-size={}", large_batch_size))
+        .fails()
+        .code_is(2)
+        .stderr_contains("maximum --batch-size argument with current rlimit is");
+}
+
+#[test]
 fn test_merge_batch_size() {
     TestScenario::new(util_name!())
         .ucmd()

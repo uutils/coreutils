@@ -3182,6 +3182,7 @@ dependencies = [
  "fnv",
  "itertools 0.13.0",
  "memchr",
+ "nix",
  "rand",
  "rayon",
  "self_cell",
