@@ -110,7 +110,7 @@ pub fn print_dired_output(
     out: &mut BufWriter<Stdout>,
 ) -> UResult<()> {
     out.flush()?;
-    if dired.padding == 0 && !dired.dired_positions.is_empty() {
+    if !dired.dired_positions.is_empty() {
         print_positions("//DIRED//", &dired.dired_positions);
     }
     if config.recursive {
