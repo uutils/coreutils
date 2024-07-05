@@ -67,7 +67,7 @@ fn test_double_not_is_false() {
 
 #[test]
 fn test_and_not_is_false() {
-    new_ucmd!().args(&["-a", "!"]).run().code_is(1);
+    new_ucmd!().args(&["-a", "!"]).run().code_is(2);
 }
 
 #[test]
