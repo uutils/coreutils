@@ -900,3 +900,19 @@ fn float_default_precision_zero_padding() {
         .succeeds()
         .stdout_only("001.000000");
 }
+
+#[test]
+fn flag_position_space_padding() {
+    new_ucmd!()
+        .args(&["% +3.1d", "1"])
+        .succeeds()
+        .stdout_only(" +1");
+}
+
+#[test]
+fn float_flag_position_space_padding() {
+    new_ucmd!()
+        .args(&["% +5.1f", "1"])
+        .succeeds()
+        .stdout_only(" +1.0");
+}
