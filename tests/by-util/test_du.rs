@@ -19,6 +19,7 @@ const SUB_FILE: &str = "subdir/links/subwords.txt";
 const SUB_LINK: &str = "subdir/links/sublink.txt";
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_basics() {
     let ts = TestScenario::new(util_name!());
 
@@ -77,6 +78,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_basics_subdir() {
     let ts = TestScenario::new(util_name!());
 
@@ -184,6 +186,7 @@ fn test_du_non_existing_files() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_soft_link() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -230,7 +233,7 @@ fn _du_soft_link(s: &str) {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(all(not(target_os = "android"), not(target_os = "openbsd")))]
 #[test]
 fn test_du_hard_link() {
     let ts = TestScenario::new(util_name!());
@@ -279,6 +282,7 @@ fn _du_hard_link(s: &str) {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_d_flag() {
     let ts = TestScenario::new(util_name!());
 
@@ -322,6 +326,7 @@ fn _du_d_flag(s: &str) {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_dereference() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -393,7 +398,12 @@ fn _du_dereference(s: &str) {
     }
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "android", target_os = "freebsd")))]
+#[cfg(not(any(
+    target_os = "windows",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "openbsd"
+)))]
 #[test]
 fn test_du_no_dereference() {
     let ts = TestScenario::new(util_name!());
@@ -641,7 +651,7 @@ fn birth_supported() -> bool {
     m.created().is_ok()
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(any(target_os = "windows", target_os = "openbsd")))]
 #[cfg(feature = "chmod")]
 #[test]
 fn test_du_no_permission() {
@@ -695,6 +705,7 @@ fn _du_no_permission(s: &str) {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_one_file_system() {
     let ts = TestScenario::new(util_name!());
 
@@ -712,6 +723,7 @@ fn test_du_one_file_system() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_du_threshold() {
     let ts = TestScenario::new(util_name!());
 
@@ -1007,6 +1019,7 @@ fn test_du_symlink_fail() {
 }
 
 #[cfg(not(windows))]
+#[cfg(not(target_os = "openbsd"))]
 #[test]
 fn test_du_symlink_multiple_fail() {
     let ts = TestScenario::new(util_name!());
