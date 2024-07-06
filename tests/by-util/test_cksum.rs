@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) asdf algo algos
+// spell-checker:ignore (words) asdf algo algos mgmt
 
 use crate::common::util::TestScenario;
 
@@ -1200,4 +1200,53 @@ fn test_check_directory_error() {
         .arg(at.subdir.join("f"))
         .fails()
         .stderr_contains(err_msg);
+}
+
+#[test]
+fn test_check_base64_hashes() {
+    let hashes =
+        "MD5 (empty) = 1B2M2Y8AsgTpgAmY7PhCfg==\nSHA256 (empty) = 47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=\nBLAKE2b (empty) = eGoC90IBWQPGxv2FJVLScpEvR0DhWEdhiobiF/cfVBnSXhAxr+5YUxOJZESTTrBLkDpoWxRIt1XVb3Aa/pvizg==\n"
+    ;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("empty");
+    at.write("check", hashes);
+
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg(at.subdir.join("check"))
+        .succeeds()
+        .stdout_is("empty: OK\nempty: OK\nempty: OK\n");
+}
+
+#[test]
+fn test_several_files_error_mgmt() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // don't exist
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("empty")
+        .arg("incorrect")
+        .fails()
+        .stderr_contains("empty: No such file ")
+        .stderr_contains("incorrect: No such file ");
+
+    at.touch("empty");
+    at.touch("incorrect");
+
+    // exists but incorrect
+    scene
+        .ucmd()
+        .arg("--check")
+        .arg("empty")
+        .arg("incorrect")
+        .fails()
+        .stderr_contains("empty: no properly ")
+        .stderr_contains("incorrect: no properly ");
 }

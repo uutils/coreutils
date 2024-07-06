@@ -2125,6 +2125,10 @@ fn copy_file(
         .into());
     }
 
+    if options.verbose {
+        print_verbose_output(options.parents, progress_bar, source, dest);
+    }
+
     if options.preserve_hard_links() {
         // if we encounter a matching device/inode pair in the source tree
         // we can arrange to create a hard link between the corresponding names
@@ -2136,10 +2140,6 @@ fn copy_file(
             std::fs::hard_link(new_source, dest)?;
             return Ok(());
         };
-    }
-
-    if options.verbose {
-        print_verbose_output(options.parents, progress_bar, source, dest);
     }
 
     // Calculate the context upfront before canonicalizing the path

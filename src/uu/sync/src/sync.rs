@@ -36,6 +36,8 @@ mod platform {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::os::unix::io::AsRawFd;
 
+    /// # Safety
+    /// This function is unsafe because it calls `libc::sync` or `libc::syscall` which are unsafe.
     pub unsafe fn do_sync() -> isize {
         // see https://github.com/rust-lang/libc/pull/2161
         #[cfg(target_os = "android")]
@@ -46,6 +48,8 @@ mod platform {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
+    /// # Safety
+    /// This function is unsafe because it calls `libc::syscall` which is unsafe.
     pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
         for path in files {
             let f = File::open(path).unwrap();
@@ -56,6 +60,8 @@ mod platform {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
+    /// # Safety
+    /// This function is unsafe because it calls `libc::syscall` which is unsafe.
     pub unsafe fn do_fdatasync(files: Vec<String>) -> isize {
         for path in files {
             let f = File::open(path).unwrap();
@@ -81,6 +87,8 @@ mod platform {
     };
     use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
 
+    /// # Safety
+    /// This function is unsafe because it calls an unsafe function.
     unsafe fn flush_volume(name: &str) {
         let name_wide = name.to_wide_null();
         if GetDriveTypeW(name_wide.as_ptr()) == DRIVE_FIXED {
@@ -99,6 +107,8 @@ mod platform {
         }
     }
 
+    /// # Safety
+    /// This function is unsafe because it calls an unsafe function.
     unsafe fn find_first_volume() -> (String, HANDLE) {
         let mut name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
         let handle = FindFirstVolumeW(name.as_mut_ptr(), name.len() as u32);
@@ -108,6 +118,8 @@ mod platform {
         (String::from_wide_null(&name), handle)
     }
 
+    /// # Safety
+    /// This function is unsafe because it calls an unsafe function.
     unsafe fn find_all_volumes() -> Vec<String> {
         let (first_volume, next_volume_handle) = find_first_volume();
         let mut volumes = vec![first_volume];
@@ -127,6 +139,8 @@ mod platform {
         }
     }
 
+    /// # Safety
+    /// This function is unsafe because it calls `find_all_volumes` which is unsafe.
     pub unsafe fn do_sync() -> isize {
         let volumes = find_all_volumes();
         for vol in &volumes {
@@ -135,6 +149,8 @@ mod platform {
         0
     }
 
+    /// # Safety
+    /// This function is unsafe because it calls `find_all_volumes` which is unsafe.
     pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
         for path in files {
             flush_volume(

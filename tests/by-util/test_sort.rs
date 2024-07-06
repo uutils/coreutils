@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) ints
+#![allow(clippy::cast_possible_wrap)]
 
 use std::time::Duration;
 
@@ -1033,6 +1034,38 @@ fn test_merge_batches() {
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
         .stdout_only_fixture("ext_sort.expected");
+}
+
+#[test]
+fn test_batch_size_invalid() {
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg("--batch-size=0")
+        .fails()
+        .code_is(2)
+        .stderr_contains("sort: invalid --batch-size argument '0'")
+        .stderr_contains("sort: minimum --batch-size argument is '2'");
+}
+
+#[test]
+fn test_batch_size_too_large() {
+    let large_batch_size = "18446744073709551616";
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg(format!("--batch-size={}", large_batch_size))
+        .fails()
+        .code_is(2)
+        .stderr_contains(format!(
+            "--batch-size argument '{}' too large",
+            large_batch_size
+        ));
+    #[cfg(target_os = "linux")]
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg(format!("--batch-size={}", large_batch_size))
+        .fails()
+        .code_is(2)
+        .stderr_contains("maximum --batch-size argument with current rlimit is");
 }
 
 #[test]

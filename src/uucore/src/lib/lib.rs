@@ -139,10 +139,14 @@ pub fn format_usage(s: &str) -> String {
     s.replace("{}", crate::execution_phrase())
 }
 
+/// Used to check if the utility is the second argument.
+/// Used to check if we were called as a multicall binary (`coreutils <utility>`)
 pub fn get_utility_is_second_arg() -> bool {
     crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
 }
 
+/// Change the value of `UTILITY_IS_SECOND_ARG` to true
+/// Used to specify that the utility is the second argument.
 pub fn set_utility_is_second_arg() {
     crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst);
 }
@@ -181,6 +185,10 @@ pub fn execution_phrase() -> &'static str {
     &EXECUTION_PHRASE
 }
 
+/// Args contains arguments passed to the utility.
+/// It is a trait that extends `Iterator<Item = OsString>`.
+/// It provides utility functions to collect the arguments into a `Vec<String>`.
+/// The collected `Vec<String>` can be lossy or ignore invalid encoding.
 pub trait Args: Iterator<Item = OsString> + Sized {
     /// Collects the iterator into a `Vec<String>`, lossily converting the `OsString`s to `Strings`.
     fn collect_lossy(self) -> Vec<String> {
@@ -195,6 +203,8 @@ pub trait Args: Iterator<Item = OsString> + Sized {
 
 impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 
+/// Returns an iterator over the command line arguments as `OsString`s.
+/// args_os() can be expensive to call
 pub fn args_os() -> impl Iterator<Item = OsString> {
     ARGV.iter().cloned()
 }
