@@ -523,6 +523,7 @@ fn test_install_failing_no_such_file() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_install_copy_then_compare_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1598,6 +1599,7 @@ fn test_install_chown_directory_invalid() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_install_compare_option() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
