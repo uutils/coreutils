@@ -79,7 +79,7 @@ impl Formatter for SignedInt {
     type Input = i64;
 
     fn fmt(&self, mut writer: impl Write, x: Self::Input) -> std::io::Result<()> {
-        let s = if self.precision > 0 {
+        let mut s = if self.precision > 0 {
             format!("{:0>width$}", x.abs(), width = self.precision)
         } else {
             x.abs().to_string()
@@ -94,7 +94,14 @@ impl Formatter for SignedInt {
         match self.alignment {
             NumberAlignment::Left => write!(writer, "{flag}{s:<width$}", width = remaining_width),
             NumberAlignment::RightSpace => {
-                write!(writer, "{flag}{s:>width$}", width = remaining_width)
+                let is_sign_flag = flag.starts_with("-") || flag.starts_with("+"); // When flag is in ['-', '+']
+                if is_sign_flag && remaining_width > 0 {
+                    // Make sure flag is right next to number, e.g. "% +3.1d" 1 ==> $ +1
+                    s = flag + s.as_str();
+                    write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add flag and s together, plus 1
+                } else {
+                    write!(writer, "{flag}{s:>width$}", width = remaining_width)
+                }
             }
             NumberAlignment::RightZero => {
                 write!(writer, "{flag}{s:0>width$}", width = remaining_width)
@@ -285,7 +292,14 @@ impl Formatter for Float {
         match self.alignment {
             NumberAlignment::Left => write!(writer, "{flag}{s:<width$}", width = remaining_width),
             NumberAlignment::RightSpace => {
-                write!(writer, "{flag}{s:>width$}", width = remaining_width)
+                let is_sign_flag = flag.starts_with("-") || flag.starts_with("+"); // When flag is in ['-', '+']
+                if is_sign_flag && remaining_width > 0 {
+                    // Make sure flag is just next to number, e.g. "% +5.1f" 1 ==> $ +1.0
+                    s = flag + s.as_str();
+                    write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add flag and s together, plus 1
+                } else {
+                    write!(writer, "{flag}{s:>width$}", width = remaining_width)
+                }
             }
             NumberAlignment::RightZero => {
                 write!(writer, "{flag}{s:0>width$}", width = remaining_width)
