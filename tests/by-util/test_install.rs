@@ -5,6 +5,7 @@
 // spell-checker:ignore (words) helloworld nodir objdump n'source
 
 use crate::common::util::{is_ci, run_ucmd_as_root, TestScenario};
+#[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};

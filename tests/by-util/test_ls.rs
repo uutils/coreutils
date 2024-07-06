@@ -15,6 +15,7 @@ use crate::common::util::TestScenario;
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
 use regex::Regex;
+#[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::ffi::OsStr;
