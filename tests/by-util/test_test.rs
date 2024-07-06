@@ -553,9 +553,9 @@ fn test_nonexistent_file_is_not_symlink() {
 }
 
 #[test]
-// Only the superuser is allowed to set the sticky bit on files on FreeBSD.
+// Only the superuser is allowed to set the sticky bit on files on FreeBSD/OpenBSD.
 // Windows has no concept of sticky bit
-#[cfg(not(any(windows, target_os = "freebsd")))]
+#[cfg(not(any(windows, target_os = "freebsd", target_os = "openbsd")))]
 fn test_file_is_sticky() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
