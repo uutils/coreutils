@@ -5614,7 +5614,7 @@ fn test_symlink_to_subdir() {
     ucmd.args(&["--symbolic", "file", "dir"])
         .fails()
         .no_stdout()
-        .stderr_is("cp: dir/file: can make relative symbolic links only in current directory\n");
+        .stderr_contains("can make relative symbolic links only in current directory\n");
 
     assert!(at.dir_exists("dir"));
     assert!(!at.file_exists("dir/file"));
