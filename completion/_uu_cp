@@ -1,0 +1,88 @@
+#compdef uu_cp
+
+autoload -U is-at-least
+
+_uu_cp() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'(-T --no-target-directory)-t+[copy all SOURCE arguments into target-directory]:target-directory:_files -/' \
+'(-T --no-target-directory)--target-directory=[copy all SOURCE arguments into target-directory]:target-directory:_files -/' \
+'--backup=[make a backup of each existing destination file]' \
+'-S+[override the usual backup suffix]:SUFFIX: ' \
+'--suffix=[override the usual backup suffix]:SUFFIX: ' \
+'--update=[move only when the SOURCE file is newer than the destination file or when the destination file is missing]' \
+'--reflink=[control clone/CoW copies. See below]' \
+'*--preserve=[Preserve the specified attributes (default\: mode, ownership (unix only), timestamps), if possible additional attributes\: context, links, xattr, all]' \
+'*--no-preserve=[don'\''t preserve the specified attributes]' \
+'--sparse=[control creation of sparse files. See below]:WHEN:(never auto always)' \
+'--context=[NotImplemented\: set SELinux security context of destination file to default type]:CTX: ' \
+'(-t --target-directory)-T[Treat DEST as a regular file and not a directory]' \
+'(-t --target-directory)--no-target-directory[Treat DEST as a regular file and not a directory]' \
+'-i[ask before overwriting files]' \
+'--interactive[ask before overwriting files]' \
+'-l[hard-link files instead of copying]' \
+'--link[hard-link files instead of copying]' \
+'-n[don'\''t overwrite a file that already exists]' \
+'--no-clobber[don'\''t overwrite a file that already exists]' \
+'-R[copy directories recursively]' \
+'-r[copy directories recursively]' \
+'--recursive[copy directories recursively]' \
+'--strip-trailing-slashes[remove any trailing slashes from each SOURCE argument]' \
+'--debug[explain how a file is copied. Implies -v]' \
+'-v[explicitly state what is being done]' \
+'--verbose[explicitly state what is being done]' \
+'-s[make symbolic links instead of copying]' \
+'--symbolic-link[make symbolic links instead of copying]' \
+'-f[if an existing destination file cannot be opened, remove it and try again (this option is ignored when the -n option is also used). Currently not implemented for Windows.]' \
+'--force[if an existing destination file cannot be opened, remove it and try again (this option is ignored when the -n option is also used). Currently not implemented for Windows.]' \
+'--remove-destination[remove each existing destination file before attempting to open it (contrast with --force). On Windows, currently only works for writeable files.]' \
+'-b[like --backup but does not accept an argument]' \
+'-u[like --update but does not accept an argument]' \
+'--attributes-only[Don'\''t copy the file data, just the attributes]' \
+'-p[same as --preserve=mode,ownership(unix only),timestamps]' \
+'--preserve-default-attributes[same as --preserve=mode,ownership(unix only),timestamps]' \
+'--parents[use full source file name under DIRECTORY]' \
+'-P[never follow symbolic links in SOURCE]' \
+'--no-dereference[never follow symbolic links in SOURCE]' \
+'-L[always follow symbolic links in SOURCE]' \
+'--dereference[always follow symbolic links in SOURCE]' \
+'-H[follow command-line symbolic links in SOURCE]' \
+'-a[Same as -dR --preserve=all]' \
+'--archive[Same as -dR --preserve=all]' \
+'-d[same as --no-dereference --preserve=links]' \
+'-x[stay on this file system]' \
+'--one-file-system[stay on this file system]' \
+'--copy-contents[NotImplemented\: copy contents of special files when recursive]' \
+'-g[Display a progress bar. 
+Note\: this feature is not supported by GNU coreutils.]' \
+'--progress[Display a progress bar. 
+Note\: this feature is not supported by GNU coreutils.]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::paths:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_cp_commands] )) ||
+_uu_cp_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_cp commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_cp" ]; then
+    _uu_cp "$@"
+else
+    compdef _uu_cp uu_cp
+fi

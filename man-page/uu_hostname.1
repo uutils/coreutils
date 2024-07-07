@@ -1,0 +1,33 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_hostname 1  "uu_hostname 0.0.27" 
+.SH NAME
+uu_hostname \- Display or set the system\*(Aqs host name.
+.SH SYNOPSIS
+\fBuu_hostname\fR [\fB\-d\fR|\fB\-\-domain\fR] [\fB\-i\fR|\fB\-\-ip\-address\fR] [\fB\-f\fR|\fB\-\-fqdn\fR] [\fB\-s\fR|\fB\-\-short\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIhost\fR] 
+.SH DESCRIPTION
+Display or set the system\*(Aqs host name.
+.SH OPTIONS
+.TP
+\fB\-d\fR, \fB\-\-domain\fR
+Display the name of the DNS domain if possible
+.TP
+\fB\-i\fR, \fB\-\-ip\-address\fR
+Display the network address(es) of the host
+.TP
+\fB\-f\fR, \fB\-\-fqdn\fR
+Display the FQDN (Fully Qualified Domain Name) (default)
+.TP
+\fB\-s\fR, \fB\-\-short\fR
+Display the short hostname (the portion before the first dot) if possible
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIhost\fR]
+
+.SH VERSION
+v0.0.27

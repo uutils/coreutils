@@ -5,28 +5,19 @@
 
 // spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput, SETFL
 
-mod blocks;
-mod bufferedoutput;
-mod conversion_tables;
-mod datastructures;
-mod numbers;
-mod parseargs;
-mod progress;
-
+use crate::blocks::conv_block_unblock_helper;
 use crate::bufferedoutput::BufferedOutput;
-use blocks::conv_block_unblock_helper;
-use datastructures::*;
+use crate::datastructures::*;
+use crate::parseargs::Parser;
+use crate::progress::ProgUpdateType;
+use crate::progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::FcntlArg::F_SETFL;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::OFlag;
-use parseargs::Parser;
-use progress::ProgUpdateType;
-use progress::{gen_prog_updater, ProgUpdate, ReadStat, StatusLevel, WriteStat};
 use uucore::io::OwnedFileDescriptorOrHandle;
 
 use std::cmp;
-use std::env;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Stdout, Write};
@@ -45,7 +36,6 @@ use std::sync::{atomic::Ordering::Relaxed, mpsc, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use clap::{crate_version, Arg, Command};
 use gcd::Gcd;
 #[cfg(target_os = "linux")]
 use nix::{
@@ -56,32 +46,29 @@ use uucore::display::Quotable;
 #[cfg(unix)]
 use uucore::error::set_exit_code;
 use uucore::error::{FromIo, UResult};
+use uucore::show_error;
 #[cfg(target_os = "linux")]
 use uucore::show_if_err;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
 
-const ABOUT: &str = help_about!("dd.md");
-const AFTER_HELP: &str = help_section!("after help", "dd.md");
-const USAGE: &str = help_usage!("dd.md");
 const BUF_INIT_BYTE: u8 = 0xDD;
 
 /// Final settings after parsing
 #[derive(Default)]
-struct Settings {
-    infile: Option<String>,
-    outfile: Option<String>,
-    ibs: usize,
-    obs: usize,
-    skip: u64,
-    seek: u64,
-    count: Option<Num>,
-    iconv: IConvFlags,
-    iflags: IFlags,
-    oconv: OConvFlags,
-    oflags: OFlags,
-    status: Option<StatusLevel>,
+pub(crate) struct Settings {
+    pub(crate) infile: Option<String>,
+    pub(crate) outfile: Option<String>,
+    pub(crate) ibs: usize,
+    pub(crate) obs: usize,
+    pub(crate) skip: u64,
+    pub(crate) seek: u64,
+    pub(crate) count: Option<Num>,
+    pub(crate) iconv: IConvFlags,
+    pub(crate) iflags: IFlags,
+    pub(crate) oconv: OConvFlags,
+    pub(crate) oflags: OFlags,
+    pub(crate) status: Option<StatusLevel>,
     /// Whether the output writer should buffer partial blocks until complete.
-    buffered: bool,
+    pub(crate) buffered: bool,
 }
 
 /// A timer which triggers on a given interval
@@ -156,7 +143,7 @@ impl Alarm {
 /// We need to remember this because the size of the blocks (ibs) is only known after parsing
 /// all the arguments.
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Num {
+pub(crate) enum Num {
     Blocks(u64),
     Bytes(u64),
 }
@@ -168,14 +155,14 @@ impl Default for Num {
 }
 
 impl Num {
-    fn force_bytes_if(self, force: bool) -> Self {
+    pub(crate) fn force_bytes_if(self, force: bool) -> Self {
         match self {
             Self::Blocks(n) if force => Self::Bytes(n),
             count => count,
         }
     }
 
-    fn to_bytes(self, block_size: u64) -> u64 {
+    pub(crate) fn to_bytes(self, block_size: u64) -> u64 {
         match self {
             Self::Blocks(n) => n * block_size,
             Self::Bytes(n) => n,
@@ -542,13 +529,13 @@ impl<'a> Input<'a> {
     }
 }
 
-enum Density {
+pub(crate) enum Density {
     Sparse,
     Dense,
 }
 
 /// Data destinations.
-enum Dest {
+pub(crate) enum Dest {
     /// Output to stdout.
     Stdout(Stdout),
 
@@ -629,7 +616,7 @@ impl Dest {
     }
 
     /// Truncate the underlying file to the current stream position, if possible.
-    fn truncate(&mut self) -> io::Result<()> {
+    pub(crate) fn truncate(&mut self) -> io::Result<()> {
         match self {
             Self::File(f, _) => {
                 let pos = f.stream_position()?;
@@ -710,12 +697,12 @@ impl Write for Dest {
 /// to construct a new instance of this struct. Then use the
 /// [`dd_copy`] function to execute the main copy operation for
 /// `dd`.
-struct Output<'a> {
+pub(crate) struct Output<'a> {
     /// The destination to which bytes will be written.
-    dst: Dest,
+    pub(crate) dst: Dest,
 
     /// Configuration settings for how to read and write the data.
-    settings: &'a Settings,
+    pub(crate) settings: &'a Settings,
 }
 
 impl<'a> Output<'a> {
@@ -829,7 +816,7 @@ impl<'a> Output<'a> {
     /// this function prints an error message to stderr and sets the
     /// exit status code to 1.
     #[allow(unused_variables)]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+    pub(crate) fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
         #[cfg(target_os = "linux")]
         {
             show_if_err!(self
@@ -875,7 +862,7 @@ impl<'a> Output<'a> {
     /// bytes). The returned [`WriteStat`] object will include the
     /// number of partial and complete blocks written during execution
     /// of this function.
-    fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
+    pub(crate) fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
         let mut writes_complete = 0;
         let mut writes_partial = 0;
         let mut bytes_total = 0;
@@ -898,7 +885,7 @@ impl<'a> Output<'a> {
     }
 
     /// Flush the output to disk, if configured to do so.
-    fn sync(&mut self) -> std::io::Result<()> {
+    pub(crate) fn sync(&mut self) -> std::io::Result<()> {
         if self.settings.oconv.fsync {
             self.dst.fsync()
         } else if self.settings.oconv.fdatasync {
@@ -1080,7 +1067,8 @@ fn dd_copy(mut i: Input, o: Output) -> std::io::Result<()> {
     // When the signal is received, it calls a handler function.
     // We inject a handler function that manually triggers the alarm.
     #[cfg(target_os = "linux")]
-    let signal_handler = progress::SignalHandler::install_signal_handler(alarm.manual_trigger_fn());
+    let signal_handler =
+        crate::progress::SignalHandler::install_signal_handler(alarm.manual_trigger_fn());
     #[cfg(target_os = "linux")]
     if let Err(e) = &signal_handler {
         if Some(StatusLevel::None) != i.settings.status {
@@ -1295,7 +1283,7 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> std::io::Resul
 // sane real-world memory use, it should not be too large. I believe
 // the least common multiple is a good representation of these interests.
 // https://en.wikipedia.org/wiki/Least_common_multiple#Using_the_greatest_common_divisor
-fn calc_bsize(ibs: usize, obs: usize) -> usize {
+pub(crate) fn calc_bsize(ibs: usize, obs: usize) -> usize {
     let gcd = Gcd::gcd(ibs, obs);
     // calculate the lcm from gcd
     (ibs / gcd) * obs
@@ -1403,11 +1391,11 @@ fn is_fifo(filename: &str) -> bool {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let settings: Settings = Parser::new().parse(
         &matches
-            .get_many::<String>(options::OPERANDS)
+            .get_many::<String>(crate::options::OPERANDS)
             .unwrap_or_default()
             .map(|s| s.as_ref())
             .collect::<Vec<_>>()[..],
@@ -1429,20 +1417,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     dd_copy(i, o).map_err_context(|| "IO error".to_string())
 }
 
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
-        .infer_long_args(true)
-        .arg(Arg::new(options::OPERANDS).num_args(1..))
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::{calc_bsize, Output, Parser};
-
+    use crate::dd::calc_bsize;
+    use crate::dd::Output;
+    use crate::dd::Parser;
     use std::path::Path;
 
     #[test]

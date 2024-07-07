@@ -1,0 +1,49 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_touch 1  "uu_touch 0.0.27" 
+.SH NAME
+uu_touch \- Update the access and modification times of each `FILE` to the current time.
+.SH SYNOPSIS
+\fBuu_touch\fR [\fB\-\-help\fR] [\fB\-a \fR] [\fB\-t \fR] [\fB\-d\fR|\fB\-\-date\fR] [\fB\-m \fR] [\fB\-c\fR|\fB\-\-no\-create\fR] [\fB\-h\fR|\fB\-\-no\-dereference\fR] [\fB\-r\fR|\fB\-\-reference\fR] [\fB\-\-time\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfiles\fR] 
+.SH DESCRIPTION
+Update the access and modification times of each `FILE` to the current time.
+.SH OPTIONS
+.TP
+\fB\-\-help\fR
+Print help information.
+.TP
+\fB\-a\fR
+change only the access time
+.TP
+\fB\-t\fR=\fISTAMP\fR
+use [[CC]YY]MMDDhhmm[.ss] instead of the current time
+.TP
+\fB\-d\fR, \fB\-\-date\fR=\fISTRING\fR
+parse argument and use it instead of current time
+.TP
+\fB\-m\fR
+change only the modification time
+.TP
+\fB\-c\fR, \fB\-\-no\-create\fR
+do not create any files
+.TP
+\fB\-h\fR, \fB\-\-no\-dereference\fR
+affect each symbolic link instead of any referenced file (only for systems that can change the timestamps of a symlink)
+.TP
+\fB\-r\fR, \fB\-\-reference\fR=\fIFILE\fR
+use this file\*(Aqs times instead of the current time
+.TP
+\fB\-\-time\fR=\fIWORD\fR
+change only the specified time: "access", "atime", or "use" are equivalent to \-a; "modify" or "mtime" are equivalent to \-m
+.br
+
+.br
+[\fIpossible values: \fRatime, mtime]
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfiles\fR]
+
+.SH VERSION
+v0.0.27

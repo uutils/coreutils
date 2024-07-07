@@ -1,0 +1,72 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_join 1  "uu_join 0.0.27" 
+.SH NAME
+uu_join \- For each pair of input lines with identical join fields, write a line to
+standard output. The default join field is the first, delimited by blanks.
+
+When `FILE1` or `FILE2` (not both) is `\-`, read standard input.
+.SH SYNOPSIS
+\fBuu_join\fR [\fB\-a \fR] [\fB\-v \fR] [\fB\-e \fR] [\fB\-i\fR|\fB\-\-ignore\-case\fR] [\fB\-j \fR] [\fB\-o \fR] [\fB\-t \fR] [\fB\-1 \fR] [\fB\-2 \fR] [\fB\-\-check\-order\fR] [\fB\-\-nocheck\-order\fR] [\fB\-\-header\fR] [\fB\-z\fR|\fB\-\-zero\-terminated\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIFILE1\fR> <\fIFILE2\fR> 
+.SH DESCRIPTION
+For each pair of input lines with identical join fields, write a line to
+standard output. The default join field is the first, delimited by blanks.
+.PP
+When `FILE1` or `FILE2` (not both) is `\-`, read standard input.
+.SH OPTIONS
+.TP
+\fB\-a\fR=\fIFILENUM\fR
+also print unpairable lines from file FILENUM, where
+FILENUM is 1 or 2, corresponding to FILE1 or FILE2
+.br
+
+.br
+[\fIpossible values: \fR1, 2]
+.TP
+\fB\-v\fR=\fIFILENUM\fR
+like \-a FILENUM, but suppress joined output lines
+.br
+
+.br
+[\fIpossible values: \fR1, 2]
+.TP
+\fB\-e\fR=\fIEMPTY\fR
+replace missing input fields with EMPTY
+.TP
+\fB\-i\fR, \fB\-\-ignore\-case\fR
+ignore differences in case when comparing fields
+.TP
+\fB\-j\fR=\fIFIELD\fR
+equivalent to \*(Aq\-1 FIELD \-2 FIELD\*(Aq
+.TP
+\fB\-o\fR=\fIFORMAT\fR
+obey FORMAT while constructing output line
+.TP
+\fB\-t\fR=\fICHAR\fR
+use CHAR as input and output field separator
+.TP
+\fB\-1\fR=\fIFIELD\fR
+join on this FIELD of file 1
+.TP
+\fB\-2\fR=\fIFIELD\fR
+join on this FIELD of file 2
+.TP
+\fB\-\-check\-order\fR
+check that the input is correctly sorted, even if all input lines are pairable
+.TP
+\fB\-\-nocheck\-order\fR
+do not check that the input is correctly sorted
+.TP
+\fB\-\-header\fR
+treat the first line in each file as field headers, print them without trying to pair them
+.TP
+\fB\-z\fR, \fB\-\-zero\-terminated\fR
+line delimiter is NUL, not newline
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

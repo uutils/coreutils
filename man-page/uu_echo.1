@@ -1,0 +1,47 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_echo 1  "uu_echo 0.0.27" 
+.SH NAME
+uu_echo \- Display a line of text
+.SH SYNOPSIS
+\fBuu_echo\fR [\fB\-n \fR] [\fB\-e \fR] [\fB\-E \fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fISTRING\fR] 
+.SH DESCRIPTION
+Display a line of text
+.SH OPTIONS
+.TP
+\fB\-n\fR
+do not output the trailing newline
+.TP
+\fB\-e\fR
+enable interpretation of backslash escapes
+.TP
+\fB\-E\fR
+disable interpretation of backslash escapes (default)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fISTRING\fR]
+
+.SH EXTRA
+Echo the STRING(s) to standard output.
+
+If \-e is in effect, the following sequences are recognized:
+
+\- \\       backslash
+\- \\a      alert (BEL)
+\- \\b      backspace
+\- \\c      produce no further output
+\- \\e      escape
+\- \\f      form feed
+\- \\n      new line
+\- \\r      carriage return
+\- \\t      horizontal tab
+\- \\v      vertical tab
+\- \\0NNN   byte with octal value NNN (1 to 3 digits)
+\- \\xHH    byte with hexadecimal value HH (1 to 2 digits)
+.SH VERSION
+v0.0.27

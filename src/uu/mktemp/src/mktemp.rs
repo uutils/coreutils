@@ -5,11 +5,7 @@
 
 // spell-checker:ignore (paths) GPGHome findxs
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
-use uucore::display::{println_verbatim, Quotable};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
-use uucore::{format_usage, help_about, help_usage};
-
+use clap::ArgMatches;
 use std::env;
 use std::error::Error;
 use std::ffi::OsStr;
@@ -17,6 +13,8 @@ use std::fmt::Display;
 use std::io::ErrorKind;
 use std::iter;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+use uucore::display::{println_verbatim, Quotable};
+use uucore::error::{FromIo, UError, UResult, UUsageError};
 
 #[cfg(unix)]
 use std::fs;
@@ -26,25 +24,12 @@ use std::os::unix::prelude::PermissionsExt;
 use rand::Rng;
 use tempfile::Builder;
 
-const ABOUT: &str = help_about!("mktemp.md");
-const USAGE: &str = help_usage!("mktemp.md");
-
-static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
-
-static OPT_DIRECTORY: &str = "directory";
-static OPT_DRY_RUN: &str = "dry-run";
-static OPT_QUIET: &str = "quiet";
-static OPT_SUFFIX: &str = "suffix";
-static OPT_TMPDIR: &str = "tmpdir";
-static OPT_P: &str = "p";
-static OPT_T: &str = "t";
-
-static ARG_TEMPLATE: &str = "template";
-
 #[cfg(not(windows))]
 const TMPDIR_ENV_VAR: &str = "TMPDIR";
 #[cfg(windows)]
 const TMPDIR_ENV_VAR: &str = "TMP";
+
+pub static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
 #[derive(Debug)]
 enum MkTempError {
@@ -145,10 +130,10 @@ pub struct Options {
 impl Options {
     fn from(matches: &ArgMatches) -> Self {
         let tmpdir = matches
-            .get_one::<PathBuf>(OPT_TMPDIR)
-            .or_else(|| matches.get_one::<PathBuf>(OPT_P))
+            .get_one::<PathBuf>(crate::options::OPT_TMPDIR)
+            .or_else(|| matches.get_one::<PathBuf>(crate::options::OPT_P))
             .cloned();
-        let (tmpdir, template) = match matches.get_one::<String>(ARG_TEMPLATE) {
+        let (tmpdir, template) = match matches.get_one::<String>(crate::options::ARG_TEMPLATE) {
             // If no template argument is given, `--tmpdir` is implied.
             None => {
                 let tmpdir = Some(tmpdir.unwrap_or_else(env::temp_dir));
@@ -156,11 +141,15 @@ impl Options {
                 (tmpdir, template.to_string())
             }
             Some(template) => {
-                let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok() && matches.get_flag(OPT_T) {
+                let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok()
+                    && matches.get_flag(crate::options::OPT_T)
+                {
                     env::var_os(TMPDIR_ENV_VAR).map(|t| t.into())
                 } else if tmpdir.is_some() {
                     tmpdir
-                } else if matches.get_flag(OPT_T) || matches.contains_id(OPT_TMPDIR) {
+                } else if matches.get_flag(crate::options::OPT_T)
+                    || matches.contains_id(crate::options::OPT_TMPDIR)
+                {
                     // If --tmpdir is given without an argument, or -t is given
                     // export in TMPDIR
                     Some(env::temp_dir())
@@ -171,12 +160,14 @@ impl Options {
             }
         };
         Self {
-            directory: matches.get_flag(OPT_DIRECTORY),
-            dry_run: matches.get_flag(OPT_DRY_RUN),
-            quiet: matches.get_flag(OPT_QUIET),
+            directory: matches.get_flag(crate::options::OPT_DIRECTORY),
+            dry_run: matches.get_flag(crate::options::OPT_DRY_RUN),
+            quiet: matches.get_flag(crate::options::OPT_QUIET),
             tmpdir,
-            suffix: matches.get_one::<String>(OPT_SUFFIX).map(String::from),
-            treat_as_template: matches.get_flag(OPT_T),
+            suffix: matches
+                .get_one::<String>(crate::options::OPT_SUFFIX)
+                .map(String::from),
+            treat_as_template: matches.get_flag(crate::options::OPT_T),
             template,
         }
     }
@@ -315,7 +306,7 @@ impl Params {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<_> = args.collect();
-    let matches = match uu_app().try_get_matches_from(&args) {
+    let matches = match crate::uu_app().try_get_matches_from(&args) {
         Ok(m) => m,
         Err(e) => {
             if e.kind() == clap::error::ErrorKind::TooManyValues
@@ -336,7 +327,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if env::var("POSIXLY_CORRECT").is_ok() {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
-        if matches.contains_id(ARG_TEMPLATE) {
+        if matches.contains_id(crate::options::ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.
             if args.last().unwrap() != OsStr::new(&options.template) {
                 return Err(Box::new(MkTempError::TooManyTemplates));
@@ -370,82 +361,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         res
     };
     println_verbatim(res?).map_err_context(|| "failed to print directory name".to_owned())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(OPT_DIRECTORY)
-                .short('d')
-                .long(OPT_DIRECTORY)
-                .help("Make a directory instead of a file")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_DRY_RUN)
-                .short('u')
-                .long(OPT_DRY_RUN)
-                .help("do not create anything; merely print a name (unsafe)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_QUIET)
-                .short('q')
-                .long("quiet")
-                .help("Fail silently if an error occurs.")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_SUFFIX)
-                .long(OPT_SUFFIX)
-                .help(
-                    "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
-                     This option is implied if TEMPLATE does not end with X.",
-                )
-                .value_name("SUFFIX"),
-        )
-        .arg(
-            Arg::new(OPT_P)
-                .short('p')
-                .help("short form of --tmpdir")
-                .value_name("DIR")
-                .num_args(1)
-                .value_parser(ValueParser::path_buf())
-                .value_hint(clap::ValueHint::DirPath),
-        )
-        .arg(
-            Arg::new(OPT_TMPDIR)
-                .long(OPT_TMPDIR)
-                .help(
-                    "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
-                     $TMPDIR ($TMP on windows) if set, else /tmp. With this option, \
-                     TEMPLATE must not be an absolute name; unlike with -t, TEMPLATE \
-                     may contain slashes, but mktemp creates only the final component",
-                )
-                .value_name("DIR")
-                // Allows use of default argument just by setting --tmpdir. Else,
-                // use provided input to generate tmpdir
-                .num_args(0..=1)
-                // Require an equals to avoid ambiguity if no tmpdir is supplied
-                .require_equals(true)
-                .overrides_with(OPT_P)
-                .value_parser(ValueParser::path_buf())
-                .value_hint(clap::ValueHint::DirPath),
-        )
-        .arg(
-            Arg::new(OPT_T)
-                .short('t')
-                .help(
-                    "Generate a template (using the supplied prefix and TMPDIR \
-                (TMP on windows) if set) to create a filename template [deprecated]",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(Arg::new(ARG_TEMPLATE).num_args(..=1))
 }
 
 fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult<PathBuf> {
@@ -578,7 +493,7 @@ pub fn mktemp(options: &Options) -> UResult<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use crate::find_last_contiguous_block_of_xs as findxs;
+    use crate::mktemp::find_last_contiguous_block_of_xs as findxs;
 
     #[test]
     fn test_find_last_contiguous_block_of_xs() {

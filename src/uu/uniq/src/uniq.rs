@@ -2,11 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore badoption
-use clap::{
-    builder::ValueParser, crate_version, error::ContextKind, error::Error, error::ErrorKind, Arg,
-    ArgAction, ArgMatches, Command,
-};
+
+use clap::{error::ContextKind, error::Error, error::ErrorKind, ArgMatches};
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Write};
@@ -14,27 +13,6 @@ use std::num::IntErrorKind;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::posix::{posix_version, OBSOLETE};
-use uucore::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage};
-
-const ABOUT: &str = help_about!("uniq.md");
-const USAGE: &str = help_usage!("uniq.md");
-const AFTER_HELP: &str = help_section!("after help", "uniq.md");
-
-pub mod options {
-    pub static ALL_REPEATED: &str = "all-repeated";
-    pub static CHECK_CHARS: &str = "check-chars";
-    pub static COUNT: &str = "count";
-    pub static IGNORE_CASE: &str = "ignore-case";
-    pub static REPEATED: &str = "repeated";
-    pub static SKIP_FIELDS: &str = "skip-fields";
-    pub static SKIP_CHARS: &str = "skip-chars";
-    pub static UNIQUE: &str = "unique";
-    pub static ZERO_TERMINATED: &str = "zero-terminated";
-    pub static GROUP: &str = "group";
-}
-
-static ARG_FILES: &str = "files";
 
 #[derive(PartialEq, Clone, Copy)]
 enum Delimiters {
@@ -398,7 +376,7 @@ fn handle_preceding_options(
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
     if slice.starts_with("--") {
-        use options as O;
+        use crate::options as O;
         *preceding_long_opt_req_value = &slice[2..] == O::SKIP_CHARS
             || &slice[2..] == O::SKIP_FIELDS
             || &slice[2..] == O::CHECK_CHARS
@@ -557,33 +535,33 @@ fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, skip_fields_old, skip_chars_old) = handle_obsolete(args);
 
-    let matches = uu_app()
+    let matches = crate::uu_app()
         .try_get_matches_from(args)
         .map_err(map_clap_errors)?;
 
-    let files = matches.get_many::<OsString>(ARG_FILES);
+    let files = matches.get_many::<OsString>(crate::uu_args::ARG_FILES);
 
     let (in_file_name, out_file_name) = files
         .map(|fi| fi.map(AsRef::as_ref))
         .map(|mut fi| (fi.next(), fi.next()))
         .unwrap_or_default();
 
-    let skip_fields_modern: Option<usize> = opt_parsed(options::SKIP_FIELDS, &matches)?;
-    let skip_chars_modern: Option<usize> = opt_parsed(options::SKIP_CHARS, &matches)?;
+    let skip_fields_modern: Option<usize> = opt_parsed(crate::options::SKIP_FIELDS, &matches)?;
+    let skip_chars_modern: Option<usize> = opt_parsed(crate::options::SKIP_CHARS, &matches)?;
 
     let uniq = Uniq {
-        repeats_only: matches.get_flag(options::REPEATED)
-            || matches.contains_id(options::ALL_REPEATED),
-        uniques_only: matches.get_flag(options::UNIQUE),
-        all_repeated: matches.contains_id(options::ALL_REPEATED)
-            || matches.contains_id(options::GROUP),
+        repeats_only: matches.get_flag(crate::options::REPEATED)
+            || matches.contains_id(crate::options::ALL_REPEATED),
+        uniques_only: matches.get_flag(crate::options::UNIQUE),
+        all_repeated: matches.contains_id(crate::options::ALL_REPEATED)
+            || matches.contains_id(crate::options::GROUP),
         delimiters: get_delimiter(&matches),
-        show_counts: matches.get_flag(options::COUNT),
+        show_counts: matches.get_flag(crate::options::COUNT),
         skip_fields: skip_fields_modern.or(skip_fields_old),
         slice_start: skip_chars_modern.or(skip_chars_old),
-        slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
-        ignore_case: matches.get_flag(options::IGNORE_CASE),
-        zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
+        slice_stop: opt_parsed(crate::options::CHECK_CHARS, &matches)?,
+        ignore_case: matches.get_flag(crate::options::IGNORE_CASE),
+        zero_terminated: matches.get_flag(crate::options::ZERO_TERMINATED),
     };
 
     if uniq.show_counts && uniq.all_repeated {
@@ -599,119 +577,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     )
 }
 
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .after_help(AFTER_HELP)
-        .arg(
-            Arg::new(options::ALL_REPEATED)
-                .short('D')
-                .long(options::ALL_REPEATED)
-                .value_parser(ShortcutValueParser::new([
-                    "none",
-                    "prepend",
-                    "separate"
-                ]))
-                .help("print all duplicate lines. Delimiting is done with blank lines. [default: none]")
-                .value_name("delimit-method")
-                .num_args(0..=1)
-                .default_missing_value("none")
-                .require_equals(true),
-        )
-        .arg(
-            Arg::new(options::GROUP)
-                .long(options::GROUP)
-                .value_parser(ShortcutValueParser::new([
-                    "separate",
-                    "prepend",
-                    "append",
-                    "both",
-                ]))
-                .help("show all items, separating groups with an empty line. [default: separate]")
-                .value_name("group-method")
-                .num_args(0..=1)
-                .default_missing_value("separate")
-                .require_equals(true)
-                .conflicts_with_all([
-                    options::REPEATED,
-                    options::ALL_REPEATED,
-                    options::UNIQUE,
-                    options::COUNT
-                ]),
-        )
-        .arg(
-            Arg::new(options::CHECK_CHARS)
-                .short('w')
-                .long(options::CHECK_CHARS)
-                .help("compare no more than N characters in lines")
-                .value_name("N"),
-        )
-        .arg(
-            Arg::new(options::COUNT)
-                .short('c')
-                .long(options::COUNT)
-                .help("prefix lines by the number of occurrences")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::IGNORE_CASE)
-                .short('i')
-                .long(options::IGNORE_CASE)
-                .help("ignore differences in case when comparing")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::REPEATED)
-                .short('d')
-                .long(options::REPEATED)
-                .help("only print duplicate lines")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SKIP_CHARS)
-                .short('s')
-                .long(options::SKIP_CHARS)
-                .help("avoid comparing the first N characters")
-                .value_name("N"),
-        )
-        .arg(
-            Arg::new(options::SKIP_FIELDS)
-                .short('f')
-                .long(options::SKIP_FIELDS)
-                .help("avoid comparing the first N fields")
-                .value_name("N"),
-        )
-        .arg(
-            Arg::new(options::UNIQUE)
-                .short('u')
-                .long(options::UNIQUE)
-                .help("only print unique lines")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::ZERO_TERMINATED)
-                .short('z')
-                .long(options::ZERO_TERMINATED)
-                .help("end lines with 0 byte, not newline")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(ARG_FILES)
-                .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
-                .num_args(0..=2)
-                .hide(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-}
-
 fn get_delimiter(matches: &ArgMatches) -> Delimiters {
     let value = matches
-        .get_one::<String>(options::ALL_REPEATED)
-        .or_else(|| matches.get_one::<String>(options::GROUP));
+        .get_one::<String>(crate::options::ALL_REPEATED)
+        .or_else(|| matches.get_one::<String>(crate::options::GROUP));
     if let Some(delimiter_arg) = value {
         match delimiter_arg.as_ref() {
             "append" => Delimiters::Append,
@@ -721,7 +590,7 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
             "none" => Delimiters::None,
             _ => unreachable!("Should have been caught by possible values in clap"),
         }
-    } else if matches.contains_id(options::GROUP) {
+    } else if matches.contains_id(crate::options::GROUP) {
         Delimiters::Separate
     } else {
         Delimiters::None

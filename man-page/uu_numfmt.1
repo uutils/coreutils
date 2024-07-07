@@ -1,0 +1,97 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_numfmt 1  "uu_numfmt 0.0.27" 
+.SH NAME
+uu_numfmt \- Convert numbers from/to human\-readable strings
+.SH SYNOPSIS
+\fBuu_numfmt\fR [\fB\-d\fR|\fB\-\-delimiter\fR] [\fB\-\-field\fR] [\fB\-\-format\fR] [\fB\-\-from\fR] [\fB\-\-from\-unit\fR] [\fB\-\-to\fR] [\fB\-\-to\-unit\fR] [\fB\-\-padding\fR] [\fB\-\-header\fR] [\fB\-\-round\fR] [\fB\-\-suffix\fR] [\fB\-\-invalid\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fINUMBER\fR] 
+.SH DESCRIPTION
+Convert numbers from/to human\-readable strings
+.SH OPTIONS
+.TP
+\fB\-d\fR, \fB\-\-delimiter\fR=\fIX\fR
+use X instead of whitespace for field delimiter
+.TP
+\fB\-\-field\fR=\fIFIELDS\fR [default: 1]
+replace the numbers in these input fields; see FIELDS below
+.TP
+\fB\-\-format\fR=\fIFORMAT\fR
+use printf style floating\-point FORMAT; see FORMAT below for details
+.TP
+\fB\-\-from\fR=\fIUNIT\fR [default: none]
+auto\-scale input numbers to UNITs; see UNIT below
+.TP
+\fB\-\-from\-unit\fR=\fIN\fR [default: 1]
+specify the input unit size
+.TP
+\fB\-\-to\fR=\fIUNIT\fR [default: none]
+auto\-scale output numbers to UNITs; see UNIT below
+.TP
+\fB\-\-to\-unit\fR=\fIN\fR [default: 1]
+the output unit size
+.TP
+\fB\-\-padding\fR=\fIN\fR
+pad the output to N characters; positive N will right\-align; negative N will left\-align; padding is ignored if the output is wider than N; the default is to automatically pad if a whitespace is found
+.TP
+\fB\-\-header\fR=\fIN\fR
+print (without converting) the first N header lines; N defaults to 1 if not specified
+.TP
+\fB\-\-round\fR=\fIMETHOD\fR [default: from\-zero]
+use METHOD for rounding when scaling
+.br
+
+.br
+[\fIpossible values: \fRup, down, from\-zero, towards\-zero, nearest]
+.TP
+\fB\-\-suffix\fR=\fISUFFIX\fR
+print SUFFIX after each formatted number, and accept inputs optionally ending with SUFFIX
+.TP
+\fB\-\-invalid\fR=\fIINVALID\fR [default: abort]
+set the failure mode for invalid input
+.br
+
+.br
+[\fIpossible values: \fRabort, fail, warn, ignore]
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+UNIT options:
+
+\- none: no auto\-scaling is done; suffixes will trigger an error
+\- auto: accept optional single/two letter suffix:
+
+    1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
+
+\- si: accept optional single letter suffix:
+
+    1K = 1000, 1M = 1000000, ...
+
+\- iec: accept optional single letter suffix:
+
+    1K = 1024, 1M = 1048576, ...
+
+\- iec\-i: accept optional two\-letter suffix:
+
+    1Ki = 1024, 1Mi = 1048576, ...
+
+\- FIELDS supports cut(1) style field ranges:
+
+    N    N\*(Aqth field, counted from 1
+    N\-   from N\*(Aqth field, to end of line
+    N\-M  from N\*(Aqth to M\*(Aqth field (inclusive)
+    \-M   from first to M\*(Aqth field (inclusive)
+    \-    all fields
+
+Multiple fields/ranges can be separated with commas
+
+FORMAT must be suitable for printing one floating\-point argument %f.
+Optional quote (%\*(Aqf) will enable \-\-grouping (if supported by current locale).
+Optional width value (%10f) will pad output. Optional zero (%010f) width
+will zero pad the number. Optional negative values (%\-10f) will left align.
+Optional precision (%.1f) will override the input determined precision.
+.SH VERSION
+v0.0.27

@@ -1,0 +1,68 @@
+#compdef uu_pr
+
+autoload -U is-at-least
+
+_uu_pr() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'--pages=[Begin and stop printing with page FIRST_PAGE\[\:LAST_PAGE\]]:FIRST_PAGE[:LAST_PAGE]: ' \
+'-h+[Use the string header to replace the file name in the header line.]:STRING: ' \
+'--header=[Use the string header to replace the file name in the header line.]:STRING: ' \
+'-n+[Provide width digit line numbering.  The default for width, if not specified, is 5.  The number occupies the first width column positions of each text column or each line of -m output.  If char (any non-digit character) is given, it is appended to the line number to separate it from whatever follows.  The default for char is a <tab>. Line numbers longer than width columns are truncated.]:[char][width]: ' \
+'--number-lines=[Provide width digit line numbering.  The default for width, if not specified, is 5.  The number occupies the first width column positions of each text column or each line of -m output.  If char (any non-digit character) is given, it is appended to the line number to separate it from whatever follows.  The default for char is a <tab>. Line numbers longer than width columns are truncated.]:[char][width]: ' \
+'-N+[start counting with NUMBER at 1st line of first page printed]:NUMBER: ' \
+'--first-line-number=[start counting with NUMBER at 1st line of first page printed]:NUMBER: ' \
+'-l+[Override the 66-line default (default number of lines of text 56, and with -F 63) and reset the page length to lines.  If lines is not greater than the sum  of  both the  header  and trailer depths (in lines), the pr utility shall suppress both the header and trailer, as if the -t option were in effect. ]:PAGE_LENGTH: ' \
+'--length=[Override the 66-line default (default number of lines of text 56, and with -F 63) and reset the page length to lines.  If lines is not greater than the sum  of  both the  header  and trailer depths (in lines), the pr utility shall suppress both the header and trailer, as if the -t option were in effect. ]:PAGE_LENGTH: ' \
+'-w+[Set the width of the line to width column positions for multiple text-column output only. If the -w option is not specified and the -s option is not specified, the default width shall be 72. If the -w option is not specified and the -s option is specified, the default width shall be 512.]:width: ' \
+'--width=[Set the width of the line to width column positions for multiple text-column output only. If the -w option is not specified and the -s option is not specified, the default width shall be 72. If the -w option is not specified and the -s option is specified, the default width shall be 512.]:width: ' \
+'-W+[set page width to PAGE_WIDTH (72) characters always, truncate lines, except -J option is set, no interference with -S or -s]:width: ' \
+'--page-width=[set page width to PAGE_WIDTH (72) characters always, truncate lines, except -J option is set, no interference with -S or -s]:width: ' \
+'--column=[Produce multi-column output that is arranged in column columns (the default shall be 1) and is written down each column  in  the order in which the text is received from the input file. This option should not be used with -m. The options -e and -i shall be assumed for multiple text-column output.  Whether or not text columns are produced with identical vertical lengths is unspecified, but a text column shall never exceed the length of the page (see the -l option). When used with -t, use the minimum number of lines to write the output.]:column: ' \
+'-s+[Separate text columns by the single character char instead of by the appropriate number of <space>s (default for char is the <tab> character).]:char: ' \
+'--separator=[Separate text columns by the single character char instead of by the appropriate number of <space>s (default for char is the <tab> character).]:char: ' \
+'-S+[separate columns by STRING, without -S\: Default separator <TAB> with -J and <space> otherwise (same as -S" "), no effect on column options]:string: ' \
+'--sep-string=[separate columns by STRING, without -S\: Default separator <TAB> with -J and <space> otherwise (same as -S" "), no effect on column options]:string: ' \
+'-o+[Each line of output shall be preceded by offset <space>s. If the -o option is not specified, the default offset shall be zero. The space taken is in addition to the output line width (see the -w option below).]:margin: ' \
+'--indent=[Each line of output shall be preceded by offset <space>s. If the -o option is not specified, the default offset shall be zero. The space taken is in addition to the output line width (see the -w option below).]:margin: ' \
+'-d[Produce output that is double spaced. An extra <newline> character is output following every <newline> found in the input.]' \
+'--double-space[Produce output that is double spaced. An extra <newline> character is output following every <newline> found in the input.]' \
+'-t[Write neither the five-line identifying header nor the five-line trailer usually supplied for each page. Quit writing after the last line of each file without spacing to the end of the page.]' \
+'--omit-header[Write neither the five-line identifying header nor the five-line trailer usually supplied for each page. Quit writing after the last line of each file without spacing to the end of the page.]' \
+'-r[omit warning when a file cannot be opened]' \
+'--no-file-warnings[omit warning when a file cannot be opened]' \
+'-F[Use a <form-feed> for new pages, instead of the default behavior that uses a sequence of <newline>s.]' \
+'--form-feed[Use a <form-feed> for new pages, instead of the default behavior that uses a sequence of <newline>s.]' \
+'-a[Modify the effect of the - column option so that the columns are filled across the page in a  round-robin  order (for example, when column is 2, the first input line heads column 1, the second heads column 2, the third is the second line in column 1, and so on).]' \
+'--across[Modify the effect of the - column option so that the columns are filled across the page in a  round-robin  order (for example, when column is 2, the first input line heads column 1, the second heads column 2, the third is the second line in column 1, and so on).]' \
+'-m[Merge files. Standard output shall be formatted so the pr utility writes one line from each file specified by a file operand, side by side into text columns of equal fixed widths, in terms of the number of column positions. Implementations shall support merging of at least nine file operands.]' \
+'--merge[Merge files. Standard output shall be formatted so the pr utility writes one line from each file specified by a file operand, side by side into text columns of equal fixed widths, in terms of the number of column positions. Implementations shall support merging of at least nine file operands.]' \
+'-J[merge full lines, turns off -W line truncation, no column alignment, --sep-string\[=STRING\] sets separators]' \
+'--help[Print help information]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::files:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_pr_commands] )) ||
+_uu_pr_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_pr commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_pr" ]; then
+    _uu_pr "$@"
+else
+    compdef _uu_pr uu_pr
+fi

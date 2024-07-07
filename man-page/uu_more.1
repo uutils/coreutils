@@ -1,0 +1,45 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_more 1  "uu_more 0.0.27" 
+.SH NAME
+uu_more \- Display the contents of a text file
+.SH SYNOPSIS
+\fBuu_more\fR [\fB\-c\fR|\fB\-\-print\-over\fR] [\fB\-d\fR|\fB\-\-silent\fR] [\fB\-p\fR|\fB\-\-clean\-print\fR] [\fB\-s\fR|\fB\-\-squeeze\fR] [\fB\-P\fR|\fB\-\-pattern\fR] [\fB\-F\fR|\fB\-\-from\-line\fR] [\fB\-n\fR|\fB\-\-lines\fR] [\fB\-\-number\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfiles\fR] 
+.SH DESCRIPTION
+Display the contents of a text file
+.SH OPTIONS
+.TP
+\fB\-c\fR, \fB\-\-print\-over\fR
+Do not scroll, display text and clean line ends
+.TP
+\fB\-d\fR, \fB\-\-silent\fR
+Display help instead of ringing bell
+.TP
+\fB\-p\fR, \fB\-\-clean\-print\fR
+Do not scroll, clean screen and display text
+.TP
+\fB\-s\fR, \fB\-\-squeeze\fR
+Squeeze multiple blank lines into one
+.TP
+\fB\-P\fR, \fB\-\-pattern\fR=\fIpattern\fR
+Display file beginning from pattern match
+.TP
+\fB\-F\fR, \fB\-\-from\-line\fR=\fInumber\fR
+Display file beginning from line number
+.TP
+\fB\-n\fR, \fB\-\-lines\fR=\fInumber\fR
+The number of lines per screen full
+.TP
+\fB\-\-number\fR
+Same as \-\-lines
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfiles\fR]
+Path to the files to be read
+.SH VERSION
+v0.0.27

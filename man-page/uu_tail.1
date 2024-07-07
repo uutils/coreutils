@@ -1,0 +1,69 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_tail 1  "uu_tail 0.0.27" 
+.SH NAME
+uu_tail \- Print the last 10 lines of each FILE to standard output.
+With more than one FILE, precede each with a header giving the file name.
+With no FILE, or when FILE is \-, read standard input.
+
+Mandatory arguments to long flags are mandatory for short flags too.
+.SH SYNOPSIS
+\fBuu_tail\fR [\fB\-c\fR|\fB\-\-bytes\fR] [\fB\-f\fR|\fB\-\-follow\fR] [\fB\-n\fR|\fB\-\-lines\fR] [\fB\-\-pid\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-s\fR|\fB\-\-sleep\-interval\fR] [\fB\-\-max\-unchanged\-stats\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-z\fR|\fB\-\-zero\-terminated\fR] [\fB\-\-use\-polling\fR] [\fB\-\-retry\fR] [\fB\-F \fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfiles\fR] 
+.SH DESCRIPTION
+Print the last 10 lines of each FILE to standard output.
+With more than one FILE, precede each with a header giving the file name.
+With no FILE, or when FILE is \-, read standard input.
+.PP
+Mandatory arguments to long flags are mandatory for short flags too.
+.SH OPTIONS
+.TP
+\fB\-c\fR, \fB\-\-bytes\fR
+Number of bytes to print
+.TP
+\fB\-f\fR, \fB\-\-follow\fR
+Print the file as it grows
+.br
+
+.br
+[\fIpossible values: \fRdescriptor, name]
+.TP
+\fB\-n\fR, \fB\-\-lines\fR
+Number of lines to print
+.TP
+\fB\-\-pid\fR=\fIPID\fR
+With \-f, terminate after process ID, PID dies
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Never output headers giving file names
+.TP
+\fB\-s\fR, \fB\-\-sleep\-interval\fR=\fIN\fR
+Number of seconds to sleep between polling the file when running with \-f
+.TP
+\fB\-\-max\-unchanged\-stats\fR=\fIN\fR
+Reopen a FILE which has not changed size after N (default 5) iterations to see if it has been unlinked or renamed (this is the usual case of rotated log files); This option is meaningful only when polling (i.e., with \-\-use\-polling) and when \-\-follow=name
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Always output headers giving file names
+.TP
+\fB\-z\fR, \fB\-\-zero\-terminated\fR
+Line delimiter is NUL, not newline
+.TP
+\fB\-\-use\-polling\fR
+Disable \*(Aqinotify\*(Aq support and use polling instead
+.TP
+\fB\-\-retry\fR
+Keep trying to open a file if it is inaccessible
+.TP
+\fB\-F\fR
+Same as \-\-follow=name \-\-retry
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfiles\fR]
+
+.SH VERSION
+v0.0.27

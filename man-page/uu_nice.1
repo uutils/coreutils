@@ -1,0 +1,30 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_nice 1  "uu_nice 0.0.27" 
+.SH NAME
+uu_nice \- Run `COMMAND` with an adjusted niceness, which affects process scheduling.
+With no `COMMAND`, print the current niceness.  Niceness values range from at
+least \-20 (most favorable to the process) to 19 (least favorable to the
+process).
+.SH SYNOPSIS
+\fBuu_nice\fR [\fB\-n\fR|\fB\-\-adjustment\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fICOMMAND\fR] 
+.SH DESCRIPTION
+Run `COMMAND` with an adjusted niceness, which affects process scheduling.
+With no `COMMAND`, print the current niceness.  Niceness values range from at
+least \-20 (most favorable to the process) to 19 (least favorable to the
+process).
+.SH OPTIONS
+.TP
+\fB\-n\fR, \fB\-\-adjustment\fR
+add N to the niceness (default is 10)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fICOMMAND\fR]
+
+.SH VERSION
+v0.0.27

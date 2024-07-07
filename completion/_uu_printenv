@@ -1,0 +1,38 @@
+#compdef uu_printenv
+
+autoload -U is-at-least
+
+_uu_printenv() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-0[end each output line with 0 byte rather than newline]' \
+'--null[end each output line with 0 byte rather than newline]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'*::variables:' \
+&& ret=0
+}
+
+(( $+functions[_uu_printenv_commands] )) ||
+_uu_printenv_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_printenv commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_printenv" ]; then
+    _uu_printenv "$@"
+else
+    compdef _uu_printenv uu_printenv
+fi

@@ -1,0 +1,32 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_paste 1  "uu_paste 0.0.27" 
+.SH NAME
+uu_paste \- Write lines consisting of the sequentially corresponding lines from each
+`FILE`, separated by `TAB`s, to standard output.
+.SH SYNOPSIS
+\fBuu_paste\fR [\fB\-s\fR|\fB\-\-serial\fR] [\fB\-d\fR|\fB\-\-delimiters\fR] [\fB\-z\fR|\fB\-\-zero\-terminated\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIFILE\fR] 
+.SH DESCRIPTION
+Write lines consisting of the sequentially corresponding lines from each
+`FILE`, separated by `TAB`s, to standard output.
+.SH OPTIONS
+.TP
+\fB\-s\fR, \fB\-\-serial\fR
+paste one file at a time instead of in parallel
+.TP
+\fB\-d\fR, \fB\-\-delimiters\fR=\fILIST\fR
+reuse characters from LIST instead of TABs
+.TP
+\fB\-z\fR, \fB\-\-zero\-terminated\fR
+line delimiter is NUL, not newline
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIFILE\fR] [default: \-]
+
+.SH VERSION
+v0.0.27

@@ -2,37 +2,19 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore (ToDO) extendedbigdecimal numberparse
+
 use std::io::{stdout, ErrorKind, Write};
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use num_traits::{ToPrimitive, Zero};
 
 use uucore::error::{FromIo, UResult};
 use uucore::format::{num_format, Format};
-use uucore::{format_usage, help_about, help_usage};
 
-mod error;
-mod extendedbigdecimal;
-// public to allow fuzzing
-#[cfg(fuzzing)]
-pub mod number;
-#[cfg(not(fuzzing))]
-mod number;
-mod numberparse;
 use crate::error::SeqError;
 use crate::extendedbigdecimal::ExtendedBigDecimal;
 use crate::number::PreciseNumber;
-
-const ABOUT: &str = help_about!("seq.md");
-const USAGE: &str = help_usage!("seq.md");
-
-const OPT_SEPARATOR: &str = "separator";
-const OPT_TERMINATOR: &str = "terminator";
-const OPT_EQUAL_WIDTH: &str = "equal-width";
-const OPT_FORMAT: &str = "format";
-
-const ARG_NUMBERS: &str = "numbers";
 
 #[derive(Clone)]
 struct SeqOptions<'a> {
@@ -49,9 +31,9 @@ type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let numbers_option = matches.get_many::<String>(ARG_NUMBERS);
+    let numbers_option = matches.get_many::<String>(crate::options::ARG_NUMBERS);
 
     if numbers_option.is_none() {
         return Err(SeqError::NoArguments.into());
@@ -61,17 +43,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = SeqOptions {
         separator: matches
-            .get_one::<String>(OPT_SEPARATOR)
+            .get_one::<String>(crate::options::OPT_SEPARATOR)
             .map(|s| s.as_str())
             .unwrap_or("\n")
             .to_string(),
         terminator: matches
-            .get_one::<String>(OPT_TERMINATOR)
+            .get_one::<String>(crate::options::OPT_TERMINATOR)
             .map(|s| s.as_str())
             .unwrap_or("\n")
             .to_string(),
-        equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
-        format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
+        equal_width: matches.get_flag(crate::options::OPT_EQUAL_WIDTH),
+        format: matches
+            .get_one::<String>(crate::options::OPT_FORMAT)
+            .map(|s| s.as_str()),
     };
 
     let first = if numbers.len() > 1 {
@@ -133,46 +117,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
         Err(e) => Err(e.map_err_context(|| "write error".into())),
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .trailing_var_arg(true)
-        .allow_negative_numbers(true)
-        .infer_long_args(true)
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .arg(
-            Arg::new(OPT_SEPARATOR)
-                .short('s')
-                .long("separator")
-                .help("Separator character (defaults to \\n)"),
-        )
-        .arg(
-            Arg::new(OPT_TERMINATOR)
-                .short('t')
-                .long("terminator")
-                .help("Terminator character (defaults to \\n)"),
-        )
-        .arg(
-            Arg::new(OPT_EQUAL_WIDTH)
-                .short('w')
-                .long("equal-width")
-                .help("Equalize widths of all numbers by padding with zeros")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_FORMAT)
-                .short('f')
-                .long(OPT_FORMAT)
-                .help("use printf style floating-point FORMAT"),
-        )
-        .arg(
-            Arg::new(ARG_NUMBERS)
-                .action(ArgAction::Append)
-                .num_args(1..=3),
-        )
 }
 
 fn done_printing<T: Zero + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {

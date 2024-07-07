@@ -1,0 +1,114 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_du 1  "uu_du 0.0.27" 
+.SH NAME
+uu_du \- Estimate file space usage
+.SH SYNOPSIS
+\fBuu_du\fR [\fB\-\-help\fR] [\fB\-a\fR|\fB\-\-all\fR] [\fB\-\-apparent\-size\fR] [\fB\-B\fR|\fB\-\-block\-size\fR] [\fB\-b\fR|\fB\-\-bytes\fR] [\fB\-c\fR|\fB\-\-total\fR] [\fB\-d\fR|\fB\-\-max\-depth\fR] [\fB\-h\fR|\fB\-\-human\-readable\fR] [\fB\-\-inodes\fR] [\fB\-k \fR] [\fB\-l\fR|\fB\-\-count\-links\fR] [\fB\-L\fR|\fB\-\-dereference\fR] [\fB\-D\fR|\fB\-\-dereference\-args\fR] [\fB\-P\fR|\fB\-\-no\-dereference\fR] [\fB\-m \fR] [\fB\-0\fR|\fB\-\-null\fR] [\fB\-S\fR|\fB\-\-separate\-dirs\fR] [\fB\-s\fR|\fB\-\-summarize\fR] [\fB\-\-si\fR] [\fB\-x\fR|\fB\-\-one\-file\-system\fR] [\fB\-t\fR|\fB\-\-threshold\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-\-exclude\fR] [\fB\-X\fR|\fB\-\-exclude\-from\fR] [\fB\-\-files0\-from\fR] [\fB\-\-time\fR] [\fB\-\-time\-style\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIFILE\fR] 
+.SH DESCRIPTION
+Estimate file space usage
+.SH OPTIONS
+.TP
+\fB\-\-help\fR
+Print help information.
+.TP
+\fB\-a\fR, \fB\-\-all\fR
+write counts for all files, not just directories
+.TP
+\fB\-\-apparent\-size\fR
+print apparent sizes, rather than disk usage although the apparent size is usually smaller, it may be larger due to holes in (\*(Aqsparse\*(Aq) files, internal fragmentation, indirect blocks, and the like
+.TP
+\fB\-B\fR, \fB\-\-block\-size\fR=\fISIZE\fR
+scale sizes by SIZE before printing them. E.g., \*(Aq\-BM\*(Aq prints sizes in units of 1,048,576 bytes. See SIZE format below.
+.TP
+\fB\-b\fR, \fB\-\-bytes\fR
+equivalent to \*(Aq\-\-apparent\-size \-\-block\-size=1\*(Aq
+.TP
+\fB\-c\fR, \fB\-\-total\fR
+produce a grand total
+.TP
+\fB\-d\fR, \fB\-\-max\-depth\fR=\fIN\fR
+print the total for a directory (or file, with \-\-all) only if it is N or fewer levels below the command line argument;  \-\-max\-depth=0 is the same as \-\-summarize
+.TP
+\fB\-h\fR, \fB\-\-human\-readable\fR
+print sizes in human readable format (e.g., 1K 234M 2G)
+.TP
+\fB\-\-inodes\fR
+list inode usage information instead of block usage like \-\-block\-size=1K
+.TP
+\fB\-k\fR
+like \-\-block\-size=1K
+.TP
+\fB\-l\fR, \fB\-\-count\-links\fR
+count sizes many times if hard linked
+.TP
+\fB\-L\fR, \fB\-\-dereference\fR
+follow all symbolic links
+.TP
+\fB\-D\fR, \fB\-\-dereference\-args\fR
+follow only symlinks that are listed on the command line
+.TP
+\fB\-P\fR, \fB\-\-no\-dereference\fR
+don\*(Aqt follow any symbolic links (this is the default)
+.TP
+\fB\-m\fR
+like \-\-block\-size=1M
+.TP
+\fB\-0\fR, \fB\-\-null\fR
+end each output line with 0 byte rather than newline
+.TP
+\fB\-S\fR, \fB\-\-separate\-dirs\fR
+do not include size of subdirectories
+.TP
+\fB\-s\fR, \fB\-\-summarize\fR
+display only a total for each argument
+.TP
+\fB\-\-si\fR
+like \-h, but use powers of 1000 not 1024
+.TP
+\fB\-x\fR, \fB\-\-one\-file\-system\fR
+skip directories on different file systems
+.TP
+\fB\-t\fR, \fB\-\-threshold\fR=\fISIZE\fR
+exclude entries smaller than SIZE if positive, or entries greater than SIZE if negative
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+verbose mode (option not present in GNU/Coreutils)
+.TP
+\fB\-\-exclude\fR=\fIPATTERN\fR
+exclude files that match PATTERN
+.TP
+\fB\-X\fR, \fB\-\-exclude\-from\fR=\fIFILE\fR
+exclude files that match any pattern in FILE
+.TP
+\fB\-\-files0\-from\fR=\fIFILE\fR
+summarize device usage of the NUL\-terminated file names specified in file F; if F is \-, then read names from standard input
+.TP
+\fB\-\-time\fR=\fIWORD\fR
+show time of the last modification of any file in the directory, or any of its subdirectories. If WORD is given, show time as WORD instead of modification time: atime, access, use, ctime, status, birth or creation
+.br
+
+.br
+[\fIpossible values: \fRatime, ctime, creation]
+.TP
+\fB\-\-time\-style\fR=\fISTYLE\fR
+show times using style STYLE: full\-iso, long\-iso, iso, +FORMAT FORMAT is interpreted like \*(Aqdate\*(Aq
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+Display values are in units of the first available SIZE from \-\-block\-size,
+and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.
+Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).
+
+SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
+Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
+of 1000).
+
+PATTERN allows some advanced exclusions. For example, the following syntaxes
+are supported:
+? will match only one character
+* will match zero or more characters
+{a,b} will match a or b
+.SH VERSION
+v0.0.27

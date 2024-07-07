@@ -1,0 +1,52 @@
+#compdef uu_chgrp
+
+autoload -U is-at-least
+
+_uu_chgrp() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'--reference=[use RFILE'\''s group rather than specifying GROUP values]:RFILE:_files' \
+'--help[Print help information.]' \
+'-c[like verbose but report only when a change is made]' \
+'--changes[like verbose but report only when a change is made]' \
+'-f[]' \
+'--silent[]' \
+'--quiet[suppress most error messages]' \
+'-v[output a diagnostic for every file processed]' \
+'--verbose[output a diagnostic for every file processed]' \
+'--dereference[]' \
+'-h[affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)]' \
+'--no-dereference[affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)]' \
+'--preserve-root[fail to operate recursively on '\''/'\'']' \
+'--no-preserve-root[do not treat '\''/'\'' specially (the default)]' \
+'-R[operate on files and directories recursively]' \
+'--recursive[operate on files and directories recursively]' \
+'-H[if a command line argument is a symbolic link to a directory, traverse it]' \
+'-P[do not traverse any symbolic links (default)]' \
+'-L[traverse every symbolic link to a directory encountered]' \
+'-V[Print version]' \
+'--version[Print version]' \
+&& ret=0
+}
+
+(( $+functions[_uu_chgrp_commands] )) ||
+_uu_chgrp_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_chgrp commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_chgrp" ]; then
+    _uu_chgrp "$@"
+else
+    compdef _uu_chgrp uu_chgrp
+fi

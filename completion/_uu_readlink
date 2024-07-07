@@ -1,0 +1,52 @@
+#compdef uu_readlink
+
+autoload -U is-at-least
+
+_uu_readlink() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-f[canonicalize by following every symlink in every component of the given name recursively; all but the last component must exist]' \
+'--canonicalize[canonicalize by following every symlink in every component of the given name recursively; all but the last component must exist]' \
+'-e[canonicalize by following every symlink in every component of the given name recursively, all components must exist]' \
+'--canonicalize-existing[canonicalize by following every symlink in every component of the given name recursively, all components must exist]' \
+'-m[canonicalize by following every symlink in every component of the given name recursively, without requirements on components existence]' \
+'--canonicalize-missing[canonicalize by following every symlink in every component of the given name recursively, without requirements on components existence]' \
+'-n[do not output the trailing delimiter]' \
+'--no-newline[do not output the trailing delimiter]' \
+'-q[suppress most error messages]' \
+'--quiet[suppress most error messages]' \
+'-s[suppress most error messages]' \
+'--silent[suppress most error messages]' \
+'-v[report error message]' \
+'--verbose[report error message]' \
+'-z[separate output with NUL rather than newline]' \
+'--zero[separate output with NUL rather than newline]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::files:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_readlink_commands] )) ||
+_uu_readlink_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_readlink commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_readlink" ]; then
+    _uu_readlink "$@"
+else
+    compdef _uu_readlink uu_readlink
+fi

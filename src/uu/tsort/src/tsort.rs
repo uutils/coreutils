@@ -2,28 +2,20 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use clap::{crate_version, Arg, Command};
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 use std::io::{stdin, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
-
-const ABOUT: &str = help_about!("tsort.md");
-const USAGE: &str = help_usage!("tsort.md");
-
-mod options {
-    pub const FILE: &str = "file";
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let input = matches
-        .get_one::<String>(options::FILE)
+        .get_one::<String>(crate::options::FILE)
         .expect("Value is required by clap");
 
     let mut stdin_buf;
@@ -82,20 +74,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::FILE)
-                .default_value("-")
-                .hide(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
 }
 
 // We use String as a representation of node here

@@ -1,0 +1,27 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_mkfifo 1  "uu_mkfifo 0.0.27" 
+.SH NAME
+uu_mkfifo \- Create a FIFO with the given name.
+.SH SYNOPSIS
+\fBuu_mkfifo\fR [\fB\-m\fR|\fB\-\-mode\fR] [\fB\-Z \fR] [\fB\-\-context\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfifo\fR] 
+.SH DESCRIPTION
+Create a FIFO with the given name.
+.SH OPTIONS
+.TP
+\fB\-m\fR, \fB\-\-mode\fR=\fIMODE\fR [default: 0666]
+file permissions for the fifo
+.TP
+\fB\-Z\fR
+set the SELinux security context to default type
+.TP
+\fB\-\-context\fR=\fICTX\fR
+like \-Z, or if CTX is specified then set the SELinux or SMACK security context to CTX
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

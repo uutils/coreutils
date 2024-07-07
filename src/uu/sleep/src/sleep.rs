@@ -8,26 +8,17 @@ use std::time::Duration;
 
 use uucore::{
     error::{UResult, USimpleError, UUsageError},
-    format_usage, help_about, help_section, help_usage, show_error,
+    show_error,
 };
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use fundu::{DurationParser, ParseError, SaturatingInto};
-
-static ABOUT: &str = help_about!("sleep.md");
-const USAGE: &str = help_usage!("sleep.md");
-static AFTER_HELP: &str = help_section!("after help", "sleep.md");
-
-mod options {
-    pub const NUMBER: &str = "NUMBER";
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let numbers = matches
-        .get_many::<String>(options::NUMBER)
+        .get_many::<String>(crate::options::NUMBER)
         .ok_or_else(|| {
             USimpleError::new(
                 1,
@@ -41,21 +32,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect::<Vec<_>>();
 
     sleep(&numbers)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::NUMBER)
-                .help("pause for NUMBER seconds")
-                .value_name(options::NUMBER)
-                .action(ArgAction::Append),
-        )
 }
 
 fn sleep(args: &[&str]) -> UResult<()> {

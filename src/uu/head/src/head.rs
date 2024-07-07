@@ -5,112 +5,22 @@
 
 // spell-checker:ignore (vars) BUFWRITER seekable
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 use std::ffi::OsString;
 use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::lines::lines;
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::show;
 
 const BUF_SIZE: usize = 65536;
 
 /// The capacity in bytes for buffered writers.
 const BUFWRITER_CAPACITY: usize = 16_384; // 16 kilobytes
 
-const ABOUT: &str = help_about!("head.md");
-const USAGE: &str = help_usage!("head.md");
-
-mod options {
-    pub const BYTES_NAME: &str = "BYTES";
-    pub const LINES_NAME: &str = "LINES";
-    pub const QUIET_NAME: &str = "QUIET";
-    pub const VERBOSE_NAME: &str = "VERBOSE";
-    pub const ZERO_NAME: &str = "ZERO";
-    pub const FILES_NAME: &str = "FILE";
-    pub const PRESUME_INPUT_PIPE: &str = "-PRESUME-INPUT-PIPE";
-}
-
-mod parse;
-mod take;
-use take::take_all_but;
-use take::take_lines;
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::BYTES_NAME)
-                .short('c')
-                .long("bytes")
-                .value_name("[-]NUM")
-                .help(
-                    "\
-                     print the first NUM bytes of each file;\n\
-                     with the leading '-', print all but the last\n\
-                     NUM bytes of each file\
-                     ",
-                )
-                .overrides_with_all([options::BYTES_NAME, options::LINES_NAME])
-                .allow_hyphen_values(true),
-        )
-        .arg(
-            Arg::new(options::LINES_NAME)
-                .short('n')
-                .long("lines")
-                .value_name("[-]NUM")
-                .help(
-                    "\
-                     print the first NUM lines instead of the first 10;\n\
-                     with the leading '-', print all but the last\n\
-                     NUM lines of each file\
-                     ",
-                )
-                .overrides_with_all([options::LINES_NAME, options::BYTES_NAME])
-                .allow_hyphen_values(true),
-        )
-        .arg(
-            Arg::new(options::QUIET_NAME)
-                .short('q')
-                .long("quiet")
-                .visible_alias("silent")
-                .help("never print headers giving file names")
-                .overrides_with_all([options::VERBOSE_NAME, options::QUIET_NAME])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::VERBOSE_NAME)
-                .short('v')
-                .long("verbose")
-                .help("always print headers giving file names")
-                .overrides_with_all([options::QUIET_NAME, options::VERBOSE_NAME])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::PRESUME_INPUT_PIPE)
-                .long("presume-input-pipe")
-                .alias("-presume-input-pipe")
-                .hide(true)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::ZERO_NAME)
-                .short('z')
-                .long("zero-terminated")
-                .help("line delimiter is NUL, not newline")
-                .overrides_with(options::ZERO_NAME)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILES_NAME)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-}
+use crate::take::take_all_but;
+use crate::take::take_lines;
 
 #[derive(Debug, PartialEq)]
 enum Mode {
@@ -128,17 +38,17 @@ impl Default for Mode {
 
 impl Mode {
     fn from(matches: &ArgMatches) -> Result<Self, String> {
-        if let Some(v) = matches.get_one::<String>(options::BYTES_NAME) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of bytes: {err}"))?;
+        if let Some(v) = matches.get_one::<String>(crate::options::BYTES_NAME) {
+            let (n, all_but_last) = crate::parse::parse_num(v)
+                .map_err(|err| format!("invalid number of bytes: {err}"))?;
             if all_but_last {
                 Ok(Self::AllButLastBytes(n))
             } else {
                 Ok(Self::FirstBytes(n))
             }
-        } else if let Some(v) = matches.get_one::<String>(options::LINES_NAME) {
-            let (n, all_but_last) =
-                parse::parse_num(v).map_err(|err| format!("invalid number of lines: {err}"))?;
+        } else if let Some(v) = matches.get_one::<String>(crate::options::LINES_NAME) {
+            let (n, all_but_last) = crate::parse::parse_num(v)
+                .map_err(|err| format!("invalid number of lines: {err}"))?;
             if all_but_last {
                 Ok(Self::AllButLastLines(n))
             } else {
@@ -157,14 +67,14 @@ fn arg_iterate<'a>(
     let first = args.next().unwrap();
     if let Some(second) = args.next() {
         if let Some(s) = second.to_str() {
-            match parse::parse_obsolete(s) {
+            match crate::parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
                 Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(USimpleError::new(
+                    crate::parse::ParseError::Syntax => Err(USimpleError::new(
                         1,
                         format!("bad argument format: {}", s.quote()),
                     )),
-                    parse::ParseError::Overflow => Err(USimpleError::new(
+                    crate::parse::ParseError::Overflow => Err(USimpleError::new(
                         1,
                         format!(
                             "invalid argument: {} Value too large for defined datatype",
@@ -197,14 +107,15 @@ impl HeadOptions {
     pub fn get_from(matches: &clap::ArgMatches) -> Result<Self, String> {
         let mut options = Self::default();
 
-        options.quiet = matches.get_flag(options::QUIET_NAME);
-        options.verbose = matches.get_flag(options::VERBOSE_NAME);
-        options.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_NAME));
-        options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
+        options.quiet = matches.get_flag(crate::options::QUIET_NAME);
+        options.verbose = matches.get_flag(crate::options::VERBOSE_NAME);
+        options.line_ending =
+            LineEnding::from_zero_flag(matches.get_flag(crate::options::ZERO_NAME));
+        options.presume_input_pipe = matches.get_flag(crate::options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(matches)?;
 
-        options.files = match matches.get_many::<String>(options::FILES_NAME) {
+        options.files = match matches.get_many::<String>(crate::options::FILES_NAME) {
             Some(v) => v.cloned().collect(),
             None => vec!["-".to_owned()],
         };
@@ -532,7 +443,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(arg_iterate(args)?)?;
+    let matches = crate::uu_app().try_get_matches_from(arg_iterate(args)?)?;
     let args = match HeadOptions::get_from(&matches) {
         Ok(o) => o,
         Err(s) => {
@@ -552,7 +463,7 @@ mod tests {
     fn options(args: &str) -> Result<HeadOptions, String> {
         let combined = "head ".to_owned() + args;
         let args = combined.split_whitespace().map(OsString::from);
-        let matches = uu_app()
+        let matches = crate::uu_app()
             .get_matches_from(arg_iterate(args).map_err(|_| String::from("Arg iterate failed"))?);
         HeadOptions::get_from(&matches)
     }

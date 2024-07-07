@@ -1,0 +1,164 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_cp 1  "uu_cp 0.0.27" 
+.SH NAME
+uu_cp \- Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.
+.SH SYNOPSIS
+\fBuu_cp\fR [\fB\-t\fR|\fB\-\-target\-directory\fR] [\fB\-T\fR|\fB\-\-no\-target\-directory\fR] [\fB\-i\fR|\fB\-\-interactive\fR] [\fB\-l\fR|\fB\-\-link\fR] [\fB\-n\fR|\fB\-\-no\-clobber\fR] [\fB\-R\fR|\fB\-\-recursive\fR] [\fB\-\-strip\-trailing\-slashes\fR] [\fB\-\-debug\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-s\fR|\fB\-\-symbolic\-link\fR] [\fB\-f\fR|\fB\-\-force\fR] [\fB\-\-remove\-destination\fR] [\fB\-\-backup\fR] [\fB\-b \fR] [\fB\-S\fR|\fB\-\-suffix\fR] [\fB\-\-update\fR] [\fB\-u \fR] [\fB\-\-reflink\fR] [\fB\-\-attributes\-only\fR] [\fB\-\-preserve\fR] [\fB\-p\fR|\fB\-\-preserve\-default\-attributes\fR] [\fB\-\-no\-preserve\fR] [\fB\-\-parents\fR] [\fB\-P\fR|\fB\-\-no\-dereference\fR] [\fB\-L\fR|\fB\-\-dereference\fR] [\fB\-H \fR] [\fB\-a\fR|\fB\-\-archive\fR] [\fB\-d \fR] [\fB\-x\fR|\fB\-\-one\-file\-system\fR] [\fB\-\-sparse\fR] [\fB\-\-copy\-contents\fR] [\fB\-\-context\fR] [\fB\-g\fR|\fB\-\-progress\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIpaths\fR] 
+.SH DESCRIPTION
+Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.
+.SH OPTIONS
+.TP
+\fB\-t\fR, \fB\-\-target\-directory\fR=\fItarget\-directory\fR
+copy all SOURCE arguments into target\-directory
+.TP
+\fB\-T\fR, \fB\-\-no\-target\-directory\fR
+Treat DEST as a regular file and not a directory
+.TP
+\fB\-i\fR, \fB\-\-interactive\fR
+ask before overwriting files
+.TP
+\fB\-l\fR, \fB\-\-link\fR
+hard\-link files instead of copying
+.TP
+\fB\-n\fR, \fB\-\-no\-clobber\fR
+don\*(Aqt overwrite a file that already exists
+.TP
+\fB\-R\fR, \fB\-\-recursive\fR
+copy directories recursively
+.TP
+\fB\-\-strip\-trailing\-slashes\fR
+remove any trailing slashes from each SOURCE argument
+.TP
+\fB\-\-debug\fR
+explain how a file is copied. Implies \-v
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+explicitly state what is being done
+.TP
+\fB\-s\fR, \fB\-\-symbolic\-link\fR
+make symbolic links instead of copying
+.TP
+\fB\-f\fR, \fB\-\-force\fR
+if an existing destination file cannot be opened, remove it and try again (this option is ignored when the \-n option is also used). Currently not implemented for Windows.
+.TP
+\fB\-\-remove\-destination\fR
+remove each existing destination file before attempting to open it (contrast with \-\-force). On Windows, currently only works for writeable files.
+.TP
+\fB\-\-backup\fR=\fICONTROL\fR
+make a backup of each existing destination file
+.TP
+\fB\-b\fR
+like \-\-backup but does not accept an argument
+.TP
+\fB\-S\fR, \fB\-\-suffix\fR=\fISUFFIX\fR
+override the usual backup suffix
+.TP
+\fB\-\-update\fR
+move only when the SOURCE file is newer than the destination file or when the destination file is missing
+.br
+
+.br
+[\fIpossible values: \fRnone, all, older]
+.TP
+\fB\-u\fR
+like \-\-update but does not accept an argument
+.TP
+\fB\-\-reflink\fR=\fIWHEN\fR
+control clone/CoW copies. See below
+.br
+
+.br
+[\fIpossible values: \fRauto, always, never]
+.TP
+\fB\-\-attributes\-only\fR
+Don\*(Aqt copy the file data, just the attributes
+.TP
+\fB\-\-preserve\fR=\fIATTR_LIST\fR
+Preserve the specified attributes (default: mode, ownership (unix only), timestamps), if possible additional attributes: context, links, xattr, all
+.br
+
+.br
+[\fIpossible values: \fRmode, ownership, timestamps, context, links, xattr, all]
+.TP
+\fB\-p\fR, \fB\-\-preserve\-default\-attributes\fR
+same as \-\-preserve=mode,ownership(unix only),timestamps
+.TP
+\fB\-\-no\-preserve\fR=\fIATTR_LIST\fR
+don\*(Aqt preserve the specified attributes
+.br
+
+.br
+[\fIpossible values: \fRmode, ownership, timestamps, context, links, xattr, all]
+.TP
+\fB\-\-parents\fR
+use full source file name under DIRECTORY
+.TP
+\fB\-P\fR, \fB\-\-no\-dereference\fR
+never follow symbolic links in SOURCE
+.TP
+\fB\-L\fR, \fB\-\-dereference\fR
+always follow symbolic links in SOURCE
+.TP
+\fB\-H\fR
+follow command\-line symbolic links in SOURCE
+.TP
+\fB\-a\fR, \fB\-\-archive\fR
+Same as \-dR \-\-preserve=all
+.TP
+\fB\-d\fR
+same as \-\-no\-dereference \-\-preserve=links
+.TP
+\fB\-x\fR, \fB\-\-one\-file\-system\fR
+stay on this file system
+.TP
+\fB\-\-sparse\fR=\fIWHEN\fR
+control creation of sparse files. See below
+.br
+
+.br
+[\fIpossible values: \fRnever, auto, always]
+.TP
+\fB\-\-copy\-contents\fR
+NotImplemented: copy contents of special files when recursive
+.TP
+\fB\-\-context\fR=\fICTX\fR
+NotImplemented: set SELinux security context of destination file to default type
+.TP
+\fB\-g\fR, \fB\-\-progress\fR
+Display a progress bar. 
+Note: this feature is not supported by GNU coreutils.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIpaths\fR]
+
+.SH EXTRA
+Do not copy a non\-directory that has an existing destination with the same or newer modification timestamp;
+instead, silently skip the file without failing. If timestamps are being preserved, the comparison is to the
+source timestamp truncated to the resolutions of the destination file system and of the system calls used to
+update timestamps; this avoids duplicate work if several cp \-pu commands are executed with the same source
+and destination. This option is ignored if the \-n or \-\-no\-clobber option is also specified. Also, if
+\-\-preserve=links is also specified (like with cp \-au for example), that will take precedence; consequently,
+depending on the order that files are processed from the source, newer files in the destination may be replaced,
+to mirror hard links in the source. which gives more control over which existing files in the destination are
+replaced, and its value can be one of the following:
+
+* all    This is the default operation when an \-\-update option is not specified, and results in all existing files in the destination being replaced.
+* none   This is similar to the \-\-no\-clobber option, in that no files in the destination are replaced, but also skipping a file does not induce a failure.
+* older  This is the default operation when \-\-update is specified, and results in files being replaced if they’re older than the corresponding source file.
+
+The backup suffix is \*(Aq~\*(Aq, unless set with \-\-suffix or SIMPLE_BACKUP_SUFFIX.
+The version control method may be selected via the \-\-backup option or through
+the VERSION_CONTROL environment variable.  Here are the values:
+
+  none, off       never make backups (even if \-\-backup is given)
+  numbered, t     make numbered backups
+  existing, nil   numbered if numbered backups exist, simple otherwise
+  simple, never   always make simple backups
+.SH VERSION
+v0.0.27

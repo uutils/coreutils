@@ -1,0 +1,233 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_ls 1  "uu_ls 0.0.27" 
+.SH NAME
+uu_ls \- List directory contents.
+Ignore files and directories starting with a \*(Aq.\*(Aq by default
+.SH SYNOPSIS
+\fBuu_ls\fR [\fB\-\-help\fR] [\fB\-\-format\fR] [\fB\-C \fR] [\fB\-l\fR|\fB\-\-long\fR] [\fB\-x \fR] [\fB\-T\fR|\fB\-\-tabsize\fR] [\fB\-m \fR] [\fB\-\-zero\fR] [\fB\-D\fR|\fB\-\-dired\fR] [\fB\-\-hyperlink\fR] [\fB\-1 \fR] [\fB\-o \fR] [\fB\-g \fR] [\fB\-n\fR|\fB\-\-numeric\-uid\-gid\fR] [\fB\-\-quoting\-style\fR] [\fB\-N\fR|\fB\-\-literal\fR] [\fB\-b\fR|\fB\-\-escape\fR] [\fB\-Q\fR|\fB\-\-quote\-name\fR] [\fB\-q\fR|\fB\-\-hide\-control\-chars\fR] [\fB\-\-show\-control\-chars\fR] [\fB\-\-time\fR] [\fB\-c \fR] [\fB\-u \fR] [\fB\-\-hide\fR] [\fB\-I\fR|\fB\-\-ignore\fR] [\fB\-B\fR|\fB\-\-ignore\-backups\fR] [\fB\-\-sort\fR] [\fB\-S \fR] [\fB\-t \fR] [\fB\-v \fR] [\fB\-X \fR] [\fB\-U \fR] [\fB\-L\fR|\fB\-\-dereference\fR] [\fB\-\-dereference\-command\-line\-symlink\-to\-dir\fR] [\fB\-H\fR|\fB\-\-dereference\-command\-line\fR] [\fB\-G\fR|\fB\-\-no\-group\fR] [\fB\-\-author\fR] [\fB\-a\fR|\fB\-\-all\fR] [\fB\-A\fR|\fB\-\-almost\-all\fR] [\fB\-d\fR|\fB\-\-directory\fR] [\fB\-h\fR|\fB\-\-human\-readable\fR] [\fB\-k\fR|\fB\-\-kibibytes\fR] [\fB\-\-si\fR] [\fB\-\-block\-size\fR] [\fB\-i\fR|\fB\-\-inode\fR] [\fB\-r\fR|\fB\-\-reverse\fR] [\fB\-R\fR|\fB\-\-recursive\fR] [\fB\-w\fR|\fB\-\-width\fR] [\fB\-s\fR|\fB\-\-size\fR] [\fB\-\-color\fR] [\fB\-\-indicator\-style\fR] [\fB\-F\fR|\fB\-\-classify\fR] [\fB\-\-file\-type\fR] [\fB\-p \fR] [\fB\-\-time\-style\fR] [\fB\-\-full\-time\fR] [\fB\-Z\fR|\fB\-\-context\fR] [\fB\-\-group\-directories\-first\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIpaths\fR] 
+.SH DESCRIPTION
+List directory contents.
+Ignore files and directories starting with a \*(Aq.\*(Aq by default
+.SH OPTIONS
+.TP
+\fB\-\-help\fR
+Print help information.
+.TP
+\fB\-\-format\fR
+Set the display format.
+.TP
+\fB\-C\fR
+Display the files in columns.
+.TP
+\fB\-l\fR, \fB\-\-long\fR
+Display detailed information.
+.TP
+\fB\-x\fR
+List entries in rows instead of in columns.
+.TP
+\fB\-T\fR, \fB\-\-tabsize\fR=\fICOLS\fR
+Assume tab stops at each COLS instead of 8 (unimplemented)
+.RS
+May also be specified with the \fBTABSIZE\fR environment variable. 
+.RE
+.TP
+\fB\-m\fR
+List entries separated by commas.
+.TP
+\fB\-\-zero\fR
+List entries separated by ASCII NUL characters.
+.TP
+\fB\-D\fR, \fB\-\-dired\fR
+generate output designed for Emacs\*(Aq dired (Directory Editor) mode
+.TP
+\fB\-\-hyperlink\fR=\fIWHEN\fR [default: never]
+hyperlink file names WHEN
+.br
+
+.br
+[\fIpossible values: \fRalways, auto, never]
+.TP
+\fB\-1\fR
+List one file per line.
+.TP
+\fB\-o\fR
+Long format without group information. Identical to \-\-format=long with \-\-no\-group.
+.TP
+\fB\-g\fR
+Long format without owner information.
+.TP
+\fB\-n\fR, \fB\-\-numeric\-uid\-gid\fR
+\-l with numeric UIDs and GIDs.
+.TP
+\fB\-\-quoting\-style\fR
+Set quoting style.
+.br
+
+.br
+[\fIpossible values: \fRliteral, shell, shell\-escape, shell\-always, shell\-escape\-always, c, escape]
+.TP
+\fB\-N\fR, \fB\-\-literal\fR
+Use literal quoting style. Equivalent to `\-\-quoting\-style=literal`
+.TP
+\fB\-b\fR, \fB\-\-escape\fR
+Use escape quoting style. Equivalent to `\-\-quoting\-style=escape`
+.TP
+\fB\-Q\fR, \fB\-\-quote\-name\fR
+Use C quoting style. Equivalent to `\-\-quoting\-style=c`
+.TP
+\fB\-q\fR, \fB\-\-hide\-control\-chars\fR
+Replace control characters with \*(Aq?\*(Aq if they are not escaped.
+.TP
+\fB\-\-show\-control\-chars\fR
+Show control characters \*(Aqas is\*(Aq if they are not escaped.
+.TP
+\fB\-\-time\fR=\fIfield\fR
+Show time in <field>:
+	access time (\-u): atime, access, use;
+	change time (\-t): ctime, status.
+	birth time: birth, creation;
+.TP
+\fB\-c\fR
+If the long listing format (e.g., \-l, \-o) is being used, print the status change time (the \*(Aqctime\*(Aq in the inode) instead of the modification time. When explicitly sorting by time (\-\-sort=time or \-t) or when not using a long listing format, sort according to the status change time.
+.TP
+\fB\-u\fR
+If the long listing format (e.g., \-l, \-o) is being used, print the status access time instead of the modification time. When explicitly sorting by time (\-\-sort=time or \-t) or when not using a long listing format, sort according to the access time.
+.TP
+\fB\-\-hide\fR=\fIPATTERN\fR
+do not list implied entries matching shell PATTERN (overridden by \-a or \-A)
+.TP
+\fB\-I\fR, \fB\-\-ignore\fR=\fIPATTERN\fR
+do not list implied entries matching shell PATTERN
+.TP
+\fB\-B\fR, \fB\-\-ignore\-backups\fR
+Ignore entries which end with ~.
+.TP
+\fB\-\-sort\fR=\fIfield\fR
+Sort by <field>: name, none (\-U), time (\-t), size (\-S), extension (\-X) or width
+.br
+
+.br
+[\fIpossible values: \fRname, none, time, size, version, extension, width]
+.TP
+\fB\-S\fR
+Sort by file size, largest first.
+.TP
+\fB\-t\fR
+Sort by modification time (the \*(Aqmtime\*(Aq in the inode), newest first.
+.TP
+\fB\-v\fR
+Natural sort of (version) numbers in the filenames.
+.TP
+\fB\-X\fR
+Sort alphabetically by entry extension.
+.TP
+\fB\-U\fR
+Do not sort; list the files in whatever order they are stored in the directory.  This is especially useful when listing very large directories, since not doing any sorting can be noticeably faster.
+.TP
+\fB\-L\fR, \fB\-\-dereference\fR
+When showing file information for a symbolic link, show information for the file the link references rather than the link itself.
+.TP
+\fB\-\-dereference\-command\-line\-symlink\-to\-dir\fR
+Do not follow symlinks except when they link to directories and are given as command line arguments.
+.TP
+\fB\-H\fR, \fB\-\-dereference\-command\-line\fR
+Do not follow symlinks except when given as command line arguments.
+.TP
+\fB\-G\fR, \fB\-\-no\-group\fR
+Do not show group in long format.
+.TP
+\fB\-\-author\fR
+Show author in long format. On the supported platforms, the author always matches the file owner.
+.TP
+\fB\-a\fR, \fB\-\-all\fR
+Do not ignore hidden files (files with names that start with \*(Aq.\*(Aq).
+.TP
+\fB\-A\fR, \fB\-\-almost\-all\fR
+In a directory, do not ignore all file names that start with \*(Aq.\*(Aq, only ignore \*(Aq.\*(Aq and \*(Aq..\*(Aq.
+.TP
+\fB\-d\fR, \fB\-\-directory\fR
+Only list the names of directories, rather than listing directory contents. This will not follow symbolic links unless one of `\-\-dereference\-command\-line (\-H)`, `\-\-dereference (\-L)`, or `\-\-dereference\-command\-line\-symlink\-to\-dir` is specified.
+.TP
+\fB\-h\fR, \fB\-\-human\-readable\fR
+Print human readable file sizes (e.g. 1K 234M 56G).
+.TP
+\fB\-k\fR, \fB\-\-kibibytes\fR
+default to 1024\-byte blocks for file system usage; used only with \-s and per directory totals
+.TP
+\fB\-\-si\fR
+Print human readable file sizes using powers of 1000 instead of 1024.
+.TP
+\fB\-\-block\-size\fR=\fIBLOCK_SIZE\fR
+scale sizes by BLOCK_SIZE when printing them
+.TP
+\fB\-i\fR, \fB\-\-inode\fR
+print the index number of each file
+.TP
+\fB\-r\fR, \fB\-\-reverse\fR
+Reverse whatever the sorting method is e.g., list files in reverse alphabetical order, youngest first, smallest first, or whatever.
+.TP
+\fB\-R\fR, \fB\-\-recursive\fR
+List the contents of all directories recursively.
+.TP
+\fB\-w\fR, \fB\-\-width\fR=\fICOLS\fR
+Assume that the terminal is COLS columns wide.
+.TP
+\fB\-s\fR, \fB\-\-size\fR
+print the allocated size of each file, in blocks
+.TP
+\fB\-\-color\fR
+Color output based on file type.
+.br
+
+.br
+[\fIpossible values: \fRalways, auto, never]
+.TP
+\fB\-\-indicator\-style\fR
+Append indicator with style WORD to entry names: none (default),  slash (\-p), file\-type (\-\-file\-type), classify (\-F)
+.br
+
+.br
+[\fIpossible values: \fRnone, slash, file\-type, classify]
+.TP
+\fB\-F\fR, \fB\-\-classify\fR=\fIwhen\fR
+Append a character to each file name indicating the file type. Also, for regular files that are executable, append \*(Aq*\*(Aq. The file type indicators are \*(Aq/\*(Aq for directories, \*(Aq@\*(Aq for symbolic links, \*(Aq|\*(Aq for FIFOs, \*(Aq=\*(Aq for sockets, \*(Aq>\*(Aq for doors, and nothing for regular files. when may be omitted, or one of:
+	none \- Do not classify. This is the default.
+	auto \- Only classify if standard output is a terminal.
+	always \- Always classify.
+Specifying \-\-classify and no when is equivalent to \-\-classify=always. This will not follow symbolic links listed on the command line unless the \-\-dereference\-command\-line (\-H), \-\-dereference (\-L), or \-\-dereference\-command\-line\-symlink\-to\-dir options are specified.
+.br
+
+.br
+[\fIpossible values: \fRalways, auto, never]
+.TP
+\fB\-\-file\-type\fR
+Same as \-\-classify, but do not append \*(Aq*\*(Aq
+.TP
+\fB\-p\fR
+Append / indicator to directories.
+.TP
+\fB\-\-time\-style\fR=\fITIME_STYLE\fR
+time/date format with \-l; see TIME_STYLE below
+.RS
+May also be specified with the \fBTIME_STYLE\fR environment variable. 
+.RE
+.TP
+\fB\-\-full\-time\fR
+like \-l \-\-time\-style=full\-iso
+.TP
+\fB\-Z\fR, \fB\-\-context\fR
+print any security context of each file (not enabled)
+.TP
+\fB\-\-group\-directories\-first\fR
+group directories before files; can be augmented with a \-\-sort option, but any use of \-\-sort=none (\-U) disables grouping
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIpaths\fR]
+
+.SH EXTRA
+The TIME_STYLE argument can be full\-iso, long\-iso, iso, locale or +FORMAT. FORMAT is interpreted like in date. Also the TIME_STYLE environment variable sets the default style to use.
+.SH VERSION
+v0.0.27

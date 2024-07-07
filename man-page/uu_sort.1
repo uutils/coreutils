@@ -1,0 +1,121 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_sort 1  "uu_sort 0.0.27" 
+.SH NAME
+uu_sort \- Display sorted concatenation of all FILE(s). With no FILE, or when FILE is \-, read standard input.
+.SH SYNOPSIS
+\fBuu_sort\fR [\fB\-\-help\fR] [\fB\-\-version\fR] [\fB\-\-sort\fR] [\fB\-h\fR|\fB\-\-human\-numeric\-sort\fR] [\fB\-M\fR|\fB\-\-month\-sort\fR] [\fB\-n\fR|\fB\-\-numeric\-sort\fR] [\fB\-g\fR|\fB\-\-general\-numeric\-sort\fR] [\fB\-V\fR|\fB\-\-version\-sort\fR] [\fB\-R\fR|\fB\-\-random\-sort\fR] [\fB\-d\fR|\fB\-\-dictionary\-order\fR] [\fB\-m\fR|\fB\-\-merge\fR] [\fB\-c\fR|\fB\-\-check\fR] [\fB\-C\fR|\fB\-\-check\-silent\fR] [\fB\-f\fR|\fB\-\-ignore\-case\fR] [\fB\-i\fR|\fB\-\-ignore\-nonprinting\fR] [\fB\-b\fR|\fB\-\-ignore\-leading\-blanks\fR] [\fB\-o\fR|\fB\-\-output\fR] [\fB\-r\fR|\fB\-\-reverse\fR] [\fB\-s\fR|\fB\-\-stable\fR] [\fB\-u\fR|\fB\-\-unique\fR] [\fB\-k\fR|\fB\-\-key\fR] [\fB\-t\fR|\fB\-\-field\-separator\fR] [\fB\-z\fR|\fB\-\-zero\-terminated\fR] [\fB\-\-parallel\fR] [\fB\-S\fR|\fB\-\-buffer\-size\fR] [\fB\-T\fR|\fB\-\-temporary\-directory\fR] [\fB\-\-compress\-program\fR] [\fB\-\-batch\-size\fR] [\fB\-\-files0\-from\fR] [\fB\-\-debug\fR] [\fIfiles\fR] 
+.SH DESCRIPTION
+Display sorted concatenation of all FILE(s). With no FILE, or when FILE is \-, read standard input.
+.SH OPTIONS
+.TP
+\fB\-\-help\fR
+Print help information.
+.TP
+\fB\-\-version\fR
+Print version information.
+.TP
+\fB\-\-sort\fR
+
+.br
+[\fIpossible values: \fRgeneral\-numeric, human\-numeric, month, numeric, version, random]
+.TP
+\fB\-h\fR, \fB\-\-human\-numeric\-sort\fR
+compare according to human readable sizes, eg 1M > 100k
+.TP
+\fB\-M\fR, \fB\-\-month\-sort\fR
+compare according to month name abbreviation
+.TP
+\fB\-n\fR, \fB\-\-numeric\-sort\fR
+compare according to string numerical value
+.TP
+\fB\-g\fR, \fB\-\-general\-numeric\-sort\fR
+compare according to string general numerical value
+.TP
+\fB\-V\fR, \fB\-\-version\-sort\fR
+Sort by SemVer version number, eg 1.12.2 > 1.1.2
+.TP
+\fB\-R\fR, \fB\-\-random\-sort\fR
+shuffle in random order
+.TP
+\fB\-d\fR, \fB\-\-dictionary\-order\fR
+consider only blanks and alphanumeric characters
+.TP
+\fB\-m\fR, \fB\-\-merge\fR
+merge already sorted files; do not sort
+.TP
+\fB\-c\fR, \fB\-\-check\fR
+check for sorted input; do not sort
+.br
+
+.br
+[\fIpossible values: \fRsilent, quiet, diagnose\-first]
+.TP
+\fB\-C\fR, \fB\-\-check\-silent\fR
+exit successfully if the given file is already sorted, and exit with status 1 otherwise.
+.TP
+\fB\-f\fR, \fB\-\-ignore\-case\fR
+fold lower case to upper case characters
+.TP
+\fB\-i\fR, \fB\-\-ignore\-nonprinting\fR
+ignore nonprinting characters
+.TP
+\fB\-b\fR, \fB\-\-ignore\-leading\-blanks\fR
+ignore leading blanks when finding sort keys in each line
+.TP
+\fB\-o\fR, \fB\-\-output\fR=\fIFILENAME\fR
+write output to FILENAME instead of stdout
+.TP
+\fB\-r\fR, \fB\-\-reverse\fR
+reverse the output
+.TP
+\fB\-s\fR, \fB\-\-stable\fR
+stabilize sort by disabling last\-resort comparison
+.TP
+\fB\-u\fR, \fB\-\-unique\fR
+output only the first of an equal run
+.TP
+\fB\-k\fR, \fB\-\-key\fR
+sort by a key
+.TP
+\fB\-t\fR, \fB\-\-field\-separator\fR
+custom separator for \-k
+.TP
+\fB\-z\fR, \fB\-\-zero\-terminated\fR
+line delimiter is NUL, not newline
+.TP
+\fB\-\-parallel\fR=\fINUM_THREADS\fR
+change the number of threads running concurrently to NUM_THREADS
+.TP
+\fB\-S\fR, \fB\-\-buffer\-size\fR=\fISIZE\fR
+sets the maximum SIZE of each segment in number of sorted items
+.TP
+\fB\-T\fR, \fB\-\-temporary\-directory\fR=\fIDIR\fR
+use DIR for temporaries, not $TMPDIR or /tmp
+.TP
+\fB\-\-compress\-program\fR=\fIPROG\fR
+compress temporary files with PROG, decompress with PROG \-d; PROG has to take input from stdin and output to stdout
+.TP
+\fB\-\-batch\-size\fR=\fIN_MERGE\fR
+Merge at most N_MERGE inputs at once.
+.TP
+\fB\-\-files0\-from\fR=\fINUL_FILES\fR
+read input from the files specified by NUL\-terminated NUL_FILES
+.TP
+\fB\-\-debug\fR
+underline the parts of the line that are actually used for sorting
+.TP
+[\fIfiles\fR]
+
+.SH EXTRA
+The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS].
+
+Fields by default are separated by the first whitespace after a non\-whitespace character. Use \-t to specify a custom separator.
+In the default case, whitespace is appended at the beginning of each field. Custom separators however are not included in fields.
+
+FIELD and CHAR both start at 1 (i.e. they are 1\-indexed). If there is no end specified after a comma, the end will be the end of the line.
+If CHAR is set 0, it means the end of the field. CHAR defaults to 1 for the start position and to 0 for the end position.
+
+Valid options are: MbdfhnRrV. They override the global options for this key.
+.SH VERSION
+v0.0.27

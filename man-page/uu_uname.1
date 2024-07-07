@@ -1,0 +1,41 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_uname 1  "uu_uname 0.0.27" 
+.SH NAME
+uu_uname \- Print certain system information. 
+With no OPTION, same as \-s.
+.SH SYNOPSIS
+\fBuu_uname\fR [\fB\-a\fR|\fB\-\-all\fR] [\fB\-s\fR|\fB\-\-kernel\-name\fR] [\fB\-n\fR|\fB\-\-nodename\fR] [\fB\-r\fR|\fB\-\-kernel\-release\fR] [\fB\-v\fR|\fB\-\-kernel\-version\fR] [\fB\-m\fR|\fB\-\-machine\fR] [\fB\-o\fR|\fB\-\-operating\-system\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] 
+.SH DESCRIPTION
+Print certain system information. 
+With no OPTION, same as \-s.
+.SH OPTIONS
+.TP
+\fB\-a\fR, \fB\-\-all\fR
+Behave as though all of the options \-mnrsvo were specified.
+.TP
+\fB\-s\fR, \fB\-\-kernel\-name\fR
+print the kernel name.
+.TP
+\fB\-n\fR, \fB\-\-nodename\fR
+print the nodename (the nodename may be a name that the system is known by to a communications network).
+.TP
+\fB\-r\fR, \fB\-\-kernel\-release\fR
+print the operating system release.
+.TP
+\fB\-v\fR, \fB\-\-kernel\-version\fR
+print the operating system version.
+.TP
+\fB\-m\fR, \fB\-\-machine\fR
+print the machine hardware name.
+.TP
+\fB\-o\fR, \fB\-\-operating\-system\fR
+print the operating system name.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

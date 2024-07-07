@@ -2,38 +2,26 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-#![allow(dead_code)]
+#![allow(dead_code)] //TODO
+
 // spell-checker:ignore (change!) each's
 // spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
 
 use std::io::stdout;
 use std::ops::ControlFlow;
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::error::{UResult, UUsageError};
 use uucore::format::{parse_spec_and_escape, FormatArgument, FormatItem};
-use uucore::{format_usage, help_about, help_section, help_usage};
-
-const VERSION: &str = "version";
-const HELP: &str = "help";
-const USAGE: &str = help_usage!("printf.md");
-const ABOUT: &str = help_about!("printf.md");
-const AFTER_HELP: &str = help_section!("after help", "printf.md");
-
-mod options {
-    pub const FORMATSTRING: &str = "FORMATSTRING";
-    pub const ARGUMENT: &str = "ARGUMENT";
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = crate::uu_app().get_matches_from(args);
 
     let format_string = matches
-        .get_one::<String>(options::FORMATSTRING)
+        .get_one::<String>(crate::options::FORMATSTRING)
         .ok_or_else(|| UUsageError::new(1, "missing operand"))?;
 
-    let values: Vec<_> = match matches.get_many::<String>(options::ARGUMENT) {
+    let values: Vec<_> = match matches.get_many::<String>(crate::options::ARGUMENT) {
         Some(s) => s.map(|s| FormatArgument::Unparsed(s.to_string())).collect(),
         None => vec![],
     };
@@ -65,29 +53,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .allow_hyphen_values(true)
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
-        .disable_help_flag(true)
-        .disable_version_flag(true)
-        .arg(
-            Arg::new(HELP)
-                .long(HELP)
-                .help("Print help information")
-                .action(ArgAction::Help),
-        )
-        .arg(
-            Arg::new(VERSION)
-                .long(VERSION)
-                .help("Print version information")
-                .action(ArgAction::Version),
-        )
-        .arg(Arg::new(options::FORMATSTRING))
-        .arg(Arg::new(options::ARGUMENT).action(ArgAction::Append))
 }

@@ -3,38 +3,31 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
-
-mod helper;
-
-const ABOUT: &str = help_about!("nl.md");
-const AFTER_HELP: &str = help_section!("after help", "nl.md");
-const USAGE: &str = help_usage!("nl.md");
+use uucore::show_error;
 
 // Settings store options used by nl to produce its output.
 pub struct Settings {
     // The variables corresponding to the options -h, -b, and -f.
-    header_numbering: NumberingStyle,
-    body_numbering: NumberingStyle,
-    footer_numbering: NumberingStyle,
+    pub(crate) header_numbering: NumberingStyle,
+    pub(crate) body_numbering: NumberingStyle,
+    pub(crate) footer_numbering: NumberingStyle,
     // The variable corresponding to -d
-    section_delimiter: String,
+    pub(crate) section_delimiter: String,
     // The variables corresponding to the options -v, -i, -l, -w.
-    starting_line_number: i64,
-    line_increment: i64,
-    join_blank_lines: u64,
-    number_width: usize, // Used with String::from_char, hence usize.
+    pub(crate) starting_line_number: i64,
+    pub(crate) line_increment: i64,
+    pub(crate) join_blank_lines: u64,
+    pub(crate) number_width: usize, // Used with String::from_char, hence usize.
     // The format of the number and the (default value for)
     // renumbering each page.
-    number_format: NumberFormat,
-    renumber: bool,
+    pub(crate) number_format: NumberFormat,
+    pub(crate) renumber: bool,
     // The string appended to each line number output.
-    number_separator: String,
+    pub(crate) number_separator: String,
 }
 
 impl Default for Settings {
@@ -75,7 +68,7 @@ impl Stats {
 // 2. Number only nonempty lines
 // 3. Don't number any lines at all
 // 4. Number all lines that match a basic regular expression.
-enum NumberingStyle {
+pub(crate) enum NumberingStyle {
     All,
     NonEmpty,
     None,
@@ -103,7 +96,7 @@ impl TryFrom<&str> for NumberingStyle {
 // space. They are justified to the left or right, in the latter case with
 // the option of having all unused space to its left turned into leading zeroes.
 #[derive(Default)]
-enum NumberFormat {
+pub(crate) enum NumberFormat {
     Left,
     #[default]
     Right,
@@ -160,31 +153,15 @@ impl SectionDelimiter {
     }
 }
 
-pub mod options {
-    pub const HELP: &str = "help";
-    pub const FILE: &str = "file";
-    pub const BODY_NUMBERING: &str = "body-numbering";
-    pub const SECTION_DELIMITER: &str = "section-delimiter";
-    pub const FOOTER_NUMBERING: &str = "footer-numbering";
-    pub const HEADER_NUMBERING: &str = "header-numbering";
-    pub const LINE_INCREMENT: &str = "line-increment";
-    pub const JOIN_BLANK_LINES: &str = "join-blank-lines";
-    pub const NUMBER_FORMAT: &str = "number-format";
-    pub const NO_RENUMBER: &str = "no-renumber";
-    pub const NUMBER_SEPARATOR: &str = "number-separator";
-    pub const STARTING_LINE_NUMBER: &str = "starting-line-number";
-    pub const NUMBER_WIDTH: &str = "number-width";
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let mut settings = Settings::default();
 
     // Update the settings from the command line options, and terminate the
     // program if some options could not successfully be parsed.
-    let parse_errors = helper::parse_options(&mut settings, &matches);
+    let parse_errors = crate::helper::parse_options(&mut settings, &matches);
     if !parse_errors.is_empty() {
         return Err(USimpleError::new(
             1,
@@ -192,7 +169,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let files: Vec<String> = match matches.get_many::<String>(options::FILE) {
+    let files: Vec<String> = match matches.get_many::<String>(crate::options::FILE) {
         Some(v) => v.cloned().collect(),
         None => vec!["-".to_owned()],
     };
@@ -218,110 +195,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .about(ABOUT)
-        .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
-        .infer_long_args(true)
-        .disable_help_flag(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help("Print help information.")
-                .action(ArgAction::Help),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .hide(true)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::BODY_NUMBERING)
-                .short('b')
-                .long(options::BODY_NUMBERING)
-                .help("use STYLE for numbering body lines")
-                .value_name("STYLE"),
-        )
-        .arg(
-            Arg::new(options::SECTION_DELIMITER)
-                .short('d')
-                .long(options::SECTION_DELIMITER)
-                .help("use CC for separating logical pages")
-                .value_name("CC"),
-        )
-        .arg(
-            Arg::new(options::FOOTER_NUMBERING)
-                .short('f')
-                .long(options::FOOTER_NUMBERING)
-                .help("use STYLE for numbering footer lines")
-                .value_name("STYLE"),
-        )
-        .arg(
-            Arg::new(options::HEADER_NUMBERING)
-                .short('h')
-                .long(options::HEADER_NUMBERING)
-                .help("use STYLE for numbering header lines")
-                .value_name("STYLE"),
-        )
-        .arg(
-            Arg::new(options::LINE_INCREMENT)
-                .short('i')
-                .long(options::LINE_INCREMENT)
-                .help("line number increment at each line")
-                .value_name("NUMBER")
-                .value_parser(clap::value_parser!(i64)),
-        )
-        .arg(
-            Arg::new(options::JOIN_BLANK_LINES)
-                .short('l')
-                .long(options::JOIN_BLANK_LINES)
-                .help("group of NUMBER empty lines counted as one")
-                .value_name("NUMBER")
-                .value_parser(clap::value_parser!(u64)),
-        )
-        .arg(
-            Arg::new(options::NUMBER_FORMAT)
-                .short('n')
-                .long(options::NUMBER_FORMAT)
-                .help("insert line numbers according to FORMAT")
-                .value_name("FORMAT")
-                .value_parser(["ln", "rn", "rz"]),
-        )
-        .arg(
-            Arg::new(options::NO_RENUMBER)
-                .short('p')
-                .long(options::NO_RENUMBER)
-                .help("do not reset line numbers at logical pages")
-                .action(ArgAction::SetFalse),
-        )
-        .arg(
-            Arg::new(options::NUMBER_SEPARATOR)
-                .short('s')
-                .long(options::NUMBER_SEPARATOR)
-                .help("add STRING after (possible) line number")
-                .value_name("STRING"),
-        )
-        .arg(
-            Arg::new(options::STARTING_LINE_NUMBER)
-                .short('v')
-                .long(options::STARTING_LINE_NUMBER)
-                .help("first line number on each logical page")
-                .value_name("NUMBER")
-                .value_parser(clap::value_parser!(i64)),
-        )
-        .arg(
-            Arg::new(options::NUMBER_WIDTH)
-                .short('w')
-                .long(options::NUMBER_WIDTH)
-                .help("use NUMBER columns for line numbers")
-                .value_name("NUMBER")
-                .value_parser(clap::value_parser!(usize)),
-        )
 }
 
 // nl implements the main functionality for an individual buffer.

@@ -1,0 +1,45 @@
+#compdef uu_dircolors
+
+autoload -U is-at-least
+
+_uu_dircolors() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-b[output Bourne shell code to set LS_COLORS]' \
+'--sh[output Bourne shell code to set LS_COLORS]' \
+'--bourne-shell[output Bourne shell code to set LS_COLORS]' \
+'-c[output C shell code to set LS_COLORS]' \
+'--csh[output C shell code to set LS_COLORS]' \
+'--c-shell[output C shell code to set LS_COLORS]' \
+'-p[print the byte counts]' \
+'--print-database[print the byte counts]' \
+'--print-ls-colors[output fully escaped colors for display]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::FILE:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_dircolors_commands] )) ||
+_uu_dircolors_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_dircolors commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_dircolors" ]; then
+    _uu_dircolors "$@"
+else
+    compdef _uu_dircolors uu_dircolors
+fi

@@ -1,0 +1,57 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_chgrp 1  "uu_chgrp 0.0.27" 
+.SH NAME
+uu_chgrp \- Change the group of each FILE to GROUP.
+.SH SYNOPSIS
+\fBuu_chgrp\fR [\fB\-\-help\fR] [\fB\-c\fR|\fB\-\-changes\fR] [\fB\-f\fR|\fB\-\-silent\fR] [\fB\-\-quiet\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-\-dereference\fR] [\fB\-h\fR|\fB\-\-no\-dereference\fR] [\fB\-\-preserve\-root\fR] [\fB\-\-no\-preserve\-root\fR] [\fB\-\-reference\fR] [\fB\-R\fR|\fB\-\-recursive\fR] [\fB\-H \fR] [\fB\-P \fR] [\fB\-L \fR] [\fB\-V\fR|\fB\-\-version\fR] 
+.SH DESCRIPTION
+Change the group of each FILE to GROUP.
+.SH OPTIONS
+.TP
+\fB\-\-help\fR
+Print help information.
+.TP
+\fB\-c\fR, \fB\-\-changes\fR
+like verbose but report only when a change is made
+.TP
+\fB\-f\fR, \fB\-\-silent\fR
+
+.TP
+\fB\-\-quiet\fR
+suppress most error messages
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+output a diagnostic for every file processed
+.TP
+\fB\-\-dereference\fR
+
+.TP
+\fB\-h\fR, \fB\-\-no\-dereference\fR
+affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)
+.TP
+\fB\-\-preserve\-root\fR
+fail to operate recursively on \*(Aq/\*(Aq
+.TP
+\fB\-\-no\-preserve\-root\fR
+do not treat \*(Aq/\*(Aq specially (the default)
+.TP
+\fB\-\-reference\fR=\fIRFILE\fR
+use RFILE\*(Aqs group rather than specifying GROUP values
+.TP
+\fB\-R\fR, \fB\-\-recursive\fR
+operate on files and directories recursively
+.TP
+\fB\-H\fR
+if a command line argument is a symbolic link to a directory, traverse it
+.TP
+\fB\-P\fR
+do not traverse any symbolic links (default)
+.TP
+\fB\-L\fR
+traverse every symbolic link to a directory encountered
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

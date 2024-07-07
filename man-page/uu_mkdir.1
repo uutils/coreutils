@@ -1,0 +1,32 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_mkdir 1  "uu_mkdir 0.0.27" 
+.SH NAME
+uu_mkdir \- Create the given DIRECTORY(ies) if they do not exist
+.SH SYNOPSIS
+\fBuu_mkdir\fR [\fB\-m\fR|\fB\-\-mode\fR] [\fB\-p\fR|\fB\-\-parents\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIdirs\fR] 
+.SH DESCRIPTION
+Create the given DIRECTORY(ies) if they do not exist
+.SH OPTIONS
+.TP
+\fB\-m\fR, \fB\-\-mode\fR
+set file mode (not implemented on windows)
+.TP
+\fB\-p\fR, \fB\-\-parents\fR
+make parent directories as needed
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+print a message for each printed directory
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIdirs\fR]
+
+.SH EXTRA
+Each MODE is of the form \*(Aq[ugoa]*([\-+=]([rwxXst]*|[ugo]))+|[\-+=]?[0\-7]+\*(Aq.
+.SH VERSION
+v0.0.27

@@ -1,0 +1,24 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_pwd 1  "uu_pwd 0.0.27" 
+.SH NAME
+uu_pwd \- Display the full filename of the current working directory.
+.SH SYNOPSIS
+\fBuu_pwd\fR [\fB\-L\fR|\fB\-\-logical\fR] [\fB\-P\fR|\fB\-\-physical\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] 
+.SH DESCRIPTION
+Display the full filename of the current working directory.
+.SH OPTIONS
+.TP
+\fB\-L\fR, \fB\-\-logical\fR
+use PWD from environment, even if it contains symlinks
+.TP
+\fB\-P\fR, \fB\-\-physical\fR
+avoid all symlinks
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

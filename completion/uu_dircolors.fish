@@ -1,0 +1,6 @@
+complete -c uu_dircolors -s b -l sh -l bourne-shell -d 'output Bourne shell code to set LS_COLORS'
+complete -c uu_dircolors -s c -l csh -l c-shell -d 'output C shell code to set LS_COLORS'
+complete -c uu_dircolors -s p -l print-database -d 'print the byte counts'
+complete -c uu_dircolors -l print-ls-colors -d 'output fully escaped colors for display'
+complete -c uu_dircolors -s h -l help -d 'Print help'
+complete -c uu_dircolors -s V -l version -d 'Print version'

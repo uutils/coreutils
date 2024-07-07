@@ -1,0 +1,60 @@
+#compdef uu_ln
+
+autoload -U is-at-least
+
+_uu_ln() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'--backup=[make a backup of each existing destination file]' \
+'-S+[override the usual backup suffix]:SUFFIX: ' \
+'--suffix=[override the usual backup suffix]:SUFFIX: ' \
+'(-T --no-target-directory)-t+[specify the DIRECTORY in which to create the links]:DIRECTORY:_files -/' \
+'(-T --no-target-directory)--target-directory=[specify the DIRECTORY in which to create the links]:DIRECTORY:_files -/' \
+'-b[like --backup but does not accept an argument]' \
+'-f[remove existing destination files]' \
+'--force[remove existing destination files]' \
+'-i[prompt whether to remove existing destination files]' \
+'--interactive[prompt whether to remove existing destination files]' \
+'-n[treat LINK_NAME as a normal file if it is a symbolic link to a directory]' \
+'--no-dereference[treat LINK_NAME as a normal file if it is a symbolic link to a directory]' \
+'-L[follow TARGETs that are symbolic links]' \
+'--logical[follow TARGETs that are symbolic links]' \
+'-P[make hard links directly to symbolic links]' \
+'--physical[make hard links directly to symbolic links]' \
+'-s[make symbolic links instead of hard links]' \
+'--symbolic[make symbolic links instead of hard links]' \
+'-T[treat LINK_NAME as a normal file always]' \
+'--no-target-directory[treat LINK_NAME as a normal file always]' \
+'-r[create symbolic links relative to link location]' \
+'--relative[create symbolic links relative to link location]' \
+'-v[print name of each linked file]' \
+'--verbose[print name of each linked file]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'*::files:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_ln_commands] )) ||
+_uu_ln_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_ln commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_ln" ]; then
+    _uu_ln "$@"
+else
+    compdef _uu_ln uu_ln
+fi

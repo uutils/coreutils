@@ -1,0 +1,67 @@
+#compdef uu_install
+
+autoload -U is-at-least
+
+_uu_install() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'--backup=[make a backup of each existing destination file]' \
+'-g+[set group ownership, instead of process'\''s current group]:GROUP: ' \
+'--group=[set group ownership, instead of process'\''s current group]:GROUP: ' \
+'-m+[set permission mode (as in chmod), instead of rwxr-xr-x]:MODE: ' \
+'--mode=[set permission mode (as in chmod), instead of rwxr-xr-x]:MODE: ' \
+'-o+[set ownership (super-user only)]:OWNER:_users' \
+'--owner=[set ownership (super-user only)]:OWNER:_users' \
+'--strip-program=[program used to strip binaries (no action Windows)]:PROGRAM:_command_names -e' \
+'-S+[override the usual backup suffix]:SUFFIX: ' \
+'--suffix=[override the usual backup suffix]:SUFFIX: ' \
+'-t+[move all SOURCE arguments into DIRECTORY]:DIRECTORY:_files -/' \
+'--target-directory=[move all SOURCE arguments into DIRECTORY]:DIRECTORY:_files -/' \
+'-b[like --backup but does not accept an argument]' \
+'-c[ignored]' \
+'-C[compare each pair of source and destination files, and in some cases, do not modify the destination at all]' \
+'--compare[compare each pair of source and destination files, and in some cases, do not modify the destination at all]' \
+'-d[treat all arguments as directory names. create all components of the specified directories]' \
+'--directory[treat all arguments as directory names. create all components of the specified directories]' \
+'-D[create all leading components of DEST except the last, then copy SOURCE to DEST]' \
+'-p[apply access/modification times of SOURCE files to corresponding destination files]' \
+'--preserve-timestamps[apply access/modification times of SOURCE files to corresponding destination files]' \
+'-s[strip symbol tables (no action Windows)]' \
+'--strip[strip symbol tables (no action Windows)]' \
+'-T[(unimplemented) treat DEST as a normal file]' \
+'--no-target-directory[(unimplemented) treat DEST as a normal file]' \
+'-v[explain what is being done]' \
+'--verbose[explain what is being done]' \
+'-P[(unimplemented) preserve security context]' \
+'--preserve-context[(unimplemented) preserve security context]' \
+'-Z[(unimplemented) set security context of files and directories]' \
+'--context[(unimplemented) set security context of files and directories]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'*::files:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_install_commands] )) ||
+_uu_install_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_install commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_install" ]; then
+    _uu_install "$@"
+else
+    compdef _uu_install uu_install
+fi

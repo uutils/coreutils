@@ -3,31 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{builder::PossibleValue, crate_version, Arg, ArgAction, Command};
 use std::fs::OpenOptions;
 use std::io::{copy, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::UResult;
-use uucore::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error};
+use uucore::show_error;
 
 // spell-checker:ignore nopipe
 
 #[cfg(unix)]
 use uucore::signals::{enable_pipe_errors, ignore_interrupts};
-
-const ABOUT: &str = help_about!("tee.md");
-const USAGE: &str = help_usage!("tee.md");
-const AFTER_HELP: &str = help_section!("after help", "tee.md");
-
-mod options {
-    pub const APPEND: &str = "append";
-    pub const IGNORE_INTERRUPTS: &str = "ignore-interrupts";
-    pub const FILE: &str = "file";
-    pub const IGNORE_PIPE_ERRORS: &str = "ignore-pipe-errors";
-    pub const OUTPUT_ERROR: &str = "output-error";
-}
 
 #[allow(dead_code)]
 struct Options {
@@ -47,20 +33,20 @@ enum OutputErrorMode {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let options = Options {
-        append: matches.get_flag(options::APPEND),
-        ignore_interrupts: matches.get_flag(options::IGNORE_INTERRUPTS),
+        append: matches.get_flag(crate::options::APPEND),
+        ignore_interrupts: matches.get_flag(crate::options::IGNORE_INTERRUPTS),
         files: matches
-            .get_many::<String>(options::FILE)
+            .get_many::<String>(crate::options::FILE)
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default(),
         output_error: {
-            if matches.get_flag(options::IGNORE_PIPE_ERRORS) {
+            if matches.get_flag(crate::options::IGNORE_PIPE_ERRORS) {
                 Some(OutputErrorMode::WarnNoPipe)
-            } else if matches.contains_id(options::OUTPUT_ERROR) {
-                if let Some(v) = matches.get_one::<String>(options::OUTPUT_ERROR) {
+            } else if matches.contains_id(crate::options::OUTPUT_ERROR) {
+                if let Some(v) = matches.get_one::<String>(crate::options::OUTPUT_ERROR) {
                     match v.as_str() {
                         "warn" => Some(OutputErrorMode::Warn),
                         "warn-nopipe" => Some(OutputErrorMode::WarnNoPipe),
@@ -81,67 +67,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(_) => Ok(()),
         Err(_) => Err(1.into()),
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .after_help(AFTER_HELP)
-        .infer_long_args(true)
-        // Since we use value-specific help texts for "--output-error", clap's "short help" and "long help" differ.
-        // However, this is something that the GNU tests explicitly test for, so we *always* show the long help instead.
-        .disable_help_flag(true)
-        .arg(
-            Arg::new("--help")
-                .short('h')
-                .long("help")
-                .help("Print help")
-                .action(ArgAction::HelpLong)
-        )
-        .arg(
-            Arg::new(options::APPEND)
-                .long(options::APPEND)
-                .short('a')
-                .help("append to the given FILEs, do not overwrite")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::IGNORE_INTERRUPTS)
-                .long(options::IGNORE_INTERRUPTS)
-                .short('i')
-                .help("ignore interrupt signals (ignored on non-Unix platforms)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::IGNORE_PIPE_ERRORS)
-                .short('p')
-                .help("set write error behavior (ignored on non-Unix platforms)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::OUTPUT_ERROR)
-                .long(options::OUTPUT_ERROR)
-                .require_equals(true)
-                .num_args(0..=1)
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("warn")
-                        .help("produce warnings for errors writing to any output"),
-                    PossibleValue::new("warn-nopipe")
-                        .help("produce warnings for errors that are not pipe errors (ignored on non-unix platforms)"),
-                    PossibleValue::new("exit").help("exit on write errors to any output"),
-                    PossibleValue::new("exit-nopipe")
-                        .help("exit on write errors to any output that are not pipe errors (equivalent to exit on non-unix platforms)"),
-                ]))
-                .help("set write error behavior")
-                .conflicts_with(options::IGNORE_PIPE_ERRORS),
-        )
 }
 
 fn tee(options: &Options) -> Result<()> {

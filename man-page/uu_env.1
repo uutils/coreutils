@@ -1,0 +1,50 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_env 1  "uu_env 0.0.27" 
+.SH NAME
+uu_env \- Set each NAME to VALUE in the environment and run COMMAND
+.SH SYNOPSIS
+\fBuu_env\fR [\fB\-i\fR|\fB\-\-ignore\-environment\fR] [\fB\-C\fR|\fB\-\-chdir\fR] [\fB\-0\fR|\fB\-\-null\fR] [\fB\-f\fR|\fB\-\-file\fR] [\fB\-u\fR|\fB\-\-unset\fR] [\fB\-v\fR|\fB\-\-debug\fR]... [\fB\-S\fR|\fB\-\-split\-string\fR] [\fB\-a\fR|\fB\-\-argv0\fR] [\fB\-\-ignore\-signal\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIvars\fR] 
+.SH DESCRIPTION
+Set each NAME to VALUE in the environment and run COMMAND
+.SH OPTIONS
+.TP
+\fB\-i\fR, \fB\-\-ignore\-environment\fR
+start with an empty environment
+.TP
+\fB\-C\fR, \fB\-\-chdir\fR=\fIDIR\fR
+change working directory to DIR
+.TP
+\fB\-0\fR, \fB\-\-null\fR
+end each output line with a 0 byte rather than a newline (only valid when printing the environment)
+.TP
+\fB\-f\fR, \fB\-\-file\fR=\fIPATH\fR
+read and set variables from a ".env"\-style configuration file (prior to any unset and/or set)
+.TP
+\fB\-u\fR, \fB\-\-unset\fR=\fINAME\fR
+remove variable from the environment
+.TP
+\fB\-v\fR, \fB\-\-debug\fR
+print verbose information for each processing step
+.TP
+\fB\-S\fR, \fB\-\-split\-string\fR=\fIS\fR
+process and split S into separate arguments; used to pass multiple arguments on shebang lines
+.TP
+\fB\-a\fR, \fB\-\-argv0\fR=\fIa\fR
+Override the zeroth argument passed to the command being executed. Without this option a default value of `command` is used.
+.TP
+\fB\-\-ignore\-signal\fR=\fISIG\fR
+set handling of SIG signal(s) to do nothing
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIvars\fR]
+
+.SH EXTRA
+A mere \- implies \-i. If no COMMAND, print the resulting environment.
+.SH VERSION
+v0.0.27

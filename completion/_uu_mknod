@@ -1,0 +1,41 @@
+#compdef uu_mknod
+
+autoload -U is-at-least
+
+_uu_mknod() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-m+[set file permission bits to MODE, not a=rw - umask]:MODE: ' \
+'--mode=[set file permission bits to MODE, not a=rw - umask]:MODE: ' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':name -- name of the new file:_files' \
+':type -- type of the new file (b, c, u or p):' \
+'::major -- major file type:' \
+'::minor -- minor file type:' \
+&& ret=0
+}
+
+(( $+functions[_uu_mknod_commands] )) ||
+_uu_mknod_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_mknod commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_mknod" ]; then
+    _uu_mknod "$@"
+else
+    compdef _uu_mknod uu_mknod
+fi

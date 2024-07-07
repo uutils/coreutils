@@ -1,0 +1,77 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_install 1  "uu_install 0.0.27" 
+.SH NAME
+uu_install \- Copy SOURCE to DEST or multiple SOURCE(s) to the existing
+DIRECTORY, while setting permission modes and owner/group
+.SH SYNOPSIS
+\fBuu_install\fR [\fB\-\-backup\fR] [\fB\-b \fR] [\fB\-c \fR] [\fB\-C\fR|\fB\-\-compare\fR] [\fB\-d\fR|\fB\-\-directory\fR] [\fB\-D \fR] [\fB\-g\fR|\fB\-\-group\fR] [\fB\-m\fR|\fB\-\-mode\fR] [\fB\-o\fR|\fB\-\-owner\fR] [\fB\-p\fR|\fB\-\-preserve\-timestamps\fR] [\fB\-s\fR|\fB\-\-strip\fR] [\fB\-\-strip\-program\fR] [\fB\-S\fR|\fB\-\-suffix\fR] [\fB\-t\fR|\fB\-\-target\-directory\fR] [\fB\-T\fR|\fB\-\-no\-target\-directory\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-P\fR|\fB\-\-preserve\-context\fR] [\fB\-Z\fR|\fB\-\-context\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfiles\fR] 
+.SH DESCRIPTION
+Copy SOURCE to DEST or multiple SOURCE(s) to the existing
+DIRECTORY, while setting permission modes and owner/group
+.SH OPTIONS
+.TP
+\fB\-\-backup\fR=\fICONTROL\fR
+make a backup of each existing destination file
+.TP
+\fB\-b\fR
+like \-\-backup but does not accept an argument
+.TP
+\fB\-c\fR
+ignored
+.TP
+\fB\-C\fR, \fB\-\-compare\fR
+compare each pair of source and destination files, and in some cases, do not modify the destination at all
+.TP
+\fB\-d\fR, \fB\-\-directory\fR
+treat all arguments as directory names. create all components of the specified directories
+.TP
+\fB\-D\fR
+create all leading components of DEST except the last, then copy SOURCE to DEST
+.TP
+\fB\-g\fR, \fB\-\-group\fR=\fIGROUP\fR
+set group ownership, instead of process\*(Aqs current group
+.TP
+\fB\-m\fR, \fB\-\-mode\fR=\fIMODE\fR
+set permission mode (as in chmod), instead of rwxr\-xr\-x
+.TP
+\fB\-o\fR, \fB\-\-owner\fR=\fIOWNER\fR
+set ownership (super\-user only)
+.TP
+\fB\-p\fR, \fB\-\-preserve\-timestamps\fR
+apply access/modification times of SOURCE files to corresponding destination files
+.TP
+\fB\-s\fR, \fB\-\-strip\fR
+strip symbol tables (no action Windows)
+.TP
+\fB\-\-strip\-program\fR=\fIPROGRAM\fR
+program used to strip binaries (no action Windows)
+.TP
+\fB\-S\fR, \fB\-\-suffix\fR=\fISUFFIX\fR
+override the usual backup suffix
+.TP
+\fB\-t\fR, \fB\-\-target\-directory\fR=\fIDIRECTORY\fR
+move all SOURCE arguments into DIRECTORY
+.TP
+\fB\-T\fR, \fB\-\-no\-target\-directory\fR
+(unimplemented) treat DEST as a normal file
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+explain what is being done
+.TP
+\fB\-P\fR, \fB\-\-preserve\-context\fR
+(unimplemented) preserve security context
+.TP
+\fB\-Z\fR, \fB\-\-context\fR
+(unimplemented) set security context of files and directories
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfiles\fR]
+
+.SH VERSION
+v0.0.27

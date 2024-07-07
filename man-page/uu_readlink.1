@@ -1,0 +1,45 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_readlink 1  "uu_readlink 0.0.27" 
+.SH NAME
+uu_readlink \- Print value of a symbolic link or canonical file name.
+.SH SYNOPSIS
+\fBuu_readlink\fR [\fB\-f\fR|\fB\-\-canonicalize\fR] [\fB\-e\fR|\fB\-\-canonicalize\-existing\fR] [\fB\-m\fR|\fB\-\-canonicalize\-missing\fR] [\fB\-n\fR|\fB\-\-no\-newline\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-s\fR|\fB\-\-silent\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-z\fR|\fB\-\-zero\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfiles\fR] 
+.SH DESCRIPTION
+Print value of a symbolic link or canonical file name.
+.SH OPTIONS
+.TP
+\fB\-f\fR, \fB\-\-canonicalize\fR
+canonicalize by following every symlink in every component of the given name recursively; all but the last component must exist
+.TP
+\fB\-e\fR, \fB\-\-canonicalize\-existing\fR
+canonicalize by following every symlink in every component of the given name recursively, all components must exist
+.TP
+\fB\-m\fR, \fB\-\-canonicalize\-missing\fR
+canonicalize by following every symlink in every component of the given name recursively, without requirements on components existence
+.TP
+\fB\-n\fR, \fB\-\-no\-newline\fR
+do not output the trailing delimiter
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+suppress most error messages
+.TP
+\fB\-s\fR, \fB\-\-silent\fR
+suppress most error messages
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+report error message
+.TP
+\fB\-z\fR, \fB\-\-zero\fR
+separate output with NUL rather than newline
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfiles\fR]
+
+.SH VERSION
+v0.0.27

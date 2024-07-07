@@ -1,0 +1,47 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_wc 1  "uu_wc 0.0.27" 
+.SH NAME
+uu_wc \- Display newline, word, and byte counts for each FILE, and a total line if
+more than one FILE is specified. With no FILE, or when FILE is \-, read standard input.
+.SH SYNOPSIS
+\fBuu_wc\fR [\fB\-c\fR|\fB\-\-bytes\fR] [\fB\-m\fR|\fB\-\-chars\fR] [\fB\-\-files0\-from\fR] [\fB\-l\fR|\fB\-\-lines\fR] [\fB\-L\fR|\fB\-\-max\-line\-length\fR] [\fB\-\-total\fR] [\fB\-w\fR|\fB\-\-words\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfiles\fR] 
+.SH DESCRIPTION
+Display newline, word, and byte counts for each FILE, and a total line if
+more than one FILE is specified. With no FILE, or when FILE is \-, read standard input.
+.SH OPTIONS
+.TP
+\fB\-c\fR, \fB\-\-bytes\fR
+print the byte counts
+.TP
+\fB\-m\fR, \fB\-\-chars\fR
+print the character counts
+.TP
+\fB\-\-files0\-from\fR=\fIF\fR
+read input from the files specified by
+  NUL\-terminated names in file F;
+  If F is \- then read names from standard input
+.TP
+\fB\-l\fR, \fB\-\-lines\fR
+print the newline counts
+.TP
+\fB\-L\fR, \fB\-\-max\-line\-length\fR
+print the length of the longest line
+.TP
+\fB\-\-total\fR=\fIWHEN\fR
+when to print a line with total counts;
+  WHEN can be: auto, always, only, never
+.TP
+\fB\-w\fR, \fB\-\-words\fR
+print the word counts
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfiles\fR]
+
+.SH VERSION
+v0.0.27

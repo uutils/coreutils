@@ -1,0 +1,6 @@
+complete -c uu_tr -s c -s C -l complement -d 'use the complement of SET1'
+complete -c uu_tr -s d -l delete -d 'delete characters in SET1, do not translate'
+complete -c uu_tr -s s -l squeeze-repeats -d 'replace each sequence of a repeated character that is listed in the last specified SET, with a single occurrence of that character'
+complete -c uu_tr -s t -l truncate-set1 -d 'first truncate SET1 to length of SET2'
+complete -c uu_tr -s h -l help -d 'Print help'
+complete -c uu_tr -s V -l version -d 'Print version'

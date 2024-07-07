@@ -1,0 +1,53 @@
+#compdef uu_env
+
+autoload -U is-at-least
+
+_uu_env() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-C+[change working directory to DIR]:DIR:_files -/' \
+'--chdir=[change working directory to DIR]:DIR:_files -/' \
+'*-f+[read and set variables from a ".env"-style configuration file (prior to any unset and/or set)]:PATH:_files' \
+'*--file=[read and set variables from a ".env"-style configuration file (prior to any unset and/or set)]:PATH:_files' \
+'*-u+[remove variable from the environment]:NAME: ' \
+'*--unset=[remove variable from the environment]:NAME: ' \
+'-S+[process and split S into separate arguments; used to pass multiple arguments on shebang lines]:S: ' \
+'--split-string=[process and split S into separate arguments; used to pass multiple arguments on shebang lines]:S: ' \
+'-a+[Override the zeroth argument passed to the command being executed. Without this option a default value of \`command\` is used.]:a: ' \
+'--argv0=[Override the zeroth argument passed to the command being executed. Without this option a default value of \`command\` is used.]:a: ' \
+'*--ignore-signal=[set handling of SIG signal(s) to do nothing]:SIG: ' \
+'-i[start with an empty environment]' \
+'--ignore-environment[start with an empty environment]' \
+'-0[end each output line with a 0 byte rather than a newline (only valid when printing the environment)]' \
+'--null[end each output line with a 0 byte rather than a newline (only valid when printing the environment)]' \
+'*-v[print verbose information for each processing step]' \
+'*--debug[print verbose information for each processing step]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::vars:' \
+&& ret=0
+}
+
+(( $+functions[_uu_env_commands] )) ||
+_uu_env_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_env commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_env" ]; then
+    _uu_env "$@"
+else
+    compdef _uu_env uu_env
+fi

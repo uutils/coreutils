@@ -1,0 +1,84 @@
+#compdef uu_sort
+
+autoload -U is-at-least
+
+_uu_sort() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'(-g --general-numeric-sort -h --human-numeric-sort -M --month-sort -n --numeric-sort -V --version-sort -R --random-sort)--sort=[]: :(general-numeric human-numeric month numeric version random)' \
+'(-o --output)-c+[check for sorted input; do not sort]' \
+'(-o --output)--check=[check for sorted input; do not sort]' \
+'-o+[write output to FILENAME instead of stdout]:FILENAME:_files' \
+'--output=[write output to FILENAME instead of stdout]:FILENAME:_files' \
+'*-k+[sort by a key]: : ' \
+'*--key=[sort by a key]: : ' \
+'-t+[custom separator for -k]: : ' \
+'--field-separator=[custom separator for -k]: : ' \
+'--parallel=[change the number of threads running concurrently to NUM_THREADS]:NUM_THREADS: ' \
+'-S+[sets the maximum SIZE of each segment in number of sorted items]:SIZE: ' \
+'--buffer-size=[sets the maximum SIZE of each segment in number of sorted items]:SIZE: ' \
+'-T+[use DIR for temporaries, not \$TMPDIR or /tmp]:DIR:_files -/' \
+'--temporary-directory=[use DIR for temporaries, not \$TMPDIR or /tmp]:DIR:_files -/' \
+'--compress-program=[compress temporary files with PROG, decompress with PROG -d; PROG has to take input from stdin and output to stdout]:PROG:_command_names -e' \
+'--batch-size=[Merge at most N_MERGE inputs at once.]:N_MERGE: ' \
+'*--files0-from=[read input from the files specified by NUL-terminated NUL_FILES]:NUL_FILES:_files' \
+'--help[Print help information.]' \
+'--version[Print version information.]' \
+'(-g --general-numeric-sort -M --month-sort -n --numeric-sort -V --version-sort -R --random-sort)-h[compare according to human readable sizes, eg 1M > 100k]' \
+'(-g --general-numeric-sort -M --month-sort -n --numeric-sort -V --version-sort -R --random-sort)--human-numeric-sort[compare according to human readable sizes, eg 1M > 100k]' \
+'(-g --general-numeric-sort -h --human-numeric-sort -n --numeric-sort -V --version-sort -R --random-sort)-M[compare according to month name abbreviation]' \
+'(-g --general-numeric-sort -h --human-numeric-sort -n --numeric-sort -V --version-sort -R --random-sort)--month-sort[compare according to month name abbreviation]' \
+'(-g --general-numeric-sort -h --human-numeric-sort -M --month-sort -V --version-sort -R --random-sort)-n[compare according to string numerical value]' \
+'(-g --general-numeric-sort -h --human-numeric-sort -M --month-sort -V --version-sort -R --random-sort)--numeric-sort[compare according to string numerical value]' \
+'(-h --human-numeric-sort -M --month-sort -n --numeric-sort -V --version-sort -R --random-sort)-g[compare according to string general numerical value]' \
+'(-h --human-numeric-sort -M --month-sort -n --numeric-sort -V --version-sort -R --random-sort)--general-numeric-sort[compare according to string general numerical value]' \
+'(-g --general-numeric-sort -h --human-numeric-sort -M --month-sort -n --numeric-sort -R --random-sort)-V[Sort by SemVer version number, eg 1.12.2 > 1.1.2]' \
+'(-g --general-numeric-sort -h --human-numeric-sort -M --month-sort -n --numeric-sort -R --random-sort)--version-sort[Sort by SemVer version number, eg 1.12.2 > 1.1.2]' \
+'(-g --general-numeric-sort -h --human-numeric-sort -M --month-sort -n --numeric-sort -V --version-sort)-R[shuffle in random order]' \
+'(-g --general-numeric-sort -h --human-numeric-sort -M --month-sort -n --numeric-sort -V --version-sort)--random-sort[shuffle in random order]' \
+'(-n --numeric-sort -g --general-numeric-sort -h --human-numeric-sort -M --month-sort)-d[consider only blanks and alphanumeric characters]' \
+'(-n --numeric-sort -g --general-numeric-sort -h --human-numeric-sort -M --month-sort)--dictionary-order[consider only blanks and alphanumeric characters]' \
+'-m[merge already sorted files; do not sort]' \
+'--merge[merge already sorted files; do not sort]' \
+'(-o --output)-C[exit successfully if the given file is already sorted, and exit with status 1 otherwise.]' \
+'(-o --output)--check-silent[exit successfully if the given file is already sorted, and exit with status 1 otherwise.]' \
+'-f[fold lower case to upper case characters]' \
+'--ignore-case[fold lower case to upper case characters]' \
+'(-n --numeric-sort -g --general-numeric-sort -h --human-numeric-sort -M --month-sort)-i[ignore nonprinting characters]' \
+'(-n --numeric-sort -g --general-numeric-sort -h --human-numeric-sort -M --month-sort)--ignore-nonprinting[ignore nonprinting characters]' \
+'-b[ignore leading blanks when finding sort keys in each line]' \
+'--ignore-leading-blanks[ignore leading blanks when finding sort keys in each line]' \
+'-r[reverse the output]' \
+'--reverse[reverse the output]' \
+'-s[stabilize sort by disabling last-resort comparison]' \
+'--stable[stabilize sort by disabling last-resort comparison]' \
+'-u[output only the first of an equal run]' \
+'--unique[output only the first of an equal run]' \
+'-z[line delimiter is NUL, not newline]' \
+'--zero-terminated[line delimiter is NUL, not newline]' \
+'--debug[underline the parts of the line that are actually used for sorting]' \
+'::files:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_sort_commands] )) ||
+_uu_sort_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_sort commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_sort" ]; then
+    _uu_sort "$@"
+else
+    compdef _uu_sort uu_sort
+fi

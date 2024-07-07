@@ -1,0 +1,58 @@
+#compdef uu_id
+
+autoload -U is-at-least
+
+_uu_id() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'(-g --group -u --user -p -P -G --groups -z --zero)-A[Display the process audit user ID and other process audit properties,
+which requires privilege (not available on Linux).]' \
+'(-g --group)-u[Display only the effective user ID as a number.]' \
+'(-g --group)--user[Display only the effective user ID as a number.]' \
+'(-u --user)-g[Display only the effective group ID as a number]' \
+'(-u --user)--group[Display only the effective group ID as a number]' \
+'(-g --group -u --user -Z --context -p -P -A)-G[Display only the different group IDs as white-space separated numbers, in no particular order.]' \
+'(-g --group -u --user -Z --context -p -P -A)--groups[Display only the different group IDs as white-space separated numbers, in no particular order.]' \
+'-p[Make the output human-readable. Each display is on a separate line.]' \
+'-n[Display the name of the user or group ID for the -G, -g and -u options instead of the number.
+If any of the ID numbers cannot be mapped into names, the number will be displayed as usual.]' \
+'--name[Display the name of the user or group ID for the -G, -g and -u options instead of the number.
+If any of the ID numbers cannot be mapped into names, the number will be displayed as usual.]' \
+'(-p)-P[Display the id as a password file entry.]' \
+'-r[Display the real ID for the -G, -g and -u options instead of the effective ID.]' \
+'--real[Display the real ID for the -G, -g and -u options instead of the effective ID.]' \
+'-z[delimit entries with NUL characters, not whitespace;
+not permitted in default format]' \
+'--zero[delimit entries with NUL characters, not whitespace;
+not permitted in default format]' \
+'(-g --group -u --user)-Z[print only the security context of the process (not enabled)]' \
+'(-g --group -u --user)--context[print only the security context of the process (not enabled)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::USER:_users' \
+&& ret=0
+}
+
+(( $+functions[_uu_id_commands] )) ||
+_uu_id_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_id commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_id" ]; then
+    _uu_id "$@"
+else
+    compdef _uu_id uu_id
+fi

@@ -1,0 +1,60 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_chown 1  "uu_chown 0.0.27" 
+.SH NAME
+uu_chown \- Change file owner and group
+.SH SYNOPSIS
+\fBuu_chown\fR [\fB\-\-help\fR] [\fB\-c\fR|\fB\-\-changes\fR] [\fB\-\-dereference\fR] [\fB\-h\fR|\fB\-\-no\-dereference\fR] [\fB\-\-from\fR] [\fB\-\-preserve\-root\fR] [\fB\-\-no\-preserve\-root\fR] [\fB\-\-quiet\fR] [\fB\-R\fR|\fB\-\-recursive\fR] [\fB\-\-reference\fR] [\fB\-f\fR|\fB\-\-silent\fR] [\fB\-H \fR] [\fB\-L \fR] [\fB\-P \fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-V\fR|\fB\-\-version\fR] 
+.SH DESCRIPTION
+Change file owner and group
+.SH OPTIONS
+.TP
+\fB\-\-help\fR
+Print help information.
+.TP
+\fB\-c\fR, \fB\-\-changes\fR
+like verbose but report only when a change is made
+.TP
+\fB\-\-dereference\fR
+affect the referent of each symbolic link (this is the default), rather than the symbolic link itself
+.TP
+\fB\-h\fR, \fB\-\-no\-dereference\fR
+affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)
+.TP
+\fB\-\-from\fR=\fICURRENT_OWNER:CURRENT_GROUP\fR
+change the owner and/or group of each file only if its current owner and/or group match those specified here. Either may be omitted, in which case a match is not required for the omitted attribute
+.TP
+\fB\-\-preserve\-root\fR
+fail to operate recursively on \*(Aq/\*(Aq
+.TP
+\fB\-\-no\-preserve\-root\fR
+do not treat \*(Aq/\*(Aq specially (the default)
+.TP
+\fB\-\-quiet\fR
+suppress most error messages
+.TP
+\fB\-R\fR, \fB\-\-recursive\fR
+operate on files and directories recursively
+.TP
+\fB\-\-reference\fR=\fIRFILE\fR
+use RFILE\*(Aqs owner and group rather than specifying OWNER:GROUP values
+.TP
+\fB\-f\fR, \fB\-\-silent\fR
+
+.TP
+\fB\-H\fR
+if a command line argument is a symbolic link to a directory, traverse it
+.TP
+\fB\-L\fR
+traverse every symbolic link to a directory encountered
+.TP
+\fB\-P\fR
+do not traverse any symbolic links (default)
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+output a diagnostic for every file processed
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

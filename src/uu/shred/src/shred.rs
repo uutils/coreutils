@@ -5,7 +5,6 @@
 
 // spell-checker:ignore (words) wipesync prefill
 
-use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(unix)]
 use libc::S_IWUSR;
 use rand::{rngs::StdRng, seq::SliceRandom, Rng, SeedableRng};
@@ -17,30 +16,7 @@ use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size_u64;
-use uucore::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
-
-const ABOUT: &str = help_about!("shred.md");
-const USAGE: &str = help_usage!("shred.md");
-const AFTER_HELP: &str = help_section!("after help", "shred.md");
-
-pub mod options {
-    pub const FORCE: &str = "force";
-    pub const FILE: &str = "file";
-    pub const ITERATIONS: &str = "iterations";
-    pub const SIZE: &str = "size";
-    pub const WIPESYNC: &str = "u";
-    pub const REMOVE: &str = "remove";
-    pub const VERBOSE: &str = "verbose";
-    pub const EXACT: &str = "exact";
-    pub const ZERO: &str = "zero";
-
-    pub mod remove {
-        pub const UNLINK: &str = "unlink";
-        pub const WIPE: &str = "wipe";
-        pub const WIPESYNC: &str = "wipesync";
-    }
-}
+use uucore::{show_error, show_if_err};
 
 // This block size seems to match GNU (2^16 = 65536)
 const BLOCK_SIZE: usize = 1 << 16;
@@ -216,13 +192,13 @@ impl BytesWriter {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    if !matches.contains_id(options::FILE) {
+    if !matches.contains_id(crate::options::FILE) {
         return Err(UUsageError::new(1, "missing file operand"));
     }
 
-    let iterations = match matches.get_one::<String>(options::ITERATIONS) {
+    let iterations = match matches.get_one::<String>(crate::options::ITERATIONS) {
         Some(s) => match s.parse::<usize>() {
             Ok(u) => u,
             Err(_) => {
@@ -237,32 +213,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // TODO: implement --random-source
 
-    let remove_method = if matches.get_flag(options::WIPESYNC) {
+    let remove_method = if matches.get_flag(crate::options::WIPESYNC) {
         RemoveMethod::WipeSync
-    } else if matches.contains_id(options::REMOVE) {
+    } else if matches.contains_id(crate::options::REMOVE) {
         match matches
-            .get_one::<String>(options::REMOVE)
+            .get_one::<String>(crate::options::REMOVE)
             .map(AsRef::as_ref)
         {
-            Some(options::remove::UNLINK) => RemoveMethod::Unlink,
-            Some(options::remove::WIPE) => RemoveMethod::Wipe,
-            Some(options::remove::WIPESYNC) => RemoveMethod::WipeSync,
+            Some(crate::options::remove::UNLINK) => RemoveMethod::Unlink,
+            Some(crate::options::remove::WIPE) => RemoveMethod::Wipe,
+            Some(crate::options::remove::WIPESYNC) => RemoveMethod::WipeSync,
             _ => unreachable!("should be caught by clap"),
         }
     } else {
         RemoveMethod::None
     };
 
-    let force = matches.get_flag(options::FORCE);
+    let force = matches.get_flag(crate::options::FORCE);
     let size_arg = matches
-        .get_one::<String>(options::SIZE)
+        .get_one::<String>(crate::options::SIZE)
         .map(|s| s.to_string());
     let size = get_size(size_arg);
-    let exact = matches.get_flag(options::EXACT) || size.is_some();
-    let zero = matches.get_flag(options::ZERO);
-    let verbose = matches.get_flag(options::VERBOSE);
+    let exact = matches.get_flag(crate::options::EXACT) || size.is_some();
+    let zero = matches.get_flag(crate::options::ZERO);
+    let verbose = matches.get_flag(crate::options::VERBOSE);
 
-    for path_str in matches.get_many::<String>(options::FILE).unwrap() {
+    for path_str in matches.get_many::<String>(crate::options::FILE).unwrap() {
         show_if_err!(wipe_file(
             path_str,
             iterations,
@@ -275,88 +251,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::FORCE)
-                .long(options::FORCE)
-                .short('f')
-                .help("change permissions to allow writing if necessary")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::ITERATIONS)
-                .long(options::ITERATIONS)
-                .short('n')
-                .help("overwrite N times instead of the default (3)")
-                .value_name("NUMBER")
-                .default_value("3"),
-        )
-        .arg(
-            Arg::new(options::SIZE)
-                .long(options::SIZE)
-                .short('s')
-                .value_name("N")
-                .help("shred this many bytes (suffixes like K, M, G accepted)"),
-        )
-        .arg(
-            Arg::new(options::WIPESYNC)
-                .short('u')
-                .help("deallocate and remove file after overwriting")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::REMOVE)
-                .long(options::REMOVE)
-                .value_name("HOW")
-                .value_parser(ShortcutValueParser::new([
-                    options::remove::UNLINK,
-                    options::remove::WIPE,
-                    options::remove::WIPESYNC,
-                ]))
-                .num_args(0..=1)
-                .require_equals(true)
-                .default_missing_value(options::remove::WIPESYNC)
-                .help("like -u but give control on HOW to delete;  See below")
-                .action(ArgAction::Set),
-        )
-        .arg(
-            Arg::new(options::VERBOSE)
-                .long(options::VERBOSE)
-                .short('v')
-                .help("show progress")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::EXACT)
-                .long(options::EXACT)
-                .short('x')
-                .help(
-                    "do not round file sizes up to the next full block;\n\
-                     this is the default for non-regular files",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::ZERO)
-                .long(options::ZERO)
-                .short('z')
-                .help("add a final overwrite with zeros to hide shredding")
-                .action(ArgAction::SetTrue),
-        )
-        // Positional arguments
-        .arg(
-            Arg::new(options::FILE)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
 }
 
 fn get_size(size_str_opt: Option<String>) -> Option<u64> {

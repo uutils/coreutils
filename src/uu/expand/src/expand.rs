@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag Preprocess
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 use std::error::Error;
 use std::ffi::OsString;
 use std::fmt;
@@ -17,19 +17,7 @@ use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult};
-use uucore::{format_usage, help_about, help_usage, show_error};
-
-const ABOUT: &str = help_about!("expand.md");
-const USAGE: &str = help_usage!("expand.md");
-
-pub mod options {
-    pub static TABS: &str = "tabs";
-    pub static INITIAL: &str = "initial";
-    pub static NO_UTF8: &str = "no-utf8";
-    pub static FILES: &str = "FILES";
-}
-
-static LONG_HELP: &str = "";
+use uucore::show_error;
 
 static DEFAULT_TABSTOP: usize = 8;
 
@@ -205,13 +193,13 @@ struct Options {
 
 impl Options {
     fn new(matches: &ArgMatches) -> Result<Self, ParseError> {
-        let (remaining_mode, tabstops) = match matches.get_many::<String>(options::TABS) {
+        let (remaining_mode, tabstops) = match matches.get_many::<String>(crate::options::TABS) {
             Some(s) => tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
             None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
-        let iflag = matches.get_flag(options::INITIAL);
-        let uflag = !matches.get_flag(options::NO_UTF8);
+        let iflag = matches.get_flag(crate::options::INITIAL);
+        let uflag = !matches.get_flag(crate::options::NO_UTF8);
 
         // avoid allocations when dumping out long sequences of spaces
         // by precomputing the longest string of spaces we will ever need
@@ -226,7 +214,7 @@ impl Options {
             .unwrap(); // length of tabstops is guaranteed >= 1
         let tspaces = " ".repeat(nspaces);
 
-        let files: Vec<String> = match matches.get_many::<String>(options::FILES) {
+        let files: Vec<String> = match matches.get_many::<String>(crate::options::FILES) {
             Some(s) => s.map(|v| v.to_string()).collect(),
             None => vec!["-".to_owned()],
         };
@@ -265,50 +253,9 @@ fn expand_shortcuts(args: Vec<OsString>) -> Vec<OsString> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(expand_shortcuts(args.collect()))?;
+    let matches = crate::uu_app().try_get_matches_from(expand_shortcuts(args.collect()))?;
 
     expand(&Options::new(&matches)?)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(LONG_HELP)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::INITIAL)
-                .long(options::INITIAL)
-                .short('i')
-                .help("do not convert tabs after non blanks")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::TABS)
-                .long(options::TABS)
-                .short('t')
-                .value_name("N, LIST")
-                .action(ArgAction::Append)
-                .help(
-                    "have tabs N characters apart, not 8 or use comma separated list \
-                    of explicit tab positions",
-                ),
-        )
-        .arg(
-            Arg::new(options::NO_UTF8)
-                .long(options::NO_UTF8)
-                .short('U')
-                .help("interpret input file as 8-bit ASCII rather than UTF-8")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILES)
-                .action(ArgAction::Append)
-                .hide(true)
-                .value_hint(clap::ValueHint::FilePath),
-        )
 }
 
 fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
@@ -494,7 +441,7 @@ fn expand(options: &Options) -> UResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::is_digit_or_comma;
+    use crate::expand::is_digit_or_comma;
 
     use super::next_tabstop;
     use super::RemainingMode;

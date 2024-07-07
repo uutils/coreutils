@@ -1,0 +1,44 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_runcon 1  "uu_runcon 0.0.27" 
+.SH NAME
+uu_runcon \- Run command with specified security context under SELinux enabled systems.
+.SH SYNOPSIS
+\fBuu_runcon\fR [\fB\-c\fR|\fB\-\-compute\fR] [\fB\-u\fR|\fB\-\-user\fR] [\fB\-r\fR|\fB\-\-role\fR] [\fB\-t\fR|\fB\-\-type\fR] [\fB\-l\fR|\fB\-\-range\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIARG\fR] 
+.SH DESCRIPTION
+Run command with specified security context under SELinux enabled systems.
+.SH OPTIONS
+.TP
+\fB\-c\fR, \fB\-\-compute\fR
+Compute process transition context before modifying.
+.TP
+\fB\-u\fR, \fB\-\-user\fR=\fIUSER\fR
+Set user USER in the target security context.
+.TP
+\fB\-r\fR, \fB\-\-role\fR=\fIROLE\fR
+Set role ROLE in the target security context.
+.TP
+\fB\-t\fR, \fB\-\-type\fR=\fITYPE\fR
+Set type TYPE in the target security context.
+.TP
+\fB\-l\fR, \fB\-\-range\fR=\fIRANGE\fR
+Set range RANGE in the target security context.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIARG\fR]
+
+.SH EXTRA
+Run COMMAND with completely\-specified CONTEXT, or with current or transitioned security context modified by one or more of LEVEL, ROLE, TYPE, and USER.
+
+If none of \-\-compute, \-\-type, \-\-user, \-\-role or \-\-range is specified, then the first argument is used as the complete context.
+
+Note that only carefully\-chosen contexts are likely to successfully run.
+
+With neither CONTEXT nor COMMAND are specified, then this prints the current security context.
+.SH VERSION
+v0.0.27

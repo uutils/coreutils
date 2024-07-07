@@ -1,0 +1,40 @@
+
+using namespace System.Management.Automation
+using namespace System.Management.Automation.Language
+
+Register-ArgumentCompleter -Native -CommandName 'uu_base64' -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+
+    $commandElements = $commandAst.CommandElements
+    $command = @(
+        'uu_base64'
+        for ($i = 1; $i -lt $commandElements.Count; $i++) {
+            $element = $commandElements[$i]
+            if ($element -isnot [StringConstantExpressionAst] -or
+                $element.StringConstantType -ne [StringConstantType]::BareWord -or
+                $element.Value.StartsWith('-') -or
+                $element.Value -eq $wordToComplete) {
+                break
+        }
+        $element.Value
+    }) -join ';'
+
+    $completions = @(switch ($command) {
+        'uu_base64' {
+            [CompletionResult]::new('-w', 'w', [CompletionResultType]::ParameterName, 'wrap encoded lines after COLS character (default 76, 0 to disable wrapping)')
+            [CompletionResult]::new('--wrap', 'wrap', [CompletionResultType]::ParameterName, 'wrap encoded lines after COLS character (default 76, 0 to disable wrapping)')
+            [CompletionResult]::new('-d', 'd', [CompletionResultType]::ParameterName, 'decode data')
+            [CompletionResult]::new('--decode', 'decode', [CompletionResultType]::ParameterName, 'decode data')
+            [CompletionResult]::new('-i', 'i', [CompletionResultType]::ParameterName, 'when decoding, ignore non-alphabetic characters')
+            [CompletionResult]::new('--ignore-garbage', 'ignore-garbage', [CompletionResultType]::ParameterName, 'when decoding, ignore non-alphabetic characters')
+            [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-V', 'V ', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('--version', 'version', [CompletionResultType]::ParameterName, 'Print version')
+            break
+        }
+    })
+
+    $completions.Where{ $_.CompletionText -like "$wordToComplete*" } |
+        Sort-Object -Property ListItemText
+}

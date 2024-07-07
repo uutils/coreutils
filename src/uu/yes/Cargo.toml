@@ -13,9 +13,6 @@ edition = "2021"
 
 readme.workspace = true
 
-[lib]
-path = "src/yes.rs"
-
 [dependencies]
 clap = { workspace = true }
 itertools = { workspace = true }

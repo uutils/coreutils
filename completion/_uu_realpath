@@ -1,0 +1,53 @@
+#compdef uu_realpath
+
+autoload -U is-at-least
+
+_uu_realpath() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'--relative-to=[print the resolved path relative to DIR]:DIR: ' \
+'--relative-base=[print absolute paths unless paths below DIR]:DIR: ' \
+'-q[Do not print warnings for invalid paths]' \
+'--quiet[Do not print warnings for invalid paths]' \
+'-s[Only strip '\''.'\'' and '\''..'\'' components, but don'\''t resolve symbolic links]' \
+'--strip[Only strip '\''.'\'' and '\''..'\'' components, but don'\''t resolve symbolic links]' \
+'--no-symlinks[Only strip '\''.'\'' and '\''..'\'' components, but don'\''t resolve symbolic links]' \
+'-z[Separate output filenames with \\0 rather than newline]' \
+'--zero[Separate output filenames with \\0 rather than newline]' \
+'-L[resolve '\''..'\'' components before symlinks]' \
+'--logical[resolve '\''..'\'' components before symlinks]' \
+'-P[resolve symlinks as encountered (default)]' \
+'--physical[resolve symlinks as encountered (default)]' \
+'-e[canonicalize by following every symlink in every component of the given name recursively, all components must exist]' \
+'--canonicalize-existing[canonicalize by following every symlink in every component of the given name recursively, all components must exist]' \
+'-m[canonicalize by following every symlink in every component of the given name recursively, without requirements on components existence]' \
+'--canonicalize-missing[canonicalize by following every symlink in every component of the given name recursively, without requirements on components existence]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':files:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_realpath_commands] )) ||
+_uu_realpath_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_realpath commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_realpath" ]; then
+    _uu_realpath "$@"
+else
+    compdef _uu_realpath uu_realpath
+fi

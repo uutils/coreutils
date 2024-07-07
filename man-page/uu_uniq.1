@@ -1,0 +1,62 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_uniq 1  "uu_uniq 0.0.27" 
+.SH NAME
+uu_uniq \- Report or omit repeated lines.
+.SH SYNOPSIS
+\fBuu_uniq\fR [\fB\-D\fR|\fB\-\-all\-repeated\fR] [\fB\-\-group\fR] [\fB\-w\fR|\fB\-\-check\-chars\fR] [\fB\-c\fR|\fB\-\-count\fR] [\fB\-i\fR|\fB\-\-ignore\-case\fR] [\fB\-d\fR|\fB\-\-repeated\fR] [\fB\-s\fR|\fB\-\-skip\-chars\fR] [\fB\-f\fR|\fB\-\-skip\-fields\fR] [\fB\-u\fR|\fB\-\-unique\fR] [\fB\-z\fR|\fB\-\-zero\-terminated\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfiles\fR] 
+.SH DESCRIPTION
+Report or omit repeated lines.
+.SH OPTIONS
+.TP
+\fB\-D\fR, \fB\-\-all\-repeated\fR=\fIdelimit\-method\fR
+print all duplicate lines. Delimiting is done with blank lines. [default: none]
+.br
+
+.br
+[\fIpossible values: \fRnone, prepend, separate]
+.TP
+\fB\-\-group\fR=\fIgroup\-method\fR
+show all items, separating groups with an empty line. [default: separate]
+.br
+
+.br
+[\fIpossible values: \fRseparate, prepend, append, both]
+.TP
+\fB\-w\fR, \fB\-\-check\-chars\fR=\fIN\fR
+compare no more than N characters in lines
+.TP
+\fB\-c\fR, \fB\-\-count\fR
+prefix lines by the number of occurrences
+.TP
+\fB\-i\fR, \fB\-\-ignore\-case\fR
+ignore differences in case when comparing
+.TP
+\fB\-d\fR, \fB\-\-repeated\fR
+only print duplicate lines
+.TP
+\fB\-s\fR, \fB\-\-skip\-chars\fR=\fIN\fR
+avoid comparing the first N characters
+.TP
+\fB\-f\fR, \fB\-\-skip\-fields\fR=\fIN\fR
+avoid comparing the first N fields
+.TP
+\fB\-u\fR, \fB\-\-unique\fR
+only print unique lines
+.TP
+\fB\-z\fR, \fB\-\-zero\-terminated\fR
+end lines with 0 byte, not newline
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+Filter adjacent matching lines from INPUT (or standard input),
+writing to OUTPUT (or standard output).
+
+Note: uniq does not detect repeated lines unless they are adjacent.
+You may want to sort the input first, or use sort \-u without uniq.
+.SH VERSION
+v0.0.27

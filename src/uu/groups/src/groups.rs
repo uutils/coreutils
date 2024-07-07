@@ -18,16 +18,8 @@ use uucore::{
     display::Quotable,
     entries::{get_groups_gnu, gid2grp, Locate, Passwd},
     error::{UError, UResult},
-    format_usage, help_about, help_usage, show,
+    show,
 };
-
-use clap::{crate_version, Arg, ArgAction, Command};
-
-mod options {
-    pub const USERS: &str = "USERNAME";
-}
-const ABOUT: &str = help_about!("groups.md");
-const USAGE: &str = help_usage!("groups.md");
 
 #[derive(Debug)]
 enum GroupsError {
@@ -62,10 +54,10 @@ fn infallible_gid2grp(gid: &u32) -> String {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let users: Vec<String> = matches
-        .get_many::<String>(options::USERS)
+        .get_many::<String>(crate::options::USERS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
@@ -92,18 +84,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::USERS)
-                .action(ArgAction::Append)
-                .value_name(options::USERS)
-                .value_hint(clap::ValueHint::Username),
-        )
 }

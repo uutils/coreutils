@@ -1,0 +1,70 @@
+#compdef uu_od
+
+autoload -U is-at-least
+
+_uu_od() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-A+[Select the base in which file offsets are printed.]:RADIX: ' \
+'--address-radix=[Select the base in which file offsets are printed.]:RADIX: ' \
+'-j+[Skip bytes input bytes before formatting and writing.]:BYTES: ' \
+'--skip-bytes=[Skip bytes input bytes before formatting and writing.]:BYTES: ' \
+'-N+[limit dump to BYTES input bytes]:BYTES: ' \
+'--read-bytes=[limit dump to BYTES input bytes]:BYTES: ' \
+'--endian=[byte order to use for multi-byte formats]:big|little:(big little)' \
+'-S+[NotImplemented\: output strings of at least BYTES graphic chars. 3 is assumed when BYTES is not specified.]:BYTES: ' \
+'--strings=[NotImplemented\: output strings of at least BYTES graphic chars. 3 is assumed when BYTES is not specified.]:BYTES: ' \
+'*-t+[select output format or formats]:TYPE: ' \
+'*--format=[select output format or formats]:TYPE: ' \
+'-w+[output BYTES bytes per output line. 32 is implied when BYTES is not specified.]' \
+'--width=[output BYTES bytes per output line. 32 is implied when BYTES is not specified.]' \
+'--help[Print help information.]' \
+'-a[named characters, ignoring high-order bit]' \
+'-b[octal bytes]' \
+'-c[ASCII characters or backslash escapes]' \
+'-d[unsigned decimal 2-byte units]' \
+'-D[unsigned decimal 4-byte units]' \
+'-o[octal 2-byte units]' \
+'-I[decimal 8-byte units]' \
+'-L[decimal 8-byte units]' \
+'-i[decimal 4-byte units]' \
+'-l[decimal 8-byte units]' \
+'-x[hexadecimal 2-byte units]' \
+'-h[hexadecimal 2-byte units]' \
+'-O[octal 4-byte units]' \
+'-s[decimal 2-byte units]' \
+'-X[hexadecimal 4-byte units]' \
+'-H[hexadecimal 4-byte units]' \
+'-e[floating point double precision (64-bit) units]' \
+'-f[floating point double precision (32-bit) units]' \
+'-F[floating point double precision (64-bit) units]' \
+'-v[do not use * to mark line suppression]' \
+'--output-duplicates[do not use * to mark line suppression]' \
+'--traditional[compatibility mode with one input, offset and label.]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::FILENAME:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_od_commands] )) ||
+_uu_od_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_od commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_od" ]; then
+    _uu_od "$@"
+else
+    compdef _uu_od uu_od
+fi

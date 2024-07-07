@@ -3,24 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::ops::ControlFlow;
 use std::str::Chars;
 use uucore::error::{FromIo, UResult};
-use uucore::{format_usage, help_about, help_section, help_usage};
-
-const ABOUT: &str = help_about!("echo.md");
-const USAGE: &str = help_usage!("echo.md");
-const AFTER_HELP: &str = help_section!("after help", "echo.md");
-
-mod options {
-    pub const STRING: &str = "STRING";
-    pub const NO_NEWLINE: &str = "no_newline";
-    pub const ENABLE_BACKSLASH_ESCAPE: &str = "enable_backslash_escape";
-    pub const DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
-}
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -118,54 +105,17 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<ControlFlow<
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().get_matches_from(args);
+    let matches = crate::uu_app().get_matches_from(args);
 
-    let no_newline = matches.get_flag(options::NO_NEWLINE);
-    let escaped = matches.get_flag(options::ENABLE_BACKSLASH_ESCAPE);
-    let values: Vec<String> = match matches.get_many::<String>(options::STRING) {
+    let no_newline = matches.get_flag(crate::options::NO_NEWLINE);
+    let escaped = matches.get_flag(crate::options::ENABLE_BACKSLASH_ESCAPE);
+    let values: Vec<String> = match matches.get_many::<String>(crate::options::STRING) {
         Some(s) => s.map(|s| s.to_string()).collect(),
         None => vec![String::new()],
     };
 
     execute(no_newline, escaped, &values)
         .map_err_context(|| "could not write to stdout".to_string())
-}
-
-pub fn uu_app() -> Command {
-    // Note: echo is different from the other utils in that it should **not**
-    // have `infer_long_args(true)`, because, for example, `--ver` should be
-    // printed as `--ver` and not show the version text.
-    Command::new(uucore::util_name())
-        // TrailingVarArg specifies the final positional argument is a VarArg
-        // and it doesn't attempts the parse any further args.
-        // Final argument must have multiple(true) or the usage string equivalent.
-        .trailing_var_arg(true)
-        .allow_hyphen_values(true)
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
-        .arg(
-            Arg::new(options::NO_NEWLINE)
-                .short('n')
-                .help("do not output the trailing newline")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::ENABLE_BACKSLASH_ESCAPE)
-                .short('e')
-                .help("enable interpretation of backslash escapes")
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::DISABLE_BACKSLASH_ESCAPE),
-        )
-        .arg(
-            Arg::new(options::DISABLE_BACKSLASH_ESCAPE)
-                .short('E')
-                .help("disable interpretation of backslash escapes (default)")
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::ENABLE_BACKSLASH_ESCAPE),
-        )
-        .arg(Arg::new(options::STRING).action(ArgAction::Append))
 }
 
 fn execute(no_newline: bool, escaped: bool, free: &[String]) -> io::Result<()> {

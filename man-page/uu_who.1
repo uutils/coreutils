@@ -1,0 +1,63 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_who 1  "uu_who 0.0.27" 
+.SH NAME
+uu_who \- Print information about users who are currently logged in.
+.SH SYNOPSIS
+\fBuu_who\fR [\fB\-a\fR|\fB\-\-all\fR] [\fB\-b\fR|\fB\-\-boot\fR] [\fB\-d\fR|\fB\-\-dead\fR] [\fB\-H\fR|\fB\-\-heading\fR] [\fB\-l\fR|\fB\-\-login\fR] [\fB\-\-lookup\fR] [\fB\-m \fR] [\fB\-p\fR|\fB\-\-process\fR] [\fB\-q\fR|\fB\-\-count\fR] [\fB\-r\fR|\fB\-\-runlevel\fR] [\fB\-s\fR|\fB\-\-short\fR] [\fB\-t\fR|\fB\-\-time\fR] [\fB\-u\fR|\fB\-\-users\fR] [\fB\-T\fR|\fB\-\-mesg\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIFILE\fR] 
+.SH DESCRIPTION
+Print information about users who are currently logged in.
+.SH OPTIONS
+.TP
+\fB\-a\fR, \fB\-\-all\fR
+same as \-b \-d \-\-login \-p \-r \-t \-T \-u
+.TP
+\fB\-b\fR, \fB\-\-boot\fR
+time of last system boot
+.TP
+\fB\-d\fR, \fB\-\-dead\fR
+print dead processes
+.TP
+\fB\-H\fR, \fB\-\-heading\fR
+print line of column headings
+.TP
+\fB\-l\fR, \fB\-\-login\fR
+print system login processes
+.TP
+\fB\-\-lookup\fR
+attempt to canonicalize hostnames via DNS
+.TP
+\fB\-m\fR
+only hostname and user associated with stdin
+.TP
+\fB\-p\fR, \fB\-\-process\fR
+print active processes spawned by init
+.TP
+\fB\-q\fR, \fB\-\-count\fR
+all login names and number of users logged on
+.TP
+\fB\-r\fR, \fB\-\-runlevel\fR
+print current runlevel
+.TP
+\fB\-s\fR, \fB\-\-short\fR
+print only name, line, and time (default)
+.TP
+\fB\-t\fR, \fB\-\-time\fR
+print last system clock change
+.TP
+\fB\-u\fR, \fB\-\-users\fR
+list users logged in
+.TP
+\fB\-T\fR, \fB\-\-mesg\fR
+add user\*(Aqs message status as +, \- or ?
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIFILE\fR]
+
+.SH VERSION
+v0.0.27

@@ -1,0 +1,29 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_fold 1  "uu_fold 0.0.27" 
+.SH NAME
+uu_fold \- Writes each file (or standard input if no files are given)
+to standard output whilst breaking long lines
+.SH SYNOPSIS
+\fBuu_fold\fR [\fB\-b\fR|\fB\-\-bytes\fR] [\fB\-s\fR|\fB\-\-spaces\fR] [\fB\-w\fR|\fB\-\-width\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Writes each file (or standard input if no files are given)
+to standard output whilst breaking long lines
+.SH OPTIONS
+.TP
+\fB\-b\fR, \fB\-\-bytes\fR
+count using bytes rather than columns (meaning control characters such as newline are not treated specially)
+.TP
+\fB\-s\fR, \fB\-\-spaces\fR
+break lines at word boundaries rather than a hard cut\-off
+.TP
+\fB\-w\fR, \fB\-\-width\fR=\fIWIDTH\fR
+set WIDTH as the maximum line width rather than 80
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

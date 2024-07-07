@@ -1,0 +1,32 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_unexpand 1  "uu_unexpand 0.0.27" 
+.SH NAME
+uu_unexpand \- Convert blanks in each `FILE` to tabs, writing to standard output.
+With no `FILE`, or when `FILE` is `\-`, read standard input.
+.SH SYNOPSIS
+\fBuu_unexpand\fR [\fB\-a\fR|\fB\-\-all\fR] [\fB\-\-first\-only\fR] [\fB\-t\fR|\fB\-\-tabs\fR] [\fB\-U\fR|\fB\-\-no\-utf8\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Convert blanks in each `FILE` to tabs, writing to standard output.
+With no `FILE`, or when `FILE` is `\-`, read standard input.
+.SH OPTIONS
+.TP
+\fB\-a\fR, \fB\-\-all\fR
+convert all blanks, instead of just initial blanks
+.TP
+\fB\-\-first\-only\fR
+convert only leading sequences of blanks (overrides \-a)
+.TP
+\fB\-t\fR, \fB\-\-tabs\fR=\fIN, LIST\fR
+use comma separated LIST of tab positions or have tabs N characters apart instead of 8 (enables \-a)
+.TP
+\fB\-U\fR, \fB\-\-no\-utf8\fR
+interpret input file as 8\-bit ASCII rather than UTF\-8
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

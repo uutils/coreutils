@@ -1,0 +1,49 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_tee 1  "uu_tee 0.0.27" 
+.SH NAME
+uu_tee \- Copy standard input to each FILE, and also to standard output.
+.SH SYNOPSIS
+\fBuu_tee\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-a\fR|\fB\-\-append\fR] [\fB\-i\fR|\fB\-\-ignore\-interrupts\fR] [\fB\-p \fR] [\fB\-\-output\-error\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Copy standard input to each FILE, and also to standard output.
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-a\fR, \fB\-\-append\fR
+append to the given FILEs, do not overwrite
+.TP
+\fB\-i\fR, \fB\-\-ignore\-interrupts\fR
+ignore interrupt signals (ignored on non\-Unix platforms)
+.TP
+\fB\-p\fR
+set write error behavior (ignored on non\-Unix platforms)
+.TP
+\fB\-\-output\-error\fR
+set write error behavior
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+warn: produce warnings for errors writing to any output
+.IP \(bu 2
+warn\-nopipe: produce warnings for errors that are not pipe errors (ignored on non\-unix platforms)
+.IP \(bu 2
+exit: exit on write errors to any output
+.IP \(bu 2
+exit\-nopipe: exit on write errors to any output that are not pipe errors (equivalent to exit on non\-unix platforms)
+.RE
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfile\fR]
+
+.SH EXTRA
+If a FILE is \-, it refers to a file named \- .
+.SH VERSION
+v0.0.27

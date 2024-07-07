@@ -1,0 +1,40 @@
+#compdef uu_mkfifo
+
+autoload -U is-at-least
+
+_uu_mkfifo() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-m+[file permissions for the fifo]:MODE: ' \
+'--mode=[file permissions for the fifo]:MODE: ' \
+'--context=[like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX]:CTX: ' \
+'-Z[set the SELinux security context to default type]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::fifo:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_mkfifo_commands] )) ||
+_uu_mkfifo_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_mkfifo commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_mkfifo" ]; then
+    _uu_mkfifo "$@"
+else
+    compdef _uu_mkfifo uu_mkfifo
+fi

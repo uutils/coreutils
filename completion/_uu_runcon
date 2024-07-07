@@ -1,0 +1,46 @@
+#compdef uu_runcon
+
+autoload -U is-at-least
+
+_uu_runcon() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-u+[Set user USER in the target security context.]:USER: ' \
+'--user=[Set user USER in the target security context.]:USER: ' \
+'-r+[Set role ROLE in the target security context.]:ROLE: ' \
+'--role=[Set role ROLE in the target security context.]:ROLE: ' \
+'-t+[Set type TYPE in the target security context.]:TYPE: ' \
+'--type=[Set type TYPE in the target security context.]:TYPE: ' \
+'-l+[Set range RANGE in the target security context.]:RANGE: ' \
+'--range=[Set range RANGE in the target security context.]:RANGE: ' \
+'-c[Compute process transition context before modifying.]' \
+'--compute[Compute process transition context before modifying.]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::ARG:_command_names -e' \
+&& ret=0
+}
+
+(( $+functions[_uu_runcon_commands] )) ||
+_uu_runcon_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_runcon commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_runcon" ]; then
+    _uu_runcon "$@"
+else
+    compdef _uu_runcon uu_runcon
+fi

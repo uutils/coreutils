@@ -1,0 +1,5 @@
+complete -c uu_pathchk -s p -d 'check for most POSIX systems'
+complete -c uu_pathchk -s P -d 'check for empty names and leading "-"'
+complete -c uu_pathchk -l portability -d 'check for all POSIX systems (equivalent to -p -P)'
+complete -c uu_pathchk -s h -l help -d 'Print help'
+complete -c uu_pathchk -s V -l version -d 'Print version'

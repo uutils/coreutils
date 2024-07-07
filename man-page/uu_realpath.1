@@ -1,0 +1,48 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_realpath 1  "uu_realpath 0.0.27" 
+.SH NAME
+uu_realpath \- Print the resolved path
+.SH SYNOPSIS
+\fBuu_realpath\fR [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-s\fR|\fB\-\-strip\fR] [\fB\-z\fR|\fB\-\-zero\fR] [\fB\-L\fR|\fB\-\-logical\fR] [\fB\-P\fR|\fB\-\-physical\fR] [\fB\-e\fR|\fB\-\-canonicalize\-existing\fR] [\fB\-m\fR|\fB\-\-canonicalize\-missing\fR] [\fB\-\-relative\-to\fR] [\fB\-\-relative\-base\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIfiles\fR> 
+.SH DESCRIPTION
+Print the resolved path
+.SH OPTIONS
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Do not print warnings for invalid paths
+.TP
+\fB\-s\fR, \fB\-\-strip\fR
+Only strip \*(Aq.\*(Aq and \*(Aq..\*(Aq components, but don\*(Aqt resolve symbolic links
+.TP
+\fB\-z\fR, \fB\-\-zero\fR
+Separate output filenames with \\0 rather than newline
+.TP
+\fB\-L\fR, \fB\-\-logical\fR
+resolve \*(Aq..\*(Aq components before symlinks
+.TP
+\fB\-P\fR, \fB\-\-physical\fR
+resolve symlinks as encountered (default)
+.TP
+\fB\-e\fR, \fB\-\-canonicalize\-existing\fR
+canonicalize by following every symlink in every component of the given name recursively, all components must exist
+.TP
+\fB\-m\fR, \fB\-\-canonicalize\-missing\fR
+canonicalize by following every symlink in every component of the given name recursively, without requirements on components existence
+.TP
+\fB\-\-relative\-to\fR=\fIDIR\fR
+print the resolved path relative to DIR
+.TP
+\fB\-\-relative\-base\fR=\fIDIR\fR
+print absolute paths unless paths below DIR
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+<\fIfiles\fR>
+
+.SH VERSION
+v0.0.27

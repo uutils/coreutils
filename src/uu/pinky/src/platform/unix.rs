@@ -6,8 +6,8 @@
 // spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
 
 use crate::options;
+use crate::pinky::Capitalize;
 use crate::uu_app;
-use crate::Capitalize;
 
 use uucore::entries::{Locate, Passwd};
 use uucore::error::{FromIo, UResult};

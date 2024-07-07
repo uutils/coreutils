@@ -33,11 +33,11 @@
 use crate::number::DynamicWidthNumber;
 use crate::number::FixedWidthNumber;
 use crate::number::Number;
-use crate::strategy::Strategy;
-use crate::{
+use crate::options::{
     OPT_ADDITIONAL_SUFFIX, OPT_HEX_SUFFIXES, OPT_HEX_SUFFIXES_SHORT, OPT_NUMERIC_SUFFIXES,
     OPT_NUMERIC_SUFFIXES_SHORT, OPT_SUFFIX_LENGTH,
 };
+use crate::strategy::Strategy;
 use clap::ArgMatches;
 use std::fmt;
 use std::path::is_separator;

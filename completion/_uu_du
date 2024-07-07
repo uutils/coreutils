@@ -1,0 +1,79 @@
+#compdef uu_du
+
+autoload -U is-at-least
+
+_uu_du() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-B+[scale sizes by SIZE before printing them. E.g., '\''-BM'\'' prints sizes in units of 1,048,576 bytes. See SIZE format below.]:SIZE: ' \
+'--block-size=[scale sizes by SIZE before printing them. E.g., '\''-BM'\'' prints sizes in units of 1,048,576 bytes. See SIZE format below.]:SIZE: ' \
+'-d+[print the total for a directory (or file, with --all) only if it is N or fewer levels below the command line argument;  --max-depth=0 is the same as --summarize]:N: ' \
+'--max-depth=[print the total for a directory (or file, with --all) only if it is N or fewer levels below the command line argument;  --max-depth=0 is the same as --summarize]:N: ' \
+'-t+[exclude entries smaller than SIZE if positive, or entries greater than SIZE if negative]:SIZE: ' \
+'--threshold=[exclude entries smaller than SIZE if positive, or entries greater than SIZE if negative]:SIZE: ' \
+'*--exclude=[exclude files that match PATTERN]:PATTERN: ' \
+'*-X+[exclude files that match any pattern in FILE]:FILE:_files' \
+'*--exclude-from=[exclude files that match any pattern in FILE]:FILE:_files' \
+'*--files0-from=[summarize device usage of the NUL-terminated file names specified in file F; if F is -, then read names from standard input]:FILE:_files' \
+'--time=[show time of the last modification of any file in the directory, or any of its subdirectories. If WORD is given, show time as WORD instead of modification time\: atime, access, use, ctime, status, birth or creation]' \
+'--time-style=[show times using style STYLE\: full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like '\''date'\'']:STYLE: ' \
+'--help[Print help information.]' \
+'-a[write counts for all files, not just directories]' \
+'--all[write counts for all files, not just directories]' \
+'--apparent-size[print apparent sizes, rather than disk usage although the apparent size is usually smaller, it may be larger due to holes in ('\''sparse'\'') files, internal fragmentation, indirect blocks, and the like]' \
+'-b[equivalent to '\''--apparent-size --block-size=1'\'']' \
+'--bytes[equivalent to '\''--apparent-size --block-size=1'\'']' \
+'-c[produce a grand total]' \
+'--total[produce a grand total]' \
+'-h[print sizes in human readable format (e.g., 1K 234M 2G)]' \
+'--human-readable[print sizes in human readable format (e.g., 1K 234M 2G)]' \
+'--inodes[list inode usage information instead of block usage like --block-size=1K]' \
+'-k[like --block-size=1K]' \
+'-l[count sizes many times if hard linked]' \
+'--count-links[count sizes many times if hard linked]' \
+'-L[follow all symbolic links]' \
+'--dereference[follow all symbolic links]' \
+'-D[follow only symlinks that are listed on the command line]' \
+'-H[follow only symlinks that are listed on the command line]' \
+'--dereference-args[follow only symlinks that are listed on the command line]' \
+'-P[don'\''t follow any symbolic links (this is the default)]' \
+'--no-dereference[don'\''t follow any symbolic links (this is the default)]' \
+'-m[like --block-size=1M]' \
+'-0[end each output line with 0 byte rather than newline]' \
+'--null[end each output line with 0 byte rather than newline]' \
+'-S[do not include size of subdirectories]' \
+'--separate-dirs[do not include size of subdirectories]' \
+'-s[display only a total for each argument]' \
+'--summarize[display only a total for each argument]' \
+'--si[like -h, but use powers of 1000 not 1024]' \
+'-x[skip directories on different file systems]' \
+'--one-file-system[skip directories on different file systems]' \
+'-v[verbose mode (option not present in GNU/Coreutils)]' \
+'--verbose[verbose mode (option not present in GNU/Coreutils)]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::FILE:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_du_commands] )) ||
+_uu_du_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_du commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_du" ]; then
+    _uu_du "$@"
+else
+    compdef _uu_du uu_du
+fi

@@ -5,45 +5,29 @@
 
 // spell-checker:ignore (ToDO) allocs bset dflag cflag sflag tflag
 
-mod operation;
-mod unicode_table;
-
-use clap::{crate_version, Arg, ArgAction, Command};
-use operation::{
+use crate::operation::{
     translate_input, Sequence, SqueezeOperation, SymbolTranslator, TranslateOperation,
 };
 use std::io::{stdin, stdout, BufWriter};
-use uucore::{format_usage, help_about, help_section, help_usage, show};
+use uucore::show;
 
 use crate::operation::DeleteOperation;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 
-const ABOUT: &str = help_about!("tr.md");
-const AFTER_HELP: &str = help_section!("after help", "tr.md");
-const USAGE: &str = help_usage!("tr.md");
-
-mod options {
-    pub const COMPLEMENT: &str = "complement";
-    pub const DELETE: &str = "delete";
-    pub const SQUEEZE: &str = "squeeze-repeats";
-    pub const TRUNCATE_SET1: &str = "truncate-set1";
-    pub const SETS: &str = "sets";
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().after_help(AFTER_HELP).try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let delete_flag = matches.get_flag(options::DELETE);
-    let complement_flag = matches.get_flag(options::COMPLEMENT);
-    let squeeze_flag = matches.get_flag(options::SQUEEZE);
-    let truncate_set1_flag = matches.get_flag(options::TRUNCATE_SET1);
+    let delete_flag = matches.get_flag(crate::options::DELETE);
+    let complement_flag = matches.get_flag(crate::options::COMPLEMENT);
+    let squeeze_flag = matches.get_flag(crate::options::SQUEEZE);
+    let truncate_set1_flag = matches.get_flag(crate::options::TRUNCATE_SET1);
 
     // Ultimately this should be OsString, but we might want to wait for the
     // pattern API on OsStr
     let sets: Vec<_> = matches
-        .get_many::<String>(options::SETS)
+        .get_many::<String>(crate::options::SETS)
         .into_iter()
         .flatten()
         .map(ToOwned::to_owned)
@@ -149,51 +133,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         translate_input(&mut locked_stdin, &mut buffered_stdout, op);
     }
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .trailing_var_arg(true)
-        .arg(
-            Arg::new(options::COMPLEMENT)
-                .visible_short_alias('C')
-                .short('c')
-                .long(options::COMPLEMENT)
-                .help("use the complement of SET1")
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::COMPLEMENT),
-        )
-        .arg(
-            Arg::new(options::DELETE)
-                .short('d')
-                .long(options::DELETE)
-                .help("delete characters in SET1, do not translate")
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::DELETE),
-        )
-        .arg(
-            Arg::new(options::SQUEEZE)
-                .long(options::SQUEEZE)
-                .short('s')
-                .help(
-                    "replace each sequence of a repeated character that is \
-                     listed in the last specified SET, with a single occurrence \
-                     of that character",
-                )
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::SQUEEZE),
-        )
-        .arg(
-            Arg::new(options::TRUNCATE_SET1)
-                .long(options::TRUNCATE_SET1)
-                .short('t')
-                .help("first truncate SET1 to length of SET2")
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::TRUNCATE_SET1),
-        )
-        .arg(Arg::new(options::SETS).num_args(1..))
 }

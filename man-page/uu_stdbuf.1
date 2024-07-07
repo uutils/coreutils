@@ -1,0 +1,44 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_stdbuf 1  "uu_stdbuf 0.0.27" 
+.SH NAME
+uu_stdbuf \- Run `COMMAND`, with modified buffering operations for its standard streams.
+
+Mandatory arguments to long options are mandatory for short options too.
+.SH SYNOPSIS
+\fBuu_stdbuf\fR [\fB\-i\fR|\fB\-\-input\fR] [\fB\-o\fR|\fB\-\-output\fR] [\fB\-e\fR|\fB\-\-error\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIcommand\fR> 
+.SH DESCRIPTION
+Run `COMMAND`, with modified buffering operations for its standard streams.
+.PP
+Mandatory arguments to long options are mandatory for short options too.
+.SH OPTIONS
+.TP
+\fB\-i\fR, \fB\-\-input\fR=\fIMODE\fR
+adjust standard input stream buffering
+.TP
+\fB\-o\fR, \fB\-\-output\fR=\fIMODE\fR
+adjust standard output stream buffering
+.TP
+\fB\-e\fR, \fB\-\-error\fR=\fIMODE\fR
+adjust standard error stream buffering
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+If MODE is \*(AqL\*(Aq the corresponding stream will be line buffered.
+This option is invalid with standard input.
+
+If MODE is \*(Aq0\*(Aq the corresponding stream will be unbuffered.
+
+Otherwise, MODE is a number which may be followed by one of the following:
+
+KB 1000, K 1024, MB 1000*1000, M 1024*1024, and so on for G, T, P, E, Z, Y.
+In this case the corresponding stream will be fully buffered with the buffer size set to MODE bytes.
+
+NOTE: If COMMAND adjusts the buffering of its standard streams (tee does for e.g.) then that will override corresponding settings changed by stdbuf.
+Also some filters (like dd and cat etc.) don\*(Aqt use streams for I/O, and are thus unaffected by stdbuf settings.
+.SH VERSION
+v0.0.27

@@ -1,0 +1,42 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_mktemp 1  "uu_mktemp 0.0.27" 
+.SH NAME
+uu_mktemp \- Create a temporary file or directory.
+.SH SYNOPSIS
+\fBuu_mktemp\fR [\fB\-d\fR|\fB\-\-directory\fR] [\fB\-u\fR|\fB\-\-dry\-run\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-\-suffix\fR] [\fB\-p \fR] [\fB\-\-tmpdir\fR] [\fB\-t \fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fItemplate\fR] 
+.SH DESCRIPTION
+Create a temporary file or directory.
+.SH OPTIONS
+.TP
+\fB\-d\fR, \fB\-\-directory\fR
+Make a directory instead of a file
+.TP
+\fB\-u\fR, \fB\-\-dry\-run\fR
+do not create anything; merely print a name (unsafe)
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+Fail silently if an error occurs.
+.TP
+\fB\-\-suffix\fR=\fISUFFIX\fR
+append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. This option is implied if TEMPLATE does not end with X.
+.TP
+\fB\-p\fR=\fIDIR\fR
+short form of \-\-tmpdir
+.TP
+\fB\-\-tmpdir\fR=\fIDIR\fR
+interpret TEMPLATE relative to DIR; if DIR is not specified, use $TMPDIR ($TMP on windows) if set, else /tmp. With this option, TEMPLATE must not be an absolute name; unlike with \-t, TEMPLATE may contain slashes, but mktemp creates only the final component
+.TP
+\fB\-t\fR
+Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) to create a filename template [deprecated]
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fItemplate\fR]
+
+.SH VERSION
+v0.0.27

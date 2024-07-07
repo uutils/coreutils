@@ -4681,7 +4681,7 @@ fn test_gnu_args_b() {
         .arg("-b")
         .pipe_in("x\n".repeat(512 * 10 / 2 + 1))
         .succeeds()
-        .stdout_only(&"x\n".repeat(512 * 10 / 2));
+        .stdout_only("x\n".repeat(512 * 10 / 2));
 }
 
 #[test]

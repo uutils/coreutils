@@ -9,10 +9,11 @@ use std::path::Path;
 use std::ptr::NonNull;
 use std::{io, iter, ptr, slice};
 
+use crate::chcon::os_str_to_c_string;
 use crate::errors::{Error, Result};
-use crate::os_str_to_c_string;
 
 #[derive(Debug)]
+#[allow(clippy::upper_case_acronyms)]
 pub(crate) struct FTS {
     fts: ptr::NonNull<fts_sys::FTS>,
 

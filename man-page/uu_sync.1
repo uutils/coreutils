@@ -1,0 +1,27 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_sync 1  "uu_sync 0.0.27" 
+.SH NAME
+uu_sync \- Synchronize cached writes to persistent storage
+.SH SYNOPSIS
+\fBuu_sync\fR [\fB\-f\fR|\fB\-\-file\-system\fR] [\fB\-d\fR|\fB\-\-data\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfiles\fR] 
+.SH DESCRIPTION
+Synchronize cached writes to persistent storage
+.SH OPTIONS
+.TP
+\fB\-f\fR, \fB\-\-file\-system\fR
+sync the file systems that contain the files (Linux and Windows only)
+.TP
+\fB\-d\fR, \fB\-\-data\fR
+sync only file data, no unneeded metadata (Linux only)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfiles\fR]
+
+.SH VERSION
+v0.0.27

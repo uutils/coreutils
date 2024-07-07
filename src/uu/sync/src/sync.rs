@@ -5,7 +5,6 @@
 
 /* Last synced with: sync (GNU coreutils) 8.13 */
 
-use clap::{crate_version, Arg, ArgAction, Command};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::errno::Errno;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -17,17 +16,6 @@ use uucore::display::Quotable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage};
-
-const ABOUT: &str = help_about!("sync.md");
-const USAGE: &str = help_usage!("sync.md");
-
-pub mod options {
-    pub static FILE_SYSTEM: &str = "file-system";
-    pub static DATA: &str = "data";
-}
-
-static ARG_FILES: &str = "files";
 
 #[cfg(unix)]
 mod platform {
@@ -180,14 +168,14 @@ mod platform {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let files: Vec<String> = matches
-        .get_many::<String>(ARG_FILES)
+        .get_many::<String>(crate::options::ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    if matches.get_flag(options::DATA) && files.is_empty() {
+    if matches.get_flag(crate::options::DATA) && files.is_empty() {
         return Err(USimpleError::new(1, "--data needs at least one argument"));
     }
 
@@ -215,45 +203,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     #[allow(clippy::if_same_then_else)]
-    if matches.get_flag(options::FILE_SYSTEM) {
+    if matches.get_flag(crate::options::FILE_SYSTEM) {
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
         syncfs(files)?;
-    } else if matches.get_flag(options::DATA) {
+    } else if matches.get_flag(crate::options::DATA) {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         fdatasync(files)?;
     } else {
         sync()?;
     }
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::FILE_SYSTEM)
-                .short('f')
-                .long(options::FILE_SYSTEM)
-                .conflicts_with(options::DATA)
-                .help("sync the file systems that contain the files (Linux and Windows only)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::DATA)
-                .short('d')
-                .long(options::DATA)
-                .conflicts_with(options::FILE_SYSTEM)
-                .help("sync only file data, no unneeded metadata (Linux only)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(ARG_FILES)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath),
-        )
 }
 
 fn sync() -> UResult<()> {

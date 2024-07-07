@@ -1,0 +1,64 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_rm 1  "uu_rm 0.0.27" 
+.SH NAME
+uu_rm \- Remove (unlink) the FILE(s)
+.SH SYNOPSIS
+\fBuu_rm\fR [\fB\-f\fR|\fB\-\-force\fR] [\fB\-i \fR] [\fB\-I \fR] [\fB\-\-interactive\fR] [\fB\-\-one\-file\-system\fR] [\fB\-\-no\-preserve\-root\fR] [\fB\-\-preserve\-root\fR] [\fB\-r\fR|\fB\-\-recursive\fR] [\fB\-d\fR|\fB\-\-dir\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfiles\fR] 
+.SH DESCRIPTION
+Remove (unlink) the FILE(s)
+.SH OPTIONS
+.TP
+\fB\-f\fR, \fB\-\-force\fR
+ignore nonexistent files and arguments, never prompt
+.TP
+\fB\-i\fR
+prompt before every removal
+.TP
+\fB\-I\fR
+prompt once before removing more than three files, or when removing recursively. Less intrusive than \-i, while still giving some protection against most mistakes
+.TP
+\fB\-\-interactive\fR=\fIWHEN\fR
+prompt according to WHEN: never, once (\-I), or always (\-i). Without WHEN, prompts always
+.TP
+\fB\-\-one\-file\-system\fR
+when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument (NOT IMPLEMENTED)
+.TP
+\fB\-\-no\-preserve\-root\fR
+do not treat \*(Aq/\*(Aq specially
+.TP
+\fB\-\-preserve\-root\fR
+do not remove \*(Aq/\*(Aq (default)
+.TP
+\fB\-r\fR, \fB\-\-recursive\fR
+remove directories and their contents recursively
+.TP
+\fB\-d\fR, \fB\-\-dir\fR
+remove empty directories
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+explain what is being done
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfiles\fR]
+
+.SH EXTRA
+By default, rm does not remove directories.  Use the \-\-recursive (\-r or \-R)
+option to remove each listed directory, too, along with all of its contents
+
+To remove a file whose name starts with a \*(Aq\-\*(Aq, for example \*(Aq\-foo\*(Aq,
+use one of these commands:
+rm \-\- \-foo
+
+rm ./\-foo
+
+Note that if you use rm to remove a file, it might be possible to recover
+some of its contents, given sufficient expertise and/or time.  For greater
+assurance that the contents are truly unrecoverable, consider using shred.
+.SH VERSION
+v0.0.27

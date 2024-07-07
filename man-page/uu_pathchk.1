@@ -1,0 +1,27 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_pathchk 1  "uu_pathchk 0.0.27" 
+.SH NAME
+uu_pathchk \- Check whether file names are valid or portable
+.SH SYNOPSIS
+\fBuu_pathchk\fR [\fB\-p \fR] [\fB\-P \fR] [\fB\-\-portability\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIpath\fR] 
+.SH DESCRIPTION
+Check whether file names are valid or portable
+.SH OPTIONS
+.TP
+\fB\-p\fR
+check for most POSIX systems
+.TP
+\fB\-P\fR
+check for empty names and leading "\-"
+.TP
+\fB\-\-portability\fR
+check for all POSIX systems (equivalent to \-p \-P)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

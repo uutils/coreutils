@@ -5,10 +5,8 @@
 
 //! Check if a file is ordered
 
-use crate::{
-    chunks::{self, Chunk, RecycledChunk},
-    compare_by, open, GlobalSettings, SortError,
-};
+use crate::chunks::{self, Chunk, RecycledChunk};
+use crate::sort::{compare_by, open, GlobalSettings, SortError};
 use itertools::Itertools;
 use std::{
     cmp::Ordering,

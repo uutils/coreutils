@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) fname, algo
-use clap::{crate_version, value_parser, Arg, ArgAction, Command};
 use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{self, stdin, stdout, BufReader, Read, Write};
@@ -13,18 +12,14 @@ use std::path::Path;
 use uucore::checksum::{
     calculate_blake2b_length, detect_algo, digest_reader, perform_checksum_validation,
     ChecksumError, ALGORITHM_OPTIONS_BLAKE2B, ALGORITHM_OPTIONS_BSD, ALGORITHM_OPTIONS_CRC,
-    ALGORITHM_OPTIONS_SYSV, SUPPORTED_ALGORITHMS,
+    ALGORITHM_OPTIONS_SYSV,
 };
 use uucore::{
     encoding,
     error::{FromIo, UResult, USimpleError},
-    format_usage, help_about, help_section, help_usage, show,
+    show,
     sum::{div_ceil, Digest},
 };
-
-const USAGE: &str = help_usage!("cksum.md");
-const ABOUT: &str = help_about!("cksum.md");
-const AFTER_HELP: &str = help_section!("after help", "cksum.md");
 
 #[derive(Debug, PartialEq)]
 enum OutputFormat {
@@ -167,24 +162,6 @@ where
     Ok(())
 }
 
-mod options {
-    pub const ALGORITHM: &str = "algorithm";
-    pub const FILE: &str = "file";
-    pub const UNTAGGED: &str = "untagged";
-    pub const TAG: &str = "tag";
-    pub const LENGTH: &str = "length";
-    pub const RAW: &str = "raw";
-    pub const BASE64: &str = "base64";
-    pub const CHECK: &str = "check";
-    pub const STRICT: &str = "strict";
-    pub const TEXT: &str = "text";
-    pub const BINARY: &str = "binary";
-    pub const STATUS: &str = "status";
-    pub const WARN: &str = "warn";
-    pub const IGNORE_MISSING: &str = "ignore-missing";
-    pub const QUIET: &str = "quiet";
-}
-
 /// Determines whether to prompt an asterisk (*) in the output.
 ///
 /// This function checks the `tag`, `binary`, and `had_reset` flags and returns a boolean
@@ -228,11 +205,11 @@ fn had_reset(args: &[String]) -> bool {
  * and "easier" to understand
  */
 fn handle_tag_text_binary_flags(matches: &clap::ArgMatches) -> UResult<(bool, bool)> {
-    let untagged: bool = matches.get_flag(options::UNTAGGED);
-    let tag: bool = matches.get_flag(options::TAG);
+    let untagged: bool = matches.get_flag(crate::options::UNTAGGED);
+    let tag: bool = matches.get_flag(crate::options::TAG);
     let tag: bool = tag || !untagged;
 
-    let binary_flag: bool = matches.get_flag(options::BINARY);
+    let binary_flag: bool = matches.get_flag(crate::options::BINARY);
 
     let args: Vec<String> = std::env::args().collect();
     let had_reset = had_reset(&args);
@@ -244,11 +221,11 @@ fn handle_tag_text_binary_flags(matches: &clap::ArgMatches) -> UResult<(bool, bo
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let check = matches.get_flag(options::CHECK);
+    let check = matches.get_flag(crate::options::CHECK);
 
-    let algo_name: &str = match matches.get_one::<String>(options::ALGORITHM) {
+    let algo_name: &str = match matches.get_one::<String>(crate::options::ALGORITHM) {
         Some(v) => v,
         None => {
             if check {
@@ -264,7 +241,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(ChecksumError::AlgorithmNotSupportedWithCheck.into());
     }
 
-    let input_length = matches.get_one::<usize>(options::LENGTH);
+    let input_length = matches.get_one::<usize>(crate::options::LENGTH);
 
     let length = match input_length {
         Some(length) => {
@@ -278,13 +255,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if check {
-        let text_flag = matches.get_flag(options::TEXT);
-        let binary_flag = matches.get_flag(options::BINARY);
-        let strict = matches.get_flag(options::STRICT);
-        let status = matches.get_flag(options::STATUS);
-        let warn = matches.get_flag(options::WARN);
-        let ignore_missing = matches.get_flag(options::IGNORE_MISSING);
-        let quiet = matches.get_flag(options::QUIET);
+        let text_flag = matches.get_flag(crate::options::TEXT);
+        let binary_flag = matches.get_flag(crate::options::BINARY);
+        let strict = matches.get_flag(crate::options::STRICT);
+        let status = matches.get_flag(crate::options::STATUS);
+        let warn = matches.get_flag(crate::options::WARN);
+        let ignore_missing = matches.get_flag(crate::options::IGNORE_MISSING);
+        let quiet = matches.get_flag(crate::options::QUIET);
 
         if binary_flag || text_flag {
             return Err(ChecksumError::BinaryTextConflict.into());
@@ -298,10 +275,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         // Execute the checksum validation based on the presence of files or the use of stdin
 
-        let files = matches.get_many::<String>(options::FILE).map_or_else(
-            || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
-            |files| files.map(OsStr::new).collect::<Vec<_>>(),
-        );
+        let files = matches
+            .get_many::<String>(crate::options::FILE)
+            .map_or_else(
+                || iter::once(OsStr::new("-")).collect::<Vec<_>>(),
+                |files| files.map(OsStr::new).collect::<Vec<_>>(),
+            );
         return perform_checksum_validation(
             files.iter().copied(),
             strict,
@@ -319,9 +298,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let algo = detect_algo(algo_name, length)?;
 
-    let output_format = if matches.get_flag(options::RAW) {
+    let output_format = if matches.get_flag(crate::options::RAW) {
         OutputFormat::Raw
-    } else if matches.get_flag(options::BASE64) {
+    } else if matches.get_flag(crate::options::BASE64) {
         OutputFormat::Base64
     } else {
         OutputFormat::Hexadecimal
@@ -337,7 +316,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         asterisk,
     };
 
-    match matches.get_many::<String>(options::FILE) {
+    match matches.get_many::<String>(crate::options::FILE) {
         Some(files) => cksum(opts, files.map(OsStr::new))?,
         None => cksum(opts, iter::once(OsStr::new("-")))?,
     };
@@ -345,130 +324,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::FILE)
-                .hide(true)
-                .action(clap::ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::ALGORITHM)
-                .long(options::ALGORITHM)
-                .short('a')
-                .help("select the digest type to use. See DIGEST below")
-                .value_name("ALGORITHM")
-                .value_parser(SUPPORTED_ALGORITHMS),
-        )
-        .arg(
-            Arg::new(options::UNTAGGED)
-                .long(options::UNTAGGED)
-                .help("create a reversed style checksum, without digest type")
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::TAG),
-        )
-        .arg(
-            Arg::new(options::TAG)
-                .long(options::TAG)
-                .help("create a BSD style checksum, undo --untagged (default)")
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::UNTAGGED),
-        )
-        .arg(
-            Arg::new(options::LENGTH)
-                .long(options::LENGTH)
-                .value_parser(value_parser!(usize))
-                .short('l')
-                .help(
-                    "digest length in bits; must not exceed the max for the blake2 algorithm \
-                    and must be a multiple of 8",
-                )
-                .action(ArgAction::Set),
-        )
-        .arg(
-            Arg::new(options::RAW)
-                .long(options::RAW)
-                .help("emit a raw binary digest, not hexadecimal")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::STRICT)
-                .long(options::STRICT)
-                .help("exit non-zero for improperly formatted checksum lines")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::CHECK)
-                .short('c')
-                .long(options::CHECK)
-                .help("read hashsums from the FILEs and check them")
-                .action(ArgAction::SetTrue)
-                .conflicts_with("tag"),
-        )
-        .arg(
-            Arg::new(options::BASE64)
-                .long(options::BASE64)
-                .help("emit a base64 digest, not hexadecimal")
-                .action(ArgAction::SetTrue)
-                // Even though this could easily just override an earlier '--raw',
-                // GNU cksum does not permit these flags to be combined:
-                .conflicts_with(options::RAW),
-        )
-        .arg(
-            Arg::new(options::TEXT)
-                .long(options::TEXT)
-                .short('t')
-                .hide(true)
-                .overrides_with(options::BINARY)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::BINARY)
-                .long(options::BINARY)
-                .short('b')
-                .hide(true)
-                .overrides_with(options::TEXT)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::WARN)
-                .short('w')
-                .long("warn")
-                .help("warn about improperly formatted checksum lines")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::STATUS)
-                .long("status")
-                .help("don't output anything, status code shows success")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::QUIET)
-                .long(options::QUIET)
-                .help("don't print OK for each successfully verified file")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::IGNORE_MISSING)
-                .long(options::IGNORE_MISSING)
-                .help("don't fail or report status for missing files")
-                .action(ArgAction::SetTrue),
-        )
-        .after_help(AFTER_HELP)
-}
-
 #[cfg(test)]
 mod tests {
     use super::had_reset;
-    use crate::calculate_blake2b_length;
-    use crate::prompt_asterisk;
+    use crate::cksum::calculate_blake2b_length;
+    use crate::cksum::prompt_asterisk;
 
     #[test]
     fn test_had_reset() {

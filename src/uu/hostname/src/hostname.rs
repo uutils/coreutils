@@ -5,26 +5,11 @@
 
 // spell-checker:ignore (ToDO) MAKEWORD addrs hashset
 
+use clap::ArgMatches;
 use std::net::ToSocketAddrs;
-use std::str;
 use std::{collections::hash_set::HashSet, ffi::OsString};
 
-use clap::builder::ValueParser;
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
-
-use uucore::{
-    error::{FromIo, UResult},
-    format_usage, help_about, help_usage,
-};
-
-const ABOUT: &str = help_about!("hostname.md");
-const USAGE: &str = help_usage!("hostname.md");
-
-static OPT_DOMAIN: &str = "domain";
-static OPT_IP_ADDRESS: &str = "ip-address";
-static OPT_FQDN: &str = "fqdn";
-static OPT_SHORT: &str = "short";
-static OPT_HOST: &str = "host";
+use uucore::error::{FromIo, UResult};
 
 #[cfg(windows)]
 mod wsa {
@@ -58,60 +43,15 @@ mod wsa {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     #[cfg(windows)]
     let _handle = wsa::start().map_err_context(|| "failed to start Winsock".to_owned())?;
 
-    match matches.get_one::<OsString>(OPT_HOST) {
+    match matches.get_one::<OsString>(crate::options::OPT_HOST) {
         None => display_hostname(&matches),
         Some(host) => hostname::set(host).map_err_context(|| "failed to set hostname".to_owned()),
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(OPT_DOMAIN)
-                .short('d')
-                .long("domain")
-                .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the name of the DNS domain if possible")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_IP_ADDRESS)
-                .short('i')
-                .long("ip-address")
-                .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the network address(es) of the host")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_FQDN)
-                .short('f')
-                .long("fqdn")
-                .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the FQDN (Fully Qualified Domain Name) (default)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_SHORT)
-                .short('s')
-                .long("short")
-                .overrides_with_all([OPT_DOMAIN, OPT_IP_ADDRESS, OPT_FQDN, OPT_SHORT])
-                .help("Display the short hostname (the portion before the first dot) if possible")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_HOST)
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::Hostname),
-        )
 }
 
 fn display_hostname(matches: &ArgMatches) -> UResult<()> {
@@ -120,7 +60,7 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         .to_string_lossy()
         .into_owned();
 
-    if matches.get_flag(OPT_IP_ADDRESS) {
+    if matches.get_flag(crate::options::OPT_IP_ADDRESS) {
         // XXX: to_socket_addrs needs hostname:port so append a dummy port and remove it later.
         // This was originally supposed to use std::net::lookup_host, but that seems to be
         // deprecated.  Perhaps we should use the dns-lookup crate?
@@ -150,10 +90,12 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
 
         Ok(())
     } else {
-        if matches.get_flag(OPT_SHORT) || matches.get_flag(OPT_DOMAIN) {
+        if matches.get_flag(crate::options::OPT_SHORT)
+            || matches.get_flag(crate::options::OPT_DOMAIN)
+        {
             let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
             if let Some(ci) = it.next() {
-                if matches.get_flag(OPT_SHORT) {
+                if matches.get_flag(crate::options::OPT_SHORT) {
                     println!("{}", &hostname[0..ci.0]);
                 } else {
                     println!("{}", &hostname[ci.0 + 1..]);

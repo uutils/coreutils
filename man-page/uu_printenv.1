@@ -1,0 +1,24 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_printenv 1  "uu_printenv 0.0.27" 
+.SH NAME
+uu_printenv \- Display the values of the specified environment VARIABLE(s), or (with no VARIABLE) display name and value pairs for them all.
+.SH SYNOPSIS
+\fBuu_printenv\fR [\fB\-0\fR|\fB\-\-null\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIvariables\fR] 
+.SH DESCRIPTION
+Display the values of the specified environment VARIABLE(s), or (with no VARIABLE) display name and value pairs for them all.
+.SH OPTIONS
+.TP
+\fB\-0\fR, \fB\-\-null\fR
+end each output line with 0 byte rather than newline
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIvariables\fR]
+
+.SH VERSION
+v0.0.27

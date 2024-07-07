@@ -1,0 +1,65 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_chcon 1  "uu_chcon 0.0.27" 
+.SH NAME
+uu_chcon \- Change the SELinux security context of each FILE to CONTEXT.
+With \-\-reference, change the security context of each FILE to that of RFILE.
+.SH SYNOPSIS
+\fBuu_chcon\fR [\fB\-\-help\fR] [\fB\-\-dereference\fR] [\fB\-h\fR|\fB\-\-no\-dereference\fR] [\fB\-\-preserve\-root\fR] [\fB\-\-no\-preserve\-root\fR] [\fB\-\-reference\fR] [\fB\-u\fR|\fB\-\-user\fR] [\fB\-r\fR|\fB\-\-role\fR] [\fB\-t\fR|\fB\-\-type\fR] [\fB\-l\fR|\fB\-\-range\fR] [\fB\-R\fR|\fB\-\-recursive\fR] [\fB\-H \fR] [\fB\-L \fR] [\fB\-P \fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIFILE\fR] 
+.SH DESCRIPTION
+Change the SELinux security context of each FILE to CONTEXT.
+With \-\-reference, change the security context of each FILE to that of RFILE.
+.SH OPTIONS
+.TP
+\fB\-\-help\fR
+Print help information.
+.TP
+\fB\-\-dereference\fR
+Affect the referent of each symbolic link (this is the default), rather than the symbolic link itself.
+.TP
+\fB\-h\fR, \fB\-\-no\-dereference\fR
+Affect symbolic links instead of any referenced file.
+.TP
+\fB\-\-preserve\-root\fR
+Fail to operate recursively on \*(Aq/\*(Aq.
+.TP
+\fB\-\-no\-preserve\-root\fR
+Do not treat \*(Aq/\*(Aq specially (the default).
+.TP
+\fB\-\-reference\fR=\fIRFILE\fR
+Use security context of RFILE, rather than specifying a CONTEXT value.
+.TP
+\fB\-u\fR, \fB\-\-user\fR=\fIUSER\fR
+Set user USER in the target security context.
+.TP
+\fB\-r\fR, \fB\-\-role\fR=\fIROLE\fR
+Set role ROLE in the target security context.
+.TP
+\fB\-t\fR, \fB\-\-type\fR=\fITYPE\fR
+Set type TYPE in the target security context.
+.TP
+\fB\-l\fR, \fB\-\-range\fR=\fIRANGE\fR
+Set range RANGE in the target security context.
+.TP
+\fB\-R\fR, \fB\-\-recursive\fR
+Operate on files and directories recursively.
+.TP
+\fB\-H\fR
+If a command line argument is a symbolic link to a directory, traverse it. Only valid when \-R is specified.
+.TP
+\fB\-L\fR
+Traverse every symbolic link to a directory encountered. Only valid when \-R is specified.
+.TP
+\fB\-P\fR
+Do not traverse any symbolic links (default). Only valid when \-R is specified.
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Output a diagnostic for every file processed.
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIFILE\fR]
+
+.SH VERSION
+v0.0.27

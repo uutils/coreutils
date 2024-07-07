@@ -1,0 +1,35 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_tr 1  "uu_tr 0.0.27" 
+.SH NAME
+uu_tr \- Translate or delete characters
+.SH SYNOPSIS
+\fBuu_tr\fR [\fB\-c\fR|\fB\-\-complement\fR] [\fB\-d\fR|\fB\-\-delete\fR] [\fB\-s\fR|\fB\-\-squeeze\-repeats\fR] [\fB\-t\fR|\fB\-\-truncate\-set1\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIsets\fR] 
+.SH DESCRIPTION
+Translate or delete characters
+.SH OPTIONS
+.TP
+\fB\-c\fR, \fB\-\-complement\fR
+use the complement of SET1
+.TP
+\fB\-d\fR, \fB\-\-delete\fR
+delete characters in SET1, do not translate
+.TP
+\fB\-s\fR, \fB\-\-squeeze\-repeats\fR
+replace each sequence of a repeated character that is listed in the last specified SET, with a single occurrence of that character
+.TP
+\fB\-t\fR, \fB\-\-truncate\-set1\fR
+first truncate SET1 to length of SET2
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIsets\fR]
+
+.SH EXTRA
+Translate, squeeze, and/or delete characters from standard input, writing to standard output.
+.SH VERSION
+v0.0.27

@@ -1,0 +1,34 @@
+#compdef uu_expr
+
+autoload -U is-at-least
+
+_uu_expr() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'--version[output version information and exit]' \
+'--help[display this help and exit]' \
+'::expression:' \
+&& ret=0
+}
+
+(( $+functions[_uu_expr_commands] )) ||
+_uu_expr_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_expr commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_expr" ]; then
+    _uu_expr "$@"
+else
+    compdef _uu_expr uu_expr
+fi

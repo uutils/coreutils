@@ -1,0 +1,48 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_head 1  "uu_head 0.0.27" 
+.SH NAME
+uu_head \- Print the first 10 lines of each `FILE` to standard output.
+With more than one `FILE`, precede each with a header giving the file name.
+With no `FILE`, or when `FILE` is `\-`, read standard input.
+
+Mandatory arguments to long flags are mandatory for short flags too.
+.SH SYNOPSIS
+\fBuu_head\fR [\fB\-c\fR|\fB\-\-bytes\fR] [\fB\-n\fR|\fB\-\-lines\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-z\fR|\fB\-\-zero\-terminated\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIFILE\fR] 
+.SH DESCRIPTION
+Print the first 10 lines of each `FILE` to standard output.
+With more than one `FILE`, precede each with a header giving the file name.
+With no `FILE`, or when `FILE` is `\-`, read standard input.
+.PP
+Mandatory arguments to long flags are mandatory for short flags too.
+.SH OPTIONS
+.TP
+\fB\-c\fR, \fB\-\-bytes\fR=\fI[\-]NUM\fR
+print the first NUM bytes of each file;
+with the leading \*(Aq\-\*(Aq, print all but the last
+NUM bytes of each file
+.TP
+\fB\-n\fR, \fB\-\-lines\fR=\fI[\-]NUM\fR
+print the first NUM lines instead of the first 10;
+with the leading \*(Aq\-\*(Aq, print all but the last
+NUM lines of each file
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+never print headers giving file names
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+always print headers giving file names
+.TP
+\fB\-z\fR, \fB\-\-zero\-terminated\fR
+line delimiter is NUL, not newline
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIFILE\fR]
+
+.SH VERSION
+v0.0.27

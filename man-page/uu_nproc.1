@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_nproc 1  "uu_nproc 0.0.27" 
+.SH NAME
+uu_nproc \- Print the number of cores available to the current process.
+If the `OMP_NUM_THREADS` or `OMP_THREAD_LIMIT` environment variables are set, then
+they will determine the minimum and maximum returned value respectively.
+.SH SYNOPSIS
+\fBuu_nproc\fR [\fB\-\-all\fR] [\fB\-\-ignore\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] 
+.SH DESCRIPTION
+Print the number of cores available to the current process.
+If the `OMP_NUM_THREADS` or `OMP_THREAD_LIMIT` environment variables are set, then
+they will determine the minimum and maximum returned value respectively.
+.SH OPTIONS
+.TP
+\fB\-\-all\fR
+print the number of cores available to the system
+.TP
+\fB\-\-ignore\fR=\fIN\fR
+ignore up to N cores
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

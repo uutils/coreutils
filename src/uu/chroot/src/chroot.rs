@@ -4,47 +4,35 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) NEWROOT Userspec pstatus chdir
-mod error;
 
 use crate::error::ChrootError;
-use clap::{crate_version, Arg, ArgAction, Command};
+
 use std::ffi::CString;
 use std::io::Error;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::process;
+use uucore::entries;
 use uucore::error::{set_exit_code, UClapError, UResult, UUsageError};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
-use uucore::{entries, format_usage, help_about, help_usage};
-
-static ABOUT: &str = help_about!("chroot.md");
-static USAGE: &str = help_usage!("chroot.md");
-
-mod options {
-    pub const NEWROOT: &str = "newroot";
-    pub const USER: &str = "user";
-    pub const GROUP: &str = "group";
-    pub const GROUPS: &str = "groups";
-    pub const USERSPEC: &str = "userspec";
-    pub const COMMAND: &str = "command";
-    pub const SKIP_CHDIR: &str = "skip-chdir";
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches = crate::uu_app()
+        .try_get_matches_from(args)
+        .with_exit_code(125)?;
 
     let default_shell: &'static str = "/bin/sh";
     let default_option: &'static str = "-i";
     let user_shell = std::env::var("SHELL");
 
-    let newroot: &Path = match matches.get_one::<String>(options::NEWROOT) {
+    let newroot: &Path = match matches.get_one::<String>(crate::options::NEWROOT) {
         Some(v) => Path::new(v),
         None => return Err(ChrootError::MissingNewRoot.into()),
     };
 
-    let skip_chdir = matches.get_flag(options::SKIP_CHDIR);
+    let skip_chdir = matches.get_flag(crate::options::SKIP_CHDIR);
     // We are resolving the path in case it is a symlink or /. or /../
     if skip_chdir
         && canonicalize(newroot, MissingHandling::Normal, ResolveMode::Logical)
@@ -62,7 +50,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(ChrootError::NoSuchDirectory(format!("{}", newroot.display())).into());
     }
 
-    let commands = match matches.get_many::<String>(options::COMMAND) {
+    let commands = match matches.get_many::<String>(crate::options::COMMAND) {
         Some(v) => v.map(|s| s.as_str()).collect(),
         None => vec![],
     };
@@ -111,85 +99,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .trailing_var_arg(true)
-        .arg(
-            Arg::new(options::NEWROOT)
-                .value_hint(clap::ValueHint::DirPath)
-                .hide(true)
-                .required(true)
-                .index(1),
-        )
-        .arg(
-            Arg::new(options::USER)
-                .short('u')
-                .long(options::USER)
-                .help("User (ID or name) to switch before running the program")
-                .value_name("USER"),
-        )
-        .arg(
-            Arg::new(options::GROUP)
-                .short('g')
-                .long(options::GROUP)
-                .help("Group (ID or name) to switch to")
-                .value_name("GROUP"),
-        )
-        .arg(
-            Arg::new(options::GROUPS)
-                .short('G')
-                .long(options::GROUPS)
-                .help("Comma-separated list of groups to switch to")
-                .value_name("GROUP1,GROUP2..."),
-        )
-        .arg(
-            Arg::new(options::USERSPEC)
-                .long(options::USERSPEC)
-                .help(
-                    "Colon-separated user and group to switch to. \
-                     Same as -u USER -g GROUP. \
-                     Userspec has higher preference than -u and/or -g",
-                )
-                .value_name("USER:GROUP"),
-        )
-        .arg(
-            Arg::new(options::SKIP_CHDIR)
-                .long(options::SKIP_CHDIR)
-                .help(
-                    "Use this option to not change the working directory \
-                    to / after changing the root directory to newroot, \
-                    i.e., inside the chroot.",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::COMMAND)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::CommandName)
-                .hide(true)
-                .index(2),
-        )
-}
-
 fn set_context(root: &Path, options: &clap::ArgMatches) -> UResult<()> {
-    let userspec_str = options.get_one::<String>(options::USERSPEC);
+    let userspec_str = options.get_one::<String>(crate::options::USERSPEC);
     let user_str = options
-        .get_one::<String>(options::USER)
+        .get_one::<String>(crate::options::USER)
         .map(|s| s.as_str())
         .unwrap_or_default();
     let group_str = options
-        .get_one::<String>(options::GROUP)
+        .get_one::<String>(crate::options::GROUP)
         .map(|s| s.as_str())
         .unwrap_or_default();
     let groups_str = options
-        .get_one::<String>(options::GROUPS)
+        .get_one::<String>(crate::options::GROUPS)
         .map(|s| s.as_str())
         .unwrap_or_default();
-    let skip_chdir = options.contains_id(options::SKIP_CHDIR);
+    let skip_chdir = options.contains_id(crate::options::SKIP_CHDIR);
     let userspec = match userspec_str {
         Some(u) => {
             let s: Vec<&str> = u.split(':').collect();

@@ -31,7 +31,7 @@
 //! * When `Err` is returned, the code corresponding with the error is used as exit code and the
 //! error message is displayed.
 //!
-//! Additionally, the errors can be displayed manually with the [`show`] and [`show_if_err`] macros:
+//! Additionally, the errors can be displayed manually with the [`crate::show`] and [`crate::show_if_err`] macros:
 //! ```ignore
 //! let res = Err(USimpleError::new(1, "Error!!"));
 //! show_if_err!(res);
@@ -41,7 +41,7 @@
 //! }
 //! ```
 //!
-//! **Note**: The [`show`] and [`show_if_err`] macros set the exit code of the program using
+//! **Note**: The [`crate::show`] and [`crate::show_if_err`] macros set the exit code of the program using
 //! [`set_exit_code`]. See the documentation on that function for more information.
 //!
 //! # Guidelines

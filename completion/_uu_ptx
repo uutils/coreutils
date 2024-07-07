@@ -1,0 +1,68 @@
+#compdef uu_ptx
+
+autoload -U is-at-least
+
+_uu_ptx() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-F+[use STRING for flagging line truncations]:STRING: ' \
+'--flag-truncation=[use STRING for flagging line truncations]:STRING: ' \
+'-M+[macro name to use instead of '\''xx'\'']:STRING: ' \
+'--macro-name=[macro name to use instead of '\''xx'\'']:STRING: ' \
+'-S+[for end of lines or end of sentences]:REGEXP: ' \
+'--sentence-regexp=[for end of lines or end of sentences]:REGEXP: ' \
+'-W+[use REGEXP to match each keyword]:REGEXP: ' \
+'--word-regexp=[use REGEXP to match each keyword]:REGEXP: ' \
+'-b+[word break characters in this FILE]:FILE:_files' \
+'--break-file=[word break characters in this FILE]:FILE:_files' \
+'-g+[gap size in columns between output fields]:NUMBER: ' \
+'--gap-size=[gap size in columns between output fields]:NUMBER: ' \
+'-i+[read ignore word list from FILE]:FILE:_files' \
+'--ignore-file=[read ignore word list from FILE]:FILE:_files' \
+'-o+[read only word list from this FILE]:FILE:_files' \
+'--only-file=[read only word list from this FILE]:FILE:_files' \
+'-w+[output width in columns, reference excluded]:NUMBER: ' \
+'--width=[output width in columns, reference excluded]:NUMBER: ' \
+'-A[output automatically generated references]' \
+'--auto-reference[output automatically generated references]' \
+'-G[behave more like System V '\''ptx'\'']' \
+'--traditional[behave more like System V '\''ptx'\'']' \
+'-O[generate output as roff directives]' \
+'--format=roff[generate output as roff directives]' \
+'-R[put references at right, not counted in -w]' \
+'--right-side-refs[put references at right, not counted in -w]' \
+'-T[generate output as TeX directives]' \
+'--format=tex[generate output as TeX directives]' \
+'-f[fold lower case to upper case for sorting]' \
+'--ignore-case[fold lower case to upper case for sorting]' \
+'-r[first field of each line is a reference]' \
+'--references[first field of each line is a reference]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::file:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_ptx_commands] )) ||
+_uu_ptx_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_ptx commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_ptx" ]; then
+    _uu_ptx "$@"
+else
+    compdef _uu_ptx uu_ptx
+fi

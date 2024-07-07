@@ -1,0 +1,45 @@
+#compdef uu_tr
+
+autoload -U is-at-least
+
+_uu_tr() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-c[use the complement of SET1]' \
+'-C[use the complement of SET1]' \
+'--complement[use the complement of SET1]' \
+'-d[delete characters in SET1, do not translate]' \
+'--delete[delete characters in SET1, do not translate]' \
+'-s[replace each sequence of a repeated character that is listed in the last specified SET, with a single occurrence of that character]' \
+'--squeeze-repeats[replace each sequence of a repeated character that is listed in the last specified SET, with a single occurrence of that character]' \
+'-t[first truncate SET1 to length of SET2]' \
+'--truncate-set1[first truncate SET1 to length of SET2]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'*::sets:' \
+&& ret=0
+}
+
+(( $+functions[_uu_tr_commands] )) ||
+_uu_tr_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_tr commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_tr" ]; then
+    _uu_tr "$@"
+else
+    compdef _uu_tr uu_tr
+fi

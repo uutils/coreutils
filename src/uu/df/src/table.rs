@@ -9,10 +9,11 @@
 //! collection of data rows ([`Row`]), one per filesystem.
 use unicode_width::UnicodeWidthStr;
 
+use crate::blocks::BlockSize;
 use crate::blocks::{to_magnitude_and_suffix, SuffixType};
 use crate::columns::{Alignment, Column};
+use crate::df::Options;
 use crate::filesystem::Filesystem;
-use crate::{BlockSize, Options};
 use uucore::fsext::{FsUsage, MountInfo};
 
 use std::fmt;
@@ -472,10 +473,14 @@ mod tests {
 
     use std::vec;
 
+    use uucore::fsext::MountInfo;
+
     use crate::blocks::HumanReadable;
     use crate::columns::Column;
+    use crate::df::Options;
+    use crate::filesystem::Filesystem;
+    use crate::table::BlockSize;
     use crate::table::{Header, HeaderMode, Row, RowFormatter, Table};
-    use crate::{BlockSize, Options};
 
     const COLUMNS_WITH_FS_TYPE: [Column; 7] = [
         Column::Source,
@@ -827,9 +832,9 @@ mod tests {
     #[test]
     fn test_row_converter_with_invalid_numbers() {
         // copy from wsl linux
-        let d = crate::Filesystem {
+        let d = Filesystem {
             file: None,
-            mount_info: crate::MountInfo {
+            mount_info: MountInfo {
                 dev_id: "28".to_string(),
                 dev_name: "none".to_string(),
                 fs_type: "9p".to_string(),
@@ -857,9 +862,9 @@ mod tests {
 
     #[test]
     fn test_table_column_width_computation_include_total_row() {
-        let d1 = crate::Filesystem {
+        let d1 = Filesystem {
             file: None,
-            mount_info: crate::MountInfo {
+            mount_info: MountInfo {
                 dev_id: "28".to_string(),
                 dev_name: "none".to_string(),
                 fs_type: "9p".to_string(),

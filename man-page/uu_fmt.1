@@ -1,0 +1,60 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_fmt 1  "uu_fmt 0.0.27" 
+.SH NAME
+uu_fmt \- Reformat paragraphs from input files (or stdin) to stdout.
+.SH SYNOPSIS
+\fBuu_fmt\fR [\fB\-c\fR|\fB\-\-crown\-margin\fR] [\fB\-t\fR|\fB\-\-tagged\-paragraph\fR] [\fB\-m\fR|\fB\-\-preserve\-headers\fR] [\fB\-s\fR|\fB\-\-split\-only\fR] [\fB\-u\fR|\fB\-\-uniform\-spacing\fR] [\fB\-p\fR|\fB\-\-prefix\fR] [\fB\-P\fR|\fB\-\-skip\-prefix\fR] [\fB\-x\fR|\fB\-\-exact\-prefix\fR] [\fB\-X\fR|\fB\-\-exact\-skip\-prefix\fR] [\fB\-w\fR|\fB\-\-width\fR] [\fB\-g\fR|\fB\-\-goal\fR] [\fB\-q\fR|\fB\-\-quick\fR] [\fB\-T\fR|\fB\-\-tab\-width\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIFILES\fR] 
+.SH DESCRIPTION
+Reformat paragraphs from input files (or stdin) to stdout.
+.SH OPTIONS
+.TP
+\fB\-c\fR, \fB\-\-crown\-margin\fR
+First and second line of paragraph may have different indentations, in which case the first line\*(Aqs indentation is preserved, and each subsequent line\*(Aqs indentation matches the second line.
+.TP
+\fB\-t\fR, \fB\-\-tagged\-paragraph\fR
+Like \-c, except that the first and second line of a paragraph *must* have different indentation or they are treated as separate paragraphs.
+.TP
+\fB\-m\fR, \fB\-\-preserve\-headers\fR
+Attempt to detect and preserve mail headers in the input. Be careful when combining this flag with \-p.
+.TP
+\fB\-s\fR, \fB\-\-split\-only\fR
+Split lines only, do not reflow.
+.TP
+\fB\-u\fR, \fB\-\-uniform\-spacing\fR
+Insert exactly one space between words, and two between sentences. Sentence breaks in the input are detected as [?!.] followed by two spaces or a newline; other punctuation is not interpreted as a sentence break.
+.TP
+\fB\-p\fR, \fB\-\-prefix\fR=\fIPREFIX\fR
+Reformat only lines beginning with PREFIX, reattaching PREFIX to reformatted lines. Unless \-x is specified, leading whitespace will be ignored when matching PREFIX.
+.TP
+\fB\-P\fR, \fB\-\-skip\-prefix\fR=\fIPSKIP\fR
+Do not reformat lines beginning with PSKIP. Unless \-X is specified, leading whitespace will be ignored when matching PSKIP
+.TP
+\fB\-x\fR, \fB\-\-exact\-prefix\fR
+PREFIX must match at the beginning of the line with no preceding whitespace.
+.TP
+\fB\-X\fR, \fB\-\-exact\-skip\-prefix\fR
+PSKIP must match at the beginning of the line with no preceding whitespace.
+.TP
+\fB\-w\fR, \fB\-\-width\fR=\fIWIDTH\fR
+Fill output lines up to a maximum of WIDTH columns, default 75. This can be specified as a negative number in the first argument.
+.TP
+\fB\-g\fR, \fB\-\-goal\fR=\fIGOAL\fR
+Goal width, default of 93% of WIDTH. Must be less than or equal to WIDTH.
+.TP
+\fB\-q\fR, \fB\-\-quick\fR
+Break lines more quickly at the expense of a potentially more ragged appearance.
+.TP
+\fB\-T\fR, \fB\-\-tab\-width\fR=\fITABWIDTH\fR
+Treat tabs as TABWIDTH spaces for determining line length, default 8. Note that this is used only for calculating line lengths; tabs are preserved in the output.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIFILES\fR]
+
+.SH VERSION
+v0.0.27

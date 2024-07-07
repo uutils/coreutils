@@ -10,7 +10,7 @@
 // spell-checker:ignore lnext rprnt susp swtch vdiscard veof veol verase vintr vkill vlnext vquit vreprint vstart vstop vsusp vswtc vwerase werase
 // spell-checker:ignore sigquit sigtstp
 
-use crate::Flag;
+use crate::stty::Flag;
 
 #[cfg(not(any(
     target_os = "freebsd",

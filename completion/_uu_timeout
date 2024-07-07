@@ -1,0 +1,45 @@
+#compdef uu_timeout
+
+autoload -U is-at-least
+
+_uu_timeout() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-k+[also send a KILL signal if COMMAND is still running this long after the initial signal was sent]: : ' \
+'--kill-after=[also send a KILL signal if COMMAND is still running this long after the initial signal was sent]: : ' \
+'-s+[specify the signal to be sent on timeout; SIGNAL may be a name like '\''HUP'\'' or a number; see '\''kill -l'\'' for a list of signals]:SIGNAL: ' \
+'--signal=[specify the signal to be sent on timeout; SIGNAL may be a name like '\''HUP'\'' or a number; see '\''kill -l'\'' for a list of signals]:SIGNAL: ' \
+'--foreground[when not running timeout directly from a shell prompt, allow COMMAND to read from the TTY and get TTY signals; in this mode, children of COMMAND will not be timed out]' \
+'--preserve-status[exit with the same status as COMMAND, even when the command times out]' \
+'-v[diagnose to stderr any signal sent upon timeout]' \
+'--verbose[diagnose to stderr any signal sent upon timeout]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':duration:' \
+':command:_command_names -e' \
+&& ret=0
+}
+
+(( $+functions[_uu_timeout_commands] )) ||
+_uu_timeout_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_timeout commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_timeout" ]; then
+    _uu_timeout "$@"
+else
+    compdef _uu_timeout uu_timeout
+fi

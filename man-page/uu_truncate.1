@@ -1,0 +1,50 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_truncate 1  "uu_truncate 0.0.27" 
+.SH NAME
+uu_truncate \- Shrink or extend the size of each file to the specified size.
+.SH SYNOPSIS
+\fBuu_truncate\fR [\fB\-o\fR|\fB\-\-io\-blocks\fR] [\fB\-c\fR|\fB\-\-no\-create\fR] [\fB\-r\fR|\fB\-\-reference\fR] [\fB\-s\fR|\fB\-\-size\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIFILE\fR> 
+.SH DESCRIPTION
+Shrink or extend the size of each file to the specified size.
+.SH OPTIONS
+.TP
+\fB\-o\fR, \fB\-\-io\-blocks\fR
+treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)
+.TP
+\fB\-c\fR, \fB\-\-no\-create\fR
+do not create files that do not exist
+.TP
+\fB\-r\fR, \fB\-\-reference\fR=\fIRFILE\fR
+base the size of each file on the size of RFILE
+.TP
+\fB\-s\fR, \fB\-\-size\fR=\fISIZE\fR
+set or adjust the size of each file according to SIZE, which is in bytes unless \-\-io\-blocks is specified
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+<\fIFILE\fR>
+
+.SH EXTRA
+SIZE is an integer with an optional prefix and optional unit.
+The available units (K, M, G, T, P, E, Z, and Y) use the following format:
+    \*(AqKB\*(Aq =>           1000 (kilobytes)
+    \*(AqK\*(Aq  =>           1024 (kibibytes)
+    \*(AqMB\*(Aq =>      1000*1000 (megabytes)
+    \*(AqM\*(Aq  =>      1024*1024 (mebibytes)
+    \*(AqGB\*(Aq => 1000*1000*1000 (gigabytes)
+    \*(AqG\*(Aq  => 1024*1024*1024 (gibibytes)
+SIZE may also be prefixed by one of the following to adjust the size of each
+file based on its current size:
+    \*(Aq+\*(Aq  => extend by
+    \*(Aq\-\*(Aq  => reduce by
+    \*(Aq<\*(Aq  => at most
+    \*(Aq>\*(Aq  => at least
+    \*(Aq/\*(Aq  => round down to multiple of
+    \*(Aq%\*(Aq  => round up to multiple of
+.SH VERSION
+v0.0.27

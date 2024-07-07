@@ -1,0 +1,27 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_tac 1  "uu_tac 0.0.27" 
+.SH NAME
+uu_tac \- Write each file to standard output, last line first.
+.SH SYNOPSIS
+\fBuu_tac\fR [\fB\-b\fR|\fB\-\-before\fR] [\fB\-r\fR|\fB\-\-regex\fR] [\fB\-s\fR|\fB\-\-separator\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Write each file to standard output, last line first.
+.SH OPTIONS
+.TP
+\fB\-b\fR, \fB\-\-before\fR
+attach the separator before instead of after
+.TP
+\fB\-r\fR, \fB\-\-regex\fR
+interpret the sequence as a regular expression
+.TP
+\fB\-s\fR, \fB\-\-separator\fR=\fISTRING\fR
+use STRING as the separator instead of newline
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

@@ -17,7 +17,8 @@ use memchr::memchr_iter;
 use self_cell::self_cell;
 use uucore::error::{UResult, USimpleError};
 
-use crate::{numeric_str_cmp::NumInfo, GeneralF64ParseResult, GlobalSettings, Line, SortError};
+use crate::numeric_str_cmp::NumInfo;
+use crate::sort::{GeneralF64ParseResult, GlobalSettings, Line, SortError};
 
 self_cell!(
     /// The chunk that is passed around between threads.

@@ -17,9 +17,6 @@ edition = "2021"
 
 readme.workspace = true
 
-[lib]
-path = "src/cp.rs"
-
 [dependencies]
 clap = { workspace = true }
 filetime = { workspace = true }

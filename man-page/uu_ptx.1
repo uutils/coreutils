@@ -1,0 +1,72 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_ptx 1  "uu_ptx 0.0.27" 
+.SH NAME
+uu_ptx \- Produce a permuted index of file contents
+Output a permuted index, including context, of the words in the input files.
+Mandatory arguments to long options are mandatory for short options too.
+With no FILE, or when FILE is \-, read standard input. Default is \*(Aq\-F /\*(Aq.
+.SH SYNOPSIS
+\fBuu_ptx\fR [\fB\-A\fR|\fB\-\-auto\-reference\fR] [\fB\-G\fR|\fB\-\-traditional\fR] [\fB\-F\fR|\fB\-\-flag\-truncation\fR] [\fB\-M\fR|\fB\-\-macro\-name\fR] [\fB\-O\fR|\fB\-\-format=roff\fR] [\fB\-R\fR|\fB\-\-right\-side\-refs\fR] [\fB\-S\fR|\fB\-\-sentence\-regexp\fR] [\fB\-T\fR|\fB\-\-format=tex\fR] [\fB\-W\fR|\fB\-\-word\-regexp\fR] [\fB\-b\fR|\fB\-\-break\-file\fR] [\fB\-f\fR|\fB\-\-ignore\-case\fR] [\fB\-g\fR|\fB\-\-gap\-size\fR] [\fB\-i\fR|\fB\-\-ignore\-file\fR] [\fB\-o\fR|\fB\-\-only\-file\fR] [\fB\-r\fR|\fB\-\-references\fR] [\fB\-w\fR|\fB\-\-width\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Produce a permuted index of file contents
+Output a permuted index, including context, of the words in the input files.
+Mandatory arguments to long options are mandatory for short options too.
+With no FILE, or when FILE is \-, read standard input. Default is \*(Aq\-F /\*(Aq.
+.SH OPTIONS
+.TP
+\fB\-A\fR, \fB\-\-auto\-reference\fR
+output automatically generated references
+.TP
+\fB\-G\fR, \fB\-\-traditional\fR
+behave more like System V \*(Aqptx\*(Aq
+.TP
+\fB\-F\fR, \fB\-\-flag\-truncation\fR=\fISTRING\fR
+use STRING for flagging line truncations
+.TP
+\fB\-M\fR, \fB\-\-macro\-name\fR=\fISTRING\fR
+macro name to use instead of \*(Aqxx\*(Aq
+.TP
+\fB\-O\fR, \fB\-\-format=roff\fR
+generate output as roff directives
+.TP
+\fB\-R\fR, \fB\-\-right\-side\-refs\fR
+put references at right, not counted in \-w
+.TP
+\fB\-S\fR, \fB\-\-sentence\-regexp\fR=\fIREGEXP\fR
+for end of lines or end of sentences
+.TP
+\fB\-T\fR, \fB\-\-format=tex\fR
+generate output as TeX directives
+.TP
+\fB\-W\fR, \fB\-\-word\-regexp\fR=\fIREGEXP\fR
+use REGEXP to match each keyword
+.TP
+\fB\-b\fR, \fB\-\-break\-file\fR=\fIFILE\fR
+word break characters in this FILE
+.TP
+\fB\-f\fR, \fB\-\-ignore\-case\fR
+fold lower case to upper case for sorting
+.TP
+\fB\-g\fR, \fB\-\-gap\-size\fR=\fINUMBER\fR
+gap size in columns between output fields
+.TP
+\fB\-i\fR, \fB\-\-ignore\-file\fR=\fIFILE\fR
+read ignore word list from FILE
+.TP
+\fB\-o\fR, \fB\-\-only\-file\fR=\fIFILE\fR
+read only word list from this FILE
+.TP
+\fB\-r\fR, \fB\-\-references\fR
+first field of each line is a reference
+.TP
+\fB\-w\fR, \fB\-\-width\fR=\fINUMBER\fR
+output width in columns, reference excluded
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

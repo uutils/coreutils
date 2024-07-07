@@ -1,0 +1,56 @@
+#compdef uu_cksum
+
+autoload -U is-at-least
+
+_uu_cksum() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-a+[select the digest type to use. See DIGEST below]:ALGORITHM:(sysv bsd crc md5 sha1 sha3 sha224 sha256 sha384 sha512 blake2b blake3 sm3 shake128 shake256)' \
+'--algorithm=[select the digest type to use. See DIGEST below]:ALGORITHM:(sysv bsd crc md5 sha1 sha3 sha224 sha256 sha384 sha512 blake2b blake3 sm3 shake128 shake256)' \
+'-l+[digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8]: : ' \
+'--length=[digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8]: : ' \
+'--untagged[create a reversed style checksum, without digest type]' \
+'--tag[create a BSD style checksum, undo --untagged (default)]' \
+'--raw[emit a raw binary digest, not hexadecimal]' \
+'--strict[exit non-zero for improperly formatted checksum lines]' \
+'(--tag)-c[read hashsums from the FILEs and check them]' \
+'(--tag)--check[read hashsums from the FILEs and check them]' \
+'(--raw)--base64[emit a base64 digest, not hexadecimal]' \
+'-t[]' \
+'--text[]' \
+'-b[]' \
+'--binary[]' \
+'-w[warn about improperly formatted checksum lines]' \
+'--warn[warn about improperly formatted checksum lines]' \
+'--status[don'\''t output anything, status code shows success]' \
+'--quiet[don'\''t print OK for each successfully verified file]' \
+'--ignore-missing[don'\''t fail or report status for missing files]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::file:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_cksum_commands] )) ||
+_uu_cksum_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_cksum commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_cksum" ]; then
+    _uu_cksum "$@"
+else
+    compdef _uu_cksum uu_cksum
+fi

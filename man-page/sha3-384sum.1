@@ -1,0 +1,51 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH sha3-384sum 1  "sha3-384sum 0.0.27" 
+.SH NAME
+sha3\-384sum \- Compute and check message digests.
+.SH SYNOPSIS
+\fBsha3\-384sum\fR [\fB\-b\fR|\fB\-\-binary\fR] [\fB\-c\fR|\fB\-\-check\fR] [\fB\-\-tag\fR] [\fB\-t\fR|\fB\-\-text\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-s\fR|\fB\-\-status\fR] [\fB\-\-strict\fR] [\fB\-\-ignore\-missing\fR] [\fB\-w\fR|\fB\-\-warn\fR] [\fB\-z\fR|\fB\-\-zero\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Compute and check message digests.
+.SH OPTIONS
+.TP
+\fB\-b\fR, \fB\-\-binary\fR
+read in binary mode
+.TP
+\fB\-c\fR, \fB\-\-check\fR
+read hashsums from the FILEs and check them
+.TP
+\fB\-\-tag\fR
+create a BSD\-style checksum
+.TP
+\fB\-t\fR, \fB\-\-text\fR
+read in text mode (default)
+.TP
+\fB\-q\fR, \fB\-\-quiet\fR
+don\*(Aqt print OK for each successfully verified file
+.TP
+\fB\-s\fR, \fB\-\-status\fR
+don\*(Aqt output anything, status code shows success
+.TP
+\fB\-\-strict\fR
+exit non\-zero for improperly formatted checksum lines
+.TP
+\fB\-\-ignore\-missing\fR
+don\*(Aqt fail or report status for missing files
+.TP
+\fB\-w\fR, \fB\-\-warn\fR
+warn about improperly formatted checksum lines
+.TP
+\fB\-z\fR, \fB\-\-zero\fR
+end each output line with NUL, not newline
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfile\fR]
+
+.SH VERSION
+v0.0.27

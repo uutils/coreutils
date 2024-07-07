@@ -1,0 +1,69 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_ln 1  "uu_ln 0.0.27" 
+.SH NAME
+uu_ln \- Make links between files.
+.SH SYNOPSIS
+\fBuu_ln\fR [\fB\-\-backup\fR] [\fB\-b \fR] [\fB\-f\fR|\fB\-\-force\fR] [\fB\-i\fR|\fB\-\-interactive\fR] [\fB\-n\fR|\fB\-\-no\-dereference\fR] [\fB\-L\fR|\fB\-\-logical\fR] [\fB\-P\fR|\fB\-\-physical\fR] [\fB\-s\fR|\fB\-\-symbolic\fR] [\fB\-S\fR|\fB\-\-suffix\fR] [\fB\-t\fR|\fB\-\-target\-directory\fR] [\fB\-T\fR|\fB\-\-no\-target\-directory\fR] [\fB\-r\fR|\fB\-\-relative\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIfiles\fR> 
+.SH DESCRIPTION
+Make links between files.
+.SH OPTIONS
+.TP
+\fB\-\-backup\fR=\fICONTROL\fR
+make a backup of each existing destination file
+.TP
+\fB\-b\fR
+like \-\-backup but does not accept an argument
+.TP
+\fB\-f\fR, \fB\-\-force\fR
+remove existing destination files
+.TP
+\fB\-i\fR, \fB\-\-interactive\fR
+prompt whether to remove existing destination files
+.TP
+\fB\-n\fR, \fB\-\-no\-dereference\fR
+treat LINK_NAME as a normal file if it is a symbolic link to a directory
+.TP
+\fB\-L\fR, \fB\-\-logical\fR
+follow TARGETs that are symbolic links
+.TP
+\fB\-P\fR, \fB\-\-physical\fR
+make hard links directly to symbolic links
+.TP
+\fB\-s\fR, \fB\-\-symbolic\fR
+make symbolic links instead of hard links
+.TP
+\fB\-S\fR, \fB\-\-suffix\fR=\fISUFFIX\fR
+override the usual backup suffix
+.TP
+\fB\-t\fR, \fB\-\-target\-directory\fR=\fIDIRECTORY\fR
+specify the DIRECTORY in which to create the links
+.TP
+\fB\-T\fR, \fB\-\-no\-target\-directory\fR
+treat LINK_NAME as a normal file always
+.TP
+\fB\-r\fR, \fB\-\-relative\fR
+create symbolic links relative to link location
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+print name of each linked file
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+<\fIfiles\fR>
+
+.SH EXTRA
+In the 1st form, create a link to TARGET with the name LINK_NAME.
+In the 2nd form, create a link to TARGET in the current directory.
+In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
+Create hard links by default, symbolic links with \-\-symbolic.
+By default, each destination (name of new link) should not already exist.
+When creating hard links, each TARGET must exist.  Symbolic links
+can hold arbitrary text; if later resolved, a relative link is
+interpreted in relation to its parent directory.
+.SH VERSION
+v0.0.27

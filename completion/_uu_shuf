@@ -1,0 +1,49 @@
+#compdef uu_shuf
+
+autoload -U is-at-least
+
+_uu_shuf() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'()-i+[treat each number LO through HI as an input line]:LO-HI: ' \
+'()--input-range=[treat each number LO through HI as an input line]:LO-HI: ' \
+'*-n+[output at most COUNT lines]:COUNT: ' \
+'*--head-count=[output at most COUNT lines]:COUNT: ' \
+'-o+[write result to FILE instead of standard output]:FILE:_files' \
+'--output=[write result to FILE instead of standard output]:FILE:_files' \
+'--random-source=[get random bytes from FILE]:FILE:_files' \
+'(-i --input-range)-e[treat each ARG as an input line]' \
+'(-i --input-range)--echo[treat each ARG as an input line]' \
+'-r[output lines can be repeated]' \
+'--repeat[output lines can be repeated]' \
+'-z[line delimiter is NUL, not newline]' \
+'--zero-terminated[line delimiter is NUL, not newline]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::file-or-args:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_shuf_commands] )) ||
+_uu_shuf_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_shuf commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_shuf" ]; then
+    _uu_shuf "$@"
+else
+    compdef _uu_shuf uu_shuf
+fi

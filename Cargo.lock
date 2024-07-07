@@ -2496,7 +2496,7 @@ dependencies = [
 name = "uu_base64"
 version = "0.0.27"
 dependencies = [
- "uu_base32",
+ "clap",
  "uucore",
 ]
 

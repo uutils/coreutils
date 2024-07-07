@@ -5,11 +5,6 @@
 
 // cSpell:ignore ilog wc wc's
 
-mod count_fast;
-mod countable;
-mod utf8;
-mod word_count;
-
 use std::{
     borrow::{Borrow, Cow},
     cmp::max,
@@ -20,16 +15,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use crate::utf8::{BufReadDecoder, BufReadDecoderError};
+use clap::ArgMatches;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
-use utf8::{BufReadDecoder, BufReadDecoderError};
 
 use uucore::{
     error::{FromIo, UError, UResult},
-    format_usage, help_about, help_usage,
     quoting_style::{escape_name, QuotingStyle},
-    shortcut_value_parser::ShortcutValueParser,
     show,
 };
 
@@ -70,20 +63,20 @@ impl Default for Settings<'_> {
 impl<'a> Settings<'a> {
     fn new(matches: &'a ArgMatches) -> Self {
         let files0_from = matches
-            .get_one::<OsString>(options::FILES0_FROM)
+            .get_one::<OsString>(crate::options::FILES0_FROM)
             .map(Into::into);
 
         let total_when = matches
-            .get_one::<String>(options::TOTAL)
+            .get_one::<String>(crate::options::TOTAL)
             .map(Into::into)
             .unwrap_or_default();
 
         let settings = Self {
-            show_bytes: matches.get_flag(options::BYTES),
-            show_chars: matches.get_flag(options::CHAR),
-            show_lines: matches.get_flag(options::LINES),
-            show_words: matches.get_flag(options::WORDS),
-            show_max_line_length: matches.get_flag(options::MAX_LINE_LENGTH),
+            show_bytes: matches.get_flag(crate::options::BYTES),
+            show_chars: matches.get_flag(crate::options::CHAR),
+            show_lines: matches.get_flag(crate::options::LINES),
+            show_words: matches.get_flag(crate::options::WORDS),
+            show_max_line_length: matches.get_flag(crate::options::MAX_LINE_LENGTH),
             files0_from,
             total_when,
         };
@@ -113,21 +106,6 @@ impl<'a> Settings<'a> {
     }
 }
 
-const ABOUT: &str = help_about!("wc.md");
-const USAGE: &str = help_usage!("wc.md");
-
-mod options {
-    pub static BYTES: &str = "bytes";
-    pub static CHAR: &str = "chars";
-    pub static FILES0_FROM: &str = "files0-from";
-    pub static LINES: &str = "lines";
-    pub static MAX_LINE_LENGTH: &str = "max-line-length";
-    pub static TOTAL: &str = "total";
-    pub static WORDS: &str = "words";
-}
-static ARG_FILES: &str = "files";
-static STDIN_REPR: &str = "-";
-
 static QS_ESCAPE: &QuotingStyle = &QuotingStyle::Shell {
     escape: true,
     always_quote: false,
@@ -152,8 +130,8 @@ enum Inputs<'a> {
 
 impl<'a> Inputs<'a> {
     fn new(matches: &'a ArgMatches) -> UResult<Self> {
-        let arg_files = matches.get_many::<OsString>(ARG_FILES);
-        let files0_from = matches.get_one::<OsString>(options::FILES0_FROM);
+        let arg_files = matches.get_many::<OsString>(crate::ARG_FILES);
+        let files0_from = matches.get_one::<OsString>(crate::options::FILES0_FROM);
 
         match (arg_files, files0_from) {
             (None, None) => Ok(Self::Stdin),
@@ -226,7 +204,7 @@ enum Input<'a> {
 
 impl From<PathBuf> for Input<'_> {
     fn from(p: PathBuf) -> Self {
-        if p.as_os_str() == STDIN_REPR {
+        if p.as_os_str() == crate::STDIN_REPR {
             Self::Stdin(StdinKind::Explicit)
         } else {
             Self::Path(Cow::Owned(p))
@@ -237,7 +215,7 @@ impl From<PathBuf> for Input<'_> {
 impl<'a, T: AsRef<Path> + ?Sized> From<&'a T> for Input<'a> {
     fn from(p: &'a T) -> Self {
         let p = p.as_ref();
-        if p.as_os_str() == STDIN_REPR {
+        if p.as_os_str() == crate::STDIN_REPR {
             Self::Stdin(StdinKind::Explicit)
         } else {
             Self::Path(Cow::Borrowed(p))
@@ -261,7 +239,7 @@ impl<'a> Input<'a> {
                 Some(s) if !s.contains('\n') => Cow::Borrowed(s),
                 _ => Cow::Owned(escape_name(path.as_os_str(), QS_ESCAPE)),
             }),
-            Self::Stdin(StdinKind::Explicit) => Some(Cow::Borrowed(STDIN_REPR)),
+            Self::Stdin(StdinKind::Explicit) => Some(Cow::Borrowed(crate::STDIN_REPR)),
             Self::Stdin(StdinKind::Implicit) => None,
         }
     }
@@ -360,7 +338,7 @@ impl WcError {
         match ctx {
             Some((input, idx)) => {
                 let path = match input {
-                    Input::Stdin(_) => STDIN_REPR.into(),
+                    Input::Stdin(_) => crate::STDIN_REPR.into(),
                     Input::Path(path) => escape_name(path.as_os_str(), QS_ESCAPE).into(),
                 };
                 Self::ZeroLengthFileNameCtx { path, idx }
@@ -382,87 +360,12 @@ impl UError for WcError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let settings = Settings::new(&matches);
     let inputs = Inputs::new(&matches)?;
 
     wc(&inputs, &settings)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::BYTES)
-                .short('c')
-                .long(options::BYTES)
-                .help("print the byte counts")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::CHAR)
-                .short('m')
-                .long(options::CHAR)
-                .help("print the character counts")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILES0_FROM)
-                .long(options::FILES0_FROM)
-                .value_name("F")
-                .help(concat!(
-                    "read input from the files specified by\n",
-                    "  NUL-terminated names in file F;\n",
-                    "  If F is - then read names from standard input"
-                ))
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::LINES)
-                .short('l')
-                .long(options::LINES)
-                .help("print the newline counts")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::MAX_LINE_LENGTH)
-                .short('L')
-                .long(options::MAX_LINE_LENGTH)
-                .help("print the length of the longest line")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::TOTAL)
-                .long(options::TOTAL)
-                .value_parser(ShortcutValueParser::new([
-                    "auto", "always", "only", "never",
-                ]))
-                .value_name("WHEN")
-                .hide_possible_values(true)
-                .help(concat!(
-                    "when to print a line with total counts;\n",
-                    "  WHEN can be: auto, always, only, never"
-                )),
-        )
-        .arg(
-            Arg::new(options::WORDS)
-                .short('w')
-                .long(options::WORDS)
-                .help("print the word counts")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(ARG_FILES)
-                .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::FilePath),
-        )
 }
 
 fn word_count_from_reader<T: WordCountable>(
@@ -749,7 +652,7 @@ type InputIterItem<'a> = Result<Input<'a>, Box<dyn UError>>;
 /// To be used with `--files0-from=-`, this applies a filter on the results of files0_iter to
 /// translate '-' into the appropriate error.
 fn files0_iter_stdin<'a>() -> impl Iterator<Item = InputIterItem<'a>> {
-    files0_iter(io::stdin().lock(), STDIN_REPR.into()).map(|i| match i {
+    files0_iter(io::stdin().lock(), crate::STDIN_REPR.into()).map(|i| match i {
         Ok(Input::Stdin(_)) => Err(WcError::StdinReprNotAllowed.into()),
         _ => i,
     })
@@ -776,7 +679,7 @@ fn files0_iter<'a>(
         io::BufReader::new(r)
             .split(b'\0')
             .map(move |res| match res {
-                Ok(p) if p == STDIN_REPR.as_bytes() => Ok(Input::Stdin(StdinKind::Explicit)),
+                Ok(p) if p == crate::STDIN_REPR.as_bytes() => Ok(Input::Stdin(StdinKind::Explicit)),
                 Ok(p) => {
                     // On Unix systems, OsStrings are just strings of bytes, not necessarily UTF-8.
                     #[cfg(unix)]

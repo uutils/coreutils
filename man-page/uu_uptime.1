@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_uptime 1  "uu_uptime 0.0.27" 
+.SH NAME
+uu_uptime \- Display the current time, the length of time the system has been up,
+the number of users on the system, and the average number of jobs
+in the run queue over the last 1, 5 and 15 minutes.
+.SH SYNOPSIS
+\fBuu_uptime\fR [\fB\-s\fR|\fB\-\-since\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIpath\fR] 
+.SH DESCRIPTION
+Display the current time, the length of time the system has been up,
+the number of users on the system, and the average number of jobs
+in the run queue over the last 1, 5 and 15 minutes.
+.SH OPTIONS
+.TP
+\fB\-s\fR, \fB\-\-since\fR
+system up since
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIpath\fR]
+file to search boot time from
+.SH VERSION
+v0.0.27

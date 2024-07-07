@@ -4,9 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
-mod error;
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use memchr::memmem;
 use memmap2::Mmap;
 use std::io::{stdin, stdout, BufWriter, Read, Write};
@@ -17,28 +15,18 @@ use std::{
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::error::UResult;
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::show;
 
 use crate::error::TacError;
 
-static USAGE: &str = help_usage!("tac.md");
-static ABOUT: &str = help_about!("tac.md");
-
-mod options {
-    pub static BEFORE: &str = "before";
-    pub static REGEX: &str = "regex";
-    pub static SEPARATOR: &str = "separator";
-    pub static FILE: &str = "file";
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let before = matches.get_flag(options::BEFORE);
-    let regex = matches.get_flag(options::REGEX);
+    let before = matches.get_flag(crate::options::BEFORE);
+    let regex = matches.get_flag(crate::options::REGEX);
     let raw_separator = matches
-        .get_one::<String>(options::SEPARATOR)
+        .get_one::<String>(crate::options::SEPARATOR)
         .map(|s| s.as_str())
         .unwrap_or("\n");
     let separator = if raw_separator.is_empty() {
@@ -47,47 +35,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         raw_separator
     };
 
-    let files: Vec<&str> = match matches.get_many::<String>(options::FILE) {
+    let files: Vec<&str> = match matches.get_many::<String>(crate::options::FILE) {
         Some(v) => v.map(|s| s.as_str()).collect(),
         None => vec!["-"],
     };
 
     tac(&files, before, regex, separator)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::BEFORE)
-                .short('b')
-                .long(options::BEFORE)
-                .help("attach the separator before instead of after")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::REGEX)
-                .short('r')
-                .long(options::REGEX)
-                .help("interpret the sequence as a regular expression")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SEPARATOR)
-                .short('s')
-                .long(options::SEPARATOR)
-                .help("use STRING as the separator instead of newline")
-                .value_name("STRING"),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .hide(true)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
 }
 
 /// Print lines of a buffer in reverse, with line separator given as a regex.

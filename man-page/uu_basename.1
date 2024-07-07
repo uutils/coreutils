@@ -1,0 +1,29 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_basename 1  "uu_basename 0.0.27" 
+.SH NAME
+uu_basename \- Print NAME with any leading directory components removed
+If specified, also remove a trailing SUFFIX
+.SH SYNOPSIS
+\fBuu_basename\fR [\fB\-a\fR|\fB\-\-multiple\fR] [\fB\-s\fR|\fB\-\-suffix\fR] [\fB\-z\fR|\fB\-\-zero\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIname\fR] 
+.SH DESCRIPTION
+Print NAME with any leading directory components removed
+If specified, also remove a trailing SUFFIX
+.SH OPTIONS
+.TP
+\fB\-a\fR, \fB\-\-multiple\fR
+support multiple arguments and treat each as a NAME
+.TP
+\fB\-s\fR, \fB\-\-suffix\fR=\fISUFFIX\fR
+remove a trailing SUFFIX; implies \-a
+.TP
+\fB\-z\fR, \fB\-\-zero\fR
+end each output line with NUL, not newline
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

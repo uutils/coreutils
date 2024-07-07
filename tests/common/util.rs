@@ -1522,12 +1522,12 @@ impl UCommand {
     ///
     /// These __defaults__ are:
     /// * `bin_path`: Depending on the platform and os, the native shell (unix -> `/bin/sh` etc.).
-    /// This default also requires to set the first argument to `-c` on unix (`/C` on windows) if
-    /// this argument wasn't specified explicitly by the user.
+    ///   This default also requires to set the first argument to `-c` on unix (`/C` on windows) if
+    ///   this argument wasn't specified explicitly by the user.
     /// * `util_name`: `None`. If neither `bin_path` nor `util_name` were given the arguments are
-    /// run in a shell (See `bin_path` above).
+    ///   run in a shell (See `bin_path` above).
     /// * `temp_dir`: If `current_dir` was not set, a new temporary directory will be created in
-    /// which this command will be run and `current_dir` will be set to this `temp_dir`.
+    ///   which this command will be run and `current_dir` will be set to this `temp_dir`.
     /// * `current_dir`: The temporary directory given by `temp_dir`.
     /// * `timeout`: `30 seconds`
     /// * `stdin`: `Stdio::null()`

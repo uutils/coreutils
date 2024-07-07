@@ -1,0 +1,46 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_shuf 1  "uu_shuf 0.0.27" 
+.SH NAME
+uu_shuf \- Shuffle the input by outputting a random permutation of input lines.
+Each output permutation is equally likely.
+With no FILE, or when FILE is \-, read standard input.
+.SH SYNOPSIS
+\fBuu_shuf\fR [\fB\-e\fR|\fB\-\-echo\fR] [\fB\-i\fR|\fB\-\-input\-range\fR] [\fB\-n\fR|\fB\-\-head\-count\fR] [\fB\-o\fR|\fB\-\-output\fR] [\fB\-\-random\-source\fR] [\fB\-r\fR|\fB\-\-repeat\fR] [\fB\-z\fR|\fB\-\-zero\-terminated\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\-or\-args\fR] 
+.SH DESCRIPTION
+Shuffle the input by outputting a random permutation of input lines.
+Each output permutation is equally likely.
+With no FILE, or when FILE is \-, read standard input.
+.SH OPTIONS
+.TP
+\fB\-e\fR, \fB\-\-echo\fR
+treat each ARG as an input line
+.TP
+\fB\-i\fR, \fB\-\-input\-range\fR=\fILO\-HI\fR
+treat each number LO through HI as an input line
+.TP
+\fB\-n\fR, \fB\-\-head\-count\fR=\fICOUNT\fR
+output at most COUNT lines
+.TP
+\fB\-o\fR, \fB\-\-output\fR=\fIFILE\fR
+write result to FILE instead of standard output
+.TP
+\fB\-\-random\-source\fR=\fIFILE\fR
+get random bytes from FILE
+.TP
+\fB\-r\fR, \fB\-\-repeat\fR
+output lines can be repeated
+.TP
+\fB\-z\fR, \fB\-\-zero\-terminated\fR
+line delimiter is NUL, not newline
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfile\-or\-args\fR]
+
+.SH VERSION
+v0.0.27

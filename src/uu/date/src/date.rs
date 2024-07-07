@@ -9,7 +9,7 @@ use chrono::format::{Item, StrftimeItems};
 use chrono::{DateTime, FixedOffset, Local, Offset, TimeDelta, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
-use clap::{crate_version, Arg, ArgAction, Command};
+
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
@@ -18,56 +18,9 @@ use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UResult, USimpleError};
-use uucore::{format_usage, help_about, help_usage, show};
+use uucore::show;
 #[cfg(windows)]
 use windows_sys::Win32::{Foundation::SYSTEMTIME, System::SystemInformation::SetSystemTime};
-
-use uucore::shortcut_value_parser::ShortcutValueParser;
-
-// Options
-const DATE: &str = "date";
-const HOURS: &str = "hours";
-const MINUTES: &str = "minutes";
-const SECONDS: &str = "seconds";
-const NS: &str = "ns";
-
-const ABOUT: &str = help_about!("date.md");
-const USAGE: &str = help_usage!("date.md");
-
-const OPT_DATE: &str = "date";
-const OPT_FORMAT: &str = "format";
-const OPT_FILE: &str = "file";
-const OPT_DEBUG: &str = "debug";
-const OPT_ISO_8601: &str = "iso-8601";
-const OPT_RFC_EMAIL: &str = "rfc-email";
-const OPT_RFC_3339: &str = "rfc-3339";
-const OPT_SET: &str = "set";
-const OPT_REFERENCE: &str = "reference";
-const OPT_UNIVERSAL: &str = "universal";
-const OPT_UNIVERSAL_2: &str = "utc";
-
-// Help strings
-
-static ISO_8601_HELP_STRING: &str = "output date/time in ISO 8601 format.
- FMT='date' for date only (the default),
- 'hours', 'minutes', 'seconds', or 'ns'
- for date and time to the indicated precision.
- Example: 2006-08-14T02:34:56-06:00";
-
-static RFC_5322_HELP_STRING: &str = "output date and time in RFC 5322 format.
- Example: Mon, 14 Aug 2006 02:34:56 -0600";
-
-static RFC_3339_HELP_STRING: &str = "output date/time in RFC 3339 format.
- FMT='date', 'seconds', or 'ns'
- for date and time to the indicated precision.
- Example: 2006-08-14 02:34:56-06:00";
-
-#[cfg(not(any(target_os = "macos", target_os = "redox")))]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING";
-#[cfg(target_os = "macos")]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on mac yet)";
-#[cfg(target_os = "redox")]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on redox yet)";
 
 /// Settings for this program, parsed from the command line
 struct Settings {
@@ -106,11 +59,11 @@ enum Iso8601Format {
 impl<'a> From<&'a str> for Iso8601Format {
     fn from(s: &str) -> Self {
         match s {
-            HOURS => Self::Hours,
-            MINUTES => Self::Minutes,
-            SECONDS => Self::Seconds,
-            NS => Self::Ns,
-            DATE => Self::Date,
+            crate::options::HOURS => Self::Hours,
+            crate::options::MINUTES => Self::Minutes,
+            crate::options::SECONDS => Self::Seconds,
+            crate::options::NS => Self::Ns,
+            crate::options::DATE => Self::Date,
             // Note: This is caught by clap via `possible_values`
             _ => unreachable!(),
         }
@@ -126,9 +79,9 @@ enum Rfc3339Format {
 impl<'a> From<&'a str> for Rfc3339Format {
     fn from(s: &str) -> Self {
         match s {
-            DATE => Self::Date,
-            SECONDS => Self::Seconds,
-            NS => Self::Ns,
+            crate::options::DATE => Self::Date,
+            crate::options::SECONDS => Self::Seconds,
+            crate::options::NS => Self::Ns,
             // Should be caught by clap
             _ => panic!("Invalid format: {s}"),
         }
@@ -138,9 +91,9 @@ impl<'a> From<&'a str> for Rfc3339Format {
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
+    let format = if let Some(form) = matches.get_one::<String>(crate::options::OPT_FORMAT) {
         if !form.starts_with('+') {
             return Err(USimpleError::new(
                 1,
@@ -150,14 +103,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let form = form[1..].to_string();
         Format::Custom(form)
     } else if let Some(fmt) = matches
-        .get_many::<String>(OPT_ISO_8601)
-        .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
+        .get_many::<String>(crate::options::OPT_ISO_8601)
+        .map(|mut iter| {
+            iter.next()
+                .unwrap_or(&crate::options::DATE.to_string())
+                .as_str()
+                .into()
+        })
     {
         Format::Iso8601(fmt)
-    } else if matches.get_flag(OPT_RFC_EMAIL) {
+    } else if matches.get_flag(crate::options::OPT_RFC_EMAIL) {
         Format::Rfc5322
     } else if let Some(fmt) = matches
-        .get_one::<String>(OPT_RFC_3339)
+        .get_one::<String>(crate::options::OPT_RFC_3339)
         .map(|s| s.as_str().into())
     {
         Format::Rfc3339(fmt)
@@ -165,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Format::Default
     };
 
-    let date_source = if let Some(date) = matches.get_one::<String>(OPT_DATE) {
+    let date_source = if let Some(date) = matches.get_one::<String>(crate::options::OPT_DATE) {
         let ref_time = Local::now();
         if let Ok(new_time) = parse_datetime::parse_datetime_at_date(ref_time, date.as_str()) {
             let duration = new_time.signed_duration_since(ref_time);
@@ -173,7 +131,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             DateSource::Custom(date.into())
         }
-    } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
+    } else if let Some(file) = matches.get_one::<String>(crate::options::OPT_FILE) {
         match file.as_ref() {
             "-" => DateSource::Stdin,
             _ => DateSource::File(file.into()),
@@ -182,7 +140,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         DateSource::Now
     };
 
-    let set_to = match matches.get_one::<String>(OPT_SET).map(parse_date) {
+    let set_to = match matches
+        .get_one::<String>(crate::options::OPT_SET)
+        .map(parse_date)
+    {
         None => None,
         Some(Err((input, _err))) => {
             return Err(USimpleError::new(
@@ -194,7 +155,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let settings = Settings {
-        utc: matches.get_flag(OPT_UNIVERSAL),
+        utc: matches.get_flag(crate::options::OPT_UNIVERSAL),
         format,
         date_source,
         set_to,
@@ -305,85 +266,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(OPT_DATE)
-                .short('d')
-                .long(OPT_DATE)
-                .value_name("STRING")
-                .help("display time described by STRING, not 'now'"),
-        )
-        .arg(
-            Arg::new(OPT_FILE)
-                .short('f')
-                .long(OPT_FILE)
-                .value_name("DATEFILE")
-                .value_hint(clap::ValueHint::FilePath)
-                .help("like --date; once for each line of DATEFILE"),
-        )
-        .arg(
-            Arg::new(OPT_ISO_8601)
-                .short('I')
-                .long(OPT_ISO_8601)
-                .value_name("FMT")
-                .value_parser(ShortcutValueParser::new([
-                    DATE, HOURS, MINUTES, SECONDS, NS,
-                ]))
-                .num_args(0..=1)
-                .default_missing_value(OPT_DATE)
-                .help(ISO_8601_HELP_STRING),
-        )
-        .arg(
-            Arg::new(OPT_RFC_EMAIL)
-                .short('R')
-                .long(OPT_RFC_EMAIL)
-                .help(RFC_5322_HELP_STRING)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_RFC_3339)
-                .long(OPT_RFC_3339)
-                .value_name("FMT")
-                .value_parser(ShortcutValueParser::new([DATE, SECONDS, NS]))
-                .help(RFC_3339_HELP_STRING),
-        )
-        .arg(
-            Arg::new(OPT_DEBUG)
-                .long(OPT_DEBUG)
-                .help("annotate the parsed date, and warn about questionable usage to stderr")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_REFERENCE)
-                .short('r')
-                .long(OPT_REFERENCE)
-                .value_name("FILE")
-                .value_hint(clap::ValueHint::AnyPath)
-                .help("display the last modification time of FILE"),
-        )
-        .arg(
-            Arg::new(OPT_SET)
-                .short('s')
-                .long(OPT_SET)
-                .value_name("STRING")
-                .help(OPT_SET_HELP_STRING),
-        )
-        .arg(
-            Arg::new(OPT_UNIVERSAL)
-                .short('u')
-                .long(OPT_UNIVERSAL)
-                .alias(OPT_UNIVERSAL_2)
-                .help("print or set Coordinated Universal Time (UTC)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(Arg::new(OPT_FORMAT))
 }
 
 /// Return the appropriate format string for the given settings.

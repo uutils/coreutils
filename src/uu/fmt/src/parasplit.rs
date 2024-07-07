@@ -10,8 +10,8 @@ use std::iter::Peekable;
 use std::slice::Iter;
 use unicode_width::UnicodeWidthChar;
 
-use crate::FileOrStdReader;
-use crate::FmtOptions;
+use crate::fmt::FileOrStdReader;
+use crate::fmt::FmtOptions;
 
 fn char_width(c: char) -> usize {
     if (c as usize) < 0xA0 {
@@ -69,8 +69,8 @@ pub struct FileLine {
 
 /// Iterator that produces a stream of Lines from a file
 pub struct FileLines<'a> {
-    opts: &'a FmtOptions,
-    lines: Lines<&'a mut FileOrStdReader>,
+    pub(crate) opts: &'a FmtOptions,
+    pub(crate) lines: Lines<&'a mut FileOrStdReader>,
 }
 
 impl<'a> FileLines<'a> {

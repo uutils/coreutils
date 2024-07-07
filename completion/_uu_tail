@@ -1,0 +1,57 @@
+#compdef uu_tail
+
+autoload -U is-at-least
+
+_uu_tail() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-c+[Number of bytes to print]: : ' \
+'--bytes=[Number of bytes to print]: : ' \
+'-f+[Print the file as it grows]' \
+'--follow=[Print the file as it grows]' \
+'-n+[Number of lines to print]: : ' \
+'--lines=[Number of lines to print]: : ' \
+'--pid=[With -f, terminate after process ID, PID dies]:PID: ' \
+'-s+[Number of seconds to sleep between polling the file when running with -f]:N: ' \
+'--sleep-interval=[Number of seconds to sleep between polling the file when running with -f]:N: ' \
+'--max-unchanged-stats=[Reopen a FILE which has not changed size after N (default 5) iterations to see if it has been unlinked or renamed (this is the usual case of rotated log files); This option is meaningful only when polling (i.e., with --use-polling) and when --follow=name]:N: ' \
+'-q[Never output headers giving file names]' \
+'--quiet[Never output headers giving file names]' \
+'--silent[Never output headers giving file names]' \
+'-v[Always output headers giving file names]' \
+'--verbose[Always output headers giving file names]' \
+'-z[Line delimiter is NUL, not newline]' \
+'--zero-terminated[Line delimiter is NUL, not newline]' \
+'--use-polling[Disable '\''inotify'\'' support and use polling instead]' \
+'--retry[Keep trying to open a file if it is inaccessible]' \
+'-F[Same as --follow=name --retry]' \
+'--presume-input-pipe[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'*::files:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_tail_commands] )) ||
+_uu_tail_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_tail commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_tail" ]; then
+    _uu_tail "$@"
+else
+    compdef _uu_tail uu_tail
+fi

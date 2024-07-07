@@ -5,11 +5,10 @@
 
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
-use uucore::{format_usage, help_about, help_section, help_usage, prompt_yes, show_error};
+use uucore::{prompt_yes, show_error};
 
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -84,49 +83,31 @@ impl UError for LnError {
     }
 }
 
-const ABOUT: &str = help_about!("ln.md");
-const USAGE: &str = help_usage!("ln.md");
-const AFTER_HELP: &str = help_section!("after help", "ln.md");
-
-mod options {
-    pub const FORCE: &str = "force";
-    //pub const DIRECTORY: &str = "directory";
-    pub const INTERACTIVE: &str = "interactive";
-    pub const NO_DEREFERENCE: &str = "no-dereference";
-    pub const SYMBOLIC: &str = "symbolic";
-    pub const LOGICAL: &str = "logical";
-    pub const PHYSICAL: &str = "physical";
-    pub const TARGET_DIRECTORY: &str = "target-directory";
-    pub const NO_TARGET_DIRECTORY: &str = "no-target-directory";
-    pub const RELATIVE: &str = "relative";
-    pub const VERBOSE: &str = "verbose";
-}
-
-static ARG_FILES: &str = "files";
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let after_help = format!(
         "{}\n\n{}",
-        AFTER_HELP,
+        crate::uu_args::AFTER_HELP,
         backup_control::BACKUP_CONTROL_LONG_HELP
     );
 
-    let matches = uu_app().after_help(after_help).try_get_matches_from(args)?;
+    let matches = crate::uu_app()
+        .after_help(after_help)
+        .try_get_matches_from(args)?;
 
     /* the list of files */
 
     let paths: Vec<PathBuf> = matches
-        .get_many::<String>(ARG_FILES)
+        .get_many::<String>(crate::uu_args::ARG_FILES)
         .unwrap()
         .map(PathBuf::from)
         .collect();
 
-    let symbolic = matches.get_flag(options::SYMBOLIC);
+    let symbolic = matches.get_flag(crate::options::SYMBOLIC);
 
-    let overwrite_mode = if matches.get_flag(options::FORCE) {
+    let overwrite_mode = if matches.get_flag(crate::options::FORCE) {
         OverwriteMode::Force
-    } else if matches.get_flag(options::INTERACTIVE) {
+    } else if matches.get_flag(crate::options::INTERACTIVE) {
         OverwriteMode::Interactive
     } else {
         OverwriteMode::NoClobber
@@ -136,7 +117,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
     // When we have "-L" or "-L -P", false otherwise
-    let logical = matches.get_flag(options::LOGICAL);
+    let logical = matches.get_flag(crate::options::LOGICAL);
 
     let settings = Settings {
         overwrite: overwrite_mode,
@@ -144,120 +125,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         suffix: backup_suffix,
         symbolic,
         logical,
-        relative: matches.get_flag(options::RELATIVE),
+        relative: matches.get_flag(crate::options::RELATIVE),
         target_dir: matches
-            .get_one::<String>(options::TARGET_DIRECTORY)
+            .get_one::<String>(crate::options::TARGET_DIRECTORY)
             .map(String::from),
-        no_target_dir: matches.get_flag(options::NO_TARGET_DIRECTORY),
-        no_dereference: matches.get_flag(options::NO_DEREFERENCE),
-        verbose: matches.get_flag(options::VERBOSE),
+        no_target_dir: matches.get_flag(crate::options::NO_TARGET_DIRECTORY),
+        no_dereference: matches.get_flag(crate::options::NO_DEREFERENCE),
+        verbose: matches.get_flag(crate::options::VERBOSE),
     };
 
     exec(&paths[..], &settings)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(backup_control::arguments::backup())
-        .arg(backup_control::arguments::backup_no_args())
-        /*.arg(
-            Arg::new(options::DIRECTORY)
-                .short('d')
-                .long(options::DIRECTORY)
-                .help("allow users with appropriate privileges to attempt to make hard links to directories")
-        )*/
-        .arg(
-            Arg::new(options::FORCE)
-                .short('f')
-                .long(options::FORCE)
-                .help("remove existing destination files")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::INTERACTIVE)
-                .short('i')
-                .long(options::INTERACTIVE)
-                .help("prompt whether to remove existing destination files")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::NO_DEREFERENCE)
-                .short('n')
-                .long(options::NO_DEREFERENCE)
-                .help(
-                    "treat LINK_NAME as a normal file if it is a \
-                     symbolic link to a directory",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::LOGICAL)
-                .short('L')
-                .long(options::LOGICAL)
-                .help("follow TARGETs that are symbolic links")
-                .overrides_with(options::PHYSICAL)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            // Not implemented yet
-            Arg::new(options::PHYSICAL)
-                .short('P')
-                .long(options::PHYSICAL)
-                .help("make hard links directly to symbolic links")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SYMBOLIC)
-                .short('s')
-                .long(options::SYMBOLIC)
-                .help("make symbolic links instead of hard links")
-                // override added for https://github.com/uutils/coreutils/issues/2359
-                .overrides_with(options::SYMBOLIC)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(backup_control::arguments::suffix())
-        .arg(
-            Arg::new(options::TARGET_DIRECTORY)
-                .short('t')
-                .long(options::TARGET_DIRECTORY)
-                .help("specify the DIRECTORY in which to create the links")
-                .value_name("DIRECTORY")
-                .value_hint(clap::ValueHint::DirPath)
-                .conflicts_with(options::NO_TARGET_DIRECTORY),
-        )
-        .arg(
-            Arg::new(options::NO_TARGET_DIRECTORY)
-                .short('T')
-                .long(options::NO_TARGET_DIRECTORY)
-                .help("treat LINK_NAME as a normal file always")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::RELATIVE)
-                .short('r')
-                .long(options::RELATIVE)
-                .help("create symbolic links relative to link location")
-                .requires(options::SYMBOLIC)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::VERBOSE)
-                .short('v')
-                .long(options::VERBOSE)
-                .help("print name of each linked file")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(ARG_FILES)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::AnyPath)
-                .required(true)
-                .num_args(1..),
-        )
 }
 
 fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {

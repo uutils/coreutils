@@ -5,15 +5,9 @@
 
 // spell-checker:ignore nbbbb ncccc hexdigit getmaxstdio
 
-mod filenames;
-mod number;
-mod platform;
-mod strategy;
-
 use crate::filenames::{FilenameIterator, Suffix, SuffixError};
 use crate::strategy::{NumberType, Strategy, StrategyError};
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command, ValueHint};
-use std::env;
+use clap::{parser::ValueSource, ArgMatches};
 use std::ffi::OsString;
 use std::fmt;
 use std::fs::{metadata, File};
@@ -25,35 +19,11 @@ use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::parse_size_u64;
 
 use uucore::uio_error;
-use uucore::{format_usage, help_about, help_section, help_usage};
-
-static OPT_BYTES: &str = "bytes";
-static OPT_LINE_BYTES: &str = "line-bytes";
-static OPT_LINES: &str = "lines";
-static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
-static OPT_FILTER: &str = "filter";
-static OPT_NUMBER: &str = "number";
-static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
-static OPT_NUMERIC_SUFFIXES_SHORT: &str = "-d";
-static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
-static OPT_HEX_SUFFIXES_SHORT: &str = "-x";
-static OPT_SUFFIX_LENGTH: &str = "suffix-length";
-static OPT_VERBOSE: &str = "verbose";
-static OPT_SEPARATOR: &str = "separator";
-static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
-static OPT_IO_BLKSIZE: &str = "-io-blksize";
-
-static ARG_INPUT: &str = "input";
-static ARG_PREFIX: &str = "prefix";
-
-const ABOUT: &str = help_about!("split.md");
-const USAGE: &str = help_usage!("split.md");
-const AFTER_HELP: &str = help_section!("after help", "split.md");
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     match Settings::from(&matches, &obs_lines) {
         Ok(settings) => split(&settings),
@@ -200,14 +170,14 @@ fn handle_preceding_options(
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
     if slice.starts_with("--") {
-        *preceding_long_opt_req_value = &slice[2..] == OPT_BYTES
-            || &slice[2..] == OPT_LINE_BYTES
-            || &slice[2..] == OPT_LINES
-            || &slice[2..] == OPT_ADDITIONAL_SUFFIX
-            || &slice[2..] == OPT_FILTER
-            || &slice[2..] == OPT_NUMBER
-            || &slice[2..] == OPT_SUFFIX_LENGTH
-            || &slice[2..] == OPT_SEPARATOR;
+        *preceding_long_opt_req_value = &slice[2..] == crate::options::OPT_BYTES
+            || &slice[2..] == crate::options::OPT_LINE_BYTES
+            || &slice[2..] == crate::options::OPT_LINES
+            || &slice[2..] == crate::options::OPT_ADDITIONAL_SUFFIX
+            || &slice[2..] == crate::options::OPT_FILTER
+            || &slice[2..] == crate::options::OPT_NUMBER
+            || &slice[2..] == crate::options::OPT_SUFFIX_LENGTH
+            || &slice[2..] == crate::options::OPT_SEPARATOR;
     }
     // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
     // following slice should be treaded as value for this option
@@ -224,165 +194,6 @@ fn handle_preceding_options(
         *preceding_short_opt_req_value = false;
         *preceding_long_opt_req_value = false;
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        // strategy (mutually exclusive)
-        .arg(
-            Arg::new(OPT_BYTES)
-                .short('b')
-                .long(OPT_BYTES)
-                .allow_hyphen_values(true)
-                .value_name("SIZE")
-                .help("put SIZE bytes per output file"),
-        )
-        .arg(
-            Arg::new(OPT_LINE_BYTES)
-                .short('C')
-                .long(OPT_LINE_BYTES)
-                .allow_hyphen_values(true)
-                .value_name("SIZE")
-                .help("put at most SIZE bytes of lines per output file"),
-        )
-        .arg(
-            Arg::new(OPT_LINES)
-                .short('l')
-                .long(OPT_LINES)
-                .allow_hyphen_values(true)
-                .value_name("NUMBER")
-                .default_value("1000")
-                .help("put NUMBER lines/records per output file"),
-        )
-        .arg(
-            Arg::new(OPT_NUMBER)
-                .short('n')
-                .long(OPT_NUMBER)
-                .allow_hyphen_values(true)
-                .value_name("CHUNKS")
-                .help("generate CHUNKS output files; see explanation below"),
-        )
-        // rest of the arguments
-        .arg(
-            Arg::new(OPT_ADDITIONAL_SUFFIX)
-                .long(OPT_ADDITIONAL_SUFFIX)
-                .allow_hyphen_values(true)
-                .value_name("SUFFIX")
-                .default_value("")
-                .help("additional SUFFIX to append to output file names"),
-        )
-        .arg(
-            Arg::new(OPT_FILTER)
-                .long(OPT_FILTER)
-                .allow_hyphen_values(true)
-                .value_name("COMMAND")
-                .value_hint(ValueHint::CommandName)
-                .help(
-                    "write to shell COMMAND; file name is $FILE (Currently not implemented for Windows)",
-                ),
-        )
-        .arg(
-            Arg::new(OPT_ELIDE_EMPTY_FILES)
-                .long(OPT_ELIDE_EMPTY_FILES)
-                .short('e')
-                .help("do not generate empty output files with '-n'")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
-                .short('d')
-                .action(ArgAction::SetTrue)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT
-                ])
-                .help("use numeric suffixes starting at 0, not alphabetic"),
-        )
-        .arg(
-            Arg::new(OPT_NUMERIC_SUFFIXES)
-                .long(OPT_NUMERIC_SUFFIXES)
-                .require_equals(true)
-                .num_args(0..=1)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT
-                ])
-                .value_name("FROM")
-                .help("same as -d, but allow setting the start value"),
-        )
-        .arg(
-            Arg::new(OPT_HEX_SUFFIXES_SHORT)
-                .short('x')
-                .action(ArgAction::SetTrue)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT
-                ])
-                .help("use hex suffixes starting at 0, not alphabetic"),
-        )
-        .arg(
-            Arg::new(OPT_HEX_SUFFIXES)
-                .long(OPT_HEX_SUFFIXES)
-                .require_equals(true)
-                .num_args(0..=1)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT
-                ])
-                .value_name("FROM")
-                .help("same as -x, but allow setting the start value"),
-        )
-        .arg(
-            Arg::new(OPT_SUFFIX_LENGTH)
-                .short('a')
-                .long(OPT_SUFFIX_LENGTH)
-                .allow_hyphen_values(true)
-                .value_name("N")
-                .help("generate suffixes of length N (default 2)"),
-        )
-        .arg(
-            Arg::new(OPT_VERBOSE)
-                .long(OPT_VERBOSE)
-                .help("print a diagnostic just before each output file is opened")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_SEPARATOR)
-                .short('t')
-                .long(OPT_SEPARATOR)
-                .allow_hyphen_values(true)
-                .value_name("SEP")
-                .action(ArgAction::Append)
-                .help("use SEP instead of newline as the record separator; '\\0' (zero) specifies the NUL character"),
-        )
-        .arg(
-            Arg::new(OPT_IO_BLKSIZE)
-                .long("io-blksize")
-                .alias(OPT_IO_BLKSIZE)
-                .hide(true),
-        )
-        .arg(
-            Arg::new(ARG_INPUT)
-                .default_value("-")
-                .value_hint(ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(ARG_PREFIX)
-                .default_value("x")
-        )
 }
 
 /// Parameters that control how a file gets split.
@@ -466,10 +277,13 @@ impl fmt::Display for SettingsError {
             }
             Self::InvalidIOBlockSize(s) => write!(f, "invalid IO block size: {}", s.quote()),
             #[cfg(windows)]
-            Self::NotSupported => write!(
-                f,
-                "{OPT_FILTER} is currently not supported in this platform"
-            ),
+            Self::NotSupported => {
+                use crate::options::OPT_FILTER;
+                write!(
+                    f,
+                    "{OPT_FILTER} is currently not supported in this platform"
+                )
+            }
         }
     }
 }
@@ -484,7 +298,7 @@ impl Settings {
         // defaults to '\n' - newline character
         // If the same separator (the same value) was used multiple times - `split` should NOT fail
         // If the separator was used multiple times but with different values (not all values are the same) - `split` should fail
-        let separator = match matches.get_many::<String>(OPT_SEPARATOR) {
+        let separator = match matches.get_many::<String>(crate::options::OPT_SEPARATOR) {
             Some(mut sep_values) => {
                 let first = sep_values.next().unwrap(); // it is safe to just unwrap here since Clap should not return empty ValuesRef<'_,String> in the option from get_many() call
                 if !sep_values.all(|s| s == first) {
@@ -499,25 +313,35 @@ impl Settings {
             None => b'\n',
         };
 
-        let io_blksize: Option<u64> = if let Some(s) = matches.get_one::<String>(OPT_IO_BLKSIZE) {
-            match parse_size_u64(s) {
-                Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
-                Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
-                _ => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
-            }
-        } else {
-            None
-        };
+        let io_blksize: Option<u64> =
+            if let Some(s) = matches.get_one::<String>(crate::options::OPT_IO_BLKSIZE) {
+                match parse_size_u64(s) {
+                    Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
+                    Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
+                    _ => return Err(SettingsError::InvalidIOBlockSize(s.to_string())),
+                }
+            } else {
+                None
+            };
 
         let result = Self {
-            prefix: matches.get_one::<String>(ARG_PREFIX).unwrap().clone(),
+            prefix: matches
+                .get_one::<String>(crate::options::ARG_PREFIX)
+                .unwrap()
+                .clone(),
             suffix,
-            input: matches.get_one::<String>(ARG_INPUT).unwrap().clone(),
-            filter: matches.get_one::<String>(OPT_FILTER).cloned(),
+            input: matches
+                .get_one::<String>(crate::options::ARG_INPUT)
+                .unwrap()
+                .clone(),
+            filter: matches
+                .get_one::<String>(crate::options::OPT_FILTER)
+                .cloned(),
             strategy,
-            verbose: matches.value_source(OPT_VERBOSE) == Some(ValueSource::CommandLine),
+            verbose: matches.value_source(crate::options::OPT_VERBOSE)
+                == Some(ValueSource::CommandLine),
             separator,
-            elide_empty_files: matches.get_flag(OPT_ELIDE_EMPTY_FILES),
+            elide_empty_files: matches.get_flag(crate::options::OPT_ELIDE_EMPTY_FILES),
             io_blksize,
         };
 
@@ -548,14 +372,14 @@ impl Settings {
         filename: &str,
         is_new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
-        if platform::paths_refer_to_same_file(&self.input, filename) {
+        if crate::platform::paths_refer_to_same_file(&self.input, filename) {
             return Err(io::Error::new(
                 ErrorKind::Other,
                 format!("'{filename}' would overwrite input; aborting"),
             ));
         }
 
-        platform::instantiate_current_writer(&self.filter, filename, is_new)
+        crate::platform::instantiate_current_writer(&self.filter, filename, is_new)
     }
 }
 

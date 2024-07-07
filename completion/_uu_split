@@ -1,0 +1,59 @@
+#compdef uu_split
+
+autoload -U is-at-least
+
+_uu_split() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-b+[put SIZE bytes per output file]:SIZE: ' \
+'--bytes=[put SIZE bytes per output file]:SIZE: ' \
+'-C+[put at most SIZE bytes of lines per output file]:SIZE: ' \
+'--line-bytes=[put at most SIZE bytes of lines per output file]:SIZE: ' \
+'-l+[put NUMBER lines/records per output file]:NUMBER: ' \
+'--lines=[put NUMBER lines/records per output file]:NUMBER: ' \
+'-n+[generate CHUNKS output files; see explanation below]:CHUNKS: ' \
+'--number=[generate CHUNKS output files; see explanation below]:CHUNKS: ' \
+'--additional-suffix=[additional SUFFIX to append to output file names]:SUFFIX: ' \
+'--filter=[write to shell COMMAND; file name is \$FILE (Currently not implemented for Windows)]:COMMAND:_command_names -e' \
+'--numeric-suffixes=[same as -d, but allow setting the start value]' \
+'--hex-suffixes=[same as -x, but allow setting the start value]' \
+'-a+[generate suffixes of length N (default 2)]:N: ' \
+'--suffix-length=[generate suffixes of length N (default 2)]:N: ' \
+'*-t+[use SEP instead of newline as the record separator; '\''\\0'\'' (zero) specifies the NUL character]:SEP: ' \
+'*--separator=[use SEP instead of newline as the record separator; '\''\\0'\'' (zero) specifies the NUL character]:SEP: ' \
+'--io-blksize=[]: : ' \
+'-e[do not generate empty output files with '\''-n'\'']' \
+'--elide-empty-files[do not generate empty output files with '\''-n'\'']' \
+'-d[use numeric suffixes starting at 0, not alphabetic]' \
+'-x[use hex suffixes starting at 0, not alphabetic]' \
+'--verbose[print a diagnostic just before each output file is opened]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::input:_files' \
+'::prefix:' \
+&& ret=0
+}
+
+(( $+functions[_uu_split_commands] )) ||
+_uu_split_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_split commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_split" ]; then
+    _uu_split "$@"
+else
+    compdef _uu_split uu_split
+fi

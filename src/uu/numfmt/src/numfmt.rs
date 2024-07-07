@@ -5,27 +5,19 @@
 
 use crate::errors::*;
 use crate::format::format_and_print;
-use crate::options::*;
+use crate::options_pgrm::{
+    FormatOptions, InvalidModes, NumfmtOptions, RoundMethod, TransformOptions,
+};
 use crate::units::{Result, Unit};
-use clap::{crate_version, parser::ValueSource, Arg, ArgAction, ArgMatches, Command};
+use clap::{parser::ValueSource, ArgMatches};
 use std::io::{BufRead, Write};
 use std::str::FromStr;
 
-use units::{IEC_BASES, SI_BASES};
+use crate::units::{IEC_BASES, SI_BASES};
 use uucore::display::Quotable;
 use uucore::error::UResult;
 use uucore::ranges::Range;
-use uucore::shortcut_value_parser::ShortcutValueParser;
-use uucore::{format_usage, help_about, help_section, help_usage, show, show_error};
-
-pub mod errors;
-pub mod format;
-pub mod options;
-mod units;
-
-const ABOUT: &str = help_about!("numfmt.md");
-const AFTER_HELP: &str = help_section!("after help", "numfmt.md");
-const USAGE: &str = help_usage!("numfmt.md");
+use uucore::{show, show_error};
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: &NumfmtOptions) -> UResult<()> {
     for l in args {
@@ -133,10 +125,10 @@ fn parse_unit_size_suffix(s: &str) -> Option<usize> {
 }
 
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
-    let from = parse_unit(args.get_one::<String>(options::FROM).unwrap())?;
-    let to = parse_unit(args.get_one::<String>(options::TO).unwrap())?;
-    let from_unit = parse_unit_size(args.get_one::<String>(options::FROM_UNIT).unwrap())?;
-    let to_unit = parse_unit_size(args.get_one::<String>(options::TO_UNIT).unwrap())?;
+    let from = parse_unit(args.get_one::<String>(crate::options::FROM).unwrap())?;
+    let to = parse_unit(args.get_one::<String>(crate::options::TO).unwrap())?;
+    let from_unit = parse_unit_size(args.get_one::<String>(crate::options::FROM_UNIT).unwrap())?;
+    let to_unit = parse_unit_size(args.get_one::<String>(crate::options::TO_UNIT).unwrap())?;
 
     let transform = TransformOptions {
         from,
@@ -145,7 +137,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         to_unit,
     };
 
-    let padding = match args.get_one::<String>(options::PADDING) {
+    let padding = match args.get_one::<String>(crate::options::PADDING) {
         Some(s) => s
             .parse::<isize>()
             .map_err(|_| s)
@@ -157,8 +149,8 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         None => Ok(0),
     }?;
 
-    let header = if args.value_source(options::HEADER) == Some(ValueSource::CommandLine) {
-        let value = args.get_one::<String>(options::HEADER).unwrap();
+    let header = if args.value_source(crate::options::HEADER) == Some(ValueSource::CommandLine) {
+        let value = args.get_one::<String>(crate::options::HEADER).unwrap();
 
         value
             .parse::<usize>()
@@ -172,7 +164,10 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Ok(0)
     }?;
 
-    let fields = args.get_one::<String>(options::FIELD).unwrap().as_str();
+    let fields = args
+        .get_one::<String>(crate::options::FIELD)
+        .unwrap()
+        .as_str();
     // a lone "-" means "all fields", even as part of a list of fields
     let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
         vec![Range {
@@ -183,7 +178,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         Range::from_list(fields)?
     };
 
-    let format = match args.get_one::<String>(options::FORMAT) {
+    let format = match args.get_one::<String>(crate::options::FORMAT) {
         Some(s) => s.parse()?,
         None => FormatOptions::default(),
     };
@@ -193,7 +188,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     }
 
     let delimiter = args
-        .get_one::<String>(options::DELIMITER)
+        .get_one::<String>(crate::options::DELIMITER)
         .map_or(Ok(None), |arg| {
             if arg.len() == 1 {
                 Ok(Some(arg.to_string()))
@@ -203,7 +198,11 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         })?;
 
     // unwrap is fine because the argument has a default value
-    let round = match args.get_one::<String>(options::ROUND).unwrap().as_str() {
+    let round = match args
+        .get_one::<String>(crate::options::ROUND)
+        .unwrap()
+        .as_str()
+    {
         "up" => RoundMethod::Up,
         "down" => RoundMethod::Down,
         "from-zero" => RoundMethod::FromZero,
@@ -212,10 +211,10 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         _ => unreachable!("Should be restricted by clap"),
     };
 
-    let suffix = args.get_one::<String>(options::SUFFIX).cloned();
+    let suffix = args.get_one::<String>(crate::options::SUFFIX).cloned();
 
     let invalid =
-        InvalidModes::from_str(args.get_one::<String>(options::INVALID).unwrap()).unwrap();
+        InvalidModes::from_str(args.get_one::<String>(crate::options::INVALID).unwrap()).unwrap();
 
     Ok(NumfmtOptions {
         transform,
@@ -232,11 +231,11 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
-    let result = match matches.get_many::<String>(options::NUMBER) {
+    let result = match matches.get_many::<String>(crate::options::NUMBER) {
         Some(values) => handle_args(values.map(|s| s.as_str()), &options),
         None => {
             let stdin = std::io::stdin();
@@ -252,125 +251,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         _ => Ok(()),
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .override_usage(format_usage(USAGE))
-        .allow_negative_numbers(true)
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::DELIMITER)
-                .short('d')
-                .long(options::DELIMITER)
-                .value_name("X")
-                .help("use X instead of whitespace for field delimiter"),
-        )
-        .arg(
-            Arg::new(options::FIELD)
-                .long(options::FIELD)
-                .help("replace the numbers in these input fields; see FIELDS below")
-                .value_name("FIELDS")
-                .allow_hyphen_values(true)
-                .default_value(options::FIELD_DEFAULT),
-        )
-        .arg(
-            Arg::new(options::FORMAT)
-                .long(options::FORMAT)
-                .help("use printf style floating-point FORMAT; see FORMAT below for details")
-                .value_name("FORMAT")
-                .allow_hyphen_values(true),
-        )
-        .arg(
-            Arg::new(options::FROM)
-                .long(options::FROM)
-                .help("auto-scale input numbers to UNITs; see UNIT below")
-                .value_name("UNIT")
-                .default_value(options::FROM_DEFAULT),
-        )
-        .arg(
-            Arg::new(options::FROM_UNIT)
-                .long(options::FROM_UNIT)
-                .help("specify the input unit size")
-                .value_name("N")
-                .default_value(options::FROM_UNIT_DEFAULT),
-        )
-        .arg(
-            Arg::new(options::TO)
-                .long(options::TO)
-                .help("auto-scale output numbers to UNITs; see UNIT below")
-                .value_name("UNIT")
-                .default_value(options::TO_DEFAULT),
-        )
-        .arg(
-            Arg::new(options::TO_UNIT)
-                .long(options::TO_UNIT)
-                .help("the output unit size")
-                .value_name("N")
-                .default_value(options::TO_UNIT_DEFAULT),
-        )
-        .arg(
-            Arg::new(options::PADDING)
-                .long(options::PADDING)
-                .help(
-                    "pad the output to N characters; positive N will \
-                     right-align; negative N will left-align; padding is \
-                     ignored if the output is wider than N; the default is \
-                     to automatically pad if a whitespace is found",
-                )
-                .value_name("N"),
-        )
-        .arg(
-            Arg::new(options::HEADER)
-                .long(options::HEADER)
-                .help(
-                    "print (without converting) the first N header lines; \
-                     N defaults to 1 if not specified",
-                )
-                .num_args(..=1)
-                .value_name("N")
-                .default_missing_value(options::HEADER_DEFAULT)
-                .hide_default_value(true),
-        )
-        .arg(
-            Arg::new(options::ROUND)
-                .long(options::ROUND)
-                .help("use METHOD for rounding when scaling")
-                .value_name("METHOD")
-                .default_value("from-zero")
-                .value_parser(ShortcutValueParser::new([
-                    "up",
-                    "down",
-                    "from-zero",
-                    "towards-zero",
-                    "nearest",
-                ])),
-        )
-        .arg(
-            Arg::new(options::SUFFIX)
-                .long(options::SUFFIX)
-                .help(
-                    "print SUFFIX after each formatted number, and accept \
-                    inputs optionally ending with SUFFIX",
-                )
-                .value_name("SUFFIX"),
-        )
-        .arg(
-            Arg::new(options::INVALID)
-                .long(options::INVALID)
-                .help("set the failure mode for invalid input")
-                .default_value("abort")
-                .value_parser(["abort", "fail", "warn", "ignore"])
-                .value_name("INVALID"),
-        )
-        .arg(
-            Arg::new(options::NUMBER)
-                .hide(true)
-                .action(ArgAction::Append),
-        )
 }
 
 #[cfg(test)]

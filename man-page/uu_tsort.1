@@ -1,0 +1,24 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_tsort 1  "uu_tsort 0.0.27" 
+.SH NAME
+uu_tsort \- Topological sort the strings in FILE.
+Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline), ordering them based on dependencies in a directed acyclic graph (DAG). 
+Useful for scheduling and determining execution order.
+If FILE is not passed in, stdin is used instead.
+.SH SYNOPSIS
+\fBuu_tsort\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Topological sort the strings in FILE.
+Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline), ordering them based on dependencies in a directed acyclic graph (DAG). 
+Useful for scheduling and determining execution order.
+If FILE is not passed in, stdin is used instead.
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

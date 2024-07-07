@@ -1,0 +1,30 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_expand 1  "uu_expand 0.0.27" 
+.SH NAME
+uu_expand \- Convert tabs in each `FILE` to spaces, writing to standard output.
+With no `FILE`, or when `FILE` is `\-`, read standard input.
+.SH SYNOPSIS
+\fBuu_expand\fR [\fB\-i\fR|\fB\-\-initial\fR] [\fB\-t\fR|\fB\-\-tabs\fR] [\fB\-U\fR|\fB\-\-no\-utf8\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIFILES\fR] 
+.SH DESCRIPTION
+Convert tabs in each `FILE` to spaces, writing to standard output.
+With no `FILE`, or when `FILE` is `\-`, read standard input.
+.SH OPTIONS
+.TP
+\fB\-i\fR, \fB\-\-initial\fR
+do not convert tabs after non blanks
+.TP
+\fB\-t\fR, \fB\-\-tabs\fR=\fIN, LIST\fR
+have tabs N characters apart, not 8 or use comma separated list of explicit tab positions
+.TP
+\fB\-U\fR, \fB\-\-no\-utf8\fR
+interpret input file as 8\-bit ASCII rather than UTF\-8
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+.SH VERSION
+v0.0.27

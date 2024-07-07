@@ -1,0 +1,49 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_chmod 1  "uu_chmod 0.0.27" 
+.SH NAME
+uu_chmod \- Change the mode of each FILE to MODE.
+With \-\-reference, change the mode of each FILE to that of RFILE.
+.SH SYNOPSIS
+\fBuu_chmod\fR [\fB\-c\fR|\fB\-\-changes\fR] [\fB\-f\fR|\fB\-\-quiet\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-\-no\-preserve\-root\fR] [\fB\-\-preserve\-root\fR] [\fB\-R\fR|\fB\-\-recursive\fR] [\fB\-\-reference\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIMODE\fR] [\fIFILE\fR] 
+.SH DESCRIPTION
+Change the mode of each FILE to MODE.
+With \-\-reference, change the mode of each FILE to that of RFILE.
+.SH OPTIONS
+.TP
+\fB\-c\fR, \fB\-\-changes\fR
+like verbose but report only when a change is made
+.TP
+\fB\-f\fR, \fB\-\-quiet\fR
+suppress most error messages
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+output a diagnostic for every file processed
+.TP
+\fB\-\-no\-preserve\-root\fR
+do not treat \*(Aq/\*(Aq specially (the default)
+.TP
+\fB\-\-preserve\-root\fR
+fail to operate recursively on \*(Aq/\*(Aq
+.TP
+\fB\-R\fR, \fB\-\-recursive\fR
+change files and directories recursively
+.TP
+\fB\-\-reference\fR
+use RFILE\*(Aqs mode instead of MODE values
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIMODE\fR]
+
+.TP
+[\fIFILE\fR]
+
+.SH EXTRA
+Each MODE is of the form \*(Aq[ugoa]*([\-+=]([rwxXst]*|[ugo]))+|[\-+=]?[0\-7]+\*(Aq.
+.SH VERSION
+v0.0.27

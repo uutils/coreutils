@@ -3,16 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::Command;
 use std::ffi::OsString;
 use std::path::Path;
-use uu_ls::{options, Config, Format};
+use uu_ls::ls::{Config, Format};
+use uu_ls::options;
 use uucore::error::UResult;
 use uucore::quoting_style::{Quotes, QuotingStyle};
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let command = uu_app();
+    let command = crate::uu_app();
 
     let matches = command.get_matches_from(args);
 
@@ -58,12 +58,5 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_else(|| vec![Path::new(".")]);
 
-    uu_ls::list(locs, &config)
-}
-
-// To avoid code duplication, we reuse ls uu_app function which has the same
-// arguments. However, coreutils won't compile if one of the utils is missing
-// an uu_app function, so we return the `ls` app.
-pub fn uu_app() -> Command {
-    uu_ls::uu_app()
+    uu_ls::ls::list(locs, &config)
 }

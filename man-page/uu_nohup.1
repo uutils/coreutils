@@ -1,0 +1,23 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_nohup 1  "uu_nohup 0.0.27" 
+.SH NAME
+uu_nohup \- Run COMMAND ignoring hangup signals.
+.SH SYNOPSIS
+\fBuu_nohup\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIcmd\fR> 
+.SH DESCRIPTION
+Run COMMAND ignoring hangup signals.
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+If standard input is terminal, it\*(Aqll be replaced with /dev/null.
+If standard output is terminal, it\*(Aqll be appended to nohup.out instead,
+or $HOME/nohup.out, if nohup.out open failed.
+If standard error is terminal, it\*(Aqll be redirected to stdout.
+.SH VERSION
+v0.0.27

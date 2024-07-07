@@ -1,0 +1,48 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_pinky 1  "uu_pinky 0.0.27" 
+.SH NAME
+uu_pinky \- Displays brief user information on Unix\-based systems
+.SH SYNOPSIS
+\fBuu_pinky\fR [\fB\-l \fR] [\fB\-b \fR] [\fB\-h \fR] [\fB\-p \fR] [\fB\-s \fR] [\fB\-f \fR] [\fB\-w \fR] [\fB\-i \fR] [\fB\-q \fR] [\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIuser\fR] 
+.SH DESCRIPTION
+Displays brief user information on Unix\-based systems
+.SH OPTIONS
+.TP
+\fB\-l\fR
+produce long format output for the specified USERs
+.TP
+\fB\-b\fR
+omit the user\*(Aqs home directory and shell in long format
+.TP
+\fB\-h\fR
+omit the user\*(Aqs project file in long format
+.TP
+\fB\-p\fR
+omit the user\*(Aqs plan file in long format
+.TP
+\fB\-s\fR
+do short format output, this is the default
+.TP
+\fB\-f\fR
+omit the line of column headings in short format
+.TP
+\fB\-w\fR
+omit the user\*(Aqs full name in short format
+.TP
+\fB\-i\fR
+omit the user\*(Aqs full name and remote host in short format
+.TP
+\fB\-q\fR
+omit the user\*(Aqs full name, remote host and idle time in short format
+.TP
+\fB\-\-help\fR
+Print help information
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIuser\fR]
+
+.SH VERSION
+v0.0.27

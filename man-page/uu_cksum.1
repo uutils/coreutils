@@ -1,0 +1,72 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_cksum 1  "uu_cksum 0.0.27" 
+.SH NAME
+uu_cksum \- Print CRC and size for each file
+.SH SYNOPSIS
+\fBuu_cksum\fR [\fB\-a\fR|\fB\-\-algorithm\fR] [\fB\-\-untagged\fR] [\fB\-\-tag\fR] [\fB\-l\fR|\fB\-\-length\fR] [\fB\-\-raw\fR] [\fB\-\-strict\fR] [\fB\-c\fR|\fB\-\-check\fR] [\fB\-\-base64\fR] [\fB\-w\fR|\fB\-\-warn\fR] [\fB\-\-status\fR] [\fB\-\-quiet\fR] [\fB\-\-ignore\-missing\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Print CRC and size for each file
+.SH OPTIONS
+.TP
+\fB\-a\fR, \fB\-\-algorithm\fR=\fIALGORITHM\fR
+select the digest type to use. See DIGEST below
+.br
+
+.br
+[\fIpossible values: \fRsysv, bsd, crc, md5, sha1, sha3, sha224, sha256, sha384, sha512, blake2b, blake3, sm3, shake128, shake256]
+.TP
+\fB\-\-untagged\fR
+create a reversed style checksum, without digest type
+.TP
+\fB\-\-tag\fR
+create a BSD style checksum, undo \-\-untagged (default)
+.TP
+\fB\-l\fR, \fB\-\-length\fR
+digest length in bits; must not exceed the max for the blake2 algorithm and must be a multiple of 8
+.TP
+\fB\-\-raw\fR
+emit a raw binary digest, not hexadecimal
+.TP
+\fB\-\-strict\fR
+exit non\-zero for improperly formatted checksum lines
+.TP
+\fB\-c\fR, \fB\-\-check\fR
+read hashsums from the FILEs and check them
+.TP
+\fB\-\-base64\fR
+emit a base64 digest, not hexadecimal
+.TP
+\fB\-w\fR, \fB\-\-warn\fR
+warn about improperly formatted checksum lines
+.TP
+\fB\-\-status\fR
+don\*(Aqt output anything, status code shows success
+.TP
+\fB\-\-quiet\fR
+don\*(Aqt print OK for each successfully verified file
+.TP
+\fB\-\-ignore\-missing\fR
+don\*(Aqt fail or report status for missing files
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+DIGEST determines the digest algorithm and default output format:
+
+\- sysv:    (equivalent to sum \-s)
+\- bsd:     (equivalent to sum \-r)
+\- crc:     (equivalent to cksum)
+\- md5:     (equivalent to md5sum)
+\- sha1:    (equivalent to sha1sum)
+\- sha224:  (equivalent to sha224sum)
+\- sha256:  (equivalent to sha256sum)
+\- sha384:  (equivalent to sha384sum)
+\- sha512:  (equivalent to sha512sum)
+\- blake2b: (equivalent to b2sum)
+\- sm3:     (only available through cksum)
+.SH VERSION
+v0.0.27

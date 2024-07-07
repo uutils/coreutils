@@ -1,0 +1,27 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_kill 1  "uu_kill 0.0.27" 
+.SH NAME
+uu_kill \- Send signal to processes or list information about signals.
+.SH SYNOPSIS
+\fBuu_kill\fR [\fB\-l\fR|\fB\-\-list\fR] [\fB\-t\fR|\fB\-\-table\fR] [\fB\-s\fR|\fB\-\-signal\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIpids_or_signals\fR] 
+.SH DESCRIPTION
+Send signal to processes or list information about signals.
+.SH OPTIONS
+.TP
+\fB\-l\fR, \fB\-\-list\fR
+Lists signals
+.TP
+\fB\-t\fR, \fB\-\-table\fR
+Lists table of signals
+.TP
+\fB\-s\fR, \fB\-\-signal\fR=\fIsignal\fR
+Sends given signal instead of SIGTERM
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

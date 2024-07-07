@@ -1,0 +1,144 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_od 1  "uu_od 0.0.27" 
+.SH NAME
+uu_od \- Dump files in octal and other formats
+.SH SYNOPSIS
+\fBuu_od\fR [\fB\-\-help\fR] [\fB\-A\fR|\fB\-\-address\-radix\fR] [\fB\-j\fR|\fB\-\-skip\-bytes\fR] [\fB\-N\fR|\fB\-\-read\-bytes\fR] [\fB\-\-endian\fR] [\fB\-S\fR|\fB\-\-strings\fR] [\fB\-a \fR] [\fB\-b \fR] [\fB\-c \fR] [\fB\-d \fR] [\fB\-D \fR] [\fB\-o \fR] [\fB\-I \fR] [\fB\-L \fR] [\fB\-i \fR] [\fB\-l \fR] [\fB\-x \fR] [\fB\-h \fR] [\fB\-O \fR] [\fB\-s \fR] [\fB\-X \fR] [\fB\-H \fR] [\fB\-e \fR] [\fB\-f \fR] [\fB\-F \fR] [\fB\-t\fR|\fB\-\-format\fR] [\fB\-v\fR|\fB\-\-output\-duplicates\fR] [\fB\-w\fR|\fB\-\-width\fR] [\fB\-\-traditional\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIFILENAME\fR] 
+.SH DESCRIPTION
+Dump files in octal and other formats
+.SH OPTIONS
+.TP
+\fB\-\-help\fR
+Print help information.
+.TP
+\fB\-A\fR, \fB\-\-address\-radix\fR=\fIRADIX\fR
+Select the base in which file offsets are printed.
+.TP
+\fB\-j\fR, \fB\-\-skip\-bytes\fR=\fIBYTES\fR
+Skip bytes input bytes before formatting and writing.
+.TP
+\fB\-N\fR, \fB\-\-read\-bytes\fR=\fIBYTES\fR
+limit dump to BYTES input bytes
+.TP
+\fB\-\-endian\fR=\fIbig|little\fR
+byte order to use for multi\-byte formats
+.br
+
+.br
+[\fIpossible values: \fRbig, little]
+.TP
+\fB\-S\fR, \fB\-\-strings\fR=\fIBYTES\fR
+NotImplemented: output strings of at least BYTES graphic chars. 3 is assumed when BYTES is not specified.
+.TP
+\fB\-a\fR
+named characters, ignoring high\-order bit
+.TP
+\fB\-b\fR
+octal bytes
+.TP
+\fB\-c\fR
+ASCII characters or backslash escapes
+.TP
+\fB\-d\fR
+unsigned decimal 2\-byte units
+.TP
+\fB\-D\fR
+unsigned decimal 4\-byte units
+.TP
+\fB\-o\fR
+octal 2\-byte units
+.TP
+\fB\-I\fR
+decimal 8\-byte units
+.TP
+\fB\-L\fR
+decimal 8\-byte units
+.TP
+\fB\-i\fR
+decimal 4\-byte units
+.TP
+\fB\-l\fR
+decimal 8\-byte units
+.TP
+\fB\-x\fR
+hexadecimal 2\-byte units
+.TP
+\fB\-h\fR
+hexadecimal 2\-byte units
+.TP
+\fB\-O\fR
+octal 4\-byte units
+.TP
+\fB\-s\fR
+decimal 2\-byte units
+.TP
+\fB\-X\fR
+hexadecimal 4\-byte units
+.TP
+\fB\-H\fR
+hexadecimal 4\-byte units
+.TP
+\fB\-e\fR
+floating point double precision (64\-bit) units
+.TP
+\fB\-f\fR
+floating point double precision (32\-bit) units
+.TP
+\fB\-F\fR
+floating point double precision (64\-bit) units
+.TP
+\fB\-t\fR, \fB\-\-format\fR=\fITYPE\fR
+select output format or formats
+.TP
+\fB\-v\fR, \fB\-\-output\-duplicates\fR
+do not use * to mark line suppression
+.TP
+\fB\-w\fR, \fB\-\-width\fR=\fIBYTES\fR
+output BYTES bytes per output line. 32 is implied when BYTES is not specified.
+.TP
+\fB\-\-traditional\fR
+compatibility mode with one input, offset and label.
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+Displays data in various human\-readable formats. If multiple formats are
+specified, the output will contain all formats in the order they appear on the
+command line. Each format will be printed on a new line. Only the line
+containing the first format will be prefixed with the offset.
+
+If no filename is specified, or it is "\-", stdin will be used. After a "\-\-", no
+more options will be recognized. This allows for filenames starting with a "\-".
+
+If a filename is a valid number which can be used as an offset in the second
+form, you can force it to be recognized as a filename if you include an option
+like "\-j0", which is only valid in the first form.
+
+RADIX is one of o,d,x,n for octal, decimal, hexadecimal or none.
+
+BYTES is decimal by default, octal if prefixed with a "0", or hexadecimal if
+prefixed with "0x". The suffixes b, KB, K, MB, M, GB, G, will multiply the
+number with 512, 1000, 1024, 1000^2, 1024^2, 1000^3, 1024^3, 1000^2, 1024^2.
+
+OFFSET and LABEL are octal by default, hexadecimal if prefixed with "0x" or
+decimal if a "." suffix is added. The "b" suffix will multiply with 512.
+
+TYPE contains one or more format specifications consisting of:
+    a       for printable 7\-bits ASCII
+    c       for utf\-8 characters or octal for undefined characters
+    d[SIZE] for signed decimal
+    f[SIZE] for floating point
+    o[SIZE] for octal
+    u[SIZE] for unsigned decimal
+    x[SIZE] for hexadecimal
+SIZE is the number of bytes which can be the number 1, 2, 4, 8 or 16,
+    or C, I, S, L for 1, 2, 4, 8 bytes for integer types,
+    or F, D, L for 4, 8, 16 bytes for floating point.
+Any type specification can have a "z" suffix, which will add a ASCII dump at
+    the end of the line.
+
+If an error occurred, a diagnostic message will be printed to stderr, and the
+exit code will be non\-zero.
+.SH VERSION
+v0.0.27

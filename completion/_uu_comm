@@ -1,0 +1,44 @@
+#compdef uu_comm
+
+autoload -U is-at-least
+
+_uu_comm() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'*--output-delimiter=[separate columns with STR]:STR: ' \
+'-1[suppress column 1 (lines unique to FILE1)]' \
+'-2[suppress column 2 (lines unique to FILE2)]' \
+'-3[suppress column 3 (lines that appear in both files)]' \
+'-z[line delimiter is NUL, not newline]' \
+'--zero-terminated[line delimiter is NUL, not newline]' \
+'--total[output a summary]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':FILE1:_files' \
+':FILE2:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_comm_commands] )) ||
+_uu_comm_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_comm commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_comm" ]; then
+    _uu_comm "$@"
+else
+    compdef _uu_comm uu_comm
+fi

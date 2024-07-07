@@ -1,0 +1,34 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_dircolors 1  "uu_dircolors 0.0.27" 
+.SH NAME
+uu_dircolors \- Output commands to set the LS_COLORS environment variable.
+.SH SYNOPSIS
+\fBuu_dircolors\fR [\fB\-b\fR|\fB\-\-sh\fR] [\fB\-c\fR|\fB\-\-csh\fR] [\fB\-p\fR|\fB\-\-print\-database\fR] [\fB\-\-print\-ls\-colors\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIFILE\fR] 
+.SH DESCRIPTION
+Output commands to set the LS_COLORS environment variable.
+.SH OPTIONS
+.TP
+\fB\-b\fR, \fB\-\-sh\fR
+output Bourne shell code to set LS_COLORS
+.TP
+\fB\-c\fR, \fB\-\-csh\fR
+output C shell code to set LS_COLORS
+.TP
+\fB\-p\fR, \fB\-\-print\-database\fR
+print the byte counts
+.TP
+\fB\-\-print\-ls\-colors\fR
+output fully escaped colors for display
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+If FILE is specified, read it to determine which colors to use for which
+file types and extensions.  Otherwise, a precompiled database is used.
+For details on the format of these files, run \*(Aqdircolors \-\-print\-database\*(Aq
+.SH VERSION
+v0.0.27

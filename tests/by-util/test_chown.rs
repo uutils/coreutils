@@ -37,7 +37,7 @@ fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
 
 #[cfg(test)]
 mod test_passgrp {
-    use chown::entries::{gid2grp, grp2gid, uid2usr, usr2uid};
+    use chown::chown::entries::{gid2grp, grp2gid, uid2usr, usr2uid};
 
     #[test]
     fn test_usr2uid() {

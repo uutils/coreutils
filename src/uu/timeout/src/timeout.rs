@@ -4,10 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid
-mod status;
 
 use crate::status::ExitStatus;
-use clap::{crate_version, Arg, ArgAction, Command};
 use std::io::ErrorKind;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
@@ -20,24 +18,9 @@ use uucore::process::ChildExt;
 use uucore::signals::enable_pipe_errors;
 
 use uucore::{
-    format_usage, help_about, help_usage, show_error,
+    show_error,
     signals::{signal_by_name_or_value, signal_name_by_value},
 };
-
-const ABOUT: &str = help_about!("timeout.md");
-const USAGE: &str = help_usage!("timeout.md");
-
-pub mod options {
-    pub static FOREGROUND: &str = "foreground";
-    pub static KILL_AFTER: &str = "kill-after";
-    pub static SIGNAL: &str = "signal";
-    pub static PRESERVE_STATUS: &str = "preserve-status";
-    pub static VERBOSE: &str = "verbose";
-
-    // Positional args.
-    pub static DURATION: &str = "duration";
-    pub static COMMAND: &str = "command";
-}
 
 struct Config {
     foreground: bool,
@@ -52,7 +35,7 @@ struct Config {
 
 impl Config {
     fn from(options: &clap::ArgMatches) -> UResult<Self> {
-        let signal = match options.get_one::<String>(options::SIGNAL) {
+        let signal = match options.get_one::<String>(crate::options::SIGNAL) {
             Some(signal_) => {
                 let signal_result = signal_by_name_or_value(signal_);
                 match signal_result {
@@ -68,7 +51,7 @@ impl Config {
             _ => uucore::signals::signal_by_name_or_value("TERM").unwrap(),
         };
 
-        let kill_after = match options.get_one::<String>(options::KILL_AFTER) {
+        let kill_after = match options.get_one::<String>(crate::options::KILL_AFTER) {
             None => None,
             Some(kill_after) => match uucore::parse_time::from_str(kill_after) {
                 Ok(k) => Some(k),
@@ -77,18 +60,18 @@ impl Config {
         };
 
         let duration = match uucore::parse_time::from_str(
-            options.get_one::<String>(options::DURATION).unwrap(),
+            options.get_one::<String>(crate::options::DURATION).unwrap(),
         ) {
             Ok(duration) => duration,
             Err(err) => return Err(UUsageError::new(ExitStatus::TimeoutFailed.into(), err)),
         };
 
-        let preserve_status: bool = options.get_flag(options::PRESERVE_STATUS);
-        let foreground = options.get_flag(options::FOREGROUND);
-        let verbose = options.get_flag(options::VERBOSE);
+        let preserve_status: bool = options.get_flag(crate::options::PRESERVE_STATUS);
+        let foreground = options.get_flag(crate::options::FOREGROUND);
+        let verbose = options.get_flag(crate::options::VERBOSE);
 
         let command = options
-            .get_many::<String>(options::COMMAND)
+            .get_many::<String>(crate::options::COMMAND)
             .unwrap()
             .map(String::from)
             .collect::<Vec<_>>();
@@ -107,7 +90,9 @@ impl Config {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args).with_exit_code(125)?;
+    let matches = crate::uu_app()
+        .try_get_matches_from(args)
+        .with_exit_code(125)?;
 
     let config = Config::from(&matches)?;
     timeout(
@@ -119,64 +104,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         config.preserve_status,
         config.verbose,
     )
-}
-
-pub fn uu_app() -> Command {
-    Command::new("timeout")
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .arg(
-            Arg::new(options::FOREGROUND)
-                .long(options::FOREGROUND)
-                .help(
-                    "when not running timeout directly from a shell prompt, allow \
-                COMMAND to read from the TTY and get TTY signals; in this mode, \
-                children of COMMAND will not be timed out",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::KILL_AFTER)
-                .long(options::KILL_AFTER)
-                .short('k')
-                .help(
-                    "also send a KILL signal if COMMAND is still running this long \
-                after the initial signal was sent",
-                ),
-        )
-        .arg(
-            Arg::new(options::PRESERVE_STATUS)
-                .long(options::PRESERVE_STATUS)
-                .help("exit with the same status as COMMAND, even when the command times out")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::SIGNAL)
-                .short('s')
-                .long(options::SIGNAL)
-                .help(
-                    "specify the signal to be sent on timeout; SIGNAL may be a name like \
-                'HUP' or a number; see 'kill -l' for a list of signals",
-                )
-                .value_name("SIGNAL"),
-        )
-        .arg(
-            Arg::new(options::VERBOSE)
-                .short('v')
-                .long(options::VERBOSE)
-                .help("diagnose to stderr any signal sent upon timeout")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(Arg::new(options::DURATION).required(true))
-        .arg(
-            Arg::new(options::COMMAND)
-                .required(true)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::CommandName),
-        )
-        .trailing_var_arg(true)
-        .infer_long_args(true)
 }
 
 /// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.

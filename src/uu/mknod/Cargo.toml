@@ -13,9 +13,6 @@ edition = "2021"
 
 readme.workspace = true
 
-[lib]
-name = "uu_mknod"
-path = "src/mknod.rs"
 
 [dependencies]
 clap = { workspace = true }

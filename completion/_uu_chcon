@@ -1,0 +1,56 @@
+#compdef uu_chcon
+
+autoload -U is-at-least
+
+_uu_chcon() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'(-u --user -r --role -t --type -l --range)--reference=[Use security context of RFILE, rather than specifying a CONTEXT value.]:RFILE:_files' \
+'-u+[Set user USER in the target security context.]:USER:_users' \
+'--user=[Set user USER in the target security context.]:USER:_users' \
+'-r+[Set role ROLE in the target security context.]:ROLE: ' \
+'--role=[Set role ROLE in the target security context.]:ROLE: ' \
+'-t+[Set type TYPE in the target security context.]:TYPE: ' \
+'--type=[Set type TYPE in the target security context.]:TYPE: ' \
+'-l+[Set range RANGE in the target security context.]:RANGE: ' \
+'--range=[Set range RANGE in the target security context.]:RANGE: ' \
+'--help[Print help information.]' \
+'--dereference[Affect the referent of each symbolic link (this is the default), rather than the symbolic link itself.]' \
+'-h[Affect symbolic links instead of any referenced file.]' \
+'--no-dereference[Affect symbolic links instead of any referenced file.]' \
+'--preserve-root[Fail to operate recursively on '\''/'\''.]' \
+'--no-preserve-root[Do not treat '\''/'\'' specially (the default).]' \
+'-R[Operate on files and directories recursively.]' \
+'--recursive[Operate on files and directories recursively.]' \
+'-H[If a command line argument is a symbolic link to a directory, traverse it. Only valid when -R is specified.]' \
+'-L[Traverse every symbolic link to a directory encountered. Only valid when -R is specified.]' \
+'-P[Do not traverse any symbolic links (default). Only valid when -R is specified.]' \
+'-v[Output a diagnostic for every file processed.]' \
+'--verbose[Output a diagnostic for every file processed.]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'*::FILE:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_chcon_commands] )) ||
+_uu_chcon_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_chcon commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_chcon" ]; then
+    _uu_chcon "$@"
+else
+    compdef _uu_chcon uu_chcon
+fi

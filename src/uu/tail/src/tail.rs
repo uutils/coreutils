@@ -12,19 +12,10 @@
 // spell-checker:ignore (shell/tools)
 // spell-checker:ignore (misc)
 
-pub mod args;
-pub mod chunks;
-mod follow;
-mod parse;
-mod paths;
-mod platform;
-pub mod text;
-
-pub use args::uu_app;
-use args::{parse_args, FilterMode, Settings, Signum};
-use chunks::ReverseChunks;
-use follow::Observer;
-use paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
+use crate::args::{parse_args, FilterMode, Settings, Signum};
+use crate::chunks::ReverseChunks;
+use crate::follow::Observer;
+use crate::paths::{FileExtTail, HeaderPrinter, Input, InputKind, MetadataExtTail};
 use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
@@ -41,16 +32,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.check_warnings();
 
     match settings.verify() {
-        args::VerificationResult::CannotFollowStdinByName => {
+        crate::args::VerificationResult::CannotFollowStdinByName => {
             return Err(USimpleError::new(
                 1,
-                format!("cannot follow {} by name", text::DASH.quote()),
+                format!("cannot follow {} by name", crate::text::DASH.quote()),
             ))
         }
         // Exit early if we do not output anything. Note, that this may break a pipe
         // when tail is on the receiving side.
-        args::VerificationResult::NoOutput => return Ok(()),
-        args::VerificationResult::Ok => {}
+        crate::args::VerificationResult::NoOutput => return Ok(()),
+        crate::args::VerificationResult::Ok => {}
     }
 
     uu_tail(&settings)
@@ -65,7 +56,9 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     // Add `path` and `reader` to `files` map if `--follow` is selected.
     for input in &settings.inputs.clone() {
         match input.kind() {
-            InputKind::File(path) if cfg!(not(unix)) || path != &PathBuf::from(text::DEV_STDIN) => {
+            InputKind::File(path)
+                if cfg!(not(unix)) || path != &PathBuf::from(crate::text::DEV_STDIN) =>
+            {
                 tail_file(settings, &mut printer, input, path, &mut observer, 0)?;
             }
             // File points to /dev/stdin here
@@ -86,12 +79,12 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         not the -f option shall be ignored.
         */
         if !settings.has_only_stdin() {
-            follow::follow(observer, settings)?;
+            crate::follow::follow(observer, settings)?;
         }
     }
 
-    if get_exit_code() > 0 && paths::stdin_is_bad_fd() {
-        show_error!("-: {}", text::BAD_FD);
+    if get_exit_code() > 0 && crate::paths::stdin_is_bad_fd() {
+        show_error!("-: {}", crate::text::BAD_FD);
     }
 
     Ok(())
@@ -110,7 +103,7 @@ fn tail_file(
         show_error!(
             "cannot open '{}' for reading: {}",
             input.display_name,
-            text::NO_SUCH_FILE
+            crate::text::NO_SUCH_FILE
         );
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else if path.is_dir() {
@@ -211,18 +204,18 @@ fn tail_stdin(
         // pipe
         None => {
             header_printer.print_input(input);
-            if paths::stdin_is_bad_fd() {
+            if crate::paths::stdin_is_bad_fd() {
                 set_exit_code(1);
                 show_error!(
                     "cannot fstat {}: {}",
-                    text::STDIN_HEADER.quote(),
-                    text::BAD_FD
+                    crate::text::STDIN_HEADER.quote(),
+                    crate::text::BAD_FD
                 );
                 if settings.follow.is_some() {
                     show_error!(
                         "error reading {}: {}",
-                        text::STDIN_HEADER.quote(),
-                        text::BAD_FD
+                        crate::text::STDIN_HEADER.quote(),
+                        crate::text::BAD_FD
                     );
                 }
             } else {
@@ -283,7 +276,7 @@ fn tail_stdin(
 /// let i = forwards_thru_file(&mut reader, 2, b'\n').unwrap();
 /// assert_eq!(i, 2);
 /// ```
-fn forwards_thru_file<R>(
+pub(crate) fn forwards_thru_file<R>(
     reader: &mut R,
     num_delimiters: u64,
     delimiter: u8,
@@ -401,7 +394,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     let mut writer = BufWriter::new(stdout.lock());
     match &settings.mode {
         FilterMode::Lines(Signum::Negative(count), sep) => {
-            let mut chunks = chunks::LinesChunkBuffer::new(*sep, *count);
+            let mut chunks = crate::chunks::LinesChunkBuffer::new(*sep, *count);
             chunks.fill(reader)?;
             chunks.print(&mut writer)?;
         }
@@ -410,7 +403,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         FilterMode::Lines(Signum::Positive(count), sep) => {
             let mut num_skip = *count - 1;
-            let mut chunk = chunks::LinesChunk::new(*sep);
+            let mut chunk = crate::chunks::LinesChunk::new(*sep);
             while chunk.fill(reader)?.is_some() {
                 let lines = chunk.get_lines() as u64;
                 if lines < num_skip {
@@ -425,7 +418,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             }
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
-            let mut chunks = chunks::BytesChunkBuffer::new(*count);
+            let mut chunks = crate::chunks::BytesChunkBuffer::new(*count);
             chunks.fill(reader)?;
             chunks.print(&mut writer)?;
         }
@@ -434,7 +427,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         FilterMode::Bytes(Signum::Positive(count)) => {
             let mut num_skip = *count - 1;
-            let mut chunk = chunks::BytesChunk::new();
+            let mut chunk = crate::chunks::BytesChunk::new();
             loop {
                 if let Some(bytes) = chunk.fill(reader)? {
                     let bytes: u64 = bytes as u64;
@@ -463,7 +456,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
 #[cfg(test)]
 mod tests {
 
-    use crate::forwards_thru_file;
+    use crate::tail::forwards_thru_file;
     use std::io::Cursor;
 
     #[test]

@@ -5,23 +5,11 @@
 
 // spell-checker:ignore (ToDO) delim
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::path::Path;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
-use uucore::{format_usage, help_about, help_usage};
-
-const ABOUT: &str = help_about!("paste.md");
-const USAGE: &str = help_usage!("paste.md");
-
-mod options {
-    pub const DELIMITER: &str = "delimiters";
-    pub const SERIAL: &str = "serial";
-    pub const FILE: &str = "file";
-    pub const ZERO_TERMINATED: &str = "zero-terminated";
-}
 
 // Wraps BufReader and stdin
 fn read_until<R: Read>(
@@ -37,56 +25,20 @@ fn read_until<R: Read>(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let serial = matches.get_flag(options::SERIAL);
-    let delimiters = matches.get_one::<String>(options::DELIMITER).unwrap();
+    let serial = matches.get_flag(crate::options::SERIAL);
+    let delimiters = matches
+        .get_one::<String>(crate::options::DELIMITER)
+        .unwrap();
     let files = matches
-        .get_many::<String>(options::FILE)
+        .get_many::<String>(crate::options::FILE)
         .unwrap()
         .cloned()
         .collect();
-    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(crate::options::ZERO_TERMINATED));
 
     paste(files, serial, delimiters, line_ending)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::SERIAL)
-                .long(options::SERIAL)
-                .short('s')
-                .help("paste one file at a time instead of in parallel")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::DELIMITER)
-                .long(options::DELIMITER)
-                .short('d')
-                .help("reuse characters from LIST instead of TABs")
-                .value_name("LIST")
-                .default_value("\t")
-                .hide_default_value(true),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .value_name("FILE")
-                .action(ArgAction::Append)
-                .default_value("-")
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::ZERO_TERMINATED)
-                .long(options::ZERO_TERMINATED)
-                .short('z')
-                .help("line delimiter is NUL, not newline")
-                .action(ArgAction::SetTrue),
-        )
 }
 
 #[allow(clippy::cognitive_complexity)]

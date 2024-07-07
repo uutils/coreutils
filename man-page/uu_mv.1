@@ -1,0 +1,87 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_mv 1  "uu_mv 0.0.27" 
+.SH NAME
+uu_mv \- Move `SOURCE` to `DEST`, or multiple `SOURCE`(s) to `DIRECTORY`.
+.SH SYNOPSIS
+\fBuu_mv\fR [\fB\-f\fR|\fB\-\-force\fR] [\fB\-i\fR|\fB\-\-interactive\fR] [\fB\-n\fR|\fB\-\-no\-clobber\fR] [\fB\-\-strip\-trailing\-slashes\fR] [\fB\-\-backup\fR] [\fB\-b \fR] [\fB\-S\fR|\fB\-\-suffix\fR] [\fB\-\-update\fR] [\fB\-u \fR] [\fB\-t\fR|\fB\-\-target\-directory\fR] [\fB\-T\fR|\fB\-\-no\-target\-directory\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-g\fR|\fB\-\-progress\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIfiles\fR> 
+.SH DESCRIPTION
+Move `SOURCE` to `DEST`, or multiple `SOURCE`(s) to `DIRECTORY`.
+.SH OPTIONS
+.TP
+\fB\-f\fR, \fB\-\-force\fR
+do not prompt before overwriting
+.TP
+\fB\-i\fR, \fB\-\-interactive\fR
+prompt before override
+.TP
+\fB\-n\fR, \fB\-\-no\-clobber\fR
+do not overwrite an existing file
+.TP
+\fB\-\-strip\-trailing\-slashes\fR
+remove any trailing slashes from each SOURCE argument
+.TP
+\fB\-\-backup\fR=\fICONTROL\fR
+make a backup of each existing destination file
+.TP
+\fB\-b\fR
+like \-\-backup but does not accept an argument
+.TP
+\fB\-S\fR, \fB\-\-suffix\fR=\fISUFFIX\fR
+override the usual backup suffix
+.TP
+\fB\-\-update\fR
+move only when the SOURCE file is newer than the destination file or when the destination file is missing
+.br
+
+.br
+[\fIpossible values: \fRnone, all, older]
+.TP
+\fB\-u\fR
+like \-\-update but does not accept an argument
+.TP
+\fB\-t\fR, \fB\-\-target\-directory\fR=\fIDIRECTORY\fR
+move all SOURCE arguments into DIRECTORY
+.TP
+\fB\-T\fR, \fB\-\-no\-target\-directory\fR
+treat DEST as a normal file
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+explain what is being done
+.TP
+\fB\-g\fR, \fB\-\-progress\fR
+Display a progress bar. 
+Note: this feature is not supported by GNU coreutils.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+<\fIfiles\fR>
+
+.SH EXTRA
+When specifying more than one of \-i, \-f, \-n, only the final one will take effect.
+
+Do not move a non\-directory that has an existing destination with the same or newer modification timestamp;
+instead, silently skip the file without failing. If the move is across file system boundaries, the comparison is
+to the source timestamp truncated to the resolutions of the destination file system and of the system calls used
+to update timestamps; this avoids duplicate work if several mv \-u commands are executed with the same source
+and destination. This option is ignored if the \-n or \-\-no\-clobber option is also specified. which gives more control
+over which existing files in the destination are replaced, and its value can be one of the following:
+
+* all    This is the default operation when an \-\-update option is not specified, and results in all existing files in the destination being replaced.
+* none   This is similar to the \-\-no\-clobber option, in that no files in the destination are replaced, but also skipping a file does not induce a failure.
+* older  This is the default operation when \-\-update is specified, and results in files being replaced if they’re older than the corresponding source file.
+
+The backup suffix is \*(Aq~\*(Aq, unless set with \-\-suffix or SIMPLE_BACKUP_SUFFIX.
+The version control method may be selected via the \-\-backup option or through
+the VERSION_CONTROL environment variable.  Here are the values:
+
+  none, off       never make backups (even if \-\-backup is given)
+  numbered, t     make numbered backups
+  existing, nil   numbered if numbered backups exist, simple otherwise
+  simple, never   always make simple backups
+.SH VERSION
+v0.0.27

@@ -1,0 +1,93 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_pr 1  "uu_pr 0.0.27" 
+.SH NAME
+uu_pr \- Write content of given file or standard input to standard output with pagination filter
+.SH SYNOPSIS
+\fBuu_pr\fR [\fB\-\-pages\fR] [\fB\-h\fR|\fB\-\-header\fR] [\fB\-d\fR|\fB\-\-double\-space\fR] [\fB\-n\fR|\fB\-\-number\-lines\fR] [\fB\-N\fR|\fB\-\-first\-line\-number\fR] [\fB\-t\fR|\fB\-\-omit\-header\fR] [\fB\-l\fR|\fB\-\-length\fR] [\fB\-r\fR|\fB\-\-no\-file\-warnings\fR] [\fB\-F\fR|\fB\-\-form\-feed\fR] [\fB\-w\fR|\fB\-\-width\fR] [\fB\-W\fR|\fB\-\-page\-width\fR] [\fB\-a\fR|\fB\-\-across\fR] [\fB\-\-column\fR] [\fB\-s\fR|\fB\-\-separator\fR] [\fB\-S\fR|\fB\-\-sep\-string\fR] [\fB\-m\fR|\fB\-\-merge\fR] [\fB\-o\fR|\fB\-\-indent\fR] [\fB\-J \fR] [\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfiles\fR] 
+.SH DESCRIPTION
+Write content of given file or standard input to standard output with pagination filter
+.SH OPTIONS
+.TP
+\fB\-\-pages\fR=\fIFIRST_PAGE[:LAST_PAGE]\fR
+Begin and stop printing with page FIRST_PAGE[:LAST_PAGE]
+.TP
+\fB\-h\fR, \fB\-\-header\fR=\fISTRING\fR
+Use the string header to replace the file name in the header line.
+.TP
+\fB\-d\fR, \fB\-\-double\-space\fR
+Produce output that is double spaced. An extra <newline> character is output following every <newline> found in the input.
+.TP
+\fB\-n\fR, \fB\-\-number\-lines\fR=\fI[char][width]\fR
+Provide width digit line numbering.  The default for width, if not specified, is 5.  The number occupies the first width column positions of each text column or each line of \-m output.  If char (any non\-digit character) is given, it is appended to the line number to separate it from whatever follows.  The default for char is a <tab>. Line numbers longer than width columns are truncated.
+.TP
+\fB\-N\fR, \fB\-\-first\-line\-number\fR=\fINUMBER\fR
+start counting with NUMBER at 1st line of first page printed
+.TP
+\fB\-t\fR, \fB\-\-omit\-header\fR
+Write neither the five\-line identifying header nor the five\-line trailer usually supplied for each page. Quit writing after the last line of each file without spacing to the end of the page.
+.TP
+\fB\-l\fR, \fB\-\-length\fR=\fIPAGE_LENGTH\fR
+Override the 66\-line default (default number of lines of text 56, and with \-F 63) and reset the page length to lines.  If lines is not greater than the sum  of  both the  header  and trailer depths (in lines), the pr utility shall suppress both the header and trailer, as if the \-t option were in effect. 
+.TP
+\fB\-r\fR, \fB\-\-no\-file\-warnings\fR
+omit warning when a file cannot be opened
+.TP
+\fB\-F\fR, \fB\-\-form\-feed\fR
+Use a <form\-feed> for new pages, instead of the default behavior that uses a sequence of <newline>s.
+.TP
+\fB\-w\fR, \fB\-\-width\fR=\fIwidth\fR
+Set the width of the line to width column positions for multiple text\-column output only. If the \-w option is not specified and the \-s option is not specified, the default width shall be 72. If the \-w option is not specified and the \-s option is specified, the default width shall be 512.
+.TP
+\fB\-W\fR, \fB\-\-page\-width\fR=\fIwidth\fR
+set page width to PAGE_WIDTH (72) characters always, truncate lines, except \-J option is set, no interference with \-S or \-s
+.TP
+\fB\-a\fR, \fB\-\-across\fR
+Modify the effect of the \- column option so that the columns are filled across the page in a  round\-robin  order (for example, when column is 2, the first input line heads column 1, the second heads column 2, the third is the second line in column 1, and so on).
+.TP
+\fB\-\-column\fR=\fIcolumn\fR
+Produce multi\-column output that is arranged in column columns (the default shall be 1) and is written down each column  in  the order in which the text is received from the input file. This option should not be used with \-m. The options \-e and \-i shall be assumed for multiple text\-column output.  Whether or not text columns are produced with identical vertical lengths is unspecified, but a text column shall never exceed the length of the page (see the \-l option). When used with \-t, use the minimum number of lines to write the output.
+.TP
+\fB\-s\fR, \fB\-\-separator\fR=\fIchar\fR
+Separate text columns by the single character char instead of by the appropriate number of <space>s (default for char is the <tab> character).
+.TP
+\fB\-S\fR, \fB\-\-sep\-string\fR=\fIstring\fR
+separate columns by STRING, without \-S: Default separator <TAB> with \-J and <space> otherwise (same as \-S" "), no effect on column options
+.TP
+\fB\-m\fR, \fB\-\-merge\fR
+Merge files. Standard output shall be formatted so the pr utility writes one line from each file specified by a file operand, side by side into text columns of equal fixed widths, in terms of the number of column positions. Implementations shall support merging of at least nine file operands.
+.TP
+\fB\-o\fR, \fB\-\-indent\fR=\fImargin\fR
+Each line of output shall be preceded by offset <space>s. If the \-o option is not specified, the default offset shall be zero. The space taken is in addition to the output line width (see the \-w option below).
+.TP
+\fB\-J\fR
+merge full lines, turns off \-W line truncation, no column alignment, \-\-sep\-string[=STRING] sets separators
+.TP
+\fB\-\-help\fR
+Print help information
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfiles\fR]
+
+.SH EXTRA
++PAGE           Begin output at page number page of the formatted input.
+\-COLUMN         Produce multi\-column output. See \-\-column
+
+The pr utility is a printing and pagination filter for text files.
+When multiple input files are specified, each is read, formatted, and written to standard output.
+By default, the input is separated into 66\-line pages, each with
+
+* A 5\-line header with the page number, date, time, and the pathname of the file.
+* A 5\-line trailer consisting of blank lines.
+
+If standard output is associated with a terminal, diagnostic messages are suppressed until the pr
+utility has completed processing.
+
+When multiple column output is specified, text columns are of equal width.
+By default, text columns are separated by at least one <blank>.
+Input lines that do not fit into a text column are truncated.
+Lines are not truncated under single column output.
+.SH VERSION
+v0.0.27

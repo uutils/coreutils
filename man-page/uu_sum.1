@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_sum 1  "uu_sum 0.0.27" 
+.SH NAME
+uu_sum \- Checksum and count the blocks in a file.
+
+With no FILE, or when FILE is \-, read standard input.
+.SH SYNOPSIS
+\fBuu_sum\fR [\fB\-r \fR] [\fB\-s\fR|\fB\-\-sysv\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Checksum and count the blocks in a file.
+.PP
+With no FILE, or when FILE is \-, read standard input.
+.SH OPTIONS
+.TP
+\fB\-r\fR
+use the BSD sum algorithm, use 1K blocks (default)
+.TP
+\fB\-s\fR, \fB\-\-sysv\fR
+use System V sum algorithm, use 512 bytes blocks
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

@@ -1,0 +1,54 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_comm 1  "uu_comm 0.0.27" 
+.SH NAME
+uu_comm \- Compare two sorted files line by line.
+
+When FILE1 or FILE2 (not both) is \-, read standard input.
+
+With no options, produce three\-column output. Column one contains
+lines unique to FILE1, column two contains lines unique to FILE2,
+and column three contains lines common to both files.
+.SH SYNOPSIS
+\fBuu_comm\fR [\fB\-1 \fR] [\fB\-2 \fR] [\fB\-3 \fR] [\fB\-\-output\-delimiter\fR] [\fB\-z\fR|\fB\-\-zero\-terminated\fR] [\fB\-\-total\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIFILE1\fR> <\fIFILE2\fR> 
+.SH DESCRIPTION
+Compare two sorted files line by line.
+.PP
+When FILE1 or FILE2 (not both) is \-, read standard input.
+.PP
+With no options, produce three\-column output. Column one contains
+lines unique to FILE1, column two contains lines unique to FILE2,
+and column three contains lines common to both files.
+.SH OPTIONS
+.TP
+\fB\-1\fR
+suppress column 1 (lines unique to FILE1)
+.TP
+\fB\-2\fR
+suppress column 2 (lines unique to FILE2)
+.TP
+\fB\-3\fR
+suppress column 3 (lines that appear in both files)
+.TP
+\fB\-\-output\-delimiter\fR=\fISTR\fR
+separate columns with STR
+.TP
+\fB\-z\fR, \fB\-\-zero\-terminated\fR
+line delimiter is NUL, not newline
+.TP
+\fB\-\-total\fR
+output a summary
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+<\fIFILE1\fR>
+
+.TP
+<\fIFILE2\fR>
+
+.SH VERSION
+v0.0.27

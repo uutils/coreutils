@@ -1,0 +1,39 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_timeout 1  "uu_timeout 0.0.27" 
+.SH NAME
+uu_timeout \- Start `COMMAND`, and kill it if still running after `DURATION`.
+.SH SYNOPSIS
+\fBuu_timeout\fR [\fB\-\-foreground\fR] [\fB\-k\fR|\fB\-\-kill\-after\fR] [\fB\-\-preserve\-status\fR] [\fB\-s\fR|\fB\-\-signal\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIduration\fR> <\fIcommand\fR> 
+.SH DESCRIPTION
+Start `COMMAND`, and kill it if still running after `DURATION`.
+.SH OPTIONS
+.TP
+\fB\-\-foreground\fR
+when not running timeout directly from a shell prompt, allow COMMAND to read from the TTY and get TTY signals; in this mode, children of COMMAND will not be timed out
+.TP
+\fB\-k\fR, \fB\-\-kill\-after\fR
+also send a KILL signal if COMMAND is still running this long after the initial signal was sent
+.TP
+\fB\-\-preserve\-status\fR
+exit with the same status as COMMAND, even when the command times out
+.TP
+\fB\-s\fR, \fB\-\-signal\fR=\fISIGNAL\fR
+specify the signal to be sent on timeout; SIGNAL may be a name like \*(AqHUP\*(Aq or a number; see \*(Aqkill \-l\*(Aq for a list of signals
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+diagnose to stderr any signal sent upon timeout
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+<\fIduration\fR>
+
+.TP
+<\fIcommand\fR>
+
+.SH VERSION
+v0.0.27

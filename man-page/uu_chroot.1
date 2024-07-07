@@ -1,0 +1,33 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_chroot 1  "uu_chroot 0.0.27" 
+.SH NAME
+uu_chroot \- Run COMMAND with root directory set to NEWROOT.
+.SH SYNOPSIS
+\fBuu_chroot\fR [\fB\-u\fR|\fB\-\-user\fR] [\fB\-g\fR|\fB\-\-group\fR] [\fB\-G\fR|\fB\-\-groups\fR] [\fB\-\-userspec\fR] [\fB\-\-skip\-chdir\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fInewroot\fR> [\fIcommand\fR] 
+.SH DESCRIPTION
+Run COMMAND with root directory set to NEWROOT.
+.SH OPTIONS
+.TP
+\fB\-u\fR, \fB\-\-user\fR=\fIUSER\fR
+User (ID or name) to switch before running the program
+.TP
+\fB\-g\fR, \fB\-\-group\fR=\fIGROUP\fR
+Group (ID or name) to switch to
+.TP
+\fB\-G\fR, \fB\-\-groups\fR=\fIGROUP1,GROUP2...\fR
+Comma\-separated list of groups to switch to
+.TP
+\fB\-\-userspec\fR=\fIUSER:GROUP\fR
+Colon\-separated user and group to switch to. Same as \-u USER \-g GROUP. Userspec has higher preference than \-u and/or \-g
+.TP
+\fB\-\-skip\-chdir\fR
+Use this option to not change the working directory to / after changing the root directory to newroot, i.e., inside the chroot.
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

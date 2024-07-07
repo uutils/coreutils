@@ -1,0 +1,54 @@
+#compdef shake128sum
+
+autoload -U is-at-least
+
+_shake128sum() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'--bits=[set the size of the output (only for SHAKE)]:BITS: ' \
+'-b[read in binary mode]' \
+'--binary[read in binary mode]' \
+'(--tag)-c[read hashsums from the FILEs and check them]' \
+'(--tag)--check[read hashsums from the FILEs and check them]' \
+'(-t --text)--tag[create a BSD-style checksum]' \
+'(-b --binary)-t[read in text mode (default)]' \
+'(-b --binary)--text[read in text mode (default)]' \
+'-q[don'\''t print OK for each successfully verified file]' \
+'--quiet[don'\''t print OK for each successfully verified file]' \
+'-s[don'\''t output anything, status code shows success]' \
+'--status[don'\''t output anything, status code shows success]' \
+'--strict[exit non-zero for improperly formatted checksum lines]' \
+'--ignore-missing[don'\''t fail or report status for missing files]' \
+'-w[warn about improperly formatted checksum lines]' \
+'--warn[warn about improperly formatted checksum lines]' \
+'-z[end each output line with NUL, not newline]' \
+'--zero[end each output line with NUL, not newline]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::file:_files' \
+&& ret=0
+}
+
+(( $+functions[_shake128sum_commands] )) ||
+_shake128sum_commands() {
+    local commands; commands=()
+    _describe -t commands 'shake128sum commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_shake128sum" ]; then
+    _shake128sum "$@"
+else
+    compdef _shake128sum shake128sum
+fi

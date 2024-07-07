@@ -1,0 +1,64 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_id 1  "uu_id 0.0.27" 
+.SH NAME
+uu_id \- Print user and group information for each specified `USER`,
+or (when `USER` omitted) for the current user.
+.SH SYNOPSIS
+\fBuu_id\fR [\fB\-A \fR] [\fB\-u\fR|\fB\-\-user\fR] [\fB\-g\fR|\fB\-\-group\fR] [\fB\-G\fR|\fB\-\-groups\fR] [\fB\-p \fR] [\fB\-n\fR|\fB\-\-name\fR] [\fB\-P \fR] [\fB\-r\fR|\fB\-\-real\fR] [\fB\-z\fR|\fB\-\-zero\fR] [\fB\-Z\fR|\fB\-\-context\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIUSER\fR] 
+.SH DESCRIPTION
+Print user and group information for each specified `USER`,
+or (when `USER` omitted) for the current user.
+.SH OPTIONS
+.TP
+\fB\-A\fR
+Display the process audit user ID and other process audit properties,
+which requires privilege (not available on Linux).
+.TP
+\fB\-u\fR, \fB\-\-user\fR
+Display only the effective user ID as a number.
+.TP
+\fB\-g\fR, \fB\-\-group\fR
+Display only the effective group ID as a number
+.TP
+\fB\-G\fR, \fB\-\-groups\fR
+Display only the different group IDs as white\-space separated numbers, in no particular order.
+.TP
+\fB\-p\fR
+Make the output human\-readable. Each display is on a separate line.
+.TP
+\fB\-n\fR, \fB\-\-name\fR
+Display the name of the user or group ID for the \-G, \-g and \-u options instead of the number.
+If any of the ID numbers cannot be mapped into names, the number will be displayed as usual.
+.TP
+\fB\-P\fR
+Display the id as a password file entry.
+.TP
+\fB\-r\fR, \fB\-\-real\fR
+Display the real ID for the \-G, \-g and \-u options instead of the effective ID.
+.TP
+\fB\-z\fR, \fB\-\-zero\fR
+delimit entries with NUL characters, not whitespace;
+not permitted in default format
+.TP
+\fB\-Z\fR, \fB\-\-context\fR
+print only the security context of the process (not enabled)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIUSER\fR]
+
+.SH EXTRA
+The id utility displays the user and group names and numeric IDs, of the
+calling process, to the standard output. If the real and effective IDs are
+different, both are displayed, otherwise only the real ID is displayed.
+
+If a user (login name or user ID) is specified, the user and group IDs of
+that user are displayed. In this case, the real and effective IDs are
+assumed to be the same.
+.SH VERSION
+v0.0.27

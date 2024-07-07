@@ -1,0 +1,33 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_seq 1  "uu_seq 0.0.27" 
+.SH NAME
+uu_seq \- Display numbers from FIRST to LAST, in steps of INCREMENT.
+.SH SYNOPSIS
+\fBuu_seq\fR [\fB\-s\fR|\fB\-\-separator\fR] [\fB\-t\fR|\fB\-\-terminator\fR] [\fB\-w\fR|\fB\-\-equal\-width\fR] [\fB\-f\fR|\fB\-\-format\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fInumbers\fR] 
+.SH DESCRIPTION
+Display numbers from FIRST to LAST, in steps of INCREMENT.
+.SH OPTIONS
+.TP
+\fB\-s\fR, \fB\-\-separator\fR
+Separator character (defaults to \\n)
+.TP
+\fB\-t\fR, \fB\-\-terminator\fR
+Terminator character (defaults to \\n)
+.TP
+\fB\-w\fR, \fB\-\-equal\-width\fR
+Equalize widths of all numbers by padding with zeros
+.TP
+\fB\-f\fR, \fB\-\-format\fR
+use printf style floating\-point FORMAT
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fInumbers\fR]
+
+.SH VERSION
+v0.0.27

@@ -1,0 +1,53 @@
+#compdef uu_cat
+
+autoload -U is-at-least
+
+_uu_cat() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-A[equivalent to -vET]' \
+'--show-all[equivalent to -vET]' \
+'-b[number nonempty output lines, overrides -n]' \
+'--number-nonblank[number nonempty output lines, overrides -n]' \
+'-e[equivalent to -vE]' \
+'-E[display \$ at end of each line]' \
+'--show-ends[display \$ at end of each line]' \
+'-n[number all output lines]' \
+'--number[number all output lines]' \
+'-s[suppress repeated empty output lines]' \
+'--squeeze-blank[suppress repeated empty output lines]' \
+'-t[equivalent to -vT]' \
+'-T[display TAB characters at ^I]' \
+'--show-tabs[display TAB characters at ^I]' \
+'-v[use ^ and M- notation, except for LF (\\n) and TAB (\\t)]' \
+'--show-nonprinting[use ^ and M- notation, except for LF (\\n) and TAB (\\t)]' \
+'-u[(ignored)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::file:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_cat_commands] )) ||
+_uu_cat_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_cat commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_cat" ]; then
+    _uu_cat "$@"
+else
+    compdef _uu_cat uu_cat
+fi

@@ -3,20 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::ArgAction;
-use clap::{crate_version, Arg, Command};
 use std::env;
 use std::io;
 use std::path::PathBuf;
-use uucore::{format_usage, help_about, help_usage};
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
-
-const ABOUT: &str = help_about!("pwd.md");
-const USAGE: &str = help_usage!("pwd.md");
-const OPT_LOGICAL: &str = "logical";
-const OPT_PHYSICAL: &str = "physical";
 
 fn physical_path() -> io::Result<PathBuf> {
     // std::env::current_dir() is a thin wrapper around libc::getcwd().
@@ -109,13 +101,13 @@ fn logical_path() -> io::Result<PathBuf> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
     // if POSIXLY_CORRECT is set, we want to a logical resolution.
     // This produces a different output when doing mkdir -p a/b && ln -s a/b c && cd c && pwd
     // We should get c in this case instead of a/b at the end of the path
-    let cwd = if matches.get_flag(OPT_PHYSICAL) {
+    let cwd = if matches.get_flag(crate::options::OPT_PHYSICAL) {
         physical_path()
-    } else if matches.get_flag(OPT_LOGICAL) || env::var("POSIXLY_CORRECT").is_ok() {
+    } else if matches.get_flag(crate::options::OPT_LOGICAL) || env::var("POSIXLY_CORRECT").is_ok() {
         logical_path()
     } else {
         physical_path()
@@ -136,27 +128,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     println_verbatim(cwd).map_err_context(|| "failed to print current directory".to_owned())?;
 
     Ok(())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(OPT_LOGICAL)
-                .short('L')
-                .long(OPT_LOGICAL)
-                .help("use PWD from environment, even if it contains symlinks")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_PHYSICAL)
-                .short('P')
-                .long(OPT_PHYSICAL)
-                .overrides_with(OPT_LOGICAL)
-                .help("avoid all symlinks")
-                .action(ArgAction::SetTrue),
-        )
 }

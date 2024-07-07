@@ -1,0 +1,49 @@
+#compdef uu_numfmt
+
+autoload -U is-at-least
+
+_uu_numfmt() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-d+[use X instead of whitespace for field delimiter]:X: ' \
+'--delimiter=[use X instead of whitespace for field delimiter]:X: ' \
+'--field=[replace the numbers in these input fields; see FIELDS below]:FIELDS: ' \
+'--format=[use printf style floating-point FORMAT; see FORMAT below for details]:FORMAT: ' \
+'--from=[auto-scale input numbers to UNITs; see UNIT below]:UNIT: ' \
+'--from-unit=[specify the input unit size]:N: ' \
+'--to=[auto-scale output numbers to UNITs; see UNIT below]:UNIT: ' \
+'--to-unit=[the output unit size]:N: ' \
+'--padding=[pad the output to N characters; positive N will right-align; negative N will left-align; padding is ignored if the output is wider than N; the default is to automatically pad if a whitespace is found]:N: ' \
+'--header=[print (without converting) the first N header lines; N defaults to 1 if not specified]' \
+'--round=[use METHOD for rounding when scaling]:METHOD:(up down from-zero towards-zero nearest)' \
+'--suffix=[print SUFFIX after each formatted number, and accept inputs optionally ending with SUFFIX]:SUFFIX: ' \
+'--invalid=[set the failure mode for invalid input]:INVALID:(abort fail warn ignore)' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::NUMBER:' \
+&& ret=0
+}
+
+(( $+functions[_uu_numfmt_commands] )) ||
+_uu_numfmt_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_numfmt commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_numfmt" ]; then
+    _uu_numfmt "$@"
+else
+    compdef _uu_numfmt uu_numfmt
+fi

@@ -530,7 +530,14 @@ serde-big-array = "0.5.1"
 clap = "4.4"
 clap_complete = "4.4"
 clap_mangen = "0.2"
-uucore = { workspace = true }
+uucore = { workspace = true, features = [
+  "perms",
+  "entries",
+  "backup-control",
+  "update-control",
+  "encoding",
+  "checksum",
+] }
 phf_codegen = { workspace = true }
 
 [[bin]]

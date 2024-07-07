@@ -5,7 +5,6 @@
 
 // spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
-use clap::{crate_version, Arg, ArgAction, Command};
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
@@ -16,10 +15,7 @@ use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
-use uucore::{crash_if_err, format_usage, help_about, help_usage, show};
-
-const USAGE: &str = help_usage!("unexpand.md");
-const ABOUT: &str = help_about!("unexpand.md");
+use uucore::{crash_if_err, show};
 
 const DEFAULT_TABSTOP: usize = 8;
 
@@ -80,14 +76,6 @@ fn tabstops_parse(s: &str) -> Result<Vec<usize>, ParseError> {
     Ok(nums)
 }
 
-mod options {
-    pub const FILE: &str = "file";
-    pub const ALL: &str = "all";
-    pub const FIRST_ONLY: &str = "first-only";
-    pub const TABS: &str = "tabs";
-    pub const NO_UTF8: &str = "no-utf8";
-}
-
 struct Options {
     files: Vec<String>,
     tabstops: Vec<usize>,
@@ -97,16 +85,17 @@ struct Options {
 
 impl Options {
     fn new(matches: &clap::ArgMatches) -> Result<Self, ParseError> {
-        let tabstops = match matches.get_many::<String>(options::TABS) {
+        let tabstops = match matches.get_many::<String>(crate::options::TABS) {
             None => vec![DEFAULT_TABSTOP],
             Some(s) => tabstops_parse(&s.map(|s| s.as_str()).collect::<Vec<_>>().join(","))?,
         };
 
-        let aflag = (matches.get_flag(options::ALL) || matches.contains_id(options::TABS))
-            && !matches.get_flag(options::FIRST_ONLY);
-        let uflag = !matches.get_flag(options::NO_UTF8);
+        let aflag = (matches.get_flag(crate::options::ALL)
+            || matches.contains_id(crate::options::TABS))
+            && !matches.get_flag(crate::options::FIRST_ONLY);
+        let uflag = !matches.get_flag(crate::options::NO_UTF8);
 
-        let files = match matches.get_many::<String>(options::FILE) {
+        let files = match matches.get_many::<String>(crate::options::FILE) {
             Some(v) => v.cloned().collect(),
             None => vec!["-".to_owned()],
         };
@@ -160,54 +149,9 @@ fn expand_shortcuts(args: &[String]) -> Vec<String> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
 
-    let matches = uu_app().try_get_matches_from(expand_shortcuts(&args))?;
+    let matches = crate::uu_app().try_get_matches_from(expand_shortcuts(&args))?;
 
     unexpand(&Options::new(&matches)?)
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::FILE)
-                .hide(true)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath),
-        )
-        .arg(
-            Arg::new(options::ALL)
-                .short('a')
-                .long(options::ALL)
-                .help("convert all blanks, instead of just initial blanks")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FIRST_ONLY)
-                .long(options::FIRST_ONLY)
-                .help("convert only leading sequences of blanks (overrides -a)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::TABS)
-                .short('t')
-                .long(options::TABS)
-                .help(
-                    "use comma separated LIST of tab positions or have tabs N characters \
-                apart instead of 8 (enables -a)",
-                )
-                .action(ArgAction::Append)
-                .value_name("N, LIST"),
-        )
-        .arg(
-            Arg::new(options::NO_UTF8)
-                .short('U')
-                .long(options::NO_UTF8)
-                .help("interpret input file as 8-bit ASCII rather than UTF-8")
-                .action(ArgAction::SetTrue),
-        )
 }
 
 fn open(path: &str) -> UResult<BufReader<Box<dyn Read + 'static>>> {
@@ -425,7 +369,7 @@ fn unexpand(options: &Options) -> UResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::is_digit_or_comma;
+    use crate::unexpand::is_digit_or_comma;
 
     #[test]
     fn test_is_digit_or_comma() {

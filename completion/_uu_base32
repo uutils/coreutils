@@ -1,0 +1,42 @@
+#compdef uu_base32
+
+autoload -U is-at-least
+
+_uu_base32() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-w+[wrap encoded lines after COLS character (default 76, 0 to disable wrapping)]:COLS: ' \
+'--wrap=[wrap encoded lines after COLS character (default 76, 0 to disable wrapping)]:COLS: ' \
+'-d[decode data]' \
+'--decode[decode data]' \
+'-i[when decoding, ignore non-alphabetic characters]' \
+'--ignore-garbage[when decoding, ignore non-alphabetic characters]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::file:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_base32_commands] )) ||
+_uu_base32_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_base32 commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_base32" ]; then
+    _uu_base32 "$@"
+else
+    compdef _uu_base32 uu_base32
+fi

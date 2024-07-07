@@ -1,0 +1,35 @@
+#compdef uu_printf
+
+autoload -U is-at-least
+
+_uu_printf() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'--help[Print help information]' \
+'--version[Print version information]' \
+'::FORMATSTRING:' \
+'::ARGUMENT:' \
+&& ret=0
+}
+
+(( $+functions[_uu_printf_commands] )) ||
+_uu_printf_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_printf commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_printf" ]; then
+    _uu_printf "$@"
+else
+    compdef _uu_printf uu_printf
+fi

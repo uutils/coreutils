@@ -1,0 +1,52 @@
+#compdef uu_shred
+
+autoload -U is-at-least
+
+_uu_shred() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-n+[overwrite N times instead of the default (3)]:NUMBER: ' \
+'--iterations=[overwrite N times instead of the default (3)]:NUMBER: ' \
+'-s+[shred this many bytes (suffixes like K, M, G accepted)]:N: ' \
+'--size=[shred this many bytes (suffixes like K, M, G accepted)]:N: ' \
+'--remove=[like -u but give control on HOW to delete;  See below]' \
+'-f[change permissions to allow writing if necessary]' \
+'--force[change permissions to allow writing if necessary]' \
+'-u[deallocate and remove file after overwriting]' \
+'-v[show progress]' \
+'--verbose[show progress]' \
+'-x[do not round file sizes up to the next full block;
+this is the default for non-regular files]' \
+'--exact[do not round file sizes up to the next full block;
+this is the default for non-regular files]' \
+'-z[add a final overwrite with zeros to hide shredding]' \
+'--zero[add a final overwrite with zeros to hide shredding]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::file:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_shred_commands] )) ||
+_uu_shred_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_shred commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_shred" ]; then
+    _uu_shred "$@"
+else
+    compdef _uu_shred uu_shred
+fi

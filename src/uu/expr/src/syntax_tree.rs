@@ -9,7 +9,7 @@ use num_bigint::{BigInt, ParseBigIntError};
 use num_traits::ToPrimitive;
 use onig::{Regex, RegexOptions, Syntax};
 
-use crate::{ExprError, ExprResult};
+use crate::expr::{ExprError, ExprResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {

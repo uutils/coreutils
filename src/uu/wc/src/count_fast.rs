@@ -6,7 +6,7 @@
 // cSpell:ignore sysconf
 use crate::word_count::WordCount;
 
-use super::WordCountable;
+use crate::WordCountable;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::OpenOptions;

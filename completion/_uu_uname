@@ -1,0 +1,53 @@
+#compdef uu_uname
+
+autoload -U is-at-least
+
+_uu_uname() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-a[Behave as though all of the options -mnrsvo were specified.]' \
+'--all[Behave as though all of the options -mnrsvo were specified.]' \
+'-s[print the kernel name.]' \
+'--kernel-name[print the kernel name.]' \
+'-n[print the nodename (the nodename may be a name that the system is known by to a communications network).]' \
+'--nodename[print the nodename (the nodename may be a name that the system is known by to a communications network).]' \
+'-r[print the operating system release.]' \
+'--kernel-release[print the operating system release.]' \
+'-v[print the operating system version.]' \
+'--kernel-version[print the operating system version.]' \
+'-m[print the machine hardware name.]' \
+'--machine[print the machine hardware name.]' \
+'-o[print the operating system name.]' \
+'--operating-system[print the operating system name.]' \
+'-p[print the processor type (non-portable)]' \
+'--processor[print the processor type (non-portable)]' \
+'-i[print the hardware platform (non-portable)]' \
+'--hardware-platform[print the hardware platform (non-portable)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+&& ret=0
+}
+
+(( $+functions[_uu_uname_commands] )) ||
+_uu_uname_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_uname commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_uname" ]; then
+    _uu_uname "$@"
+else
+    compdef _uu_uname uu_uname
+fi

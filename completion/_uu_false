@@ -1,0 +1,33 @@
+#compdef uu_false
+
+autoload -U is-at-least
+
+_uu_false() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'--help[Print help information]' \
+'--version[Print version information]' \
+&& ret=0
+}
+
+(( $+functions[_uu_false_commands] )) ||
+_uu_false_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_false commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_false" ]; then
+    _uu_false "$@"
+else
+    compdef _uu_false uu_false
+fi

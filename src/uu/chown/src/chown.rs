@@ -6,20 +6,14 @@
 // spell-checker:ignore (ToDO) COMFOLLOW Passwd RFILE RFILE's derefer dgid duid groupname
 
 use uucore::display::Quotable;
-pub use uucore::entries::{self, Group, Locate, Passwd};
-use uucore::perms::{chown_base, options, GidUidOwnerFilter, IfFrom};
-use uucore::{format_usage, help_about, help_usage};
-
+use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::perms::{chown_base, options, GidUidOwnerFilter, IfFrom};
 
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
-
-static ABOUT: &str = help_about!("chown.md");
-
-const USAGE: &str = help_usage!("chown.md");
 
 fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     let filter = if let Some(spec) = matches.get_one::<String>(options::FROM) {
@@ -68,131 +62,12 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     chown_base(
-        uu_app(),
+        crate::uu_app(),
         args,
         options::ARG_OWNER,
         parse_gid_uid_and_filter,
         false,
     )
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .disable_help_flag(true)
-        .arg(
-            Arg::new(options::HELP)
-                .long(options::HELP)
-                .help("Print help information.")
-                .action(ArgAction::Help),
-        )
-        .arg(
-            Arg::new(options::verbosity::CHANGES)
-                .short('c')
-                .long(options::verbosity::CHANGES)
-                .help("like verbose but report only when a change is made")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::dereference::DEREFERENCE)
-                .long(options::dereference::DEREFERENCE)
-                .help(
-                    "affect the referent of each symbolic link (this is the default), \
-                    rather than the symbolic link itself",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::dereference::NO_DEREFERENCE)
-                .short('h')
-                .long(options::dereference::NO_DEREFERENCE)
-                .help(
-                    "affect symbolic links instead of any referenced file \
-                    (useful only on systems that can change the ownership of a symlink)",
-                )
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FROM)
-                .long(options::FROM)
-                .help(
-                    "change the owner and/or group of each file only if its \
-                    current owner and/or group match those specified here. \
-                    Either may be omitted, in which case a match is not required \
-                    for the omitted attribute",
-                )
-                .value_name("CURRENT_OWNER:CURRENT_GROUP"),
-        )
-        .arg(
-            Arg::new(options::preserve_root::PRESERVE)
-                .long(options::preserve_root::PRESERVE)
-                .help("fail to operate recursively on '/'")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::preserve_root::NO_PRESERVE)
-                .long(options::preserve_root::NO_PRESERVE)
-                .help("do not treat '/' specially (the default)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::verbosity::QUIET)
-                .long(options::verbosity::QUIET)
-                .help("suppress most error messages")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::RECURSIVE)
-                .short('R')
-                .long(options::RECURSIVE)
-                .help("operate on files and directories recursively")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::REFERENCE)
-                .long(options::REFERENCE)
-                .help("use RFILE's owner and group rather than specifying OWNER:GROUP values")
-                .value_name("RFILE")
-                .value_hint(clap::ValueHint::FilePath)
-                .num_args(1..),
-        )
-        .arg(
-            Arg::new(options::verbosity::SILENT)
-                .short('f')
-                .long(options::verbosity::SILENT)
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::TRAVERSE)
-                .short(options::traverse::TRAVERSE.chars().next().unwrap())
-                .help("if a command line argument is a symbolic link to a directory, traverse it")
-                .overrides_with_all([options::traverse::EVERY, options::traverse::NO_TRAVERSE])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::EVERY)
-                .short(options::traverse::EVERY.chars().next().unwrap())
-                .help("traverse every symbolic link to a directory encountered")
-                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::NO_TRAVERSE])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::traverse::NO_TRAVERSE)
-                .short(options::traverse::NO_TRAVERSE.chars().next().unwrap())
-                .help("do not traverse any symbolic links (default)")
-                .overrides_with_all([options::traverse::TRAVERSE, options::traverse::EVERY])
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::verbosity::VERBOSE)
-                .long(options::verbosity::VERBOSE)
-                .short('v')
-                .help("output a diagnostic for every file processed")
-                .action(ArgAction::SetTrue),
-        )
 }
 
 /// Parses the user string to extract the UID.

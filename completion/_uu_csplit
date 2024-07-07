@@ -1,0 +1,51 @@
+#compdef uu_csplit
+
+autoload -U is-at-least
+
+_uu_csplit() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-b+[use sprintf FORMAT instead of %02d]:FORMAT: ' \
+'--suffix-format=[use sprintf FORMAT instead of %02d]:FORMAT: ' \
+'-f+[use PREFIX instead of '\''xx'\'']:PREFIX: ' \
+'--prefix=[use PREFIX instead of '\''xx'\'']:PREFIX: ' \
+'-n+[use specified number of digits instead of 2]:DIGITS: ' \
+'--digits=[use specified number of digits instead of 2]:DIGITS: ' \
+'-k[do not remove output files on errors]' \
+'--keep-files[do not remove output files on errors]' \
+'--suppress-matched[suppress the lines matching PATTERN]' \
+'-s[do not print counts of output file sizes]' \
+'--quiet[do not print counts of output file sizes]' \
+'--silent[do not print counts of output file sizes]' \
+'-z[remove empty output files]' \
+'--elide-empty-files[remove empty output files]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':file:_files' \
+':pattern:' \
+&& ret=0
+}
+
+(( $+functions[_uu_csplit_commands] )) ||
+_uu_csplit_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_csplit commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_csplit" ]; then
+    _uu_csplit "$@"
+else
+    compdef _uu_csplit uu_csplit
+fi

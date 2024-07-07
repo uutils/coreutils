@@ -1,0 +1,41 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_csplit 1  "uu_csplit 0.0.27" 
+.SH NAME
+uu_csplit \- Split a file into sections determined by context lines
+.SH SYNOPSIS
+\fBuu_csplit\fR [\fB\-b\fR|\fB\-\-suffix\-format\fR] [\fB\-f\fR|\fB\-\-prefix\fR] [\fB\-k\fR|\fB\-\-keep\-files\fR] [\fB\-\-suppress\-matched\fR] [\fB\-n\fR|\fB\-\-digits\fR] [\fB\-s\fR|\fB\-\-quiet\fR] [\fB\-z\fR|\fB\-\-elide\-empty\-files\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] <\fIfile\fR> <\fIpattern\fR> 
+.SH DESCRIPTION
+Split a file into sections determined by context lines
+.SH OPTIONS
+.TP
+\fB\-b\fR, \fB\-\-suffix\-format\fR=\fIFORMAT\fR
+use sprintf FORMAT instead of %02d
+.TP
+\fB\-f\fR, \fB\-\-prefix\fR=\fIPREFIX\fR
+use PREFIX instead of \*(Aqxx\*(Aq
+.TP
+\fB\-k\fR, \fB\-\-keep\-files\fR
+do not remove output files on errors
+.TP
+\fB\-\-suppress\-matched\fR
+suppress the lines matching PATTERN
+.TP
+\fB\-n\fR, \fB\-\-digits\fR=\fIDIGITS\fR
+use specified number of digits instead of 2
+.TP
+\fB\-s\fR, \fB\-\-quiet\fR
+do not print counts of output file sizes
+.TP
+\fB\-z\fR, \fB\-\-elide\-empty\-files\fR
+remove empty output files
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+Output pieces of FILE separated by PATTERN(s) to files \*(Aqxx00\*(Aq, \*(Aqxx01\*(Aq, ..., and output byte counts of each piece to standard output.
+.SH VERSION
+v0.0.27

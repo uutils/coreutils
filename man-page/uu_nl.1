@@ -1,0 +1,69 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_nl 1  "uu_nl 0.0.27" 
+.SH NAME
+uu_nl \- Number lines of files
+.SH SYNOPSIS
+\fBuu_nl\fR [\fB\-\-help\fR] [\fB\-b\fR|\fB\-\-body\-numbering\fR] [\fB\-d\fR|\fB\-\-section\-delimiter\fR] [\fB\-f\fR|\fB\-\-footer\-numbering\fR] [\fB\-h\fR|\fB\-\-header\-numbering\fR] [\fB\-i\fR|\fB\-\-line\-increment\fR] [\fB\-l\fR|\fB\-\-join\-blank\-lines\fR] [\fB\-n\fR|\fB\-\-number\-format\fR] [\fB\-p\fR|\fB\-\-no\-renumber\fR] [\fB\-s\fR|\fB\-\-number\-separator\fR] [\fB\-v\fR|\fB\-\-starting\-line\-number\fR] [\fB\-w\fR|\fB\-\-number\-width\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Number lines of files
+.SH OPTIONS
+.TP
+\fB\-\-help\fR
+Print help information.
+.TP
+\fB\-b\fR, \fB\-\-body\-numbering\fR=\fISTYLE\fR
+use STYLE for numbering body lines
+.TP
+\fB\-d\fR, \fB\-\-section\-delimiter\fR=\fICC\fR
+use CC for separating logical pages
+.TP
+\fB\-f\fR, \fB\-\-footer\-numbering\fR=\fISTYLE\fR
+use STYLE for numbering footer lines
+.TP
+\fB\-h\fR, \fB\-\-header\-numbering\fR=\fISTYLE\fR
+use STYLE for numbering header lines
+.TP
+\fB\-i\fR, \fB\-\-line\-increment\fR=\fINUMBER\fR
+line number increment at each line
+.TP
+\fB\-l\fR, \fB\-\-join\-blank\-lines\fR=\fINUMBER\fR
+group of NUMBER empty lines counted as one
+.TP
+\fB\-n\fR, \fB\-\-number\-format\fR=\fIFORMAT\fR
+insert line numbers according to FORMAT
+.br
+
+.br
+[\fIpossible values: \fRln, rn, rz]
+.TP
+\fB\-p\fR, \fB\-\-no\-renumber\fR
+do not reset line numbers at logical pages
+.TP
+\fB\-s\fR, \fB\-\-number\-separator\fR=\fISTRING\fR
+add STRING after (possible) line number
+.TP
+\fB\-v\fR, \fB\-\-starting\-line\-number\fR=\fINUMBER\fR
+first line number on each logical page
+.TP
+\fB\-w\fR, \fB\-\-number\-width\fR=\fINUMBER\fR
+use NUMBER columns for line numbers
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH EXTRA
+STYLE is one of:
+
+* a     number all lines
+* t     number only nonempty lines
+* n     number no lines
+* pBRE  number only lines that contain a match for the basic regular
+        expression, BRE
+
+FORMAT is one of:
+
+* ln    left justified, no leading zeros
+* rn    right justified, no leading zeros
+* rz    right justified, leading zeros
+.SH VERSION
+v0.0.27

@@ -1,0 +1,44 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_base32 1  "uu_base32 0.0.27" 
+.SH NAME
+uu_base32 \- encode/decode data and print to standard output
+With no FILE, or when FILE is \-, read standard input.
+
+The data are encoded as described for the base32 alphabet in RFC 4648.
+When decoding, the input may contain newlines in addition
+to the bytes of the formal base32 alphabet. Use \-\-ignore\-garbage
+to attempt to recover from any other non\-alphabet bytes in the
+encoded stream.
+.SH SYNOPSIS
+\fBuu_base32\fR [\fB\-d\fR|\fB\-\-decode\fR] [\fB\-i\fR|\fB\-\-ignore\-garbage\fR] [\fB\-w\fR|\fB\-\-wrap\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+encode/decode data and print to standard output
+With no FILE, or when FILE is \-, read standard input.
+.PP
+The data are encoded as described for the base32 alphabet in RFC 4648.
+When decoding, the input may contain newlines in addition
+to the bytes of the formal base32 alphabet. Use \-\-ignore\-garbage
+to attempt to recover from any other non\-alphabet bytes in the
+encoded stream.
+.SH OPTIONS
+.TP
+\fB\-d\fR, \fB\-\-decode\fR
+decode data
+.TP
+\fB\-i\fR, \fB\-\-ignore\-garbage\fR
+when decoding, ignore non\-alphabetic characters
+.TP
+\fB\-w\fR, \fB\-\-wrap\fR=\fICOLS\fR
+wrap encoded lines after COLS character (default 76, 0 to disable wrapping)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfile\fR]
+
+.SH VERSION
+v0.0.27

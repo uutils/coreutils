@@ -1,0 +1,50 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_cat 1  "uu_cat 0.0.27" 
+.SH NAME
+uu_cat \- Concatenate FILE(s), or standard input, to standard output
+With no FILE, or when FILE is \-, read standard input.
+.SH SYNOPSIS
+\fBuu_cat\fR [\fB\-A\fR|\fB\-\-show\-all\fR] [\fB\-b\fR|\fB\-\-number\-nonblank\fR] [\fB\-e \fR] [\fB\-E\fR|\fB\-\-show\-ends\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-s\fR|\fB\-\-squeeze\-blank\fR] [\fB\-t \fR] [\fB\-T\fR|\fB\-\-show\-tabs\fR] [\fB\-v\fR|\fB\-\-show\-nonprinting\fR] [\fB\-u \fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Concatenate FILE(s), or standard input, to standard output
+With no FILE, or when FILE is \-, read standard input.
+.SH OPTIONS
+.TP
+\fB\-A\fR, \fB\-\-show\-all\fR
+equivalent to \-vET
+.TP
+\fB\-b\fR, \fB\-\-number\-nonblank\fR
+number nonempty output lines, overrides \-n
+.TP
+\fB\-e\fR
+equivalent to \-vE
+.TP
+\fB\-E\fR, \fB\-\-show\-ends\fR
+display $ at end of each line
+.TP
+\fB\-n\fR, \fB\-\-number\fR
+number all output lines
+.TP
+\fB\-s\fR, \fB\-\-squeeze\-blank\fR
+suppress repeated empty output lines
+.TP
+\fB\-t\fR
+equivalent to \-vT
+.TP
+\fB\-T\fR, \fB\-\-show\-tabs\fR
+display TAB characters at ^I
+.TP
+\fB\-v\fR, \fB\-\-show\-nonprinting\fR
+use ^ and M\- notation, except for LF (\\n) and TAB (\\t)
+.TP
+\fB\-u\fR
+(ignored)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.SH VERSION
+v0.0.27

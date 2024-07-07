@@ -1,0 +1,64 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_date 1  "uu_date 0.0.27" 
+.SH NAME
+uu_date \- Print or set the system date and time
+.SH SYNOPSIS
+\fBuu_date\fR [\fB\-d\fR|\fB\-\-date\fR] [\fB\-f\fR|\fB\-\-file\fR] [\fB\-I\fR|\fB\-\-iso\-8601\fR] [\fB\-R\fR|\fB\-\-rfc\-email\fR] [\fB\-\-rfc\-3339\fR] [\fB\-\-debug\fR] [\fB\-r\fR|\fB\-\-reference\fR] [\fB\-s\fR|\fB\-\-set\fR] [\fB\-u\fR|\fB\-\-universal\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIformat\fR] 
+.SH DESCRIPTION
+Print or set the system date and time
+.SH OPTIONS
+.TP
+\fB\-d\fR, \fB\-\-date\fR=\fISTRING\fR
+display time described by STRING, not \*(Aqnow\*(Aq
+.TP
+\fB\-f\fR, \fB\-\-file\fR=\fIDATEFILE\fR
+like \-\-date; once for each line of DATEFILE
+.TP
+\fB\-I\fR, \fB\-\-iso\-8601\fR=\fIFMT\fR
+output date/time in ISO 8601 format.
+FMT=\*(Aqdate\*(Aq for date only (the default),
+\*(Aqhours\*(Aq, \*(Aqminutes\*(Aq, \*(Aqseconds\*(Aq, or \*(Aqns\*(Aq
+for date and time to the indicated precision.
+Example: 2006\-08\-14T02:34:56\-06:00
+.br
+
+.br
+[\fIpossible values: \fRdate, hours, minutes, seconds, ns]
+.TP
+\fB\-R\fR, \fB\-\-rfc\-email\fR
+output date and time in RFC 5322 format.
+Example: Mon, 14 Aug 2006 02:34:56 \-0600
+.TP
+\fB\-\-rfc\-3339\fR=\fIFMT\fR
+output date/time in RFC 3339 format.
+FMT=\*(Aqdate\*(Aq, \*(Aqseconds\*(Aq, or \*(Aqns\*(Aq
+for date and time to the indicated precision.
+Example: 2006\-08\-14 02:34:56\-06:00
+.br
+
+.br
+[\fIpossible values: \fRdate, seconds, ns]
+.TP
+\fB\-\-debug\fR
+annotate the parsed date, and warn about questionable usage to stderr
+.TP
+\fB\-r\fR, \fB\-\-reference\fR=\fIFILE\fR
+display the last modification time of FILE
+.TP
+\fB\-s\fR, \fB\-\-set\fR=\fISTRING\fR
+set time described by STRING
+.TP
+\fB\-u\fR, \fB\-\-universal\fR
+print or set Coordinated Universal Time (UTC)
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIformat\fR]
+
+.SH VERSION
+v0.0.27

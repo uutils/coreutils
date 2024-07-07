@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) delim sourcefiles
 
 use bstr::io::BufReadExt;
-use clap::{builder::ValueParser, crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, IsTerminal, Read, Write};
@@ -17,17 +17,10 @@ use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 
-use self::searcher::Searcher;
-use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
+use crate::matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
+use crate::searcher::Searcher;
 use uucore::ranges::Range;
-use uucore::{format_usage, help_about, help_section, help_usage, show_error, show_if_err};
-
-mod matcher;
-mod searcher;
-
-const USAGE: &str = help_usage!("cut.md");
-const ABOUT: &str = help_about!("cut.md");
-const AFTER_HELP: &str = help_section!("after help", "cut.md");
+use uucore::{show_error, show_if_err};
 
 struct Options<'a> {
     out_delimiter: Option<&'a [u8]>,
@@ -374,8 +367,8 @@ fn get_delimiters(
     matches: &ArgMatches,
     delimiter_is_equal: bool,
 ) -> UResult<(Delimiter, Option<&[u8]>)> {
-    let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
-    let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
+    let whitespace_delimited = matches.get_flag(crate::options::WHITESPACE_DELIMITED);
+    let delim_opt = matches.get_one::<OsString>(crate::options::DELIMITER);
     let delim = match delim_opt {
         Some(_) if whitespace_delimited => {
             return Err(USimpleError::new(
@@ -417,7 +410,7 @@ fn get_delimiters(
         }
     };
     let out_delim = matches
-        .get_one::<OsString>(options::OUTPUT_DELIMITER)
+        .get_one::<OsString>(crate::options::OUTPUT_DELIMITER)
         .map(|os_string| {
             if os_string.is_empty() || os_string == "''" {
                 b"\0"
@@ -428,39 +421,26 @@ fn get_delimiters(
     Ok((delim, out_delim))
 }
 
-mod options {
-    pub const BYTES: &str = "bytes";
-    pub const CHARACTERS: &str = "characters";
-    pub const DELIMITER: &str = "delimiter";
-    pub const FIELDS: &str = "fields";
-    pub const ZERO_TERMINATED: &str = "zero-terminated";
-    pub const ONLY_DELIMITED: &str = "only-delimited";
-    pub const OUTPUT_DELIMITER: &str = "output-delimiter";
-    pub const WHITESPACE_DELIMITED: &str = "whitespace-delimited";
-    pub const COMPLEMENT: &str = "complement";
-    pub const FILE: &str = "file";
-}
-
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect::<Vec<OsString>>();
 
     let delimiter_is_equal = args.contains(&OsString::from("-d=")); // special case
-    let matches = uu_app().try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
-    let complement = matches.get_flag(options::COMPLEMENT);
-    let only_delimited = matches.get_flag(options::ONLY_DELIMITED);
+    let complement = matches.get_flag(crate::options::COMPLEMENT);
+    let only_delimited = matches.get_flag(crate::options::ONLY_DELIMITED);
 
     let (delimiter, out_delimiter) = get_delimiters(&matches, delimiter_is_equal)?;
-    let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
+    let line_ending = LineEnding::from_zero_flag(matches.get_flag(crate::options::ZERO_TERMINATED));
 
     // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
     // is expected. The number of those arguments is used for parsing a cutting
     // mode and handling the error cases.
     let mode_args_count = [
-        matches.indices_of(options::BYTES),
-        matches.indices_of(options::CHARACTERS),
-        matches.indices_of(options::FIELDS),
+        matches.indices_of(crate::options::BYTES),
+        matches.indices_of(crate::options::CHARACTERS),
+        matches.indices_of(crate::options::FIELDS),
     ]
     .into_iter()
     .map(|indices| indices.unwrap_or_default().count())
@@ -468,9 +448,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mode_parse = match (
         mode_args_count,
-        matches.get_one::<String>(options::BYTES),
-        matches.get_one::<String>(options::CHARACTERS),
-        matches.get_one::<String>(options::FIELDS),
+        matches.get_one::<String>(crate::options::BYTES),
+        matches.get_one::<String>(crate::options::CHARACTERS),
+        matches.get_one::<String>(crate::options::FIELDS),
     ) {
         (1, Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
             Mode::Bytes(
@@ -514,17 +494,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(_) => mode_parse,
         Ok(mode) => match mode {
             Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.contains_id(options::DELIMITER) =>
+                if matches.contains_id(crate::options::DELIMITER) =>
             {
                 Err("invalid input: The '--delimiter' ('-d') option only usable if printing a sequence of fields".into())
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.get_flag(options::WHITESPACE_DELIMITED) =>
+                if matches.get_flag(crate::options::WHITESPACE_DELIMITED) =>
             {
                 Err("invalid input: The '-w' option only usable if printing a sequence of fields".into())
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.get_flag(options::ONLY_DELIMITED) =>
+                if matches.get_flag(crate::options::ONLY_DELIMITED) =>
             {
                 Err("invalid input: The '--only-delimited' ('-s') option only usable if printing a sequence of fields".into())
             }
@@ -533,7 +513,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let files: Vec<String> = matches
-        .get_many::<String>(options::FILE)
+        .get_many::<String>(crate::options::FILE)
         .unwrap_or_default()
         .cloned()
         .collect();
@@ -545,96 +525,4 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         Err(e) => Err(USimpleError::new(1, e)),
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .override_usage(format_usage(USAGE))
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .infer_long_args(true)
-        // While `args_override_self(true)` for some arguments, such as `-d`
-        // and `--output-delimiter`, is consistent to the behavior of GNU cut,
-        // arguments related to cutting mode, i.e. `-b`, `-c`, `-f`, should
-        // cause an error when there is more than one of them, as described in
-        // the manual of GNU cut: "Use one, and only one of -b, -c or -f".
-        // `ArgAction::Append` is used on `-b`, `-c`, `-f` arguments, so that
-        // the occurrences of those could be counted and be handled accordingly.
-        .args_override_self(true)
-        .arg(
-            Arg::new(options::BYTES)
-                .short('b')
-                .long(options::BYTES)
-                .help("filter byte columns from the input source")
-                .allow_hyphen_values(true)
-                .value_name("LIST")
-                .action(ArgAction::Append),
-        )
-        .arg(
-            Arg::new(options::CHARACTERS)
-                .short('c')
-                .long(options::CHARACTERS)
-                .help("alias for character mode")
-                .allow_hyphen_values(true)
-                .value_name("LIST")
-                .action(ArgAction::Append),
-        )
-        .arg(
-            Arg::new(options::DELIMITER)
-                .short('d')
-                .long(options::DELIMITER)
-                .value_parser(ValueParser::os_string())
-                .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
-                .value_name("DELIM"),
-        )
-        .arg(
-            Arg::new(options::WHITESPACE_DELIMITED)
-                .short('w')
-                .help("Use any number of whitespace (Space, Tab) to separate fields in the input source (FreeBSD extension).")
-                .value_name("WHITESPACE")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FIELDS)
-                .short('f')
-                .long(options::FIELDS)
-                .help("filter field columns from the input source")
-                .allow_hyphen_values(true)
-                .value_name("LIST")
-                .action(ArgAction::Append),
-        )
-        .arg(
-            Arg::new(options::COMPLEMENT)
-                .long(options::COMPLEMENT)
-                .help("invert the filter - instead of displaying only the filtered columns, display all but those columns")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::ONLY_DELIMITED)
-                .short('s')
-                .long(options::ONLY_DELIMITED)
-                .help("in field mode, only print lines which contain the delimiter")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::ZERO_TERMINATED)
-                .short('z')
-                .long(options::ZERO_TERMINATED)
-                .help("instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::OUTPUT_DELIMITER)
-                .long(options::OUTPUT_DELIMITER)
-                .value_parser(ValueParser::os_string())
-                .help("in field mode, replace the delimiter in output lines with this option's argument")
-                .value_name("NEW_DELIM"),
-        )
-        .arg(
-            Arg::new(options::FILE)
-            .hide(true)
-            .action(ArgAction::Append)
-            .value_hint(clap::ValueHint::FilePath)
-        )
 }

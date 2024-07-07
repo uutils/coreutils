@@ -1,0 +1,59 @@
+#compdef uu_mv
+
+autoload -U is-at-least
+
+_uu_mv() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'--backup=[make a backup of each existing destination file]' \
+'-S+[override the usual backup suffix]:SUFFIX: ' \
+'--suffix=[override the usual backup suffix]:SUFFIX: ' \
+'--update=[move only when the SOURCE file is newer than the destination file or when the destination file is missing]' \
+'(-T --no-target-directory)-t+[move all SOURCE arguments into DIRECTORY]:DIRECTORY:_files -/' \
+'(-T --no-target-directory)--target-directory=[move all SOURCE arguments into DIRECTORY]:DIRECTORY:_files -/' \
+'-f[do not prompt before overwriting]' \
+'--force[do not prompt before overwriting]' \
+'-i[prompt before override]' \
+'--interactive[prompt before override]' \
+'-n[do not overwrite an existing file]' \
+'--no-clobber[do not overwrite an existing file]' \
+'--strip-trailing-slashes[remove any trailing slashes from each SOURCE argument]' \
+'-b[like --backup but does not accept an argument]' \
+'-u[like --update but does not accept an argument]' \
+'-T[treat DEST as a normal file]' \
+'--no-target-directory[treat DEST as a normal file]' \
+'-v[explain what is being done]' \
+'--verbose[explain what is being done]' \
+'-g[Display a progress bar. 
+Note\: this feature is not supported by GNU coreutils.]' \
+'--progress[Display a progress bar. 
+Note\: this feature is not supported by GNU coreutils.]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'*::files:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_mv_commands] )) ||
+_uu_mv_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_mv commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_mv" ]; then
+    _uu_mv "$@"
+else
+    compdef _uu_mv uu_mv
+fi

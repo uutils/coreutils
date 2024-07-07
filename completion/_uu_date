@@ -1,0 +1,65 @@
+#compdef uu_date
+
+autoload -U is-at-least
+
+_uu_date() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'-d+[display time described by STRING, not '\''now'\'']:STRING: ' \
+'--date=[display time described by STRING, not '\''now'\'']:STRING: ' \
+'-f+[like --date; once for each line of DATEFILE]:DATEFILE:_files' \
+'--file=[like --date; once for each line of DATEFILE]:DATEFILE:_files' \
+'-I+[output date/time in ISO 8601 format.
+FMT='\''date'\'' for date only (the default),
+'\''hours'\'', '\''minutes'\'', '\''seconds'\'', or '\''ns'\''
+for date and time to the indicated precision.
+Example\: 2006-08-14T02\:34\:56-06\:00]' \
+'--iso-8601=[output date/time in ISO 8601 format.
+FMT='\''date'\'' for date only (the default),
+'\''hours'\'', '\''minutes'\'', '\''seconds'\'', or '\''ns'\''
+for date and time to the indicated precision.
+Example\: 2006-08-14T02\:34\:56-06\:00]' \
+'--rfc-3339=[output date/time in RFC 3339 format.
+FMT='\''date'\'', '\''seconds'\'', or '\''ns'\''
+for date and time to the indicated precision.
+Example\: 2006-08-14 02\:34\:56-06\:00]:FMT:(date seconds ns)' \
+'-r+[display the last modification time of FILE]:FILE:_files' \
+'--reference=[display the last modification time of FILE]:FILE:_files' \
+'-s+[set time described by STRING]:STRING: ' \
+'--set=[set time described by STRING]:STRING: ' \
+'-R[output date and time in RFC 5322 format.
+Example\: Mon, 14 Aug 2006 02\:34\:56 -0600]' \
+'--rfc-email[output date and time in RFC 5322 format.
+Example\: Mon, 14 Aug 2006 02\:34\:56 -0600]' \
+'--debug[annotate the parsed date, and warn about questionable usage to stderr]' \
+'-u[print or set Coordinated Universal Time (UTC)]' \
+'--universal[print or set Coordinated Universal Time (UTC)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::format:' \
+&& ret=0
+}
+
+(( $+functions[_uu_date_commands] )) ||
+_uu_date_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_date commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_date" ]; then
+    _uu_date "$@"
+else
+    compdef _uu_date uu_date
+fi

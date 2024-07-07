@@ -8,8 +8,8 @@
 use std::io::{BufWriter, Stdout, Write};
 use std::{cmp, mem};
 
+use crate::fmt::FmtOptions;
 use crate::parasplit::{ParaWords, Paragraph, WordInfo};
-use crate::FmtOptions;
 
 struct BreakArgs<'a> {
     opts: &'a FmtOptions,

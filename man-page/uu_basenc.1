@@ -1,0 +1,66 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_basenc 1  "uu_basenc 0.0.27" 
+.SH NAME
+uu_basenc \- Encode/decode data and print to standard output
+With no FILE, or when FILE is \-, read standard input.
+
+When decoding, the input may contain newlines in addition to the bytes of
+the formal alphabet. Use \-\-ignore\-garbage to attempt to recover
+from any other non\-alphabet bytes in the encoded stream.
+.SH SYNOPSIS
+\fBuu_basenc\fR [\fB\-d\fR|\fB\-\-decode\fR] [\fB\-i\fR|\fB\-\-ignore\-garbage\fR] [\fB\-w\fR|\fB\-\-wrap\fR] [\fB\-\-base64\fR] [\fB\-\-base64url\fR] [\fB\-\-base32\fR] [\fB\-\-base32hex\fR] [\fB\-\-base16\fR] [\fB\-\-base2lsbf\fR] [\fB\-\-base2msbf\fR] [\fB\-\-z85\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIfile\fR] 
+.SH DESCRIPTION
+Encode/decode data and print to standard output
+With no FILE, or when FILE is \-, read standard input.
+.PP
+When decoding, the input may contain newlines in addition to the bytes of
+the formal alphabet. Use \-\-ignore\-garbage to attempt to recover
+from any other non\-alphabet bytes in the encoded stream.
+.SH OPTIONS
+.TP
+\fB\-d\fR, \fB\-\-decode\fR
+decode data
+.TP
+\fB\-i\fR, \fB\-\-ignore\-garbage\fR
+when decoding, ignore non\-alphabetic characters
+.TP
+\fB\-w\fR, \fB\-\-wrap\fR=\fICOLS\fR
+wrap encoded lines after COLS character (default 76, 0 to disable wrapping)
+.TP
+\fB\-\-base64\fR
+same as \*(Aqbase64\*(Aq program
+.TP
+\fB\-\-base64url\fR
+file\- and url\-safe base64
+.TP
+\fB\-\-base32\fR
+same as \*(Aqbase32\*(Aq program
+.TP
+\fB\-\-base32hex\fR
+extended hex alphabet base32
+.TP
+\fB\-\-base16\fR
+hex encoding
+.TP
+\fB\-\-base2lsbf\fR
+bit string with least significant bit (lsb) first
+.TP
+\fB\-\-base2msbf\fR
+bit string with most significant bit (msb) first
+.TP
+\fB\-\-z85\fR
+ascii85\-like encoding;
+when encoding, input length must be a multiple of 4;
+when decoding, input length must be a multiple of 5
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIfile\fR]
+
+.SH VERSION
+v0.0.27

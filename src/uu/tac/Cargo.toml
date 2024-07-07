@@ -15,8 +15,6 @@ edition = "2021"
 
 readme.workspace = true
 
-[lib]
-path = "src/tac.rs"
 
 [dependencies]
 memchr = { workspace = true }

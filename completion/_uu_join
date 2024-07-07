@@ -1,0 +1,53 @@
+#compdef uu_join
+
+autoload -U is-at-least
+
+_uu_join() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'*-a+[also print unpairable lines from file FILENUM, where
+FILENUM is 1 or 2, corresponding to FILE1 or FILE2]:FILENUM:(1 2)' \
+'*-v+[like -a FILENUM, but suppress joined output lines]:FILENUM:(1 2)' \
+'-e+[replace missing input fields with EMPTY]:EMPTY: ' \
+'-j+[equivalent to '\''-1 FIELD -2 FIELD'\'']:FIELD: ' \
+'-o+[obey FORMAT while constructing output line]:FORMAT: ' \
+'-t+[use CHAR as input and output field separator]:CHAR: ' \
+'-1+[join on this FIELD of file 1]:FIELD: ' \
+'-2+[join on this FIELD of file 2]:FIELD: ' \
+'-i[ignore differences in case when comparing fields]' \
+'--ignore-case[ignore differences in case when comparing fields]' \
+'--check-order[check that the input is correctly sorted, even if all input lines are pairable]' \
+'--nocheck-order[do not check that the input is correctly sorted]' \
+'--header[treat the first line in each file as field headers, print them without trying to pair them]' \
+'-z[line delimiter is NUL, not newline]' \
+'--zero-terminated[line delimiter is NUL, not newline]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+':file1:_files' \
+':file2:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_join_commands] )) ||
+_uu_join_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_join commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_join" ]; then
+    _uu_join "$@"
+else
+    compdef _uu_join uu_join
+fi

@@ -2,39 +2,27 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore datetime
 
-use clap::builder::ValueParser;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+#[cfg(target_os = "android")]
+use uucore::error::UResult;
+#[cfg(not(target_os = "android"))]
+use uucore::error::{UResult, USimpleError};
 use uucore::fs::display_permissions;
 use uucore::fsext::{pretty_filetype, pretty_fstype, read_fs_list, statfs, BirthTime, FsMeta};
 use uucore::libc::mode_t;
-use uucore::{
-    entries, format_usage, help_about, help_section, help_usage, show_error, show_warning,
-};
+use uucore::{entries, show_error, show_warning};
 
 use chrono::{DateTime, Local};
-use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+use clap::ArgMatches;
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
-
-const ABOUT: &str = help_about!("stat.md");
-const USAGE: &str = help_usage!("stat.md");
-const LONG_USAGE: &str = help_section!("long usage", "stat.md");
-
-mod options {
-    pub const DEREFERENCE: &str = "dereference";
-    pub const FILE_SYSTEM: &str = "file-system";
-    pub const FORMAT: &str = "format";
-    pub const PRINTF: &str = "printf";
-    pub const TERSE: &str = "terse";
-    pub const FILES: &str = "files";
-}
 
 #[derive(Default, Debug, PartialEq, Eq, Clone, Copy)]
 struct Flags {
@@ -546,7 +534,7 @@ impl Stater {
 
     fn new(matches: &ArgMatches) -> UResult<Self> {
         let files: Vec<OsString> = matches
-            .get_many::<OsString>(options::FILES)
+            .get_many::<OsString>(crate::options::FILES)
             .map(|v| v.map(OsString::from).collect())
             .unwrap_or_default();
         if files.is_empty() {
@@ -555,20 +543,20 @@ impl Stater {
                 message: "missing operand\nTry 'stat --help' for more information.".to_string(),
             }));
         }
-        let format_str = if matches.contains_id(options::PRINTF) {
+        let format_str = if matches.contains_id(crate::options::PRINTF) {
             matches
-                .get_one::<String>(options::PRINTF)
+                .get_one::<String>(crate::options::PRINTF)
                 .expect("Invalid format string")
         } else {
             matches
-                .get_one::<String>(options::FORMAT)
+                .get_one::<String>(crate::options::FORMAT)
                 .map(|s| s.as_str())
                 .unwrap_or("")
         };
 
-        let use_printf = matches.contains_id(options::PRINTF);
-        let terse = matches.get_flag(options::TERSE);
-        let show_fs = matches.get_flag(options::FILE_SYSTEM);
+        let use_printf = matches.contains_id(crate::options::PRINTF);
+        let terse = matches.get_flag(crate::options::TERSE);
+        let show_fs = matches.get_flag(crate::options::FILE_SYSTEM);
 
         let default_tokens = if format_str.is_empty() {
             Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)?
@@ -583,7 +571,10 @@ impl Stater {
             None
         } else {
             let mut mount_list = read_fs_list()
-                .map_err_context(|| "cannot read table of mounted file systems".into())?
+                .map_err(|e| {
+                    let context = "cannot read table of mounted file systems";
+                    USimpleError::new(e.code(), format!("{}: {}", context, e))
+                })?
                 .iter()
                 .map(|mi| mi.mount_dir.clone())
                 .collect::<Vec<String>>();
@@ -594,7 +585,7 @@ impl Stater {
         };
 
         Ok(Self {
-            follow: matches.get_flag(options::DEREFERENCE),
+            follow: matches.get_flag(crate::options::DEREFERENCE),
             show_fs,
             from_user: !format_str.is_empty(),
             files,
@@ -887,7 +878,7 @@ impl Stater {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uu_app().after_help(LONG_USAGE).try_get_matches_from(args)?;
+    let matches = crate::uu_app().try_get_matches_from(args)?;
 
     let stater = Stater::new(&matches)?;
     let exit_status = stater.exec();
@@ -896,61 +887,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         Err(exit_status.into())
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(crate_version!())
-        .about(ABOUT)
-        .override_usage(format_usage(USAGE))
-        .infer_long_args(true)
-        .arg(
-            Arg::new(options::DEREFERENCE)
-                .short('L')
-                .long(options::DEREFERENCE)
-                .help("follow links")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE_SYSTEM)
-                .short('f')
-                .long(options::FILE_SYSTEM)
-                .help("display file system status instead of file status")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::TERSE)
-                .short('t')
-                .long(options::TERSE)
-                .help("print the information in terse form")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FORMAT)
-                .short('c')
-                .long(options::FORMAT)
-                .help(
-                    "use the specified FORMAT instead of the default;
- output a newline after each use of FORMAT",
-                )
-                .value_name("FORMAT"),
-        )
-        .arg(
-            Arg::new(options::PRINTF)
-                .long(options::PRINTF)
-                .value_name("FORMAT")
-                .help(
-                    "like --format, but interpret backslash escapes,
-            and do not output a mandatory trailing newline;
-            if you want a newline, include \n in FORMAT",
-                ),
-        )
-        .arg(
-            Arg::new(options::FILES)
-                .action(ArgAction::Append)
-                .value_parser(ValueParser::os_string())
-                .value_hint(clap::ValueHint::FilePath),
-        )
 }
 
 const PRETTY_DATETIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S.%f %z";

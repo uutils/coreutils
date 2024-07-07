@@ -1,0 +1,31 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_rmdir 1  "uu_rmdir 0.0.27" 
+.SH NAME
+uu_rmdir \- Remove the DIRECTORY(ies), if they are empty.
+.SH SYNOPSIS
+\fBuu_rmdir\fR [\fB\-\-ignore\-fail\-on\-non\-empty\fR] [\fB\-p\fR|\fB\-\-parents\fR] [\fB\-v\fR|\fB\-\-verbose\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIdirs\fR] 
+.SH DESCRIPTION
+Remove the DIRECTORY(ies), if they are empty.
+.SH OPTIONS
+.TP
+\fB\-\-ignore\-fail\-on\-non\-empty\fR
+ignore each failure that is solely because a directory is non\-empty
+.TP
+\fB\-p\fR, \fB\-\-parents\fR
+remove DIRECTORY and its ancestors; e.g.,
+                  \*(Aqrmdir \-p a/b/c\*(Aq is similar to rmdir a/b/c a/b a
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+output a diagnostic for every directory processed
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIdirs\fR]
+
+.SH VERSION
+v0.0.27

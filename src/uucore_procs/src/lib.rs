@@ -158,7 +158,7 @@ fn read_help(filename: &str) -> String {
 
     let parent_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
 
-    let mut path = PathBuf::from(parent_path.clone());
+    let mut path = parent_path.clone();
     path.push(filename);
 
     let mut file_state = File::open(&path);

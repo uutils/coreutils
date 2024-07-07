@@ -1,0 +1,30 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH uu_stty 1  "uu_stty 0.0.27" 
+.SH NAME
+uu_stty \- Print or change terminal characteristics.
+.SH SYNOPSIS
+\fBuu_stty\fR [\fB\-a\fR|\fB\-\-all\fR] [\fB\-g\fR|\fB\-\-save\fR] [\fB\-F\fR|\fB\-\-file\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIsettings\fR] 
+.SH DESCRIPTION
+Print or change terminal characteristics.
+.SH OPTIONS
+.TP
+\fB\-a\fR, \fB\-\-all\fR
+print all current settings in human\-readable form
+.TP
+\fB\-g\fR, \fB\-\-save\fR
+print all current settings in a stty\-readable form
+.TP
+\fB\-F\fR, \fB\-\-file\fR=\fIDEVICE\fR
+open and use the specified DEVICE instead of stdin
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIsettings\fR]
+settings to change
+.SH VERSION
+v0.0.27

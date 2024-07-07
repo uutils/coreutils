@@ -1,0 +1,51 @@
+#compdef uu_wc
+
+autoload -U is-at-least
+
+_uu_wc() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" \
+'--files0-from=[read input from the files specified by
+  NUL-terminated names in file F;
+  If F is - then read names from standard input]:F:_files' \
+'--total=[when to print a line with total counts;
+  WHEN can be\: auto, always, only, never]:WHEN:(auto always only never)' \
+'-c[print the byte counts]' \
+'--bytes[print the byte counts]' \
+'-m[print the character counts]' \
+'--chars[print the character counts]' \
+'-l[print the newline counts]' \
+'--lines[print the newline counts]' \
+'-L[print the length of the longest line]' \
+'--max-line-length[print the length of the longest line]' \
+'-w[print the word counts]' \
+'--words[print the word counts]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+'::files:_files' \
+&& ret=0
+}
+
+(( $+functions[_uu_wc_commands] )) ||
+_uu_wc_commands() {
+    local commands; commands=()
+    _describe -t commands 'uu_wc commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_uu_wc" ]; then
+    _uu_wc "$@"
+else
+    compdef _uu_wc uu_wc
+fi
