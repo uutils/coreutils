@@ -37,9 +37,9 @@ jobs:
     - uses: actions/checkout@v4
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.4
+      uses: mozilla-actions/sccache-action@v0.0.5
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.0.7
+      uses: vmactions/freebsd-vm@v1.0.8
       with:
         usesh: true
         sync: rsync
@@ -129,9 +129,9 @@ jobs:
     - uses: actions/checkout@v4
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
-      uses: mozilla-actions/sccache-action@v0.0.4
+      uses: mozilla-actions/sccache-action@v0.0.5
     - name: Prepare, build and test
-      uses: vmactions/freebsd-vm@v1.0.7
+      uses: vmactions/freebsd-vm@v1.0.8
       with:
         usesh: true
         sync: rsync

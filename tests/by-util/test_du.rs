@@ -545,7 +545,7 @@ fn test_du_h_flag_empty_file() {
 #[test]
 fn test_du_h_precision() {
     let test_cases = [
-        (133456345, "128M"),
+        (133_456_345, "128M"),
         (12 * 1024 * 1024, "12M"),
         (8500, "8.4K"),
     ];

@@ -10,7 +10,7 @@ use clap::{
     crate_version, Arg, ArgAction, Command,
 };
 use glob::{MatchOptions, Pattern};
-use lscolors::{LsColors, Style};
+use lscolors::LsColors;
 
 use ansi_width::ansi_width;
 use std::{cell::OnceCell, num::IntErrorKind};
@@ -67,7 +67,9 @@ use uucore::{
 };
 use uucore::{help_about, help_section, help_usage, parse_glob, show, show_error, show_warning};
 mod dired;
-use dired::DiredOutput;
+use dired::{is_dired_arg_present, DiredOutput};
+mod colors;
+use colors::{color_name, StyleManager};
 #[cfg(not(feature = "selinux"))]
 static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
 #[cfg(feature = "selinux")]
@@ -174,7 +176,6 @@ enum LsError {
     IOError(std::io::Error),
     IOErrorContext(std::io::Error, PathBuf, bool),
     BlockSizeParseError(String),
-    ConflictingArgumentDired,
     DiredAndZeroAreIncompatible,
     AlreadyListedError(PathBuf),
     TimeStyleParseError(String, Vec<String>),
@@ -188,7 +189,6 @@ impl UError for LsError {
             Self::IOErrorContext(_, _, false) => 1,
             Self::IOErrorContext(_, _, true) => 2,
             Self::BlockSizeParseError(_) => 2,
-            Self::ConflictingArgumentDired => 1,
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_, _) => 2,
@@ -203,9 +203,6 @@ impl Display for LsError {
         match self {
             Self::BlockSizeParseError(s) => {
                 write!(f, "invalid --block-size argument {}", s.quote())
-            }
-            Self::ConflictingArgumentDired => {
-                write!(f, "--dired requires --format=long")
             }
             Self::DiredAndZeroAreIncompatible => {
                 write!(f, "--dired and --zero are incompatible")
@@ -756,20 +753,51 @@ fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
     }
 }
 
-fn parse_width(s: &str) -> Result<u16, LsError> {
-    let radix = if s.starts_with('0') && s.len() > 1 {
-        8
-    } else {
-        10
+/// Parses the width value from either the command line arguments or the environment variables.
+fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
+    let parse_width_from_args = |s: &str| -> Result<u16, LsError> {
+        let radix = if s.starts_with('0') && s.len() > 1 {
+            8
+        } else {
+            10
+        };
+        match u16::from_str_radix(s, radix) {
+            Ok(x) => Ok(x),
+            Err(e) => match e.kind() {
+                IntErrorKind::PosOverflow => Ok(u16::MAX),
+                _ => Err(LsError::InvalidLineWidth(s.into())),
+            },
+        }
     };
-    match u16::from_str_radix(s, radix) {
-        Ok(x) => Ok(x),
-        Err(e) => match e.kind() {
-            IntErrorKind::PosOverflow => Ok(u16::MAX),
-            _ => Err(LsError::InvalidLineWidth(s.into())),
+
+    let parse_width_from_env =
+        |columns: OsString| match columns.to_str().and_then(|s| s.parse().ok()) {
+            Some(columns) => columns,
+            None => {
+                show_error!(
+                    "ignoring invalid width in environment variable COLUMNS: {}",
+                    columns.quote()
+                );
+                DEFAULT_TERM_WIDTH
+            }
+        };
+
+    let calculate_term_size = || match terminal_size::terminal_size() {
+        Some((width, _)) => width.0,
+        None => DEFAULT_TERM_WIDTH,
+    };
+
+    let ret = match width_match {
+        Some(x) => parse_width_from_args(x)?,
+        None => match std::env::var_os("COLUMNS") {
+            Some(columns) => parse_width_from_env(columns),
+            None => calculate_term_size(),
         },
-    }
+    };
+
+    Ok(ret)
 }
+
 impl Config {
     #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
@@ -929,26 +957,7 @@ impl Config {
                 numeric_uid_gid,
             }
         };
-
-        let width = match options.get_one::<String>(options::WIDTH) {
-            Some(x) => parse_width(x)?,
-            None => match terminal_size::terminal_size() {
-                Some((width, _)) => width.0,
-                None => match std::env::var_os("COLUMNS") {
-                    Some(columns) => match columns.to_str().and_then(|s| s.parse().ok()) {
-                        Some(columns) => columns,
-                        None => {
-                            show_error!(
-                                "ignoring invalid width in environment variable COLUMNS: {}",
-                                columns.quote()
-                            );
-                            DEFAULT_TERM_WIDTH
-                        }
-                    },
-                    None => DEFAULT_TERM_WIDTH,
-                },
-            },
-        };
+        let width = parse_width(options.get_one::<String>(options::WIDTH))?;
 
         #[allow(clippy::needless_bool)]
         let mut show_control = if options.get_flag(options::HIDE_CONTROL_CHARS) {
@@ -962,7 +971,8 @@ impl Config {
         let mut quoting_style = extract_quoting_style(options, show_control);
         let indicator_style = extract_indicator_style(options);
         // Only parse the value to "--time-style" if it will become relevant.
-        let time_style = if format == Format::Long {
+        let dired = options.get_flag(options::DIRED);
+        let time_style = if format == Format::Long || dired {
             parse_time_style(options)?
         } else {
             TimeStyle::Iso
@@ -1083,11 +1093,13 @@ impl Config {
             None
         };
 
-        let dired = options.get_flag(options::DIRED);
-        if dired && format != Format::Long {
-            return Err(Box::new(LsError::ConflictingArgumentDired));
+        if dired || is_dired_arg_present() {
+            // --dired implies --format=long
+            // if we have --dired --hyperlink, we don't show dired but we still want to see the
+            // long format
+            format = Format::Long;
         }
-        if dired && format == Format::Long && options.get_flag(options::ZERO) {
+        if dired && options.get_flag(options::ZERO) {
             return Err(Box::new(LsError::DiredAndZeroAreIncompatible));
         }
 
@@ -1215,6 +1227,7 @@ pub fn uu_app() -> Command {
                     options::format::LONG,
                     options::format::ACROSS,
                     options::format::COLUMNS,
+                    options::DIRED,
                 ]),
         )
         .arg(
@@ -1291,7 +1304,8 @@ pub fn uu_app() -> Command {
                 .long(options::DIRED)
                 .short('D')
                 .help("generate output designed for Emacs' dired (Directory Editor) mode")
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::HYPERLINK),
         )
         .arg(
             Arg::new(options::HYPERLINK)
@@ -1306,7 +1320,8 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .default_missing_value("always")
                 .default_value("never")
-                .value_name("WHEN"),
+                .value_name("WHEN")
+                .overrides_with(options::DIRED),
         )
         // The next four arguments do not override with the other format
         // options, see the comment in Config::from for the reason.
@@ -2022,8 +2037,8 @@ impl PathData {
 }
 
 fn show_dir_name(path_data: &PathData, out: &mut BufWriter<Stdout>, config: &Config) {
-    if config.hyperlink {
-        let name = escape_name(&path_data.display_name, &config.quoting_style);
+    if config.hyperlink && !config.dired {
+        let name = escape_name(path_data.p_buf.as_os_str(), &config.quoting_style);
         let hyperlink = create_hyperlink(&name, path_data);
         write!(out, "{}:", hyperlink).unwrap();
     } else {
@@ -2037,7 +2052,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     let mut dirs = Vec::<PathData>::new();
     let mut out = BufWriter::new(stdout());
     let mut dired = DiredOutput::default();
-    let mut style_manager = StyleManager::new();
+    let mut style_manager = config.color.as_ref().map(StyleManager::new);
     let initial_locs_len = locs.len();
 
     for loc in locs {
@@ -2070,6 +2085,15 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 
     sort_entries(&mut files, config, &mut out);
     sort_entries(&mut dirs, config, &mut out);
+
+    if let Some(style_manager) = style_manager.as_mut() {
+        // ls will try to write a reset before anything is written if normal
+        // color is given
+        if style_manager.get_normal_style().is_some() {
+            let to_write = style_manager.reset(true);
+            write!(out, "{}", to_write)?;
+        }
+    }
 
     display_items(&files, config, &mut out, &mut dired, &mut style_manager)?;
 
@@ -2127,7 +2151,7 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
             &mut style_manager,
         )?;
     }
-    if config.dired {
+    if config.dired && !config.hyperlink {
         dired::print_dired_output(config, &dired, &mut out)?;
     }
     Ok(())
@@ -2244,7 +2268,7 @@ fn enter_directory(
     out: &mut BufWriter<Stdout>,
     listed_ancestors: &mut HashSet<FileInformation>,
     dired: &mut DiredOutput,
-    style_manager: &mut StyleManager,
+    style_manager: &mut Option<StyleManager>,
 ) -> UResult<()> {
     // Create vec of entries with initial dot files
     let mut entries: Vec<PathData> = if config.files == Files::All {
@@ -2468,7 +2492,7 @@ fn display_items(
     config: &Config,
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
-    style_manager: &mut StyleManager,
+    style_manager: &mut Option<StyleManager>,
 ) -> UResult<()> {
     // `-Z`, `--context`:
     // Display the SELinux security context or '?' if none is found. When used with the `-l`
@@ -2520,10 +2544,21 @@ fn display_items(
 
         let padding = calculate_padding_collection(items, config, out);
 
+        // we need to apply normal color to non filename output
+        if let Some(style_manager) = style_manager {
+            write!(out, "{}", style_manager.apply_normal())?;
+        }
+
         let mut names_vec = Vec::new();
         for i in items {
             let more_info = display_additional_leading_info(i, &padding, config, out)?;
-            let cell = display_item_name(i, config, prefix_context, more_info, out, style_manager);
+            // it's okay to set current column to zero which is used to decide
+            // whether text will wrap or not, because when format is grid or
+            // column ls will try to place the item name in a new line if it
+            // wraps.
+            let cell =
+                display_item_name(i, config, prefix_context, more_info, out, style_manager, 0);
+
             names_vec.push(cell);
         }
 
@@ -2615,7 +2650,7 @@ fn display_grid(
             writeln!(out)?;
         }
     } else {
-        let names = if quoted {
+        let names: Vec<String> = if quoted {
             // In case some names are quoted, GNU adds a space before each
             // entry that does not start with a quote to make it prettier
             // on multiline.
@@ -2640,12 +2675,21 @@ fn display_grid(
         } else {
             names.collect()
         };
+
+        // Determine whether to use tabs for separation based on whether any entry ends with '/'.
+        // If any entry ends with '/', it indicates that the -F flag is likely used to classify directories.
+        let use_tabs = names.iter().any(|name| name.ends_with('/'));
+
+        let filling = if use_tabs {
+            Filling::Text("\t".to_string())
+        } else {
+            Filling::Spaces(2)
+        };
+
         let grid = Grid::new(
             names,
             GridOptions {
-                // TODO: To match gnu/tests/ls/stat-dtype.sh
-                // we might want to have Filling::Text("\t".to_string());
-                filling: Filling::Spaces(2),
+                filling,
                 direction,
                 width: width as usize,
             },
@@ -2690,10 +2734,15 @@ fn display_item_long(
     config: &Config,
     out: &mut BufWriter<Stdout>,
     dired: &mut DiredOutput,
-    style_manager: &mut StyleManager,
+    style_manager: &mut Option<StyleManager>,
     quoted: bool,
 ) -> UResult<()> {
     let mut output_display: String = String::new();
+
+    // apply normal color to non filename outputs
+    if let Some(style_manager) = style_manager {
+        write!(output_display, "{}", style_manager.apply_normal()).unwrap();
+    }
     if config.dired {
         output_display += "  ";
     }
@@ -2795,7 +2844,15 @@ fn display_item_long(
 
         write!(output_display, " {} ", display_date(md, config)).unwrap();
 
-        let item_name = display_item_name(item, config, None, String::new(), out, style_manager);
+        let item_name = display_item_name(
+            item,
+            config,
+            None,
+            String::new(),
+            out,
+            style_manager,
+            ansi_width(&output_display),
+        );
 
         let displayed_item = if quoted && !item_name.starts_with('\'') {
             format!(" {}", item_name)
@@ -2884,8 +2941,15 @@ fn display_item_long(
             write!(output_display, " {}", pad_right("?", padding.uname)).unwrap();
         }
 
-        let displayed_item =
-            display_item_name(item, config, None, String::new(), out, style_manager);
+        let displayed_item = display_item_name(
+            item,
+            config,
+            None,
+            String::new(),
+            out,
+            style_manager,
+            ansi_width(&output_display),
+        );
         let date_len = 12;
 
         write!(
@@ -3145,17 +3209,21 @@ fn display_item_name(
     prefix_context: Option<usize>,
     more_info: String,
     out: &mut BufWriter<Stdout>,
-    style_manager: &mut StyleManager,
+    style_manager: &mut Option<StyleManager>,
+    current_column: usize,
 ) -> String {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
+
+    let is_wrap =
+        |namelen: usize| config.width != 0 && current_column + namelen > config.width.into();
 
     if config.hyperlink {
         name = create_hyperlink(&name, path);
     }
 
-    if let Some(ls_colors) = &config.color {
-        name = color_name(name, path, ls_colors, style_manager, out, None);
+    if let Some(style_manager) = style_manager {
+        name = color_name(&name, path, style_manager, out, None, is_wrap(name.len()));
     }
 
     if config.format != Format::Long && !more_info.is_empty() {
@@ -3201,7 +3269,7 @@ fn display_item_name(
                 // We might as well color the symlink output after the arrow.
                 // This makes extra system calls, but provides important information that
                 // people run `ls -l --color` are very interested in.
-                if let Some(ls_colors) = &config.color {
+                if let Some(style_manager) = style_manager {
                     // We get the absolute path to be able to construct PathData with valid Metadata.
                     // This is because relative symlinks will fail to get_metadata.
                     let mut absolute_target = target.clone();
@@ -3227,12 +3295,12 @@ fn display_item_name(
                         name.push_str(&path.p_buf.read_link().unwrap().to_string_lossy());
                     } else {
                         name.push_str(&color_name(
-                            escape_name(target.as_os_str(), &config.quoting_style),
+                            &escape_name(target.as_os_str(), &config.quoting_style),
                             path,
-                            ls_colors,
                             style_manager,
                             out,
                             Some(&target_data),
+                            is_wrap(name.len()),
                         ));
                     }
                 } else {
@@ -3291,92 +3359,6 @@ fn create_hyperlink(name: &str, path: &PathData) -> String {
     format!("\x1b]8;;file://{hostname}{absolute_path}\x07{name}\x1b]8;;\x07")
 }
 
-/// We need this struct to be able to store the previous style.
-/// This because we need to check the previous value in case we don't need
-/// the reset
-struct StyleManager {
-    current_style: Option<Style>,
-}
-
-impl StyleManager {
-    fn new() -> Self {
-        Self {
-            current_style: None,
-        }
-    }
-
-    fn apply_style(&mut self, new_style: &Style, name: &str) -> String {
-        if let Some(current) = &self.current_style {
-            if *current == *new_style {
-                // Current style is the same as new style, apply without reset.
-                let mut style = new_style.to_nu_ansi_term_style();
-                style.prefix_with_reset = false;
-                return style.paint(name).to_string();
-            }
-        }
-
-        // We are getting a new style, we need to reset it
-        self.current_style = Some(new_style.clone());
-        new_style
-            .to_nu_ansi_term_style()
-            .reset_before_style()
-            .paint(name)
-            .to_string()
-    }
-}
-
-fn apply_style_based_on_metadata(
-    path: &PathData,
-    md_option: Option<&Metadata>,
-    ls_colors: &LsColors,
-    style_manager: &mut StyleManager,
-    name: &str,
-) -> String {
-    match ls_colors.style_for_path_with_metadata(&path.p_buf, md_option) {
-        Some(style) => style_manager.apply_style(style, name),
-        None => name.to_owned(),
-    }
-}
-
-/// Colors the provided name based on the style determined for the given path
-/// This function is quite long because it tries to leverage DirEntry to avoid
-/// unnecessary calls to stat()
-/// and manages the symlink errors
-fn color_name(
-    name: String,
-    path: &PathData,
-    ls_colors: &LsColors,
-    style_manager: &mut StyleManager,
-    out: &mut BufWriter<Stdout>,
-    target_symlink: Option<&PathData>,
-) -> String {
-    if !path.must_dereference {
-        // If we need to dereference (follow) a symlink, we will need to get the metadata
-        if let Some(de) = &path.de {
-            // There is a DirEntry, we don't need to get the metadata for the color
-            return match ls_colors.style_for(de) {
-                Some(style) => style_manager.apply_style(style, &name),
-                None => name,
-            };
-        }
-    }
-
-    if let Some(target) = target_symlink {
-        // use the optional target_symlink
-        // Use fn get_metadata_with_deref_opt instead of get_metadata() here because ls
-        // should not exit with an err, if we are unable to obtain the target_metadata
-        let md_res = get_metadata_with_deref_opt(target.p_buf.as_path(), path.must_dereference);
-        let md = md_res.or(path.p_buf.symlink_metadata());
-        apply_style_based_on_metadata(path, md.ok().as_ref(), ls_colors, style_manager, &name)
-    } else {
-        let md_option = path.get_metadata(out);
-        let symlink_metadata = path.p_buf.symlink_metadata().ok();
-        let md = md_option.or(symlink_metadata.as_ref());
-
-        apply_style_based_on_metadata(path, md, ls_colors, style_manager, &name)
-    }
-}
-
 #[cfg(not(unix))]
 fn display_symlink_count(_metadata: &Metadata) -> String {
     // Currently not sure of how to get this on Windows, so I'm punting.
@@ -3396,7 +3378,6 @@ fn display_inode(metadata: &Metadata) -> String {
 
 // This returns the SELinux security context as UTF8 `String`.
 // In the long term this should be changed to `OsStr`, see discussions at #2621/#2656
-#[allow(unused_variables)]
 fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
     let substitute_string = "?".to_string();
     // If we must dereference, ensure that the symlink is actually valid even if the system
@@ -3410,7 +3391,7 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
                 show!(LsError::IOErrorContext(err, p_buf.to_path_buf(), false));
                 return substitute_string;
             }
-            Ok(md) => (),
+            Ok(_md) => (),
         }
     }
     if config.selinux_supported {

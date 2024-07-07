@@ -177,7 +177,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     let fields = if fields.split(&[',', ' ']).any(|x| x == "-") {
         vec![Range {
             low: 1,
-            high: std::usize::MAX,
+            high: usize::MAX,
         }]
     } else {
         Range::from_list(fields)?

@@ -689,10 +689,23 @@ fn test_touch_system_fails() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_touch_trailing_slash() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "no-file/";
-    ucmd.args(&[file]).fails();
+    ucmd.args(&[file]).fails().stderr_only(format!(
+        "touch: cannot touch '{file}': No such file or directory\n"
+    ));
+}
+
+#[test]
+#[cfg(target_os = "windows")]
+fn test_touch_trailing_slash_windows() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "no-file/";
+    ucmd.args(&[file]).fails().stderr_only(format!(
+        "touch: cannot touch '{file}': The filename, directory name, or volume label syntax is incorrect.\n"
+    ));
 }
 
 #[test]

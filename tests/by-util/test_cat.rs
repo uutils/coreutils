@@ -485,7 +485,7 @@ fn test_dev_random() {
 }
 
 /// Reading from /dev/full should return an infinite amount of zero bytes.
-/// Wikipedia says there is support on Linux, FreeBSD, and NetBSD.
+/// Wikipedia says there is support on Linux, FreeBSD, and `NetBSD`.
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_dev_full() {

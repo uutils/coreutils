@@ -1332,7 +1332,11 @@ fn construct_dest_path(
     Ok(match target_type {
         TargetType::Directory => {
             let root = if options.parents {
-                Path::new("")
+                if source_path.has_root() && cfg!(unix) {
+                    Path::new("/")
+                } else {
+                    Path::new("")
+                }
             } else {
                 source_path.parent().unwrap_or(source_path)
             };
@@ -1380,7 +1384,9 @@ fn copy_source(
         );
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
-                copy_attributes(x, y, &options.attributes)?;
+                if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
+                    copy_attributes(&src, y, &options.attributes)?;
+                }
             }
         }
         res
@@ -1443,8 +1449,8 @@ pub(crate) fn copy_attributes(
 
         let dest_uid = source_metadata.uid();
         let dest_gid = source_metadata.gid();
-
-        wrap_chown(
+        // gnu compatibility: cp doesn't report an error if it fails to set the ownership.
+        let _ = wrap_chown(
             dest,
             &dest.symlink_metadata().context(context)?,
             Some(dest_uid),
@@ -1452,11 +1458,9 @@ pub(crate) fn copy_attributes(
             false,
             Verbosity {
                 groups_only: false,
-                level: VerbosityLevel::Normal,
+                level: VerbosityLevel::Silent,
             },
-        )
-        .map_err(Error::Error)?;
-
+        );
         Ok(())
     })?;
 
@@ -2104,6 +2108,10 @@ fn copy_file(
         .into());
     }
 
+    if options.verbose {
+        print_verbose_output(options.parents, progress_bar, source, dest);
+    }
+
     if options.preserve_hard_links() {
         // if we encounter a matching device/inode pair in the source tree
         // we can arrange to create a hard link between the corresponding names
@@ -2115,10 +2123,6 @@ fn copy_file(
             std::fs::hard_link(new_source, dest)?;
             return Ok(());
         };
-    }
-
-    if options.verbose {
-        print_verbose_output(options.parents, progress_bar, source, dest);
     }
 
     // Calculate the context upfront before canonicalizing the path
@@ -2163,7 +2167,13 @@ fn copy_file(
         fs::set_permissions(dest, dest_permissions).ok();
     }
 
-    copy_attributes(source, dest, &options.attributes)?;
+    if options.dereference(source_in_command_line) {
+        if let Ok(src) = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical) {
+            copy_attributes(&src, dest, &options.attributes)?;
+        }
+    } else {
+        copy_attributes(source, dest, &options.attributes)?;
+    }
 
     copied_files.insert(
         FileInformation::from_path(source, options.dereference(source_in_command_line))?,

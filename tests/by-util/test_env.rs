@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD
+#![allow(clippy::missing_errors_doc)]
 
 use crate::common::util::TestScenario;
 #[cfg(unix)]
@@ -555,28 +556,28 @@ fn test_env_parsing_errors() {
         .stderr_is("env: invalid sequence '\\a' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S\|\&\;"#) // no quotes, invalid escape sequence |
+        .arg(r"-S\|\&\;") // no quotes, invalid escape sequence |
         .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\|' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S\<\&\;"#) // no quotes, invalid escape sequence <
+        .arg(r"-S\<\&\;") // no quotes, invalid escape sequence <
         .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\<' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S\>\&\;"#) // no quotes, invalid escape sequence >
+        .arg(r"-S\>\&\;") // no quotes, invalid escape sequence >
         .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\>' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S\`\&\;"#) // no quotes, invalid escape sequence `
+        .arg(r"-S\`\&\;") // no quotes, invalid escape sequence `
         .fails()
         .code_is(125)
         .no_stdout()
@@ -590,14 +591,14 @@ fn test_env_parsing_errors() {
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S'\`\&\;'"#) // single quotes, invalid escape sequence `
+        .arg(r"-S'\`\&\;'") // single quotes, invalid escape sequence `
         .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S\`"#) // ` escaped without quotes
+        .arg(r"-S\`") // ` escaped without quotes
         .fails()
         .code_is(125)
         .no_stdout()
@@ -611,14 +612,14 @@ fn test_env_parsing_errors() {
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
-        .arg(r#"-S'\`'"#) // ` escaped in single quotes
+        .arg(r"-S'\`'") // ` escaped in single quotes
         .fails()
         .code_is(125)
         .no_stdout()
         .stderr_is("env: invalid sequence '\\`' in -S\n");
 
     ts.ucmd()
-        .args(&[r#"-S\🦉"#]) // ` escaped in single quotes
+        .args(&[r"-S\🦉"]) // ` escaped in single quotes
         .fails()
         .code_is(125)
         .no_stdout()
@@ -1068,11 +1069,11 @@ mod tests_split_iterator {
     #[test]
     fn split_single_quotes() {
         split_ok(&[
-            (r#"''"#, &[r#""#]),
-            (r#"'a'"#, &[r#"a"#]),
-            (r#"'\\'"#, &[r#"\"#]),
-            (r#"' \\ '"#, &[r#" \ "#]),
-            (r#"'#'"#, &[r#"#"#]),
+            (r"''", &[r""]),
+            (r"'a'", &[r"a"]),
+            (r"'\\'", &[r"\"]),
+            (r"' \\ '", &[r" \ "]),
+            (r"'#'", &[r"#"]),
         ]);
     }
 
@@ -1094,12 +1095,12 @@ mod tests_split_iterator {
     #[test]
     fn split_unquoted() {
         split_ok(&[
-            (r#"\\|\\&\\;"#, &[r#"\|\&\;"#]),
-            (r#"\\<\\>"#, &[r#"\<\>"#]),
-            (r#"\\(\\)"#, &[r#"\(\)"#]),
-            (r#"\$"#, &[r#"$"#]),
+            (r"\\|\\&\\;", &[r"\|\&\;"]),
+            (r"\\<\\>", &[r"\<\>"]),
+            (r"\\(\\)", &[r"\(\)"]),
+            (r"\$", &[r"$"]),
             (r#"\""#, &[r#"""#]),
-            (r#"\'"#, &[r#"'"#]),
+            (r"\'", &[r"'"]),
             ("\\\n", &[]),
             (" \\\n \n", &[]),
             ("a\nb\nc", &["a", "b", "c"]),
@@ -1179,7 +1180,7 @@ mod tests_split_iterator {
             Err(ParseError::InvalidSequenceBackslashXInMinusS { pos: 2, c: 'a' })
         );
         assert_eq!(
-            split(r#"\🦉"#),
+            split(r"\🦉"),
             Err(ParseError::InvalidSequenceBackslashXInMinusS {
                 pos: 1,
                 c: '\u{FFFD}'
@@ -1190,9 +1191,9 @@ mod tests_split_iterator {
     #[test]
     fn split_comments() {
         split_ok(&[
-            (r#" x # comment "#, &["x"]),
-            (r#" w1#w2 "#, &["w1#w2"]),
-            (r#"'not really a # comment'"#, &["not really a # comment"]),
+            (r" x # comment ", &["x"]),
+            (r" w1#w2 ", &["w1#w2"]),
+            (r"'not really a # comment'", &["not really a # comment"]),
             (" a # very long comment \n b # another comment", &["a", "b"]),
         ]);
     }

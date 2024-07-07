@@ -560,8 +560,8 @@ fn test_dec_offset() {
 
 #[test]
 fn test_no_offset() {
-    let input = [0u8; 31];
     const LINE: &str = " 00000000 00000000 00000000 00000000\n";
+    let input = [0u8; 31];
     let expected_output = [LINE, LINE, LINE, LINE].join("");
 
     new_ucmd!()

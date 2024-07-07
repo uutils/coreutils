@@ -1369,3 +1369,47 @@ fn check_ignore_truncate_when_squeezing() {
 fn check_disallow_blank_in_set2_when_translating() {
     new_ucmd!().args(&["-t", "1234", "[:blank:]"]).fails();
 }
+
+#[test]
+fn check_class_in_set2_must_be_matched_in_set1() {
+    new_ucmd!().args(&["-t", "1[:upper:]", "[:upper:]"]).fails();
+}
+
+#[test]
+fn check_class_in_set2_must_be_matched_in_set1_right_length_check() {
+    new_ucmd!()
+        .args(&["-t", "a-z[:upper:]", "abcdefghijklmnopqrstuvwxyz[:upper:]"])
+        .succeeds();
+}
+
+#[test]
+fn check_set1_longer_set2_ends_in_class() {
+    new_ucmd!().args(&["[:lower:]a", "[:upper:]"]).fails();
+}
+
+#[test]
+fn check_set1_longer_set2_ends_in_class_with_trunc() {
+    new_ucmd!()
+        .args(&["-t", "[:lower:]a", "[:upper:]"])
+        .succeeds();
+}
+
+#[test]
+fn check_complement_2_unique_in_set2() {
+    let x226 = "x".repeat(226);
+
+    // [y*] is expanded tp "y" here
+    let arg = x226 + "[y*]xxx";
+    new_ucmd!().args(&["-c", "[:upper:]", arg.as_str()]).fails();
+}
+
+#[test]
+fn check_complement_1_unique_in_set2() {
+    let x226 = "x".repeat(226);
+
+    // [y*] is expanded to "" here
+    let arg = x226 + "[y*]xxxx";
+    new_ucmd!()
+        .args(&["-c", "[:upper:]", arg.as_str()])
+        .succeeds();
+}

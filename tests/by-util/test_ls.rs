@@ -3,6 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo
+#![allow(
+    clippy::similar_names,
+    clippy::too_many_lines,
+    clippy::cast_possible_truncation
+)]
 
 #[cfg(any(unix, feature = "feat_selinux"))]
 use crate::common::util::expected_result;
@@ -160,7 +165,7 @@ fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
     let output = cmd.succeeds();
     let stdout_str = String::from_utf8_lossy(output.stdout());
     println!("output of stat call ({cmd:?}):\n{stdout_str}");
-    let regex_str = r#"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+"#;
+    let regex_str = r"Filesystem\s+Type\s+.+[\r\n]+([^\s]+)\s+(?<fstype>[^\s]+)\s+";
     let regex = Regex::new(regex_str).unwrap();
     let m = regex.captures(&stdout_str).unwrap();
     let fstype = m["fstype"].to_owned();
@@ -1150,6 +1155,7 @@ fn test_ls_long_padding_of_size_column_with_multiple_files() {
 #[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
 #[test]
 #[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
+#[allow(clippy::items_after_statements)]
 fn test_ls_long_symlink_color() {
     // If you break this test after breaking mkdir, touch, or ln, do not be alarmed!
     // This test is made for ls, but it attempts to run those utils in the process.
@@ -1378,7 +1384,7 @@ fn test_ls_long_symlink_color() {
 
 /// This test is for "ls -l --color=auto|--color=always"
 /// We use "--color=always" as the colors are the same regardless of the color option being "auto" or "always"
-/// tests whether the specific color of the target and the dangling_symlink are equal and checks
+/// tests whether the specific color of the target and the `dangling_symlink` are equal and checks
 /// whether checks whether ls outputs the correct path for the symlink and the file it points to and applies the color code to it.
 #[test]
 fn test_ls_long_dangling_symlink_color() {
@@ -2987,6 +2993,35 @@ fn test_ls_align_unquoted() {
 }
 
 #[test]
+fn test_ls_align_unquoted_multiline() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("one");
+    at.touch("two");
+    at.touch("three_long");
+    at.touch("four_long");
+    at.touch("five");
+    at.touch("s ix");
+    at.touch("s even");
+    at.touch("eight_long_long");
+    at.touch("nine");
+    at.touch("ten");
+
+    // In TTY
+    #[cfg(unix)]
+    scene
+        .ucmd()
+        .arg("--color")
+        .terminal_simulation(true)
+        .succeeds()
+        .stdout_only(concat!(
+            " eight_long_long   four_long   one      's ix'   three_long\r\n",
+            " five              nine       's even'   ten     two\r\n"
+        ));
+}
+
+#[test]
 fn test_ls_ignore_hide() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3929,15 +3964,68 @@ fn test_ls_perm_io_errors() {
 }
 
 #[test]
-fn test_ls_dired_incompatible() {
+fn test_ls_dired_implies_long() {
     let scene = TestScenario::new(util_name!());
 
     scene
         .ucmd()
         .arg("--dired")
-        .fails()
-        .code_is(1)
-        .stderr_contains("--dired requires --format=long");
+        .succeeds()
+        .stdout_does_not_contain("//DIRED//")
+        .stdout_contains("  total 0")
+        .stdout_contains("//DIRED-OPTIONS// --quoting-style");
+}
+
+#[test]
+fn test_ls_dired_hyperlink() {
+    // we will have link but not the DIRED output
+    // note that the order matters
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/a");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("--hyperlink")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains("file://")
+        .stdout_contains("-rw") // we should have the long output
+        // even if dired isn't actually run
+        .stdout_does_not_contain("//DIRED//");
+    // dired is passed after hyperlink
+    // so we will have DIRED output
+    scene
+        .ucmd()
+        .arg("--hyperlink")
+        .arg("--dired")
+        .arg("-R")
+        .succeeds()
+        .stdout_does_not_contain("file://")
+        .stdout_contains("//DIRED//");
+}
+
+#[test]
+fn test_ls_dired_order_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.touch("dir/a");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("--format=vertical")
+        .arg("-R")
+        .succeeds()
+        .stdout_does_not_contain("//DIRED//");
+    scene
+        .ucmd()
+        .arg("--format=vertical")
+        .arg("--dired")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains("//DIRED//");
 }
 
 #[test]
@@ -3968,6 +4056,42 @@ fn test_ls_dired_recursive() {
         .stdout_contains("  total 0")
         .stdout_contains("//SUBDIRED// 2 3")
         .stdout_contains("//DIRED-OPTIONS// --quoting-style");
+}
+
+#[test]
+fn test_ls_dired_outputs_parent_offset() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.mkdir("dir/a");
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("dir")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains("//DIRED//");
+}
+
+#[test]
+fn test_ls_dired_outputs_same_date_time_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.mkdir("dir/a");
+    let binding = scene.ucmd().arg("-l").arg("dir").run();
+    let long_output_str = binding.stdout_str();
+    let split_lines: Vec<&str> = long_output_str.split('\n').collect();
+    // the second line should contain the long output which includes date
+    let list_line = split_lines.get(1).unwrap();
+    // should be same as the dired output
+    scene
+        .ucmd()
+        .arg("--dired")
+        .arg("dir")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains(list_line);
 }
 
 #[test]
@@ -4171,7 +4295,6 @@ fn test_ls_subdired_complex() {
     assert_eq!(dirnames, vec!["dir1", "dir1\\c2", "dir1\\d"]);
 }
 
-#[ignore = "issue #5396"]
 #[test]
 fn test_ls_cf_output_should_be_delimited_by_tab() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -4507,6 +4630,49 @@ fn test_ls_hyperlink_dirs() {
 }
 
 #[test]
+fn test_ls_hyperlink_recursive_dirs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let path = at.root_dir_resolved();
+    let separator = std::path::MAIN_SEPARATOR_STR;
+
+    let dir_a = "a";
+    let dir_b = "b";
+    at.mkdir(dir_a);
+    at.mkdir(format!("{dir_a}/{dir_b}"));
+
+    let result = scene
+        .ucmd()
+        .arg("--hyperlink")
+        .arg("--recursive")
+        .arg(dir_a)
+        .succeeds();
+
+    macro_rules! assert_hyperlink {
+        ($line:expr, $expected:expr) => {
+            assert!(matches!($line, Some(l) if l.starts_with("\x1b]8;;file://") && l.ends_with($expected)));
+        };
+    }
+
+    let mut lines = result.stdout_str().lines();
+    assert_hyperlink!(
+        lines.next(),
+        &format!("{path}{separator}{dir_a}\x07{dir_a}\x1b]8;;\x07:")
+    );
+    assert_hyperlink!(
+        lines.next(),
+        &format!("{path}{separator}{dir_a}{separator}{dir_b}\x07{dir_b}\x1b]8;;\x07")
+    );
+    assert!(matches!(lines.next(), Some(l) if l.is_empty()));
+    assert_hyperlink!(
+        lines.next(),
+        &format!(
+            "{path}{separator}{dir_a}{separator}{dir_b}\x07{dir_a}{separator}{dir_b}\x1b]8;;\x07:"
+        )
+    );
+}
+
+#[test]
 fn test_ls_color_do_not_reset() {
     let scene: TestScenario = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4619,4 +4785,157 @@ fn test_acl_display() {
         .args(&["-lda", &path])
         .succeeds()
         .stdout_contains("+");
+}
+
+// Make sure that "ls --color" correctly applies color "normal" to text and
+// files. Specifically, it should use the NORMAL setting to format non-file name
+// output and file names that don't have a designated color (unless the FILE
+// setting is also configured).
+#[cfg(unix)]
+#[test]
+fn test_ls_color_norm() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("exe");
+    at.set_mode("exe", 0o755);
+    at.touch("no_color");
+    at.set_mode("no_color", 0o444);
+    let colors = "no=7:ex=01;32";
+    let strip = |input: &str| {
+        let re = Regex::new(r"-r.*norm").unwrap();
+        re.replace_all(input, "norm").to_string()
+    };
+
+    //  Uncolored file names should inherit NORMAL attributes.
+    let expected = "\x1b[0m\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n\x1b[07mnorm no_color\x1b[0m"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("exe")
+        .arg("no_color")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    let expected = "\x1b[0m\x1b[07m\x1b[0m\x1b[01;32mexe\x1b[0m  \x1b[07mno_color\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-xU")
+        .arg("--color")
+        .arg("exe")
+        .arg("no_color")
+        .succeeds()
+        .stdout_contains(expected);
+
+    let expected =
+        "\x1b[0m\x1b[07mnorm no_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    let expected = "\x1b[0m\x1b[07mno_color\x1b[0m  \x1b[07m\x1b[0m\x1b[01;32mexe\x1b[0m"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-xU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_contains(expected);
+
+    //  NORMAL does not override FILE
+    let expected = "\x1b[0m\x1b[07mnorm \x1b[0m\x1b[01mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", format!("{}:fi=1", colors))
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    // uncolored ordinary files that do _not_ inherit from NORMAL.
+    let expected =
+        "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", format!("{}:fi=", colors))
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    let expected =
+        "\x1b[0m\x1b[07mnorm \x1b[0mno_color\x1b[0m\n\x1b[07mnorm \x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", format!("{}:fi=0", colors))
+        .env("TIME_STYLE", "+norm")
+        .arg("-gGU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_str_apply(strip)
+        .stdout_contains(expected);
+
+    //  commas (-m), indicator chars (-F) and the "total" line, do not currently
+    //  use NORMAL attributes
+    let expected = "\x1b[0m\x1b[07mno_color\x1b[0m, \x1b[07m\x1b[0m\x1b[01;32mexe\x1b[0m\n"; // spell-checker:disable-line
+    scene
+        .ucmd()
+        .env("LS_COLORS", colors)
+        .env("TIME_STYLE", "+norm")
+        .arg("-mU")
+        .arg("--color")
+        .arg("no_color")
+        .arg("exe")
+        .succeeds()
+        .stdout_contains(expected);
+}
+
+#[test]
+fn test_ls_color_clear_to_eol() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    // we create file with a long name
+    at.touch("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo");
+    let result = scene
+        .ucmd()
+        .env("TERM", "xterm")
+        // set the columns to something small so that the text would wrap around
+        .env("COLUMNS", "80")
+        // set the background to green and text to red
+        .env("LS_COLORS", "*.foo=0;31;42")
+        .env("TIME_STYLE", "+T")
+        .arg("-og")
+        .arg("--color")
+        .arg("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo")
+        .succeeds();
+    // check that the wrapped name contains clear to end of line code
+    // cspell:disable-next-line
+    result.stdout_contains("\x1b[0m\x1b[31;42mzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.foo\x1b[0m\x1b[K");
 }

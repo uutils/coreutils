@@ -142,6 +142,16 @@ fn test_date_utc() {
 }
 
 #[test]
+fn test_date_utc_issue_6495() {
+    new_ucmd!()
+        .arg("-u")
+        .arg("-d")
+        .arg("@0")
+        .succeeds()
+        .stdout_is("Thu Jan  1 00:00:00 1970\n");
+}
+
+#[test]
 fn test_date_format_y() {
     let scene = TestScenario::new(util_name!());
 
@@ -263,7 +273,7 @@ fn test_date_set_mac_unavailable() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to succeeds() when required.
+/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_2() {
     if geteuid() == 0 {
         let result = new_ucmd!()
@@ -288,10 +298,11 @@ fn test_date_for_invalid_file() {
 #[test]
 #[cfg(unix)]
 fn test_date_for_no_permission_file() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    use std::os::unix::fs::PermissionsExt;
     const FILE: &str = "file-no-perm-1";
 
-    use std::os::unix::fs::PermissionsExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
     let file = std::fs::OpenOptions::new()
         .create(true)
         .truncate(true)
@@ -328,7 +339,7 @@ fn test_date_for_file() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to succeeds() when required.
+/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_3() {
     if geteuid() == 0 {
         let result = new_ucmd!()
@@ -342,7 +353,7 @@ fn test_date_set_valid_3() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
-/// TODO: expected to fail currently; change to succeeds() when required.
+/// TODO: expected to fail currently; change to `succeeds()` when required.
 fn test_date_set_valid_4() {
     if geteuid() == 0 {
         let result = new_ucmd!()
@@ -379,6 +390,14 @@ fn test_date_string_human() {
         "5 hours ago",
         "30 minutes ago",
         "10 seconds",
+        "last day",
+        "last week",
+        "last month",
+        "last year",
+        "next day",
+        "next week",
+        "next month",
+        "next year",
     ];
     let re = Regex::new(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}\n$").unwrap();
     for date_format in date_formats {
@@ -412,8 +431,8 @@ fn test_date_overflow() {
 
 #[test]
 fn test_date_parse_from_format() {
-    let (at, mut ucmd) = at_and_ucmd!();
     const FILE: &str = "file-with-dates";
+    let (at, mut ucmd) = at_and_ucmd!();
 
     at.write(
         FILE,
