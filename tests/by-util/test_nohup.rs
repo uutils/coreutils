@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore winsize Openpty openpty xpixel ypixel ptyprocess
 use crate::common::util::TestScenario;
+#[cfg(not(target_os = "openbsd"))]
 use std::thread::sleep;
 
 // General observation: nohup.out will not be created in tests run by cargo test

@@ -15,6 +15,7 @@ use crate::common::util::TestScenario;
 #[cfg(all(unix, feature = "chmod"))]
 use nix::unistd::{close, dup};
 use regex::Regex;
+#[cfg(not(target_os = "openbsd"))]
 use std::collections::HashMap;
 #[cfg(target_os = "linux")]
 use std::ffi::OsStr;
@@ -158,7 +159,11 @@ fn test_ls_ordering() {
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
 }
 
-#[cfg(all(unix, feature = "df", not(target_os = "freebsd")))]
+#[cfg(all(
+    unix,
+    feature = "df",
+    not(any(target_os = "freebsd", target_os = "openbsd"))
+))]
 fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
     let mut cmd = scene.ccmd("df");
     cmd.args(&["-PT"]).arg(path);
@@ -174,7 +179,8 @@ fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
 }
 
 #[cfg(all(feature = "truncate", feature = "dd"))]
-#[test] // FIXME: fix this test for FreeBSD
+#[test] // FIXME: fix this test for FreeBSD and OpenBSD
+#[cfg(not(target_os = "openbsd"))]
 fn test_ls_allocation_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1421,6 +1427,7 @@ fn test_ls_long_dangling_symlink_color() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_ls_long_total_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2440,7 +2447,7 @@ fn test_ls_indicator_style() {
     }
 }
 
-#[cfg(not(any(target_vendor = "apple", target_os = "windows")))] // Truncate not available on mac or win
+#[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))] // Truncate not available on mac or win
 #[test]
 fn test_ls_human_si() {
     let scene = TestScenario::new(util_name!());
@@ -4310,6 +4317,7 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
 
 #[cfg(all(unix, feature = "dd"))]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_posixly_correct_and_block_size_env_vars() {
     let scene = TestScenario::new(util_name!());
 
@@ -4363,6 +4371,7 @@ fn test_posixly_correct_and_block_size_env_vars() {
 
 #[cfg(all(unix, feature = "dd"))]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_posixly_correct_and_block_size_env_vars_with_k() {
     let scene = TestScenario::new(util_name!());
 
@@ -4423,6 +4432,7 @@ fn test_ls_invalid_block_size() {
 
 #[cfg(all(unix, feature = "dd"))]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_ls_invalid_block_size_in_env_var() {
     let scene = TestScenario::new(util_name!());
 
@@ -4461,6 +4471,7 @@ fn test_ls_invalid_block_size_in_env_var() {
 
 #[cfg(all(unix, feature = "dd"))]
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_ls_block_size_override() {
     let scene = TestScenario::new(util_name!());
 

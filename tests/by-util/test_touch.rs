@@ -721,7 +721,7 @@ fn test_touch_no_such_file_error_msg() {
 }
 
 #[test]
-#[cfg(not(target_os = "freebsd"))]
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
 fn test_touch_changes_time_of_file_in_stdout() {
     // command like: `touch - 1< ./c`
     // should change the timestamp of c
@@ -864,6 +864,7 @@ fn test_touch_no_dereference_dangling() {
 }
 
 #[test]
+#[cfg(not(target_os = "openbsd"))]
 fn test_touch_dash() {
     let (_, mut ucmd) = at_and_ucmd!();
 
