@@ -3,16 +3,16 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/// Encapsulates differences between OSs regarding the access to
-/// file handles / descriptors.
-/// This is useful when dealing with lower level stdin/stdout access.
-///
-/// In detail:
-/// On unix like OSs, file _descriptors_ are used in this context.
-/// On windows OSs, file _handles_ are used.
-///
-/// Even though they are distinct classes, they share common functionality.
-/// Access to this common functionality is provided in `OwnedFileDescriptorOrHandle`.
+//! Encapsulates differences between OSs regarding the access to
+//! file handles / descriptors.
+//! This is useful when dealing with lower level stdin/stdout access.
+//!
+//! In detail:
+//! On unix like OSs, file _descriptors_ are used in this context.
+//! On windows OSs, file _handles_ are used.
+//!
+//! Even though they are distinct classes, they share common functionality.
+//! Access to this common functionality is provided in `OwnedFileDescriptorOrHandle`.
 
 #[cfg(not(windows))]
 use std::os::fd::{AsFd, OwnedFd};
