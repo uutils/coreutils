@@ -3,14 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) MAKEWORD addrs hashset
+// spell-checker:ignore hashset Addrs addrs
 
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
 use std::net::ToSocketAddrs;
 use std::str;
 use std::{collections::hash_set::HashSet, ffi::OsString};
 
 use clap::builder::ValueParser;
 use clap::{crate_version, Arg, ArgAction, ArgMatches, Command};
+
+#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+use dns_lookup::lookup_host;
 
 use uucore::{
     error::{FromIo, UResult},
@@ -121,13 +125,25 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         .into_owned();
 
     if matches.get_flag(OPT_IP_ADDRESS) {
-        // XXX: to_socket_addrs needs hostname:port so append a dummy port and remove it later.
-        // This was originally supposed to use std::net::lookup_host, but that seems to be
-        // deprecated.  Perhaps we should use the dns-lookup crate?
-        let hostname = hostname + ":1";
-        let addresses = hostname
-            .to_socket_addrs()
-            .map_err_context(|| "failed to resolve socket addresses".to_owned())?;
+        let addresses;
+
+        #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
+        {
+            let hostname = hostname + ":1";
+            let addrs = hostname
+                .to_socket_addrs()
+                .map_err_context(|| "failed to resolve socket addresses".to_owned())?;
+            addresses = addrs;
+        }
+
+        // DNS reverse lookup via "hostname:1" does not work on FreeBSD and OpenBSD
+        // use dns-lookup crate instead
+        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
+        {
+            let addrs: Vec<std::net::IpAddr> = lookup_host(hostname.as_str()).unwrap();
+            addresses = addrs;
+        }
+
         let mut hashset = HashSet::new();
         let mut output = String::new();
         for addr in addresses {
