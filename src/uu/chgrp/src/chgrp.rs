@@ -5,10 +5,11 @@
 
 // spell-checker:ignore (ToDO) COMFOLLOW Chowner RFILE RFILE's derefer dgid nonblank nonprint nonprinting
 
+use uucore::commom_args::options;
 use uucore::display::Quotable;
 use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::perms::{chown_base, options, GidUidOwnerFilter, IfFrom};
+use uucore::perms::{chown_base, GidUidOwnerFilter, IfFrom};
 
 use clap::ArgMatches;
 

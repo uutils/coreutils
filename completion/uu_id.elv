@@ -38,8 +38,8 @@ If any of the ID numbers cannot be mapped into names, the number will be display
 not permitted in default format'
             cand --zero 'delimit entries with NUL characters, not whitespace;
 not permitted in default format'
-            cand -Z 'print only the security context of the process (not enabled)'
-            cand --context 'print only the security context of the process (not enabled)'
+            cand -Z 'print only the security context of the process'
+            cand --context 'print only the security context of the process'
             cand -h 'Print help'
             cand --help 'Print help'
             cand -V 'Print version'

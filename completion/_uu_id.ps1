@@ -41,8 +41,8 @@ If any of the ID numbers cannot be mapped into names, the number will be display
 not permitted in default format')
             [CompletionResult]::new('--zero', 'zero', [CompletionResultType]::ParameterName, 'delimit entries with NUL characters, not whitespace;
 not permitted in default format')
-            [CompletionResult]::new('-Z', 'Z ', [CompletionResultType]::ParameterName, 'print only the security context of the process (not enabled)')
-            [CompletionResult]::new('--context', 'context', [CompletionResultType]::ParameterName, 'print only the security context of the process (not enabled)')
+            [CompletionResult]::new('-Z', 'Z ', [CompletionResultType]::ParameterName, 'print only the security context of the process')
+            [CompletionResult]::new('--context', 'context', [CompletionResultType]::ParameterName, 'print only the security context of the process')
             [CompletionResult]::new('-h', 'h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', 'help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('-V', 'V ', [CompletionResultType]::ParameterName, 'Print version')

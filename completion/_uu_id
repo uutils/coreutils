@@ -35,8 +35,8 @@ If any of the ID numbers cannot be mapped into names, the number will be display
 not permitted in default format]' \
 '--zero[delimit entries with NUL characters, not whitespace;
 not permitted in default format]' \
-'(-g --group -u --user)-Z[print only the security context of the process (not enabled)]' \
-'(-g --group -u --user)--context[print only the security context of the process (not enabled)]' \
+'(-g --group -u --user)-Z[print only the security context of the process]' \
+'(-g --group -u --user)--context[print only the security context of the process]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-V[Print version]' \

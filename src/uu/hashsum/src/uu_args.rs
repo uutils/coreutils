@@ -30,6 +30,8 @@ pub mod options {
 }
 
 // TODO: return custom error type
+/// # Errors
+/// Returns an error if the argument cannot be parsed as a usize.
 fn parse_bit_num(arg: &str) -> Result<usize, ParseIntError> {
     arg.parse()
 }

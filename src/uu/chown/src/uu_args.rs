@@ -6,7 +6,7 @@
 // spell-checker:ignore RFILE's RFILE
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use uucore::perms::options;
+use uucore::commom_args::options;
 use uucore::{format_usage, help_about, help_usage};
 
 static ABOUT: &str = help_about!("chown.md");

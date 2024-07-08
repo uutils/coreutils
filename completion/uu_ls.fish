@@ -61,6 +61,6 @@ complete -c uu_ls -s s -l size -d 'print the allocated size of each file, in blo
 complete -c uu_ls -l file-type -d 'Same as --classify, but do not append \'*\''
 complete -c uu_ls -s p -d 'Append / indicator to directories.'
 complete -c uu_ls -l full-time -d 'like -l --time-style=full-iso'
-complete -c uu_ls -s Z -l context -d 'print any security context of each file (not enabled)'
+complete -c uu_ls -s Z -l context -d 'print any security context of each file'
 complete -c uu_ls -l group-directories-first -d 'group directories before files; can be augmented with a --sort option, but any use of --sort=none (-U) disables grouping'
 complete -c uu_ls -s V -l version -d 'Print version'

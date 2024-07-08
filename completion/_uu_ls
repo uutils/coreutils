@@ -106,8 +106,8 @@ Specifying --classify and no when is equivalent to --classify=always. This will 
 '--file-type[Same as --classify, but do not append '\''*'\'']' \
 '-p[Append / indicator to directories.]' \
 '--full-time[like -l --time-style=full-iso]' \
-'-Z[print any security context of each file (not enabled)]' \
-'--context[print any security context of each file (not enabled)]' \
+'-Z[print any security context of each file]' \
+'--context[print any security context of each file]' \
 '--group-directories-first[group directories before files; can be augmented with a --sort option, but any use of --sort=none (-U) disables grouping]' \
 '-V[Print version]' \
 '--version[Print version]' \

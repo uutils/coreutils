@@ -5,10 +5,11 @@
 
 // spell-checker:ignore (ToDO) COMFOLLOW Passwd RFILE RFILE's derefer dgid duid groupname
 
+use uucore::commom_args::options;
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::perms::{chown_base, options, GidUidOwnerFilter, IfFrom};
+use uucore::perms::{chown_base, GidUidOwnerFilter, IfFrom};
 
 use clap::ArgMatches;
 

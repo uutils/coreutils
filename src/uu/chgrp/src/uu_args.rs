@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 use clap::{crate_version, Arg, ArgAction, Command};
-use uucore::perms::options;
+use uucore::commom_args::options;
 use uucore::{format_usage, help_about, help_usage};
 
 const ABOUT: &str = help_about!("chgrp.md");
